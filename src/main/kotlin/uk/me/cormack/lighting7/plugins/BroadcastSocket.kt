@@ -1,6 +1,5 @@
 package uk.me.cormack.lighting7.plugins
 
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -67,9 +66,13 @@ data object StageRegionListChangedOutMessage : BroadcastOutMessage()
  * Speed-master CRUD only — created, renamed, deleted. Live BPM changes stream over the
  * `speedMasters.*` family instead, for the same storm rationale as [LookListChangedOutMessage]:
  * this message is a cache-invalidation signal, and a tapped tempo would fire it twice a second.
+ *
+ * Named into the `speedMasters.*` wire namespace even though it is fired from this file's
+ * [FixturesChangeListener] like its `*ListChanged` neighbours: the namespace describes the client
+ * cache the frame invalidates, not which server component emits it.
  */
 @Serializable
-@SerialName("speedMasterListChanged")
+@SerialName("speedMasters.listChanged")
 data object SpeedMasterListChangedOutMessage : BroadcastOutMessage()
 
 /** A script was created, renamed, edited or deleted. */
@@ -199,8 +202,17 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
     var currentFixtures = state.show.fixtures
     currentFixtures.registerListener(listener)
 
-    // Initial channel-mapping snapshot so a fresh connection doesn't have to ask.
-    session.launch { scope.send(buildChannelMappingMessage(state)) }
+    // Connect snapshots for the three channel-family states this file broadcasts changes for
+    // (see docs/websocket-engineering.md §"Snapshot rule"). One snapshot job for all three
+    // rather than three: `scope.send` only throws on a serialization bug, which fails the whole
+    // session scope anyway, so splitting them buys no isolation. Clients must not read anything
+    // into the order — the families are set up in separate coroutines and the burst as a whole
+    // has none. The matching request messages stay as explicit resync.
+    scope.sendSnapshot {
+        send(buildChannelStateMessage(state))
+        send(UniversesStateOutMessage(buildUniverseList(state)))
+        send(buildChannelMappingMessage(state))
+    }
 
     // Run-state snapshot, for the same reason plus one more: a session that opens mid-fade
     // gets a non-null `fadeElapsedMs` and animates the remainder instead of nothing.
@@ -215,16 +227,18 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         runState.stacksWithRunState().map { runState.runStateFor(state, it) }
     }
     if (runStateSnapshot.isNotEmpty()) {
-        session.launch {
-            for (runState in runStateSnapshot) scope.send(CueRunStateChangedOutMessage.of(runState))
+        scope.sendSnapshot {
+            for (runState in runStateSnapshot) send(CueRunStateChangedOutMessage.of(runState))
         }
     }
 
     // Re-register on project switch — the previous project's [Fixtures] instance is replaced
-    // wholesale, so a stale registration would silently stop firing. `.drop(1)` skips the
-    // SharedFlow's replay-1 cached event, which would otherwise unregister/re-register the
-    // freshly-installed listener at every connect for no reason.
-    scope.subscribe(state.projectManager.projectChangedFlow.drop(1)) {
+    // wholesale, so a stale registration would silently stop firing. No `drop(1)` here: it used
+    // to skip `projectChangedFlow`'s replay-1 cached event, but that flow is replay-0 now (the
+    // connect snapshot is `projectState`, not a replayed change event), and a `drop(1)` against
+    // an empty replay cache swallows the *first real* switch instead — leaving the connection
+    // listening to the outgoing project's [Fixtures] for the rest of its life.
+    scope.subscribe(state.projectManager.projectChangedFlow) {
         currentFixtures.unregisterListener(listener)
         currentFixtures = state.show.fixtures
         currentFixtures.registerListener(listener)

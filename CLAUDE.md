@@ -341,7 +341,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `universesState` - Available DMX universes
 - `updateChannel` - Direct channel control
 - `fxState` - Request/receive the active-effect list (incl. per-effect speed master). Carries no tempo — that is the `speedMasters.*` family's job
-- `speedMasters.state` / `speedMasters.setBpm` / `speedMasters.tap` - Keyed per-master tempo control, the only WS tempo surface; `speedMasters.changed` streams live BPM moves, `speedMasters.beat` beat boundaries, `speedMasterListChanged` signals CRUD
+- `speedMasters.state` / `speedMasters.setBpm` / `speedMasters.tap` - Keyed per-master tempo control, the only WS tempo surface; `speedMasters.changed` streams live BPM moves, `speedMasters.beat` beat boundaries, `speedMasters.listChanged` signals CRUD
 - `removeFx` / `pauseFx` / `resumeFx` / `clearFx` - Effect control
 - `fxChanged` - Broadcast on effect add/remove/update
 - `groupsState` - Request/receive fixture groups state

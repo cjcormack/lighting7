@@ -126,7 +126,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | File | Purpose |
 |---|---|
 | `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty`, `CueStackGo` / `Back` / `Pause`, `FireCue`, `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
-| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Emits `BindingChange` events; broadcast via `surfaceBindingsChanged`. |
+| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
 
 ### Inbound routing
@@ -424,7 +424,7 @@ From `State.kt`:
 | `surfaceBank.changed` | Single delta event |
 | `surfaceScaler.state` | `{ blackout, grandMaster }` |
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
-| `surfaceBindingsChanged` | Broadcast on every binding mutation |
+| `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
 | `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |
 
 ## REST surface

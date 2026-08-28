@@ -34,7 +34,17 @@ class ProjectManager(
     /** The show if [initialize] has run, otherwise null (no throw). */
     val showOrNull: Show? get() = _show
 
-    private val _projectChangedFlow = MutableSharedFlow<ProjectChangedEvent>(replay = 1)
+    /**
+     * Project switches, as events — **replay 0 on purpose.** This is not a snapshot of "which
+     * project is current": that is `projectState` on the WS side and [currentProject] here, and a
+     * replayed switch event pretending to be one made every subscriber choose between re-handling
+     * a switch that already happened and a `drop(1)` that swallows the first genuine one.
+     */
+    // `extraBufferCapacity` rather than a bare (replay = 0, buffer = 0) flow: with no buffer at
+    // all, `emit` suspends until every subscriber has taken the value, which would let one wedged
+    // WebSocket stall a project switch. 16 slots is more switches than can be in flight, so the
+    // emit is effectively non-blocking while still never dropping an event.
+    private val _projectChangedFlow = MutableSharedFlow<ProjectChangedEvent>(extraBufferCapacity = 16)
     val projectChangedFlow: SharedFlow<ProjectChangedEvent> = _projectChangedFlow.asSharedFlow()
 
     data class ProjectChangedEvent(

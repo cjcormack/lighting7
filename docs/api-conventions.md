@@ -156,5 +156,5 @@ even though it has no side effect, there is no stable resource behind it for a `
 
 ---
 
-WebSocket message naming and snapshot rules are **F5**, and live in
-[`websocket-engineering.md`](websocket-engineering.md).
+WebSocket message naming, the connect-snapshot rule and the reply conventions live in
+[`websocket-engineering.md`](websocket-engineering.md) §"Conventions".

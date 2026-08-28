@@ -1,7 +1,6 @@
 package uk.me.cormack.lighting7.plugins
 
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
@@ -12,7 +11,7 @@ import java.util.UUID
 /**
  * The `speedMasters.*` WS family — live tempo control and streaming for the speed-master
  * bank, and the desk's only WS tempo surface. CRUD (create/rename/delete) is REST
- * (`/projects/{id}/speed-masters`) with a `speedMasterListChanged` invalidation broadcast;
+ * (`/projects/{id}/speed-masters`) with a `speedMasters.listChanged` invalidation broadcast;
  * this family carries only what changes at performance rate: per-master BPM.
  *
  * A master is addressed by uuid throughout, with `null` meaning master 1 on every *inbound*
@@ -167,9 +166,9 @@ private inline fun withWriteTarget(raw: String?, write: (UUID?) -> Unit) {
 fun setupSpeedMasterSubscriptions(scope: SocketScope) {
     val bank = scope.state.show.speedMasterBank
 
-    // Exactly one state frame on connect — the connect burst is documented in
-    // WsTestHelpers, and anything per-tick here would be a storm.
-    scope.session.launch { scope.send(buildSpeedMastersState(bank)) }
+    // Exactly one state frame on connect (the one-snapshot rule in
+    // docs/websocket-engineering.md); anything per-tick here would be a storm.
+    scope.sendSnapshot { send(buildSpeedMastersState(bank)) }
 
     scope.subscribe(bank.changes) { change ->
         scope.send(

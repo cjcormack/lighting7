@@ -2,6 +2,86 @@
 
 This document describes the WebSocket API for real-time communication between the server and frontend clients.
 
+## Conventions
+
+These are the rules the socket settled on in the post-refactor sweep (backend item F5). They are
+the WS counterpart of [`api-conventions.md`](api-conventions.md), and the same decision sits
+behind them: **normalize hard, no aliases.** A renamed message is renamed, not dual-emitted —
+there is one client, in one adjacent repo, so a compatibility alias would only be a second
+spelling that never dies.
+
+### Naming
+
+Message names are **dotted namespaces**: `family.verb` — `speedMasters.state`,
+`programmer.clearAll`, `surfaceLearn.begin`, `surfaceBank.bindingsChanged`. The family names the
+client cache or subsystem the frame belongs to; it does **not** name the server component that
+emits it (`speedMasters.listChanged` is fired from `BroadcastSocket.kt`'s fixtures listener, and
+that is fine).
+
+The flat `somethingHappened` names — `channelState`, `lookListChanged`, `cueRunStateChanged`,
+`fixturesChanged` — are the older scheme. They are left alone deliberately: they are whole
+families spelled consistently, and renaming them buys nothing but a client edit. What was *not*
+left alone is a flat name sitting inside an otherwise-dotted family, because that is the one case
+where a reader cannot tell which convention applies. Both were fixed:
+`speedMasterListChanged` → `speedMasters.listChanged`, `surfaceBindingsChanged` →
+`surfaceBank.bindingsChanged`.
+
+New messages take the dotted form.
+
+### Snapshot rule
+
+**Every stateful family pushes its snapshot on connect.** A client should be able to render the
+desk from the connect burst alone, without asking for anything.
+
+The request messages (`channelState`, `fxState`, `programmer.state`, `speedMasters.state`,
+`surfaceScaler.state`, …) stay, but their only remaining job is **explicit resync** — a tab
+coming back from the background, a client that thinks it has drifted. They are not the way
+initial state arrives, and a client that still asks on open just gets the frame twice.
+
+Two mechanisms satisfy the rule, and only two:
+
+- an explicit `scope.send(build…)` in the family's `setupXxxSubscriptions`, or
+- a subscription to a **`StateFlow`** (or a `combine` of them), which always carries a current
+  value.
+
+A **replay-1 `MutableSharedFlow` does not count.** Its replay cache is empty until something has
+happened, so the snapshot arrives only on a desk where the thing has already happened once —
+which is exactly the case a fresh client cannot detect. `ParkManager.parkStateFlow` and
+`FxEngine.fxStateFlow` were both this, and are both `StateFlow` now, so "nothing is parked" and
+"no effects are running" are values rather than silence.
+
+`.drop(1)` is likewise not a way to suppress a connect frame. It suppresses the first *event*,
+which on a flow whose replay cache happens to be empty is the first real one — the bug that used
+to leave a WebSocket's fixtures listener bound to the outgoing project after the very first
+project switch.
+
+Pure event streams — `*ListChanged` invalidations, `cloudSync*`, `programmer.entryChanged`,
+`speedMasters.changed` — have no snapshot and push nothing on connect. That is not an exception to
+the rule; they simply are not state.
+
+### Reply conventions
+
+A write arriving over the socket is answered in one of three ways, and all three are in the
+codebase today:
+
+1. **Full family snapshot.** `speedMasters.setBpm` and `.tap` both answer `speedMasters.state`.
+2. **Narrow ack or delta.** `removeFx` answers `fxChanged(REMOVED, id)`; `programmer.setBlind`
+   answers `programmer.blindState`.
+3. **No reply at all** — the mutation lands and the family's change stream carries it back, to
+   this client along with every other. `surfaceBank.set`, `surfaceScaler.setBlackout`,
+   `parkChannel` and `updateChannel` all work this way.
+
+**For new operations, pick (3).** Everything this socket controls is shared desk state, so a
+unicast reply is at best redundant with the broadcast and at worst the reason two tabs disagree:
+a reply-only path leaves every other client stale, which is precisely the bug that put the
+programmer layer stack on a broadcast subscription rather than trusting `handleProgrammer`'s
+unicast reply. If a client needs confirmation that its own frame was the cause, that belongs in
+the broadcast payload, not in a second private message.
+
+(1) remains right where a write is a *retune* of something the client is holding a live model of
+and the whole family is small — the speed-master bank is four rows. (2) is right for a failure
+reply, where there is no state change to broadcast; see the `surfaceLearn.error` family.
+
 ## Overview
 
 The WebSocket API provides:
@@ -264,11 +344,18 @@ show-scoped subscription, because they read nothing off `state.show`.
 
 ### On Connect
 
-1. New `SocketConnection` created with unique ID
-2. Added to global `connections` set
-3. `FixturesChangeListener` registered with `Fixtures`
-4. Initial `channelMappingState` sent to client
-5. Connection ready to receive messages
+1. Session-cookie auth check; unauthenticated sockets are accepted and then closed `4401`
+2. Machine-scoped subscriptions registered (account changes, install row) — these predate the
+   warm-up gate because they read nothing off `state.show`
+3. Boot progress streamed until `isShowReady`, or the socket returns on a `FAILED` boot
+4. New `SocketConnection` created with unique ID and added to the global `connections` set
+5. Each domain's `setupXxxSubscriptions` runs: `FixturesChangeListener` is registered, live
+   subscriptions are opened, and **every stateful family's snapshot is pushed** — see
+   §"Snapshot rule". The client needs to request nothing.
+6. Connection ready to receive messages
+
+The snapshot burst has no guaranteed order: the families are set up in separate coroutines, so a
+client must key off message type, never position.
 
 ### Message Loop
 
@@ -347,12 +434,9 @@ Universe numbers are sent as-is (0-15 range within subnet 0).
 ```javascript
 const ws = new WebSocket('ws://localhost:8413/api');
 
-ws.onopen = () => {
-    // Request initial state
-    ws.send(JSON.stringify({ type: 'universesState' }));
-    ws.send(JSON.stringify({ type: 'channelState' }));
-};
-
+// No requests on open. The server pushes every stateful family's snapshot as part of the
+// connect burst (§"Snapshot rule"), so asking only gets the frame twice. The request messages
+// are for explicit resync — a tab returning from the background, say.
 ws.onmessage = (event) => {
     const message = JSON.parse(event.data);
     switch (message.type) {

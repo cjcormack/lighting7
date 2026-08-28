@@ -1111,9 +1111,9 @@ and behaves identically to the null default).
 | `fxState` | The active-effect list `{ activeEffects }`; each effect carries `speedMasterUuid`/`speedMasterIndex` and `rateSpeedMasterUuid`/`rateSpeedMasterIndex`. No tempo — it used to carry `bpm`/`isClockRunning` for master 1 |
 | `fxChanged` | Effect change notification `{ changeType, effectId }` |
 | `speedMasters.state` | Full bank `{ masters: [{ uuid, index, name, bpm, isRunning, source }] }` — sent on connect, on request, and as the reply to every `speedMasters.*` write |
-| `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasterListChanged` instead |
+| `speedMasters.changed` | One master's tempo moved `{ masterUuid, index, bpm, source, timestampMs }` — the live-BPM stream; CRUD invalidation goes via `speedMasters.listChanged` instead |
 | `speedMasters.beat` | One master crossed a beat boundary `{ masterUuid, index, beatNumber, bpm, timestampMs }` — every master, master 1 included |
-| `speedMasterListChanged` | A master was created/renamed/deleted (cache-invalidation signal, never fired per tempo change) |
+| `speedMasters.listChanged` | A master was created/renamed/deleted (cache-invalidation signal, never fired per tempo change) |
 
 ### Beat Sync
 

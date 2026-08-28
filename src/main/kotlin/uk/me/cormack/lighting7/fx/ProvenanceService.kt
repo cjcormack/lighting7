@@ -86,6 +86,13 @@ class ProvenanceService internal constructor(
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
     // diffs: the entry set is small (the union of active keys) and event-rate, so diffing
     // buys nothing over the conflation.
+    //
+    // Stays a replay-1 SharedFlow, unlike `ParkManager.parkStateFlow` and `FxEngine.fxStateFlow`
+    // which became StateFlows for the WS connect-snapshot rule: a provenance frame is what makes
+    // the client refetch `programmer.state`, and two *content-equal* snapshots are a real signal
+    // — the owner of a property unchanged, its value moved. A StateFlow conflates exactly that
+    // away and the refetch never fires. The connect frame is pushed explicitly from
+    // `setupProgrammerSubscriptions` instead.
     private val _flow = MutableSharedFlow<List<ProvenanceEntry>>(
         replay = 1,
         extraBufferCapacity = 1,

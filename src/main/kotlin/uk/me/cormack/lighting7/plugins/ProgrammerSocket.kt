@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProvenanceEntry
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
@@ -405,6 +406,23 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
  * three delivers the latest on connect.
  */
 fun setupProgrammerSubscriptions(scope: SocketScope) {
+    // Connect snapshots. Only `lastIncludedTargetFlow` below is a StateFlow; `layersFlow` and
+    // `provenance.flow` are replay-1 `SharedFlow`s, which have nothing to replay on a desk where
+    // no layer has been touched and nothing has moved a value — so neither can be the connect
+    // frame for its family. `programmer.state` covers two of the three: it carries `lastIncluded`
+    // and `layers` alongside the entries and the channel sideband, which had no connect frame at
+    // all and are why the client asked on open. Provenance has no such carrier, so it gets its
+    // own explicit push.
+    //
+    // On a warm desk the replayed frames then arrive too, so `programmer.includeTarget`,
+    // `programmer.layerState` and `provenanceState` can each be seen twice at connect. Harmless:
+    // all three are idempotent, and the client already coalesces repeated provenance frames into
+    // one debounced refetch.
+    scope.sendSnapshot {
+        send(ProgrammerHandler.stateSnapshot(state))
+        send(buildProvenanceStateMessage(state.show.fxEngine.provenance.compute()))
+    }
+
     // StateFlow replays its current value, so a tab opened mid-show sees the live include
     // target immediately rather than only after the next Include.
     scope.subscribe(scope.state.show.programmerStore.lastIncludedTargetFlow) { target ->
@@ -418,24 +436,26 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
         scope.send(ProgrammerLayerStateOutMessage(layers.map { it.toDto() }))
     }
     scope.subscribe(scope.state.show.fxEngine.provenance.flow) { entries ->
-        scope.send(
-            ProvenanceStateOutMessage(
-                entries.map {
-                    ProvenanceEntryDto(
-                        targetKey = it.targetKey,
-                        propertyName = it.propertyName,
-                        source = it.source.name,
-                        cueId = it.cueId,
-                        cueStackId = it.cueStackId,
-                        effectId = it.effectId,
-                        layerId = it.layerId,
-                        layerSource = it.layerSource?.toDto(),
-                    )
-                },
-            )
-        )
+        scope.send(buildProvenanceStateMessage(entries))
     }
 }
+
+/** Shared by the connect snapshot and the live `provenance.flow` subscription. */
+private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>) =
+    ProvenanceStateOutMessage(
+        entries.map {
+            ProvenanceEntryDto(
+                targetKey = it.targetKey,
+                propertyName = it.propertyName,
+                source = it.source.name,
+                cueId = it.cueId,
+                cueStackId = it.cueStackId,
+                effectId = it.effectId,
+                layerId = it.layerId,
+                layerSource = it.layerSource?.toDto(),
+            )
+        },
+    )
 
 private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
     layerId = layerId,

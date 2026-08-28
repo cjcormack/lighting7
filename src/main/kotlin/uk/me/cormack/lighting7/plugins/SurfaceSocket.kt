@@ -3,7 +3,6 @@ package uk.me.cormack.lighting7.plugins
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -125,7 +124,7 @@ enum class BindingChangeType {
 }
 
 @Serializable
-@SerialName("surfaceBindingsChanged")
+@SerialName("surfaceBank.bindingsChanged")
 data class SurfaceBindingsChangedOutMessage(
     val projectId: Int,
     val changeType: BindingChangeType,
@@ -246,6 +245,14 @@ suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
 fun setupSurfaceSubscriptions(scope: SocketScope) {
     val state = scope.state
 
+    // `surfaceBank.changed` carries previous→new, so a client that never saw a switch has
+    // nothing to render from — the bank family needs a state frame of its own. Taken as a
+    // subscription to the `active` StateFlow rather than a one-shot read of `.value`: a switch
+    // landing between a one-shot snapshot and the delta subscription below starting to collect
+    // would be lost in both, and nothing pushes full bank state again to correct it.
+    // `surfaceScaler.state` and `surfaceDevices.state` get theirs the same way, below.
+    scope.subscribe(state.activeBankState.active) { scope.send(SurfaceBankStateOutMessage(it)) }
+
     // Learn-event broadcasts are filtered to sessions this connection started, so two
     // `/surfaces` tabs don't see phantom captures from each other's sessions.
     scope.subscribe(state.midiLearnSessionManager.events.filter { it.sessionId in scope.ownedLearnSessions }) { event ->
@@ -299,9 +306,8 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
     // `combine(...)` at connect time would observe the previous project's facade forever.
     // Re-subscribing via `flatMapLatest` off `projectChangedFlow` (plus an initial Unit to
     // bootstrap the first subscription) makes the outbound flow follow the active show. The
-    // `drop(1)` suppresses the combine's initial emit so connect doesn't push state the
-    // client hasn't asked for — clients fetch initial state via the `surfaceScaler.state`
-    // request message.
+    // combine's initial emit — both at connect and after a switch — *is* the connect snapshot
+    // under the one-snapshot rule; `surfaceScaler.state` stays as explicit resync.
     scope.subscribe(
         state.projectManager.projectChangedFlow
             .map { Unit }
@@ -312,7 +318,7 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
                     state.show.globalScalerState.grandMasterEnabled,
                 ) { blackout, grandMaster -> SurfaceScalerStateOutMessage(blackout, grandMaster) }
             }
-            .drop(1),
+            .distinctUntilChanged(),
     ) { scope.send(it) }
 
     scope.subscribe(state.surfaceFeedbackPublisher.takeover.changes) { change ->
@@ -324,8 +330,9 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
         ))
     }
 
-    // Push the full device list whenever the set of connected ports or matched profiles
-    // changes, or when an active bank flips. `distinctUntilChanged` drops no-op emits.
+    // Push the full device list on connect (all three sources are StateFlows, so the combine
+    // emits immediately) and again whenever the set of connected ports or matched profiles
+    // changes, or an active bank flips. `distinctUntilChanged` drops no-op emits.
     scope.subscribe(
         combine(
             state.midiRegistry.devices,
@@ -334,8 +341,7 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
         ) { devices, attached, banks ->
             buildSurfaceDevicesStateMessage(devices, attached, banks)
         }
-            .distinctUntilChanged()
-            .drop(1),
+            .distinctUntilChanged(),
     ) { scope.send(it) }
 }
 

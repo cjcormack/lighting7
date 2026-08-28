@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import io.ktor.server.websocket.*
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
@@ -66,6 +67,21 @@ class SocketScope(
 
     fun <T> subscribe(flow: Flow<T>, onEach: suspend (T) -> Unit) {
         jobs += flow.onEach(onEach).launchIn(session)
+    }
+
+    /**
+     * Push a family's connect snapshot — the explicit half of the one-snapshot rule (see
+     * docs/websocket-engineering.md §"Snapshot rule"). Use it for a family whose live stream is a
+     * delta, or is a replay-1 `SharedFlow` and so has nothing to replay on a desk where the thing
+     * has never happened; a family backed by a `StateFlow` needs nothing here, because
+     * [subscribe] already delivers that flow's current value.
+     *
+     * A launch rather than a straight `send` because setup runs on the connection handler's own
+     * coroutine, before it reaches the frame loop. Tracked in [jobs] like a subscription, so a
+     * connection that hangs up mid-burst doesn't leave a send pending against a dead socket.
+     */
+    fun sendSnapshot(block: suspend SocketScope.() -> Unit) {
+        jobs += session.launch { block() }
     }
 
     fun cancelAll() {

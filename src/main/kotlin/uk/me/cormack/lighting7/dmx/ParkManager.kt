@@ -1,8 +1,8 @@
 package uk.me.cormack.lighting7.dmx
 
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -56,9 +56,13 @@ class ParkManager(
     // In-memory park state: universe -> (channel -> value)
     private val parkedChannels = ConcurrentHashMap<Int, ConcurrentHashMap<Int, UByte>>()
 
-    // Flow for notifying WebSocket clients of park state changes
-    private val _parkStateFlow = MutableSharedFlow<List<ParkedChannel>>(replay = 1)
-    val parkStateFlow = _parkStateFlow.asSharedFlow()
+    // Flow for notifying WebSocket clients of park state changes. A [MutableStateFlow] rather
+    // than a replay-1 [kotlinx.coroutines.flow.MutableSharedFlow] so that "the park list is
+    // empty" is a value a subscriber can observe, not the absence of one — that is what makes a
+    // new WebSocket connection's park snapshot unconditional (see the one-snapshot rule in
+    // docs/websocket-engineering.md) instead of contingent on something having parked first.
+    private val _parkStateFlow = MutableStateFlow<List<ParkedChannel>>(emptyList())
+    val parkStateFlow: StateFlow<List<ParkedChannel>> = _parkStateFlow.asStateFlow()
 
     /**
      * Load parked channels from the database. Call once after construction.
@@ -71,8 +75,7 @@ class ParkManager(
                         .getOrPut(row.universe) { ConcurrentHashMap() }[row.channel] = row.value.toUByte()
                 }
         }
-        // Emit initial state so flow subscribers (WebSocket connections) get the correct replay value
-        runBlocking { emitState() }
+        emitState()
     }
 
     /**
@@ -175,7 +178,7 @@ class ParkManager(
         }
     }
 
-    private suspend fun emitState() {
-        _parkStateFlow.emit(getAllParked())
+    private fun emitState() {
+        _parkStateFlow.value = getAllParked()
     }
 }

@@ -83,22 +83,7 @@ data class ChannelMappingStateOutMessage(
 suspend fun handleChannel(scope: SocketScope, message: ChannelInMessage) {
     val state = scope.state
     when (message) {
-        is ChannelStateInMessage -> {
-            // Overlay parked values onto currentValues so clients see what the fixture is
-            // actually emitting, not the underlying buffered value.
-            val parkManager = state.show.parkManager
-            val currentValues = state.show.fixtures.controllers.flatMap { controller ->
-                val universe = controller.universe.universe
-                controller.currentValues.map { (channelNo, value) ->
-                    ChannelState(
-                        universe,
-                        channelNo,
-                        parkManager.getParkedValue(universe, channelNo) ?: value,
-                    )
-                }
-            }
-            scope.send(ChannelStateOutMessage(currentValues))
-        }
+        is ChannelStateInMessage -> scope.send(buildChannelStateMessage(state))
         is UpdateChannelInMessage -> handleUpdateChannel(state, message)
         is UniversesStateInMessage -> {
             scope.send(UniversesStateOutMessage(buildUniverseList(state)))
@@ -220,6 +205,25 @@ private fun currentExtendedColour(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * The whole DMX output buffer, parked values overlaid so clients see what the fixture is
+ * actually emitting rather than the underlying buffered value.
+ */
+internal fun buildChannelStateMessage(state: State): ChannelStateOutMessage {
+    val parkManager = state.show.parkManager
+    val currentValues = state.show.fixtures.controllers.flatMap { controller ->
+        val universe = controller.universe.universe
+        controller.currentValues.map { (channelNo, value) ->
+            ChannelState(
+                universe,
+                channelNo,
+                parkManager.getParkedValue(universe, channelNo) ?: value,
+            )
+        }
+    }
+    return ChannelStateOutMessage(currentValues)
+}
 
 internal fun buildUniverseList(state: State): List<Int> =
     state.show.fixtures.controllers.map(DmxController::universe).map(Universe::universe).sortedBy { it }

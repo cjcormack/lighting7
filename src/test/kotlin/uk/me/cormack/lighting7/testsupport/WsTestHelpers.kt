@@ -23,10 +23,15 @@ fun ApplicationTestBuilder.createWsClient(): HttpClient = createClient {
 }
 
 /**
- * Read inbound frames until one deserializes as [T]. The server fans out an initial-state
- * burst on connect (channelMapping / fxState / palette / speedMasters.state —
- * see plugins/Sockets.kt); tests use this to skip past those and wait for the message they
- * actually care about.
+ * Read inbound frames until one deserializes as [T]. Every stateful family pushes its snapshot
+ * on connect, so the server fans out an initial-state burst (channelState, universesState,
+ * channelMapping, fxState, parkState, projectState, programmer.state, speedMasters.state, the
+ * surface families — see the snapshot rule in docs/websocket-engineering.md and the
+ * `setupXxxSubscriptions` calls in plugins/Sockets.kt). Tests use this to skip past those and
+ * wait for the message they actually care about.
+ *
+ * Frames from different families are ordered only within one `setupXxx`, so never assert on a
+ * position in the burst — wait for the type you want.
  */
 suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitOfType(
     maxFrames: Int = 100,

@@ -359,10 +359,18 @@ class FxEngine(
         fun isProgrammerFxPriority(priority: Int): Boolean = priority >= PROGRAMMER_FX_PRIORITY_BASE
     }
 
-    private val _fxStateFlow = MutableSharedFlow<FxStateUpdate>(replay = 1, extraBufferCapacity = 1)
-
-    /** Flow of FX state updates for WebSocket broadcasting */
-    val fxStateFlow: SharedFlow<FxStateUpdate> = _fxStateFlow.asSharedFlow()
+    /**
+     * FX state snapshots for WebSocket broadcasting.
+     *
+     * A [MutableStateFlow] rather than a replay-1 [MutableSharedFlow] for two reasons: "no
+     * effects are running" becomes an observable value instead of the absence of one, so a
+     * fresh connection's `fxState` snapshot is unconditional (the one-snapshot rule in
+     * docs/websocket-engineering.md) rather than contingent on some effect having been added
+     * since boot; and the old `tryEmit` against a one-slot buffer could silently *drop* an
+     * update if a subscriber was mid-send, whereas a StateFlow always holds the latest.
+     */
+    private val _fxStateFlow = MutableStateFlow(FxStateUpdate(activeEffectIds = emptyList(), effectStates = emptyMap()))
+    val fxStateFlow: StateFlow<FxStateUpdate> = _fxStateFlow.asStateFlow()
 
     // --- E1 split components ---
     //
@@ -1930,10 +1938,10 @@ class FxEngine(
             )
         }
 
-        _fxStateFlow.tryEmit(FxStateUpdate(
+        _fxStateFlow.value = FxStateUpdate(
             activeEffectIds = activeEffects.keys.toList(),
-            effectStates = states
-        ))
+            effectStates = states,
+        )
         // Effect lifecycle changes move provenance winners — piggyback on the same sites.
         provenance.emitUpdate()
     }
