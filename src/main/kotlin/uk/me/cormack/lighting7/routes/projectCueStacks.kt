@@ -397,12 +397,11 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-stacks/{stackId}/preview - Compose a cue without firing it
-    post<CueStackPreviewResource> { resource ->
+    // GET /{projectId}/cue-stacks/{stackId}/preview - Compose a cue without firing it
+    get<CueStackPreviewResource> { resource ->
         withCurrentProject(state, resource.parent.parent.projectId, "Cannot preview - not current project") { _ ->
-            val request = try { call.receive<PreviewCueRequest>() } catch (_: Exception) { PreviewCueRequest() }
             try {
-                when (val result = previewCueLook(state, resource.parent.stackId, request.cueId)) {
+                when (val result = previewCueLook(state, resource.parent.stackId, resource.cueId)) {
                     null -> call.respond(
                         HttpStatusCode.BadRequest,
                         ErrorResponse("Nothing to preview - the stack has no next cue"),
@@ -502,7 +501,11 @@ data class CueStackGoToResource(val parent: ProjectCueStackResource)
 data class CueStackStandbyResource(val parent: ProjectCueStackResource)
 
 @Resource("/preview")
-data class CueStackPreviewResource(val parent: ProjectCueStackResource)
+data class CueStackPreviewResource(
+    val parent: ProjectCueStackResource,
+    /** The cue to preview; absent previews the stack's effective next (what GO would fire). */
+    val cueId: Int? = null,
+)
 
 @Resource("/sort-by-cue-number")
 data class CueStackSortByNumberResource(val parent: ProjectCueStackResource)

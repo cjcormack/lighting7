@@ -32,12 +32,6 @@ import uk.me.cormack.lighting7.state.State
  *    vis source already overlays. Reporting 0 would black out every unaddressed fixture.
  * 3. **No programmer, no park.** This is a preview of playback, not of the stage.
  */
-@Serializable
-data class PreviewCueRequest(
-    /** The cue to preview; null previews the stack's effective next (what GO would fire). */
-    val cueId: Int? = null,
-)
-
 /** One channel of a previewed look. Mirrors the `channelState` WS shape the client already merges. */
 @Serializable
 data class PreviewChannel(

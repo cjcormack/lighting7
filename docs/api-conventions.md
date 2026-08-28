@@ -140,8 +140,21 @@ answers with the same DTO shape across all four, `activeStackId`/`activatedStack
 after a deactivate — a client watching "what's live now" reads one response shape regardless of
 which verb got it there, rather than inferring the deactivated state from a bare status code.
 
+## POST-for-read
+
+An endpoint that only computes and returns something — no write, no side effect a `force`-style
+retry would need to worry about — is a `GET`, even if an earlier draft of the route grew up as a
+`POST`. `cue-stacks/{stackId}/preview` is the model case: it takes one scalar (`cueId`), so it
+takes it as a query parameter (absent means "the stack's effective next").
+
+The exception is a route whose input is a body too shaped to live in a query string — a source
+script, or an unsaved draft with its own list of rows — because there is no clean way to spell
+that as `?rows=...` and no cache key worth building around it anyway. `fx/definitions/compile`,
+`fx/definitions/{id}/compile` and `templates/resolve` all stay `POST` for this reason:
+`templates/resolve` in particular answers "resolve *this* body", not "resolve the template", so
+even though it has no side effect, there is no stable resource behind it for a `GET` to name.
+
 ---
 
-One further convention belongs here and is still being applied by its own sweep item: POST-for-read
-(**F4**). WebSocket message naming and snapshot rules are **F5**, and live in
+WebSocket message naming and snapshot rules are **F5**, and live in
 [`websocket-engineering.md`](websocket-engineering.md).

@@ -2,8 +2,10 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -71,11 +73,10 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
             setBody(ActivateCueStackRequest(cueId = cueId))
         }
 
-    private suspend fun preview(client: HttpClient, stackId: Int, cueId: Int? = null) =
-        client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/preview") {
-            contentType(ContentType.Application.Json)
-            setBody(PreviewCueRequest(cueId = cueId))
-        }
+    private suspend fun preview(client: HttpClient, stackId: Int, cueId: Int? = null): HttpResponse {
+        val query = if (cueId != null) "?cueId=$cueId" else ""
+        return client.get("/api/rest/projects/$projectId/cue-stacks/$stackId/preview$query")
+    }
 
     private fun List<PreviewChannel>.at(channel: Int): Int? =
         firstOrNull { it.channel == channel }?.value?.toInt()
