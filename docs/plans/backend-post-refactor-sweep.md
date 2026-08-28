@@ -605,13 +605,24 @@ plan already gives for compile-checks — confirmed against lighting-react's own
 comment, which keeps it a mutation for exactly that reason. It stays POST, documented as a second
 named exception alongside compile-checks in api-conventions.md.
 
-**F5. WS naming + snapshot rules** — medium / P2 / M / opus
+~~**F5. WS naming + snapshot rules**~~ — done, `27323a3` (+ lighting-react `c19aa12`). medium / P2 / M / opus
 Dotted namespaces are the modern scheme; fix the two mixed-scheme stragglers
 (`speedMasterListChanged` → `speedMasters.listChanged`, `surfaceBindingsChanged` →
 `surfaceBank.bindingsChanged`). One snapshot rule: every stateful family pushes on connect,
 request-messages remain as explicit resync — and fix the double `speedMasters.state` frame (server
 pushes on connect *and* client requests on open). Document the three reply conventions and pick
 one for future ops.
+
+Grew in the landing: eleven families needed a connect snapshot, not one, and two of them were
+being served by mechanisms that only *looked* like snapshots — `ParkManager.parkStateFlow` and
+`FxEngine.fxStateFlow` were replay-1 `MutableSharedFlow`s, which replay nothing on a desk where
+nothing has ever been parked and no effect has ever been added. Both are `StateFlow` now.
+`ProjectManager.projectChangedFlow` went the other way, to replay-0: it was doubling as
+`projectState`'s snapshot, and the `.drop(1)` two subscribers used to suppress its stale replay
+swallowed the *first real* project switch instead whenever the replay cache happened to be empty —
+which left a WebSocket's fixtures listener bound to the outgoing project for the rest of its life.
+The conventions went into `docs/websocket-engineering.md` §"Conventions" (naming, snapshot rule,
+the three reply conventions and the pick), leaving H1 to rewrite the reference tables below it.
 
 ~~**F6. Auth gating: route-tree composition** *(decision taken)*~~ — done, `60cc3b3` (+ lighting-react `0d2081d`). high / P1 / M / opus
 Replace `ADMIN_ONLY_PREFIXES` string matching (`auth/AuthGate.kt:134`) with an `adminOnly {}`
@@ -695,7 +706,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3~~, F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5~~ **done**, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
@@ -738,7 +749,11 @@ nothing is outstanding — see below), ~~F2~~ (landed: `/ai/conversations` moved
 changes — RTK Query's `fetchBaseQuery` already treats a `204`/an unread body as a no-op, so nothing
 was outstanding; `deactivateProgram` gained a JSON body it doesn't read, which is harmless), ~~F4~~
 (landed: `previewCueLook` moved to `GET` + `?cueId=` in `lighting-react` `a5d1853`, so nothing is
-outstanding), F5 (renamed messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
+outstanding), ~~F5~~ (landed: two WS messages renamed —
+`speedMasterListChanged` → `speedMasters.listChanged`, `surfaceBindingsChanged` →
+`surfaceBank.bindingsChanged` — and every stateful family now pushes its snapshot on connect, so
+the client's ten request-on-open sends went with it, in `lighting-react` `c19aa12`. Nothing
+is outstanding — see below), ~~F6~~ (landed: the widget's base URL moved to
 `/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
 below), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
@@ -750,6 +765,19 @@ of leaving them stale forever), E4 (`POST /fx/add`, `PUT /fx/{id}` and `POST /gr
 now **400** an unrecognised `distributionStrategy` or `elementFilter` instead of quietly using
 LINEAR / ALL — the shipped UI only sends canonical names so nothing needs changing, but any
 hand-built or replayed request with a legacy value now loses the whole effect).
+
+**F5.** Two WS messages are renamed on the wire: `speedMasterListChanged` →
+`speedMasters.listChanged` and `surfaceBindingsChanged` → `surfaceBank.bindingsChanged`. No
+aliases, so a client that still listens for the old spelling silently stops invalidating.
+
+The bigger change is that **every stateful family now pushes its snapshot on connect** —
+`channelState`, `universesState`, `channelMappingState`, `parkState`, `fxState`, `projectState`,
+`programmer.state`, `speedMasters.state`, `surfaceBank.state`, `surfaceScaler.state`,
+`surfaceDevices.state`. A client can render the desk from the connect burst alone; the request
+messages all still exist, but only as explicit resync. `lighting-react` dropped its ten
+request-on-open sends accordingly, and `projectState` in particular is a new connect frame where
+the client previously had to ask (the replay-1 `projectChanged` it used to lean on only arrived on
+a desk that had already switched project once).
 
 **D7.** `GET /fx/library` now returns each parameter's real `type`, `defaultValue` and
 `description` instead of `"string"`, `""`, `""`. Same payload shape, so nothing breaks and
@@ -910,7 +938,7 @@ the two renamed subtrees. The client half landed in the same run rather than bei
 there are no aliases, so a split would have left the desk's UI 404ing on nearly every call.
 The sync export directory `stageRegions` and the WS message `surfaceBindingsChanged` were left
 alone on purpose — the first is canonical-JSON layout (renaming it is a `formatVersion` break,
-not a path rename), the second is F5's.
+not a path rename), the second was F5's, and is now `surfaceBank.bindingsChanged`.
 
 F2 (`05fb674`, + lighting-react `481e453`) — `docs/api-conventions.md` gains a "Project scoping"
 section, and the one misfit moved. Frontend-visible in full: `GET /ai/conversations`,
