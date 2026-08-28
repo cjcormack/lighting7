@@ -412,6 +412,10 @@ class ProjectImporter(private val state: State) {
                     this.uuid = UUID.fromString(r.uuid)
                 }
             }
+            // No strict effect-enum check here, deliberately, unlike the authoring routes: a
+            // snapshot can come from a *newer* build whose blend modes this one does not know
+            // yet, and refusing the whole import over one unrecognised string is worse than the
+            // warn `EffectSpecCoercion.Lenient` logs when the effect eventually spawns.
             l.effects.forEach { e ->
                 DaoLookEffect.new {
                     look = dao

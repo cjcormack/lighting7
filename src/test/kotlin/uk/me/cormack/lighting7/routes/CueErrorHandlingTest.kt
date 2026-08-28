@@ -9,9 +9,12 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import org.junit.Test
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -120,6 +123,51 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         assertTrue(
             body.error.contains("cue number", ignoreCase = true),
             "message should name the offending field, got: ${body.error}",
+        )
+    }
+
+    @Test
+    fun `an unrecognised effect enum is rejected on create and on patch`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val stack = client.newStack("Act 1")
+
+        // Both must answer 400 — a stored "ADD" reads back as itself, renders in the UI as the
+        // layer's blend, and plays as OVERRIDE, permanently. PATCH is the one worth pinning
+        // separately: its children are decoded off a raw body, so the check sits on a different
+        // line of the handler than POST's.
+        val created = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                NewCue(
+                    name = "Bad Blend", cueStackId = stack,
+                    layers = listOf(CueLayerDto(lookId = 1, blendMode = "ADD")),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, created.status, created.bodyAsText())
+        assertTrue(
+            created.body<ErrorResponse>().error.contains("Unknown blendMode 'ADD'"),
+            created.body<ErrorResponse>().error,
+        )
+
+        val cue = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "Fine", cueStackId = stack))
+        }.body<CueDetails>()
+
+        val patched = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("layers", Json.encodeToJsonElement(listOf(CueLayerDto(lookId = 1, blendMode = "ADD"))))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, patched.status, patched.bodyAsText())
+        assertTrue(
+            patched.body<ErrorResponse>().error.contains("Unknown blendMode 'ADD'"),
+            patched.body<ErrorResponse>().error,
         )
     }
 

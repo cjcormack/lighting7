@@ -19,6 +19,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -636,6 +637,12 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
  * The same target check for effects. Rows had it and effects did not, which let a write through with
  * an unresolvable `targetType`: [DaoLookEffect.target] and `loadLookSnapshot` both then drop the
  * effect silently on every read, so the operator sees a 201 and an effect that never exists again.
+ *
+ * The enum-valued fields are checked here for the same reason, and it is the worse failure of the
+ * two: an unrecognised `blendMode` reaches `varchar(50)` intact, reads back as itself, and renders
+ * in the UI as the layer's blend — while every spawn warns and plays `OVERRIDE`. The value the
+ * operator sees and the value the desk plays then disagree permanently, which is what
+ * [EffectSpecCoercion.Lenient] exists to *survive*, not what it should have to cover.
  */
 internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
     for (effect in effects) {
@@ -646,6 +653,12 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
                 "expected 'fixture', 'group' or '$DEFERRED_TARGET_TYPE'"
         }
         if (effect.effectType.isBlank()) return "Effect type must not be blank"
+        EffectSpecCoercion.Strict.problem(
+            blendMode = effect.blendMode,
+            distribution = effect.distribution,
+            elementMode = effect.elementMode,
+            elementFilter = effect.elementFilter,
+        )?.let { return it }
     }
     return null
 }

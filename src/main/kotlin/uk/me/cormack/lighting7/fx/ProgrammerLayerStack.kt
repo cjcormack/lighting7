@@ -296,7 +296,16 @@ class ProgrammerLayerStack(
                     enabled = layer.enabled,
                     targets = layer.targets,
                     propertyMask = layer.propertyMask,
-                    blendMode = layer.blendMode,
+                    // The one point a *stored* blend becomes programmer state, and so the one
+                    // place the lenient policy belongs on this path: a row written by another
+                    // build may name a blend this one does not know, and Record writes these
+                    // layers straight back out again. Canonicalising here means the stack, the
+                    // UI and every subsequent write agree on the blend the desk is actually
+                    // playing — and that `createCueChildren`'s strict check, which Record CREATE
+                    // does not catch, can never see an unrecognised value from this direction.
+                    blendMode = EffectSpecCoercion.Lenient.blendMode(layer.blendMode) {
+                        "included cue layer ${layer.layerId} on '${layer.source.name}'"
+                    }.name,
                     amount = layer.amount,
                     stomp = layer.stomp,
                     speedMasterUuid = layer.speedMasterUuid,

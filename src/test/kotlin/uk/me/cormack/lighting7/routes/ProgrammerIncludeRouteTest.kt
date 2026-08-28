@@ -6,13 +6,19 @@ import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.client.statement.bodyAsText
 import io.ktor.server.testing.testApplication
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
@@ -327,6 +333,52 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         assertEquals(warm.id, layers.single().source.id)
         assertEquals(200u.toUByte(), programmerChannel(state, 0, 1), "and it is on stage")
     }
+
+    @Test
+    fun `an included layer's unrecognised blend is canonicalised, so Record cannot re-store it`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            val warm = ProgrammerRouteTestSupport.createLookBoundTo(
+                client, projectId, "Warm", mapOf("dimmer" to "200"),
+            )
+            val cueId = createCue(
+                client, "layered",
+                layers = listOf(
+                    CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+                ),
+            )
+            // A row the write boundary now refuses, as an older build or a hand edit left it. The
+            // routes cannot produce this any more, which is exactly why the read side still has to
+            // cope: Include is where a stored blend becomes programmer state.
+            transaction(state.database) {
+                DaoCueLayer.find { DaoCueLayers.cue eq cueId }.single().blendMode = "SCREEN"
+            }
+
+            client.include(cueId)
+            assertEquals(
+                "OVERRIDE",
+                state.show.programmerStore.layers.single().blendMode,
+                "the stack must show the blend the desk is actually playing",
+            )
+
+            // …and Record then writes that canonical value. Without the coercion this 500s: the
+            // strict check in `createCueChildren` fires on a value Record itself supplied, and the
+            // Record route has no catch for it.
+            val stack = ProgrammerRouteTestSupport.createStack(client, projectId, "recorded")
+            val recorded = client.post("/api/rest/programmer/record") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ProgrammerRecordRequest(
+                        projectId = projectId.toString(), mode = "CREATE",
+                        cueStackId = stack, name = "from-include",
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.Created, recorded.status, recorded.bodyAsText())
+            assertEquals("OVERRIDE", recorded.body<ProgrammerRecordResponse>().cue.layers.single().blendMode)
+        }
 
     @Test
     fun `an included layer remembers the cue row it came from, for Update to diff against`() =

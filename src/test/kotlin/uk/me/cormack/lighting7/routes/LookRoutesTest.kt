@@ -218,6 +218,54 @@ class LookRoutesTest : RouteIntegrationTest() {
         }
 
     @Test
+    fun `an unrecognised effect enum is rejected at the write, not survived at spawn`() =
+        testApplication {
+            // The failure this closes: `blendMode: "ADD"` used to reach `varchar(50)` intact and
+            // read back as itself, so the UI rendered "ADD" as the layer's blend while every spawn
+            // warned and played OVERRIDE. `EffectSpecCoercion.Lenient` exists to *survive* a row an
+            // older build wrote, not to paper over one this build accepted.
+            mountTestApp(state)
+            val client = jsonClient()
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreateLookRequest(
+                        name = "Bad Blend",
+                        effects = listOf(
+                            LookEffectDto(
+                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                                beatDivision = 0.5, blendMode = "ADD", distribution = "LINEAR",
+                            ),
+                        ),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            assertTrue(resp.bodyAsText().contains("Unknown blendMode 'ADD'"), resp.bodyAsText())
+
+            // The other three fields go through the same check, so one of them stands for the set.
+            val filter = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreateLookRequest(
+                        name = "Bad Filter",
+                        effects = listOf(
+                            LookEffectDto(
+                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                elementFilter = "THIRDS",
+                            ),
+                        ),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, filter.status)
+            assertTrue(filter.bodyAsText().contains("elementFilter"), filter.bodyAsText())
+        }
+
+    @Test
     fun `a duplicate name in one project is rejected`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

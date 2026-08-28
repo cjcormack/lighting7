@@ -448,7 +448,44 @@ internal fun resolveLayerSourceRecords(source: LayerSource): ResolvedLayerSource
 internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
     look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
 
-/** Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue. */
+/**
+ * Reject an unrecognised `blendMode` / `distribution` / `elementMode` / `elementFilter` before it
+ * reaches the `varchar(50)` that stores it, or null when every value parses.
+ *
+ * Message-returning rather than throwing, because [createCueChildren] serves surfaces with three
+ * different ways of saying "no" — a 400, a `ToolExecutionResult`, Record's outcome type — and only
+ * the first can afford a stack trace.
+ */
+internal fun validateCueChildren(
+    adHocEffects: List<CueAdHocEffectDto>,
+    layers: List<CueLayerDto>,
+): String? {
+    for (layer in layers) {
+        EffectSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
+    }
+    for (effect in adHocEffects) {
+        EffectSpecCoercion.Strict.problem(
+            blendMode = effect.blendMode,
+            distribution = effect.distribution,
+            elementMode = effect.elementMode,
+            elementFilter = effect.elementFilter,
+        )?.let { return it }
+    }
+    return null
+}
+
+/**
+ * Create child layer, ad-hoc effect, property assignment, and trigger entities for a cue.
+ *
+ * **Throws [IllegalArgumentException] on an unrecognised effect enum** — see [validateCueChildren]
+ * for why a bad `blendMode` must not be allowed to reach the column. The check is here as well as
+ * in the three cue routes, which call [validateCueChildren] themselves to answer a 400, so that a
+ * new write path cannot skip it: `AiTools.executeTool` catches the throw at its dispatcher and
+ * turns it into a failed tool result, and Record cannot produce an unrecognised value — its
+ * ad-hoc effects are serialized from typed enums, and its layers' blends were canonicalised when
+ * Include put them in the programmer (`ProgrammerLayerStack.installFromCue`). Record has no catch,
+ * so if that ever stops being true it surfaces as a 500, not a stored bad blend.
+ */
 internal fun createCueChildren(
     cue: DaoCue,
     adHocEffects: List<CueAdHocEffectDto>,
@@ -456,6 +493,7 @@ internal fun createCueChildren(
     triggers: List<CueTriggerDto> = emptyList(),
     layers: List<CueLayerDto> = emptyList(),
 ) {
+    validateCueChildren(adHocEffects, layers)?.let { throw IllegalArgumentException(it) }
     for (layer in layers) {
         // A layer naming a record that no longer exists is dropped rather than failing the write —
         // the rule a preset application used for a deleted preset, kept when that table went. The

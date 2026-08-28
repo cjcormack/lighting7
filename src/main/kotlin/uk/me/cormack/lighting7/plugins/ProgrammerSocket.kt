@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
@@ -526,17 +527,24 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerHandler.layerState(state)
         }
         is ProgrammerPatchLayerInMessage -> {
-            state.show.programmerLayerStack.patch(
-                layerId = message.layerId,
-                enabled = message.enabled,
-                amount = message.amount,
-                propertyMask = message.propertyMask,
-                blendMode = message.blendMode,
-                targets = message.targets,
-                stomp = message.stomp,
-                fadeMs = message.fadeMs ?: 0,
-            )
-            ProgrammerHandler.layerState(state)
+            // Same rejection as `programmer.addLayer`: a patched blend reaches `cue_layers` through
+            // Record just as an added one does, so it is checked where it enters.
+            val problem = EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)
+            if (problem != null) {
+                ProgrammerErrorOutMessage(problem)
+            } else {
+                state.show.programmerLayerStack.patch(
+                    layerId = message.layerId,
+                    enabled = message.enabled,
+                    amount = message.amount,
+                    propertyMask = message.propertyMask,
+                    blendMode = message.blendMode,
+                    targets = message.targets,
+                    stomp = message.stomp,
+                    fadeMs = message.fadeMs ?: 0,
+                )
+                ProgrammerHandler.layerState(state)
+            }
         }
     }
     scope.send(reply)
@@ -688,6 +696,12 @@ object ProgrammerHandler {
             ?: return ProgrammerErrorOutMessage(
                 "programmer.addLayer needs exactly one of lookId / templateId, naming a record that exists",
             )
+        // A frame has no 400 to be given, so the strict policy's message becomes the error frame.
+        // Left unchecked, a bad blend survives Record into `cue_layers` and the operator then sees
+        // a blend the desk does not play — the whole point of rejecting it where it enters.
+        EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
+            return ProgrammerErrorOutMessage(it)
+        }
 
         state.show.programmerLayerStack.add(
             source = source,

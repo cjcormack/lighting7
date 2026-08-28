@@ -66,6 +66,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("cueStackId is required — every cue must belong to a cue stack"))
                 return@withCurrentProject
             }
+            validateCueChildren(newCue.adHocEffects, newCue.layers)?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withCurrentProject
+            }
             val result = transaction(state.database) {
                 val stack = DaoCueStack.findById(cueStackId)
                     ?: return@transaction null to "Cue stack not found"
@@ -137,6 +141,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewCue>()
+            validateCueChildren(updatedData.adHocEffects, updatedData.layers)?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withCurrentProject
+            }
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
@@ -195,6 +203,33 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val body = call.receive<JsonObject>()
+
+            // Children arrays — replace wholesale when present. Decoded *before* the transaction
+            // purely so the effect-enum check can answer 400 the way POST and PUT do: validating
+            // after the scalar fields had been assigned would mean rejecting a body that had
+            // already half-written the cue.
+            val hasLayers = "layers" in body
+            val hasEffects = "adHocEffects" in body
+            val hasAssignments = "propertyAssignments" in body
+            val hasTriggers = "triggers" in body
+            val json = Json { ignoreUnknownKeys = true }
+            val effects = if (hasEffects)
+                json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
+            else null
+            val assignments = if (hasAssignments)
+                json.decodeFromJsonElement<List<CuePropertyAssignmentDto>>(body["propertyAssignments"]!!)
+            else null
+            val triggers = if (hasTriggers)
+                json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
+            else null
+            val layers = if (hasLayers)
+                json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
+            else null
+            validateCueChildren(effects ?: emptyList(), layers ?: emptyList())?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withCurrentProject
+            }
+
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
@@ -219,27 +254,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelayMs = body["autoAdvanceDelayMs"].nullableLong()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
-                // Children arrays — replace wholesale when present
-                val hasLayers = "layers" in body
-                val hasEffects = "adHocEffects" in body
-                val hasAssignments = "propertyAssignments" in body
-                val hasTriggers = "triggers" in body
-
                 if (hasLayers || hasEffects || hasAssignments || hasTriggers) {
-                    val json = Json { ignoreUnknownKeys = true }
-                    val effects = if (hasEffects)
-                        json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
-                    else null
-                    val assignments = if (hasAssignments)
-                        json.decodeFromJsonElement<List<CuePropertyAssignmentDto>>(body["propertyAssignments"]!!)
-                    else null
-                    val triggers = if (hasTriggers)
-                        json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
-                    else null
-                    val layers = if (hasLayers)
-                        json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
-                    else null
-
                     // Delete only the children being replaced
                     if (hasLayers) cue.layers.forEach { it.delete() }
                     if (hasEffects) cue.adHocEffects.forEach { it.delete() }

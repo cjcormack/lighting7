@@ -81,6 +81,35 @@ class EffectSpecCoercionTest {
     }
 
     @Test
+    fun `problem answers the message strict would throw, and null when everything parses`() {
+        assertNull(
+            EffectSpecCoercion.Strict.problem(
+                blendMode = "override", distribution = "Ping_Pong",
+                elementMode = "FLAT", elementFilter = " second_half ",
+            )
+        )
+
+        // Each field reports itself: the write boundaries surface this string verbatim, so a
+        // message naming the wrong field would send an operator hunting the wrong control.
+        assertTrue(EffectSpecCoercion.Strict.problem(blendMode = "ADD")!!.contains("blendMode 'ADD'"))
+        assertTrue(EffectSpecCoercion.Strict.problem(distribution = "SPIRAL")!!.contains("distributionStrategy"))
+        assertTrue(EffectSpecCoercion.Strict.problem(elementMode = "nope")!!.contains("elementMode"))
+        assertTrue(EffectSpecCoercion.Strict.problem(elementFilter = "nope")!!.contains("elementFilter"))
+
+        // And it names the valid set, which is the only reason a rejection is actionable.
+        assertTrue(EffectSpecCoercion.Strict.problem(blendMode = "ADD")!!.contains("ADDITIVE"))
+    }
+
+    @Test
+    fun `problem treats a null field as absent, not as a fault`() {
+        // The optional half of every spec — `elementMode` / `elementFilter` are nullable columns,
+        // and a WS layer patch sends only the fields it changes. Rejecting those would make the
+        // strict policy unusable at exactly the write sites that need it.
+        assertNull(EffectSpecCoercion.Strict.problem())
+        assertNull(EffectSpecCoercion.Strict.problem(blendMode = "MAX", elementMode = null))
+    }
+
+    @Test
     fun `the shared name lookup is the nullable one both policies sit on`() {
         assertNull(EffectSpecCoercion.Names.blendMode("nope"))
         assertNull(EffectSpecCoercion.Names.elementMode("nope"))

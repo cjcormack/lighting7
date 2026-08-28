@@ -439,6 +439,8 @@ class AiTools(private val state: State) {
                 // call that lists layers bottom-to-top composes the way it reads.
                 sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
                 propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
+                // Unrecognised blends are rejected by `createCueChildren` below rather than here,
+                // so this surface and the cue routes cannot disagree about what a valid blend is.
                 blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
                 amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
             )
@@ -675,8 +677,15 @@ class AiTools(private val state: State) {
 
     // ─── Helpers ───────────────────────────────────────────────────────────
 
+    /**
+     * One Look effect out of a tool call.
+     *
+     * The enum-valued fields are checked before the spec is returned: this path writes
+     * `look_effects` rows directly, and `executeTool`'s catch is the AI surface's 400 — the model
+     * is told the valid set and can retry, rather than the desk storing a blend it will not play.
+     */
     private fun parsePresetEffect(obj: JsonObject): LookEffectSpec {
-        return LookEffectSpec(
+        val spec = LookEffectSpec(
             effectType = obj["effectType"]!!.jsonPrimitive.content,
             category = obj["category"]!!.jsonPrimitive.content,
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
@@ -689,8 +698,22 @@ class AiTools(private val state: State) {
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
         )
+        EffectSpecCoercion.Strict.problem(
+            blendMode = spec.blendMode,
+            distribution = spec.distribution,
+            elementMode = spec.elementMode,
+            elementFilter = spec.elementFilter,
+        )?.let { throw IllegalArgumentException(it) }
+        return spec
     }
 
+    /**
+     * One ad-hoc cue effect out of a tool call.
+     *
+     * No enum check here, unlike [parsePresetEffect]: everything this returns goes through
+     * `createCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
+     * turns that message into a failed result the same way.
+     */
     private fun parseAdHocEffectFromJson(obj: JsonObject): CueAdHocEffectDto {
         return CueAdHocEffectDto(
             targetType = obj["targetType"]!!.jsonPrimitive.content,

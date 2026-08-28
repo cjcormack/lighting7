@@ -47,9 +47,13 @@ object EffectSpecCoercion {
      *
      * **A new call site needs its own `catch`.** `plugins/ErrorHandling.kt` registers no
      * `IllegalArgumentException` clause, so this reaches the `Throwable` catch-all and answers
-     * **500** with an error-level stack trace. It reads as a 400 at the three call sites that
-     * exist because each sits inside a handler that already catches `Exception` and responds
-     * `BadRequest` — not because the type maps to one. Sweep item F6/F7 owns the envelope.
+     * **500** with an error-level stack trace. It reads as a 400 at the apply endpoints because
+     * each sits inside a handler that already catches `Exception` and responds `BadRequest` — not
+     * because the type maps to one. Sweep item F6/F7 owns the envelope.
+     *
+     * The surfaces that *store* a spec rather than applying one mostly want [problem] instead:
+     * they answer with a message, and two of them (a WS frame, an AI tool result) have no HTTP
+     * status to answer with at all.
      */
     object Strict {
         fun blendMode(raw: String): BlendMode =
@@ -64,10 +68,44 @@ object EffectSpecCoercion {
         fun distribution(raw: String): DistributionStrategy =
             Names.distribution(raw) ?: fail("distributionStrategy", raw, DistributionStrategy.availableStrategies)
 
+        /**
+         * The message the four functions above would throw for the first unrecognised value, or
+         * null when every value supplied parses. **A null argument is "absent"** and takes no
+         * view — the optional fields on a stored spec are genuinely optional.
+         *
+         * For the write boundaries that answer with a *message* rather than an exception:
+         * `validateLookEffects` returns one for its 400, `ProgrammerSocket` puts one in a
+         * `programmer.error` frame. They get the same verdict as a `try` around four calls
+         * without either surface reimplementing the parse.
+         */
+        fun problem(
+            blendMode: String? = null,
+            distribution: String? = null,
+            elementMode: String? = null,
+            elementFilter: String? = null,
+        ): String? {
+            blendMode?.let { raw ->
+                Names.blendMode(raw) ?: return message("blendMode", raw, BlendMode.entries.map { it.name })
+            }
+            distribution?.let { raw ->
+                Names.distribution(raw)
+                    ?: return message("distributionStrategy", raw, DistributionStrategy.availableStrategies)
+            }
+            elementMode?.let { raw ->
+                Names.elementMode(raw) ?: return message("elementMode", raw, ElementMode.entries.map { it.name })
+            }
+            elementFilter?.let { raw ->
+                Names.elementFilter(raw)
+                    ?: return message("elementFilter", raw, ElementFilter.entries.map { it.name })
+            }
+            return null
+        }
+
         private fun fail(field: String, raw: String, valid: List<String>): Nothing =
-            throw IllegalArgumentException(
-                "Unknown $field '$raw' (expected one of: ${valid.joinToString(", ")})"
-            )
+            throw IllegalArgumentException(message(field, raw, valid))
+
+        private fun message(field: String, raw: String, valid: List<String>): String =
+            "Unknown $field '$raw' (expected one of: ${valid.joinToString(", ")})"
     }
 
     /**
