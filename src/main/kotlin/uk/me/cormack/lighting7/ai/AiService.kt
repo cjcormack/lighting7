@@ -277,8 +277,10 @@ class AiService(
         sb.appendLine("## Available Fixtures")
         for (fixture in state.show.fixtures.fixtures) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
+            // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
+            // closing paren went missing for every fixture that *is* in a group.
             sb.appendLine("- **${fixture.fixtureName}** (key=`${fixture.key}`, type=`${fixture.typeKey}`" +
-                    if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "" +
+                    (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     ")")
         }
         sb.appendLine()
@@ -319,7 +321,7 @@ class AiService(
 
         // Current state
         sb.appendLine("## Current State")
-        sb.appendLine("BPM: ${state.show.fxEngine.masterClock.bpm.value}")
+        sb.appendLine("BPM: ${state.show.fxEngine.masterClock.bpm.value} (master 1)")
         val activeEffects = state.show.fxEngine.getActiveEffects()
         if (activeEffects.isNotEmpty()) {
             sb.appendLine("Active effects: ${activeEffects.size}")
@@ -330,6 +332,19 @@ class AiService(
             }
         } else {
             sb.appendLine("No active effects.")
+        }
+        sb.appendLine()
+
+        // Speed masters, with their uuids — like the colour templates below, a uuid the model
+        // cannot see is a reference it cannot make, and every effect-authoring tool takes one.
+        sb.appendLine("## Speed Masters")
+        sb.appendLine("Independent tempo clocks. Effects, cue layers and set_bpm name one by uuid; omitting it means master 1, the global tempo.")
+        for (master in state.show.fxEngine.speedMasters.masterStates()) {
+            val uuid = master.uuid?.let { "`$it`" } ?: "(no uuid yet — omit the reference)"
+            sb.appendLine(
+                "- **${master.name}** — $uuid (index ${master.index}, ${master.bpm} BPM" +
+                    (if (master.isRunning) "" else ", stopped") + ")"
+            )
         }
         sb.appendLine()
 
@@ -418,6 +433,7 @@ class AiService(
         sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
         sb.appendLine("- **Cues**: A cue is an ordered stack of look layers plus its own local values and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Re-applying the same cue refreshes it. Use stop_cue to stop one cue, or apply_cue with replaceAll=true to stop all others first. Looks are read fresh at apply time, so edits to a look are always reflected.")
+        sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted means master 1 / unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with beat divisions.")
         sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then activate with activate_cue_stack. Use advance_cue_stack to go forward/backward. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Multiple stacks can be active simultaneously.")
 
         return sb.toString()

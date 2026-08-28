@@ -29,6 +29,7 @@ class AiTools(private val state: State) {
         applyLookTool,
         runLightingScriptTool,
         setBpmTool,
+        createSpeedMasterTool,
         clearEffectsTool,
         getCurrentStateTool,
         createCueTool,
@@ -51,6 +52,7 @@ class AiTools(private val state: State) {
                 "apply_look" -> executeApplyLook(input)
                 "run_lighting_script" -> executeRunLightingScript(input)
                 "set_bpm" -> executeSetBpm(input)
+                "create_speed_master" -> executeCreateSpeedMaster(input)
                 "clear_effects" -> executeClearEffects(input)
                 "get_current_state" -> executeGetCurrentState(input)
                 "create_cue" -> executeCreateCue(input)
@@ -231,16 +233,55 @@ class AiTools(private val state: State) {
 
     private fun executeSetBpm(input: JsonObject): ToolExecutionResult {
         val bpm = input["bpm"]?.jsonPrimitive?.double ?: return errorResult("Missing 'bpm'")
-        // The AI tool means the global tempo — master 1; routed through the bank so the
-        // change is tracked, pushed, and written through like any other tempo write.
-        state.show.fxEngine.speedMasters.setBpm(
-            null, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL
+        // Omitting the reference still means the global tempo — master 1 — which is what the
+        // tool meant before the bank existed. Routed through the bank either way so the change
+        // is tracked, pushed, and written through like any other tempo write.
+        val requested = input["speedMasterUuid"]?.jsonPrimitive?.contentOrNull
+        val master = resolveSpeedMaster(requested)
+            ?: return errorResult(unknownSpeedMasterMessage(requested))
+        // The bank looks the uuid up again, so a master deleted between the two lookups makes
+        // this a dropped write — report that rather than the success the resolve implied.
+        val applied = state.show.fxEngine.speedMasters.setBpm(
+            master.uuid, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL
         )
+        if (!applied) return errorResult(unknownSpeedMasterMessage(requested))
         return ToolExecutionResult(
             success = true,
-            description = "Set BPM to $bpm",
-            result = """{"bpm": $bpm}"""
+            description = "Set ${master.name} to $bpm BPM",
+            result = buildJsonObject {
+                put("bpm", bpm)
+                put("speedMasterIndex", master.index)
+                put("name", master.name)
+                master.uuid?.let { put("speedMasterUuid", it.toString()) }
+            }.toString()
         )
+    }
+
+    private fun executeCreateSpeedMaster(input: JsonObject): ToolExecutionResult {
+        val request = CreateSpeedMasterRequest(
+            name = input["name"]?.jsonPrimitive?.contentOrNull,
+            bpm = input["bpm"]?.jsonPrimitive?.doubleOrNull,
+            notes = input["notes"]?.jsonPrimitive?.contentOrNull,
+        )
+        // Same helper the REST route uses, so an AI-created master is indistinguishable from a
+        // UI-created one — including the bank reload that makes its uuid resolvable straight away
+        // by the effect-authoring tools below.
+        return when (val outcome = createSpeedMaster(state, state.projectManager.currentProject, request)) {
+            is CreateSpeedMasterOutcome.Invalid -> errorResult(outcome.error)
+            is CreateSpeedMasterOutcome.Conflict -> errorResult(outcome.error)
+            is CreateSpeedMasterOutcome.Created -> ToolExecutionResult(
+                success = true,
+                description = "Created speed master '${outcome.dto.name}' " +
+                        "(index ${outcome.dto.masterIndex}, ${outcome.dto.bpm} BPM)",
+                result = buildJsonObject {
+                    put("speedMasterId", outcome.dto.id)
+                    put("speedMasterUuid", outcome.dto.uuid)
+                    put("masterIndex", outcome.dto.masterIndex)
+                    put("name", outcome.dto.name)
+                    put("bpm", outcome.dto.bpm)
+                }.toString()
+            )
+        }
     }
 
     private fun executeClearEffects(input: JsonObject): ToolExecutionResult {
@@ -443,6 +484,8 @@ class AiTools(private val state: State) {
                 // so this surface and the cue routes cannot disagree about what a valid blend is.
                 blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
                 amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
+                speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
+                rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
             )
         } ?: emptyList()
         val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
@@ -697,6 +740,8 @@ class AiTools(private val state: State) {
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
+            speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
+            rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
         )
         EffectSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
@@ -729,7 +774,42 @@ class AiTools(private val state: State) {
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
+            speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
+            rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
         )
+    }
+
+    /**
+     * Resolve a tool-supplied speed-master reference against the live bank, or null when the
+     * uuid names no master. A null [raw] resolves to master 1, the global tempo — that is what
+     * every "no master given" surface means.
+     */
+    private fun resolveSpeedMaster(raw: String?): SpeedMasterBank.MasterState? {
+        val masters = state.show.fxEngine.speedMasters.masterStates()
+        val wanted = speedMasterUuidOrNull(raw)
+        if (raw != null && wanted == null) return null
+        return if (wanted == null) masters.first() else masters.firstOrNull { it.uuid == wanted }
+    }
+
+    /**
+     * A speed-master reference on its way into a stored row, checked against the live bank.
+     *
+     * Unknown uuids are rejected rather than written: `SpeedMasterBank.slotFor` resolves a
+     * dangling reference to master 1, so a mistyped uuid would run at the global tempo forever
+     * while looking like it had been accepted. Throwing here reaches the model as a failed tool
+     * result it can retry — the same bargain [parsePresetEffect] strikes over blend modes.
+     */
+    private fun checkedSpeedMasterUuid(element: JsonElement?): String? {
+        val raw = element?.jsonPrimitive?.contentOrNull ?: return null
+        resolveSpeedMaster(raw) ?: throw IllegalArgumentException(unknownSpeedMasterMessage(raw))
+        return raw
+    }
+
+    /** Names what the model got wrong *and* the masters it could have picked, so a retry lands. */
+    private fun unknownSpeedMasterMessage(raw: String?): String {
+        val known = state.show.fxEngine.speedMasters.masterStates()
+            .joinToString(", ") { "${it.name}=${it.uuid ?: "(unsaved)"}" }
+        return "Unknown speed master '$raw'. Known masters: $known"
     }
 
     private fun errorResult(message: String) = ToolExecutionResult(

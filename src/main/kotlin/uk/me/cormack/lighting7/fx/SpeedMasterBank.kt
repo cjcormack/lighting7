@@ -315,12 +315,17 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         bindings.slots.forEach { it.clock.stop() }
     }
 
-    /** Retune one master (null → master 1). [source] records how — MANUAL for typed, TAP for tapped. */
-    fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource) {
-        val entry = entryFor(uuid) ?: return
+    /**
+     * Retune one master (null → master 1). [source] records how — MANUAL for typed, TAP for
+     * tapped. Returns false when [uuid] names no master, which is a dropped write rather than a
+     * fallback (see [entryFor]) — callers that report an outcome must not claim success on it.
+     */
+    fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): Boolean {
+        val entry = entryFor(uuid) ?: return false
         entry.clock.setBpm(bpm)
         entry.source = source
         emitChange(entry)
+        return true
     }
 
     /** Tap one master's tempo (null → master 1). */

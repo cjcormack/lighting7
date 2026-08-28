@@ -73,49 +73,16 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
     post<ProjectSpeedMastersResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val request = call.receive<CreateSpeedMasterRequest>()
-            val trimmedName = request.name?.trim()
-            if (trimmedName != null && trimmedName.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Speed master name must not be blank"))
-                return@withProject
-            }
-            validateBpm(request.bpm)?.let { error ->
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
-                return@withProject
-            }
+            when (val outcome = createSpeedMaster(state, project, request)) {
+                is CreateSpeedMasterOutcome.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.error))
 
-            val result = transaction(state.database) {
-                ensureDefaultSpeedMasters(project)
-                val existing = DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }.toList()
-                val nextIndex = (existing.maxOfOrNull { it.masterIndex } ?: 0) + 1
-                val name = trimmedName ?: "Master $nextIndex"
-                if (existing.any { it.name == name }) {
-                    return@transaction Pair<SpeedMasterDto?, String?>(
-                        null,
-                        "A speed master called '$name' already exists",
-                    )
-                }
-                val master = DaoSpeedMaster.new {
-                    this.project = project
-                    masterIndex = nextIndex
-                    this.name = name
-                    request.bpm?.let { bpm = it }
-                    this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-                }
-                Pair<SpeedMasterDto?, String?>(master.toDto(SpeedMasterUsage.NONE), null)
+                is CreateSpeedMasterOutcome.Conflict ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.error))
+
+                is CreateSpeedMasterOutcome.Created ->
+                    call.respond(HttpStatusCode.Created, outcome.dto)
             }
-            val (dto, error) = result
-            if (error != null) {
-                call.respond(HttpStatusCode.Conflict, ErrorResponse(error))
-                return@withProject
-            }
-            // Only the live show's bank needs reloading, and only when the edited project IS
-            // the live one — reloading it after editing some other project's rows is a wasted
-            // transaction against an unrelated bank (same guard rationale as
-            // Show.setSpeedMasterBpmIfCurrent). The list broadcast stays unconditional, like
-            // paletteListChanged.
-            if (state.isCurrentProject(project)) state.show.reloadSpeedMasters()
-            state.show.fixtures.speedMasterListChanged()
-            call.respond(HttpStatusCode.Created, dto!!)
         }
     }
 
@@ -245,6 +212,72 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
             }
         }
     }
+}
+
+/**
+ * What [createSpeedMaster] did. Two rejection cases rather than one string because the REST
+ * route maps them to different statuses (400 vs 409) while the AI surface maps both to a
+ * failed tool result.
+ */
+internal sealed interface CreateSpeedMasterOutcome {
+    data class Created(val dto: SpeedMasterDto) : CreateSpeedMasterOutcome
+
+    /** Malformed request — blank name, out-of-range bpm. */
+    data class Invalid(val error: String) : CreateSpeedMasterOutcome
+
+    /** A master of that name already exists in the project. */
+    data class Conflict(val error: String) : CreateSpeedMasterOutcome
+}
+
+/**
+ * Append a speed master to [project]'s bank: validate, write the row, and — when the project is
+ * the live one — reload the running bank and broadcast the list change.
+ *
+ * Shared with the AI surface's `create_speed_master` so a master a tool call adds is
+ * indistinguishable from one the UI adds: same defaulted name, same duplicate refusal, same
+ * bank reload. Everything about a new master is derived (index, default bpm), so the two
+ * callers only differ in how they render the outcome.
+ */
+internal fun createSpeedMaster(
+    state: State,
+    project: DaoProject,
+    request: CreateSpeedMasterRequest,
+): CreateSpeedMasterOutcome {
+    val trimmedName = request.name?.trim()
+    if (trimmedName != null && trimmedName.isEmpty()) {
+        return CreateSpeedMasterOutcome.Invalid("Speed master name must not be blank")
+    }
+    validateBpm(request.bpm)?.let { return CreateSpeedMasterOutcome.Invalid(it) }
+
+    val outcome = transaction(state.database) {
+        ensureDefaultSpeedMasters(project)
+        val existing = DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }.toList()
+        val nextIndex = (existing.maxOfOrNull { it.masterIndex } ?: 0) + 1
+        val name = trimmedName ?: "Master $nextIndex"
+        if (existing.any { it.name == name }) {
+            return@transaction CreateSpeedMasterOutcome.Conflict(
+                "A speed master called '$name' already exists",
+            )
+        }
+        val master = DaoSpeedMaster.new {
+            this.project = project
+            masterIndex = nextIndex
+            this.name = name
+            request.bpm?.let { bpm = it }
+            this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        CreateSpeedMasterOutcome.Created(master.toDto(SpeedMasterUsage.NONE))
+    }
+    if (outcome !is CreateSpeedMasterOutcome.Created) return outcome
+
+    // Only the live show's bank needs reloading, and only when the edited project IS
+    // the live one — reloading it after editing some other project's rows is a wasted
+    // transaction against an unrelated bank (same guard rationale as
+    // Show.setSpeedMasterBpmIfCurrent). The list broadcast stays unconditional, like
+    // paletteListChanged.
+    if (state.isCurrentProject(project)) state.show.reloadSpeedMasters()
+    state.show.fixtures.speedMasterListChanged()
+    return outcome
 }
 
 private const val SPEED_MASTER_NOT_FOUND = "Speed master not found"

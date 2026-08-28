@@ -58,8 +58,9 @@ The FX system provides:
 
 Tempo lives in a per-show **`SpeedMasterBank`** of `MasterClock` instances — named tempo
 buses that effects *subscribe to* rather than owning speeds. **Slot 0 is always master 1**,
-the global tempo that script `setBpm`/`tapTempo` and the AI `set_bpm` tool mean, and that
-every effect with no explicit master resolves to.
+the global tempo that script `setBpm`/`tapTempo` and a bare AI `set_bpm` mean, and that
+every effect with no explicit master resolves to. (`set_bpm` also takes an optional
+`speedMasterUuid`, so the AI surface can retune any master, not only the global one.)
 
 There used to be a second, unkeyed tempo surface alongside this one — WS
 `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync`, REST `/fx/clock/*`, and `bpm` /

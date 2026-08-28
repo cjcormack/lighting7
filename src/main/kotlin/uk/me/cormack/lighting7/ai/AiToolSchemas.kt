@@ -59,6 +59,14 @@ private val lookEffectSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
         })
+        put("speedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Speed master whose tempo this effect follows, named by the uuid from the Speed Masters list. Omit for master 1, the global tempo.")
+        })
+        put("rateSpeedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Speed master scaling this effect's wall-clock rate, named by uuid. Only wall-clock effects read it. Omit to leave the effect unscaled.")
+        })
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
@@ -133,13 +141,36 @@ internal val runLightingScriptTool = AnthropicToolDef(
 
 internal val setBpmTool = AnthropicToolDef(
     name = "set_bpm",
-    description = "Set the master clock BPM for beat-synced effects.",
+    description = "Set a speed master's BPM. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned effect follows.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("bpm", buildJsonObject { put("type", "number"); put("minimum", 20); put("maximum", 300) })
+            put("speedMasterUuid", buildJsonObject {
+                put("type", "string")
+                put("description", "Which master to retune, by uuid from the Speed Masters list. Omit for master 1.")
+            })
         })
         put("required", buildJsonArray { add("bpm") })
+    }
+)
+
+internal val createSpeedMasterTool = AnthropicToolDef(
+    name = "create_speed_master",
+    description = "Add a speed master — an independent tempo clock effects can follow instead of the global one. Use it when part of the rig should run at its own speed. Returns the new master's uuid, which effects and cue layers reference.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("name", buildJsonObject {
+                put("type", "string")
+                put("description", "Master name. Must be unique in the project; defaults to 'Master {index}'.")
+            })
+            put("bpm", buildJsonObject {
+                put("type", "number"); put("minimum", 20); put("maximum", 300)
+                put("description", "Starting tempo. Defaults to the desk default.")
+            })
+            put("notes", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
+        })
     }
 )
 
@@ -219,6 +250,14 @@ private val adHocEffectSchema = buildJsonObject {
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
         })
         put("stepTiming", buildJsonObject { put("type", "boolean") })
+        put("speedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Speed master whose tempo this effect follows, by uuid. Omit for master 1.")
+        })
+        put("rateSpeedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Speed master scaling this effect's wall-clock rate, by uuid. Omit to leave it unscaled.")
+        })
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
@@ -249,6 +288,14 @@ private val cueLayerSchema = buildJsonObject {
         put("blendMode", buildJsonObject {
             put("type", "string")
             put("description", "How this layer combines with the layers beneath: OVERRIDE (default), MAX, MIN, MULTIPLY, ADDITIVE")
+        })
+        put("speedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Speed master override for every effect this layer brings in, by uuid. Omit to let each effect keep its own master.")
+        })
+        put("rateSpeedMasterUuid", buildJsonObject {
+            put("type", "string")
+            put("description", "Wall-clock rate-master override for this layer's effects, by uuid. Omit to let each effect keep its own.")
         })
         put("amount", buildJsonObject {
             put("type", "number")
