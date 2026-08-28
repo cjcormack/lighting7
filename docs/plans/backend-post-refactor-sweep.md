@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVES 0–3 COMPLETE.** This is the output of the
+> **Document status: BACKLOG, WAVES 0–4 COMPLETE.** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -535,7 +535,7 @@ each); extract `TapTempo` from `MasterClock`; name the magic-number relationship
 (`PROGRAMMER_FX_PRIORITY_BASE` band vs the 100k rank clamp; `MAX_CATCHUP_MS` vs 300 BPM;
 `DEFAULT_BPM` doubling as the rate-scale reference).
 
-**E10. Authoring endpoints store effect enums unvalidated** — medium / P2 / M / opus
+~~**E10. Authoring endpoints store effect enums unvalidated**~~ — done, `dc1e7ea`. medium / P2 / M / opus
 E4 gave the four effect enum fields one coercion layer with two policies, and wired `Strict` into
 the three REST *apply* endpoints. The endpoints that **write the stored rows** were not in its
 scope and still pass `blendMode` / `distribution` / `elementMode` / `elementFilter` from the
@@ -548,6 +548,14 @@ survive rather than one it should have to. **Fix:** `EffectSpecCoercion.Strict` 
 site, so a bad value is rejected where it enters and `Lenient` is left covering only rows written
 by an older build. The WS and AI surfaces have no 400 to return, so each needs its own error path
 — that, and the seven call sites, is why this is its own item and not part of E4.
+
+Grew in the landing: an eighth site, `programmer.patchLayer`, stores the same column through the
+same route into Record and was taken in with the seven. Making the cue write path strict then
+turned a *stored* bad blend into a 500 on Record CREATE, because Include carried a stored layer's
+`blendMode` into the programmer as a raw string and Record handed it straight back — the same
+rawness that left Record's MERGE / UPDATE_EXISTING paths, which write `DaoCueLayer` directly,
+storing unvalidated blends. One root cause, fixed once: `installFromCue` canonicalises through
+`Lenient`. `ProjectImporter` stays lenient on purpose and now says why.
 
 ## F — API consistency *(decision: normalize hard, no aliases)*
 
@@ -705,7 +713,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 1 | ~~C1–C2~~ **done** | The two big hot-path wins, taken against the fresh wave-0 baseline. fable. See the re-sequencing note below. |
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
-| 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
+| 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | ~~F1–F3, F5~~ **done**, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
@@ -755,7 +763,9 @@ outstanding), ~~F5~~ (landed: two WS messages renamed —
 the client's ten request-on-open sends went with it, in `lighting-react` `c19aa12`. Nothing
 is outstanding — see below), ~~F6~~ (landed: the widget's base URL moved to
 `/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
-below), B3
+below), E10 (the authoring
+routes and the two `programmer.*Layer` frames now reject an unrecognised effect enum — verified
+that no `lighting-react` sender can produce one, so this is a confirm-only entry), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
 `rateSpeedMasterUuid` — on the WS `fxState` push and reconnect answer, and on the REST
 `EffectDto`/`IndirectEffectDto` — now null out whichever field the effect's `timingSource` doesn't
@@ -912,7 +922,16 @@ defaults). Frontend-visible only in that the three REST apply endpoints got *str
 `distributionStrategy` and `elementFilter` used to degrade an unrecognised value to LINEAR / ALL
 and add the effect, and now 400 the request, matching what `blendMode` always did. Casing is now
 tolerated everywhere, which it was not on the two throwing fields. The authoring endpoints that
-write these values to the DB are still unvalidated — E10.
+write these values to the DB were the other half, landed as E10.
+
+E10 (`dc1e7ea`) — the authoring half of E4, and frontend-visible in the same narrow way: a
+`blendMode` / `distribution` / `elementMode` / `elementFilter` value the desk does not recognise is
+now refused where it enters rather than stored. The look and cue write routes answer 400,
+`programmer.addLayer` / `programmer.patchLayer` answer a `programmer.error` frame, and the AI tool
+call comes back failed. `lighting-react` sends only canonical names (`BlendMode` is a string-union
+type, `distribution`/`elementFilter` are literals), so nothing there needs changing — the entry is
+here so the frontend sweep can confirm rather than discover it. Casing and surrounding whitespace
+are still tolerated, so this cannot break a client that was already sending a real value.
 
 F6 (`60cc3b3`, + lighting-react `0d2081d`) — two frontend-visible changes. The script editor's
 language services moved from `/script-editor/*` to `/api/script-editor/*`; the widget's base URL
