@@ -551,7 +551,7 @@ by an older build. The WS and AI surfaces have no 400 to return, so each needs i
 
 ## F — API consistency *(decision: normalize hard, no aliases)*
 
-**F1. Write the conventions down, then apply them** — medium / P2 / M / opus
+~~**F1. Write the conventions down, then apply them**~~ — done, `1af6ef8` (+ lighting-react `85229a7`). medium / P2 / M / opus
 One short `docs/api-conventions.md`: kebab-case paths; plural collections with GET-on-collection;
 one spelling for vocabulary enumerations; `?force=true` as the guard-override convention;
 "unbounded lists are fine at desk scale" stated explicitly. Then fix the deviants:
@@ -560,6 +560,14 @@ one spelling for vocabulary enumerations; `?force=true` as the guard-override co
 (`/cueedit-histogram` was on this list; D1 deleted it. Note `?force=true` lost two of its three
 users with D1 as well — the surviving guard-override convention is worth restating on whatever is
 left rather than on what this item was written against.)
+
+Landed as the full subtree rename, not just the named list endpoints: `/project/**` →
+`/projects/**` and `/fixture/**` → `/fixtures/**`, confirmed with the desk owner before starting.
+Introducing `GET /projects` while items stayed on `/project/{id}` would have left two spellings
+for one resource, which is what this section's "no aliases" decision rules out. Both trees mount
+from a single `route()` call, so the backend cost was one line each. `/fixture/types` became a
+*top-level* `/fixture-types` rather than `/fixtures/types`: it enumerates what the build can
+drive, most of which is not patched, so it belongs beside `/control-surface-types`.
 
 **F2. One scoping rule for `{projectId}`** — medium / P2 / M / opus
 102 handlers 409 unless the id is current, while equally project-dependent surfaces (`/groups`,
@@ -666,7 +674,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | F1–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1~~, F2–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
@@ -702,7 +710,8 @@ rateSpeedMasterIndex), D4 (`POST`/`DELETE /project/{id}/looks/preview` are gone 
 caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-stack special-casing
 in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
 dead code now, not just unreachable),
-F1/F2/F3/F5 (renamed paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
+~~F1~~ (landed: the whole REST path rename went in with `lighting-react` `85229a7`, so
+nothing is outstanding — see below), F2/F3/F5 (renamed paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
 `/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
 below), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
@@ -860,6 +869,21 @@ operator gets a bare 403 from something that used to work. Gating them is left t
 sweep (the desk owner's call), and `FS-COORD-ADMIN-GATE` names the file and the controls. Nothing
 else changed status: the code-execution endpoints stayed operator-reachable, so no existing
 surface becomes a 403 generator and the script editor needs no role handling.
+
+F1 (`1af6ef8`, + lighting-react `85229a7`) — the conventions are written down in
+`docs/api-conventions.md` (kebab-case segments, plural collections with the list GET on the
+collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override,
+unbounded lists deliberate at desk scale), and every deviant was renamed. Frontend-visible in
+full: `/controlSurfaceTypes` → `/control-surface-types`, `/project/{id}/stageRegions` →
+`/projects/{id}/stage-regions`, `/project/{id}/surfaceBindings` →
+`/projects/{id}/surface-bindings`, `GET /project/list` → `GET /projects`, `GET /project/current`
+→ `GET /projects/current`, `GET /fixture/list` → `GET /fixtures`, `GET /fixture/{key}` →
+`GET /fixtures/{key}`, `GET /fixture/types` → `GET /fixture-types`, and every other path under
+the two renamed subtrees. The client half landed in the same run rather than being deferred:
+there are no aliases, so a split would have left the desk's UI 404ing on nearly every call.
+The sync export directory `stageRegions` and the WS message `surfaceBindingsChanged` were left
+alone on purpose — the first is canonical-JSON layout (renaming it is a `formatVersion` break,
+not a path rename), the second is F5's.
 
 ## Verification
 
