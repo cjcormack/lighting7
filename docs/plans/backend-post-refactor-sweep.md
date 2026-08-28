@@ -652,10 +652,13 @@ node is shared with the WebSocket (Ktor reuses an equal selector), so the gates 
 transparent child of it; `transparentChild` in `routes/RouteComposition.kt` is the primitive both
 that and `adminOnly {}` are built on.
 
-**F7. Error envelope hygiene** — low / P2 / S / sonnet
+~~**F7. Error envelope hygiene**~~ — done, `ba40af4`. low / P2 / S / sonnet
 Move `ErrorResponse` out of `lightFx.kt:287` into a neutral `routes/ApiTypes.kt`; make `code`
 present wherever the UI branches (today: 5 codes, ~278 prose-only sites — add codes opportunistically,
 not exhaustively); drop the retired `fx_presets` arm in `ErrorHandling.kt:145`.
+Audited all five live UI code-branch points (`lighting-react`'s `CODE_SPEED_MASTER_*`,
+`LOOK_IN_USE`, `TEMPLATE_IN_USE`, `INCLUDE_TARGET_GONE`, `LAST_ADMIN`, `SELF_TARGET`) — every one
+already carries a machine code, so no prose-only site needed one added opportunistically.
 
 **F8. DTO unification across transports** — medium / P2 / M / opus
 `GroupSummary` (WS) vs `GroupSummaryDto` (REST), each with its own capability detection;
@@ -714,7 +717,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3, F5~~ **done**, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5, F7~~ **done**, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
