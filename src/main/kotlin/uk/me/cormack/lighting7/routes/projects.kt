@@ -345,6 +345,9 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectShow(state)
         routeApiRestProjectPromptBooks(state)
         routeApiRestProjectSurfaceBindings(state)
+        // Conversation history only. `POST /ai/chat` stays global — it drives the running
+        // show rather than a stored project (see docs/api-conventions.md §"Project scoping").
+        routeApiRestProjectAiConversations(state)
         // Both subtrees are admin territory, for different reasons. Cloud sync carries the
         // desk's git identity, remotes and credentials. Export/import take a caller-supplied
         // absolute filesystem path and read or write it verbatim as the desk process — the one

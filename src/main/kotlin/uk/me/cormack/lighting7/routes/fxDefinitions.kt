@@ -11,6 +11,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
@@ -101,7 +102,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     // GET /fx/definitions/{id} - Get a single definition
     get<FxDefinitionResource> { resource ->
         val definition = transaction(state.database) {
-            DaoFxDefinition.findById(resource.definitionId)?.toDto()
+            state.fxDefinitionInCurrentProject(resource.definitionId)?.toDto()
         }
         if (definition == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
@@ -120,7 +121,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         // inside that transaction, so validating there would have already written the row this
         // rejects.
         val stored = transaction(state.database) {
-            DaoFxDefinition.findById(resource.definitionId)?.let { it.outputType to it.compatibleProperties }
+            state.fxDefinitionInCurrentProject(resource.definitionId)
+                ?.let { it.outputType to it.compatibleProperties }
         }
         if (stored == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
@@ -139,7 +141,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         }
 
         val definition = transaction(state.database) {
-            val def = DaoFxDefinition.findById(resource.definitionId) ?: return@transaction null
+            val def = state.fxDefinitionInCurrentProject(resource.definitionId)
+                ?: return@transaction null
 
             request.effectId?.let { def.effectId = it }
             request.name?.let { def.name = it }
@@ -177,7 +180,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     // DELETE /fx/definitions/{id} - Delete a definition
     delete<FxDefinitionResource> { resource ->
         val deleted = transaction(state.database) {
-            val def = DaoFxDefinition.findById(resource.definitionId) ?: return@transaction false
+            val def = state.fxDefinitionInCurrentProject(resource.definitionId)
+                ?: return@transaction false
 
             val effectId = def.effectId
             def.delete()
@@ -222,7 +226,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
     // POST /fx/definitions/{id}/test - Compile, register, and test
     post<FxDefinitionTestResource> { resource ->
         val definition = transaction(state.database) {
-            DaoFxDefinition.findById(resource.definitionId)
+            state.fxDefinitionInCurrentProject(resource.definitionId)
         }
 
         if (definition == null) {
@@ -237,6 +241,20 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         ))
     }
 }
+
+/**
+ * Resolve an FX definition by id, but only within the running show's project.
+ *
+ * `/fx/definitions` is a global live-runtime surface — it carries no `{projectId}` because
+ * `{definitionId}` is only ever meaningful inside the loaded show (see `docs/api-conventions.md`
+ * §"Project scoping"). A bare `findById` broke that: it let any definition from any project be
+ * read, overwritten, deleted or test-registered by id, while the list and create handlers filter
+ * by project. Call inside a transaction.
+ */
+private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefinition? =
+    DaoFxDefinition.find {
+        (DaoFxDefinitions.id eq definitionId) and (DaoFxDefinitions.project eq show.project.id)
+    }.singleOrNull()
 
 /**
  * Reject `compatibleProperties` an effect of this [outputType] cannot actually drive.

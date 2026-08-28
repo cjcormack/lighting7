@@ -48,6 +48,53 @@ when they only mean something inside it (`distribution-strategies` is a group co
 must **not** do is hide under the resource they merely resemble: `/fixture-types` is a sibling of
 `/fixtures`, not `/fixtures/types`, because it does not describe the patched rig.
 
+## Project scoping
+
+Every endpoint sits on one of two sides, and which one is not a matter of taste:
+
+**Live-runtime surfaces are global.** `/fx`, `/groups`, `/programmer`, `/locate`, `/ai/chat` and
+the direct channel-control surface — these address *the show that is currently running*, not a row
+in the database. There is no other show to address, so they carry no `{projectId}`, and there is
+no id for them to 409 about. Adding one would be a lie: the parameter would have exactly one legal
+value.
+
+Being global does not mean ignoring the project. Where a global surface reaches a per-project
+table it must still filter by the *running show's* project — `/fx/definitions/{definitionId}` and
+`/ai/chat`'s conversation lookup both do, because a bare `findById` would otherwise let one
+project's id reach another's row. `POST /ai/chat` is also the one live-runtime endpoint that can
+answer 409: its tool loop spans several round trips to the model, and it refuses rather than
+finish against a project that changed underneath it.
+
+**Persisted project data is project-scoped**, under `/projects/{projectId}/…`, where `{projectId}`
+is a numeric id or the literal `current`. Everything an operator authors and the desk stores lives
+here: cues, cue stacks, looks, templates, scripts, patches, riggings, stage regions, universe
+configs, surface bindings, speed masters, prompt books, AI conversation history.
+
+Inside that second side, mutations split again, on **whether the write is also a live-show
+mutation**:
+
+* **409 `Cannot modify - not current project`** when the handler changes the running show as part
+  of the write — cues, cue stacks, looks, templates, scripts, `/show`, prompt books. There is no
+  coherent way to apply a cue belonging to a project that isn't loaded, so the request is refused
+  rather than half-performed. Use `withCurrentProject`.
+* **Ungated** when the write is DB-only and the running show is re-synced afterwards *if it
+  happens to be looking at that project* — patches, riggings, patch groups, stage regions,
+  universe configs, surface bindings, speed masters, cloud sync, AI conversation history. These
+  read `withProject` and then branch on `state.isCurrentProject(project)` to reload fixtures or
+  retune the clock. Patching a rig you are not currently running is a real workflow and this is
+  what keeps it working.
+
+Note that "persisted project data" here is a *routing* claim, not a sync one: AI conversation
+history is scoped to a project and stored, but `SyncCoverageTest` classifies it `Excluded` and it
+never leaves the desk. Which URL a table hangs off and whether it is portable are separate
+questions — see `docs/sync-engineering.md` for the second.
+
+Reads are never gated: `GET` on project data accepts any project id, current or not.
+
+So the test for a new endpoint is: *does this address the running show, or stored data?* — and if
+stored data, *does writing it require the show to be loaded?* The 409 is a statement about live
+state, which is why it is not `?force=true`-overridable (see below).
+
 ## Guard overrides: `?force=true`
 
 A mutation that refuses because of a *referential* consequence — deleting something another row
@@ -79,7 +126,6 @@ history endpoints paginate newest-first with `?limit=&beforeId=`.
 
 ---
 
-Two further conventions belong here and are still being applied by their own sweep items: which
-surfaces are project-scoped and 409-guarded versus global (**F2**), and the response shape of
-mutations — 204 versus the updated DTO (**F3**). WebSocket message naming and snapshot rules are
-**F5**, and live in [`websocket-engineering.md`](websocket-engineering.md).
+One further convention belongs here and is still being applied by its own sweep item: the response
+shape of mutations — 204 versus the updated DTO (**F3**). WebSocket message naming and snapshot
+rules are **F5**, and live in [`websocket-engineering.md`](websocket-engineering.md).

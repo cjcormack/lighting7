@@ -13,6 +13,13 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
 /**
+ * Thrown when the desk's current project changes part-way through [AiService.chat]. Answered as
+ * 409 by the route, matching the "that project isn't current" refusal the rest of the HTTP surface
+ * uses — see `docs/api-conventions.md` §"Project scoping".
+ */
+class ProjectChangedDuringChatException(message: String) : Exception(message)
+
+/**
  * Orchestrates AI conversations: manages context, calls Claude, executes tools,
  * and persists conversation history to the database.
  */
@@ -36,17 +43,21 @@ class AiService(
     suspend fun chat(conversationId: Int?, userMessage: String): AiChatResponse {
         val now = System.currentTimeMillis()
 
-        // Load or create conversation
+        // Load or create conversation. Chat is a live-runtime surface — it drives whatever
+        // show is loaded — so a conversation from another project is not merely uninteresting,
+        // it would silently accumulate this show's history under that project's id. Scope the
+        // lookup to the current project rather than trusting the caller's id (see F2).
+        val currentProject = state.projectManager.currentProject
         val (convId, existingMessages) = if (conversationId != null) {
             val conv = transaction(state.database) {
-                DaoAiConversation.findById(conversationId)
+                conversationIn(currentProject, conversationId)
             } ?: throw IllegalArgumentException("Conversation not found: $conversationId")
             convId@(conv.id.value) to conv.messages
         } else {
             val conv = transaction(state.database) {
                 DaoAiConversation.new {
                     title = null
-                    project = state.projectManager.currentProject
+                    project = currentProject
                     messages = emptyList()
                     createdAt = now
                     updatedAt = now
@@ -79,6 +90,20 @@ class AiService(
 
         while (loopCount < maxLoops) {
             loopCount++
+
+            // Both `buildSystemPrompt()` and every tool in `AiTools` read the *live* show, and
+            // each round awaits the Anthropic API — so a concurrent `set-current` would point the
+            // remaining tool calls at a different rig while the transcript kept accruing against
+            // this conversation's project. Refuse rather than straddle the two. Checking once per
+            // round narrows the window to a single round; closing it entirely would mean holding
+            // a lock across an outbound HTTP call, which is worse.
+            if (state.projectManager.currentProject.id != currentProject.id) {
+                persistConversation(convId, existingMessages + newStoredMessages, userMessage)
+                throw ProjectChangedDuringChatException(
+                    "The current project changed while this reply was being generated. " +
+                        "The conversation was stopped part-way; send the message again."
+                )
+            }
 
             val request = AnthropicRequest(
                 system = buildSystemPrompt(),
@@ -151,17 +176,7 @@ class AiService(
             }
         }
 
-        // Persist conversation
-        val allMessages = existingMessages + newStoredMessages
-        transaction(state.database) {
-            val conv = DaoAiConversation.findById(convId)!!
-            conv.messages = allMessages
-            conv.updatedAt = System.currentTimeMillis()
-            // Auto-title from first user message if not set
-            if (conv.title == null) {
-                conv.title = userMessage.take(100)
-            }
-        }
+        persistConversation(convId, existingMessages + newStoredMessages, userMessage)
 
         return AiChatResponse(
             conversationId = convId,
@@ -171,10 +186,33 @@ class AiService(
     }
 
     /**
-     * List all conversations for the current project.
+     * Write the transcript back. Also called on the abort path, so a chat cut short by a project
+     * change still leaves the operator the exchange that got as far as it did.
      */
-    fun listConversations(): List<AiConversationSummary> {
-        val project = state.projectManager.currentProject
+    private fun persistConversation(
+        convId: Int,
+        allMessages: List<ConversationMessageDto>,
+        userMessage: String,
+    ) {
+        transaction(state.database) {
+            val conv = DaoAiConversation.findById(convId)!!
+            conv.messages = allMessages
+            conv.updatedAt = System.currentTimeMillis()
+            // Auto-title from first user message if not set
+            if (conv.title == null) {
+                conv.title = userMessage.take(100)
+            }
+        }
+    }
+
+    /**
+     * List all conversations belonging to [project], newest first.
+     *
+     * Conversation history is persisted project data, so every accessor here takes the project
+     * explicitly rather than assuming the current one — the routes hang off
+     * `/projects/{projectId}/ai/conversations`.
+     */
+    fun listConversations(project: DaoProject): List<AiConversationSummary> {
         return transaction(state.database) {
             DaoAiConversation.find { DaoAiConversations.project eq project.id }
                 .orderBy(DaoAiConversations.updatedAt to SortOrder.DESC)
@@ -189,11 +227,12 @@ class AiService(
     }
 
     /**
-     * Get a full conversation with display-friendly messages.
+     * Get a full conversation with display-friendly messages, or null if [conversationId] does
+     * not exist or belongs to a different project.
      */
-    fun getConversation(conversationId: Int): AiConversationDetail? {
+    fun getConversation(project: DaoProject, conversationId: Int): AiConversationDetail? {
         return transaction(state.database) {
-            val conv = DaoAiConversation.findById(conversationId) ?: return@transaction null
+            val conv = conversationIn(project, conversationId) ?: return@transaction null
             AiConversationDetail(
                 id = conv.id.value,
                 title = conv.title,
@@ -204,15 +243,27 @@ class AiService(
     }
 
     /**
-     * Delete a conversation.
+     * Delete a conversation. Returns false if it does not exist or belongs to a different
+     * project — the caller cannot tell the two apart, which is the point.
      */
-    fun deleteConversation(conversationId: Int): Boolean {
+    fun deleteConversation(project: DaoProject, conversationId: Int): Boolean {
         return transaction(state.database) {
-            val conv = DaoAiConversation.findById(conversationId) ?: return@transaction false
+            val conv = conversationIn(project, conversationId) ?: return@transaction false
             conv.delete()
             true
         }
     }
+
+    /**
+     * Look a conversation up by id, but only within [project]. Call inside a transaction.
+     *
+     * Filtered on the FK column rather than `conv.project.id`: dereferencing the `referencedOn`
+     * relation would load the whole [DaoProject] row just to compare an id.
+     */
+    private fun conversationIn(project: DaoProject, conversationId: Int): DaoAiConversation? =
+        DaoAiConversation.find {
+            (DaoAiConversations.id eq conversationId) and (DaoAiConversations.project eq project.id)
+        }.singleOrNull()
 
     // ─── System Prompt Construction ────────────────────────────────────────
 

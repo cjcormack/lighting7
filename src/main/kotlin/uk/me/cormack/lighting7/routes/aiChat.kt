@@ -1,26 +1,32 @@
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.http.*
+import io.ktor.resources.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
+import io.ktor.server.resources.*
+import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.ai.ProjectChangedDuringChatException
 import uk.me.cormack.lighting7.state.State
 
 /**
- * REST API routes for AI chat and conversation management.
+ * REST API routes for AI chat.
+ *
+ * Chat itself is a **live-runtime** surface: the tools Claude calls drive whatever show is
+ * loaded, so the endpoint carries no `{projectId}` and always means the current project — see
+ * `docs/api-conventions.md` §"Project scoping". The conversation *history* it writes is
+ * persisted project data and lives under `/projects/{projectId}/ai/conversations`
+ * ([routeApiRestProjectAiConversations]).
  */
 internal fun Route.routeApiRestAiChat(state: State) {
     route("/ai") {
         // POST /ai/chat - Send a message to Claude
         post("/chat") {
-            val aiService = state.aiService
-            if (aiService == null) {
-                call.respond(
-                    HttpStatusCode.ServiceUnavailable,
-                    ErrorResponse("AI service not available. Set ANTHROPIC_API_KEY to enable.")
-                )
+            val aiService = state.aiService ?: run {
+                call.respondAiUnavailable()
                 return@post
             }
 
@@ -34,6 +40,8 @@ internal fun Route.routeApiRestAiChat(state: State) {
                         AiActionDto(tool = it.tool, description = it.description, success = it.success)
                     }
                 ))
+            } catch (e: ProjectChangedDuringChatException) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Project changed"))
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Not found"))
             } catch (e: Exception) {
@@ -43,39 +51,39 @@ internal fun Route.routeApiRestAiChat(state: State) {
                 )
             }
         }
+    }
+}
 
-        // GET /ai/conversations - List conversations for current project
-        get("/conversations") {
-            val aiService = state.aiService
-            if (aiService == null) {
-                call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("AI service not available"))
-                return@get
+/**
+ * Conversation history for one project. Mounted under `/projects` alongside the other persisted
+ * project data. Reads and the delete both take any project id — nothing here touches the running
+ * show, so there is no live state for a non-current project to be incoherent with.
+ */
+internal fun Route.routeApiRestProjectAiConversations(state: State) {
+    // GET /{projectId}/ai/conversations
+    get<ProjectAiConversationsResource> { resource ->
+        withProject(state, resource.projectId) { project ->
+            val aiService = state.aiService ?: run {
+                call.respondAiUnavailable()
+                return@withProject
             }
-
-            val conversations = aiService.listConversations()
-            call.respond(conversations.map {
+            call.respond(aiService.listConversations(project).map {
                 AiConversationSummaryDto(id = it.id, title = it.title, updatedAt = it.updatedAt)
             })
         }
+    }
 
-        // GET /ai/conversations/{id} - Get full conversation
-        get("/conversations/{id}") {
-            val aiService = state.aiService
-            if (aiService == null) {
-                call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("AI service not available"))
-                return@get
+    // GET /{projectId}/ai/conversations/{conversationId}
+    get<ProjectAiConversationResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val aiService = state.aiService ?: run {
+                call.respondAiUnavailable()
+                return@withProject
             }
-
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid conversation ID"))
-                return@get
-            }
-
-            val conversation = aiService.getConversation(id)
+            val conversation = aiService.getConversation(project, resource.conversationId)
             if (conversation == null) {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Conversation not found"))
-                return@get
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(CONVERSATION_NOT_FOUND))
+                return@withProject
             }
 
             call.respond(AiConversationDetailDto(
@@ -91,29 +99,46 @@ internal fun Route.routeApiRestAiChat(state: State) {
                 updatedAt = conversation.updatedAt,
             ))
         }
+    }
 
-        // DELETE /ai/conversations/{id} - Delete a conversation
-        delete("/conversations/{id}") {
-            val aiService = state.aiService
-            if (aiService == null) {
-                call.respond(HttpStatusCode.ServiceUnavailable, ErrorResponse("AI service not available"))
-                return@delete
+    // DELETE /{projectId}/ai/conversations/{conversationId}
+    delete<ProjectAiConversationResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val aiService = state.aiService ?: run {
+                call.respondAiUnavailable()
+                return@withProject
             }
-
-            val id = call.parameters["id"]?.toIntOrNull()
-            if (id == null) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid conversation ID"))
-                return@delete
-            }
-
-            if (aiService.deleteConversation(id)) {
-                call.respond(HttpStatusCode.OK)
+            if (aiService.deleteConversation(project, resource.conversationId)) {
+                call.respond(HttpStatusCode.NoContent)
             } else {
-                call.respond(HttpStatusCode.NotFound, ErrorResponse("Conversation not found"))
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(CONVERSATION_NOT_FOUND))
             }
         }
     }
 }
+
+private const val CONVERSATION_NOT_FOUND = "Conversation not found"
+
+/**
+ * `State.aiService` is absent whenever no API key is configured, which is the normal state of a
+ * desk that doesn't use the assistant — so this is a 503 about the deployment, not a 404 about
+ * the URL.
+ */
+private suspend fun ApplicationCall.respondAiUnavailable() {
+    respond(
+        HttpStatusCode.ServiceUnavailable,
+        ErrorResponse("AI service not available. Set ANTHROPIC_API_KEY to enable."),
+    )
+}
+
+@Resource("/{projectId}/ai/conversations")
+data class ProjectAiConversationsResource(val projectId: String)
+
+@Resource("/{conversationId}")
+data class ProjectAiConversationResource(
+    val parent: ProjectAiConversationsResource,
+    val conversationId: Int,
+)
 
 // ─── DTOs ──────────────────────────────────────────────────────────────────
 
