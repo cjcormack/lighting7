@@ -569,12 +569,24 @@ from a single `route()` call, so the backend cost was one line each. `/fixture/t
 *top-level* `/fixture-types` rather than `/fixtures/types`: it enumerates what the build can
 drive, most of which is not patched, so it belongs beside `/control-surface-types`.
 
-**F2. One scoping rule for `{projectId}`** — medium / P2 / M / opus
+~~**F2. One scoping rule for `{projectId}`**~~ — done, `05fb674` (+ lighting-react `481e453`). medium / P2 / M / opus
 102 handlers 409 unless the id is current, while equally project-dependent surfaces (`/groups`,
 `/fx`, `/programmer`, `/locate`, `/ai/conversations`) are global. **Recommended rule:** persisted
 project *data* is project-scoped and 409-guarded; live-runtime surfaces are global by design.
 Write it in the conventions doc; move the misfits (`/ai/conversations` is project-dependent data —
 scope it).
+
+Landed as a three-tier rule, not two: project-scoped mutations split again on whether the write
+*is* a live-show mutation. 27 handlers (patches, riggings, stage regions, universe configs,
+surface bindings, speed masters, sync) deliberately take `withProject` and then re-sync the show
+only `if (isCurrentProject)`, because patching a rig you are not currently running is a real
+workflow. Documenting the flat rule would have meant converting all of them.
+
+Grew in the landing: `/ai/chat` now resolves the conversation within the current project and
+re-checks between tool rounds (409 + partial transcript persisted if `set-current` lands
+mid-loop), without which the scoping was decorative on the write path; and
+`/fx/definitions/{definitionId}` had the identical defect — GET/PUT/DELETE/test resolved by bare
+`findById` while list/create filtered by project — fixed in the same commit.
 
 **F3. Normalize mutation responses** — low / P2 / S / sonnet
 Deletes: 204 everywhere (currently split 204 vs 200-empty by resource); updates: return the DTO
@@ -674,7 +686,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, C8, B6–B7, F6~~ **done**, E10 | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1~~, F2–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F2~~, F3–F5, F7, F8, G1–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7~~, E9, F4 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
@@ -711,7 +723,10 @@ caller, `ProgrammerLookStack`'s local `isPreview` filter, and the unfiltered-sta
 in `ProgrammerScopeBand`/`LookRowStoreProvider` that `FU-PROG-FOCUS-PREVIEW-LAYER` flagged are all
 dead code now, not just unreachable),
 ~~F1~~ (landed: the whole REST path rename went in with `lighting-react` `85229a7`, so
-nothing is outstanding — see below), F2/F3/F5 (renamed paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
+nothing is outstanding — see below), ~~F2~~ (landed: `/ai/conversations` moved to
+`/projects/{projectId}/ai/conversations` and the four callers were repointed to
+`projects/current/...` in `481e453`, so nothing is outstanding), F3/F5 (renamed
+paths/messages/status codes), ~~F6~~ (landed: the widget's base URL moved to
 `/api/script-editor` in `0d2081d`, and `Projects.tsx` must gate Export/Import on `isAdmin` — see
 below), B3
 (`elementMode` now accepted on `POST /fx/add`, matching `PUT`), B4 (`speedMasterUuid` /
@@ -884,6 +899,17 @@ there are no aliases, so a split would have left the desk's UI 404ing on nearly 
 The sync export directory `stageRegions` and the WS message `surfaceBindingsChanged` were left
 alone on purpose — the first is canonical-JSON layout (renaming it is a `formatVersion` break,
 not a path rename), the second is F5's.
+
+F2 (`05fb674`, + lighting-react `481e453`) — `docs/api-conventions.md` gains a "Project scoping"
+section, and the one misfit moved. Frontend-visible in full: `GET /ai/conversations`,
+`GET /ai/conversations/{id}` and `DELETE /ai/conversations/{id}` are now
+`/projects/{projectId}/ai/conversations[/{conversationId}]`; the four callers went to
+`projects/current/…` in the same run. The delete answers `204` rather than `200`-empty (F3's
+target anyway, taken here because the caller was being repointed regardless). `POST /ai/chat`
+keeps its path but gains a `409`: it refuses when the current project changes mid-loop, and a
+`conversationId` belonging to another project is now a `404` rather than being silently continued.
+`/fx/definitions/{definitionId}` is unchanged in shape but now `404`s a definition belonging to a
+different project on GET/PUT/DELETE/test.
 
 ## Verification
 
