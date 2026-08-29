@@ -355,6 +355,14 @@ class FxEngine(
          */
         const val PROGRAMMER_FX_PRIORITY_BASE = Int.MAX_VALUE - 1_000_000
 
+        /**
+         * Clamp for a programmer layer's rank offset within the band
+         * ([ProgrammerLayerStack.priorityFor]). An order of magnitude below the band's
+         * 1,000,000 width, so it is a backstop against a runaway rank rather than a bound
+         * any real cue stack approaches.
+         */
+        const val PROGRAMMER_FX_RANK_CLAMP = 100_000
+
         /** True when [priority] sits in the programmer-owned effect band. */
         fun isProgrammerFxPriority(priority: Int): Boolean = priority >= PROGRAMMER_FX_PRIORITY_BASE
     }

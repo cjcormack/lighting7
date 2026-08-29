@@ -31,6 +31,12 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class MasterClock {
     companion object {
+        /**
+         * A new clock's starting tempo, and separately the rate-master reference:
+         * [SpeedMasterBank.rateScales] divides a master's live BPM by this same constant to
+         * get its rate multiplier, so 1.0x means "at `DEFAULT_BPM`" rather than "unscaled" —
+         * the two roles happen to share a value, not a concept.
+         */
         const val DEFAULT_BPM = 120.0
         const val MIN_BPM = 20.0
         const val MAX_BPM = 300.0
@@ -46,7 +52,9 @@ class MasterClock {
          * real pause (GC, debugger, machine sleep), and bursting the backlog would snap
          * every BEAT effect's phase forward in one frame — at 120 BPM this cap limits the
          * burst to ~12 ticks (half a beat), visually negligible, while anything longer
-         * resyncs so effects resume smoothly from where they were.
+         * resyncs so effects resume smoothly from where they were. The burst scales with
+         * tempo since it is a fixed *time* bound over a tick rate that speeds up with BPM:
+         * at [MAX_BPM] it is ~30 ticks (1.25 beats), the largest a real tempo can produce.
          */
         const val MAX_CATCHUP_MS = 250L
 
@@ -112,11 +120,7 @@ class MasterClock {
 
     private var clockJob: Job? = null
 
-    // Tap tempo tracking. Guarded by its own monitor: taps arrive from WS handlers, REST
-    // routes, scripts and the AI tool, which run on different dispatchers.
-    private val tapTimestamps = mutableListOf<Long>()
-    private val maxTapHistory = 4
-    private val tapTimeoutMs = 2000L
+    private val tapTempo = TapTempo()
 
     /**
      * Represents a single clock tick.
@@ -231,28 +235,6 @@ class MasterClock {
      * Requires at least 2 taps to calculate BPM.
      */
     fun tap() {
-        val now = System.currentTimeMillis()
-
-        val averageIntervalMs = synchronized(tapTimestamps) {
-            // Remove old taps that are beyond the timeout
-            tapTimestamps.removeIf { now - it > tapTimeoutMs }
-
-            // Add the new tap
-            tapTimestamps.add(now)
-
-            // Keep only the most recent taps
-            while (tapTimestamps.size > maxTapHistory) {
-                tapTimestamps.removeAt(0)
-            }
-
-            // Need at least 2 taps to calculate BPM
-            if (tapTimestamps.size < 2) return
-
-            tapTimestamps.zipWithNext { a, b -> b - a }.average()
-        }
-
-        if (averageIntervalMs > 0) {
-            setBpm(60_000.0 / averageIntervalMs)
-        }
+        tapTempo.tap()?.let { setBpm(it) }
     }
 }

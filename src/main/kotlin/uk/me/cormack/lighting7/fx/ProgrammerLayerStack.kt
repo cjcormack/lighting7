@@ -550,10 +550,11 @@ class ProgrammerLayerStack(
      * counter, so without the offset relative order would be *spawn* order and a reorder would need
      * a respawn to express itself. Every consumer of the band tests
      * `isProgrammerFxPriority` (`>= BASE`) rather than exact equality, so an offset is invisible to
-     * all of them. The band is a million wide; the clamp is a backstop, not an expected case.
+     * all of them. The band is a million wide; [FxEngine.PROGRAMMER_FX_RANK_CLAMP] is a backstop,
+     * not an expected case.
      */
     private fun priorityFor(rank: Int): Int =
-        FxEngine.PROGRAMMER_FX_PRIORITY_BASE + rank.coerceIn(0, 100_000)
+        FxEngine.PROGRAMMER_FX_PRIORITY_BASE + rank.coerceIn(0, FxEngine.PROGRAMMER_FX_RANK_CLAMP)
 
     /**
      * Build the instance a programmer layer's effect wants, or null if it can't be built.
