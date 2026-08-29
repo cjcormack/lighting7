@@ -69,8 +69,8 @@ claims are trivially checkable at fix time and are flagged there.
 ## 3. Index
 
 124 findings: 2 × S1, 19 × S2, 68 × S3, 35 × S4. Sorted by severity then priority. The
-`FS-COORD-*` rows were the backend seam (§14) and are now unblocked, eight of them already landed;
-the `FS-BE-*` backend halves still owed are listed in §14 only.
+`FS-COORD-*` rows were the backend seam (§14); all eleven have now landed. The `FS-BE-*` backend
+halves still owed are listed in §14 only.
 
 | ID | Finding | Sev | Pri | Cx | Model |
 |---|---|---|---|---|---|
@@ -98,7 +98,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-CUEEDIT-RETIRE`~~ **done** | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ **done** | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
-| `FS-COORD-GROUPS-WS` | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
+| ~~`FS-COORD-GROUPS-WS`~~ **done** | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
@@ -161,7 +161,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
 | `FS-RES-FIXTUREMODEL-SPLIT` | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
 | `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
-| `FS-TYPES-GROUPFX-WS` | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
+| ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | `FS-TYPES-SURFACE-DESCRIPTORS` | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
 | `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
 | ~~`FS-COORD-NEW-BROADCASTS`~~ **done** | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
@@ -176,7 +176,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
 | ~~`FS-COORD-PING`~~ **done** | Landed with backend D5 as `c6ee984`; one flatten constraint survives it — see the item | S4 | P3 | C1 | haiku |
-| `FS-COORD-STRICT-ENUMS` | Confirm-only: E4/E10 made the effect-enum write sites strict, and B3 lets the FX sheet se… | S4 | P3 | C1 | haiku |
+| ~~`FS-COORD-STRICT-ENUMS`~~ **done** | Confirm-only: E4/E10 made the effect-enum write sites strict, and B3 lets the FX sheet se… | S4 | P3 | C1 | haiku |
 | `FS-DEAD-CSS` | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
 | `FS-DEAD-EXPORT-KEYWORD` | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
 | `FS-DEAD-PROTOTYPES` | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
@@ -234,8 +234,9 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
 10. **The backend seam is no longer a wait — it is a queue** (§14). The backend sweep is complete,
     so nothing is gated; what remains is an ordering constraint and a re-measure.
     `FS-COORD-CUEEDIT-RETIRE`'s `force` senders must be deleted here **before** the backend drops
-    the inert fields (`FS-BE-FORCE-FIELDS`), and `FS-COORD-GROUPS-WS`'s deletion should follow the
-    `groupListChanged` broadcast (`FS-BE-GROUPLIST-CHANGED`) rather than precede it.
+    the inert fields (`FS-BE-FORCE-FIELDS`). `FS-COORD-GROUPS-WS`'s ordering is spent: the
+    `groupListChanged` prerequisite was refuted rather than filed — `fixturesChanged` already
+    carries that signal — so the deletion landed without a backend half.
     `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2, and `FS-PERF-PROVENANCE-REFETCH` should be
     re-measured now that backend C3 (`d317d93`) has landed — it hoisted the winner-set resolve out
     of the per-frame crossfade path, so the client cost this item assumes may be smaller than the
@@ -1056,9 +1057,9 @@ guarantee and the LOOK arm's `updateIncludedLook` write-back stay untouched. See
 `FS-BE-INCLUDEDTARGET-PALETTE` (§14) for the backend half, and `FS-RES-PALETTERESULT` for the
 unreachable `UpdateDialog` branch.
 
-### `FS-TYPES-GROUPFX-WS`
-**groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls** ·
-S3 · P3 · C1 · haiku
+### ~~`FS-TYPES-GROUPFX-WS`~~ — **landed with `FS-COORD-GROUPS-WS`**
+**groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls**,
+lighting-react `c1a8c44` · S3 · P3 · C1 · haiku
 `src/api/groupsApi.ts`
 
 `groupFxAdded` is the only orphan in a full diff of client WS `type` literals against every backend
@@ -1233,6 +1234,9 @@ count needs no backend work.
 `surfacesApi.request*State` senders, `groupsApi.addFx`/`clearFx` (see `FS-TYPES-GROUPFX-WS`). All
 senders/subscribers, so removal can't drop an inbound frame; if any is a deliberate protocol
 placeholder, comment it instead.
+
+Two of the six are already gone: `groupsApi.addFx`/`clearFx` went with `FS-COORD-GROUPS-WS`
+(lighting-react `c1a8c44`), which deleted the whole module. Four remain.
 
 ### `FS-DEAD-DEVDEPS`
 **Eight unused devDependencies, including a Prettier-in-ESLint wiring never made** · S3 · P2 · C1 ·
@@ -1970,9 +1974,9 @@ written:
 Also resolved the `beatSync` half of `FS-PERF-BPM-INVALIDATION` by deletion, and folded in
 `FS-CHROME-BEAT-RESUBSCRIBE` as that item asked.
 
-### `FS-COORD-GROUPS-WS`
+### ~~`FS-COORD-GROUPS-WS`~~ — **landed**
 **Delete the client groups WS layer — backend D3 landed `de2e1d5`, and the question it was waiting
-on now has an answer** · S3 · P1 · C1 · sonnet
+on now has an answer**, lighting-react `c1a8c44` · S3 · P1 · C1 · sonnet
 `src/api/groupsApi.ts`, `src/store/groups.ts`
 
 D3 deleted `plugins/GroupSocket.kt` outright, superseding `FS-TYPES-GROUPFX-WS`'s scope. This item
@@ -1986,6 +1990,18 @@ So this is two changes, not one, and the deletion is the *second*: file `FS-BE-G
 `groupsState`/`groupFxAdded` arms in `handleOnMessage` (`:239-247`) and the dead `addFx`/`clearFx`
 senders — and re-point the invalidation at whatever frame the backend half adds, rather than
 leaving the list refreshed only by this client's own mutations.
+
+Landed as one change, not two: the freshness question has a better answer than this item found.
+`GET /groups` reads `state.show.fixtures.groups`, and that register is only ever rebuilt inside
+`Fixtures.register {}` (`show/Fixtures.kt`), whose tail already fires `fixturesChanged()` — already
+broadcast as `FixturesChangedOutMessage`. Every path that can change the group list (patch CRUD,
+patch-group `PUT`/`DELETE`, riggings, universe configs, a project switch) reaches that block through
+`DbFixtureLoader.loadFixtures`, so a `groupListChanged` frame would be a duplicate emitted from the
+same line — `FS-BE-GROUPLIST-CHANGED` is struck below rather than filed. The invalidation was
+re-pointed at the frame that already exists instead: `store/fixtures.ts` now invalidates `GroupList`
+alongside `Fixture`, which covers the id-scoped `group` / `groupProperties` entries too. Deleting
+the whole module rather than the named arms also closes `FS-TYPES-GROUPFX-WS` and spends the
+`groupsApi.addFx`/`clearFx` half of `FS-DEAD-WS-METHODS`.
 
 ### ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ — **landed**
 **Retired-concept wire fields: the server has now deleted them, so these are live phantoms**,
@@ -2186,8 +2202,8 @@ backend change and the built-ins gave it nothing to fix. It is filed as `FU-FE-F
 `followups.md`, triggered by a script-defined effect whose numeric range the heuristic guesses
 wrong; that is the only case left where it can.
 
-### `FS-COORD-STRICT-ENUMS` *(new — confirm-only, from backend E4/E10)*
-**The effect-enum write sites now 400 an unrecognised value** · S4 · P3 · C1 · haiku
+### ~~`FS-COORD-STRICT-ENUMS`~~ — **confirmed at HEAD, no change** *(new — confirm-only, from backend E4/E10)*
+**The effect-enum write sites now 400 an unrecognised value**, no commit · S4 · P3 · C1 · haiku
 
 E4 (`0ce10d9`) and E10 (`dc1e7ea`) made `blendMode` / `distribution` / `elementMode` /
 `elementFilter` strict where they enter the desk: the REST apply endpoints and look/cue write routes
@@ -2208,6 +2224,14 @@ Also confirm-only from the same waves: **B3** (`39f4d7c`) added `elementMode` to
 `AddEditFxSheet` can set FLAT mode at creation instead of add-then-`PUT` — worth taking if the sheet
 does the two-step today. **E10** and **B3** are both cheap riders on any FX-sheet work.
 
+Confirmed at both HEADs, and nothing needed changing. `BLEND_MODE_OPTIONS`,
+`DISTRIBUTION_STRATEGY_OPTIONS`, `ELEMENT_MODE_OPTIONS` and `ELEMENT_FILTER_OPTIONS`
+(`components/fx/fxConstants.ts`) are canonical against `BlendMode`, `DistributionStrategy.byName`
+and `ElementFilter`, and the only enum literals written outside those tables are
+`useBuskingState`'s `'OVERRIDE'` / `'LINEAR'`. The B3 rider is already taken: `AddEditFxSheet`
+sends `elementMode` in the create payload on both the fixture and group branches, so there is no
+add-then-`PUT` two-step to remove.
+
 ### Backend halves still owed
 
 The backend sweep closed (all waves, `a4bf981`) **without** picking up the proposals this section
@@ -2215,11 +2239,17 @@ raised. They are restated here as the backlog they now are; the right home is
 `../plans/followups.md` as `FU-` items, and promoting them is a decision for the desk owner rather
 than something an agent should do while landing a frontend item.
 
-Two of the original five are settled:
+Three of the six are settled:
 
 - ~~`FS-BE-STOP-ROWSONLY`~~ — refuted at HEAD: `removeEffectsForCue` clears Layer 4
   unconditionally (`b11d66a`), and `/apply` routes through `activateCueInStack` (`dcc511f`) so the
   stack is active and stop takes the deactivate branch anyway. Pinned by `CueSlotLivenessRouteTest`.
+- ~~`FS-BE-GROUPLIST-CHANGED`~~ — refuted at HEAD: the signal it proposed already exists under
+  another name. `GET /groups` reads `state.show.fixtures.groups`, that register is only rebuilt
+  inside `Fixtures.register {}`, and that block's last act is `fixturesChanged()` — already
+  broadcast. A `groupListChanged` frame would be a second frame from one emit point, so
+  `FS-COORD-GROUPS-WS` pointed the client's `GroupList` invalidation at `fixturesChanged` instead
+  (lighting-react `c1a8c44`).
 - ~~`FS-BE-ACTIVATE-SHORTCIRCUIT`~~ — done, `1cdadb7`, with `FS-BUG-CUESLOT-LIVENESS`.
 
 Still owed, and each blocking a frontend item from being finished honestly:
@@ -2238,10 +2268,6 @@ Still owed, and each blocking a frontend item from being finished honestly:
   expanded cue's composed values. Confirmed still absent at HEAD: `cuesRepublished` exists on the
   REST responses (`lookRepublish.kt:36`, `programmerRoutes.kt:325`, `lookRecord.kt:255`) and
   nowhere on the broadcast bus. Backend half of `FS-BUG-CUE-TAG-STALE`.
-- `FS-BE-GROUPLIST-CHANGED` *(new)* — there is no `groupListChanged` broadcast, so nothing keeps a
-  second client's group list fresh; D3 removed the bridge that was *supposed* to and B5 added the
-  two sibling broadcasts without this one. Prerequisite for `FS-COORD-GROUPS-WS`'s deletion being a
-  cleanup rather than a silent regression.
 - `FS-BE-FORCE-FIELDS` *(new)* — **now unblocked.** `force` survives on the Record and Update
   request bodies, inert, solely because this repo used to send it on every submit (backend D1
   note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client sends it and
