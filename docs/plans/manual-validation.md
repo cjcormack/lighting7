@@ -23,6 +23,7 @@ as a one-line row.
 | [`FU-MANUAL-CROSSFADE-C3`](#fu-manual-crossfade-c3) | crossfades stay smooth and provenance names the right cue after the C3 republish rework | Sweep C3, 2026-08-26 |
 | [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
 | [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
+| [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
 
 ---
 
@@ -389,6 +390,32 @@ inside about a second, and there should be no visible stall in DMX output. Then 
 cable for two seconds and plug it back in — the flap must produce exactly one resync, not one per
 transition. Repeat once signed in as an **operator** rather than an admin, which is the case where the
 role-gated families must produce no requests at all. 15 minutes.
+
+## `FU-MANUAL-WS-SINGLE-PARSE`
+
+**No bridge lost a frame when the WebSocket parse moved into the connection** · frontend sweep
+`FS-PERF-WS-SINGLE-PARSE` + `FS-WS-ERROR-ISOLATION`, 2026-08-29
+
+Every inbound frame used to be `JSON.parse`d once per bridge — 24 of the ~27 parsed it
+unconditionally and threw it away, against a `channelState` firehose running at up to ~40 frames/s
+per universe on the thread that also paints the grid. The connection now parses each frame once and
+hands every bridge the same object, and `notifyEvent` wraps each subscriber in its own try/catch so
+one that throws can no longer starve the ones registered after it. Two of the bridges
+(programmer, speed masters) lost hand-rolled substring pre-filters in the process, and the six
+`handleOnMessage` bridges now take a parsed body rather than the raw event. This is a **code-read**
+change: the parse count is arithmetic, not a measurement, and nothing in-tree exercises all
+twenty-eight bridges against a real server.
+
+**Test**: with the desk running and DMX moving (an effect on a group is enough), open the client and
+work each WS-fed surface in turn, confirming each still updates live from a *second* browser rather
+than only from its own actions — the fixtures grid and channel values, the universes list, the
+Programmer (set a value, go Blind, watch provenance), the cue list and the show bar's live/next
+cursor, prompt books, the patch and rigging pages, the stage regions and park views, the MIDI
+`/surfaces` page (bank change and a learn), Cloud Sync (run a sync and watch the log stream), the
+Updates tab, and the speed-master BPM readout including its beat indicator. Then restart lighting7
+under the client and confirm every one of those recovers on the reconnect. Finally, watch the
+browser console throughout: a `WebSocket: a message subscriber threw` line is the new isolation
+firing and means a real bug to file, and no frame should ever be reported as unparseable. 20 minutes.
 
 ---
 

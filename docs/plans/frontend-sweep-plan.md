@@ -87,7 +87,7 @@ halves still owed are listed in §14 only.
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
 | `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
 | `FS-PERF-SAVELOOK-INVALIDATION` | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
-| `FS-PERF-WS-SINGLE-PARSE` | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
+| ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
@@ -103,7 +103,7 @@ halves still owed are listed in §14 only.
 | `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
-| `FS-WS-ERROR-ISOLATION` | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
+| ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | `FS-ARCH-ALERTDIALOG-DEP` | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
 | `FS-ARCH-CURSOR-OWNERSHIP` | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
 | `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
@@ -720,8 +720,8 @@ change.
 
 ### The WS fan-out band
 
-### `FS-PERF-WS-SINGLE-PARSE`
-**The channelState firehose is `JSON.parse`d 24 times per frame** · S2 · P1 · C2 · sonnet
+### ~~`FS-PERF-WS-SINGLE-PARSE`~~ — **landed**
+**The channelState firehose is `JSON.parse`d 24 times per frame**, `61cbc01` · S2 · P1 · C2 · sonnet
 `src/api/internalApi.ts`, `src/api/lightingApi.ts`, and every `src/api/*Api.ts` bridge
 
 `notifyEvent` hands every WS event to all ~27 eagerly-built bridges; only `programmerWsApi` and
@@ -736,9 +736,17 @@ parse) and let them switch on `type`. Keep per-bridge `open` handling and notify
 (several bridges seed caches on reconnect); do not change which bridge sees which frame. Rider:
 per-subscriber try/catch in `notifyEvent` (`FS-WS-ERROR-ISOLATION`).
 
-### `FS-WS-ERROR-ISOLATION`
+Grew in the landing: review found that the twelve bridges which are nothing but "one payload-free
+frame means this list changed" had all just been touched to take the new argument, and that the five
+bridge test files each carried a byte-identical `fakeConnection()` edited in lockstep. Both were
+extracted in the same commit — `createChangeSignalApi` in `wsSubscriptionFactory.ts`, and
+`src/test/fakeWsConnection.ts` — because the extraction rewrote the very bodies this item edits, so
+there was no separable intermediate. `parseWsFrame` is exported for the fake to mirror production,
+and `internalApi` gained its first test file. Operator check filed as `FU-MANUAL-WS-SINGLE-PARSE`.
+
+### ~~`FS-WS-ERROR-ISOLATION`~~ — **landed**
 **`notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registered
-last** · S3 · P1 · C1 · sonnet
+last**, `a046c50` · S3 · P1 · C1 · sonnet
 `src/api/internalApi.ts`
 
 A bare `forEach` — one throwing subscriber starves every later-registered bridge of that frame, and
