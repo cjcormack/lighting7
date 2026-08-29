@@ -533,7 +533,7 @@ policies, because there are exactly two situations:
   own `catch`, not from `plugins/ErrorHandling.kt` — it registers no `IllegalArgumentException`
   clause, so a *new* strict call site needs its own.
 * **`Lenient`** — a stored row is already on the desk and the cue has to fire, so an unrecognised
-  value warns and takes the field's default. Used by `EffectSpawner.createInstanceFromPreset` and
+  value warns and takes the field's default. Used by `EffectSpawner.createEffectInstance` and
   `CueComposer`'s layer blend. A `null` optional field is silent; a present-but-blank one warns,
   since every column that holds these is either nullable or NOT NULL with a default, so `""` means
   a row was written wrong.

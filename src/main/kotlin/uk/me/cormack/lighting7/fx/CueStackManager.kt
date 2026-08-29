@@ -204,7 +204,7 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = EffectSpawner.createInstanceFromPreset(
+            val instance = EffectSpawner.createEffectInstance(
                 effectSpec, fxTarget, state = state,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -223,7 +223,7 @@ class CueStackManager(
         // Apply immediate ad-hoc effects
         for (adHoc in immediateAdHoc) {
             val target = CueTargetDto(adHoc.target)
-            val presetEffectDto = LookEffectSpec(
+            val adHocEffectSpec = LookEffectSpec(
                 effectType = adHoc.effectType,
                 category = adHoc.category,
                 propertyName = adHoc.propertyName,
@@ -239,7 +239,7 @@ class CueStackManager(
                 rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
             )
             val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, target, presetEffectDto)
+                EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
             } catch (e: Exception) {
                 logger.warn(
                     "cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}",
@@ -248,7 +248,7 @@ class CueStackManager(
                 null
             } ?: continue
 
-            val instance = EffectSpawner.createInstanceFromPreset(presetEffectDto, fxTarget, state)
+            val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
             spawning += instance
@@ -603,7 +603,7 @@ class CueStackManager(
 
     // ─── Private helpers ─────────────────────────────────────────────────
 
-    // `createInstanceForStack` stood here. It was `createInstanceFromPreset` with a `stackId`
+    // `createInstanceForStack` stood here. It was `createEffectInstance` with a `stackId`
     // parameter, which existed only to resolve `P1` against the stack's positional colour list.
     // With that list gone the two bodies were identical — and this copy had lost the
     // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `tmpl:`

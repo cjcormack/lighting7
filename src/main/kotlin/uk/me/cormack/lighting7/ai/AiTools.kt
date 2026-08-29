@@ -97,7 +97,7 @@ class AiTools(private val state: State) {
         val notes = input["description"]?.jsonPrimitive?.contentOrNull
         val effectsArray = input["effects"]?.jsonArray ?: return errorResult("Missing 'effects'")
 
-        val effects = effectsArray.map { parsePresetEffect(it.jsonObject) }
+        val effects = effectsArray.map { parseLookEffect(it.jsonObject) }
 
         val project = state.projectManager.currentProject
         val look = transaction(state.database) {
@@ -1170,7 +1170,7 @@ class AiTools(private val state: State) {
      * `look_effects` rows directly, and `executeTool`'s catch is the AI surface's 400 — the model
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
-    private fun parsePresetEffect(obj: JsonObject): LookEffectSpec {
+    private fun parseLookEffect(obj: JsonObject): LookEffectSpec {
         val spec = LookEffectSpec(
             effectType = obj["effectType"]!!.jsonPrimitive.content,
             category = obj["category"]!!.jsonPrimitive.content,
@@ -1198,7 +1198,7 @@ class AiTools(private val state: State) {
     /**
      * One ad-hoc cue effect out of a tool call.
      *
-     * No enum check here, unlike [parsePresetEffect]: everything this returns goes through
+     * No enum check here, unlike [parseLookEffect]: everything this returns goes through
      * `createCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
      * turns that message into a failed result the same way.
      */
@@ -1240,7 +1240,7 @@ class AiTools(private val state: State) {
      * Unknown uuids are rejected rather than written: `SpeedMasterBank.slotFor` resolves a
      * dangling reference to master 1, so a mistyped uuid would run at the global tempo forever
      * while looking like it had been accepted. Throwing here reaches the model as a failed tool
-     * result it can retry — the same bargain [parsePresetEffect] strikes over blend modes.
+     * result it can retry — the same bargain [parseLookEffect] strikes over blend modes.
      */
     private fun checkedSpeedMasterUuid(element: JsonElement?): String? {
         val raw = element?.jsonPrimitive?.contentOrNull ?: return null

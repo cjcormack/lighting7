@@ -25,50 +25,50 @@ internal object EffectSpawner {
     fun resolveTargetForCue(
         state: State,
         target: CueTargetDto,
-        presetEffect: LookEffectSpec,
+        effectSpec: LookEffectSpec,
     ): FxTarget? {
         // A recorded row's own `propertyName` wins, and rows recorded while sweep item A11 was live
         // carry `"pan"` for a position effect. The registration's output type is what lets
         // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
-        val outputType = state.show.fxRegistry.getRegistration(presetEffect.effectType)?.outputType
+        val outputType = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.outputType
         return when (target.target) {
             is TargetRef.Group -> {
                 val group = state.show.fixtures.untypedGroup(target.key)
-                val propertyName = presetEffect.propertyName
-                    ?: resolvePresetEffectPropertyForCue(presetEffect, group.detectCapabilities())
+                val propertyName = effectSpec.propertyName
+                    ?: resolveEffectPropertyForCue(effectSpec, group.detectCapabilities())
                     ?: return null
                 createGroupTargetForCue(group.name, propertyName, group, outputType)
             }
             is TargetRef.Fixture -> {
-                val propertyName = presetEffect.propertyName
-                    ?: resolvePresetEffectPropertyForFixtureInCue(presetEffect)
+                val propertyName = effectSpec.propertyName
+                    ?: resolveEffectPropertyForFixtureInCue(effectSpec)
                     ?: return null
                 createFixtureTargetForCue(target.key, propertyName, state, outputType)
             }
         }
     }
 
-    private fun resolvePresetEffectPropertyForCue(
-        presetEffect: LookEffectSpec,
+    private fun resolveEffectPropertyForCue(
+        effectSpec: LookEffectSpec,
         capabilities: List<String>,
     ): String? {
-        return when (presetEffect.category) {
+        return when (effectSpec.category) {
             "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
             "colour" -> if ("colour" in capabilities) "colour" else null
             "position" -> if ("position" in capabilities) "position" else null
-            "controls", "setting" -> presetEffect.propertyName
+            "controls", "setting" -> effectSpec.propertyName
             else -> null
         }
     }
 
-    private fun resolvePresetEffectPropertyForFixtureInCue(
-        presetEffect: LookEffectSpec,
+    private fun resolveEffectPropertyForFixtureInCue(
+        effectSpec: LookEffectSpec,
     ): String? {
-        return when (presetEffect.category) {
+        return when (effectSpec.category) {
             "dimmer" -> "dimmer"
             "colour" -> "colour"
             "position" -> "position"
-            "controls", "setting" -> presetEffect.propertyName
+            "controls", "setting" -> effectSpec.propertyName
             else -> null
         }
     }
@@ -95,7 +95,7 @@ internal object EffectSpawner {
     }
 
     /**
-     * Build an [FxInstance] from a preset effect definition.
+     * Build an [FxInstance] from a look effect definition.
      *
      * There were two of these until the positional colour list went. A cue-scoped one resolved `P1`
      * against `getCuePalette(cueId) ?: getPalette()`, and Include needed a second that took an explicit
@@ -103,49 +103,49 @@ internal object EffectSpawner {
      * the cue wasn't live, resolving an included cue's colours against the wrong ones. A `tmpl:`
      * reference has one answer wherever it is read, so the fork had nothing left to be about.
      */
-    fun createInstanceFromPreset(
-        presetEffect: LookEffectSpec,
+    fun createEffectInstance(
+        effectSpec: LookEffectSpec,
         fxTarget: FxTarget,
         state: State,
-        /** Per-cue-application override; null falls through to the preset effect's own master. */
+        /** Per-cue-application override; null falls through to the effect spec's own master. */
         overrideSpeedMasterUuid: UUID? = null,
         overrideRateSpeedMasterUuid: UUID? = null,
     ): FxInstance {
         val effect = state.show.fxRegistry.createEffectWithTemplates(
             state.show.templateRegistry,
-            presetEffect.effectType,
-            presetEffect.parameters,
+            effectSpec.effectType,
+            effectSpec.parameters,
         )
-        val timing = FxTiming(presetEffect.beatDivision)
+        val timing = FxTiming(effectSpec.beatDivision)
 
         // Lenient, not strict: these fields come off a stored row, and a spec written by an older
         // build (or hand-edited) must still fire rather than take the cue down. The warn names the
         // effect type, which is as much identity as a `LookEffectSpec` carries here.
-        val context = { "look effect '${presetEffect.effectType}'" }
-        val blendMode = EffectSpecCoercion.Lenient.blendMode(presetEffect.blendMode, context)
-        val distribution = EffectSpecCoercion.Lenient.distribution(presetEffect.distribution, context)
-        val elementMode = EffectSpecCoercion.Lenient.elementMode(presetEffect.elementMode, context)
-        val elementFilter = EffectSpecCoercion.Lenient.elementFilter(presetEffect.elementFilter, context)
+        val context = { "look effect '${effectSpec.effectType}'" }
+        val blendMode = EffectSpecCoercion.Lenient.blendMode(effectSpec.blendMode, context)
+        val distribution = EffectSpecCoercion.Lenient.distribution(effectSpec.distribution, context)
+        val elementMode = EffectSpecCoercion.Lenient.elementMode(effectSpec.elementMode, context)
+        val elementFilter = EffectSpecCoercion.Lenient.elementFilter(effectSpec.elementFilter, context)
 
         // Propagate timing source from the effect's registration
-        val registration = state.show.fxRegistry.getRegistration(presetEffect.effectType)
+        val registration = state.show.fxRegistry.getRegistration(effectSpec.effectType)
         val timingSource = registration?.timingSource ?: TimingSource.BEAT
 
         return FxInstance(effect, fxTarget, timing, blendMode).apply {
-            // The *canonical* id, not `presetEffect.effectType`: the registry resolves aliases, so two
+            // The *canonical* id, not `effectSpec.effectType`: the registry resolves aliases, so two
             // stored specs can name one registration and must compare equal. See
             // [FxInstance.registrationId].
             this.registrationId = registration?.id
-            phaseOffset = presetEffect.phaseOffset
+            phaseOffset = effectSpec.phaseOffset
             distributionStrategy = distribution
             this.elementMode = elementMode
             this.elementFilter = elementFilter
             this.timingSource = timingSource
-            presetEffect.stepTiming?.let { this.stepTiming = it }
+            effectSpec.stepTiming?.let { this.stepTiming = it }
             speedMasterUuid = overrideSpeedMasterUuid
-                ?: speedMasterUuidOrNull(presetEffect.speedMasterUuid)
+                ?: speedMasterUuidOrNull(effectSpec.speedMasterUuid)
             rateSpeedMasterUuid = overrideRateSpeedMasterUuid
-                ?: speedMasterUuidOrNull(presetEffect.rateSpeedMasterUuid)
+                ?: speedMasterUuidOrNull(effectSpec.rateSpeedMasterUuid)
         }
     }
 }

@@ -306,7 +306,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
  *
  * [uk.me.cormack.lighting7.models.LookEffectSpec] already serves as that shared vehicle rather
  * than as anything preset-specific — a cue's ad-hoc effect is converted *into* it before spawning
- * too — so bridging here keeps `createInstanceFromPreset` and `resolveTargetForCue` untouched. The
+ * too — so bridging here keeps `createEffectInstance` and `resolveTargetForCue` untouched. The
  * type gets its final, non-preset name when `models/fxPresets.kt` is deleted and it has to move
  * anyway.
  *

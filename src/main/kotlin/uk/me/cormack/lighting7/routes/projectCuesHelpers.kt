@@ -698,7 +698,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = EffectSpawner.createInstanceFromPreset(
+        val instance = EffectSpawner.createEffectInstance(
             effectSpec, fxTarget, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -715,7 +715,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // (Timed ad-hoc effects with delayMs/intervalMs are handled by CueTriggerManager)
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         val target = CueTargetDto(adHoc.target)
-        val presetEffectDto = LookEffectSpec(
+        val adHocEffectSpec = LookEffectSpec(
             effectType = adHoc.effectType,
             category = adHoc.category,
             propertyName = adHoc.propertyName,
@@ -731,10 +731,10 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             rateSpeedMasterUuid = adHoc.rateSpeedMasterUuid,
         )
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, target, presetEffectDto)
+            EffectSpawner.resolveTargetForCue(state, target, adHocEffectSpec)
         } catch (_: Exception) { null } ?: continue
 
-        val instance = EffectSpawner.createInstanceFromPreset(presetEffectDto, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
         instance.cueId = cueData.cueId
         instance.priority = priority
         spawning += instance

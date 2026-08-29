@@ -117,7 +117,7 @@ class ProgrammerLayerStack(
     private val store: ProgrammerStore,
     /**
      * Supplied lazily because `Show` builds this before `State` finishes wiring itself, and only
-     * effect *spawning* needs it — `resolveTargetForCue` and `createInstanceFromPreset` both take
+     * effect *spawning* needs it — `resolveTargetForCue` and `createEffectInstance` both take
      * it. Values cook with no `State` at all, which is what lets the value half be tested without
      * a database.
      */
@@ -580,7 +580,7 @@ class ProgrammerLayerStack(
             null
         } ?: return null
 
-        // [createInstanceFromPreset] gives this a **live** colour source, unlike the frozen
+        // [createEffectInstance] gives this a **live** colour source, unlike the frozen
         // snapshot this path used to build for itself.
         //
         // The old positional colour list was captured at include time — version pinned to `0L` — so
@@ -589,7 +589,7 @@ class ProgrammerLayerStack(
         // colour is that retuning it moves everything that follows it, and a programmer layer is no
         // more exempt from that than a cue's.
         val instance = try {
-            EffectSpawner.createInstanceFromPreset(
+            EffectSpawner.createEffectInstance(
                 spec, fxTarget, state = st,
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
                 overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,

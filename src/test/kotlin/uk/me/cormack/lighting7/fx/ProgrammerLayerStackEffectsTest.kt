@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 
 /**
  * The effect half of the programmer's layer stack, which needs a real `State`: both
- * `resolveTargetForCue` and `createInstanceFromPreset` take one, so unlike the value rules in
+ * `resolveTargetForCue` and `createEffectInstance` take one, so unlike the value rules in
  * `ProgrammerLayerStackTest` this cannot run against a map-backed registry.
  *
  * The headline is `a reorder re-ranks the running effects without respawning them`. Layer order is

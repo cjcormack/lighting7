@@ -334,7 +334,7 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createInstanceFromPreset(
+        val instance = EffectSpawner.createEffectInstance(
             effectSpec, fxTarget, state = state,
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
@@ -362,7 +362,7 @@ class CueTriggerManager(
         effectIds: MutableList<Long>,
     ) {
         val toggleTarget = CueTargetDto(effect.target)
-        val presetEffect = LookEffectSpec(
+        val adHocEffectSpec = LookEffectSpec(
             effectType = effect.effectType,
             category = effect.category,
             propertyName = effect.propertyName,
@@ -379,7 +379,7 @@ class CueTriggerManager(
         )
 
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, toggleTarget, presetEffect)
+            EffectSpawner.resolveTargetForCue(state, toggleTarget, adHocEffectSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: timed ad-hoc effect on '{}' — target unresolvable — skipping: {}",
@@ -388,7 +388,7 @@ class CueTriggerManager(
             null
         } ?: return
 
-        val instance = EffectSpawner.createInstanceFromPreset(presetEffect, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstance(adHocEffectSpec, fxTarget, state)
         instance.cueId = cueId
         instance.cueStackId = cueStackId
 

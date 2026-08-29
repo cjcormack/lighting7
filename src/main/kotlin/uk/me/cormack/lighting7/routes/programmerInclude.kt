@@ -249,7 +249,7 @@ private fun spawnIncludedFx(
     val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId }
 
     fun spawn(
-        presetEffect: LookEffectSpec,
+        effectSpec: LookEffectSpec,
         target: TargetRef,
         origin: ProgrammerFxOrigin,
     ) {
@@ -262,7 +262,7 @@ private fun spawnIncludedFx(
             } catch (_: Exception) {
                 null
             }
-            val propertyName = presetEffect.propertyName
+            val propertyName = effectSpec.propertyName
             val group = if (reference != null && propertyName != null) {
                 maskGroupForProperty(reference, propertyName)
             } else null
@@ -282,10 +282,10 @@ private fun spawnIncludedFx(
         // resembles. The child's own live instance still matches it exactly — same target,
         // property and registration, and no layer provenance either — so a live cue's children
         // are still skipped rather than doubled, which is the rule this guard exists for.
-        val registrationId = state.show.fxRegistry.getRegistration(presetEffect.effectType)?.id
+        val registrationId = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.id
         val duplicate = running.any {
             it.target.targetKey == target.key &&
-                it.target.propertyName == presetEffect.propertyName &&
+                it.target.propertyName == effectSpec.propertyName &&
                 it.registrationId == registrationId &&
                 it.lookId == null && it.cueLayerId == null
         }
@@ -295,7 +295,7 @@ private fun spawnIncludedFx(
         }
 
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), presetEffect)
+            EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: included fx on '{}' — target unresolvable — skipping: {}",
@@ -304,7 +304,7 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        val instance = EffectSpawner.createInstanceFromPreset(presetEffect, fxTarget, state)
+        val instance = EffectSpawner.createEffectInstance(effectSpec, fxTarget, state)
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
         spawning += instance
@@ -317,7 +317,7 @@ private fun spawnIncludedFx(
     // retraction on remove, re-ranking on reorder. Only the cue's own ad-hoc children are left here.
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
-            adHoc.toPresetEffectDto(), adHoc.target,
+            adHoc.toEffectSpec(), adHoc.target,
             ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.sortOrder),
         )
     }
@@ -331,8 +331,8 @@ private fun spawnIncludedFx(
     return IncludedFxOutcome(spawned, alreadyRunning, timedSkipped, covered, groupKeys)
 }
 
-/** Ad-hoc children and preset effects share a shape; this is the adapter `applyCue` also uses. */
-internal fun CueAdHocEffectDto.toPresetEffectDto() = LookEffectSpec(
+/** Ad-hoc children and look effects share a shape; this is the adapter `applyCue` also uses. */
+internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
     effectType = effectType,
     category = category,
     propertyName = propertyName,

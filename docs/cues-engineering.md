@@ -157,7 +157,7 @@ parameter on the desk, and an effect naming no template from re-resolving at all
 change (create / rename / delete) still moves every scoped version by one, because an effect is
 allowed to name a uuid that has no template yet.
 
-There were two `createInstanceFromPreset` variants until the positional list went — a cue-scoped one
+There were two `createEffectInstance` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
 because that fallback silently reached the *global* list when the cue was not live. A `tmpl:`
 reference has one answer wherever it is read, so the fork had nothing left to be about and the two
