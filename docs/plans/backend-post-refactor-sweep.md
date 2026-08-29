@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVES 0–4 COMPLETE.** This is the output of the
+> **Document status: BACKLOG, WAVES 0–5 COMPLETE.** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -696,9 +696,16 @@ pre-existing precedence bug dropping its closing paren for grouped fixtures, fix
 No `speed_masters`, no programmer (which the AI itself mutates via `apply_look`), no cue run state
 (active/armed-next/fade — the point of server-owned Next). **Fix:** add the three sections.
 
-**G3. Missing tools for the new authoring loop** — medium / P2 / M / opus
+~~**G3. Missing tools for the new authoring loop**~~ — done, `1a5bf3a`. medium / P2 / M / opus
 No template create (successor to the removed `set_palette`), no Record/Include/Update, no
 standby/GO. **Fix:** add per product judgement — standby/GO first (smallest, highest show value).
+Landed as all three, not standby/GO alone: the operator took the whole loop in one pass.
+Grew in the landing: rather than a second implementation of the gestures that decide which rows
+get overwritten, Record/Include/Update came out of the Ktor handlers into
+`routes/programmerSurface.kt`, which both surfaces now render. `CueStackManager.go` is shared with
+`SurfaceActions.cueStackGo` for the same reason, and two pre-existing bugs went with it —
+`activate_cue_stack` hand-querying the first row instead of `activateAtFirstCue`, and
+`advance_cue_stack` claiming a stack had been deactivated when `advanceStack` returned null.
 
 **G4. Retired vocabulary** — low / P3 / S / sonnet
 `parsePresetEffect` name, prompt text "the preset", ~~the always-absent `presetId` key~~ (gone with
@@ -734,7 +741,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3, F5, F7–F8, G1–G2~~ **done**, G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5, F7–F8, G1–G3~~ **done** | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
