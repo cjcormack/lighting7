@@ -16,7 +16,7 @@ private val logger = LoggerFactory.getLogger("CueTriggerManager")
 /**
  * Manages the runtime lifecycle of cue triggers and timed effects.
  *
- * **Timed effects**: Preset applications and ad-hoc effects with delay/interval
+ * **Timed effects**: Look applications and ad-hoc effects with delay/interval
  * timing fields. These are "effects with scheduling" — they fire at specific
  * times relative to cue activation.
  *
@@ -55,7 +55,7 @@ class CueTriggerManager(
      * [CueAssignmentLayer.replaceAssignments] preserves an in-flight crossfade weight where
      * `setAssignments` would reset it to fully-in.
      */
-    private val firedTimedLooks = ConcurrentHashMap<Int, MutableSet<Int>>()
+    private val firedTimedLayers = ConcurrentHashMap<Int, MutableSet<Int>>()
 
     /**
      * The timed layers of [cueId] that have already fired.
@@ -65,7 +65,7 @@ class CueTriggerManager(
      * other republish that omits it re-cooks the cue *without* the fired layers and so silently
      * retracts their contribution, permanently for a one-shot delay.
      */
-    internal fun firedTimedLayerIds(cueId: Int): Set<Int> = firedTimedLooks[cueId]?.toSet() ?: emptySet()
+    internal fun firedTimedLayerIds(cueId: Int): Set<Int> = firedTimedLayers[cueId]?.toSet() ?: emptySet()
 
     /** Stored DEACTIVATION script triggers per cue ID (fired on deactivation) */
     private val deactivationTriggers = ConcurrentHashMap<Int, List<CueTriggerDto>>()
@@ -73,13 +73,13 @@ class CueTriggerManager(
     // ─── Timed effect activation ───────────────────────────────────────────
 
     /**
-     * Activate timed (delayed/recurring) preset applications and ad-hoc effects for a cue.
+     * Activate timed (delayed/recurring) Look applications and ad-hoc effects for a cue.
      *
      * Call this after the cue's immediate effects have been applied. Only effects
      * with non-null delayMs or intervalMs should be passed here.
      *
      * [priority] is the cue-derived Layer 4 priority (see
-     * [cueDerivedPriority]). Timed preset fires produce Layer 4
+     * [cueDerivedPriority]). Timed Look fires produce Layer 4
      * rows at this priority so they compose consistently with the cue's apply-time rows.
      */
     internal fun activateTimedEffectsForCue(
@@ -104,7 +104,7 @@ class CueTriggerManager(
         // A fresh activation has fired nothing: start from empty rather than inheriting a previous
         // run's set, which would make a re-applied cue skip its delays.
         val fired: MutableSet<Int> = java.util.concurrent.ConcurrentHashMap.newKeySet()
-        firedTimedLooks[cueId] = fired
+        firedTimedLayers[cueId] = fired
 
         // Shared by every timed layer of this cue, and dies with the activation — the jobs below
         // are the only holders, and `deactivateTriggersForCue` cancels them.
@@ -245,7 +245,7 @@ class CueTriggerManager(
             fxEngine.removeEffect(effectId)
         }
 
-        firedTimedLooks.remove(cueId)
+        firedTimedLayers.remove(cueId)
         cueToStack.remove(cueId)
 
         // A fired timed layer's most recent `replaceAssignments` call may have left this cue's
@@ -311,7 +311,7 @@ class CueTriggerManager(
     }
 
     /**
-     * Spawn effects for a timed preset application. Takes the preset's effects list preloaded
+     * Spawn effects for a timed Look application. Takes the Look's effects list preloaded
      * by the caller so the fire path can share one DB transaction with the Layer 4 property-
      * assignment lookup.
      */
@@ -455,7 +455,7 @@ class CueTriggerManager(
 /**
  * One activation's memo of the fire path's cook.
  *
- * Firing a timed layer re-cooks the **whole** cue (see [CueTriggerManager.firedTimedLooks] for why
+ * Firing a timed layer re-cooks the **whole** cue (see [CueTriggerManager.firedTimedLayers] for why
  * appending is not an option), and a recurring layer does that at up to 10/s. But the cook is a
  * pure function of the activation-time [CueApplyData], the live patch and the two registries — so
  * once a layer's *first* fire has been cooked, every later fire of the same layer is asking for a

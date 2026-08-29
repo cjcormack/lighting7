@@ -28,7 +28,7 @@ The FX system provides:
 │   │                     MasterClock                             │   │
 │   │              (BPM, ticks, beat events)                      │   │
 │   └───────────────────────────┬─────────────────────────────────┘   │
-│                               │ tickFlow (24 ticks/beat)            │
+│                               │ onTick → wake channel               │
 │                               ▼                                     │
 │   ┌─────────────────────────────────────────────────────────────┐   │
 │   │                  Active Effects Map                         │   │
@@ -97,7 +97,7 @@ enters the phase math, tempo is purely tick emission rate).
 |----------|------|-------------|
 | `bpm` | `StateFlow<Double>` | Current tempo (20-300 BPM) |
 | `isRunning` | `StateFlow<Boolean>` | Whether clock is active |
-| `tickFlow` | `SharedFlow<ClockTick>` | Emits 24 times per beat |
+| `tickFlow` | `SharedFlow<ClockTick>` | Emits 24 times per beat; production drives off `onTick`/the wake channel, so only tests collect this flow |
 | `currentTick` | `ClockTick` (`@Volatile`) | Most recent tick, sampled per pass by the bank |
 | `onTick` / `onBeat` | `(() -> Unit)?` / `((BeatEvent) -> Unit)?` | Callbacks the bank wires per clock: the wake nudge and the beat fan-out. There was a `beatFlow` alongside `tickFlow`; its only consumer was the retired `beatSync` push |
 

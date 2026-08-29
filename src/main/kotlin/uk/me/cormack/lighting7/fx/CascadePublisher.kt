@@ -265,7 +265,7 @@ class CascadePublisher internal constructor(
     /**
      * The (fixture, property) key whose channels include (universe, channel), or null when
      * no property backs the channel. Walks the owning fixture's property catalogue plus the
-     * position axes — the same channel set [FxTarget.fallbackFromProgrammer]'s sideband
+     * position axes — the same channel set [FxTarget.composeProgrammerOver]'s sideband
      * lookups consult.
      */
     fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? {

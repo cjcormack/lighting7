@@ -72,9 +72,9 @@ data class LookSnapshot(
  * fixture-beats-group specificity [CueAssignmentResolver.applySpecificity] applies, resolved once
  * here instead of per read.
  *
- * This is what serves `ref:{uuid}` resolution. The palettes → Looks migration preserves each
- * palette's uuid onto its Look, so an existing reference keeps resolving through here unchanged
- * until the grammar itself is retired.
+ * This is what served `ref:{uuid}` resolution before the grammar retired in session 4 — the
+ * palettes → Looks migration had preserved each palette's uuid onto its Look so an existing
+ * reference kept resolving through here unchanged in the meantime.
  */
 class ExpandedLook(
     val snapshot: LookSnapshot,
@@ -213,8 +213,9 @@ class LookRegistry(
         /**
          * Flatten a snapshot's **whole-fixture** rows against the live patch. Group rows
          * first, then fixture rows, so a fixture row wins. Unknown and empty groups contribute
-         * nothing — a Look that outlived a group is a dead reference on those members, reported as
-         * [AssignmentHealth.MissingPaletteEntry] at resolve time rather than guessed at here.
+         * nothing — a Look that outlived a group simply drops those members' rows, with no
+         * [AssignmentHealth] diagnosis: a Look row cannot hold a reference, so there is nothing
+         * left to report as unresolved.
          */
         internal fun expand(snapshot: LookSnapshot, fixtures: Fixtures): ExpandedLook {
             val byFixture = HashMap<String, MutableMap<String, String>>()

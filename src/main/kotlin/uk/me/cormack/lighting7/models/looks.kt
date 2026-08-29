@@ -40,7 +40,7 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
  * not nest**: a `ref:` value is rejected at the write boundary, so resolution can never recurse.
  *
  * `moveInDark` deliberately has no place here — it is a cue-*crossfade* concept, which is also
- * why [PaletteEntryDto] excluded it. It lives on the cue's local layer only.
+ * why this type excludes it. It lives on the cue's local layer only.
  */
 @Serializable
 data class LookRowDto(

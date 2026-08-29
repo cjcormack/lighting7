@@ -54,45 +54,6 @@ internal data class CookLayer(
 }
 
 /**
- * Flattens a cue's ordered layer stack plus its local rows to **exactly one contributor per
- * (fixture, property)**, before [CueAssignmentResolver] ever sees it.
- *
- * ```
- * layers in sortOrder → local rows → cook → ONE contributor per (fixture,property) → resolver
- * ```
- *
- * ### Why cook rather than per-layer priorities
- *
- * The obvious alternative is to give each layer a distinct [CueAssignmentResolver.Assignment.priority]
- * — and there is even room, since `cueDerivedPriority` leaves 999 slots between cues. It does not
- * work, and the reason is decisive: **`composeHtp` ignores `priority` except on exact value ties.**
- * Per-layer priority would give ordered override for colour and position and leave dimmer on
- * `max()` — the exact category-dependent split this design exists to remove. Cooking is the only
- * way to get one rule for every category.
- *
- * What it buys:
- * - **Within-cue** = strict ordered override (plus blend / amount), independent of
- *   [PropertyCategory], explainable in one sentence.
- * - **Cross-cue** = untouched. All existing HTP/LTP, crossfade weighting and `moveInDark` logic
- *   keeps working, because the resolver still sees one contributor per cue per key — which is what
- *   it was written for.
- *
- * ### The constraint that cannot be layered away
- *
- * Effects are Layer 3 and values are Layer 4, so an effect sits above a static value regardless of
- * layer order. "Layer 2 sets colour statically, Layer 1 runs a colour effect" resolves to the
- * effect winning even though Layer 2 is later. Layer order governs values-vs-values and
- * effects-vs-effects, not the value/effect boundary.
- *
- * The escape hatch is per-layer [CookLayer.stomp], and it works by **suppression, not removal**:
- * [CookResult.stompSuppression] names the lower layers' `(target, property)` pairs the engine must
- * skip painting, and the reset pass has already put the cooked value there. Removal would be
- * unrecoverable — disabling the stomping layer, or pulling its amount to zero, only triggers a
- * recook, and a recook has no instance left to bring back.
- *
- * See `docs/plans/completed/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
- */
-/**
  * Which layer produced a cooked row, for the consumers that need to name it rather than just use
  * its value.
  *
@@ -158,6 +119,46 @@ internal data class CookResult(
      */
     val assertedKeys: Set<FxEngine.PropertyKey>,
 )
+
+/**
+ * Flattens a cue's ordered layer stack plus its local rows to **exactly one contributor per
+ * (fixture, property)**, before [CueAssignmentResolver] ever sees it.
+ *
+ * ```
+ * layers in sortOrder → local rows → cook → ONE contributor per (fixture,property) → resolver
+ * ```
+ *
+ * ### Why cook rather than per-layer priorities
+ *
+ * The obvious alternative is to give each layer a distinct [CueAssignmentResolver.Assignment.priority]
+ * — and there is even room, since `cueDerivedPriority` leaves 999 slots between cues. It does not
+ * work, and the reason is decisive: **`composeHtp` ignores `priority` except on exact value ties.**
+ * Per-layer priority would give ordered override for colour and position and leave dimmer on
+ * `max()` — the exact category-dependent split this design exists to remove. Cooking is the only
+ * way to get one rule for every category.
+ *
+ * What it buys:
+ * - **Within-cue** = strict ordered override (plus blend / amount), independent of
+ *   [PropertyCategory], explainable in one sentence.
+ * - **Cross-cue** = untouched. All existing HTP/LTP, crossfade weighting and `moveInDark` logic
+ *   keeps working, because the resolver still sees one contributor per cue per key — which is what
+ *   it was written for.
+ *
+ * ### The constraint that cannot be layered away
+ *
+ * Effects are Layer 3 and values are Layer 4, so an effect sits above a static value regardless of
+ * layer order. "Layer 2 sets colour statically, Layer 1 runs a colour effect" resolves to the
+ * effect winning even though Layer 2 is later. Layer order governs values-vs-values and
+ * effects-vs-effects, not the value/effect boundary.
+ *
+ * The escape hatch is per-layer [CookLayer.stomp], and it works by **suppression, not removal**:
+ * [CookResult.stompSuppression] names the lower layers' `(target, property)` pairs the engine must
+ * skip painting, and the reset pass has already put the cooked value there. Removal would be
+ * unrecoverable — disabling the stomping layer, or pulling its amount to zero, only triggers a
+ * recook, and a recook has no instance left to bring back.
+ *
+ * See `docs/plans/completed/looks-and-layers-plan.md` §3.3 and `docs/lighting-composition-model.md`.
+ */
 
 internal object CueComposer {
 

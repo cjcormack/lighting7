@@ -141,7 +141,7 @@ class CueComposerTest {
         resolveTemplate = { null },
     )
 
-    /** The cooked winner for one key, as `lookName@index`, or null when a local row won. */
+    /** The cooked winner for one key, as `sourceName@index`, or null when a local row won. */
     private fun List<CueAssignmentResolver.Assignment>.winnerAt(
         targetKey: String,
         propertyName: String = "dimmer",

@@ -106,8 +106,6 @@ data class FxDefinitionJson(
     val timingSource: TimingSource = TimingSource.BEAT,
 )
 
-
-
 @Serializable
 data class LookRowJson(
     val uuid: String,
@@ -161,12 +159,9 @@ data class LookJson(
     val name: String,
     val notes: String? = null,
     val sortOrder: Int = 0,
-    /** The positional colour list (`P1` / `P2`), not the Look's own rows. */
     val rows: List<LookRowJson> = emptyList(),
     val effects: List<LookEffectJson> = emptyList(),
 )
-
-
 
 /**
  * One template row: a target (or none) and the intent it holds.
@@ -338,7 +333,6 @@ data class CuePropertyAssignmentJson(
     val sortOrder: Int = 0,
     val moveInDark: Boolean = false,
 )
-
 
 /**
  * One line of a cue's ordered layer composition. Its own top-level folder, the way the retired

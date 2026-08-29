@@ -321,7 +321,7 @@ class FxInstance internal constructor(
      *
      * A full key rather than reusing [lookId], because the programmer's stack may hold the same
      * Look twice and the two have to be retracted and re-ranked independently — the same reason
-     * `CookLayer.layerId` exists beside `CookLayer.lookId`. It is also not
+     * `CookLayer.layerId` exists beside `CookLayer.source.id`. It is also not
      * [ProgrammerFxOrigin], whose `cueId` is non-null and read by Update to replace a cue child in
      * place; a programmer layer belongs to no cue.
      */

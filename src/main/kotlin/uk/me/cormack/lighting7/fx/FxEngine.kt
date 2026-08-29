@@ -977,17 +977,7 @@ class FxEngine(
     }
 
     /**
-     * Remove all effects that were applied as part of a specific cue.
-     *
-     * @param cueId The cue ID whose effects should be removed
-     * @return Number of effects removed
-     */
-    /**
      * Identifies a single (fixture, property) pair for stomp overlap checks.
-     *
-     * Phase 0 builds these from the stomping cue's own ad-hoc effect targets because Layer 4
-     * assignments don't exist yet. Phase 1 switches the overlap source to the cue's property
-     * assignments. The shape is stable across the transition.
      */
     data class PropertyKey(val targetKey: String, val propertyName: String)
 
@@ -1015,6 +1005,12 @@ class FxEngine(
         return toRemove.size
     }
 
+    /**
+     * Remove all effects that were applied as part of a specific cue.
+     *
+     * @param cueId The cue ID whose effects should be removed
+     * @return Number of effects removed
+     */
     fun removeEffectsForCue(cueId: Int): Int {
         val toRemove = activeEffects.values.filter { it.cueId == cueId }
         toRemove.forEach { activeEffects.remove(it.id) }

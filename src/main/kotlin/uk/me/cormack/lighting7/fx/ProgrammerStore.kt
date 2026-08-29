@@ -87,8 +87,8 @@ value class ProgrammerOwner(val id: String) {
  * A value held by the programmer.
  *
  * Carries a concrete [resolved] value, so every read path — including
- * [FxTarget.composeProgrammerOver] and `fallbackFromProgrammer` on the 50 Hz tick — reads
- * `.resolved`.
+ * [FxTarget.composeProgrammerOver], called from `LayerResolver.fallbackFor` on the 50 Hz
+ * tick — reads `.resolved`.
  *
  * **Why this is still a sealed interface with one arm.** It had a second, [Ref], holding a
  * `ref:{uuid}` named-palette reference plus the literal it currently resolved to; the `ref:` value
@@ -179,7 +179,7 @@ data class IncludedTarget(
  * serialises on its own lock — the store itself never touches DMX.
  *
  * Performance: [get] and [getChannel] are on the 50 Hz effect-reset hot path
- * ([FxTarget.fallbackFromProgrammer]) — both are O(1) map lookups returning the stored
+ * ([FxTarget.composeProgrammerOver], via `LayerResolver.fallbackFor`) — both are O(1) map lookups returning the stored
  * objects without allocation. [epoch] increments on every mutation so per-tick consumers
  * (the effect-suppression snapshot) can cache derived state until the store actually
  * changes. Mutations (human/MIDI rate) copy-on-write the slot stacks.

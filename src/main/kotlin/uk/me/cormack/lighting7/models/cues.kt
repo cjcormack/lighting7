@@ -182,9 +182,8 @@ object DaoCues : IntIdTable("cues") {
     val cueType = varchar("cue_type", 20).default("STANDARD")
     /**
      * When true, applying this cue removes ad-hoc effects owned by *other* cues that target
-     * properties covered by this cue's Layer 4 assignments. Mirrors grandMA3's `Stomp`. Phase 0
-     * lands the column and resolver hook; Phase 1 wires real Layer 4 data in as the overlap
-     * source. See `docs/lighting-composition-model.md` §"Stomp".
+     * properties covered by this cue's Layer 4 assignments. Mirrors grandMA3's `Stomp`.
+     * See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
