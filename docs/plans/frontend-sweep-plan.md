@@ -77,7 +77,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | ~~`FS-BUG-CUESLOT-LIVENESS`~~ done | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
 | `FS-BUG-STALE-ROW-SNAPSHOT` | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
 | `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
-| `FS-BUG-FADE-KEY-SNAPSHOT` | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
+| ~~`FS-BUG-FADE-KEY-SNAPSHOT`~~ **done** | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
 | ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ **done** | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
@@ -371,9 +371,9 @@ invisible by default.
 it through `errorToastMiddleware` (that keys on RTK Query actions). First check whether the backend
 unicasts the frame to the acting socket — a second tab must not toast for someone else's mistake.
 
-### `FS-BUG-FADE-KEY-SNAPSHOT`
+### ~~`FS-BUG-FADE-KEY-SNAPSHOT`~~ — **landed**
 **`PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-time
-snapshot of the fade** · S2 · P1 · C2 · sonnet
+snapshot of the fade**, `53561c0` · S2 · P1 · C2 · sonnet
 `src/hooks/usePersistentState.ts`, `src/lib/programmerFade.ts`, `src/hooks/useShowBarProps.ts`,
 `src/components/programmer/ProgrammerActionBar.tsx`
 
@@ -391,6 +391,11 @@ press is precisely mid-session, when the operator just chose a fade.
 `usePersistentState` to notify sibling instances of a key. Blind must still read the fade at press
 time in ms, `Number(fadeMs) || 0` must keep answering 0 for junk, and the persisted key stays
 `programmer.fadeMs`. Pin with a test: picker changed → Blind uses the new fade without a remount.
+
+Grew in the landing: review found the new store was a second copy of `useVisSource.ts`'s
+boilerplate — the same drift risk this item exists to remove — so both now build on a shared
+`lib/syncStore.ts` `createSyncStore<T>` factory, and `usePersistentState`'s doc states its
+one-mounted-instance-per-key rule and points at it.
 
 ### `FS-BUG-PIXEL-CACHE-PERMUTATION`
 **`useGroupColourValues` never compares per-member colours, so a colour chase across a pixel bar
