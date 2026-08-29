@@ -721,7 +721,7 @@ Grew in the landing: the real count is 95 (37 in, 58 out), not ~110. The doc als
 application-level `ping` message that has never existed in the codebase — that went too, along
 with a note that keep-alive is Ktor's protocol ping.
 
-**H2. KDoc/dangling-reference sweep** — low / P3 / S / sonnet
+~~**H2. KDoc/dangling-reference sweep**~~ — done, `7728b88`. low / P3 / S / sonnet
 The dangling refs to deleted types (`MissingPaletteEntry`, `PaletteEntryDto`, `lookName`,
 `CookLayer.lookId`, `fallbackFromProgrammer`, `loadPaletteSnapshot`, `ref:{uuid}` mentions); the
 two orphaned double-KDoc blocks (`CueComposer.kt:54-92`, `FxEngine.kt:528`); stale "Phase 0/1"
@@ -746,7 +746,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | ~~F1–F3, F5, F7–F8, G1–G3~~ **done** | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
-| 6 | ~~H1~~, H2–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
+| 6 | ~~H1–H2~~, H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
 `effect: Effect` signatures, and neither touches the tick path, so pulling them out of waves 3
