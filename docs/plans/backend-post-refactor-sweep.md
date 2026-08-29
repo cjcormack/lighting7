@@ -1,6 +1,6 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, WAVES 0–5 COMPLETE.** This is the output of the
+> **Document status: BACKLOG, ALL WAVES (0–6) COMPLETE.** This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -529,11 +529,15 @@ life of the process; both levels now catch `Throwable` (a compiled script effect
 `Error`), and an auto-pause resets the effect's properties so a half-applied group frame isn't
 left frozen.
 
-**E9. Small structural items** — low / P3 / S / sonnet
+~~**E9. Small structural items**~~ — done, `2bd4bff`. low / P3 / S / sonnet
 `FixturesChangeListener` 15-method interface → default methods (six implementers stub ~12 no-ops
 each); extract `TapTempo` from `MasterClock`; name the magic-number relationships
 (`PROGRAMMER_FX_PRIORITY_BASE` band vs the 100k rank clamp; `MAX_CATCHUP_MS` vs 300 BPM;
 `DEFAULT_BPM` doubling as the rate-scale reference).
+
+Grew in the landing: the `FixturesChangeListener` default-methods conversion was already done by
+an earlier refactor (all six implementers already override only what they need), so that bullet
+needed no change.
 
 ~~**E10. Authoring endpoints store effect enums unvalidated**~~ — done, `dc1e7ea`. medium / P2 / M / opus
 E4 gave the four effect enum fields one coercion layer with two policies, and wired `Strict` into
@@ -707,9 +711,13 @@ get overwritten, Record/Include/Update came out of the Ktor handlers into
 `activate_cue_stack` hand-querying the first row instead of `activateAtFirstCue`, and
 `advance_cue_stack` claiming a stack had been deactivated when `advanceStack` returned null.
 
-**G4. Retired vocabulary** — low / P3 / S / sonnet
+~~**G4. Retired vocabulary**~~ — done, `12514a4`. low / P3 / S / sonnet
 `parsePresetEffect` name, prompt text "the preset", ~~the always-absent `presetId` key~~ (gone with
 A2), tombstone naming `get_show_state` for `get_current_state`.
+
+Grew in the landing: `parsePresetEffect` was already renamed by H3, and the `get_show_state`
+tombstone was already removed by G3's `create_template` KDoc. Only the AI system prompt's
+step-timing note ("override per-effect in the preset") still needed the fix.
 
 ## H — Docs and naming (one mechanical pass at the end)
 
@@ -746,7 +754,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
 | 5 | ~~F1–F3, F5, F7–F8, G1–G3~~ **done** | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
-| 6 | ~~H1–H3~~, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
+| 6 | ~~H1–H3, G4, D7, F4, E9~~ **done** | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
 `effect: Effect` signatures, and neither touches the tick path, so pulling them out of waves 3
