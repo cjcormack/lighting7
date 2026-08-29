@@ -1,6 +1,18 @@
 # WebSocket Protocol Engineering Documentation
 
-This document describes the WebSocket API for real-time communication between the server and frontend clients.
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **95 message types**
+(37 inbound, 58 outbound) across eleven domain families. This document is the inventory and the
+rules that govern it.
+
+The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
+To re-check it after adding a message:
+
+```bash
+grep -rn '@SerialName' src/main/kotlin/uk/me/cormack/lighting7/plugins/*.kt
+```
+
+Anything in `plugins/` carrying a `@SerialName` and extending `InMessage`/`OutMessage` is on the
+wire and belongs in a table here.
 
 ## Conventions
 
@@ -40,7 +52,7 @@ initial state arrives, and a client that still asks on open just gets the frame 
 
 Two mechanisms satisfy the rule, and only two:
 
-- an explicit `scope.send(build…)` in the family's `setupXxxSubscriptions`, or
+- an explicit `scope.sendSnapshot { … }` in the family's `setupXxxSubscriptions`, or
 - a subscription to a **`StateFlow`** (or a `combine` of them), which always carries a current
   value.
 
@@ -82,433 +94,554 @@ the broadcast payload, not in a second private message.
 and the whole family is small — the speed-master bank is four rows. (2) is right for a failure
 reply, where there is no state change to broadcast; see the `surfaceLearn.error` family.
 
-## Overview
-
-The WebSocket API provides:
-- Real-time DMX channel value updates
-- Direct channel control from the UI
-- Fixture change notifications
-
 ## Connection
 
-**Endpoint**: `ws://localhost:8413/api`
+**Endpoint**: `ws://localhost:8413/api` — the only WebSocket route in the app.
 
-**Configuration**:
-- Ping period: 15 seconds
-- Timeout: 15 seconds
-- Serialization: JSON via kotlinx.serialization
+**Plugin configuration** (`Application.configureSockets`, `plugins/Sockets.kt`):
+
+```kotlin
+install(WebSockets) {
+    pingPeriod = 15.seconds
+    timeout = 15.seconds
+    maxFrameSize = Long.MAX_VALUE
+    masking = false
+    contentConverter = KotlinxWebsocketSerializationConverter(Json)
+}
+```
+
+Keep-alive is Ktor's protocol-level ping; **there is no application-level `ping` message**, and a
+client that sends one gets the undeserializable-frame path (logged and ignored), not a pong.
+
+**Auth**: the upgrade is accepted and then closed with code **4401** if the desk has accounts and
+the request carries no valid session cookie — a browser cannot read a 401 on an upgrade response,
+but it can read a close code. Bootstrap-open mode (zero accounts) admits everyone, mirroring the
+REST gate. The same 4401 is used for **live revocation**: `AuthService.revocations` is collected
+per connection, so disabling an operator or resetting their password closes their already-open
+socket instead of leaving it streaming. See [`desk-accounts.md`](desk-accounts.md).
 
 ## Architecture
 
+One `webSocket("/api")` handler, one `SocketScope` per connection, and a file per domain. The
+handler itself only routes; every family owns its messages, its handler and its subscriptions.
+
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Frontend (React)                              │
-│                                                                         │
-│   ┌─────────────────────────────────────────────────────────────────┐   │
-│   │                    WebSocket Client                             │   │
-│   │                                                                 │   │
-│   │  Send: ping, channelState, channelMappingState, updateChannel   │   │
-│   │  Receive: channelState, channelMappingState, fxChanged, etc.    │   │
-│   └─────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │ WebSocket
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Ktor WebSocket Handler                          │
-│                                                                         │
-│   ┌─────────────────────────────────────────────────────────────────┐   │
-│   │                    SocketConnection                             │   │
-│   │                   (per-client session)                          │   │
-│   │                                                                 │   │
-│   │   ┌──────────────────────────────────────────────────────────┐  │   │
-│   │   │              FixturesChangeListener                      │  │   │
-│   │   │                                                          │  │   │
-│   │   │  channelsChanged() ──────► ChannelStateOutMessage        │  │   │
-│   │   │  controllersChanged() ───► UniversesStateOutMessage      │  │   │
-│   │   │  fixturesChanged() ──────► FixturesChangedOutMessage     │  │   │
-│   │   │                      ────► ChannelMappingStateOutMessage │  │   │
-│   │   │  fxPresetListChanged() ► FxPresetListChangedOutMessage │  │   │
-│   │   │  cueListChanged() ─────► CueListChangedOutMessage      │  │   │
-│   │   └──────────────────────────────────────────────────────────┘  │   │
-│   └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│   connections: Set<SocketConnection>                                    │
-└─────────────────────────────────────────────────────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                              Fixtures                                   │
-│                                                                         │
-│   Broadcasts changes to all registered listeners                        │
-│   (each WebSocket connection registers a listener)                      │
-└─────────────────────────────────────────────────────────────────────────┘
+                        ┌──────────── WS frame in ────────────┐
+                        ▼                                     │
+ ┌───────────────────────────────────────────────────┐        │
+ │ plugins/Sockets.kt — webSocket("/api")            │        │
+ │                                                   │        │
+ │  1. resolveSessionUser → close 4401 if no session │        │
+ │  2. SocketScope(session, state, user)             │        │
+ │  ── pre-warm-up band (touches no state.show) ──   │        │
+ │  3. authService.revocations  → close 4401         │        │
+ │  4. setupMachineSubscriptions                     │        │
+ │  5. bootProgress.flow → bootProgressState, until  │        │
+ │     isShowReady (return on FAILED)                │        │
+ │  ── show-scoped band ──────────────────────────   │        │
+ │  6. setupBroadcast/Park/Fx/Project/Surface/       │        │
+ │     CloudSync/Programmer/SpeedMaster Subscriptions│        │
+ │  7. for (frame in incoming) → handleXxx(scope, m) │────────┘
+ └───────────────────────────────────────────────────┘
+        │                              │
+        │ scope.send(OutMessage)       │ scope.subscribe(flow) { … }
+        ▼                              ▼
+ ┌──────────────────┐   ┌───────────────────────────────────────────┐
+ │ per-connection   │   │ sources                                   │
+ │ session channel  │   │  Fixtures ── FixturesChangeListener ──────│→ BroadcastSocket
+ │                  │   │  FxEngine.fxStateFlow / provenance.flow   │
+ │                  │   │  ParkManager.parkStateFlow                │
+ │                  │   │  ProgrammerStore.layersFlow / lastIncluded│
+ │                  │   │  SpeedMasterBank.changes / .beats         │
+ │                  │   │  ProjectManager.projectChangedFlow        │
+ │                  │   │  MidiRegistry / DeviceMatcher / banks     │
+ │                  │   │  State.machineEventsFlow                  │
+ │                  │   │  State.cloudSyncEventsFlow                │
+ └──────────────────┘   └───────────────────────────────────────────┘
 ```
 
-## Message Types
+**Two bands, and the split matters.** Session revocation and `setupMachineSubscriptions` are
+registered *before* the boot warm-up gate, because they read nothing off `state.show`; a change
+during warm-up would otherwise be lost rather than delayed, and a `FAILED` boot returns before the
+show-scoped cluster is ever reached — leaving a desk whose show didn't start with no live account
+administration, which is when you want it most. Everything else touches `state.show` (fixtures, FX
+engine, programmer) and must wait for `isShowReady`.
 
-All messages are JSON with a discriminator field for polymorphic serialization.
+**`FixturesChangeListener` is a per-project listener.** It hangs off `show/Fixtures.kt`, whose
+instance is replaced wholesale on project switch, so `setupBroadcastSubscriptions` re-registers on
+`projectChangedFlow` and returns an unregister function for teardown. Machine-scoped state
+(accounts, install row, updates) deliberately does **not** ride it — see `MachineSocket.kt`.
 
-### Client → Server (InMessage)
+## Domain families
 
-#### ping
+| Family | File | In | Out | Handler | Subscriptions |
+|---|---|---|---|---|---|
+| Boot | `BootSocket.kt` | — | 1 | — | inline in `Sockets.kt` |
+| Broadcast | `BroadcastSocket.kt` | — | 15 | — | `setupBroadcastSubscriptions` |
+| Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
+| Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
+| FX | `FxSocket.kt` | 5 | 2 | `handleFx` | `setupFxSubscriptions` |
+| Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
+| Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
+| Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
+| Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
+| Speed masters | `SpeedMasterSocket.kt` | 4 | 3 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
+| Surfaces | `SurfaceSocket.kt` | 9 | 11 | `handleSurface` | `setupSurfaceSubscriptions` |
 
-Keep-alive ping (server does nothing).
+Four families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages are declared in
+`ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
+`BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
+so the family has no `setupChannelSubscriptions` of its own.
 
-```json
-{ "type": "ping" }
-```
+## Client → Server (37)
 
-#### channelState
+Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
-Request current values of all DMX channels.
+### Channel — `ChannelSocket.kt`
 
-```json
-{ "type": "channelState" }
-```
+| Message | Fields | Effect |
+|---|---|---|
+| `channelState` | — | Resync: replies `channelState` with the whole output buffer |
+| `universesState` | — | Resync: replies `universesState` |
+| `channelMappingState` | — | Resync: replies `channelMappingState` |
+| `updateChannel` | `universe: Int`, `id: Int`, `level: UByte`, `fadeTime: Long` | Raw channel write, routed through the programmer. No reply — the change arrives via `channelState` |
 
-**Response**: `channelState` message with all channel values.
+`updateChannel` is a compatibility shim for the Channels debug view and legacy fixture sliders.
+Slider- and setting-backed channels lift to a property-level programmer entry; a colour
+sub-channel lifts to the whole `rgbColour` property (freezing the sibling components); position
+axes and channels with no backing property stay channel-shaped in the programmer's sideband. All
+three are released by Clear.
 
-#### universesState
+### Park — `ParkSocket.kt`
 
-Request list of available DMX universes.
+| Message | Fields | Effect |
+|---|---|---|
+| `parkState` | — | Resync: replies `parkState` |
+| `parkChannel` | `universe: Int`, `channel: Int`, `value: UByte` | Parks a channel; lands on the next frame of that universe. No reply |
+| `unparkChannel` | `universe: Int`, `channel: Int` | Releases the park. No reply |
 
-```json
-{ "type": "universesState" }
-```
+### FX — `FxSocket.kt`
 
-**Response**: `universesState` message with universe list.
+| Message | Fields | Effect |
+|---|---|---|
+| `fxState` | — | Resync: replies `fxState` |
+| `removeFx` | `effectId: Long` | Replies `fxChanged(REMOVED, id)` |
+| `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
+| `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
+| `clearFx` | — | Replies `fxChanged(CLEARED)` |
 
-#### channelMappingState
+Adding and updating effects is REST (`POST /api/rest/fx/add`), not WS.
 
-Request channel-to-fixture mapping.
+### Project — `ProjectSocket.kt`
 
-```json
-{ "type": "channelMappingState" }
-```
+| Message | Fields | Effect |
+|---|---|---|
+| `projectState` | — | Resync: replies `projectState` |
 
-**Response**: `channelMappingState` message with mapping data.
+Switching project is REST; the socket only reports it (`projectChanged`).
 
-Note: This is also automatically sent on connection and when fixtures change.
+### Speed masters — `SpeedMasterSocket.kt`
 
-#### updateChannel
+The desk's only WS tempo surface. A master is addressed by uuid, and `masterUuid` null/omitted
+means **master 1** on every inbound message, for a client that has no uuid to hand yet. Note the
+asymmetry: outbound frames report master 1 by its *real* uuid once the bank has loaded, so a
+client can ask about master 1 with a null uuid but must not expect to recognise its frames by one.
 
-Directly set a DMX channel value.
+| Message | Fields | Effect |
+|---|---|---|
+| `speedMasters.state` | — | Resync: replies `speedMasters.state` |
+| `speedMasters.setBpm` | `bpm: Double`, `masterUuid: String?` | Retunes; replies with the full bank state |
+| `speedMasters.tap` | `masterUuid: String?` | Tap tempo; replies with the full bank state |
+| `speedMasters.requestBeat` | `masterUuid: String?` | One-shot: releases the next `speedMasters.beat` frame past the throttle. No reply |
 
-```json
-{
-    "type": "updateChannel",
-    "universe": 0,
-    "id": 1,
-    "level": 255,
-    "fadeTime": 1000
-}
-```
+A present-but-garbled `masterUuid` **drops** a tempo write rather than degrading it to master 1 —
+a corrupt frame must not retune the global tempo. The state reply still goes out, so a stale
+client re-syncs. CRUD (create / rename / delete) is REST, with a `speedMasters.listChanged`
+invalidation broadcast.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| universe | Int | Universe number (within subnet 0) |
-| id | Int | Channel number (1-512) |
-| level | UByte | Target value (0-255) |
-| fadeTime | Long | Fade duration in milliseconds |
+### Programmer — `ProgrammerSocket.kt`
 
-### Server → Client (OutMessage)
+`targetType` is `fixture` or `group`; `targetKey` is that target's key. `value` uses the same
+canonical grammar as a stored cue assignment: `"0".."255"` for sliders and settings, `"#rrggbb"`
+(plus optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer value is
+always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect parameter.
 
-#### channelState
+| Message | Fields | Reply |
+|---|---|---|
+| `programmer.set` | `targetType`, `targetKey`, `propertyName`, `value`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
+| `programmer.setColour` | `targetType`, `targetKey`, `propertyName = "rgbColour"`, `r`,`g`,`b`, `w?`,`a?`,`uv?`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
+| `programmer.setPosition` | `targetType`, `targetKey`, `pan`, `tilt`, `fadeMs?`, `sourceGroup?` | `programmer.entryChanged` \| `programmer.error` |
+| `programmer.clearEntry` | `targetType`, `targetKey`, `propertyName`, `fadeMs?` | `programmer.entryCleared` \| `programmer.error` |
+| `programmer.clearAll` | `fadeMs?` | `programmer.cleared` |
+| `programmer.setBlind` | `blind: Boolean`, `fadeMs?` | `programmer.blindState` |
+| `programmer.state` | — | `programmer.state` |
+| `programmer.addLayer` | exactly one of `lookId`/`templateId`, `targets`, `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
+| `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
+| `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?`, `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 
-DMX channel values (response to request or push on change).
+`sourceGroup` is for clients that fan a group-scoped gesture out to member fixtures rather than
+sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a Highlight
+release restoring per-fixture values. It is validated server-side, so a client cannot assert a
+hint it has not earned. On `patchLayer`, a null field means "leave alone", not "clear".
 
-```json
-{
-    "type": "channelState",
-    "channels": [
-        { "universe": 0, "id": 1, "currentLevel": 255 },
-        { "universe": 0, "id": 2, "currentLevel": 128 },
-        ...
-    ]
-}
-```
+The unicast replies above are the *acknowledgement*; the authoritative update reaches every tab
+through `programmer.layerState`, `programmer.includeTarget` and `provenanceState`, which are
+broadcast because the programmer is shared desk state.
 
-When pushed on change, only changed channels are included.
+### Surfaces — `SurfaceSocket.kt`
 
-#### universesState
+| Message | Fields | Reply |
+|---|---|---|
+| `surfaceLearn.begin` | `projectId: Int`, `deviceTypeKey?` | `surfaceLearn.started` |
+| `surfaceLearn.cancel` | `sessionId: String` | `surfaceLearn.cancelled` \| `surfaceLearn.error` |
+| `surfaceLearn.commit` | `sessionId`, `bank?`, `target: BindingTarget`, `takeoverPolicy?` | `surfaceLearn.committed` \| `surfaceLearn.error` |
+| `surfaceBank.set` | `deviceTypeKey: String`, `bank: String?` | none — `surfaceBank.changed`/`.state` broadcast |
+| `surfaceBank.state` | — | `surfaceBank.state` |
+| `surfaceScaler.state` | — | `surfaceScaler.state` |
+| `surfaceScaler.setBlackout` | `enabled: Boolean` | none — `surfaceScaler.state` follows |
+| `surfaceScaler.setGrandMaster` | `enabled: Boolean` | none — `surfaceScaler.state` follows |
+| `surfaceDevices.state` | — | `surfaceDevices.state` |
 
-List of available DMX universes.
+Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds the inbound event
+broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
+session this connection started.
 
-```json
-{
-    "type": "universesState",
-    "universes": [0, 1, 2]
-}
-```
+## Server → Client (58)
 
-#### channelMappingState
+### Boot — `BootSocket.kt`
 
-Channel-to-fixture mapping, organized by universe. Sent automatically on connection,
-when fixtures change, or in response to a `channelMappingState` request.
+| Message | Payload | When |
+|---|---|---|
+| `bootProgressState` | `status: BootStatus` (`phase`, `message`, `percent`, `ready`, `error?`) | On connect, then on every change until `isShowReady` or `FAILED` |
 
-```json
-{
-    "type": "channelMappingState",
-    "mappings": {
-        "0": {
-            "1": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Dimmer" },
-            "2": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Red" },
-            "3": { "fixtureKey": "hex-1", "fixtureName": "Hex 1", "description": "Green" }
-        }
-    }
-}
-```
+Outbound-only, and the only frame a client sees before the show-scoped families come up. A
+`FAILED` boot sends the terminal frame and returns without wiring show subscriptions.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| mappings | Map<Int, Map<Int, Entry>> | Universe → Channel → Mapping |
-| fixtureKey | String | Unique fixture identifier |
-| fixtureName | String | Display name of the fixture |
-| description | String | Channel description (e.g., "Dimmer", "Red") |
+### Broadcast — `BroadcastSocket.kt`
 
-#### fixturesChanged
+Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged` and
+`cueRunStateChanged` is a **payload-free cache invalidation**: the client refetches over REST.
 
-Notification that fixtures have been re-registered.
+| Message | Payload | Meaning |
+|---|---|---|
+| `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
+| `templateListChanged` | — | A template was created, renamed or deleted |
+| `cueListChanged` | — | Cue CRUD |
+| `cueStackListChanged` | — | Cue-stack CRUD |
+| `cueSlotListChanged` | — | Cue-slot CRUD |
+| `patchListChanged` | — | Patch CRUD |
+| `riggingListChanged` | — | Rigging CRUD |
+| `stageRegionListChanged` | — | Stage-region CRUD |
+| `speedMasters.listChanged` | — | Speed-master CRUD only; live BPM rides `speedMasters.changed` |
+| `scriptListChanged` | — | A script was created, renamed, edited or deleted |
+| `fxDefinitionListChanged` | — | A user-defined effect was created, edited or deleted |
+| `fixturesChanged` | — | Fixtures re-registered; `channelMappingState` follows immediately |
+| `promptBookChanged` | — | Prompt-book content changed |
+| `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
+| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally |
 
-```json
-{ "type": "fixturesChanged" }
-```
+`cueRunStateChanged` is snapshotted on connect for every stack with run state, and the snapshot is
+captured **synchronously** at setup and only *sent* from the launched coroutine — reading it inside
+the coroutine would describe whenever it happened to be scheduled, which can be after a GO the
+listener has already queued a `transition = true` frame for.
 
-Client should refresh fixture list via REST API.
+### Channel — `ChannelSocket.kt`
 
-#### fxPresetListChanged
+| Message | Payload | When |
+|---|---|---|
+| `channelState` | `channels: [{universe, id, currentLevel}]` | Connect snapshot (whole buffer, parked values overlaid), then per-change deltas |
+| `universesState` | `universes: [Int]` | Connect snapshot; on `controllersChanged` |
+| `channelMappingState` | `mappings: {universe: {channel: {fixtureKey, fixtureName, description}}}` | Connect snapshot; after `fixturesChanged` |
 
-Notification that the FX preset list has changed (preset added/updated/deleted).
+### Park — `ParkSocket.kt`
 
-```json
-{ "type": "fxPresetListChanged" }
-```
+| Message | Payload | When |
+|---|---|---|
+| `parkState` | `channels: [{universe, channel, value}]` | Every emission of `ParkManager.parkStateFlow` — a `StateFlow`, so the empty set is a value and arrives on connect |
 
-Client should refresh preset list via REST API.
+### FX — `FxSocket.kt`
 
-#### cueListChanged
+| Message | Payload | When |
+|---|---|---|
+| `fxState` | `activeEffects: [EffectDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
+| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the four FX writes |
 
-Notification that the cue list has changed (cue added/updated/deleted).
+`fxState` is purely an effect frame. It carried `bpm` / `isClockRunning` before the speed-master
+bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `EffectDto` is defined in
+`fx/EffectDto.kt` and is the same object `GET /api/rest/fx/active` returns.
 
-```json
-{ "type": "cueListChanged" }
-```
+### Project — `ProjectSocket.kt`
 
-Client should refresh cue list via REST API.
+| Message | Payload | When |
+|---|---|---|
+| `projectState` | `projectId`, `projectName`, `description?` | Connect snapshot, and the reply to a `projectState` request |
+| `projectChanged` | `previousProjectId?`, `newProjectId`, `newProjectName` | Purely an event — fires on switches only |
 
-#### userListChanged
+### Speed masters — `SpeedMasterSocket.kt`
 
-Notification that a desk account was created, renamed, re-roled, enabled, disabled, deleted
-or re-passworded. Sent to **every** socket.
+| Message | Payload | When |
+|---|---|---|
+| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source}]` | Connect snapshot, on request, and as the reply to every write |
+| `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate |
+| `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat` |
 
-```json
-{ "type": "userListChanged" }
-```
+`source` is `MANUAL` or `TAP`. `uuid`/`masterUuid` is null only for the synthetic pre-load master 1.
+Beats are throttled deliberately: the client runs a local timer off `bpm` between frames and only
+needs the server to correct its drift.
 
-Client should refresh the user list via REST API. Payload-free deliberately, not just by
-convention: sockets are open to operators while `/api/rest/users` is admin-only, so a body here
-would leak what that gate withholds.
+### Machine — `MachineSocket.kt`
 
-#### ownAccountChanged
+Machine-scoped, so registered in the pre-warm-up band and unaffected by project switches.
 
-Same trigger, but sent **only** to sockets belonging to the account that changed. Client should
-re-read `GET /auth/status` — its display name or role moved, and the role decides which pages
-its sidebar offers.
+| Message | Payload | Recipients |
+|---|---|---|
+| `userListChanged` | — | **Every** socket |
+| `ownAccountChanged` | — | Only sockets belonging to the changed account (and bootstrap-open sockets) |
+| `installChanged` | — | Every socket |
+| `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
 
-```json
-{ "type": "ownAccountChanged" }
-```
+The account frames are payload-free **deliberately, not just by convention**: sockets are open to
+operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
+withholds. `ownAccountChanged` is sent first, so a demoted admin flips `isAdmin` before it
+refetches the user list and takes a 403.
 
-Never broadcast. If it were, one admin edit would make every connected client re-read its own
-session.
+`updateStateChanged` is the one payload-carrying exception, and only to the payload-free half of
+the convention: for an installer download the frame *is* the progress, and a bare "something
+changed" at 2 Hz would mean an HTTP round-trip per tick for a several-hundred-megabyte transfer.
+It carries no user data. Disabling and deleting an account are felt through a different mechanism
+entirely — they revoke sessions, and the socket closes 4401.
 
-#### installChanged
+### Cloud sync — `CloudSyncSocket.kt`
 
-Notification that the install row changed (currently only its friendly name). Sent to every
-socket; client should refresh `GET /install`.
+Emitted from REST handlers via `State.cloudSyncEventsFlow`; outbound-only, transitions only.
 
-```json
-{ "type": "installChanged" }
-```
+| Message | Payload |
+|---|---|
+| `cloudSyncStarted` | `projectId` |
+| `cloudSyncDone` | `projectId`, `outcome`, `headSha`, `pushed`, `pulled`, `replaced`, `message` |
+| `cloudSyncFailed` | `projectId`, `errorCode`, `message` |
+| `cloudSyncConflictsPending` | `projectId`, `sessionId`, `conflictCount` |
+| `cloudSyncLogAppended` | `projectId`, `entry: SyncLogEntryDto` |
+| `cloudSyncProjectImported` | `projectId`, `projectUuid`, `name` |
+| `oauthIdentityChanged` | `provider`, `connected`, `login?`, `accessExpiresAtMs?`, `refreshExpiresAtMs?`, `reauthRequired` |
 
-**These three do not come from `FixturesChangeListener`.** Accounts and the install row belong to
-the machine, and the diagram above is a *fixtures* diagram: its listener hangs off the per-project
-`Fixtures` instance, which is torn down and re-registered on project switch. Machine-scoped state
-reaches sockets through `SharedFlow`s collected per connection instead —
-`AuthService.userChanges` (carrying a userId, so the collector can filter per recipient) and
-`State.machineEventsFlow` (carrying ready-made messages) — both wired in
-`plugins/MachineSocket.kt`. They are registered *before* the boot warm-up gate, unlike every
-show-scoped subscription, because they read nothing off `state.show`.
+`oauthIdentityChanged` is a nudge, not the detail: clients invalidate their identity cache and
+re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineering.md).
 
-## Connection Lifecycle
+### Programmer — `ProgrammerSocket.kt`
 
-### On Connect
+| Message | Payload | Cast |
+|---|---|---|
+| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]` | Connect snapshot + reply |
+| `programmer.entryChanged` | `targetType`, `targetKey`, `propertyName`, `value` | Unicast reply |
+| `programmer.entryCleared` | `targetType`, `targetKey`, `propertyName` | Unicast reply |
+| `programmer.cleared` | `cleared: Int`, `effectsCleared: Int` | Unicast reply |
+| `programmer.blindState` | `blind: Boolean` | Unicast reply |
+| `programmer.layerState` | `layers: [ProgrammerLayerDto]` | **Broadcast** — every tab, on `layersFlow` |
+| `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
+| `programmer.error` | `message: String` | Unicast reply |
+| `provenanceState` | `entries: [ProvenanceEntryDto]` | **Broadcast** — on every layer event, never per frame |
 
-1. Session-cookie auth check; unauthenticated sockets are accepted and then closed `4401`
-2. Machine-scoped subscriptions registered (account changes, install row) — these predate the
-   warm-up gate because they read nothing off `state.show`
-3. Boot progress streamed until `isShowReady`, or the socket returns on a `FAILED` boot
-4. New `SocketConnection` created with unique ID and added to the global `connections` set
-5. Each domain's `setupXxxSubscriptions` runs: `FixturesChangeListener` is registered, live
-   subscriptions are opened, and **every stateful family's snapshot is pushed** — see
-   §"Snapshot rule". The client needs to request nothing.
-6. Connection ready to receive messages
+The three broadcast frames are broadcast for the same reason: the programmer is shared, so a
+second tab reordering the stack or pressing Include must not leave the first showing a stale view.
+Without the `layersFlow` subscription, a mutation that moved no value pushed no `provenanceState`
+either, and other tabs kept a stale layer list indefinitely.
 
-The snapshot burst has no guaranteed order: the families are set up in separate coroutines, so a
-client must key off message type, never position.
+`ProgrammerEntryDto` carries `targetKey`, `propertyName`, `value` (the canonical literal), `owner`,
+`touched`, `sourceGroup?` and `owners` (every owner holding the property, most recent first).
+`ProvenanceEntryDto` carries `targetKey`, `propertyName`, `source`
+(`PARKED`|`PROGRAMMER`|`EFFECT`|`CUE`), `cueId?`, `cueStackId?`, `effectId?`, `layerId?` and
+`layerSource?` — the last two so the desk can answer "why is this fixture this colour?" by naming
+*Warm Wash* rather than *a cue*.
 
-### Message Loop
+On a warm desk the connect snapshot and the replayed flow value can each deliver
+`programmer.includeTarget`, `programmer.layerState` and `provenanceState` twice. Harmless: all
+three are idempotent, and the client coalesces repeated provenance frames into one debounced
+refetch.
+
+### Surfaces — `SurfaceSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `surfaceLearn.started` | `sessionId`, `projectId`, `deviceTypeKey?`, `deadlineMs` | Unicast reply |
+| `surfaceLearn.captured` | `sessionId`, `projectId`, `deviceTypeKey`, `controlId` | Owning connection only |
+| `surfaceLearn.committed` | `sessionId`, `bindingId`, `projectId` | Unicast reply |
+| `surfaceLearn.cancelled` | `sessionId`, `reason` (`cancelled` \| `timeout`) | Owning connection only |
+| `surfaceLearn.error` | `sessionId?`, `message` | Unicast reply |
+| `surfaceBank.bindingsChanged` | `projectId`, `changeType: added\|updated\|removed\|reloaded`, `bindingId?` | Broadcast |
+| `surfaceBank.state` | `activeBanks: {deviceTypeKey: bank}` (null values elided) | Connect snapshot + broadcast |
+| `surfaceBank.changed` | `deviceTypeKey`, `previousBank?`, `newBank?` | Broadcast delta |
+| `surfaceScaler.state` | `blackoutEnabled`, `grandMasterEnabled` | Connect snapshot + broadcast |
+| `surfacePickup.changed` | `displayKey`, `controlId`, `state`, `target?` | Broadcast — soft-takeover pickup indicator |
+| `surfaceDevices.state` | `devices: [{displayKey, displayName, typeKey?, isMatched, hasInputPort, hasOutputPort, activeBank?}]` | Connect snapshot + broadcast |
+
+`surfaceBank.changed` carries previous→new only, so a client that never saw a switch has nothing to
+render from — hence `surfaceBank.state` as its own frame, taken as a subscription to the `active`
+`StateFlow` rather than a one-shot read, so a switch landing between snapshot and subscription
+isn't lost by both.
+
+`surfaceScaler.state` re-subscribes through `flatMapLatest` off `projectChangedFlow`, because
+`state.show.globalScalerState` is re-created on project switch and a plain `combine` at connect
+time would observe the previous project's facade forever.
+
+## Connection lifecycle
+
+### On connect
+
+1. Session-cookie auth check; unauthenticated sockets are accepted and then closed `4401`.
+2. `SocketScope` opened; the revocation stream is subscribed so a session revoked mid-boot closes.
+3. Machine-scoped subscriptions registered (`setupMachineSubscriptions`) — these predate the
+   warm-up gate because they read nothing off `state.show`.
+4. `bootProgressState` sent, then streamed until `isShowReady`; a `FAILED` boot returns here.
+5. `SocketConnection` created and added to the global `connections` set.
+6. Each domain's `setupXxxSubscriptions` runs: the `FixturesChangeListener` is registered, live
+   subscriptions are opened, and **every stateful family's snapshot is pushed** (§"Snapshot rule").
+   The client needs to request nothing.
+
+The snapshot burst has **no guaranteed order**: the families are set up in separate coroutines, so
+a client must key off message type, never position. A client may also receive machine frames while
+still showing the boot overlay — harmless, since the invalidations are idempotent.
+
+### Message loop
 
 ```kotlin
 for (frame in incoming) {
-    val message = converter?.deserialize<InMessage>(frame)
-    when (message) {
-        is PingInMessage -> { /* no-op */ }
-        is ChannelStateInMessage -> { /* send current values */ }
-        is UpdateChannelInMessage -> { /* set channel value */ }
-        // ...
-    }
+    try {
+        when (val message = converter?.deserialize<InMessage>(frame)) {
+            is ChannelInMessage -> handleChannel(scope, message)
+            is ParkInMessage -> handlePark(scope, message)
+            is FxInMessage -> handleFx(scope, message)
+            is ProjectInMessage -> handleProject(scope, message)
+            is SurfaceInMessage -> handleSurface(scope, message)
+            is ProgrammerInMessage -> handleProgrammer(scope, message)
+            is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
+            null -> System.err.println("WS /api: undeserializable frame ignored")
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { /* logged */ }
 }
 ```
 
-### On Disconnect
+The per-message guard is load-bearing: one bad frame (unknown universe, stale fixture key,
+malformed payload) must not tear down the operator's whole socket.
 
-1. Connection removed from `connections` set
-2. Listener unregistered from `Fixtures`
-3. Resources cleaned up
+### On disconnect
 
-## Real-time Updates
+1. Connection removed from `connections`.
+2. `scope.cancelAll()` cancels every subscription and pending snapshot job.
+3. Learn sessions this connection owns are cancelled.
+4. The fixtures listener is unregistered from whatever `Fixtures` instance is current — the project
+   may have switched mid-connection, which is why `setupBroadcastSubscriptions` returns a closure
+   rather than the caller holding the instance.
+
+A send racing teardown becomes a quiet `CancellationException` (`SocketScope.send`), so collectors
+unwind instead of pumping frames into a dead socket. Anything else — a serialization bug in an
+`OutMessage` — stays loud and fails the session scope, so a broken message type can't silently
+stale the UI.
+
+## Real-time channel updates
 
 When DMX values change anywhere in the system:
 
 ```
 ArtNetController
-    │
-    ▼ channelChanged
+    │ channelChanged
+    ▼
 Fixtures (ChannelChangeListener)
-    │
-    ▼ channelsChanged
-FixturesChangeListener (per WebSocket)
-    │
-    ▼ sendSerialized
-WebSocket Client
+    │ channelsChanged(universe, changes)
+    ▼
+FixturesChangeListener (one per WebSocket, BroadcastSocket.kt)
+    │ scope.send
+    ▼
+WebSocket client
 ```
 
 Each connected client receives only the channels that changed:
 
 ```kotlin
 override fun channelsChanged(universe: Universe, changes: Map<Int, UByte>) {
-    if (universe.subnet != 0) return  // Only subnet 0 supported
-
-    val changeList = changes.map {
-        ChannelState(universe.universe, it.key, it.value)
-    }
-    launch {
-        sendSerialized<OutMessage>(ChannelStateOutMessage(changeList))
-    }
+    if (universe.subnet != 0) return
+    fire(ChannelStateOutMessage(changes.map { ChannelState(universe.universe, it.key, it.value) }))
 }
 ```
 
-## Subnet Limitation
+The connect snapshot is the whole buffer with parked values overlaid, so clients see what fixtures
+are actually emitting rather than the underlying buffered value.
 
-Current implementation only supports subnet 0:
+**Subnet limitation**: only subnet 0 is on the wire. Universe numbers are sent as-is (0–15 within
+subnet 0); frames for other subnets are dropped at the listener.
 
-```kotlin
-if (universe.subnet != 0) {
-    return
-}
-```
+## Thread safety
 
-Universe numbers are sent as-is (0-15 range within subnet 0).
+- `connections`: `Collections.synchronizedSet`.
+- `SocketScope.pendingBeatRequests` / `ownedLearnSessions`: synchronized sets, mutated from both
+  the frame loop and subscription collectors.
+- `FixturesChangeListener` callbacks are **non-suspending and may arrive on the DMX transmission
+  thread**; `BroadcastSocket.fire` bridges them with `session.launch { scope.send(…) }`, which is
+  safe because `DefaultWebSocketServerSession` is its own `CoroutineScope`.
+- Every subscription job is tracked by `SocketScope.subscribe`/`sendSnapshot`, so teardown is one
+  `cancelAll()` rather than per-job bookkeeping — historically a source of forgotten cleanups.
 
-## Thread Safety
+## Message serialization
 
-- `connections`: `Collections.synchronizedSet` for thread-safe access
-- Message sending: Uses `launch` for async non-blocking sends
-- Listener callbacks: May be called from DMX transmission thread
-
-## Typical Client Flow
-
-### Initialization
-
-```javascript
-const ws = new WebSocket('ws://localhost:8413/api');
-
-// No requests on open. The server pushes every stateful family's snapshot as part of the
-// connect burst (§"Snapshot rule"), so asking only gets the frame twice. The request messages
-// are for explicit resync — a tab returning from the background, say.
-ws.onmessage = (event) => {
-    const message = JSON.parse(event.data);
-    switch (message.type) {
-        case 'channelState':
-            updateChannelDisplay(message.channels);
-            break;
-        // ...
-    }
-};
-```
-
-### Setting a Channel
-
-```javascript
-ws.send(JSON.stringify({
-    type: 'updateChannel',
-    universe: 0,
-    id: 1,
-    level: 255,
-    fadeTime: 500
-}));
-```
-
-### Keeping Alive
-
-```javascript
-setInterval(() => {
-    ws.send(JSON.stringify({ type: 'ping' }));
-}, 10000);
-```
-
-## Message Serialization
-
-Uses kotlinx.serialization with polymorphic types:
+kotlinx.serialization polymorphism over two sealed roots, with a per-domain sealed layer between:
 
 ```kotlin
-@Serializable
-sealed class InMessage
+@Serializable sealed class InMessage
+@Serializable sealed class OutMessage
+
+@Serializable sealed class FxInMessage : InMessage()
 
 @Serializable
-@SerialName("ping")
-data object PingInMessage : InMessage()
-
-@Serializable
-@SerialName("updateChannel")
-data class UpdateChannelInMessage(
-    val universe: Int,
-    val id: Int,
-    val level: UByte,
-    val fadeTime: Long,
-) : InMessage()
+@SerialName("removeFx")
+data class RemoveFxInMessage(val effectId: Long) : FxInMessage()
 ```
 
-The `@SerialName` annotation provides the JSON discriminator value.
+`@SerialName` is the JSON `type` discriminator. The intermediate sealed class is what lets the
+top-level dispatcher enumerate *domains* while each `handleXxx` matches its own leaves
+exhaustively — the compiler then refuses to let a new message ship without a handler.
 
-## File Reference
+## Adding a domain
+
+One file, four edits:
+
+1. Define `sealed class XxxInMessage : InMessage()` (and `XxxOutMessage : OutMessage()`) with the
+   leaf messages and their `@SerialName`s.
+2. Add `handleXxx(scope, message)` with an exhaustive `when`.
+3. Add `setupXxxSubscriptions(scope)` if the family has live state — and push its connect snapshot
+   there, per §"Snapshot rule".
+4. Add one arm to the dispatch `when` in `Sockets.kt` and one call to setup.
+
+Register in the **pre-warm-up band** only if the family reads nothing off `state.show`; everything
+show-scoped goes after the gate. Then add the family to the tables above.
+
+## File reference
 
 | File | Purpose |
-|------|---------|
-| `plugins/Sockets.kt` | WebSocket configuration and message handling |
-| `show/Fixtures.kt` | `FixturesChangeListener` interface |
+|---|---|
+| `plugins/Sockets.kt` | Plugin config, `/api` endpoint, auth + warm-up gates, frame dispatch, teardown |
+| `plugins/SocketScope.kt` | Per-connection context: `send`, `subscribe`, `sendSnapshot`, `cancelAll` |
+| `plugins/SocketMessages.kt` | The `InMessage` / `OutMessage` sealed roots |
+| `plugins/BootSocket.kt` | `bootProgressState` |
+| `plugins/BroadcastSocket.kt` | `FixturesChangeListener` wiring and the 15 broadcast frames |
+| `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
+| `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
+| `plugins/FxSocket.kt` | Active-effect state and the four FX writes |
+| `plugins/MachineSocket.kt` | Accounts, install row, update state (machine-scoped band) |
+| `plugins/ParkSocket.kt` | Park state and park/unpark writes |
+| `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
+| `plugins/ProjectSocket.kt` | Current project and switch events |
+| `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
+| `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup |
+| `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
+| `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
+| `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |
 
-## Configuration
+## Related documentation
 
-In `Application.configureSockets()`:
-
-```kotlin
-install(WebSockets) {
-    pingPeriod = Duration.ofSeconds(15)
-    timeout = Duration.ofSeconds(15)
-    maxFrameSize = Long.MAX_VALUE
-    masking = false
-    contentConverter = KotlinxWebsocketSerializationConverter(Json)
-}
-```
+- [API Conventions](api-conventions.md) — the REST counterpart of §"Conventions"
+- [Desk Accounts](desk-accounts.md) — the 4401 close path and live revocation
+- [FX System](fx-engineering.md) — what `fxState` and the `speedMasters.*` family describe
+- [Composition Model](lighting-composition-model.md) — what `provenanceState` is reporting on
+- [Cloud Sync](sync-engineering.md) — the `cloudSync*` lifecycle
