@@ -69,7 +69,7 @@ claims are trivially checkable at fix time and are flagged there.
 ## 3. Index
 
 124 findings: 2 × S1, 19 × S2, 68 × S3, 35 × S4. Sorted by severity then priority. The
-`FS-COORD-*` rows were the backend seam (§14) and are now unblocked, five of them already landed;
+`FS-COORD-*` rows were the backend seam (§14) and are now unblocked, eight of them already landed;
 the `FS-BE-*` backend halves still owed are listed in §14 only.
 
 | ID | Finding | Sev | Pri | Cx | Model |
@@ -88,7 +88,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
 | `FS-PERF-SAVELOOK-INVALIDATION` | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | `FS-PERF-WS-SINGLE-PARSE` | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
-| `FS-TEST-LOOKONLY-GATE` | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
+| ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | `FS-PERF-CODE-SPLITTING` | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
@@ -96,7 +96,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-PERF-PROMPTBOOK-FADE-DRILL` | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
 | ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
-| `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
+| ~~`FS-COORD-CUEEDIT-RETIRE`~~ **done** | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ **done** | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
 | `FS-COORD-GROUPS-WS` | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
@@ -113,7 +113,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
 | `FS-COORD-FXLIBRARY-PARAMS` | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
-| `FS-COORD-PREVIEW-DEAD` | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
+| ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
 | `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
 | `FS-DEAD-CURRENTCUESTATE` | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
 | `FS-DEAD-DEVDEPS` | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
@@ -164,8 +164,8 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-TYPES-GROUPFX-WS` | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | `FS-TYPES-SURFACE-DESCRIPTORS` | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
 | `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
-| `FS-COORD-NEW-BROADCASTS` | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
-| `FS-DOCS-CLAUDEMD-CUE-ARM` | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
+| ~~`FS-COORD-NEW-BROADCASTS`~~ **done** | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
+| ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ **done** | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
 | `FS-DOCS-COMPATIBLELOOKIDS` | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
 | `FS-DOCS-ELEMENT-KEY-INVARIANT` | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
 | `FS-DOCS-SPEEDMASTERS` | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
@@ -1689,9 +1689,9 @@ rewritten to remove. **Fix**: rewrite CLAUDE.md §Speed Masters to match the com
 fix the two stale mentions. Keep the still-true halves: stored vs live BPM, the two per-effect uuid
 references, master 1 undeletable / what a null uuid means.
 
-### `FS-DOCS-CLAUDEMD-CUE-ARM`
-**CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b** · S4 · P2 ·
-C1 · haiku
+### ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ — **landed**
+**CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b**,
+lighting-react `62b64eb` · S4 · P2 · C1 · haiku
 `CLAUDE.md`, `src/components/lighting-editor/EditorContext.tsx`
 
 The file's own doc says the opposite of CLAUDE.md ("There is no `cue` arm … removed in 2b"). An
@@ -1794,9 +1794,9 @@ The pattern across these: CLAUDE.md declares an invariant load-bearing, and eith
 across the refactors or it never existed. Most fixes are one focused test file. (The script-editor
 subsystem's zero-test state is `FS-TEST-EDITOR-PINS`, filed with its cluster in §5.)
 
-### `FS-TEST-LOOKONLY-GATE`
+### ~~`FS-TEST-LOOKONLY-GATE`~~ — **landed**
 **The LOOK-only gate — the guard against silently converting a generic template to per-fixture — has
-no test** · S2 · P1 · C1 · sonnet
+no test**, lighting-react `3a67b93` · S2 · P1 · C1 · sonnet
 `src/components/programmer/LookRowStore.tsx`, `src/components/programmer/LookRowStore.test.tsx`
 
 CLAUDE.md's rule that `LookRowStore` engages only for a LOOK layer is one expression
@@ -1911,8 +1911,9 @@ those two fields for exactly this reason (D1 note 1).
 
 *(The waves are all landed; "in step" now means "these are the items the backend seam created".)*
 
-### `FS-COORD-CUEEDIT-RETIRE`
-**Delete the client's cueEdit remnants — backend D1 landed `26cc782`** · S3 · P1 · C1 · sonnet
+### ~~`FS-COORD-CUEEDIT-RETIRE`~~ — **landed**
+**Delete the client's cueEdit remnants — backend D1 landed `26cc782`**, lighting-react `62b64eb`
+· S3 · P1 · C1 · sonnet
 `src/components/lighting-editor/EditorContext.tsx`, `src/components/programmer/RecordSheet.tsx`,
 `src/components/programmer/UpdateDialog.tsx`, `src/lib/programmerSource.ts`,
 `src/store/programmerOps.ts`, `src/store/perf.ts`, `src/routes/Diagnostics.tsx`,
@@ -1939,6 +1940,12 @@ each:
   and `useCellWriters.ts:53`. Write `FS-DOCS-CLAUDEMD-CUE-ARM`'s CLAUDE.md rewrite in the same
   change so it doesn't enshrine a keep that has already evaporated — and see `FS-COORD-PING` for
   the constraint on what that rewrite may say about flatten.
+
+Grew in the landing: `RecordSheet` lost its conflict path entirely rather than just its `force`
+sender — `INCLUDE_TARGET_GONE` is Update-only server-side, so Record had no surviving 409 to catch
+and `submit` now reports through the mutation's own `error`. Deleting the Diagnostics panel also
+orphaned `HistogramView` and its `Stat` helper, which had no other consumer. `FS-DOCS-CLAUDEMD-CUE-ARM`
+landed in the same commit, as this item asked. `FS-BE-FORCE-FIELDS` is now unblocked — §14 updated.
 
 ### ~~`FS-COORD-LEGACY-TEMPO`~~ — **landed with backend D2**
 **Migrate the legacy-tempo consumers to `speedMasters.*`** · S3 · P1 · C2 · sonnet
@@ -2071,15 +2078,25 @@ role-prefix list is drift — no such list exists at HEAD (`restApi.ts` has a `N
 endpoint set, not a role/path mirror); the actual mechanism is `navigation.ts`'s per-item
 `adminOnly` flags plus each component's own `isAdmin` check, both already correct and pinned.
 
-### `FS-COORD-NEW-BROADCASTS`
+### ~~`FS-COORD-NEW-BROADCASTS`~~ — **landed**
 **Add the client bridges for `scriptListChanged` / `fxDefinitionListChanged` — backend B5 landed
-`47dcb83`** · S4 · P2 · C1 · sonnet
+`47dcb83`**, lighting-react `f59feeb` · S4 · P2 · C1 · sonnet
 
 Both frames are broadcast today; grep finds **no** listener in this repo, so the staleness B5 fixed
 server-side is still fully present here — a second client's script list and effect library never
 refresh. Two bridges plus tag invalidations, using whichever pattern `FS-ARCH-BRIDGE-EVAL`'s
 written-down rule prescribes. `FS-DEAD-RTKQ-HOOKS` deletes three unused FX-definition endpoints;
 decide which tags survive that before wiring the second bridge.
+
+Landed as two module-scope bridges, not deferred `start…Bridge()` ones: `FS-ARCH-BRIDGE-EVAL` has
+not landed, so there is still no written-down rule, and the existing precedent is that the deferred
+form exists only for slices on the earliest render path. `scriptListChanged` sits in
+`store/projects.ts`, which owns the script endpoints and already touches `lightingApi` at module
+scope. `fxDefinitionListChanged` sits in `store/fixtureFx.ts` rather than beside the definition CRUD
+in `store/fxDefinitions.ts`: a module-scope bridge only runs once something imports its module, and
+`effectLibrary` is the `FxLibrary` consumer that mounts everywhere while that slice is reached only
+from `routes/FxLibrary.tsx`. `FxLibrary` is the only tag either bridge needs, so
+`FS-DEAD-RTKQ-HOOKS` cannot strand one.
 
 ### ~~`FS-COORD-PING`~~ — **landed with backend D5**
 **The WS `ping` keepalive** · S4 · P3 · C1 · haiku
@@ -2092,8 +2109,9 @@ One constraint survives this item: D5 also deleted `POST /cues/{cueId}/flatten`,
 `FS-DOCS-STALE-COMMENTS`' `CueCardEditor` rewrite and CLAUDE.md's flatten paragraph **must not**
 present flatten as the live replacement for Make Hard. `CueCardEditor.tsx:469` still does.
 
-### `FS-COORD-PREVIEW-DEAD` *(new — created by backend D4)*
-**The Look live-preview machinery is dead code now, not merely unreachable** · S3 · P2 · C1 · sonnet
+### ~~`FS-COORD-PREVIEW-DEAD`~~ — **landed** *(new — created by backend D4)*
+**The Look live-preview machinery is dead code now, not merely unreachable**, lighting-react
+`05d5d65` · S3 · P2 · C1 · sonnet
 `src/api/programmerWsApi.ts`, `src/components/programmer/ProgrammerLookStack.tsx`,
 `src/components/programmer/ProgrammerFxList.tsx`, `src/components/busking/lookPresence.ts`,
 `src/store/looks.test.ts`, `ProgrammerScopeBand`, `LookRowStoreProvider`
@@ -2113,6 +2131,16 @@ Read `FU-PROG-FOCUS-PREVIEW-LAYER` before deleting — the backend item checked 
 hook kept, but the *frontend* special-casing is what that follow-up describes, so this may close it
 outright. Deleting the filters without deleting the tests leaves three green tests asserting a
 deleted protocol.
+
+Grew in the landing: the follow-up needed no action — it was already retired in `followups.md` when
+D4 landed, and `ProgrammerScopeBand` / `LookRowStoreProvider` turned out to carry no `isPreview`
+reference at all, only an unfiltered lookup with nothing left to admit. Three of the four preview
+tests were deleted; the fourth pinned index→`layerId` addressing *through* the filter and was
+rewritten against two ordinary layers instead, since blend and mask reach the store from a popover
+rather than from the row. Three stale doc claims the deletion falsified went too —
+`store/looks.ts`'s "the route and `installPreview` remain and still work" (citing a follow-up id
+that exists nowhere), and `LookRowStore` + CLAUDE.md both offering `LookPreviewRequest` as the
+smooth-preview escape hatch a layer-scope drag doesn't have.
 
 ### `FS-COORD-FXLIBRARY-PARAMS` *(new — created by backend D7)*
 **`GET /fx/library` now returns real parameter types and defaults, and the FX sheet has a heuristic
@@ -2187,10 +2215,11 @@ Still owed, and each blocking a frontend item from being finished honestly:
   second client's group list fresh; D3 removed the bridge that was *supposed* to and B5 added the
   two sibling broadcasts without this one. Prerequisite for `FS-COORD-GROUPS-WS`'s deletion being a
   cleanup rather than a silent regression.
-- `FS-BE-FORCE-FIELDS` *(new)* — `force` survives on the Record and Update request bodies, inert,
-  solely because this repo still sends it on every submit (backend D1 note 1). It is safe to delete
-  server-side **only after** `FS-COORD-CUEEDIT-RETIRE` lands here. Sequence it that way round or
-  every Record and Update 400s.
+- `FS-BE-FORCE-FIELDS` *(new)* — **now unblocked.** `force` survives on the Record and Update
+  request bodies, inert, solely because this repo used to send it on every submit (backend D1
+  note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client sends it and
+  the two fields can be deleted server-side whenever the desk owner wants them gone. The ordering
+  constraint is spent; nothing 400s either way now.
 
 And one remark, not an item: `programmerRecord.kt`'s rename-breadcrumb KDoc pattern ("Was
 `timedPresetApplications`", still there at `:61-64`) is what let `FS-BUG-TIMEDLAYERS-RENAME` be
