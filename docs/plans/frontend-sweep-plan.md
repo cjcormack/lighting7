@@ -1,6 +1,7 @@
 # Frontend sweep — what the refactors left behind
 
-> **Document status: findings catalogue, awaiting triage.** Produced 2026-08-24 by a two-round
+> **Document status: findings catalogue, reconciled against the completed backend sweep
+> (2026-08-29); awaiting triage.** Produced 2026-08-24 by a two-round
 > multi-agent sweep of `lighting-react` (31 reviewer/verifier agents: nine audit dimensions plus a
 > completeness critic, then five gap dimensions the critic identified; every finding adversarially
 > verified against the code, S1s twice independently, and the S1/S2 band re-read by hand). Scope is
@@ -12,7 +13,11 @@
 > §2, because the intended consumer is a dispatching operator handing items to agents.
 >
 > Finding IDs use the slug grammar of `followups.md` but with an `FS-` prefix so they cannot be
-> confused with real `FU-` items until deliberately promoted. Known-open `FU-` items were excluded
+> confused with real `FU-` items until deliberately promoted. **The sibling backend sweep is now
+> complete** (all waves 0–6, `a4bf981`): no item here is gated on a backend wave any longer, five
+> `FS-COORD-*` items landed with their backend halves, two became live defects, and three new
+> coordination items and two new backend-half proposals came out of the landing. §14 carries all of
+> it, and is the section to read before dispatching anything. Known-open `FU-` items were excluded
 > from the sweep by construction; where a finding *corrects* one, it says so inline
 > (`FS-DEAD-ORPHAN-FILES` vs `FU-FE-REBIND-INPLACE`, `FS-DEAD-DTO-FIELDS` vs
 > `FU-FE-SHARED-LOOK-EDIT-GUARD`).
@@ -63,9 +68,9 @@ claims are trivially checkable at fix time and are flagged there.
 
 ## 3. Index
 
-121 findings: 2 × S1, 19 × S2, 66 × S3, 34 × S4. Sorted by severity then priority. The
-`FS-COORD-*` rows ship with backend waves (§14); the `FS-BE-*` proposals for the backend
-backlog are listed in §14 only.
+124 findings: 2 × S1, 19 × S2, 68 × S3, 35 × S4. Sorted by severity then priority. The
+`FS-COORD-*` rows were the backend seam (§14) and are now unblocked, five of them already landed;
+the `FS-BE-*` backend halves still owed are listed in §14 only.
 
 | ID | Finding | Sev | Pri | Cx | Model |
 |---|---|---|---|---|---|
@@ -90,8 +95,10 @@ backlog are listed in §14 only.
 | `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | `FS-PERF-PROMPTBOOK-FADE-DRILL` | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
-| `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants when backend D1 lands | S3 | P1 | C1 | sonnet |
-| `FS-COORD-GROUPS-WS` | Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after ans… | S3 | P1 | C1 | sonnet |
+| `FS-COORD-ADMIN-GATE` | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
+| `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
+| `FS-COORD-WIRE-FIELD-DELETIONS` | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
+| `FS-COORD-GROUPS-WS` | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
@@ -104,9 +111,9 @@ backlog are listed in §14 only.
 | `FS-ARCH-LOCALSTORAGE-BOOT` | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
 | `FS-BUG-CUE-TAG-STALE` | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
 | `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
-| `FS-COORD-ADMIN-GATE` | Re-verify the client's hand-mirrored admin gates when backend F6 lands | S3 | P2 | C1 | sonnet |
-| `FS-COORD-API-NORMALIZE` | Every hard rename in backend F1/F2/F3/F5/F8 is a same-change client edit | S3 | P2 | C2 | sonnet |
-| `FS-COORD-WIRE-FIELD-DELETIONS` | The retired-concept wire fields die server-side under backend A2/D9/B4 — coordinate, don'… | S3 | P2 | C1 | haiku |
+| ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
+| `FS-COORD-FXLIBRARY-PARAMS` | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
+| `FS-COORD-PREVIEW-DEAD` | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
 | `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
 | `FS-DEAD-CURRENTCUESTATE` | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
 | `FS-DEAD-DEVDEPS` | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
@@ -138,7 +145,7 @@ backlog are listed in §14 only.
 | `FS-TYPES-EFFECTTYPE-UNION` | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-MASKGROUP-DUP` | `PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily` | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-PALETTE-WIRE-ARMS` | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
-| `FS-TYPES-PRESETCOUNT-RENAME` | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` | S3 | P2 | C1 | haiku |
+| `FS-TYPES-PRESETCOUNT-RENAME` | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
 | `FS-TYPES-RIGGING-POSITION` | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
 | `FS-ARCH-BUSKING-GOD-HOOK` | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
 | `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
@@ -157,7 +164,7 @@ backlog are listed in §14 only.
 | `FS-TYPES-GROUPFX-WS` | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | `FS-TYPES-SURFACE-DESCRIPTORS` | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
 | `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
-| `FS-COORD-NEW-BROADCASTS` | When backend B5 adds `scriptListChanged`/`fxDefinitionListChanged`, add the client bridges | S4 | P2 | C1 | sonnet |
+| `FS-COORD-NEW-BROADCASTS` | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
 | `FS-DOCS-CLAUDEMD-CUE-ARM` | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
 | `FS-DOCS-COMPATIBLELOOKIDS` | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
 | `FS-DOCS-ELEMENT-KEY-INVARIANT` | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
@@ -168,7 +175,8 @@ backlog are listed in §14 only.
 | `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
 | `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
-| `FS-COORD-PING` | Backend D5 deletes the WS `ping` type; this client sends it | S4 | P3 | C1 | haiku |
+| ~~`FS-COORD-PING`~~ **done** | Landed with backend D5 as `c6ee984`; one flatten constraint survives it — see the item | S4 | P3 | C1 | haiku |
+| `FS-COORD-STRICT-ENUMS` | Confirm-only: E4/E10 made the effect-enum write sites strict, and B3 lets the FX sheet se… | S4 | P3 | C1 | haiku |
 | `FS-DEAD-CSS` | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
 | `FS-DEAD-EXPORT-KEYWORD` | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
 | `FS-DEAD-PROTOTYPES` | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
@@ -223,17 +231,32 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
    facts).
 9. **Any `cueUtils` edit keeps the field-by-field pin shape** (never tidy it into a deep-equal) and
    takes `FS-TEST-CUEUTILS-TRIGGERS` along.
-10. **Backend-coordinated items wait for their wave** (§14): the `FS-COORD-*` items ship with
-    backend D1/D2/D3/D5/F-wave changes; `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2;
-    `FS-PERF-PROVENANCE-REFETCH` is re-measured after backend C3.
+10. **The backend seam is no longer a wait — it is a queue** (§14). The backend sweep is complete,
+    so nothing is gated; what remains is an ordering constraint and a re-measure.
+    `FS-COORD-CUEEDIT-RETIRE`'s `force` senders must be deleted here **before** the backend drops
+    the inert fields (`FS-BE-FORCE-FIELDS`), and `FS-COORD-GROUPS-WS`'s deletion should follow the
+    `groupListChanged` broadcast (`FS-BE-GROUPLIST-CHANGED`) rather than precede it.
+    `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2, and `FS-PERF-PROVENANCE-REFETCH` should be
+    re-measured now that backend C3 (`d317d93`) has landed — it hoisted the winner-set resolve out
+    of the per-frame crossfade path, so the client cost this item assumes may be smaller than the
+    C3-sized effort it asks for.
 
-A reasonable dispatch order for what's left after those constraints: the independent P1 bugs first
-(`FS-BUG-CUESLOT-LIVENESS` with its two backend additions, `FS-BUG-RECONNECT-RESYNC`,
-`FS-BUG-TIMEDLAYERS-RENAME`, `FS-BUG-PROGRAMMER-ERROR-DROPPED`, `FS-BUG-FADE-KEY-SNAPSHOT`,
-`FS-TEST-LOOKONLY-GATE`), then the fade cluster, then `FS-PERF-WS-SINGLE-PARSE` + riders, then the
-haiku dead-code/docs batches (cheap, high signal-to-noise for future agents), then the structural
-moves, with the C3-sized items (`FS-DUP-AGGREGATION`, `FS-ARCH-CURSOR-OWNERSHIP`,
-`FS-PERF-CODE-SPLITTING`) scheduled as their own sessions.
+A reasonable dispatch order for what's left after those constraints: **the two live defects the
+backend landing created first** — `FS-COORD-ADMIN-GATE`'s `Projects.tsx` gating (an operator gets a
+bare 403 from two visible controls today) and `FS-COORD-WIRE-FIELD-DELETIONS` (client sites reading
+fields the server has deleted) — then the independent P1 bugs (`FS-BUG-STALE-ROW-SNAPSHOT` through
+`FS-DUP-ROW-SUBSCRIPTION` per constraint 2, `FS-BUG-RECONNECT-RESYNC`, `FS-BUG-TIMEDLAYERS-RENAME`,
+`FS-BUG-PROGRAMMER-ERROR-DROPPED`, `FS-BUG-FADE-KEY-SNAPSHOT`, `FS-TEST-LOOKONLY-GATE`), then the
+rest of the coordination queue (`FS-COORD-CUEEDIT-RETIRE`, `FS-COORD-PREVIEW-DEAD`,
+`FS-COORD-NEW-BROADCASTS`, `FS-COORD-FXLIBRARY-PARAMS`), then the fade cluster, then
+`FS-PERF-WS-SINGLE-PARSE` + riders, then the haiku dead-code/docs batches (cheap, high
+signal-to-noise for future agents), then the structural moves, with the C3-sized items
+(`FS-DUP-AGGREGATION`, `FS-ARCH-CURSOR-OWNERSHIP`, `FS-PERF-CODE-SPLITTING`) scheduled as their own
+sessions.
+
+The coordination items are unusually good first work regardless of order: they are mostly deletions
+against a server that has already moved, so they shrink the tree, and each one closes a place where
+this repo's code currently describes a protocol that no longer exists.
 
 ## 5. Bugs
 
@@ -310,6 +333,10 @@ see it and no test constructs a real response.
 **Fix**: rename the field to `timedLayers` and fix the sum. kotlinx has defaults on all five counts,
 so prefer `?? 0` at the read site over trusting non-optionality. Keep both counts in the one
 sentence — that wording is what tells an operator a timed child was preserved rather than dropped.
+
+Confirmed at backend HEAD after the sweep: `programmerRecord.kt:61-64` still sends `timedLayers` and
+still carries the "Was `timedPresetApplications`" breadcrumb that made this findable. No backend
+half; this is a one-repo fix.
 
 ### `FS-BUG-FXROUTE-REGEX`
 **`isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects panel
@@ -432,7 +459,8 @@ cue layers, the rig moves, the other tab's read-only grid shows the pre-edit val
 and reconnect doesn't clear it either. **Fix** (layered): add `Cue` to the derived reconnect list
 (`FS-BUG-RECONNECT-RESYNC`); have the looks/templates bridges also invalidate `Cue` (both are
 CRUD-cadence, affordable); the full cross-client fix needs a backend frame — `republishForSourceEdit`
-broadcasting its `cuesRepublished` id list, proposed in §14 as `FS-BE-CUES-REPUBLISHED-FRAME` — and
+broadcasting its `cuesRepublished` id list (§14, `FS-BE-CUES-REPUBLISHED-FRAME` — still owed; the
+field exists on the REST responses and nowhere on the bus) — and
 the `projectCueCooked` doc comment corrected to say which edits actually refetch it.
 
 ### `FS-BUG-WS-SEND-DROPPED`
@@ -952,8 +980,9 @@ stomp (`lighting-composition-model.md` §Stomp).
 **`CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount`** · S3 · P2 · C1 · haiku
 `src/api/cueStacksApi.ts` + four test fixtures
 
-The backend renamed it in session 4 (KDoc: "No client reads it yet … treat it as available").
-Declared non-optional, always `undefined`; the field actually sent — the per-cue layer count a
+The backend renamed it in session 4 (KDoc: "No client reads it yet … treat it as available"), and
+the sweep confirmed `presetCount` exists nowhere in the backend at HEAD — `layerCount` is the only
+spelling. Declared non-optional, always `undefined`; the field actually sent — the per-cue layer count a
 collapsed row wants — is invisible. Four test files write `presetCount: 0` purely for the compiler,
 pinning the drift in place. **Fix**: mechanical rename + fixtures; optionally then use `layerCount`
 where a layers-only cue currently reads as empty.
@@ -1042,14 +1071,16 @@ sonnet
 
 Both client call sites send `propertyMask: template.family`, and the route's KDoc says the mask is
 "echoed back rather than applied … the server derives" it. Nothing derives it:
-`ProgrammerLayerStack.toggle` has no mask parameter, so the layer lands with `propertyMask: null`
+`ProgrammerLayerStack.toggle` has no mask parameter (still true at backend HEAD — the sweep closed
+without taking this), so the layer lands with `propertyMask: null`
 and the response echo can never disagree with itself. CLAUDE.md's §two-apply-gestures claim ("masked
 to the template's family — the client states the mask, so the layer row shows what it asserts") is
 false in the layer data; the row still *displays* a family badge because `LookStack` derives
 `info.families` from the library lookup, which is what keeps this S3 (rig output unaffected today —
 a template's rows are all one family — and the display lies in the right direction). **Fix**: needs
 the backend half — a `propertyMask` parameter on `toggle` with the family derived server-side
-(proposed in §14 as `FS-BE-TEMPLATE-TOGGLE-MASK`); then fix the KDoc, and pin that the layer
+(§14, `FS-BE-TEMPLATE-TOGGLE-MASK` — still owed, and not carried by the completed backend sweep);
+then fix the KDoc, and pin that the layer
 emitted in `programmer.layerState` after a toggle carries the family.
 
 ### `FS-TYPES-ADDLAYER-MASK-DROP`
@@ -1164,8 +1195,10 @@ sonnet
 `src/store/fixtureFx.ts`, `src/api/groupsApi.ts`, `src/api/fxApi.ts`,
 `src/components/programmer/FxSheet.tsx`, `src/api/surfacesApi.ts`, `src/api/looksApi.ts`
 
-Two jobs, not one — and the first is now coordinated: backend A2 deletes `EffectDto.presetId` on
-the wire (see `FS-COORD-WIRE-FIELD-DELETIONS`). **Delete the retired-concept fields**: the three
+Two jobs, not one — and the first is no longer coordination but repair: backend A2 (`ab0ff8b`)
+**has** deleted `EffectDto.presetId` and `GroupEffectDto.presetId`, so these declarations describe a
+wire that has moved (see `FS-COORD-WIRE-FIELD-DELETIONS`, now P1, which also picks up
+`presetApplications` and `presetCount`). **Delete the retired-concept fields**: the three
 `presetId` declarations plus
 `FxSheet.toEffectContext`'s pass-through copy (nothing downstream reads it; sitting in a mapping
 whose siblings are all deliberate makes the residue look load-bearing), `FxEffectState.speedMasterIndex`
@@ -1673,7 +1706,8 @@ nothing since session 3 made every Look row bound. `LayerPicker.tsx` already car
 wording, so the codebase contradicts itself on one field. **Fix**: align all four comments with
 `LayerPicker`'s; say what a toggle onto one target does for a Look whose rows name other fixtures.
 Do not restore a client-side filter — compatibility belongs to the backend (and see
-`FS-BE-COMPATIBLEIDS`, §14, for the rows-only hole itself).
+`FS-BE-COMPATIBLEIDS`, §14, for the rows-only hole itself — still owed, so the corrected wording
+here has to describe the hole rather than promise it is closed).
 
 ### `FS-DOCS-OUTOFSCOPE-COMMENT`
 **`RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the only
@@ -1833,35 +1867,70 @@ missing case (two frames differing only in `layerSource`, `layerId` and `source`
 
 ## 14. The backend seam
 
-The sibling [backend-post-refactor-sweep.md](backend-post-refactor-sweep.md) landed first, with
-four decisions already taken (retire `cueEdit.*`; retire the legacy tempo surface on both sides;
-route-tree auth gating; normalize the API hard, no aliases) and a "Frontend-coordination register"
-addressed to this document. This section absorbs that register as concrete frontend items — each
-tagged with the backend item and wave it lands with, because doing the frontend half early breaks a
-live desk and doing it late leaves dead client code lying to readers — and then lists the few
-backend facts this sweep hit that the backend backlog does **not** carry.
+The sibling [backend-post-refactor-sweep.md](backend-post-refactor-sweep.md) is **complete** — all
+seven waves (0–6) landed, the last on 2026-08-29 (`a4bf981`). Nothing in this section is gated on a
+backend wave any more: every `FS-COORD-*` item is either already landed or unblocked and ready to
+dispatch. All four of its standing decisions shipped as written (retire `cueEdit.*`; retire the
+legacy tempo surface on both sides; route-tree auth gating; normalize the API hard, no aliases).
+
+This section was reconciled against what actually landed on 2026-08-29, and three things changed
+shape in the process:
+
+1. **Five coordination items are already done.** Their client halves shipped in the same run as the
+   backend change, because "no aliases" makes a split a broken desk. Struck through below with both
+   SHAs.
+2. **Two items stopped being cleanup and became live defects.** The backend deleted the fields and
+   gated the routes while the client still reads and offers them —
+   `FS-COORD-WIRE-FIELD-DELETIONS` and the surviving half of `FS-COORD-ADMIN-GATE` are **P1** now,
+   not P2, and the second is a live 403 generator on a desk.
+3. **The backend sweep closed without picking up this section's `FS-BE-*` proposals.** They are
+   restated at the end as backend halves still owed; three frontend items cannot be finished
+   correctly without them.
+
+One ordering constraint outranks everything else here, because getting it backwards breaks Record
+and Update on a live desk: **`FS-COORD-CUEEDIT-RETIRE`'s `force` senders must be deleted from this
+repo before the backend deletes the inert `force` fields**, not after. The backend deliberately kept
+those two fields for exactly this reason (D1 note 1).
 
 ### Frontend work that lands in step with backend waves
 
+*(The waves are all landed; "in step" now means "these are the items the backend seam created".)*
+
 ### `FS-COORD-CUEEDIT-RETIRE`
-**Delete the client's cueEdit remnants when backend D1 lands** *(wave 1)* · S3 · P1 · C1 · sonnet
+**Delete the client's cueEdit remnants — backend D1 landed `26cc782`** · S3 · P1 · C1 · sonnet
 `src/components/lighting-editor/EditorContext.tsx`, `src/components/programmer/RecordSheet.tsx`,
 `src/components/programmer/UpdateDialog.tsx`, `src/lib/programmerSource.ts`,
-`src/store/programmerOps.ts`, `src/routes/Diagnostics.tsx`
+`src/store/programmerOps.ts`, `src/store/perf.ts`, `src/routes/Diagnostics.tsx`,
+`src/components/runner/program/CueCardEditor/CueCardEditor.tsx`,
+`src/components/fixtures-list/useCellWriters.ts`
 
-Backend D1 deletes the whole `cueEdit.*` family including `GET /perf/cueedit-histogram`. That
-retires the two client keeps this sweep deliberately did *not* flag as dead: the
-`409 CUE_EDIT_SESSION_OPEN` handling (five files — its justification, "another client can hold a
-session", stops being true) and the Diagnostics cueEdit latency panel (its data source 404s).
-Delete both in the same change as, or immediately after, D1 — and write
-`FS-DOCS-CLAUDEMD-CUE-ARM`'s CLAUDE.md rewrite so it doesn't enshrine a keep that is about to
-evaporate.
+D1 deleted the whole `cueEdit.*` family: fifteen socket messages, all four 409 guards, and
+`GET /perf/cueedit-histogram`. Verified still present in this repo at HEAD, and what to do with
+each:
+
+- **The `force` senders go first, and they are the only part with an ordering constraint.**
+  `RecordSheet.submit(force)` and `UpdateDialog.commit(force)` put `force` in *every* request body,
+  not just a conflict retry, and the backend's `Json` is strict on unknown keys. The backend is
+  holding two now-inert fields open until this lands; deleting them server-side first would 400
+  every Record and Update. Land this, then promote `FS-BE-FORCE-FIELDS` below.
+- **The 409 handling** — `RecordSheet.tsx:178`, `UpdateDialog.tsx:73,161`, `programmerOps.ts:302`'s
+  union arm, `programmerSource.ts:18`'s comment. Its justification ("another client can hold a
+  session") is now false: nothing can open one. Keep `INCLUDE_TARGET_GONE`, which is live and
+  shares the same union and the same dialog.
+- **The Diagnostics panel** — `store/perf.ts:62` queries `perf/cueedit-histogram`, which now 404s
+  rather than returning an empty histogram, so `Diagnostics.tsx:107-145` shows a fetch error where
+  it used to show an honest empty state. Delete the query and the panel together.
+- **Stale doc comments** naming the family in `EditorContext.tsx:11-14`, `CueCardEditor.tsx:87,365`
+  and `useCellWriters.ts:53`. Write `FS-DOCS-CLAUDEMD-CUE-ARM`'s CLAUDE.md rewrite in the same
+  change so it doesn't enshrine a keep that has already evaporated — and see `FS-COORD-PING` for
+  the constraint on what that rewrite may say about flatten.
 
 ### ~~`FS-COORD-LEGACY-TEMPO`~~ — **landed with backend D2**
-**Migrate the legacy-tempo consumers to `speedMasters.*`** *(wave 1)* · S3 · P1 · C2 · sonnet
+**Migrate the legacy-tempo consumers to `speedMasters.*`** · S3 · P1 · C2 · sonnet
 
-Landed as the client half of backend sweep D2, in one change across both repos. Two corrections
-worth keeping, because both were premises of this item as written:
+Landed as the client half of backend sweep D2 (`db937f6` + `lighting-react` `179280e`), in one
+change across both repos. Two corrections worth keeping, because both were premises of this item as
+written:
 
 - It was **ten files, not three**. Substantive: `api/fxApi.ts` (the transport — the `beatSync`
   message type and the `requestBeatSync`/`setFxBpm`/`tapTempo` senders), `store/fx.ts`,
@@ -1880,119 +1949,226 @@ Also resolved the `beatSync` half of `FS-PERF-BPM-INVALIDATION` by deletion, and
 `FS-CHROME-BEAT-RESUBSCRIBE` as that item asked.
 
 ### `FS-COORD-GROUPS-WS`
-**Delete the whole client groups WS layer when backend D3 deletes `GroupSocket` — after answering
-one question** *(wave 1)* · S3 · P1 · C1 · sonnet
+**Delete the client groups WS layer — backend D3 landed `de2e1d5`, and the question it was waiting
+on now has an answer** · S3 · P1 · C1 · sonnet
 `src/api/groupsApi.ts`, `src/store/groups.ts`
 
-D3 supersedes `FS-TYPES-GROUPFX-WS`'s scope: the backend deletes `plugins/GroupSocket.kt` outright
-(it found `groupsState` is never pushed — no `setupGroupSubscriptions` exists). The question to
-answer first: `store/groups.ts`'s `groupsState → invalidateTags(['GroupList'])` bridge therefore
-never fires today, so **what keeps `GroupList` fresh across clients?** If the answer is "nothing but
-this client's own mutations", that is a functional gap to raise against the backend backlog
-(a `groupListChanged` on the broadcast bus, like every sibling list), not a silent client deletion.
+D3 deleted `plugins/GroupSocket.kt` outright, superseding `FS-TYPES-GROUPFX-WS`'s scope. This item
+said not to delete the client half until one question was answered — *what keeps `GroupList` fresh
+across clients, given the `groupsState → invalidateTags(['GroupList'])` bridge never fires?* It has
+been answered by grep at backend HEAD: **nothing does.** There is no `groupListChanged` anywhere in
+the backend, and B5 added the two missing `*ListChanged` broadcasts without adding this one.
+
+So this is two changes, not one, and the deletion is the *second*: file `FS-BE-GROUPLIST-CHANGED`
+(below) as the functional gap, then delete `GroupsInMessage` (`groupsApi.ts:209-211`), the
+`groupsState`/`groupFxAdded` arms in `handleOnMessage` (`:239-247`) and the dead `addFx`/`clearFx`
+senders — and re-point the invalidation at whatever frame the backend half adds, rather than
+leaving the list refreshed only by this client's own mutations.
 
 ### `FS-COORD-WIRE-FIELD-DELETIONS`
-**The retired-concept wire fields die server-side under backend A2/D9/B4 — coordinate, don't
-unilaterally delete** *(waves 0–1)* · S3 · P2 · C1 · haiku
+**Retired-concept wire fields: the server has now deleted them, so these are live phantoms** *(was:
+"coordinate, don't unilaterally delete")* · S3 · **P1** · C1 · haiku
+`src/components/programmer/FxSheet.tsx`, `src/store/fixtureFx.ts`, `src/api/groupsApi.ts`,
+`src/api/cuesApi.ts`, `src/api/cueStacksApi.ts`
 
-Backend A2 deletes `EffectDto.presetId` on the wire and D9 flags the client types — that is
-`FS-DEAD-DTO-FIELDS`'s `presetId` batch, now coordinated rather than unilateral. Backend B4 will
-stop reporting the non-consumed master field per `timingSource`, and its F8 asks whether the client
-is missing `rateSpeedMasterIndex`: the answer from this side is **no** — the FX-sheet chip resolves
-display via `useSpeedMasterDisplay(uuid)`, so index fields are display debris client-side
-(`FS-DOCS-STALE-COMMENTS` covers the stale `speedMasterIndex` claim). State that in F8's change
-rather than adding the field.
+Backend A2 (`ab0ff8b`) deleted `presetId` from `EffectDto` **and** `GroupEffectDto`; D9 (`10c51ae`)
+took `LookRepublishOutcome.programmerKeysUncovered`; `presetApplications` and `presetCount` went
+with the layer rewrite. Nothing here is coordination any more — the fields are gone, and every
+client site reading one now reads `undefined`:
 
-### `FS-COORD-API-NORMALIZE`
-**Every hard rename in backend F1/F2/F3/F5/F8 is a same-change client edit** *(wave 4)* · S3 · P2 ·
-C2 · sonnet
-`src/store/*.ts`, `src/api/*.ts`
+- `FxSheet.tsx:358` copies `presetId: effect.presetId` out of a DTO that no longer carries it.
+- `store/fixtureFx.ts:28,165` and `groupsApi.ts:120` declare it; `fixtureFx.ts:174`'s doc still
+  reasons about how it differs from its siblings.
+- `cuesApi.ts:265-269`'s `presetApplications` block asserts "**Still** `presetApplications` on the
+  wire" — false as of the cue rewrite (`projectCues.kt:640` records the removal). `cueUtils.test.ts`
+  pins the same claim from the other side.
+- `cueStacksApi.ts:16`'s `presetCount` mirrors a field renamed to `layerCount` — that is
+  `FS-TYPES-PRESETCOUNT-RENAME`, and it is confirmed rather than suspected now. It is never
+  rendered, only carried and pinned by six test fixtures, so it is a safe deletion.
 
-No aliases and no deprecation windows means the client edit ships with the backend one: the
-kebab/plural path renames land in the matching `store/*.ts` endpoints; `speedMasterListChanged` →
-`speedMasters.listChanged` (`store/speedMasters.ts`) and `surfaceBindingsChanged` →
-`surfaceBank.bindingsChanged` (`api/surfacesApi.ts`); delete-status normalization should be
-verified against any `.unwrap()` that reads a response body; F5's fix for the double
-`speedMasters.state` frame touches this client's request-on-open; F8's DTO unification lands in
-the matching client types. The backend doc commits to maintaining a list of frontend-visible
-changes per wave — consume it change-by-change rather than re-diffing.
+The B4 half of this item is **resolved and needs no change**: the backend asked (F8) whether the
+client was missing `rateSpeedMasterIndex`, and the answer from this side is no — the FX-sheet chip
+resolves display via `useSpeedMasterDisplay(uuid)`, so the two `*Index` fields in `api/fxApi.ts`
+are display debris. B4 shipped with the `*Index` pair left unconditional deliberately and the
+`*Uuid` pair nulled per `timingSource`, which is what this client actually reads.
+`FS-DOCS-STALE-COMMENTS` still covers the stale `speedMasterIndex` claim.
+
+### ~~`FS-COORD-API-NORMALIZE`~~ — **landed with backend F1–F5, F8**
+**Every hard rename in the F wave was a same-change client edit** · S3 · P2 · C2 · sonnet
+
+Done, in five commits that shipped alongside their backend halves — no aliases meant a split would
+have left the desk 404ing on nearly every call:
+
+- **F1** (`1af6ef8` + `85229a7`) — the whole REST path rename: `/controlSurfaceTypes` →
+  `/control-surface-types`, `/project/{id}/stageRegions` → `/projects/{id}/stage-regions`,
+  `/project/{id}/surfaceBindings` → `/projects/{id}/surface-bindings`, `GET /project/list` →
+  `GET /projects`, `GET /fixture/list` → `GET /fixtures`, and everything under the renamed subtrees.
+  The conventions are now written down in the backend's `docs/api-conventions.md`.
+- **F2** (`05fb674` + `481e453`) — AI conversations moved under `/projects/{projectId}/…`; the four
+  callers went to `projects/current/…`.
+- **F3** (`5c59124`) — delete routes answer `204`; `deactivateProgram` gained a body it doesn't
+  read. Nothing was outstanding: `fetchBaseQuery` already no-ops an empty body.
+- **F4** (`411363b` + `a5d1853`) — `previewCueLook` is `GET` + `?cueId=`.
+- **F5** (`27323a3` + `c19aa12`) — `speedMasterListChanged` → `speedMasters.listChanged`,
+  `surfaceBindingsChanged` → `surfaceBank.bindingsChanged`, and the ten request-on-open sends
+  deleted now that every stateful family pushes its snapshot per connection.
+- **F8** (`974e6c0` + `d6c26c4`) — `fxState` is the same `EffectDto` REST returns: `phase` →
+  `currentPhase`, `targetKey` is the bare key with a sibling `propertyName`, `effectType` is the
+  registry id. It fixed a real bug on the way: Kill All's `removeFx({ fixtureKey })` cache tag was
+  built from the composite key and could never match.
+
+One consequence worth carrying to a neighbouring item: F5's connect burst narrows
+`FS-BUG-RECONNECT-RESYNC` without closing it. Eleven families now arrive unasked on every
+reconnect, so the hand-maintained tag list no longer has to cover them — but everything RTK Query
+caches over plain REST still does.
 
 ### `FS-COORD-ADMIN-GATE`
-**Re-verify the client's hand-mirrored admin gates when backend F6 lands** *(wave 3)* · S3 · P2 ·
-C1 · sonnet
-`src/navigation.ts`, `src/store/restApi.ts`, `src/hooks` (skip guards)
+**Gate Export/Import in `Projects.tsx` — backend F6 landed `60cc3b3` and this is now a live 403** ·
+S3 · **P1** · C1 · sonnet
+`src/routes/Projects.tsx`, `src/navigation.ts`, `src/store/restApi.ts`
 
-**Landed backend-side as F6** (`adminOnly {}` route-tree gating). What it actually did, which is
-narrower than this item assumed: the code-execution endpoints stayed **operator-reachable**
-(`scripts/run`, definition test, script-editor compile, AI `run_lighting_script`) — an operator is
-trusted local crew who can already do anything the desk process can — so no surface becomes a 403
-generator and the script editor needs no `skip: !isAdmin` treatment. Only `POST /project/{id}/export`
-and `POST /project/import` were newly gated, on the filesystem-path argument.
+F6 landed narrower than this item assumed, and the narrowing is good news: the code-execution
+endpoints stayed **operator-reachable** (`scripts/run`, definition test, script-editor compile, AI
+`run_lighting_script`) — an operator is trusted local crew who can already do anything the desk
+process can — so no surface becomes a 403 generator on that account and the script editor needs no
+`skip: !isAdmin` treatment. Only `POST /project/{id}/export` and `POST /project/import` were newly
+gated, on their filesystem-path argument.
 
-Client half remaining, and the first of these is a **live 403 generator** as of F6: `Projects.tsx`
-renders the Export menu item and the Import button unconditionally, so an operator sees controls
-that can now only answer 403. The component already computes `isAdmin`; hide or disable both, the
-way the file gates its other admin controls, and give the queries the `skip: !isAdmin` treatment
-`useOAuthReauthState` / `useUsersQuery` document. Then the `adminOnly` nav ids (pinned by
-`navigation.test.ts` against nothing backend-side) and the prefix list the backend doc cites in
-`restApi.ts`. The `/script-editor` → `/api/script-editor` move landed in this repo alongside F6,
-so that half is done.
+The `/script-editor` → `/api/script-editor` half **landed** in this repo as `0d2081d`, with the
+backend, because a mismatch is silent (a failed `/versions` probe drops every editor on the page to
+read-only — `FS-BUG-EDITOR-SILENT-READONLY`).
+
+What is left is the live defect: `Projects.tsx` renders the Import button (`:83-85`) and the Export
+menu item (`:256-257`) unconditionally, so an operator sees two controls that can now only answer
+403. The component already computes `isAdmin` (`:47`) and already uses it to skip an admin-only
+query (`:48`) — hide or disable both controls the same way. Then the `adminOnly` nav ids (pinned by
+`navigation.test.ts` against nothing backend-side) and the role-prefix list in `restApi.ts:15`,
+which the backend doc cites as a hand-mirror worth re-verifying now that the real gating exists.
 
 ### `FS-COORD-NEW-BROADCASTS`
-**When backend B5 adds `scriptListChanged`/`fxDefinitionListChanged`, add the client bridges** ·
-S4 · P2 · C1 · sonnet
+**Add the client bridges for `scriptListChanged` / `fxDefinitionListChanged` — backend B5 landed
+`47dcb83`** · S4 · P2 · C1 · sonnet
 
-Two new `*ListChanged` frames need client bridges + tag invalidations, or the staleness B5 fixes
-server-side stays unfixed here. Use whichever bridge pattern `FS-ARCH-BRIDGE-EVAL`'s written-down
-rule prescribes.
+Both frames are broadcast today; grep finds **no** listener in this repo, so the staleness B5 fixed
+server-side is still fully present here — a second client's script list and effect library never
+refresh. Two bridges plus tag invalidations, using whichever pattern `FS-ARCH-BRIDGE-EVAL`'s
+written-down rule prescribes. `FS-DEAD-RTKQ-HOOKS` deletes three unused FX-definition endpoints;
+decide which tags survive that before wiring the second bridge.
 
-### `FS-COORD-PING`
-**Backend D5 deletes the WS `ping` type; this client sends it** · S4 · P3 · C1 · haiku
-`src/api/internalApi.ts`
+### ~~`FS-COORD-PING`~~ — **landed with backend D5**
+**The WS `ping` keepalive** · S4 · P3 · C1 · haiku
 
-The keepalive sender (`ws.send({type: "ping"})`) goes in the same change — or D5 decides the
-backend tolerates unknown inbound types; decide, don't assume. Also from D5: `POST
-/cues/{cueId}/flatten` dies with no client caller (verified — only two prose comments reference it),
-so `FS-DOCS-STALE-COMMENTS`' CueCardEditor rewrite and CLAUDE.md's flatten paragraph must not
-present flatten as the live replacement for Make Hard if that deletion stands.
+Done in `c6ee984`, alongside backend D5 (`98ec1a2`): the `ws.send({type: "ping"})` keepalive went
+(Ktor's `pingPeriod` already covers it), together with flatten's id field and `clearAll`'s stale
+reply field name. Verified gone at HEAD.
 
-Cross-references, not new work: backend **C3** (crossfade republish at ~62 fps) is the server half
-of `FS-PERF-PROVENANCE-REFETCH` — coordinate the protocol change there, and re-measure the client
-cost after C3 before spending the C3-sized frontend effort. Backend **D4** (Look preview routes)
-deletes the endpoints whose client DTO leftovers `FS-DEAD-EXPORTS` removes. Backend **D8** covers
-what this sweep filed as the `IncludedTarget.Kind.PALETTE` backend half of
-`FS-TYPES-PALETTE-WIRE-ARMS`; **D3/D5** cover the orphan inbound WS types (`addFx`, `clearFx`,
-`unparkAll`); **H1** covers the stale `websocket-engineering.md`.
+One constraint survives this item: D5 also deleted `POST /cues/{cueId}/flatten`, so
+`FS-DOCS-STALE-COMMENTS`' `CueCardEditor` rewrite and CLAUDE.md's flatten paragraph **must not**
+present flatten as the live replacement for Make Hard. `CueCardEditor.tsx:469` still does.
 
-### Proposed additions to the backend backlog
+### `FS-COORD-PREVIEW-DEAD` *(new — created by backend D4)*
+**The Look live-preview machinery is dead code now, not merely unreachable** · S3 · P2 · C1 · sonnet
+`src/api/programmerWsApi.ts`, `src/components/programmer/ProgrammerLookStack.tsx`,
+`src/components/programmer/ProgrammerFxList.tsx`, `src/components/busking/lookPresence.ts`,
+`src/store/looks.test.ts`, `ProgrammerScopeBand`, `LookRowStoreProvider`
 
-Three backend facts this sweep verified that `backend-post-refactor-sweep.md` does not carry —
-candidates for its A/B series:
+Backend D4 (`17c5dac`) deleted `POST`/`DELETE /project/{id}/looks/preview` **and**
+`ProgrammerLayerStack.installPreview`, so `programmer.layerState` can no longer carry an
+`isPreview` layer — verified: neither symbol exists backend-side at HEAD. Every client filter on it
+is therefore unreachable rather than merely unused:
+`programmerWsApi.ts:122`'s `isPreview?: boolean`, `ProgrammerLookStack.tsx:59-60`'s filter and
+`preview` lookup, `ProgrammerFxList.tsx:35`'s filter, `lookPresence.ts:29,64`'s two guards, and the
+unfiltered-stack special-casing in `ProgrammerScopeBand` / `LookRowStoreProvider` that
+`FU-PROG-FOCUS-PREVIEW-LAYER` flagged. `store/looks.test.ts:36` still fixtures a
+`projects/1/looks/preview` write count, and `ProgrammerLookStack.test.tsx` builds three preview
+layers to assert behaviour the server can no longer produce.
+
+Read `FU-PROG-FOCUS-PREVIEW-LAYER` before deleting — the backend item checked it didn't want the
+hook kept, but the *frontend* special-casing is what that follow-up describes, so this may close it
+outright. Deleting the filters without deleting the tests leaves three green tests asserting a
+deleted protocol.
+
+### `FS-COORD-FXLIBRARY-PARAMS` *(new — created by backend D7)*
+**`GET /fx/library` now returns real parameter types and defaults, and the FX sheet has a heuristic
+that was never exercised against them** · S3 · P2 · C2 · sonnet
+`src/components/fx/EffectParameterForm.tsx`
+
+D7 (`84885df`) replaced the placeholder `"string"` / `""` / `""` triple with each parameter's real
+`type`, `defaultValue` and `description`. Same payload shape, so nothing breaks — but this form
+consumes all three, so typed controls and prefilled defaults start working on their own, for the
+first time, across all 28 built-in effects.
+
+The one place that needs eyes rather than a green build: the `double`/`float` branch
+(`EffectParameterForm.tsx:474-478`) picks its slider range from a heuristic — *"if default <= 1.0,
+treat as 0–1 ratio; otherwise 0–10"* — which until D7 always saw `""`. Walk the built-ins'
+declared doubles and confirm the two buckets are right; a parameter whose sensible range exceeds 10
+(or whose default is 0 but whose range is not 0–1) now renders an unusable slider. Fix by declaring
+the range rather than by widening the heuristic, if the backend registrations can carry one.
+
+### `FS-COORD-STRICT-ENUMS` *(new — confirm-only, from backend E4/E10)*
+**The effect-enum write sites now 400 an unrecognised value** · S4 · P3 · C1 · haiku
+
+E4 (`0ce10d9`) and E10 (`dc1e7ea`) made `blendMode` / `distribution` / `elementMode` /
+`elementFilter` strict where they enter the desk: the REST apply endpoints and look/cue write routes
+answer 400, `programmer.addLayer` / `programmer.patchLayer` answer a `programmer.error` frame, and
+the AI tool call fails. Casing and whitespace are still tolerated, so a client already sending a
+real value cannot break.
+
+The backend verified this client only sends canonical names (`BlendMode` is a string-union;
+`distribution` / `elementFilter` are literals), so this is a **confirm, not a change** — the entry
+exists so a future reader doesn't rediscover it as a bug. Two things ride on it, though: a
+`programmer.error` frame is now reachable from a bad enum, which is exactly the frame
+`FS-BUG-PROGRAMMER-ERROR-DROPPED` proves is delivered to zero subscribers; and
+`FS-TYPES-EFFECTTYPE-UNION`'s cast is the shape that could launder a non-canonical value past the
+type system.
+
+Also confirm-only from the same waves: **B3** (`39f4d7c`) added `elementMode` to `POST /fx/add`, so
+`AddEditFxSheet` can set FLAT mode at creation instead of add-then-`PUT` — worth taking if the sheet
+does the two-step today. **E10** and **B3** are both cheap riders on any FX-sheet work.
+
+### Backend halves still owed
+
+The backend sweep closed (all waves, `a4bf981`) **without** picking up the proposals this section
+raised. They are restated here as the backlog they now are; the right home is
+`../plans/followups.md` as `FU-` items, and promoting them is a decision for the desk owner rather
+than something an agent should do while landing a frontend item.
+
+Two of the original five are settled:
 
 - ~~`FS-BE-STOP-ROWSONLY`~~ — refuted at HEAD: `removeEffectsForCue` clears Layer 4
   unconditionally (`b11d66a`), and `/apply` routes through `activateCueInStack` (`dcc511f`) so the
-  stack is active and stop takes the deactivate branch anyway. Pinned by
-  `CueSlotLivenessRouteTest`.
+  stack is active and stop takes the deactivate branch anyway. Pinned by `CueSlotLivenessRouteTest`.
 - ~~`FS-BE-ACTIVATE-SHORTCIRCUIT`~~ — done, `1cdadb7`, with `FS-BUG-CUESLOT-LIVENESS`.
+
+Still owed, and each blocking a frontend item from being finished honestly:
+
 - `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
   capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
   target and `LookTogglePicker` offers pads that assert nothing. Decide whether compatibility should
-  also require row coverage; the frontend comments claiming it already does are
-  `FS-DOCS-COMPATIBLELOOKIDS`.
+  also require row coverage. Blocks `FS-DOCS-COMPATIBLELOOKIDS`, which cannot be made true from this
+  side alone.
 - `FS-BE-TEMPLATE-TOGGLE-MASK` — `ProgrammerLayerStack.toggle` has no `propertyMask` parameter and
-  `projectTemplates.kt`'s toggle route derives none while its KDoc claims the server derives the
+  `projectTemplates.kt`'s toggle route derives none, while its KDoc claims the server derives the
   family and cross-checks the echo (the echo can never disagree with itself). Backend half of
-  `FS-TYPES-TEMPLATE-TOGGLE-MASK`: add the parameter, derive the family server-side, make the KDoc
-  true.
-- `FS-BE-CUES-REPUBLISHED-FRAME` — `republishForLookEdit`/`republishForTemplateEdit` re-cook and
+  `FS-TYPES-TEMPLATE-TOGGLE-MASK`; that item is a client-side no-op without it.
+- `FS-BE-CUES-REPUBLISHED-FRAME` — `republishForLookEdit` / `republishForTemplateEdit` re-cook and
   re-transmit affected cues but emit no frame naming them, so no *other* client can refresh an
-  expanded cue's composed values (`FS-BUG-CUE-TAG-STALE`). Broadcast the `cuesRepublished` id list
-  (the REST responses already carry the same field for the acting client).
+  expanded cue's composed values. Confirmed still absent at HEAD: `cuesRepublished` exists on the
+  REST responses (`lookRepublish.kt:36`, `programmerRoutes.kt:325`, `lookRecord.kt:255`) and
+  nowhere on the broadcast bus. Backend half of `FS-BUG-CUE-TAG-STALE`.
+- `FS-BE-GROUPLIST-CHANGED` *(new)* — there is no `groupListChanged` broadcast, so nothing keeps a
+  second client's group list fresh; D3 removed the bridge that was *supposed* to and B5 added the
+  two sibling broadcasts without this one. Prerequisite for `FS-COORD-GROUPS-WS`'s deletion being a
+  cleanup rather than a silent regression.
+- `FS-BE-FORCE-FIELDS` *(new)* — `force` survives on the Record and Update request bodies, inert,
+  solely because this repo still sends it on every submit (backend D1 note 1). It is safe to delete
+  server-side **only after** `FS-COORD-CUEEDIT-RETIRE` lands here. Sequence it that way round or
+  every Record and Update 400s.
 
 And one remark, not an item: `programmerRecord.kt`'s rename-breadcrumb KDoc pattern ("Was
-`timedPresetApplications`") is what let `FS-BUG-TIMEDLAYERS-RENAME` be found quickly; the rename
-that *didn't* leave one (`layerCount`) took longer. Worth keeping as a convention in the API
-normalization wave.
+`timedPresetApplications`", still there at `:61-64`) is what let `FS-BUG-TIMEDLAYERS-RENAME` be
+found quickly; the rename that *didn't* leave one (`layerCount`) took longer, and left this repo
+carrying `presetCount` to this day. The API normalization wave kept the convention — worth keeping.
 
 ## 15. Explicitly not findings
 
@@ -2047,7 +2223,9 @@ What this sweep did and did not do, so silence is never read as a clean bill:
   absorbed into clusters; what remains is every finding that survived adversarial verification, with
   downgrades applied. Two S1s, both independently re-verified twice and re-read by hand.
 - This catalogue cites symbols, not line numbers, against `lighting-react` `b5067e5`-era `main`;
-  expect drift as items land. When an item lands, strike it through here with the commit SHA, the
+  expect drift as items land. Eight commits have landed since (`c126d62` through `d6c26c4`, mostly
+  the backend-coordinated halves in §14), and the §14 claims — but only those — were re-verified
+  against both repos' HEAD on 2026-08-29. Everything outside §14 is still as first written. When an item lands, strike it through here with the commit SHA, the
   way `backend-post-refactor-sweep.md` does.
 
 
