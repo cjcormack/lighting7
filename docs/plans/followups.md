@@ -41,6 +41,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
+| [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -1146,6 +1147,37 @@ real loss is the multi-layer row.
 
 **Trigger**: an operator reads a cue drawn from two looks and concludes neither is involved. On a
 show whose cues each layer one look, this never fires.
+
+---
+
+### `FU-FE-FX-PARAM-RANGE`
+
+**The FX sheet guesses a numeric parameter's range, because the wire carries no bounds** · Trigger ·
+frontend sweep `FS-COORD-FXLIBRARY-PARAMS`, 2026-08-29
+
+`GET /fx/library` describes each parameter with `name` / `type` / `defaultValue` / `description`
+(`FxRegistry.ParameterInfo`, filled from each `.fx.kts` file's frontmatter via `FxFileParameter`)
+and nothing else. `EffectParameterForm.ParameterInput` therefore has to invent the slider range for
+every numeric control: a `double` gets 0–1 when its default is `<= 1.0` and 0–10 otherwise, and an
+`int` gets `max(255, default * 2)`.
+
+For the 28 built-ins this is exactly right and was verified parameter by parameter when backend D7
+(`84885df`) started sending real defaults: all ten declared doubles are 0–1 ratios with defaults
+between 0.1 and 1.0, so the 0–10 arm is unreachable, and the two ints (`ColourFlicker.variation` 50,
+`FluorescentFlicker.flickerDurationMs` 800) land in usable ranges. The guess only breaks for an
+effect the built-ins don't constrain — a script-defined one registered through `registerEffect` /
+an `FX_DEFINITION` script, which may declare a double whose real range is 0–360 (rendered 0–1
+because its default is 0) or 0–1000 (rendered 0–10).
+
+The fix is to declare the bounds rather than widen the guess: add nullable `min` / `max` to
+`FxFileParameter` and `ParameterInfo`, teach `FxFileLoader.parseSimpleYaml`'s `parameters:`
+continuation branch the two extra keys, declare them on the numeric built-ins, and have
+`ParameterInput` prefer them with the present heuristic as the fallback for a definition that
+declares none. Additive on the wire and additive in canonical JSON, so no `formatVersion` change —
+but it is a backend change, which is why the sweep item that found it did not take it.
+
+**Trigger**: a script-defined effect declares a numeric parameter whose sensible range is not the
+one the heuristic picks, and the operator finds the slider unusable.
 
 ---
 

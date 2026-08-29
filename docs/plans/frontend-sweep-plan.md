@@ -112,7 +112,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-BUG-CUE-TAG-STALE` | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
 | `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
-| `FS-COORD-FXLIBRARY-PARAMS` | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
+| ~~`FS-COORD-FXLIBRARY-PARAMS`~~ **done** | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
 | `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
 | `FS-DEAD-CURRENTCUESTATE` | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
@@ -2142,9 +2142,9 @@ rather than from the row. Three stale doc claims the deletion falsified went too
 that exists nowhere), and `LookRowStore` + CLAUDE.md both offering `LookPreviewRequest` as the
 smooth-preview escape hatch a layer-scope drag doesn't have.
 
-### `FS-COORD-FXLIBRARY-PARAMS` *(new — created by backend D7)*
+### ~~`FS-COORD-FXLIBRARY-PARAMS`~~ — **landed** *(new — created by backend D7)*
 **`GET /fx/library` now returns real parameter types and defaults, and the FX sheet has a heuristic
-that was never exercised against them** · S3 · P2 · C2 · sonnet
+that was never exercised against them**, `1e3c33a` · S3 · P2 · C2 · sonnet
 `src/components/fx/EffectParameterForm.tsx`
 
 D7 (`84885df`) replaced the placeholder `"string"` / `""` / `""` triple with each parameter's real
@@ -2158,6 +2158,33 @@ treat as 0–1 ratio; otherwise 0–10"* — which until D7 always saw `""`. Wal
 declared doubles and confirm the two buckets are right; a parameter whose sensible range exceeds 10
 (or whose default is 0 but whose range is not 0–1) now renders an unusable slider. Fix by declaring
 the range rather than by widening the heuristic, if the backend registrations can carry one.
+
+**Landed as an `int` fix and a confirmation, not the double fix the item expected.** The walk found
+the double heuristic *correct for every built-in*: all ten declared doubles are 0–1 ratios with
+defaults in [0.1, 1.0] (`ColourCycle.fadeRatio`, `ColourStrobe.onRatio`, `RainbowCycle.saturation`
+and `brightness`, `CandleFlicker.smoothing`, `FluorescentFlicker.flickerSpeed`, `Pulse.attackRatio`
+and `holdRatio`, `SquareWave.dutyCycle`, `Strobe.onRatio`), so the 0–10 arm is unreachable from the
+built-in library and no unusable double slider exists at HEAD.
+
+The branch D7 *did* break is the neighbouring `int` one, which derived its max from the live value
+(`Math.max(255, numVal * 2)`). While `defaultValue` was `""` that always read 0 and the range was a
+stable 0–255; with real defaults, `FluorescentFlicker.flickerDurationMs` opens at 0–1600 and then
+ratchets to 0–3200 the moment the handle reaches the right edge, which it therefore never can.
+
+**Grew in the landing: the int control gained a typable value.** The first fix derived the max from
+the declared default and widened it by the live value; review showed that merely relocates the
+defect, because `max === numVal` for anything above the derived range pins the thumb at 100% — the
+value can then fall but never rise — while dropping the ratchet caps a 0–5000 parameter with a small
+default at 255 with no way to reach the rest. Both failures are the same one: with no declared
+bounds on the wire, a guessed range was the branch's *only* input. So the max is now a pure function
+of the declared default (`Math.max(255, default * 2)`, never moves), the slider clamps for display
+without writing back, and the value readout in the header row became an `Input` — the pattern the
+wall-clock `Cycle length` control already uses — so anything outside the guess is still reachable.
+
+The plan's preferred fix — declare the range on the wire — was **not** taken, because it is a
+backend change and the built-ins gave it nothing to fix. It is filed as `FU-FE-FX-PARAM-RANGE` in
+`followups.md`, triggered by a script-defined effect whose numeric range the heuristic guesses
+wrong; that is the only case left where it can.
 
 ### `FS-COORD-STRICT-ENUMS` *(new — confirm-only, from backend E4/E10)*
 **The effect-enum write sites now 400 an unrecognised value** · S4 · P3 · C1 · haiku
