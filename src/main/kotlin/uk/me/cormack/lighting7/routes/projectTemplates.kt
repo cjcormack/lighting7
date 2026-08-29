@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
@@ -113,43 +114,14 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     // POST /projects/{id}/templates
     post<ProjectTemplatesResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
-            val request = call.receive<TemplateInput>()
-            val name = request.name?.trim().orEmpty()
-            if (name.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Template name must not be blank"))
-                return@withCurrentProject
+            when (val result = performTemplateCreate(state, project, call.receive())) {
+                is TemplateCreateResult.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
+                is TemplateCreateResult.Duplicate ->
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(result.message))
+                is TemplateCreateResult.Ok ->
+                    call.respond(HttpStatusCode.Created, result.template)
             }
-            val rows = request.rows ?: emptyList()
-            validateTemplateRows(rows)?.let { problem ->
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
-                return@withCurrentProject
-            }
-            val result = transaction(state.database) {
-                val duplicate = DaoTemplate.find {
-                    (DaoTemplates.project eq project.id) and (DaoTemplates.name eq name)
-                }.firstOrNull()
-                if (duplicate != null) return@transaction null
-                val template = DaoTemplate.new {
-                    this.project = project
-                    this.name = name
-                    this.notes = request.notes
-                    this.sortOrder = request.sortOrder
-                        ?: ((DaoTemplate.find { DaoTemplates.project eq project.id }
-                            .maxOfOrNull { it.sortOrder } ?: -1) + 1)
-                    this.fadeDurationMs = request.fadeDurationMs
-                }
-                createTemplateRows(template, rows)
-                template.toDto(templateUsage(template.id.value))
-            }
-            if (result == null) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ErrorResponse("A template named '$name' already exists in this project"),
-                )
-                return@withCurrentProject
-            }
-            state.show.fixtures.templateListChanged()
-            call.respond(HttpStatusCode.Created, result)
         }
     }
 
@@ -522,6 +494,55 @@ private sealed interface TemplateDeleteOutcome {
  *  4. **No group rows.** A template names no targets of its own; the only reason a row names a
  *     fixture is that its value is specific to that head, which a group cannot be.
  */
+internal sealed interface TemplateCreateResult {
+    data class Ok(val template: TemplateDto) : TemplateCreateResult
+    data class Invalid(val message: String) : TemplateCreateResult
+    data class Duplicate(val message: String) : TemplateCreateResult
+}
+
+/**
+ * Create a template — the shared body behind `POST /templates` and the AI surface's
+ * `create_template`.
+ *
+ * Shared rather than copied because the validation *is* the feature: [validateTemplateRows]
+ * enforces one attribute family per template and rejects slotted properties, and a second caller
+ * that skipped it could write a template no consumer can resolve.
+ */
+internal fun performTemplateCreate(
+    state: State,
+    project: DaoProject,
+    input: TemplateInput,
+): TemplateCreateResult {
+    val name = input.name?.trim().orEmpty()
+    if (name.isEmpty()) return TemplateCreateResult.Invalid("Template name must not be blank")
+
+    val rows = input.rows ?: emptyList()
+    validateTemplateRows(rows)?.let { return TemplateCreateResult.Invalid(it) }
+
+    val created = transaction(state.database) {
+        val duplicate = DaoTemplate.find {
+            (DaoTemplates.project eq project.id) and (DaoTemplates.name eq name)
+        }.firstOrNull()
+        if (duplicate != null) return@transaction null
+        val template = DaoTemplate.new {
+            this.project = project
+            this.name = name
+            this.notes = input.notes
+            this.sortOrder = input.sortOrder
+                ?: ((DaoTemplate.find { DaoTemplates.project eq project.id }
+                    .maxOfOrNull { it.sortOrder } ?: -1) + 1)
+            this.fadeDurationMs = input.fadeDurationMs
+        }
+        createTemplateRows(template, rows)
+        template.toDto(templateUsage(template.id.value))
+    } ?: return TemplateCreateResult.Duplicate(
+        "A template named '$name' already exists in this project",
+    )
+
+    state.show.fixtures.templateListChanged()
+    return TemplateCreateResult.Ok(created)
+}
+
 internal fun validateTemplateRows(rows: List<TemplateRowDto>): String? {
     if (rows.isEmpty()) return "A template must hold at least one value"
     val families = LinkedHashSet<PropertyMaskGroup>()

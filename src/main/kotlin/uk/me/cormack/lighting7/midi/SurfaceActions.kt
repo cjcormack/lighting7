@@ -153,11 +153,7 @@ class DefaultSurfaceActions(
     @OptIn(DelicateCoroutinesApi::class)
     override fun cueStackGo(stackId: Int) {
         try {
-            val result = if (cueStackManager.isStackActive(stackId)) {
-                cueStackManager.advanceStack(state, stackId, CueStackManager.AdvanceDirection.FORWARD, GlobalScope)
-            } else {
-                cueStackManager.activateAtFirstCue(state, stackId, GlobalScope)
-            }
+            val result = cueStackManager.go(state, stackId, GlobalScope)
             if (result != null) state.show.fixtures.cueStackListChanged()
         } catch (e: Exception) {
             logger.warn("Surface GO failed for stack $stackId: ${e.message}")

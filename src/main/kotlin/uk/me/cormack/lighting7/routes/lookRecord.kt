@@ -476,12 +476,12 @@ private fun resolveLookTarget(
  * MERGE rather than replace, so rows outside the current selection or mask survive — Update never
  * deletes, which is `Record REMOVE`'s job.
  */
-internal suspend fun RoutingContext.updateIncludedLook(
+internal fun updateIncludedLook(
     state: State,
     project: DaoProject,
     includeTarget: IncludedTarget,
     mask: Set<PropertyMaskGroup>?,
-) {
+): UpdateCoreResult {
     val lookId = includeTarget.lookId!!
     val located = transaction(state.database) {
         DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.name
@@ -490,15 +490,10 @@ internal suspend fun RoutingContext.updateIncludedLook(
         // Stale target: the Look was deleted since Include. Clear it so the indicator stops
         // offering it, and say so rather than silently writing nothing.
         state.show.programmerStore.clearIncludeTargetForLook(lookId)
-        call.respond(
-            HttpStatusCode.Conflict,
-            ProgrammerConflictResponse(
-                "The look that was included no longer exists in this project.",
-                CODE_INCLUDE_TARGET_GONE,
-                lookId,
-            ),
+        return UpdateCoreResult.IncludeTargetGone(
+            "The look that was included no longer exists in this project.",
+            lookId,
         )
-        return
     }
 
     val (changed, skips) = changedSinceInclude(state, mask)
@@ -517,18 +512,14 @@ internal suspend fun RoutingContext.updateIncludedLook(
         located, outcome.written, if (outcome.written == 1) "" else "s",
         republish.programmerKeysRefreshed, republish.cuesRepublished.size,
     )
-    call.respond(
-        ProgrammerUpdateResponse(
-            applied = outcome.written > 0,
-            mode = "A",
-            lookResult = ProgrammerLookUpdateResult(
-                lookId = lookId,
-                lookName = located,
-                rowsWritten = outcome.written,
-                programmerKeysRefreshed = republish.programmerKeysRefreshed,
-                cuesRepublished = republish.cuesRepublished,
-            ),
-            skipped = skips.map { it.toDto() },
-        )
+    return UpdateCoreResult.LookUpdated(
+        ProgrammerLookUpdateResult(
+            lookId = lookId,
+            lookName = located,
+            rowsWritten = outcome.written,
+            programmerKeysRefreshed = republish.programmerKeysRefreshed,
+            cuesRepublished = republish.cuesRepublished,
+        ),
+        skipped = skips,
     )
 }

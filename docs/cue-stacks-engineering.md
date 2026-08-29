@@ -438,11 +438,18 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 
 ## Lux AI Integration
 
-Five tools:
+Seven tools:
 - `create_cue_stack` — Create with name, loop
-- `activate_cue_stack` — Activate (optionally at specific cue)
+- `activate_cue_stack` — Activate (optionally at specific cue). With no cue named it routes to
+  `activateAtFirstCue`, so it honours an armed standby exactly as the REST route and the surface do
 - `deactivate_cue_stack` — Deactivate
-- `advance_cue_stack` — Advance forward/backward
+- `go_cue_stack` — GO: fire whatever is on deck, starting the stack if it is stopped. It calls
+  `CueStackManager.go`, which is also what `SurfaceActions.cueStackGo` calls — the active-or-not
+  branch is GO's whole meaning, so the model, the tablet and the physical GO button press one
+  button rather than three implementations of it
+- `advance_cue_stack` — Advance forward/backward; the model is pointed at `go_cue_stack` for FORWARD
+  and this for BACKWARD
+- `set_standby` — Arm (or, with no `cueId`, disarm) the cue the next GO fires, without moving a light
 - `add_cue_to_stack` — Move/add a cue into a stack
 
 The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info, and `cue_run` alongside it for the run state of every stack that has one — the armed-or-positional `nextCueId`, `nextIsArmed`, and the live fade. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.

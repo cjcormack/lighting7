@@ -40,6 +40,12 @@ class AiTools(private val state: State) {
         deactivateCueStackTool,
         advanceCueStackTool,
         addCueToStackTool,
+        setStandbyTool,
+        goCueStackTool,
+        recordCueTool,
+        includeIntoProgrammerTool,
+        updateFromProgrammerTool,
+        createTemplateTool,
     )
 
     /**
@@ -63,6 +69,12 @@ class AiTools(private val state: State) {
                 "deactivate_cue_stack" -> executeDeactivateCueStack(input)
                 "advance_cue_stack" -> executeAdvanceCueStack(input)
                 "add_cue_to_stack" -> executeAddCueToStack(input)
+                "set_standby" -> executeSetStandby(input)
+                "go_cue_stack" -> executeGoCueStack(input)
+                "record_cue" -> executeRecordCue(input)
+                "include_into_programmer" -> executeInclude(input)
+                "update_from_programmer" -> executeUpdate(input)
+                "create_template" -> executeCreateTemplate(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -719,13 +731,18 @@ class AiTools(private val state: State) {
         val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
 
         val manager = state.show.cueStackManager
-        val targetCueId = cueId ?: transaction(state.database) {
-            DaoCue.find { DaoCues.cueStack eq stackId }
-                .orderBy(DaoCues.sortOrder to SortOrder.ASC)
-                .firstOrNull()?.id?.value
-        } ?: return errorResult("Stack $stackId has no cues")
-
-        val result = manager.activateCueInStack(state, stackId, targetCueId)
+        // No cue named: `activateAtFirstCue`, not a hand-rolled "first row" query. It skips
+        // marker cues and fires an armed standby when there is one, so arming cue 5 pre-show and
+        // then activating starts at 5 — which the local query silently got wrong.
+        val result = if (cueId != null) {
+            manager.activateCueInStack(state, stackId, cueId)
+        } else {
+            try {
+                manager.activateAtFirstCue(state, stackId)
+            } catch (e: IllegalArgumentException) {
+                return errorResult(e.message ?: "Stack $stackId has no cues")
+            }
+        }
 
         return ToolExecutionResult(
             success = true,
@@ -767,16 +784,9 @@ class AiTools(private val state: State) {
         val manager = state.show.cueStackManager
         val result = manager.advanceStack(state, stackId, direction)
 
-        if (result == null) {
-            return ToolExecutionResult(
-                success = true,
-                description = "Stack $stackId reached end — deactivated (not looping)",
-                result = buildJsonObject {
-                    put("stackId", stackId)
-                    put("deactivated", true)
-                }.toString()
-            )
-        }
+        // Not "reached the end": `advanceStack` returns null only for a stack with no STANDARD
+        // cues, and it deactivates nothing — at a boundary it stays on the live cue.
+        if (result == null) return errorResult("Stack $stackId has no standard cues to fire")
 
         return ToolExecutionResult(
             success = true,
@@ -786,6 +796,98 @@ class AiTools(private val state: State) {
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
                 put("effectCount", result.effectCount)
+            }.toString()
+        )
+    }
+
+    /**
+     * Arm (or disarm) the cue a stack's next GO fires.
+     *
+     * The arming is deliberately separate from firing it: "stand by cue 5" is a rehearsal
+     * gesture that must not move a light, and the model has to be able to make it before the
+     * operator — or [executeGoCueStack] — presses GO.
+     */
+    private fun executeSetStandby(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+
+        val manager = state.show.cueStackManager
+        val runState = manager.runState
+        try {
+            if (cueId != null) runState.setStandby(state, stackId, cueId) else runState.clearStandby(state, stackId)
+        } catch (e: IllegalArgumentException) {
+            return errorResult(e.message ?: "Failed to change the standby on stack $stackId")
+        }
+
+        // The effective next, not the arming, is what the model needs back: disarming leaves the
+        // positional successor on deck, and that is the cue the next GO actually fires.
+        val (nextCueId, nextCueName) = transaction(state.database) {
+            val next = runState.effectiveNextCueId(state, stackId)
+            next to next?.let { DaoCue.findById(it)?.name }
+        }
+
+        return ToolExecutionResult(
+            success = true,
+            description = if (cueId != null) {
+                // Arming the cue that is already live is not an error, but it does not do what
+                // "stand by cue 5" sounds like: `nextCueIdFrom` ignores a standby equal to the
+                // active cue, so the next GO advances past it. Say so rather than promising a
+                // fire the run state then contradicts.
+                if (cueId == manager.getActiveCueId(stackId)) {
+                    "Cue $cueId is already live on stack $stackId — the next GO advances to " +
+                        (nextCueName?.let { "'$it' (id=$nextCueId)" } ?: "nothing")
+                } else {
+                    "Armed cue $cueId on stack $stackId — the next GO fires it"
+                }
+            } else {
+                "Disarmed stack $stackId — the next GO fires " +
+                    (nextCueName?.let { "'$it' (id=$nextCueId)" } ?: "nothing")
+            },
+            result = buildJsonObject {
+                put("stackId", stackId)
+                manager.getActiveCueId(stackId)?.let { put("activeCueId", it) }
+                cueId?.let { put("standbyCueId", it) }
+                nextCueId?.let { put("nextCueId", it) }
+                nextCueName?.let { put("nextCueName", it) }
+            }.toString()
+        )
+    }
+
+    /**
+     * Press GO: fire whatever is on deck, starting the stack if it is stopped.
+     *
+     * The branch itself lives in [CueStackManager.go], which `SurfaceActions.cueStackGo` also
+     * calls — the model, the tablet and the physical GO button press one button, not three
+     * implementations of it.
+     */
+    private fun executeGoCueStack(input: JsonObject): ToolExecutionResult {
+        val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
+
+        val manager = state.show.cueStackManager
+        val wasActive = manager.isStackActive(stackId)
+        val result = try {
+            manager.go(state, stackId)
+        } catch (e: IllegalArgumentException) {
+            return errorResult(e.message ?: "GO failed on stack $stackId")
+        }
+
+        // Null means the stack holds no STANDARD cues — see [CueStackManager.go]. It is not
+        // "reached the end", and nothing has been deactivated.
+        if (result == null) return errorResult("Stack $stackId has no standard cues to fire")
+
+        state.show.fixtures.cueStackListChanged()
+
+        return ToolExecutionResult(
+            success = true,
+            description = "GO on stack $stackId — " +
+                (if (wasActive) "fired" else "started at") +
+                " cue '${result.cueName}' (${result.effectCount} effects)",
+            result = buildJsonObject {
+                put("stackId", result.stackId)
+                put("cueId", result.cueId)
+                put("cueName", result.cueName)
+                put("effectCount", result.effectCount)
+                put("started", !wasActive)
             }.toString()
         )
     }
@@ -828,6 +930,235 @@ class AiTools(private val state: State) {
                 put("cueName", cueName)
             }.toString()
         )
+    }
+
+    // ─── Programmer: Record / Include / Update ─────────────────────────────
+    //
+    // All four go through the same `perform*` cores the REST routes call — see
+    // `routes/programmerSurface.kt`. These executors only translate JSON in and JSON out; the
+    // decisions about which rows get overwritten are made once, in one place.
+
+    private fun executeRecordCue(input: JsonObject): ToolExecutionResult {
+        val mode = parseEnumOrNull<RecordMode>(input["mode"]?.jsonPrimitive?.content ?: "CREATE")
+            ?: return errorResult("Unknown record mode '${input["mode"]?.jsonPrimitive?.content}'")
+        val source = parseEnumOrNull<RecordSource>(input["source"]?.jsonPrimitive?.content ?: "TOUCHED")
+            ?: return errorResult("Unknown record source '${input["source"]?.jsonPrimitive?.content}'")
+        val cueType = parseEnumOrNull<CueType>(input["cueType"]?.jsonPrimitive?.content ?: "STANDARD")
+            ?: return errorResult("Unknown cue type '${input["cueType"]?.jsonPrimitive?.content}'")
+        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+
+        val result = performProgrammerRecord(
+            state,
+            state.projectManager.currentProject,
+            mode = mode,
+            source = source,
+            cueType = cueType,
+            cueStackId = input["cueStackId"]?.jsonPrimitive?.intOrNull,
+            cueId = input["cueId"]?.jsonPrimitive?.intOrNull,
+            mask = mask,
+            includeFx = input["includeFx"]?.jsonPrimitive?.booleanOrNull ?: true,
+            name = input["name"]?.jsonPrimitive?.contentOrNull,
+            cueNumber = input["cueNumber"]?.jsonPrimitive?.contentOrNull,
+            sortOrder = input["sortOrder"]?.jsonPrimitive?.intOrNull,
+            targets = input.targetList("targets").getOrElse { return errorResult(it.message ?: "Bad targets") },
+        )
+
+        return when (result) {
+            is RecordCoreResult.Failure -> errorResult(result.message)
+            is RecordCoreResult.Ok -> ToolExecutionResult(
+                success = true,
+                description = (if (result.outcome.created) "Recorded new cue" else "Recorded into cue") +
+                    " '${result.details.name}' (id=${result.outcome.cueId}) — " +
+                    "${result.outcome.assignmentsWritten} value(s), ${result.outcome.fxWritten} effect(s)",
+                result = buildJsonObject {
+                    put("cueId", result.outcome.cueId)
+                    put("cueName", result.details.name)
+                    put("created", result.outcome.created)
+                    result.stackId?.let { put("cueStackId", it) }
+                    put("assignmentsWritten", result.outcome.assignmentsWritten)
+                    put("assignmentsRemoved", result.outcome.assignmentsRemoved)
+                    put("fxWritten", result.outcome.fxWritten)
+                    put("republishedLive", result.republishedLive)
+                    putSkips(result.skipped)
+                    putStrings("warnings", result.outcome.warnings)
+                }.toString()
+            )
+        }
+    }
+
+    private fun executeInclude(input: JsonObject): ToolExecutionResult {
+        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+
+        val result = performProgrammerInclude(
+            state,
+            state.projectManager.currentProject,
+            cueId = input["cueId"]?.jsonPrimitive?.intOrNull,
+            lookId = input["lookId"]?.jsonPrimitive?.intOrNull,
+            mask = mask,
+            fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull ?: 0L,
+        )
+
+        return when (result) {
+            is IncludeCoreResult.Failure -> errorResult(result.message)
+            is IncludeCoreResult.Cue -> ToolExecutionResult(
+                success = true,
+                description = "Included cue '${result.cueData.cueName}' — ${result.outcome.entriesWritten} " +
+                    "value(s) and ${result.outcome.fxSpawned} effect(s) staged in the programmer",
+                result = buildJsonObject {
+                    put("kind", "CUE")
+                    put("cueId", result.cueData.cueId)
+                    put("name", result.cueData.cueName)
+                    put("entriesWritten", result.outcome.entriesWritten)
+                    put("fxSpawned", result.outcome.fxSpawned)
+                    putStrings("fixtureKeys", result.outcome.fixtureKeys)
+                    putSkips(result.outcome.skipped)
+                    putStrings("warnings", result.outcome.warnings)
+                }.toString()
+            )
+            is IncludeCoreResult.Look -> ToolExecutionResult(
+                success = true,
+                description = "Included look '${result.lookName}' — ${result.outcome.entriesWritten} " +
+                    "value(s) staged in the programmer",
+                result = buildJsonObject {
+                    put("kind", "LOOK")
+                    put("lookId", result.lookId)
+                    put("name", result.lookName)
+                    put("entriesWritten", result.outcome.entriesWritten)
+                    putStrings("fixtureKeys", result.outcome.fixtureKeys)
+                    putSkips(result.outcome.skipped)
+                    putStrings("warnings", lookIncludeWarnings(result.lookName, result.outcome))
+                }.toString()
+            )
+        }
+    }
+
+    private fun executeUpdate(input: JsonObject): ToolExecutionResult {
+        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+        val targets = input["targets"]?.jsonArray?.map { it.jsonPrimitive.int }
+
+        val result = performProgrammerUpdate(
+            state,
+            state.projectManager.currentProject,
+            targets = targets,
+            mask = mask,
+            preview = input["preview"]?.jsonPrimitive?.booleanOrNull ?: false,
+            includeFx = input["includeFx"]?.jsonPrimitive?.booleanOrNull ?: true,
+        )
+
+        return when (result) {
+            is UpdateCoreResult.Failure -> errorResult(result.message)
+            // Not an error the model can retry its way out of, but not a write either: say what
+            // happened and let it re-include rather than reporting a successful update of nothing.
+            is UpdateCoreResult.IncludeTargetGone -> errorResult(result.message)
+            is UpdateCoreResult.Checklist -> ToolExecutionResult(
+                success = true,
+                description = "Nothing written — the programmer is sitting on " +
+                    "${result.checklist.totalKeys} key(s) across ${result.checklist.stacks.size} stack(s)",
+                result = buildJsonObject {
+                    put("mode", "CHECKLIST")
+                    put("applied", false)
+                    put("totalKeys", result.checklist.totalKeys)
+                    put("cues", buildJsonArray {
+                        for (stack in result.checklist.stacks) {
+                            for (cue in stack.cues) {
+                                addJsonObject {
+                                    put("cueId", cue.cueId)
+                                    put("cueName", cue.cueName)
+                                    stack.cueStackName?.let { put("stackName", it) }
+                                    put("isActive", cue.isActive)
+                                    put("keyCount", cue.keyCount)
+                                }
+                            }
+                        }
+                    })
+                    put("unattributedKeys", result.checklist.unattributed.size)
+                }.toString()
+            )
+            is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
+                success = true,
+                description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s) written",
+                result = buildJsonObject {
+                    put("mode", "A")
+                    put("applied", result.result.rowsWritten > 0)
+                    put("lookId", result.result.lookId)
+                    put("lookName", result.result.lookName)
+                    put("rowsWritten", result.result.rowsWritten)
+                    putSkips(result.skipped)
+                }.toString()
+            )
+            is UpdateCoreResult.CuesUpdated -> ToolExecutionResult(
+                success = true,
+                description = if (result.results.isEmpty()) {
+                    "Nothing written"
+                } else {
+                    "Updated " + result.results.joinToString { "'${it.cueName}' (${it.assignmentsWritten} value(s))" }
+                },
+                result = buildJsonObject {
+                    put("mode", result.mode)
+                    put("applied", result.results.isNotEmpty())
+                    put("results", buildJsonArray {
+                        for (r in result.results) {
+                            addJsonObject {
+                                put("cueId", r.cueId)
+                                put("cueName", r.cueName)
+                                put("assignmentsWritten", r.assignmentsWritten)
+                                put("fxWritten", r.fxWritten)
+                                put("republishedLive", r.republishedLive)
+                            }
+                        }
+                    })
+                    putSkips(result.skipped)
+                    putStrings("warnings", result.warnings)
+                }.toString()
+            )
+        }
+    }
+
+    private fun executeCreateTemplate(input: JsonObject): ToolExecutionResult {
+        val rows = input["rows"]?.jsonArray?.map { row ->
+            val obj = row.jsonObject
+            val targetKey = obj["targetKey"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            TemplateRowDto(
+                // A row with no fixture key is *deferred*, which is the generic template an
+                // effect can reference by uuid — so the absent key is the meaningful default,
+                // not a missing field.
+                targetType = if (targetKey == null) DEFERRED_TARGET_TYPE else TargetRef.Fixture.TYPE,
+                targetKey = targetKey.orEmpty(),
+                propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull
+                    ?: return errorResult("A template row is missing 'propertyName'"),
+                value = obj["value"]?.jsonPrimitive?.contentOrNull
+                    ?: return errorResult("A template row is missing 'value'"),
+            )
+        } ?: return errorResult("Missing 'rows'")
+
+        val result = performTemplateCreate(
+            state,
+            state.projectManager.currentProject,
+            TemplateInput(
+                name = input["name"]?.jsonPrimitive?.contentOrNull,
+                notes = input["notes"]?.jsonPrimitive?.contentOrNull,
+                fadeDurationMs = input["fadeDurationMs"]?.jsonPrimitive?.longOrNull,
+                rows = rows,
+            ),
+        )
+
+        return when (result) {
+            is TemplateCreateResult.Invalid -> errorResult(result.message)
+            is TemplateCreateResult.Duplicate -> errorResult(result.message)
+            is TemplateCreateResult.Ok -> ToolExecutionResult(
+                success = true,
+                description = "Created template '${result.template.name}' " +
+                    "(${result.template.rows.size} row(s)) — reference it as tmpl:${result.template.uuid}",
+                result = buildJsonObject {
+                    put("templateId", result.template.id)
+                    put("uuid", result.template.uuid)
+                    put("name", result.template.name)
+                    put("family", result.template.family)
+                    put("isGeneric", result.template.isGeneric)
+                    put("rowCount", result.template.rows.size)
+                }.toString()
+            )
+        }
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────
@@ -922,6 +1253,57 @@ class AiTools(private val state: State) {
         val known = state.show.fxEngine.speedMasters.masterStates()
             .joinToString(", ") { "${it.name}=${it.uuid ?: "(unsaved)"}" }
         return "Unknown speed master '$raw'. Known masters: $known"
+    }
+
+    /**
+     * The parsed `mask` argument, or null when it names a family that does not exist.
+     *
+     * Doubly-wrapped on purpose: the outer null is "reject this call", the inner one is the
+     * legitimate "no mask at all" that [parseMaskGroups] returns for an absent or complete mask.
+     */
+    private fun JsonObject.maskGroups(): Result<Set<PropertyMaskGroup>?> = runCatching {
+        parseMaskGroups(this["mask"]?.jsonArray?.map { it.jsonPrimitive.content })
+    }
+
+    /**
+     * The target list under [key], or a failure naming the field a model left out — the same
+     * "say which field is missing" treatment every other required argument here gets, rather
+     * than an NPE surfacing through the dispatcher's generic handler.
+     */
+    private fun JsonObject.targetList(key: String): Result<List<CueTargetDto>?> = runCatching {
+        this[key]?.jsonArray?.map {
+            val obj = it.jsonObject
+            CueTargetDto(
+                type = obj["type"]?.jsonPrimitive?.contentOrNull
+                    ?: throw IllegalArgumentException("A '$key' entry is missing 'type'"),
+                key = obj["key"]?.jsonPrimitive?.contentOrNull
+                    ?: throw IllegalArgumentException("A '$key' entry is missing 'key'"),
+            )
+        }
+    }
+
+    /** Skips and warnings are omitted when empty — an empty array is noise in a tool result. */
+    private fun JsonObjectBuilder.putSkips(skips: List<RecordSkip>) {
+        if (skips.isEmpty()) return
+        put("skipped", buildJsonArray {
+            // Through `toDto()`, so a skip reads the same here as in the REST response and picks
+            // up any field `ProgrammerSkipDto` gains — `universe` and `channel` included, which a
+            // hand-picked mapping was already dropping.
+            for (dto in skips.map { it.toDto() }) {
+                addJsonObject {
+                    dto.targetKey?.let { put("targetKey", it) }
+                    dto.propertyName?.let { put("propertyName", it) }
+                    dto.universe?.let { put("universe", it) }
+                    dto.channel?.let { put("channel", it) }
+                    put("reason", dto.reason)
+                }
+            }
+        })
+    }
+
+    private fun JsonObjectBuilder.putStrings(key: String, values: List<String>) {
+        if (values.isEmpty()) return
+        put(key, buildJsonArray { values.forEach { add(it) } })
     }
 
     private fun errorResult(message: String) = ToolExecutionResult(

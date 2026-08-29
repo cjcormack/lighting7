@@ -7,15 +7,9 @@ import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.RoutingContext
 import kotlinx.serialization.Serializable
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.IncludedTarget
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
-import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueStack
-import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.plugins.IncludedTargetDto
 import uk.me.cormack.lighting7.plugins.includedTargetDto
 import uk.me.cormack.lighting7.state.State
@@ -135,100 +129,54 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
 
-    if (mode == RecordMode.CREATE && request.cueStackId == null) {
-        return call.respond(HttpStatusCode.BadRequest, ErrorResponse("CREATE requires cueStackId"))
+    // Ahead of `withCurrentProject`, where this check has always run: a malformed request should
+    // report itself rather than the project mismatch. `performProgrammerRecord` re-runs it.
+    recordShapeProblem(mode, request.cueStackId, request.cueId)?.let {
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
-    if (mode != RecordMode.CREATE && request.cueId == null) {
-        return call.respond(
-            HttpStatusCode.BadRequest,
-            ErrorResponse("${mode.name} requires cueId"),
-        )
-    }
-
-    // Expand the selection outside the transaction too — it reads the patch, not the DB.
-    val scope = request.targets?.let { expandTargetsToFixtureKeys(state, it) }
-    if (request.targets != null && scope!!.isEmpty()) {
-        return call.respond(
-            HttpStatusCode.BadRequest,
-            ErrorResponse("None of the requested targets resolve to a fixture"),
-        )
-    }
-
-    // Read the programmer outside the transaction: it touches the engine and the fixture patch,
-    // neither of which should be held under a DB lock.
-    val recording = collectProgrammerRecording(state, source, mask, request.includeFx, scope)
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot record into project '${p.name}' — only the current project can be modified"
     }) { project ->
-        data class Result(val outcome: CueWriteOutcome, val details: CueDetails, val stackId: Int?)
+        when (
+            val result = performProgrammerRecord(
+                state, project,
+                mode = mode,
+                source = source,
+                cueType = cueType,
+                cueStackId = request.cueStackId,
+                cueId = request.cueId,
+                mask = mask,
+                includeFx = request.includeFx,
+                name = request.name,
+                cueNumber = request.cueNumber,
+                sortOrder = request.sortOrder,
+                targets = request.targets,
+            )
+        ) {
+            is RecordCoreResult.Failure -> call.respond(
+                if (result.notFound) HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                ErrorResponse(result.message),
+            )
 
-        val result = transaction(state.database) {
-            if (mode == RecordMode.CREATE) {
-                val stack = DaoCueStack.findById(request.cueStackId!!)
-                    ?: return@transaction null to "Cue stack not found"
-                if (stack.project.id != project.id) {
-                    return@transaction null to "Cue stack belongs to a different project"
-                }
-                if (stack.type == CueStackType.SEPARATOR.name) {
-                    return@transaction null to "Cannot record into a separator row"
-                }
-                val outcome = createCueFromRecording(
-                    project, stack, recording,
-                    name = request.name?.takeIf { it.isNotBlank() } ?: defaultRecordedCueName(stack),
-                    cueNumber = request.cueNumber?.takeIf { it.isNotBlank() },
-                    sortOrder = request.sortOrder,
-                    cueType = cueType,
-                )
-                val cue = DaoCue.findById(outcome.cueId)!!
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures), stack.id.value) to null
-            } else {
-                val cue = DaoCue.findById(request.cueId!!)
-                    ?: return@transaction null to "Cue not found"
-                if (cue.project.id != project.id) {
-                    return@transaction null to "Cue belongs to a different project"
-                }
-                val outcome = writeRecordingIntoCue(state, cue, recording, mode, mask, scope)
-                Result(outcome, cue.toCueDetails(true, state.show.fixtures), cue.cueStack.id.value) to null
-            }
+            is RecordCoreResult.Ok -> call.respond(
+                if (result.outcome.created) HttpStatusCode.Created else HttpStatusCode.OK,
+                ProgrammerRecordResponse(
+                    cue = result.details,
+                    created = result.outcome.created,
+                    assignmentsWritten = result.outcome.assignmentsWritten,
+                    assignmentsRemoved = result.outcome.assignmentsRemoved,
+                    groupRowsEmitted = result.outcome.groupRowsEmitted,
+                    fxWritten = result.outcome.fxWritten,
+                    preserved = result.outcome.preserved,
+                    republishedLive = result.republishedLive,
+                    skipped = result.skipped.map { it.toDto() },
+                    warnings = result.outcome.warnings,
+                ),
+            )
         }
-
-        val (value, error) = result
-        if (value == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse(error ?: "Cue not found"))
-            return@withCurrentProject
-        }
-
-        val republished = republishCueIfLive(state, value.outcome.cueId, value.stackId)
-
-        // Record-then-tweak-then-Update is the obvious next gesture, so point the include
-        // target at what we just wrote.
-        state.show.programmerStore.lastIncludedTarget =
-            uk.me.cormack.lighting7.fx.IncludedTarget.cue(value.outcome.cueId, value.stackId)
-
-        state.show.fixtures.cueListChanged()
-        if (value.outcome.created) state.show.fixtures.cueStackListChanged()
-
-        call.respond(
-            if (value.outcome.created) HttpStatusCode.Created else HttpStatusCode.OK,
-            ProgrammerRecordResponse(
-                cue = value.details,
-                created = value.outcome.created,
-                assignmentsWritten = value.outcome.assignmentsWritten,
-                assignmentsRemoved = value.outcome.assignmentsRemoved,
-                groupRowsEmitted = value.outcome.groupRowsEmitted,
-                fxWritten = value.outcome.fxWritten,
-                preserved = value.outcome.preserved,
-                republishedLive = republished,
-                skipped = recording.skipped.map { it.toDto() },
-                warnings = value.outcome.warnings,
-            ),
-        )
     }
 }
-
-private fun defaultRecordedCueName(stack: DaoCueStack): String =
-    "Cue ${(stack.cues.maxOfOrNull { it.sortOrder } ?: -1) + 2}"
 
 // ── Include ─────────────────────────────────────────────────────────────────
 
@@ -276,63 +224,61 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    if (listOfNotNull(request.cueId, request.lookId).size != 1) {
-        return call.respond(
-            HttpStatusCode.BadRequest,
-            ErrorResponse("Include needs exactly one of cueId or lookId"),
-        )
-    }
 
-    if (request.lookId != null) {
-        return handleIncludeLook(state, request, mask)
+    includeShapeProblem(request.cueId, request.lookId)?.let {
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot include from project '${p.name}' — only the current project can be modified"
     }) { project ->
-        val cueData = transaction(state.database) {
-            DaoCue.findById(request.cueId!!)
-                ?.takeIf { it.project.id == project.id }
-                ?.let { buildCueApplyData(it) }
+        when (
+            val result = performProgrammerInclude(
+                state, project, request.cueId, request.lookId, mask, request.fadeMs ?: 0,
+            )
+        ) {
+            is IncludeCoreResult.Failure -> call.respond(
+                if (result.notFound) HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                ErrorResponse(result.message),
+            )
+
+            is IncludeCoreResult.Cue -> call.respond(
+                ProgrammerIncludeResponse(
+                    kind = IncludedTarget.Kind.CUE.name,
+                    cueId = result.cueData.cueId,
+                    cueStackId = result.cueData.cueStackId,
+                    name = result.cueData.cueName,
+                    entriesWritten = result.outcome.entriesWritten,
+                    fixtureKeys = result.outcome.fixtureKeys,
+                    groupKeys = result.outcome.groupKeys,
+                    fxSpawned = result.outcome.fxSpawned,
+                    fxAlreadyRunning = result.outcome.fxAlreadyRunning,
+                    fxTimedSkipped = result.outcome.fxTimedSkipped,
+                    lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
+                    skipped = result.outcome.skipped.map { it.toDto() },
+                    warnings = result.outcome.warnings,
+                ),
+            )
+
+            is IncludeCoreResult.Look -> call.respond(
+                ProgrammerIncludeResponse(
+                    kind = IncludedTarget.Kind.LOOK.name,
+                    lookId = result.lookId,
+                    name = result.lookName,
+                    entriesWritten = result.outcome.entriesWritten,
+                    fixtureKeys = result.outcome.fixtureKeys,
+                    // A Look's group rows expand to members before they reach the programmer, so
+                    // there is no group-shaped selection to hand back.
+                    groupKeys = emptyList(),
+                    fxSpawned = 0,
+                    fxAlreadyRunning = 0,
+                    fxTimedSkipped = 0,
+                    lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
+                    skipped = result.outcome.skipped.map { it.toDto() },
+                    warnings = lookIncludeWarnings(result.lookName, result.outcome),
+                ),
+            )
         }
-        if (cueData == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found in current project"))
-            return@withCurrentProject
-        }
-
-        val warnings = ArrayList<String>()
-
-        val outcome = includeCueIntoProgrammer(state, cueData, mask, request.fadeMs ?: 0)
-
-        // `layersInstalled` is load-bearing here, not decorative: a cue built entirely from layers
-        // writes no INCLUDE slots and may spawn no effects, so without it the include target would
-        // never be set and Update would silently fall through to the Mode B checklist — unable to
-        // write the stack back to the cue the operator had just included.
-        if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0) {
-            state.show.programmerStore.lastIncludedTarget = includedTargetFor(cueData)
-        }
-        // The diff baseline, taken *after* the install so it records what actually landed —
-        // timed layers were dropped, so diffing against the cue's own list would report every one
-        // of them as deleted on the next Update.
-        state.show.programmerStore.includedLayerSnapshot = state.show.programmerStore.layers
-
-        call.respond(
-            ProgrammerIncludeResponse(
-                kind = IncludedTarget.Kind.CUE.name,
-                cueId = cueData.cueId,
-                cueStackId = cueData.cueStackId,
-                name = cueData.cueName,
-                entriesWritten = outcome.entriesWritten,
-                fixtureKeys = outcome.fixtureKeys,
-                groupKeys = outcome.groupKeys,
-                fxSpawned = outcome.fxSpawned,
-                fxAlreadyRunning = outcome.fxAlreadyRunning,
-                fxTimedSkipped = outcome.fxTimedSkipped,
-                lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
-                skipped = outcome.skipped.map { it.toDto() },
-                warnings = warnings + outcome.warnings,
-            ),
-        )
     }
 }
 
@@ -407,130 +353,50 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
-    if (request.targets != null && request.targets.isEmpty()) {
-        return call.respond(
-            HttpStatusCode.BadRequest,
-            ErrorResponse("targets was empty — omit it for the checklist, or name at least one cue"),
-        )
+
+    updateShapeProblem(request.targets)?.let {
+        return call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
     }
 
     withCurrentProject(state, request.projectId, { p ->
         "Cannot update project '${p.name}' — only the current project can be modified"
     }) { project ->
-        val includeTarget = state.show.programmerStore.lastIncludedTarget
+        when (
+            val result = performProgrammerUpdate(
+                state, project, request.targets, mask, request.preview, request.includeFx,
+            )
+        ) {
+            is UpdateCoreResult.Failure ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
 
-        // Checklist: asked for explicitly, or the fallback when nothing was included.
-        if (request.preview || (request.targets == null && includeTarget == null)) {
-            call.respond(
+            is UpdateCoreResult.IncludeTargetGone -> call.respond(
+                HttpStatusCode.Conflict,
+                ProgrammerConflictResponse(result.message, CODE_INCLUDE_TARGET_GONE, result.id),
+            )
+
+            is UpdateCoreResult.Checklist -> call.respond(
+                ProgrammerUpdateResponse(applied = false, mode = "CHECKLIST", checklist = result.checklist),
+            )
+
+            is UpdateCoreResult.LookUpdated -> call.respond(
                 ProgrammerUpdateResponse(
-                    applied = false,
-                    mode = "CHECKLIST",
-                    checklist = buildUpdateChecklist(state, mask),
+                    applied = result.result.rowsWritten > 0,
+                    mode = "A",
+                    lookResult = result.result,
+                    skipped = result.skipped.map { it.toDto() },
                 ),
             )
-            return@withCurrentProject
-        }
 
-        val modeLabel = if (request.targets != null) "B" else "A"
-
-        // Mode A into a Look. Handled before the `cueId!!` below, which is null for a Look target.
-        //
-        // There was a palette arm beside this one, taken first. It wrote back through the palette
-        // tables, and Mode B stayed cue-only on purpose: Mode B's premise is "which cue am I sitting
-        // on top of", answered from the Layer 4 winner map, and a palette was never in the output
-        // cascade at all so there was no equivalent to derive. Both went with the tables in session
-        // 4; a Look *is* in the cascade, through the layer that applies it, so Mode B needs no
-        // special case for it either.
-        if (modeLabel == "A" && includeTarget!!.kind == IncludedTarget.Kind.LOOK) {
-            updateIncludedLook(state, project, includeTarget, mask)
-            return@withCurrentProject
-        }
-
-        val cueIds = request.targets ?: listOf(includeTarget!!.cueId!!)
-
-        // Mode A writes only what changed since Include (which is what preserves palette refs
-        // the operator didn't touch); Mode B writes each cue exactly the keys it was under.
-        //
-        // **Mode A also diffs the layer stack; Mode B deliberately does not.** Mode B's premise is
-        // "which cue am I sitting on top of", derived from the Layer 4 winner map — and that map
-        // cannot attribute a key to a *layer of another cue*, only to the cue as a whole. Writing
-        // the programmer's stack into a cue the operator never included would replace that cue's
-        // composition with one built for a different cue. The same reasoning the palette arm has
-        // carried since Mode B was written: it is cue-only because nothing else is derivable.
-        val allSkips = ArrayList<RecordSkip>()
-        val plans = cueIds.associateWith { cueId ->
-            if (modeLabel == "A") {
-                val (changed, skips) = changedSinceInclude(state, mask)
-                allSkips += skips
-                changed
-            } else {
-                entriesUnderlyingCue(state, cueId, mask)
-            }
-        }
-
-        val results = ArrayList<ProgrammerUpdateResult>(cueIds.size)
-        val warnings = ArrayList<String>()
-
-        for (cueId in cueIds) {
-            val entries = plans[cueId].orEmpty()
-            val recording = recordingForUpdate(state, entries, request.includeFx)
-
-            val outcome = transaction(state.database) {
-                val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
-                    ?: return@transaction null
-                val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
-                if (modeLabel == "A") {
-                    writeLayerStackIntoCue(
-                        cue,
-                        state.show.programmerStore.layers,
-                        state.show.programmerStore.includedLayerSnapshot,
-                    )
-                }
-                Triple(written, cue.name, cue.cueStack.id.value)
-            }
-
-            if (outcome == null) {
-                if (modeLabel == "A") {
-                    // The include target is stale — the cue was deleted or moved out of the
-                    // project since Include. Clear it so the indicator stops offering it.
-                    state.show.programmerStore.clearIncludeTargetForCue(cueId)
-                    call.respond(
-                        HttpStatusCode.Conflict,
-                        ProgrammerConflictResponse(
-                            "The cue that was included no longer exists in this project.",
-                            CODE_INCLUDE_TARGET_GONE,
-                            cueId,
-                        ),
-                    )
-                    return@withCurrentProject
-                }
-                warnings += "Cue $cueId not found in this project — skipped"
-                continue
-            }
-
-            val (written, cueName, stackId) = outcome
-            results += ProgrammerUpdateResult(
-                cueId = cueId,
-                cueStackId = stackId,
-                cueName = cueName,
-                assignmentsWritten = written.assignmentsWritten,
-                fxWritten = written.fxWritten,
-                republishedLive = republishCueIfLive(state, cueId, stackId),
+            is UpdateCoreResult.CuesUpdated -> call.respond(
+                ProgrammerUpdateResponse(
+                    applied = result.results.isNotEmpty(),
+                    mode = result.mode,
+                    results = result.results,
+                    skipped = result.skipped.map { it.toDto() },
+                    warnings = result.warnings,
+                ),
             )
-            warnings += written.warnings
         }
-
-        if (results.isNotEmpty()) state.show.fixtures.cueListChanged()
-
-        call.respond(
-            ProgrammerUpdateResponse(
-                applied = results.isNotEmpty(),
-                mode = modeLabel,
-                results = results,
-                skipped = allSkips.map { it.toDto() },
-                warnings = warnings,
-            ),
-        )
     }
 }
 

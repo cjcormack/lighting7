@@ -214,11 +214,12 @@ internal val getCurrentStateTool = AnthropicToolDef(
     }
 )
 
-// `set_palette` stood here. It replaced the global positional colour list that effects indexed as
+// `set_palette` stood here. It wrote the global positional colour list that effects indexed as
 // `P1` / `P2` — a single mutable list of unnamed slots, and the only thing the word "palette" still
-// meant. There is no successor tool by design: a colour an effect should follow is a **template**,
-// which has a name and a uuid, and retuning one moves every effect referencing it without a
-// stage-wide mutation. `get_show_state` lists them under `templates`.
+// meant. Its successor is `create_template` below, and the difference is the point: a colour an
+// effect should follow is a **template**, which has a name and a uuid, so retuning one moves every
+// effect referencing it without a stage-wide mutation. `get_current_state` lists them under
+// `templates`.
 private val adHocEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
@@ -429,5 +430,184 @@ internal val addCueToStackTool = AnthropicToolDef(
             put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (0-based). Omit to append.") })
         })
         put("required", buildJsonArray { add("stackId"); add("cueId") })
+    }
+)
+
+internal val setStandbyTool = AnthropicToolDef(
+    name = "set_standby",
+    description = "Put a cue on deck: arm the cue the stack's next GO will fire, or omit cueId to disarm and " +
+            "leave the positional next on deck. Arming changes no lights — it only decides what GO fires next, " +
+            "which is why \"stand by cue 5\" and \"go\" are two separate gestures. `cue_run` in get_current_state " +
+            "reports what is currently on deck.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID") })
+            put("cueId", buildJsonObject {
+                put("type", "integer")
+                put("description", "The cue to arm. Must belong to this stack. Omit to disarm.")
+            })
+        })
+        put("required", buildJsonArray { add("stackId") })
+    }
+)
+
+internal val goCueStackTool = AnthropicToolDef(
+    name = "go_cue_stack",
+    description = "Press GO on a cue stack — fire whatever is on deck. On a stopped stack that starts it, at the " +
+            "armed standby if one is set and at its first cue otherwise; on a running stack it fires the armed " +
+            "standby, else the next cue in order. This is the tool to use for running a show; advance_cue_stack " +
+            "is for stepping BACKWARD, and activate_cue_stack for jumping to a named cue.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID") })
+        })
+        put("required", buildJsonArray { add("stackId") })
+    }
+)
+
+// ─── Programmer: Record / Include / Update ─────────────────────────
+
+private val maskSchema = buildJsonObject {
+    put("type", "array")
+    put("items", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { add("INTENSITY"); add("POSITION"); add("COLOUR"); add("BEAM") })
+    })
+    put("description", "Attribute families to act on. Omit (or name all four) for no mask.")
+}
+
+internal val recordCueTool = AnthropicToolDef(
+    name = "record_cue",
+    description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue. " +
+            "CREATE makes a new cue in a stack; MERGE adds the recorded values to an existing cue; " +
+            "UPDATE_EXISTING replaces that cue's in-mask content; REMOVE deletes the rows the recording names. " +
+            "Check `programmer` in get_current_state first: an empty programmer records an empty cue.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("mode", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("CREATE"); add("MERGE"); add("REMOVE"); add("UPDATE_EXISTING") })
+                put("description", "Defaults to CREATE.")
+            })
+            put("source", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("TOUCHED"); add("ALL"); add("STAGE_SNAPSHOT") })
+                put("description", "TOUCHED (default) records what was edited this session; STAGE_SNAPSHOT records everything on stage, running effects included.")
+            })
+            put("cueStackId", buildJsonObject { put("type", "integer"); put("description", "Required for CREATE.") })
+            put("cueId", buildJsonObject { put("type", "integer"); put("description", "Required for every mode but CREATE.") })
+            put("mask", maskSchema)
+            put("includeFx", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Record the running effects as well as the static values. Default true.")
+            })
+            put("name", buildJsonObject { put("type", "string"); put("description", "New cue's name (CREATE). Defaults to the next 'Cue N'.") })
+            put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number (CREATE). Omit to let the stack number it.") })
+            put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (CREATE). Omit to append.") })
+            put("cueType", buildJsonObject {
+                put("type", "string")
+                put("enum", buildJsonArray { add("STANDARD"); add("MARKER") })
+                put("description", "Defaults to STANDARD.")
+            })
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "Record only these fixtures (groups are expanded). Omit to record the whole programmer.")
+            })
+        })
+    }
+)
+
+internal val includeIntoProgrammerTool = AnthropicToolDef(
+    name = "include_into_programmer",
+    description = "Load a cue or a look back into the programmer as an edit buffer — the desk's Include. " +
+            "Name exactly one of cueId or lookId. The included thing becomes the update target, so the " +
+            "follow-up is: include, change what you want, then update_from_programmer with no targets, which " +
+            "writes back only what changed and leaves everything else alone.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("cueId", buildJsonObject { put("type", "integer") })
+            put("lookId", buildJsonObject { put("type", "integer") })
+            put("mask", maskSchema)
+            put("fadeMs", buildJsonObject {
+                put("type", "integer")
+                put("description", "Fade the staged values in over this many milliseconds. Default 0 (snap).")
+            })
+        })
+    }
+)
+
+internal val updateFromProgrammerTool = AnthropicToolDef(
+    name = "update_from_programmer",
+    description = "Write the programmer back into what it came from — the desk's Update. With no targets it " +
+            "writes only what changed since the last include_into_programmer, into that same cue or look. " +
+            "With targets it writes each named cue exactly the keys the programmer is currently overriding it " +
+            "on. With preview=true it writes nothing and returns the checklist of which cues the programmer is " +
+            "sitting on top of, which is the safe thing to call first.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", buildJsonObject { put("type", "integer") })
+                put("description", "Cue ids to write. Omit to write back into the included cue or look.")
+            })
+            put("mask", maskSchema)
+            put("preview", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Return the checklist without writing anything. Default false.")
+            })
+            put("includeFx", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Write the running effects as well as the static values. Default true.")
+            })
+        })
+    }
+)
+
+internal val createTemplateTool = AnthropicToolDef(
+    name = "create_template",
+    description = "Create a template — a named, referenceable value (a colour, a position, an intensity) that " +
+            "effects and cue layers point at instead of restating it. This is what replaced the old positional " +
+            "colour palette: retuning the template moves everything referencing it. Returns the uuid, which a " +
+            "colour parameter names as 'tmpl:{uuid}'. A template holds one attribute family; leave every row " +
+            "deferred (the default) to make a generic one that can be aimed at any fixture.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("name", buildJsonObject { put("type", "string"); put("description", "Unique template name in this project") })
+            put("notes", buildJsonObject { put("type", "string"); put("description", "Optional notes") })
+            put("fadeDurationMs", buildJsonObject {
+                put("type", "integer")
+                put("description", "Default fade when the template is applied. Omit for a snap.")
+            })
+            put("rows", buildJsonObject {
+                put("type", "array")
+                put("description", "The values. All rows must be the same attribute family (colour, position, intensity or beam).")
+                put("items", buildJsonObject {
+                    put("type", "object")
+                    put("properties", buildJsonObject {
+                        put("propertyName", buildJsonObject {
+                            put("type", "string")
+                            put("description", "e.g. colour, dimmer, pan, tilt. Slotted properties (gobo, colour wheel, macros) belong in a look, not a template.")
+                        })
+                        put("value", buildJsonObject {
+                            put("type", "string")
+                            put("description", "The value, in the same spelling an effect parameter takes: '#ff8800' for a colour, a number for a slider.")
+                        })
+                        put("targetKey", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Fixture key to bind this row to. Omit for a deferred row — the usual case, and the only kind an effect can reference by uuid.")
+                        })
+                    })
+                    put("required", buildJsonArray { add("propertyName"); add("value") })
+                })
+            })
+        })
+        put("required", buildJsonArray { add("name"); add("rows") })
     }
 )

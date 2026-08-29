@@ -437,6 +437,25 @@ class CueStackManager(
     }
 
     /**
+     * Press GO: fire whatever [stackId] has on deck, starting the stack if it is stopped.
+     *
+     * The whole of GO's meaning, in one place. Both halves already honour the armed standby, so
+     * what this adds is the branch between them — and that branch is the thing every surface has
+     * to agree on: a MIDI GO button, a tablet, and the AI's `go_cue_stack` all press the same
+     * button, and a second copy of "active ? advance : activate" is a show where they disagree.
+     *
+     * @return null only when the stack holds no STANDARD cues — at the end of a non-looping stack
+     *   [advanceStack] stays on the live cue and returns it. Nothing here deactivates a stack.
+     * @throws IllegalArgumentException if a stopped stack has no standard cues to start at.
+     */
+    fun go(state: State, stackId: Int, scope: CoroutineScope = GlobalScope): ActivateResult? =
+        if (isStackActive(stackId)) {
+            advanceStack(state, stackId, AdvanceDirection.FORWARD, scope)
+        } else {
+            activateAtFirstCue(state, stackId, scope)
+        }
+
+    /**
      * Start a stack: fire the armed standby if an operator has one on deck, else the stack's
      * first STANDARD cue.
      *

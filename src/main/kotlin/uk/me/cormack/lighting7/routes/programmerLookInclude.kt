@@ -1,16 +1,10 @@
 package uk.me.cormack.lighting7.routes
 
-import io.ktor.http.HttpStatusCode
-import io.ktor.server.response.respond
-import io.ktor.server.routing.RoutingContext
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.plugins.includedTargetDto
 import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("programmerLookInclude")
@@ -167,56 +161,16 @@ internal data class LookIncludeOutcome(
     val skipped: List<RecordSkip>,
 )
 
-/** `POST /programmer/include` with a `lookId`: load a Look's bound rows in as the edit buffer. */
-internal suspend fun RoutingContext.handleIncludeLook(
-    state: State,
-    request: ProgrammerIncludeRequest,
-    mask: Set<PropertyMaskGroup>?,
-) {
-    withCurrentProject(state, request.projectId, { p ->
-        "Cannot include from project '${p.name}' — only the current project can be modified"
-    }) { project ->
-        val look = transaction(state.database) {
-            uk.me.cormack.lighting7.models.DaoLook.findById(request.lookId!!)
-                ?.takeIf { it.project.id == project.id }
-                ?.let { it.id.value to (it.name to it.uuid) }
-        }
-        if (look == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Look not found in current project"))
-            return@withCurrentProject
-        }
-        val (lookId, nameAndUuid) = look
-        val (name, uuid) = nameAndUuid
-
-        val outcome = includeLookIntoProgrammer(state, lookId, uuid, mask, request.fadeMs ?: 0)
-        call.respond(
-            ProgrammerIncludeResponse(
-                kind = uk.me.cormack.lighting7.fx.IncludedTarget.Kind.LOOK.name,
-                lookId = lookId,
-                name = name,
-                entriesWritten = outcome.entriesWritten,
-                fixtureKeys = outcome.fixtureKeys,
-                // A Look's group rows expand to members before they reach the programmer, so there
-                // is no group-shaped selection to hand back.
-                groupKeys = emptyList(),
-                fxSpawned = 0,
-                fxAlreadyRunning = 0,
-                fxTimedSkipped = 0,
-                lastIncluded = includedTargetDto(state, state.show.programmerStore.lastIncludedTarget),
-                skipped = outcome.skipped.map { it.toDto() },
-                // Silently writing nothing reads as a broken button, so a zero-write include always
-                // says why. The two reasons point the operator at different places — the Look
-                // editor, or the patch — so they are two messages rather than one hedged one.
-                warnings = when {
-                    outcome.entriesWritten > 0 -> emptyList()
-                    outcome.skipped.isNotEmpty() -> listOf(
-                        "None of '$name''s rows could be staged: the fixtures or properties they " +
-                            "name are not in the current patch, or the mask excluded them.",
-                    )
-                    else -> listOf("'$name' holds no rows to stage — only effects, or nothing at all.")
-                },
-            ),
-        )
-    }
+/**
+ * Why a zero-write Look include always says something: silently writing nothing reads as a broken
+ * button. The two reasons point at different places — the Look editor, or the patch — so they are
+ * two messages rather than one hedged one.
+ */
+internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome): List<String> = when {
+    outcome.entriesWritten > 0 -> emptyList()
+    outcome.skipped.isNotEmpty() -> listOf(
+        "None of '$lookName''s rows could be staged: the fixtures or properties they " +
+            "name are not in the current patch, or the mask excluded them.",
+    )
+    else -> listOf("'$lookName' holds no rows to stage — only effects, or nothing at all.")
 }
-

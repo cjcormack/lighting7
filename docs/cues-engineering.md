@@ -304,6 +304,16 @@ Three tools for the AI assistant:
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
 
+Plus the three programmer gestures, which is how a cue gets *authored* rather than described:
+`record_cue` (the programmer into a cue, in any `RecordMode` — CREATE / MERGE / UPDATE_EXISTING / REMOVE), `include_into_programmer`
+(a cue or Look back out as an edit buffer) and `update_from_programmer` (write back only what
+changed since the Include; `preview=true` returns the checklist without writing). They call the
+same `performProgrammerRecord` / `performProgrammerInclude` / `performProgrammerUpdate` cores in
+`routes/programmerSurface.kt` that the REST routes render — the mode/mask/scope rules and the
+include-target bookkeeping decide which rows get overwritten, so there is exactly one copy of them.
+`create_template` completes the set: the named, referenceable value an effect parameter points at
+with `tmpl:{uuid}`.
+
 The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning cue names and counts for the current project.
 
 The system prompt describes:
