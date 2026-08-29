@@ -136,7 +136,7 @@ halves still owed are listed in §14 only.
 | `FS-RES-PALETTERESULT` | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
 | `FS-RES-PRESETPICKER` | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
 | `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
-| `FS-TEST-CUEUTILS-TRIGGERS` | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
+| ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ **done** | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
 | `FS-TEST-EDITOR-PINS` | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
 | `FS-TEST-PROGRAMMER-SCOPE` | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
 | `FS-TEST-PROVENANCE-PIN` | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
@@ -166,10 +166,10 @@ halves still owed are listed in §14 only.
 | `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
 | ~~`FS-COORD-NEW-BROADCASTS`~~ **done** | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
 | ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ **done** | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
-| `FS-DOCS-COMPATIBLELOOKIDS` | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
-| `FS-DOCS-ELEMENT-KEY-INVARIANT` | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
-| `FS-DOCS-SPEEDMASTERS` | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
-| `FS-DOCS-STALE-COMMENTS` | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
+| ~~`FS-DOCS-COMPATIBLELOOKIDS`~~ **done** | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
+| ~~`FS-DOCS-ELEMENT-KEY-INVARIANT`~~ **done** | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
+| ~~`FS-DOCS-SPEEDMASTERS`~~ **done** | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
+| ~~`FS-DOCS-STALE-COMMENTS`~~ **done** | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
 | `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
 | `FS-RES-RUNNER-DIR` | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
 | `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
@@ -180,9 +180,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-DEAD-CSS`~~ **done** | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
 | ~~`FS-DEAD-EXPORT-KEYWORD`~~ **done** | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
 | ~~`FS-DEAD-PROTOTYPES`~~ **done** | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
-| `FS-DOCS-CLAUDEMD-PROVENANCE` | CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource` | S4 | P3 | C1 | haiku |
-| `FS-DOCS-OUTOFSCOPE-COMMENT` | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
-| `FS-DOCS-REF-RATIONALE` | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
+| ~~`FS-DOCS-CLAUDEMD-PROVENANCE`~~ **done** | CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource` | S4 | P3 | C1 | haiku |
+| ~~`FS-DOCS-OUTOFSCOPE-COMMENT`~~ **done** | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
+| ~~`FS-DOCS-REF-RATIONALE`~~ **done** | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
 | `FS-DUP-CHANNEL-SLIDER` | Four copies of the labelled 0–255 channel slider row | S4 | P3 | C1 | haiku |
 | `FS-DUP-MARKER-ROW` | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
 | `FS-DUP-MINISTAGE-GEL` | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
@@ -229,8 +229,9 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
 8. **`FS-ARCH-CURSOR-OWNERSHIP` is a decision before a cleanup** — it absorbs three
    would-be deletions that are not automatically safe (the two `standbyCueId`s carry different
    facts).
-9. **Any `cueUtils` edit keeps the field-by-field pin shape** (never tidy it into a deep-equal) and
-   takes `FS-TEST-CUEUTILS-TRIGGERS` along.
+9. **Any `cueUtils` edit keeps the field-by-field pin shape** — never tidy it into a deep-equal.
+   `FS-TEST-CUEUTILS-TRIGGERS` has landed (`771ce87`), so the pin now covers `triggers` as well as
+   `layers`; the shape rule still binds whatever touches it next.
 10. **The backend seam is no longer a wait — it is a queue** (§14). The backend sweep is complete,
     so nothing is gated; what remains is an ordering constraint and a re-measure.
     `FS-COORD-CUEEDIT-RETIRE`'s `force` senders must be deleted here **before** the backend drops
@@ -1220,12 +1221,13 @@ so nothing there needed changing.
 `src/lib/cueUtils.ts`, `src/lib/cueUtils.test.ts`
 
 The cue-layer drag they served died with the three-pane editor; the only `LayerHandlers` host is the
-programmer path, which deliberately does not renumber client-side. Their doc comments claim callers
-that don't exist (and CLAUDE.md repeats the claim — see `FS-DOCS-STALE-COMMENTS`). **Fix is a
-decision**: delete both plus their describe block, or keep them explicitly annotated as held for the
-editable-cue-rows decision, the way `EditorContext.tsx` annotates its keeps. Do not let the deletion
-tidy `cueUtils.test.ts`'s thirteen-assertion field-by-field pin into a deep-equal — that shape is
-deliberate.
+programmer path, which deliberately does not renumber client-side. Their doc comments claimed
+callers that don't exist, and so did CLAUDE.md and `ProgrammerLookStack.onMove`; all three were
+corrected by `FS-DOCS-STALE-COMMENTS` (`afb2af8`), so what is left here is only the code. **Fix is
+a decision**: delete both plus their describe block, or keep them as they now stand — annotated
+"no production caller", the way `EditorContext.tsx` annotates its keeps. Do not let the deletion
+tidy `cueUtils.test.ts`'s field-by-field pin into a deep-equal — that shape is deliberate, and
+`FS-TEST-CUEUTILS-TRIGGERS` (`771ce87`) extended it to the trigger list.
 
 ### `FS-DEAD-DTO-FIELDS`
 **Wire-mirror fields never read by the client, several naming retired concepts** · S3 · P3 · C2 ·
@@ -1708,9 +1710,9 @@ The refactors' most insidious residue: rationale comments and CLAUDE.md paragrap
 deleted machinery, in a codebase whose agents demonstrably obey written rationale. Each item below
 names text that would make a competent agent do the wrong thing.
 
-### `FS-DOCS-SPEEDMASTERS`
+### ~~`FS-DOCS-SPEEDMASTERS`~~ — **landed**
 **CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a
-`SpeedMastersStrip` that no longer exists** · S4 · P2 · C1 · haiku
+`SpeedMastersStrip` that no longer exists**, lighting-react `a69e07d` · S4 · P2 · C1 · haiku
 `CLAUDE.md`, `src/routes/SpeedMasters.tsx`, `src/routes/ResetPasswordPage.test.tsx`
 
 No `SpeedMastersStrip` symbol exists; `components/SpeedMasters.tsx` renders **every** master
@@ -1719,6 +1721,11 @@ exists either). A reviewer following CLAUDE.md would reintroduce the split brain
 rewritten to remove. **Fix**: rewrite CLAUDE.md §Speed Masters to match the component's docblock;
 fix the two stale mentions. Keep the still-true halves: stored vs live BPM, the two per-effect uuid
 references, master 1 undeletable / what a null uuid means.
+
+Grew in the landing: the same section's `BeatIndicator` paragraph was stale for a different reason
+— it described a fallback to the legacy unkeyed `beatSync`, which went with backend D2. Rewritten
+alongside, including the `useMaster1Uuid` correction `FS-COORD-LEGACY-TEMPO` established (null means
+master 1 on the tempo *write* messages only).
 
 ### ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ — **landed**
 **CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b**,
@@ -1732,9 +1739,9 @@ handling (true only until backend D1: the decision to retire `cueEdit.*` is take
 `FS-COORD-CUEEDIT-RETIRE` then deletes the handling too — write the rewrite so it doesn't enshrine
 a keep that is about to evaporate).
 
-### `FS-DOCS-CLAUDEMD-PROVENANCE`
-**CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource`** · S4 · P3 ·
-C1 · haiku
+### ~~`FS-DOCS-CLAUDEMD-PROVENANCE`~~ — **landed**
+**CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource`**,
+lighting-react `4eebd54` · S4 · P3 · C1 · haiku
 `CLAUDE.md`, `src/api/programmerWsApi.ts`
 
 The doc's "must stay in `provenanceSignature`" invariant is right but names two fields that no
@@ -1742,9 +1749,9 @@ longer exist and misses the polymorphism (a Look and a template can share an int
 whole reason the signature reads a source object. Update to `layerId` + `layerSource` with the why.
 Same drift that let the stale test in `FS-TEST-PROVENANCE-PIN` survive.
 
-### `FS-DOCS-COMPATIBLELOOKIDS`
-**`compatibleLookIds` is documented as type-gated and deferred-only in three places; it is neither**
-· S4 · P2 · C1 · haiku
+### ~~`FS-DOCS-COMPATIBLELOOKIDS`~~ — **landed**
+**`compatibleLookIds` is documented as type-gated and deferred-only in three places; it is neither**,
+lighting-react `0bcda19` · S4 · P2 · C1 · haiku
 `src/api/groupsApi.ts`, `src/store/fixtures.ts`, `src/components/fx/LookTogglePicker.tsx`
 
 The producer is capability-only (D6) and never excludes bound rows; "deferred Looks" describes
@@ -1755,18 +1762,21 @@ Do not restore a client-side filter — compatibility belongs to the backend (an
 `FS-BE-COMPATIBLEIDS`, §14, for the rows-only hole itself — still owed, so the corrected wording
 here has to describe the hole rather than promise it is closed).
 
-### `FS-DOCS-OUTOFSCOPE-COMMENT`
+Landed as scoped: all three comments now match `LayerPicker`'s, the rows-only hole is stated as the
+backend's to close, and no client-side filter was added. `FS-BE-COMPATIBLEIDS` is still owed.
+
+### ~~`FS-DOCS-OUTOFSCOPE-COMMENT`~~ — **landed**
 **`RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the only
-scoped ones — both halves wrong** · S4 · P3 · C1 · haiku
+scoped ones — both halves wrong**, lighting-react `5462720` · S4 · P3 · C1 · haiku
 `src/store/programmerOps.ts`
 
 The backend arm says the *Look* routes; a targeted cue Record passes a scope too; "palette" is
 retired vocabulary. Reword; sweep the file's other retired-vocabulary comments in the same pass
 (`RecordRequest.targets` also says "unlike a palette").
 
-### `FS-DOCS-ELEMENT-KEY-INVARIANT`
+### ~~`FS-DOCS-ELEMENT-KEY-INVARIANT`~~ — **landed**
 **`LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; that file
-was deleted** · S4 · P2 · C1 · sonnet
+was deleted**, lighting-react `8924b9e` · S4 · P2 · C1 · sonnet
 `src/components/programmer/LookRowStore.tsx`
 
 The invariant (element keys are element-local suffixes, never parsed or synthesised client-side) is
@@ -1774,9 +1784,14 @@ real and now documented nowhere. State it inline or relocate it beside the other
 in `src/lib/` and cite that. `FU-LOOK-ELEMENT-ROWS` tracks the behaviour gap; this is only about the
 rule having a live home.
 
-### `FS-DOCS-REF-RATIONALE`
-**`programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current** ·
-S4 · P3 · C1 · haiku
+Landed as the inline option, not the relocation: `src/lib/`'s value-grammar modules are about
+*values*, and an element key is target addressing, so a home there would have needed a new exported
+symbol with no caller. `LookRowStore` is the only code the rule constrains, so the rule lives beside
+it.
+
+### ~~`FS-DOCS-REF-RATIONALE`~~ — **landed**
+**`programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current**,
+lighting-react `0caf6aa` · S4 · P3 · C1 · haiku
 `src/lib/programmerValue.ts`, `src/components/fixtures-list/useCellWriters.ts`
 
 One doc block says `ref:{uuid}` "can now appear" as an entry's value forty lines above the note
@@ -1790,9 +1805,15 @@ legal only in an effect parameter — fold the `'P1'` test case into the junk-st
 repoint the `parseProgrammerEntryValue` tombstone at `colourUtils.test.ts`'s `tmpl:` coverage.
 Leave the live `ref:` rejections alone.
 
-### `FS-DOCS-STALE-COMMENTS`
-**Batch: ~14 rationale comments naming callers, renderers or files that no longer exist** · S4 · P2
-· C1 · haiku
+Grew in the landing, slightly: `parseProgrammerEntryValue`'s docblock claimed "its two callers" and
+there are three (`useScopedRowValues`, `useCellWriters`, `programmerChannels`), and its stated reason
+for existing was the `ref:` branch it no longer has — restated as keeping one entry-shaped reader.
+The `describe('parseProgrammerEntryValue')` tombstone's claim that the positional form "did not"
+retire went too.
+
+### ~~`FS-DOCS-STALE-COMMENTS`~~ — **landed**
+**Batch: ~14 rationale comments naming callers, renderers or files that no longer exist**,
+lighting-react `afb2af8` · S4 · P2 · C1 · haiku
 `CLAUDE.md`, `src/components/ShowBar.tsx`,
 `src/components/runner/program/CueCardEditor/CueCardEditor.tsx`, `src/store/saveStatusSlice.ts`,
 `src/components/cues/TimingBadge.tsx`, `src/api/fxApi.ts`, `src/api/cuesApi.ts`,
@@ -1818,6 +1839,22 @@ coverage; `fixtureTypeHierarchy` naming the deleted Look editor among its consum
 a dead local path); `RunMobile`'s summary still framing itself against the Run view. **Fix**: fix
 each in the same change that resolves the code it describes where one exists; the rest as one
 mechanical docs pass, verifying each replacement against the tree rather than the surrounding prose.
+
+Grew in the landing, by two sites the list did not name and one it did that was already fixed:
+
+- **CLAUDE.md's flatten paragraph** (§"All three Make Hard routes are gone") presented
+  `POST /{projectId}/cues/{cueId}/flatten` as the live replacement, which is exactly what
+  `FS-COORD-PING`'s surviving constraint says it must not do — so it landed here, with the two
+  design constraints kept as notes for a reimplementation rather than as a live route's contract.
+  That constraint is now spent.
+- **`ProgrammerLookStack.onMove`** justified not renumbering by naming "the cue path's
+  `reorderCueLayers`", asserting a live cue path that does not exist. Same false claim as the
+  `cueUtils` docblocks, fixed in the same commit.
+- `cuesApi`'s `presetApplications` keep-note was already gone with `FS-DEAD-CURRENTCUESTATE`;
+  nothing to do.
+
+`FS-DEAD-CUELAYER-HELPERS` still owns the decision on whether the two helpers go; this only made
+their doc comments, their one referring call site and CLAUDE.md stop claiming callers.
 
 ## 13. Tests
 
@@ -1864,9 +1901,9 @@ layers query pinning refusal-returns-false, accept-switches, removal-falls-back,
 context identity staying stable across a scope change (the file's own doc says that stability is the
 point of the split contexts).
 
-### `FS-TEST-CUEUTILS-TRIGGERS`
+### ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ — **landed**
 **`cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the trigger
-fields its own docstring claims** · S3 · P2 · C1 · haiku
+fields its own docstring claims**, lighting-react `771ce87` · S3 · P2 · C1 · haiku
 `src/lib/cueUtils.test.ts`, `CLAUDE.md`
 
 `templateId` made it fourteen; CLAUDE.md's count drifted (say "every field" instead of a number so
@@ -2056,7 +2093,9 @@ client was missing `rateSpeedMasterIndex`, and the answer from this side is no �
 resolves display via `useSpeedMasterDisplay(uuid)`, so the two `*Index` fields in `api/fxApi.ts`
 are display debris. B4 shipped with the `*Index` pair left unconditional deliberately and the
 `*Uuid` pair nulled per `timingSource`, which is what this client actually reads.
-`FS-DOCS-STALE-COMMENTS` still covers the stale `speedMasterIndex` claim.
+`FS-DOCS-STALE-COMMENTS` covered the stale `speedMasterIndex` claim (`afb2af8`): the field is now
+documented as read by nothing, with the chip resolving the index itself. Deleting it is
+`FS-DEAD-DTO-FIELDS`' call.
 
 Landed as scoped: `cueStacksApi.ts`'s `presetCount` was left alone, per this item's own note that
 its deletion is `FS-TYPES-PRESETCOUNT-RENAME`'s job. `CueCurrentState.presetApplications` was
@@ -2148,9 +2187,10 @@ Done in `c6ee984`, alongside backend D5 (`98ec1a2`): the `ws.send({type: "ping"}
 (Ktor's `pingPeriod` already covers it), together with flatten's id field and `clearAll`'s stale
 reply field name. Verified gone at HEAD.
 
-One constraint survives this item: D5 also deleted `POST /cues/{cueId}/flatten`, so
-`FS-DOCS-STALE-COMMENTS`' `CueCardEditor` rewrite and CLAUDE.md's flatten paragraph **must not**
-present flatten as the live replacement for Make Hard. `CueCardEditor.tsx:469` still does.
+One constraint survived this item, and is now **spent**: D5 also deleted
+`POST /cues/{cueId}/flatten`, so `FS-DOCS-STALE-COMMENTS`' `CueCardEditor` rewrite and CLAUDE.md's
+flatten paragraph must not present flatten as the live replacement for Make Hard. Both landed
+saying nothing replaced it (`afb2af8`).
 
 ### ~~`FS-COORD-PREVIEW-DEAD`~~ — **landed** *(new — created by backend D4)*
 **The Look live-preview machinery is dead code now, not merely unreachable**, lighting-react
@@ -2284,8 +2324,9 @@ Still owed, and each blocking a frontend item from being finished honestly:
 - `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
   capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
   target and `LookTogglePicker` offers pads that assert nothing. Decide whether compatibility should
-  also require row coverage. Blocks `FS-DOCS-COMPATIBLELOOKIDS`, which cannot be made true from this
-  side alone.
+  also require row coverage. `FS-DOCS-COMPATIBLELOOKIDS` landed without it (`0bcda19`) by
+  documenting the hole rather than claiming it closed, as that item required — so this is no longer
+  blocking anything, only still true.
 - `FS-BE-TEMPLATE-TOGGLE-MASK` — `ProgrammerLayerStack.toggle` has no `propertyMask` parameter and
   `projectTemplates.kt`'s toggle route derives none, while its KDoc claims the server derives the
   family and cross-checks the echo (the echo can never disagree with itself). Backend half of
