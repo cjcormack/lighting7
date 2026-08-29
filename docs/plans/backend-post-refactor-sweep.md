@@ -692,7 +692,7 @@ Grew in the landing: `SpeedMasterBank.setBpm` returns whether it applied (a mast
 between resolve and write was being reported as success), and `AiService`'s fixture line had a
 pre-existing precedence bug dropping its closing paren for grouped fixtures, fixed here.
 
-**G2. `get_current_state` misses the new subsystems** — medium / P1 / M / opus
+~~**G2. `get_current_state` misses the new subsystems**~~ — done, `3e61ebc`. medium / P1 / M / opus
 No `speed_masters`, no programmer (which the AI itself mutates via `apply_look`), no cue run state
 (active/armed-next/fade — the point of server-owned Next). **Fix:** add the three sections.
 
@@ -734,7 +734,7 @@ presets; `docs/fx-engineering.md` tickFlow diagram and composite claim (per A4/C
 | 2 | ~~D1–D6, D8, D9, A5–A10, E8, B3–B5~~ **done** | Retirements — everything after moves less code. D1 and D2 are done, so cueEdit-adjacent and tempo-surface work is unblocked. **A5/A6 land in the tick path: re-capture the benchmark baseline when this wave completes.** |
 | 3 | ~~C3–C7, B1–B2~~ **done** | Remaining hot-path fixes, measured against the *re-captured* baseline, not the wave-0 one. fable for C3. B2 was pulled forward — see below. |
 | 4 | ~~E1–E7, E10, C8, B6–B7, F6~~ **done** | Structure. E1 (FxEngine split) last in the wave, after everything shrank it. |
-| 5 | ~~F1–F3, F5, F7–F8, G1~~ **done**, G2–G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
+| 5 | ~~F1–F3, F5, F7–F8, G1–G2~~ **done**, G3 | API normalization — coordinate breaking changes with the frontend sweep (one list of frontend-visible changes maintained as these land). |
 | 6 | H1–H3, G4, ~~D7, F4~~, E9 | Mechanical passes. D7 was pulled forward — see below. |
 
 **Re-sequencing note (2026-08-25): B2 + D7 taken together.** They land on the same 24
