@@ -22,6 +22,7 @@ as a one-line row.
 | [`FU-MANUAL-RUN-STATE-TWO-SESSIONS`](#fu-manual-run-state-two-sessions) | desk, tablet and MIDI surface agree on what GO fires | Server-owned Next, 2026-08-20 |
 | [`FU-MANUAL-CROSSFADE-C3`](#fu-manual-crossfade-c3) | crossfades stay smooth and provenance names the right cue after the C3 republish rework | Sweep C3, 2026-08-26 |
 | [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
+| [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
 
 ---
 
@@ -364,6 +365,32 @@ also why this can only be judged on the rig, with an effect written for it.
 and run it with no rate master assigned. Move master 1 from 120 to 200 BPM and back. The effect's
 speed must not change. Then assign master 1 as its *rate* master and repeat: now it must speed up
 and slow down with the fader. 10 minutes.
+
+## `FU-MANUAL-RECONNECT-RESYNC`
+
+**The reconnect resync heals a slept tab, and costs nothing visible** · frontend sweep
+`FS-BUG-RECONNECT-RESYNC`, 2026-08-29
+
+The client used to invalidate a hand-written 15-tag list on CLOSED→OPEN, under a comment claiming
+"all REST caches"; twenty tags had no reconnect path at all. It now invalidates every tag but
+`Auth`, derived from `REST_TAG_TYPES`, spread over waves of eight after a 250 ms debounce so the
+burst doesn't land in one tick on a single-connection SQLite pool that is still warming up. The
+timing is unit-tested against fake timers, but the numbers themselves are guesses: nothing in-tree
+can say whether 250 ms + 150 ms per wave is imperceptible on a real reconnect, or whether the
+serialisation it exists to avoid was ever going to bite.
+
+**Test**: with a show running and the Programmer open on a busy rig, start the show from a
+*second* browser, then sleep the laptop (or stop and restart lighting7) for a minute and wake it.
+On reconnect the transport must agree with the other tab — GO live, no phantom grey-out — and the
+fixtures table, all three stage views, the MIDI bindings page and the Updates tab must show current
+data without a manual reload. Watch the network panel across the reconnect: requests should arrive
+in small groups roughly 150 ms apart rather than all at once, the whole resync should be done
+inside about a second, and there should be no visible stall in DMX output. Then pull the network
+cable for two seconds and plug it back in — the flap must produce exactly one resync, not one per
+transition. Repeat once signed in as an **operator** rather than an admin, which is the case where the
+role-gated families must produce no requests at all. 15 minutes.
+
+---
 
 ---
 

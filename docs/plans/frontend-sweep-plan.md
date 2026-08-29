@@ -80,7 +80,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-BUG-FADE-KEY-SNAPSHOT` | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-PROGRAMMER-ERROR-DROPPED` | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
-| `FS-BUG-RECONNECT-RESYNC` | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
+| ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-TIMEDLAYERS-RENAME` | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
 | `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
 | `FS-PERF-FADE-IN-SHOWBAR` | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
@@ -416,9 +416,9 @@ independently re-verified this from the stage side and sharpened the observable:
 animates the chase correctly (its imperative copy has no such cache) while the 2D plot and the DOM
 marker freeze — three surfaces disagreeing about one rig.
 
-### `FS-BUG-RECONNECT-RESYNC`
+### ~~`FS-BUG-RECONNECT-RESYNC`~~ — **landed**
 **Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags have no
-resync path at all** · S2 · P1 · C2 · sonnet
+resync path at all**, lighting-react `928fc5c` · S2 · P1 · C2 · sonnet
 `src/store/status.ts`, `src/store/restApi.ts`, and the per-bridge `open` branches in `src/api/*.ts`
 
 Two independent reconnect mechanisms exist and neither is authoritative: `status.ts` invalidates a
@@ -444,6 +444,16 @@ AuthGate). Invalidation only refetches subscribed queries, and the role-gated fa
 `skip: !isAdmin`, so the cost is bounded. Then delete the now-redundant pure-invalidation `open`
 branches, keeping the ones that also re-send a socket state request; add a test that fails when tag
 48 is in neither the reconnect list nor the exclusion set.
+
+Grew in the landing: review objected that firing all 46 tags in one tick lands exactly when the
+backend has just restarted, and lighting7 serves REST from a single pooled SQLite connection
+(`maximumPoolSize = 1`), so the burst serialises behind a warming show. The dispatch is therefore
+debounced 250 ms — a flapping link resyncs once, not once per transition — and goes out in waves of
+eight 150 ms apart, operator-visible caches (`ProgramState`, `Patch`, the cue lists) first, with a
+mid-sequence drop abandoning the rest. Coverage stays derived: the test pins that the waves
+concatenate to exactly the resync set, so a new tag cannot fall out by landing in no wave. The
+timings are code-read guesses, so the landing also files `FU-MANUAL-RECONNECT-RESYNC` in
+`manual-validation.md`.
 
 ### `FS-BUG-CUE-TAG-STALE`
 **The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go stale on
