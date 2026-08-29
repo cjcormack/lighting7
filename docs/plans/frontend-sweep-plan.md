@@ -79,7 +79,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FADE-KEY-SNAPSHOT` | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
-| `FS-BUG-PROGRAMMER-ERROR-DROPPED` | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
+| ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ **done** | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
 | `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
@@ -353,9 +353,9 @@ page that isn't it. This is the `startsWith` trap CLAUDE.md documents for `pathM
 lock is still wanted at all now FX is a band of the programmer rather than a view. Coordinate with
 the Layout cluster (§4).
 
-### `FS-BUG-PROGRAMMER-ERROR-DROPPED`
+### ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ — **landed**
 **`programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere is
-silent** · S2 · P1 · C2 · sonnet
+silent**, `71fdb9a` · S2 · P1 · C2 · sonnet
 `src/api/programmerWsApi.ts`, `src/store/errorToastMiddleware.ts`
 
 `subscribeToErrors` exists, is documented ("so callers can surface a toast"), and has no production
@@ -2139,7 +2139,8 @@ The backend verified this client only sends canonical names (`BlendMode` is a st
 `distribution` / `elementFilter` are literals), so this is a **confirm, not a change** — the entry
 exists so a future reader doesn't rediscover it as a bug. Two things ride on it, though: a
 `programmer.error` frame is now reachable from a bad enum, which is exactly the frame
-`FS-BUG-PROGRAMMER-ERROR-DROPPED` proves is delivered to zero subscribers; and
+`FS-BUG-PROGRAMMER-ERROR-DROPPED` found delivered to zero subscribers — it now raises a toast
+(`71fdb9a`); and
 `FS-TYPES-EFFECTTYPE-UNION`'s cast is the shape that could launder a non-canonical value past the
 type system.
 
