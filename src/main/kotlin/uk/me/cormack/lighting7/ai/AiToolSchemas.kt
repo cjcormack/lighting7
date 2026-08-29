@@ -191,7 +191,10 @@ internal val clearEffectsTool = AnthropicToolDef(
 
 internal val getCurrentStateTool = AnthropicToolDef(
     name = "get_current_state",
-    description = "Get the current state of the lighting system. Use to check what's running before making changes.",
+    description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
+            "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
+            "`cue_run` says what each running stack's next GO will fire; " +
+            "`programmer` is the manual overlay this surface itself writes through apply_look.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -200,7 +203,9 @@ internal val getCurrentStateTool = AnthropicToolDef(
                 put("items", buildJsonObject {
                     put("type", "string")
                     put("enum", buildJsonArray {
-                        add("active_effects"); add("bpm"); add("fixtures"); add("groups"); add("looks"); add("templates"); add("cues"); add("cue_stacks")
+                        add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
+                        add("groups"); add("looks"); add("templates"); add("cues")
+                        add("cue_stacks"); add("cue_run"); add("programmer")
                     })
                 })
                 put("description", "What to include. Defaults to all.")

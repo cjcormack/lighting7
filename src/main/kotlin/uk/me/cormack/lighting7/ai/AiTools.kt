@@ -318,12 +318,36 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf("active_effects", "bpm", "fixtures", "groups", "looks", "templates", "cues", "cue_stacks")
+            ?: setOf(
+                "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
+                "templates", "cues", "cue_stacks", "cue_run", "programmer",
+            )
 
         val result = buildJsonObject {
             if ("bpm" in include) {
                 put("bpm", state.show.fxEngine.masterClock.bpm.value)
                 put("clockRunning", state.show.fxEngine.masterClock.isRunning.value)
+            }
+
+            if ("speed_masters" in include) {
+                // The uuids belong here as well as in the system prompt: every effect-authoring
+                // tool takes a `speedMasterUuid`, and a master created mid-conversation (by
+                // `create_speed_master`, or by the operator at the desk) is unnameable until the
+                // model can read its uuid back. The prompt is built once per conversation.
+                put("speedMasters", buildJsonArray {
+                    for (master in state.show.fxEngine.speedMasters.masterStates()) {
+                        addJsonObject {
+                            // Absent before the bank has loaded its rows, and only for master 1.
+                            // Omitting the reference is exactly what names master 1 anyway, so
+                            // there is nothing the model loses by the key not being there.
+                            master.uuid?.let { put("uuid", it.toString()) }
+                            put("index", master.index)
+                            put("name", master.name)
+                            put("bpm", master.bpm)
+                            put("isRunning", master.isRunning)
+                        }
+                    }
+                })
             }
 
             if ("active_effects" in include) {
@@ -450,6 +474,94 @@ class AiTools(private val state: State) {
                         }
                 }
                 put("cueStacks", buildJsonArray { stacks.forEach { add(it) } })
+            }
+
+            if ("cue_run" in include) {
+                // What the *next* GO will fire, which `cue_stacks` above cannot say: it reports
+                // the live cue, and "next" is server-owned (an armed standby, else the positional
+                // successor). A model asked to "hold, then go" has to be able to read the arming
+                // it just made. Only stacks that have run state at all appear — the same set the
+                // WebSocket connect snapshot walks — and the whole walk shares one transaction,
+                // since `runStateFor` would otherwise open one per stack.
+                val runState = state.show.cueStackManager.runState
+                val frames = transaction(state.database) {
+                    runState.stacksWithRunState().sorted().map { runState.runStateFor(state, it) }
+                }
+                put("cueRun", buildJsonArray {
+                    for (frame in frames) {
+                        addJsonObject {
+                            put("stackId", frame.stackId)
+                            frame.activeCueId?.let { put("activeCueId", it) }
+                            frame.nextCueId?.let { put("nextCueId", it) }
+                            put("nextIsArmed", frame.nextIsArmed)
+                            frame.fadeDurationMs?.let { put("fadeDurationMs", it) }
+                            // Only present while a fade is actually running.
+                            frame.fadeElapsedMs?.let { put("fadeElapsedMs", it) }
+                            put("autoAdvance", frame.autoAdvance)
+                            frame.autoAdvanceDelayMs?.let { put("autoAdvanceDelayMs", it) }
+                        }
+                    }
+                })
+            }
+
+            if ("programmer" in include) {
+                // The AI mutates the programmer itself — `apply_look` and `create_look`'s
+                // `applyToTargets` both go through `programmerLayerStack.toggle`, which *toggles*:
+                // without being able to read the stack back, a model asked to "add the wash" a
+                // second time takes it off stage instead.
+                val store = state.show.programmerStore
+                put("programmer", buildJsonObject {
+                    put("blind", store.blind)
+                    put("layers", buildJsonArray {
+                        for (layer in store.layers) {
+                            addJsonObject {
+                                put("layerId", layer.layerId)
+                                put("sourceKind", layer.source.kind.name)
+                                put("sourceId", layer.source.id)
+                                put("sourceName", layer.source.name)
+                                put("sortOrder", layer.sortOrder)
+                                put("enabled", layer.enabled)
+                                put("blendMode", layer.blendMode)
+                                put("amount", layer.amount)
+                                put("targets", buildJsonArray {
+                                    for (target in layer.targets) {
+                                        addJsonObject {
+                                            put("type", target.type)
+                                            put("key", target.key)
+                                        }
+                                    }
+                                })
+                            }
+                        }
+                    })
+                    // The winning slot only. The per-owner stack underneath it is provenance for
+                    // the operator's UI; a model reading it could do nothing but re-derive the
+                    // top, which is the value on stage.
+                    put("entries", buildJsonArray {
+                        val entries = store.entries()
+                            .sortedWith(compareBy({ it.fixtureKey }, { it.propertyName }))
+                        for (entry in entries) {
+                            val top = entry.slots.first()
+                            addJsonObject {
+                                put("targetKey", entry.fixtureKey)
+                                put("propertyName", entry.propertyName)
+                                put("value", top.value.resolved.serialize())
+                                put("owner", top.owner.id)
+                                put("touched", top.touched)
+                            }
+                        }
+                    })
+                    // The raw-channel sideband is deliberately absent: no tool on this surface
+                    // writes or clears a channel, so it would be state the model can read and
+                    // never act on.
+                    store.lastIncludedTarget?.let { target ->
+                        put("lastIncluded", buildJsonObject {
+                            put("kind", target.kind.name)
+                            put("targetId", target.targetId)
+                            target.cueStackId?.let { put("cueStackId", it) }
+                        })
+                    }
+                })
             }
         }
 

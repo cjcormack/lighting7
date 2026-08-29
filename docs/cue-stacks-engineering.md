@@ -445,6 +445,6 @@ Five tools:
 - `advance_cue_stack` — Advance forward/backward
 - `add_cue_to_stack` — Move/add a cue into a stack
 
-The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.
+The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info, and `cue_run` alongside it for the run state of every stack that has one — the armed-or-positional `nextCueId`, `nextIsArmed`, and the live fade. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.
 
 The system prompt describes cue stack concepts and workflow.

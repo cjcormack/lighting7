@@ -61,6 +61,9 @@ buses that effects *subscribe to* rather than owning speeds. **Slot 0 is always 
 the global tempo that script `setBpm`/`tapTempo` and a bare AI `set_bpm` mean, and that
 every effect with no explicit master resolves to. (`set_bpm` also takes an optional
 `speedMasterUuid`, so the AI surface can retune any master, not only the global one.)
+The AI reads the bank back through `get_current_state`'s `speed_masters` section, which is
+where a master created mid-conversation gets its uuid — the system prompt's listing is built
+once and cannot grow one.
 
 There used to be a second, unkeyed tempo surface alongside this one — WS
 `setFxBpm`/`tapTempo`/`beatSync`/`requestBeatSync`, REST `/fx/clock/*`, and `bpm` /
