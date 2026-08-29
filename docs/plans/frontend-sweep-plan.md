@@ -81,7 +81,7 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-PROGRAMMER-ERROR-DROPPED` | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
-| `FS-BUG-TIMEDLAYERS-RENAME` | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
+| ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
 | `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
 | `FS-PERF-FADE-IN-SHOWBAR` | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
@@ -318,9 +318,9 @@ not break: the cached snapshot identity (stops unrelated provenance pushes re-re
 the per-`(target,property)` subscription split, empty-cells-means-off, and the blind-transition
 filter.
 
-### `FS-BUG-TIMEDLAYERS-RENAME`
+### ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ — **landed**
 **Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →
-`timedLayers`** · S2 · P1 · C1 · sonnet
+`timedLayers`**, lighting-react `d01f0b7` · S2 · P1 · C1 · sonnet
 `src/store/programmerOps.ts`, `src/components/programmer/RecordSheet.tsx`
 
 `ProgrammerPreservedCounts.timedPresetApplications` (non-optional) mirrors a field
