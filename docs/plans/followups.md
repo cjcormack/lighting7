@@ -22,8 +22,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
 | [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
-| [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Trigger | FE | operator asks for it |
-| [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 4th surface renders `AssignmentHealth` |
+| [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Rejected | FE | decision record — no surface hosts it |
+| [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
@@ -154,26 +154,34 @@ The operator-visible symptom to watch for is in `FU-MANUAL-FX-TEMPLATE-COLOUR` s
 
 ### `FU-FE-REBIND-INPLACE`
 
-**In-place "Rebind" for dead assignments** · Trigger · Cue-authoring Phase 6, deferred 2026-04-22
+**In-place "Rebind" for dead assignments** · Rejected · Cue-authoring Phase 6, deferred
+2026-04-22; closed 2026-08-29
 
-`DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` ship one Remove button per dead row. The
-plan wanted a Rebind quick-action opening a picker pre-populated with the dead assignment's
-property + value; we shipped Remove-and-re-author instead.
+The item asked for a Rebind quick-action beside each dead row, opening a picker pre-populated with
+the dead assignment's property + value, in place of the Remove-and-re-author we shipped. It named
+`DeadAssignmentsBanner` / `DeadPresetAssignmentsBanner` as the hosts. Neither exists: the second
+never did, and the first rendered nowhere and was deleted with `FS-DEAD-ORPHAN-FILES`
+(lighting-react `a23b16c`). Cue and Look authoring have no dead-assignment surface at all today —
+the only thing that renders health is `BindingMatrix`, over surface bindings, where "rebind" is
+already the whole point of the grid.
 
-**Trigger**: an operator asks for it. Implementation is unblocked — `PropertyChannelWriter`
-(Phase 7) can drive live preview of the proposed rebind.
+Closed rather than restated because there is no host to restate it against. If a dead-row surface
+is ever built for cues or Looks, decide Rebind-vs-Remove as part of designing it rather than
+inheriting this note.
 
 ### `FU-FE-HEALTH-BADGE`
 
 **Shared `<HealthBadge>` for `AssignmentHealth`** · Trigger · `moveInDark` row-list editor,
 2026-04-25
 
-`AssignmentHealth` renders in three places — `DeadAssignmentsBanner.tsx`,
-`DeadPresetAssignmentsBanner.tsx`, `PropertyAssignmentsList.tsx`. All three use `describeHealth()`
-from `lib/healthDescriptor.ts` for the label but wrap it in their own `<Badge>` / `<Alert>`.
+`AssignmentHealth` used to render in three places. Two of the three named here never survived:
+`DeadPresetAssignmentsBanner.tsx` did not exist, and `DeadAssignmentsBanner.tsx` rendered nowhere
+and went with `FS-DEAD-ORPHAN-FILES` (lighting-react `a23b16c`). One live renderer is left —
+`BindingMatrix.tsx`, which calls `describeHealth()` from `lib/healthDescriptor.ts` and wraps it in
+its own markup.
 
-**Trigger**: a fourth surface needs it (likely the cue detail sheet or the surface bindings list).
-Three call sites with stable display patterns don't pay for the abstraction.
+**Trigger**: a second surface needs it. A shared `<HealthBadge>` over a single call site is pure
+indirection; `describeHealth()` is already the shared part.
 
 ### `FU-FE-USE-TARGET-PROPERTIES`
 

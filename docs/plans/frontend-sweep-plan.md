@@ -115,10 +115,10 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-FXLIBRARY-PARAMS`~~ **done** | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
 | `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
-| `FS-DEAD-CURRENTCUESTATE` | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
+| ~~`FS-DEAD-CURRENTCUESTATE`~~ **done** | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
 | `FS-DEAD-DEVDEPS` | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
-| `FS-DEAD-EXPORTS` | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
-| `FS-DEAD-ORPHAN-FILES` | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
+| ~~`FS-DEAD-EXPORTS`~~ **done** | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
+| ~~`FS-DEAD-ORPHAN-FILES`~~ **done** | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
 | `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
 | `FS-DUP-COLOUR-POPOVER` | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
 | `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
@@ -177,9 +177,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
 | ~~`FS-COORD-PING`~~ **done** | Landed with backend D5 as `c6ee984`; one flatten constraint survives it — see the item | S4 | P3 | C1 | haiku |
 | ~~`FS-COORD-STRICT-ENUMS`~~ **done** | Confirm-only: E4/E10 made the effect-enum write sites strict, and B3 lets the FX sheet se… | S4 | P3 | C1 | haiku |
-| `FS-DEAD-CSS` | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
-| `FS-DEAD-EXPORT-KEYWORD` | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
-| `FS-DEAD-PROTOTYPES` | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
+| ~~`FS-DEAD-CSS`~~ **done** | `.scrollbar-thin` and its three webkit child rules serve a deleted palette strip | S4 | P3 | C1 | haiku |
+| ~~`FS-DEAD-EXPORT-KEYWORD`~~ **done** | Ten symbols exported but used only inside their own module | S4 | P3 | C1 | haiku |
+| ~~`FS-DEAD-PROTOTYPES`~~ **done** | `src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree | S4 | P3 | C1 | haiku |
 | `FS-DOCS-CLAUDEMD-PROVENANCE` | CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource` | S4 | P3 | C1 | haiku |
 | `FS-DOCS-OUTOFSCOPE-COMMENT` | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
 | `FS-DOCS-REF-RATIONALE` | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
@@ -1148,8 +1148,8 @@ clone was complete — and fix the sheet wording.
 Roughly 4,300 lines deletable outright, plus endpoint/DTO surface. The house test gates make these
 safe mechanical batches; the notes below are the non-obvious couplings.
 
-### `FS-DEAD-ORPHAN-FILES`
-**Six files unreachable from `main.tsx` (and from any test)** · S3 · P2 · C1 · haiku
+### ~~`FS-DEAD-ORPHAN-FILES`~~ — **landed**
+**Six files unreachable from `main.tsx` (and from any test)**, `a23b16c` · S3 · P2 · C1 · haiku
 `src/UnsavedChangesDialog.tsx`, `src/components/cues/editor/DeadAssignmentsBanner.tsx`,
 `src/components/looks/DeadLookRowsBanner.tsx`, `src/components/fixtures/GroupPropertiesDialog.tsx`,
 `src/components/ui/searchable-select.tsx`, `src/react-app-env.d.ts`
@@ -1161,6 +1161,12 @@ installed. **Corrects a FU**: `FU-FE-REBIND-INPLACE`'s premise is already false 
 `DeadPresetAssignmentsBanner` doesn't exist anywhere and `DeadAssignmentsBanner` renders nowhere, so
 there is no live dead-assignment banner to add Rebind to. Restate that FU against whatever surface
 would host it, or close it.
+
+Grew in the landing: two follow-ups needed the premise repair, not one. `FU-FE-REBIND-INPLACE` was
+closed as **Rejected** — there is no host to restate it against, since neither cues nor Looks have a
+dead-row surface at all. `FU-FE-HEALTH-BADGE` named the same two banners as two of its three
+`AssignmentHealth` renderers; one live renderer is left (`BindingMatrix.tsx`), so its trigger is now
+"a second surface", not a fourth.
 
 ### `FS-DEAD-RTKQ-HOOKS`
 **Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints fully dead**
@@ -1179,9 +1185,9 @@ so an endpoint and its list entries move in one change. `copyCue`'s SILENT entry
 `CopyCueDialog.tsx`, a file that does not exist — the one dead path among all paths that file
 names. Verify per symbol, not per module.
 
-### `FS-DEAD-CURRENTCUESTATE`
+### ~~`FS-DEAD-CURRENTCUESTATE`~~ — **landed**
 **The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing reads —
-with a claim that is also false** · S3 · P2 · C1 · haiku
+with a claim that is also false**, `c6533c9` · S3 · P2 · C1 · haiku
 `src/store/cues.ts`, `src/api/cuesApi.ts`
 
 Query, lazy hook and `CueCurrentState` have zero consumers; the type's "still `presetApplications`
@@ -1189,8 +1195,8 @@ on the wire" comment asserts the opposite of the wire (`CueCurrentStateResponse`
 `layers: List<CueLayerDto>`). Delete all three. The backend route stays; a future "what is on stage"
 surface re-types against `layers` then.
 
-### `FS-DEAD-EXPORTS`
-**Sixteen exported symbols with zero references anywhere** · S3 · P2 · C1 · haiku
+### ~~`FS-DEAD-EXPORTS`~~ — **landed**
+**Sixteen exported symbols with zero references anywhere**, `e88eb09` · S3 · P2 · C1 · haiku
 across `src/api/`, `src/store/`, `src/hooks/`, `src/lib/`, `src/components/`
 
 `resolveFixtureTypeLabel`, `isDeferred`, `LookPreviewResponse`/`LookPreviewRequest` (outlived their
@@ -1200,6 +1206,14 @@ endpoints), `CODE_SPEED_MASTER_PROTECTED`, `scopeIsEditable`, `targetEquals`, `S
 `programmerSetColour`/`programmerSetPosition` (thin wrappers the live call sites bypass). Cautions:
 `isDeferred`'s deletion must not touch `validateLookRows`' inlined `ref:`/`tmpl:` shape checks;
 keep the *meaning* of the `CODE_SPEED_MASTER_PROTECTED` prose in errorToastMiddleware's comment.
+
+Landed as fourteen of the sixteen. `useStackActiveCueIds` was already gone with
+`FS-BUG-CUESLOT-LIVENESS`, and `targetEquals` was deliberately left standing for
+`FS-DUP-TARGETKEY` to take with its other half, per §4's supersession. Two private symbols followed
+their last caller out as this item anticipated: `deepEqual` (whose only non-recursive caller was
+`arraysEqual`) and `normaliseEffectName` (private to `buildEffectLibraryLookup`). Both cautions held
+as written — errorToastMiddleware's prose already names the wire literal rather than the constant,
+so nothing there needed changing.
 
 ### `FS-DEAD-CUELAYER-HELPERS`
 **`reorderCueLayers` and `densifyCueLayerOrder` have no production caller** · S3 · P2 · C2 · sonnet
@@ -1260,17 +1274,17 @@ behaviour change to a real gate) or drop both and leave formatting to `npm run f
 finding: `FS-ARCH-ALERTDIALOG-DEP` *adds* a missing declaration — do them together as one manifest
 pass.
 
-### `FS-DEAD-CSS`
-**`.scrollbar-thin` and its three webkit child rules serve a deleted palette strip** · S4 · P3 · C1
-· haiku
+### ~~`FS-DEAD-CSS`~~ — **landed**
+**`.scrollbar-thin` and its three webkit child rules serve a deleted palette strip**, `51276c2` · S4
+· P3 · C1 · haiku
 `src/index.css`
 
 Zero class references; the comment names the "horizontal palette strip" deleted in session 4. The
 whole of the dead-CSS surface — everything else in the file is live or carries documented reasons
 (the kotlin-playground rules stay).
 
-### `FS-DEAD-EXPORT-KEYWORD`
-**Ten symbols exported but used only inside their own module** · S4 · P3 · C1 · haiku
+### ~~`FS-DEAD-EXPORT-KEYWORD`~~ — **landed**
+**Ten symbols exported but used only inside their own module**, `2eb6854` · S4 · P3 · C1 · haiku
 `src/hooks/`, `src/lib/`, `src/components/programmer/ProgrammerScope.tsx`,
 `src/components/looks/lookRefValue.tsx`
 
@@ -1280,9 +1294,9 @@ caller is dead `arraysEqual` — check whether it follows), `DEFAULT_ARRAY_INSET
 `scopesEqual`, `lookValueColourCss`, `describeLookValue`. Drop the `export` keyword.
 `RecordPreset` looks similar but stays exported — it types the context's public `openRecord`.
 
-### `FS-DEAD-PROTOTYPES`
-**`src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree** ·
-S4 · P3 · C1 · haiku
+### ~~`FS-DEAD-PROTOTYPES`~~ — **landed**
+**`src/prototypes/` is 2.4k lines of shipped-and-done design scratch inside the compiled tree**,
+`1fc26ac` · S4 · P3 · C1 · haiku
 `src/prototypes/`, `eslint.config.js`
 
 Zero importers; all three prototyped surfaces have shipped; `model.ts`'s `computeWarnings` was
@@ -1291,6 +1305,11 @@ arrangement is partly deliberate (eslint.config.js documents ignoring the `.jsx`
 frames them as reference implementations) — honour that by **relocating** to `docs/prototypes/` (or
 deleting) rather than leaving a directory a third of which is type-checked and linted for nothing.
 Drop the eslint ignore entry with it.
+
+Landed as relocated, with the ignore entry **replaced** rather than dropped: `npm run lint` is
+`eslint .`, not `eslint src`, so the `.jsx` files would have kept failing to parse in their new
+home. `src/prototypes/**/*.jsx` became `docs/prototypes/**`. The tsc half of the finding is fully
+answered — `tsconfig.json` includes only `src`, so `model.ts` leaves the type-check entirely.
 
 ## 9. Duplication
 
