@@ -95,9 +95,9 @@ the `FS-BE-*` backend halves still owed are listed in §14 only.
 | `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | `FS-PERF-PROMPTBOOK-FADE-DRILL` | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
-| `FS-COORD-ADMIN-GATE` | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
+| ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
 | `FS-COORD-CUEEDIT-RETIRE` | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
-| `FS-COORD-WIRE-FIELD-DELETIONS` | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
+| ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ **done** | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
 | `FS-COORD-GROUPS-WS` | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
@@ -1965,9 +1965,9 @@ So this is two changes, not one, and the deletion is the *second*: file `FS-BE-G
 senders — and re-point the invalidation at whatever frame the backend half adds, rather than
 leaving the list refreshed only by this client's own mutations.
 
-### `FS-COORD-WIRE-FIELD-DELETIONS`
-**Retired-concept wire fields: the server has now deleted them, so these are live phantoms** *(was:
-"coordinate, don't unilaterally delete")* · S3 · **P1** · C1 · haiku
+### ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ — **landed**
+**Retired-concept wire fields: the server has now deleted them, so these are live phantoms**,
+`39b2375` *(was: "coordinate, don't unilaterally delete")* · S3 · **P1** · C1 · haiku
 `src/components/programmer/FxSheet.tsx`, `src/store/fixtureFx.ts`, `src/api/groupsApi.ts`,
 `src/api/cuesApi.ts`, `src/api/cueStacksApi.ts`
 
@@ -1992,6 +1992,11 @@ resolves display via `useSpeedMasterDisplay(uuid)`, so the two `*Index` fields i
 are display debris. B4 shipped with the `*Index` pair left unconditional deliberately and the
 `*Uuid` pair nulled per `timingSource`, which is what this client actually reads.
 `FS-DOCS-STALE-COMMENTS` still covers the stale `speedMasterIndex` claim.
+
+Landed as scoped: `cueStacksApi.ts`'s `presetCount` was left alone, per this item's own note that
+its deletion is `FS-TYPES-PRESETCOUNT-RENAME`'s job. `CueCurrentState.presetApplications` was
+deleted outright rather than replaced with the backend's new `layers` shape — that type is already
+flagged dead in full by `FS-DEAD-CURRENTCUESTATE`, so wiring up a replacement would be waste.
 
 ### ~~`FS-COORD-API-NORMALIZE`~~ — **landed with backend F1–F5, F8**
 **Every hard rename in the F wave was a same-change client edit** · S3 · P2 · C2 · sonnet
@@ -2022,9 +2027,9 @@ One consequence worth carrying to a neighbouring item: F5's connect burst narrow
 reconnect, so the hand-maintained tag list no longer has to cover them — but everything RTK Query
 caches over plain REST still does.
 
-### `FS-COORD-ADMIN-GATE`
-**Gate Export/Import in `Projects.tsx` — backend F6 landed `60cc3b3` and this is now a live 403** ·
-S3 · **P1** · C1 · sonnet
+### ~~`FS-COORD-ADMIN-GATE`~~ — **landed**
+**Gate Export/Import in `Projects.tsx` — backend F6 landed `60cc3b3` and this is now a live 403**,
+`a695e6c` · S3 · **P1** · C1 · sonnet
 `src/routes/Projects.tsx`, `src/navigation.ts`, `src/store/restApi.ts`
 
 F6 landed narrower than this item assumed, and the narrowing is good news: the code-execution
@@ -2044,6 +2049,12 @@ menu item (`:256-257`) unconditionally, so an operator sees two controls that ca
 query (`:48`) — hide or disable both controls the same way. Then the `adminOnly` nav ids (pinned by
 `navigation.test.ts` against nothing backend-side) and the role-prefix list in `restApi.ts:15`,
 which the backend doc cites as a hand-mirror worth re-verifying now that the real gating exists.
+
+Landed as scoped: both controls are hidden (not disabled), matching this codebase's documented
+"hidden rather than disabled" convention for permission-gated affordances. The `restApi.ts:15`
+role-prefix list is drift — no such list exists at HEAD (`restApi.ts` has a `NOT_A_SESSION_LOSS`
+endpoint set, not a role/path mirror); the actual mechanism is `navigation.ts`'s per-item
+`adminOnly` flags plus each component's own `isAdmin` check, both already correct and pinned.
 
 ### `FS-COORD-NEW-BROADCASTS`
 **Add the client bridges for `scriptListChanged` / `fxDefinitionListChanged` — backend B5 landed
