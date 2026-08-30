@@ -25,6 +25,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Rejected | FE | decision record — no surface hosts it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
+| [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
+| [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
@@ -197,6 +199,42 @@ plus a categorised variant for surfaces that need colour/dimmer/position groupin
 
 **Trigger**: a sixth consumer, or a property-shape change that forces a multi-file edit. Today's
 implementations are stable, so pulling them together now is churn that risks visual regressions.
+
+### `FU-FE-REVISION-REFETCH-DEDUP`
+
+**Shared primitive for "coalesce a high-frequency broadcast, refetch only on real change"** ·
+Trigger · frontend sweep `FS-PERF-PROMPTBOOK-FADE-DRILL` review, 2026-08-30
+
+`programmerWsApi.ts`'s `applyProvenance` gates a state refetch on `message.programmerRevision`
+moving since the last frame (landed with `FS-PERF-PROVENANCE-REFETCH`) — the third independent
+hand-rolled implementation of this problem class. `channelSource.ts` already notes it uses "the
+same reasoning as `changedKeys` in `programmerWsApi.ts`" rather than sharing code, and
+`debounceMapUpdates` in `channelsApi.ts` is a third, structurally different coalescing scheme for
+the same problem. `wsSubscriptionFactory.ts` has generic subscription primitives but nothing for
+revision-gated refetch specifically.
+
+**Trigger**: a fourth high-frequency broadcast needs this treatment (a candidate: `cueRunStateChanged`'s
+`fadeElapsedMs`, if it ever needs a value refetch rather than just an animation input). The three
+existing implementations differ enough in shape (map-diff signatures vs. a monotonic counter vs. a
+per-key debounce) that unifying them now, with no fourth caller driving the design, risks losing a
+subtlety one of them depends on for no present benefit.
+
+### `FU-FE-REVISION-NAME-CLASH`
+
+**Two same-named "revision" counters in `programmerWsApi.ts` mean different things** · Ready ·
+frontend sweep `FS-PERF-PROMPTBOOK-FADE-DRILL` review, 2026-08-30
+
+The wire field `programmerRevision` (server-driven refetch gate, added by
+`FS-PERF-PROVENANCE-REFETCH`) and the pre-existing client-side `revision`/`useProgrammerRevision()`
+render-notification counter share the word "revision" in the same module but have unrelated
+semantics — the client counter increments only when `touched.length > 0`, decoupling it further
+from the wire field's meaning. A future maintainer debugging "why didn't the refetch fire" versus
+"why didn't this re-render" is likely to conflate the two given the identical name.
+
+Rename one to make the distinction explicit — e.g. `programmerRenderTick` or
+`programmerNotifyRevision` for the client-side render counter, leaving `programmerRevision` for
+the wire field it mirrors. Pure rename, no behaviour change; pick it up whenever this file is next
+touched.
 
 ### `FU-SPEED-SURFACE-TAP-LED`
 
