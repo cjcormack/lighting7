@@ -109,7 +109,7 @@ halves still owed are listed in §14 only.
 | `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
 | ~~`FS-ARCH-IMPORT-CYCLE`~~ **done** | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
 | ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ **done** | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
-| `FS-BUG-CUE-TAG-STALE` | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
+| ~~`FS-BUG-CUE-TAG-STALE`~~ **done** | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
 | `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-FXLIBRARY-PARAMS`~~ **done** | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
@@ -489,9 +489,9 @@ concatenate to exactly the resync set, so a new tag cannot fall out by landing i
 timings are code-read guesses, so the landing also files `FU-MANUAL-RECONNECT-RESYNC` in
 `manual-validation.md`.
 
-### `FS-BUG-CUE-TAG-STALE`
+### ~~`FS-BUG-CUE-TAG-STALE`~~ — **landed**
 **The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go stale on
-a healthy socket** · S3 · P2 · C2 · opus
+a healthy socket**, lighting-react `49fe1d3` (+ lighting7 `6525ad6`) · S3 · P2 · C2 · opus
 `src/store/cues.ts`, `src/store/looks.ts`, `src/store/templates.ts`
 
 `projectCueCooked` — the read behind `CueValueGrid` — is tagged `Cue`, and nothing invalidates `Cue`
@@ -506,6 +506,19 @@ CRUD-cadence, affordable); the full cross-client fix needs a backend frame — `
 broadcasting its `cuesRepublished` id list (§14, `FS-BE-CUES-REPUBLISHED-FRAME` — still owed; the
 field exists on the REST responses and nowhere on the bus) — and
 the `projectCueCooked` doc comment corrected to say which edits actually refetch it.
+
+Landed as all three layers, backend half included: the reconnect layer needed nothing (`Cue` reached
+`RECONNECT_RESYNC_TAGS`, in the first wave, with `FS-BUG-RECONNECT-RESYNC`), the two CRUD bridges now
+carry `Cue`, and `FS-BE-CUES-REPUBLISHED-FRAME` was written rather than left owed.
+
+Landed wider than the **Fix** on two points, both deliberate. The frame carries **every cue layering
+the edited record**, not the `cuesRepublished` list the item names: that list is the *live* cues whose
+Layer 4 rows were replaced, but `/cues/{id}/cooked` composes on read, so a **dark** cue layering the
+Look reads stale from the identical edit. Because the two sets differ, the frame is named
+`cuesRecomposed` — during review the two names a line apart in `republishForSourceEdit` were read as
+one set twice. Grew in the landing: the two bridges also send `CueList`, the pairing every
+cue-affecting write in the client uses, since a cue's list entry carries `layers[].source.name` and a
+rename elsewhere left the old one cached.
 
 ### `FS-BUG-WS-SEND-DROPPED`
 **Every WS write is silently dropped while the socket is down — programmer sets, Blind, blackout,
@@ -2184,8 +2197,9 @@ shape in the process:
    `FS-COORD-WIRE-FIELD-DELETIONS` and the surviving half of `FS-COORD-ADMIN-GATE` are **P1** now,
    not P2, and the second is a live 403 generator on a desk.
 3. **The backend sweep closed without picking up this section's `FS-BE-*` proposals.** They are
-   restated at the end as backend halves still owed; three frontend items cannot be finished
-   correctly without them.
+   restated at the end as backend halves still owed. Two have since been written by the frontend
+   item that needed them (`FS-BE-ACTIVATE-SHORTCIRCUIT`, `FS-BE-CUES-REPUBLISHED-FRAME`), which is
+   the pattern to follow when one blocks an item: write the half, in its own commit here.
 
 One ordering constraint outranks everything else here, because getting it backwards breaks Record
 and Update on a live desk: **`FS-COORD-CUEEDIT-RETIRE`'s `force` senders must be deleted from this
@@ -2535,6 +2549,9 @@ Three of the six are settled:
   `FS-COORD-GROUPS-WS` pointed the client's `GroupList` invalidation at `fixturesChanged` instead
   (lighting-react `c1a8c44`).
 - ~~`FS-BE-ACTIVATE-SHORTCIRCUIT`~~ — done, `1cdadb7`, with `FS-BUG-CUESLOT-LIVENESS`.
+- ~~`FS-BE-CUES-REPUBLISHED-FRAME`~~ — done, `6525ad6`, with `FS-BUG-CUE-TAG-STALE`. Landed as
+  `cuesRecomposed`, carrying every cue layering the edited record rather than the REST responses'
+  narrower `cuesRepublished` list — see that item for why the two are different questions.
 
 Still owed, and each blocking a frontend item from being finished honestly:
 
@@ -2548,11 +2565,6 @@ Still owed, and each blocking a frontend item from being finished honestly:
   `projectTemplates.kt`'s toggle route derives none, while its KDoc claims the server derives the
   family and cross-checks the echo (the echo can never disagree with itself). Backend half of
   `FS-TYPES-TEMPLATE-TOGGLE-MASK`; that item is a client-side no-op without it.
-- `FS-BE-CUES-REPUBLISHED-FRAME` — `republishForLookEdit` / `republishForTemplateEdit` re-cook and
-  re-transmit affected cues but emit no frame naming them, so no *other* client can refresh an
-  expanded cue's composed values. Confirmed still absent at HEAD: `cuesRepublished` exists on the
-  REST responses (`lookRepublish.kt:36`, `programmerRoutes.kt:325`, `lookRecord.kt:255`) and
-  nowhere on the broadcast bus. Backend half of `FS-BUG-CUE-TAG-STALE`.
 - `FS-BE-FORCE-FIELDS` *(new)* — **now unblocked.** `force` survives on the Record and Update
   request bodies, inert, solely because this repo used to send it on every submit (backend D1
   note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client sends it and
