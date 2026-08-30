@@ -94,7 +94,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-CODE-SPLITTING`~~ **done** | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-COLLAPSED-PANELS`~~ **done** | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ **done** | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
-| `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
+| ~~`FS-TEST-PUBLICPATH`~~ **done** | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
 | ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-CUEEDIT-RETIRE`~~ **done** | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ **done** | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
@@ -2167,9 +2167,9 @@ focused template's rows editable, which is precisely the silent-conversion CLAUD
 asserting on the store's own output (query skipped, empty `serverRows`, `setValue` a no-op) so the
 pin survives notice rewording.
 
-### `FS-TEST-PUBLICPATH`
-**The publicPath auth/boot-gate bypass predicate is untested and unexported** · S2 · P2 · C2 ·
-sonnet
+### ~~`FS-TEST-PUBLICPATH`~~ — **landed**
+**The publicPath auth/boot-gate bypass predicate is untested and unexported**, `435f209` · S2 · P2
+· C2 · sonnet
 `src/App.tsx`
 
 The predicate that switches *both* gates off carries two documented traps (matches routes not
