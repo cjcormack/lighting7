@@ -34,6 +34,7 @@ as a one-line row.
 | [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CUE-REPUBLISH-FRAME`](#fu-manual-cue-republish-frame) | a cue expanded on one client refreshes when another retunes a Look it layers | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-WS-SEND-DROPPED`](#fu-manual-ws-send-dropped) | a WebSocket blip announces itself instead of eating every gesture silently | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -684,6 +685,37 @@ frame is deliberately wider than the REST field of the same name to cover. Then 
 template instead of a Look. Finally check the storm guard: with a Look library open in A, do a
 handful of rapid saves in B and confirm A issues one cooked read per save, not a cue-cache-wide
 refetch. 15 minutes.
+
+---
+
+## `FU-MANUAL-WS-SEND-DROPPED`
+
+**What it proves**: every WebSocket write used to be `if (readyState === OPEN) ws.send(...)` with no
+return value, so a programmer set, a Blind press, a blackout, a park, a TAP — all of them — were
+discarded in silence for however long the reconnect backoff was sleeping (up to 30 s). The write
+path now reports the drop as a toast, and the controls that promise an immediate rig change go
+disabled while the socket is down. There is deliberately **no replay queue**: flushing a
+minute-old blackout on reconnect would move the rig behind the operator's back.
+
+**Test**: with the desk running and a browser on `/programmer`, pull the backend's network (or stop
+the app) and watch the connection pill go red. Then, without reconnecting:
+
+1. Drag a dimmer cell in the grid — the cell must not open at all (mouse *and* Tab-then-Enter), and
+   the hover text should say the desk is unreachable. Confirm a cell that Output scope has already
+   made read-only still says *its* reason, not the connection's.
+2. Press Blind in the show bar, and blackout / GM on `/settings/surfaces` — all three disabled.
+3. On `/channels`, in Edit mode: the level sliders, the park/unpark affordances, Unpark All, and
+   both "…at Value" buttons are refused, and the park tooltip and its context-menu item say the
+   same thing.
+4. TAP and the BPM readout in the show bar are disabled; a fixture-detail sheet's property sliders
+   are read-only; a busking property pad takes no press.
+5. Start MIDI Learn while offline — the dialog must show a reason rather than spinning forever.
+
+Exactly one toast should have appeared across all of that (they share a sonner id). Then restore
+the network: the pill goes green, every control comes back live, and **nothing queued fires** — the
+rig must not suddenly blackout or move. Finally check the race the disable can't cover: begin a
+drag with the desk up, pull the network mid-drag, and confirm the one toast and no stuck state.
+15 minutes.
 
 ---
 

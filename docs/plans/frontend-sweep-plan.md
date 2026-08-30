@@ -110,7 +110,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-ARCH-IMPORT-CYCLE`~~ **done** | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
 | ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ **done** | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
 | ~~`FS-BUG-CUE-TAG-STALE`~~ **done** | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
-| `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
+| ~~`FS-BUG-WS-SEND-DROPPED`~~ **done** | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-FXLIBRARY-PARAMS`~~ **done** | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
@@ -520,9 +520,9 @@ one set twice. Grew in the landing: the two bridges also send `CueList`, the pai
 cue-affecting write in the client uses, since a cue's list entry carries `layers[].source.name` and a
 rename elsewhere left the old one cached.
 
-### `FS-BUG-WS-SEND-DROPPED`
+### ~~`FS-BUG-WS-SEND-DROPPED`~~ — **landed**
 **Every WS write is silently dropped while the socket is down — programmer sets, Blind, blackout,
-park included** · S3 · P2 · C2 · opus
+park included**, `8d83277` · S3 · P2 · C2 · opus
 `src/api/internalApi.ts` and every WS write path
 
 `send` is `if (ws.readyState === OPEN) ws.send(data)` — no return value, queue, log, or toast — and
@@ -535,6 +535,16 @@ REST uses, and controls that promise an immediate rig change (blackout, Blind, c
 disable while disconnected. **Do not build a replay queue** — flushing a minute-old blackout on
 reconnect moves the rig behind the operator's back; the bridges' idempotent state re-requests are
 the correct catch-up.
+
+Grew in the landing: the disable now covers three sibling surfaces this finding doesn't name but
+that write to the same programmer over the same socket — the fixture-detail and group property
+sliders, the busking property pads, and the speed-master BPM/TAP tiles. Leaving them live while the
+grid was inert was incoherent. The review also found the grid's `pointer-events-none` was
+mouse-only (the cell triggers are tabbable, so Tab-then-Enter walked past it), that the three
+WS-backed RTK mutations (`parkChannel`, `unparkChannel`, `updateChannel`) fabricated success for a
+frame that never left the browser, and that MIDI Learn spun forever on a dropped `beginLearn`.
+`FU-MANUAL-WS-SEND-DROPPED` in [`manual-validation.md`](manual-validation.md) carries the rig check,
+including the one thing no test covers: that nothing queued fires on reconnect.
 
 ### `FS-BUG-3D-PLACEHOLDER`
 **The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a fully-lit
