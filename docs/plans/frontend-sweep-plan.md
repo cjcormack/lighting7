@@ -138,8 +138,8 @@ halves still owed are listed in §14 only.
 | `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
 | ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ **done** | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
 | ~~`FS-TEST-EDITOR-PINS`~~ **done** | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
-| `FS-TEST-PROGRAMMER-SCOPE` | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
-| `FS-TEST-PROVENANCE-PIN` | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
+| ~~`FS-TEST-PROGRAMMER-SCOPE`~~ **done** | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
+| ~~`FS-TEST-PROVENANCE-PIN`~~ **done** | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
 | ~~`FS-TYPES-ADDLAYER-MASK-DROP`~~ **done** | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
 | ~~`FS-TYPES-CUE-STOMP`~~ **done** | Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silent… | S3 | P2 | C1 | sonnet |
 | `FS-TYPES-EFFECTTYPE-UNION` | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
@@ -194,7 +194,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-RES-LOOKREFVALUE-NAME`~~ **done** | `lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never… | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-PANECHROME`~~ **done** | `components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-STRAY-CAPTURES`~~ **refuted** | Four `capture *.json` DMX debug dumps sit at the repo root | S4 | P3 | C1 | haiku |
-| `FS-TEST-INDICATOR-LINK` | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
+| ~~`FS-TEST-INDICATOR-LINK`~~ **done** | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
 | ~~`FS-TYPES-CLONE-COUNTS`~~ **done** | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
 | ~~`FS-TYPES-ISBUILTIN`~~ **done** | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
 | `FS-WS-DEBOUNCE-TICK` | `debounceMapUpdates` keeps its interval alive one no-op tick past idle | S4 | P3 | C1 | haiku |
@@ -2191,9 +2191,9 @@ touches it — the test CLAUDE.md cites pins a consequence, not the matching. **
 `/reset/abc` and `/device/abc` true (± trailing slash), `/Device/abc` true, `/device/` and `/device`
 false, `/device/abc/def` false.
 
-### `FS-TEST-PROGRAMMER-SCOPE`
-**`focusLayer`'s membership guard and the removed-layer fallback are unpinned** · S3 · P2 · C1 ·
-sonnet
+### ~~`FS-TEST-PROGRAMMER-SCOPE`~~ — **landed**
+**`focusLayer`'s membership guard and the removed-layer fallback are unpinned**, lighting-react
+`6b0731f` · S3 · P2 · C1 · sonnet
 `src/components/programmer/ProgrammerScope.tsx`
 
 CLAUDE.md calls the membership guard the one that bites (a cue's `layerId` must be refused), and no
@@ -2228,9 +2228,9 @@ mocked template list pinning all three exclusions and the `labelFor` loading/res
 split; decide whether the `rows.length === 1` clause is intended and state it in CLAUDE.md either
 way.
 
-### `FS-TEST-INDICATOR-LINK`
+### ~~`FS-TEST-INDICATOR-LINK`~~ — **landed**
 **`ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself is now
-historical)** · S4 · P3 · C1 · haiku
+historical)**, lighting-react `658ef83` · S4 · P3 · C1 · haiku
 `src/components/ProgrammerIndicator.test.tsx`
 
 All seven cases mount at `/projects/1/show`; none asserts the badge is an inert div (not a Link) on
@@ -2239,9 +2239,9 @@ current path value — it diverges only on non-existent siblings — so what's w
 on/off-programmer rendering split. **Fix**: parameterise the mount route; assert link+tooltip at
 `/show`, inert at `/programmer` and `/programmer/fx`.
 
-### `FS-TEST-PROVENANCE-PIN`
+### ~~`FS-TEST-PROVENANCE-PIN`~~ — **landed**
 **The provenance-signature test pins field names that no longer exist, and the `layerSource` arm of
-the signature has no test at all** · S3 · P2 · C1 · sonnet
+the signature has no test at all**, lighting-react `08adc63` · S3 · P2 · C1 · sonnet
 `src/api/programmerWsApi.test.ts`
 
 The "wakes a cell when only the winning layer changed" test sends `lookId`/`lookName` — fields
