@@ -91,7 +91,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
-| `FS-PERF-CODE-SPLITTING` | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
+| ~~`FS-PERF-CODE-SPLITTING`~~ **done** | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ **done** | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
@@ -1054,9 +1054,9 @@ re-request itself is deliberate and load-bearing for phase recovery). Give `crea
 emptiness signal and drop empty entries; keep re-requests for keys with live subscribers and master
 1's `''` convention.
 
-### `FS-PERF-CODE-SPLITTING`
-**The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere** · S2 · P2 · C2 ·
-opus
+### ~~`FS-PERF-CODE-SPLITTING`~~ — **landed**
+**The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere**, `656ff33` ·
+S2 · P2 · C2 · opus
 `vite.config.ts`, `src/App.tsx`
 
 One 4,023 kB `index-*.js` (1,141 kB gzip); zero `React.lazy` or dynamic imports in src. Measured
@@ -1067,6 +1067,19 @@ cold boot and every post-update restart. **Fix**: route-level `React.lazy` for t
 islands with layout-stable fallbacks. Two traps: `lib/stageCoords.ts` imports `three` and is
 consumed by non-3D code, so `three` stays in the main chunk until the Three-typed helpers are
 separated; and `AuthGate`/`BootGate` must not sit behind a lazy boundary.
+
+Landed as four lazy boundaries, not four route boundaries: `CueTriggerEditor` mounts the Kotlin
+editor in a sheet inside Show, so splitting only `/scripts` and `/fx-library` would have left all
+511 kB in the entry chunk — that island's boundary is the widget's own component
+(`LazyScriptEditor`), and `AiChatPanel`'s is a mount latch in `Layout`. `vite.config.ts` was not
+touched; rolldown's default chunking did the rest. Boot payload (entry plus every `modulepreload`)
+1,961 kB / 564 kB gzip, from 4,015 kB / 1,141 kB. Both traps held as written: `three` is still in
+the boot set via `stageCoords` → `useProjectedPatches` → the Layout stage panel.
+
+Grew in the landing: a `FeatureErrorBoundary` around each lazy boundary. The tree had no error
+boundary anywhere, and four `React.lazy` sites make a stale-chunk 404 reachable for the first time
+— acute here because the Windows updater rewrites the running install's statics in place — which
+unguarded unmounts the whole desk. On-rig check filed as `FU-MANUAL-CODE-SPLITTING`.
 
 ### `FS-WS-DEBOUNCE-TICK`
 **`debounceMapUpdates` keeps its interval alive one no-op tick past idle** · S4 · P3 · C1 · haiku

@@ -31,6 +31,7 @@ as a one-line row.
 | [`FU-MANUAL-PROVENANCE-REFETCH`](#fu-manual-provenance-refetch) | a crossfade no longer drives a refetch storm, and a MIDI write mid-fade still lands in the grid | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -602,6 +603,31 @@ advances several cues, foreground it, and confirm B converges on the right live/
 done ticks without a stuck fade or a spurious fade replay. On A, confirm its own GO never restarts
 or stutters the fade it is drawing, and that a standby armed mid-fade survives the fade ending.
 10 minutes.
+
+---
+
+## `FU-MANUAL-CODE-SPLITTING`
+
+**Four route/component chunks now arrive after boot rather than in it**
+· frontend sweep `FS-PERF-CODE-SPLITTING`, 2026-08-30
+
+The app was one 4.0 MB entry chunk; it is now a 2.0 MB boot payload plus four lazily-fetched
+chunks — Stage (`@react-three/*`), Prompt Book (`react-pdf`/pdfjs), the Kotlin script editor
+(`kotlin-playground`), and the Lux chat panel (`react-markdown`). The split is measured from the
+build output, not profiled, and the checks that matter are the ones a build can't make: that the
+chunks actually load from the packaged installer's static resources, and that the fallbacks read as
+"loading" rather than "broken" at desk latency.
+
+**Test**: from a packaged install (not the Vite dev server), hard-reload the desk and confirm the
+login screen paints noticeably sooner than before, then visit `/stage`, `/prompt-book`, a script in
+`/scripts`, an effect editor in `/fx-library`, a cue's trigger editor inside Show, and Lux. Each
+should show a brief spinner and then the real surface — never a blank pane, a console 404 on a
+`/assets/*.js` chunk, or a stuck spinner. Repeat the Stage and Prompt Book visits with the desk's
+network cable pulled, since these are the first assets the desk fetches *after* boot and a desk
+runs offline: they are served by lighting7 itself from `src/main/resources/static/`, so they must
+still arrive. Finally, open Lux, send a message, close the sheet, reopen it, and confirm the
+conversation is still there — the panel is now mounted on first open and deliberately never
+unmounted, and losing the thread on close would be the regression. 10 minutes.
 
 ---
 
