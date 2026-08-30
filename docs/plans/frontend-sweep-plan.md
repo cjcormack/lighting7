@@ -78,7 +78,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-BUG-STALE-ROW-SNAPSHOT`~~ **done** | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
 | `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-FADE-KEY-SNAPSHOT`~~ **done** | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
-| `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
+| ~~`FS-BUG-FXROUTE-REGEX`~~ **done** | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
 | ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ **done** | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
@@ -92,7 +92,7 @@ halves still owed are listed in §14 only.
 | `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | ~~`FS-PERF-CODE-SPLITTING`~~ **done** | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
-| `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
+| ~~`FS-PERF-COLLAPSED-PANELS`~~ **done** | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ **done** | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
 | ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
@@ -107,8 +107,8 @@ halves still owed are listed in §14 only.
 | ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
 | ~~`FS-ARCH-CURSOR-OWNERSHIP`~~ **done** | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
 | `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
-| `FS-ARCH-IMPORT-CYCLE` | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
-| `FS-ARCH-LOCALSTORAGE-BOOT` | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
+| ~~`FS-ARCH-IMPORT-CYCLE`~~ **done** | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
+| ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ **done** | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
 | `FS-BUG-CUE-TAG-STALE` | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
 | `FS-BUG-WS-SEND-DROPPED` | Every WS write is silently dropped while the socket is down — programmer sets, Blind, bla… | S3 | P2 | C2 | opus |
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
@@ -122,13 +122,13 @@ halves still owed are listed in §14 only.
 | `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
 | `FS-DUP-COLOUR-POPOVER` | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
 | `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
-| `FS-DUP-OVERVIEW-TOGGLES` | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
+| ~~`FS-DUP-OVERVIEW-TOGGLES`~~ **done** | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
 | `FS-DUP-REDIRECTS` | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
 | ~~`FS-DUP-ROW-SUBSCRIPTION`~~ **done** | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
 | ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ **done** | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
 | ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
 | `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
-| `FS-PERF-CHANNELSOURCE-REBUILD` | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
+| ~~`FS-PERF-CHANNELSOURCE-REBUILD`~~ **done** | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
 | ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
 | ~~`FS-PERF-PROVENANCE-REFETCH`~~ **done** | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
 | `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
@@ -219,7 +219,10 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
 4. **One Layout/overview-panel refactor, not five patches.** `FS-PERF-COLLAPSED-PANELS`,
    `FS-PERF-CHANNELSOURCE-REBUILD`'s `isVisible` gate, `FS-DUP-OVERVIEW-TOGGLES`,
    `FS-BUG-FXROUTE-REGEX`, `FS-ARCH-IMPORT-CYCLE` and `FS-ARCH-LOCALSTORAGE-BOOT` all converge on
-   `Layout.tsx` and the panels — dispatch as one batch.
+   `Layout.tsx` and the panels. ~~**spent**~~ — landed as one batch 2026-08-30, six commits
+   (lighting-react `52660a6`, `8d3e906`, `6cdd030`, `934025d`, `e773197`, `fbeddfa`, plus
+   `6365894`, `0ed1b31`, `4d7946a` and `1a9ebdb` for the cycle guard and the two review passes).
+   Nothing outstanding.
 5. **The `components/runner/` tree: move first or last, never interleaved.**
    `FS-RES-RUNNER-DIR` + `FS-RES-CUECARDEDITOR-DIR` touch files carrying
    `FS-PERF-MOBILE-SHEET-FADE`, `FS-DUP-MARKER-ROW` and `FS-DUP-TARGETKEY`; pick an order and rebase
@@ -350,9 +353,9 @@ Confirmed at backend HEAD after the sweep: `programmerRecord.kt:61-64` still sen
 still carries the "Was `timedPresetApplications`" breadcrumb that made this findable. No backend
 half; this is a one-repo fix.
 
-### `FS-BUG-FXROUTE-REGEX`
+### ~~`FS-BUG-FXROUTE-REGEX`~~ — **landed**
 **`isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects panel
-open** · S2 · P1 · C1 · sonnet
+open**, lighting-react `8d3e906` · S2 · P1 · C1 · sonnet
 `src/Layout.tsx`, `src/hooks/useEffectsOverview.ts`
 
 `/\/projects\/\d+\/fx/.test(pathname)` has no trailing boundary, so it matches
@@ -364,6 +367,20 @@ page that isn't it. This is the `startsWith` trap CLAUDE.md documents for `pathM
 **Fix**: match the whole segment (reuse `lib/navMatch.ts`), retitle the tooltip, and confirm the
 lock is still wanted at all now FX is a band of the programmer rather than a view. Coordinate with
 the Layout cluster (§4).
+
+Landed with the lock **kept**: `/projects/:id/fx` is still a real route with its own `active-only`
+nav entry, so there is still a page that wants the panel open. Grew by one line: the locked tooltip
+left ` effects overview` outside its ternary, so it read "…in FX view) effects overview" whenever it
+fired.
+
+Landed **twice**, which is the interesting part. The first attempt did what this item says — reuse
+`navMatch.ts`, via a new exported `pathHasSegment` — and the review caught that a segment match
+fixes `/fx-library` but then fires on `/projects/:id/programmer/fx`, a route the unanchored regex
+never hit. So the commit that tightened the guard widened it elsewhere. The fix is to stop matching
+the path here at all: `mostSpecificActiveId(navItems, pathname) === 'fx'` asks the nav the same
+question the sidebar asks, and longest-match resolves both cases by construction (`4d7946a`). Three
+cases are pinned in `navMatch.test.ts`. `pathHasSegment` stays — it is what `mostSpecificActiveId`
+is built on, and `ProgrammerIndicator` now shares it.
 
 ### ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ — **landed**
 **`programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere is
@@ -974,8 +991,9 @@ Note it; take it only if a cheap change-counter falls out of other programmer wo
 
 ### Always-mounted chrome
 
-### `FS-PERF-COLLAPSED-PANELS`
-**Collapsed overview panels keep doing full live work on every route** · S2 · P2 · C2 · opus
+### ~~`FS-PERF-COLLAPSED-PANELS`~~ — **landed**
+**Collapsed overview panels keep doing full live work on every route**, lighting-react `52660a6`
+(+ `6365894`) · S2 · P2 · C2 · opus
 `src/Layout.tsx`, `src/components/StageOverviewPanel.tsx`, `src/components/EffectsOverviewPanel.tsx`,
 `src/components/CueSlotOverviewPanel.tsx`
 
@@ -990,9 +1008,34 @@ sharing the Stage route's `ChannelSource` when open; reopening must not flash em
 Layout cluster (§4). `FS-PERF-CHANNELSOURCE-REBUILD` below is the largest single cost hiding behind
 this panel.
 
-### `FS-PERF-CHANNELSOURCE-REBUILD`
+Landed as an unmount, not a `wasRecentlyVisible` render gate: a shared `CollapsiblePanel` keeps the
+grid-rows wrapper and mounts the body while open plus one collapse's worth of time after, which is
+the same thing said as a lifecycle rather than a flag. Reopening does not flash empty inside RTK
+Query's one-minute retention of an unsubscribed entry; past it, it refetches like a fresh load, and
+the two pieces of state an operator would miss (the stage group filter, the cue-slot page) are held
+above the boundary. All **four** panels were done, not the three the file list names — the fixture
+overview panel has the same shape and its cards subscribe per fixture.
+
+Grew in the landing: `EditModeAssignPanel` was a fifth hand-rolled copy of the same collapse
+holding a cue-stack query, so it goes through `CollapsiblePanel` too; two cue-slot timers (the
+long-press stages, the drag edge-scroll) gained unmount cleanup, harmless before and not now; and
+`docs/stage-vis-engineering.md`'s "a collapsed panel costs nothing" claim was restated, since its
+stated *reason* — the panel renders whether or not it is expanded — is now false. A second review
+pass added `holdMounted`, which keeps the cue-slot body through an in-flight drag (unmounting takes
+every droppable with it, and the drop would be discarded in silence), and deleted the dead
+`CueSlotDndContext.isSlotPanelVisible` — lighting-react `6365894`.
+
+A second review pass over the whole cluster found one live regression and four consolidation gaps,
+all taken (`4d7946a`, `1a9ebdb`): the FX lock, the index-coupled descriptor pairing, a falsy
+`clientX` check that disabled drag edge-paging for a drag begun at x=0, the cue-slot page moved onto
+`usePersistentState`, and `ProgrammerIndicator` migrated onto `pathHasSegment`. The one finding
+left open is whether dnd-kit re-measures droppable rects after the wrapper collapses, which would
+defeat `holdMounted`; that is a rig question and is `FU-MANUAL-COLLAPSED-PANELS`'s last step.
+
+### ~~`FS-PERF-CHANNELSOURCE-REBUILD`~~ — **landed**
 **`createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that cannot
-have changed a channel — app-wide, from the always-mounted overview panel** · S3 · P2 · C1 · sonnet
+have changed a channel — app-wide, from the always-mounted overview panel**, lighting-react
+`fbeddfa` · S3 · P2 · C1 · sonnet
 `src/api/channelSource.ts`, `src/api/programmerWsApi.ts`, `src/components/StageOverviewPanel.tsx`
 
 `rebuild` runs unconditionally on every `programmer.subscribe` notification — including
@@ -1006,6 +1049,10 @@ Programmer/Output+Programmer vis choice keeps this running everywhere for a pane
 time (`refresh()` keeps forcing, it exists for descriptor changes); gate the provider on
 `isVisible` as part of `FS-PERF-COLLAPSED-PANELS`. The drag path staying O(entries) per echo is
 noted, not fixed — incremental resolution is a larger change.
+
+Landed in two halves as written: the `isVisible` gate came free with
+`FS-PERF-COLLAPSED-PANELS` (the provider sits inside the stage panel's body, which now unmounts),
+and the identity guard is its own commit.
 
 ### `FS-PERF-STAGE-BUFFER-UPLOADS`
 **`StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-uploads all
@@ -1490,9 +1537,9 @@ deleted; that FU needs restating regardless.) **Fix**: one module owning `proper
 rule with a unit test. Keep AddEditFxSheet's explicit setting/slider pickers — a UI affordance, not
 part of the rule.
 
-### `FS-DUP-OVERVIEW-TOGGLES`
-**Four near-identical Overview toggles plus three alias hooks for one persistent toggle** · S3 · P2
-· C1 · haiku
+### ~~`FS-DUP-OVERVIEW-TOGGLES`~~ — **landed**
+**Four near-identical Overview toggles plus three alias hooks for one persistent toggle**,
+lighting-react `e773197` · S3 · P2 · C1 · haiku
 `src/components/*OverviewToggle.tsx`, `src/Layout.tsx`
 
 Same Tooltip + ghost icon button, differing in icon and noun; the command palette already declares
@@ -1615,9 +1662,9 @@ authoring (share the request builder), presence — and pull the property-name d
 `FS-DUP-EFFECT-COMPAT`'s shared module. `programmerEntryFor`'s `owner === 'web'` rule is
 load-bearing: a pad must not light on, or clear, a Locate's or a layer's entry.
 
-### `FS-ARCH-IMPORT-CYCLE`
+### ~~`FS-ARCH-IMPORT-CYCLE`~~ — **landed**
 **The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`, with no
-lint rule to catch the next one** · S3 · P2 · C1 · sonnet
+lint rule to catch the next one**, lighting-react `934025d` (+ `0ed1b31`) · S3 · P2 · C1 · sonnet
 `src/components/CueSlotOverviewPanel.tsx`, `src/components/CueSlotEditAssignPanel.tsx`, `eslint.config.js`
 
 A genuine value-import cycle (the only one in the tree once type-only imports are stripped), in the
@@ -1625,6 +1672,18 @@ codebase whose CLAUDE.md documents what a cycle costs here (the `startOAuthIdent
 break that only shows up as a broken app in the browser). **Fix**: extract `SlotItemContent` +
 `CueSlotAssignDragData` into a third module; then add `eslint-plugin-import` with `import/no-cycle`
 as an error — it lands green immediately and guards the failure mode permanently.
+
+Landed in two commits, because the agent sandbox cannot add npm packages (§4 constraint 7) and the
+operator ran the install by hand. The rule needed more than turning on, and both halves of that
+fail **silently**: without `settings['import/parsers']` mapping `.ts`/`.tsx` to the TypeScript
+parser the plugin cannot read a dependency file at all and reports nothing whatsoever, and without
+an alias-aware resolver it skips the ~70% of this tree's imports written `@/…`. The stock node
+resolver understands neither, so the obvious configuration is a rule that passes forever and
+catches nothing. `eslint-import-resolver-alias.cjs` teaches it the one prefix; it is a separate
+CommonJS module because eslint-module-utils `require`s resolvers by name, and its path is computed
+absolutely because a repo-relative name resolves against the *linted file's* directory. Verified by
+restoring the pre-`934025d` cycle and watching the rule report it. `eslint-import-resolver-typescript`
+would read the tsconfig `paths` directly and should replace the shim if it ever needs to do more.
 
 ### `FS-ARCH-GRID-IN-ROUTES`
 **`FixturesListContainer` — the shared value grid — lives in a route module a component imports** ·
@@ -1638,9 +1697,9 @@ modules in `components/fixtures-list/` already document themselves against the c
 component identity — `useListSelection` clears its Redux scope on unmount and
 `ProgrammerPage.test.tsx` pins `gridMounts`; don't touch the null-scope-vs-Output distinction.
 
-### `FS-ARCH-LOCALSTORAGE-BOOT`
-**Unguarded `localStorage` on the boot path, against the policy the tree states explicitly** · S3 ·
-P2 · C1 · haiku
+### ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ — **landed**
+**Unguarded `localStorage` on the boot path, against the policy the tree states explicitly**,
+lighting-react `6cdd030` · S3 · P2 · C1 · haiku
 `src/lib/theme.ts`, `src/main.tsx`, `src/ThemeToggle.tsx`, `src/components/CueSlotOverviewPanel.tsx`
 
 `usePersistentState`'s docblock states the policy (all storage access wrapped) and most sites follow

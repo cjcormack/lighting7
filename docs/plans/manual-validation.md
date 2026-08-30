@@ -32,6 +32,7 @@ as a one-line row.
 | [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -628,6 +629,36 @@ runs offline: they are served by lighting7 itself from `src/main/resources/stati
 still arrive. Finally, open Lux, send a message, close the sheet, reopen it, and confirm the
 conversation is still there — the panel is now mounted on first open and deliberately never
 unmounted, and losing the thread on close would be the regression. 10 minutes.
+
+---
+
+## `FU-MANUAL-COLLAPSED-PANELS`
+
+**A collapsed overview panel is gone, not merely flat** · from the frontend sweep's Layout cluster,
+2026-08-30 (`FS-PERF-COLLAPSED-PANELS`, lighting-react `52660a6`)
+
+Layout rendered all four overview panels on every route, with visibility switching only the CSS
+grid rows — so on a live rig the mini-stage kept re-rendering its markers, the effects panel kept a
+beat interval running and the cue-slot panel kept its queries and listeners alive behind a
+zero-height container while the operator was on some unrelated page. Each panel is now a wrapper
+plus a body, and the body unmounts once the collapse animation finishes. This is a code-read win,
+not a profiled one, and the three things a build cannot check are the animation, the reopen, and
+the drag.
+
+**Test**: with a patched rig outputting and the programmer holding values, open all four overview
+panels, then close each one and watch it *animate* shut rather than snap — the body is held for
+200 ms precisely so it can. Reopen each immediately and confirm it comes back populated with no
+spinner and no "No fixtures placed yet": the mini-stage should show live marker colours at once,
+the effects panel a BPM and a beating dot rather than a dash. Then leave a panel closed for two
+minutes and reopen it — past RTK Query's cache retention this one *may* show a brief spinner, which
+is correct; what must not happen is an empty state where data exists. Navigate to `/users` with all
+four closed and confirm the desk is quiet. Finally, with the cue-slot panel open and in edit mode,
+start dragging a cue toward a slot and — without releasing — have a second person click the cue-slot
+toggle in the toolbar; the drop must still land, not vanish (lighting-react `6365894`). That last
+step is the one genuinely open question in the cluster: the body is held mounted through the drag,
+but the wrapper still collapses to zero height, and if dnd-kit re-measures droppable rects rather
+than using the ones cached at drag start, the drop resolves to nothing anyway. If it does vanish,
+the fix is to hold the wrapper open too, not just the body. 10 minutes.
 
 ---
 
