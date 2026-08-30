@@ -140,12 +140,12 @@ halves still owed are listed in §14 only.
 | ~~`FS-TEST-EDITOR-PINS`~~ **done** | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
 | `FS-TEST-PROGRAMMER-SCOPE` | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
 | `FS-TEST-PROVENANCE-PIN` | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
-| `FS-TYPES-ADDLAYER-MASK-DROP` | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
-| `FS-TYPES-CUE-STOMP` | Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silent… | S3 | P2 | C1 | sonnet |
+| ~~`FS-TYPES-ADDLAYER-MASK-DROP`~~ **done** | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
+| ~~`FS-TYPES-CUE-STOMP`~~ **done** | Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silent… | S3 | P2 | C1 | sonnet |
 | `FS-TYPES-EFFECTTYPE-UNION` | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-MASKGROUP-DUP` | `PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily` | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-PALETTE-WIRE-ARMS` | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
-| `FS-TYPES-PRESETCOUNT-RENAME` | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
+| ~~`FS-TYPES-PRESETCOUNT-RENAME`~~ **done** | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
 | `FS-TYPES-RIGGING-POSITION` | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
 | `FS-ARCH-BUSKING-GOD-HOOK` | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
 | `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
@@ -162,7 +162,7 @@ halves still owed are listed in §14 only.
 | `FS-RES-FIXTUREMODEL-SPLIT` | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
 | `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
 | ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
-| `FS-TYPES-SURFACE-DESCRIPTORS` | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
+| ~~`FS-TYPES-SURFACE-DESCRIPTORS`~~ **done** | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
 | `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
 | ~~`FS-COORD-NEW-BROADCASTS`~~ **done** | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
 | ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ **done** | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
@@ -195,8 +195,8 @@ halves still owed are listed in §14 only.
 | ~~`FS-RES-PANECHROME`~~ **done** | `components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-STRAY-CAPTURES`~~ **refuted** | Four `capture *.json` DMX debug dumps sit at the repo root | S4 | P3 | C1 | haiku |
 | `FS-TEST-INDICATOR-LINK` | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
-| `FS-TYPES-CLONE-COUNTS` | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
-| `FS-TYPES-ISBUILTIN` | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
+| ~~`FS-TYPES-CLONE-COUNTS`~~ **done** | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
+| ~~`FS-TYPES-ISBUILTIN`~~ **done** | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
 | `FS-WS-DEBOUNCE-TICK` | `debounceMapUpdates` keeps its interval alive one no-op tick past idle | S4 | P3 | C1 | haiku |
 
 ## 4. Sequencing and collisions
@@ -1218,9 +1218,9 @@ declares, server no longer sends) are listed here; the one *omission* class the 
 `FS-TYPES-CUE-STOMP`; a dedicated gap-round pass then swept the omission direction backend-first —
 its findings are folded in below.
 
-### `FS-TYPES-CUE-STOMP`
+### ~~`FS-TYPES-CUE-STOMP`~~ — **landed**
 **Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silently clears
-it** · S3 · P2 · C1 · sonnet
+it**, `27da6f1` · S3 · P2 · C1 · sonnet
 `src/api/cuesApi.ts`, `src/lib/cueUtils.ts`
 
 `routes/projectCues.kt`'s `CueDetails` and `NewCue` both carry `stomp: Boolean = false` (the
@@ -1236,8 +1236,15 @@ overwrites it, so wiring that hook up would convert the loss to active. The fiel
 test. Decide separately whether `CuePropertiesSheet` exposes it. Do not conflate with per-layer
 stomp (`lighting-composition-model.md` §Stomp).
 
-### `FS-TYPES-PRESETCOUNT-RENAME`
-**`CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount`** · S3 · P2 · C1 · haiku
+Landed as an *optional* field, not a required one: the server's REST `Json` runs with
+`encodeDefaults = false`, so it omits `stomp` when false — the same reason `CueLayerDetail.stomp`
+is already optional. The pin therefore asserts both directions, that a true flag round-trips and
+that an absent one is not rebuilt as an explicit `false`. `CuePropertiesSheet` still does not
+expose it; that decision is still open.
+
+### ~~`FS-TYPES-PRESETCOUNT-RENAME`~~ — **landed**
+**`CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount`**, `38e8ff3` · S3 · P2 ·
+C1 · haiku
 `src/api/cueStacksApi.ts` + four test fixtures
 
 The backend renamed it in session 4 (KDoc: "No client reads it yet … treat it as available"), and
@@ -1246,6 +1253,11 @@ spelling. Declared non-optional, always `undefined`; the field actually sent —
 collapsed row wants — is invisible. Four test files write `presetCount: 0` purely for the compiler,
 pinning the drift in place. **Fix**: mechanical rename + fixtures; optionally then use `layerCount`
 where a layers-only cue currently reads as empty.
+
+Landed as scoped: the rename and the five fixtures only. The optional half has no host — neither
+`layerCount` nor its sibling `adHocEffectCount` is read anywhere in the tree, so there is no render
+site that currently shows a layers-only cue as empty. Left available, as the backend's own KDoc
+frames it.
 
 ### `FS-TYPES-RIGGING-POSITION`
 **`FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never render** ·
@@ -1314,8 +1326,8 @@ the payload. **Superseded in scope by backend D3**, which deletes `plugins/Group
 see `FS-COORD-GROUPS-WS` (§14) for the whole-module deletion and the GroupList-freshness question
 that must be answered first. Do not do this finding's narrower fix separately.
 
-### `FS-TYPES-ISBUILTIN`
-**`FxDefinition.isBuiltin` has no producer and no consumer** · S4 · P3 · C1 · haiku
+### ~~`FS-TYPES-ISBUILTIN`~~ — **landed**
+**`FxDefinition.isBuiltin` has no producer and no consumer**, `2bd7ca4` · S4 · P3 · C1 · haiku
 `src/store/fxDefinitions.ts`
 
 A required boolean that is always `undefined` — the shape that later grows a guard that never
@@ -1343,9 +1355,9 @@ the backend half — a `propertyMask` parameter on `toggle` with the family deri
 sweep); then fix the KDoc, and pin that the layer
 emitted in `programmer.layerState` after a toggle carries the family.
 
-### `FS-TYPES-ADDLAYER-MASK-DROP`
-**`ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer** · S3 ·
-P2 · C1 · haiku
+### ~~`FS-TYPES-ADDLAYER-MASK-DROP`~~ — **landed**
+**`ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer**,
+`e4f86d0` · S3 · P2 · C1 · haiku
 `src/components/programmer/ProgrammerLookStack.tsx`
 
 `LayerPicker` sets the mask with a comment explaining exactly why ("an unmasked template layer would
@@ -1355,9 +1367,9 @@ in a cue and an unmasked one in the programmer. **Fix**: forward `propertyMask`,
 so the timing-only exclusion isn't read as "all extra fields deliberately dropped", pin with a test
 on the outgoing frame.
 
-### `FS-TYPES-SURFACE-DESCRIPTORS`
+### ~~`FS-TYPES-SURFACE-DESCRIPTORS`~~ — **landed**
 **Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonControl.note`
-non-nullable where the wire guarantees null for one legal shape** · S3 · P3 · C1 · haiku
+non-nullable where the wire guarantees null for one legal shape**, `157c6b8` · S3 · P3 · C1 · haiku
 `src/api/surfacesApi.ts`
 
 The wire's Fader carries `touchCc` (populated by the shipped X-Touch profile) which the client
@@ -1368,9 +1380,9 @@ over-declaration: the actual divergence runs in both directions, so that cluster
 reconciliation against `ControlDescriptorDto`, not blanket deletion. **Fix**: add the two fields,
 widen `note`, comment the mutual exclusion.
 
-### `FS-TYPES-CLONE-COUNTS`
+### ~~`FS-TYPES-CLONE-COUNTS`~~ — **landed**
 **`CloneProjectResponse` drops four of the server's content counts, and the dialog discards the
-rest** · S4 · P3 · C1 · haiku
+rest**, `90c62af` · S4 · P3 · C1 · haiku
 `src/api/projectApi.ts`, `src/CloneProjectDialog.tsx`
 
 The server counts scripts, looks, cues, stacks and total records cloned; the client type declares
@@ -2379,7 +2391,8 @@ client site reading one now reads `undefined`:
   pins the same claim from the other side.
 - `cueStacksApi.ts:16`'s `presetCount` mirrors a field renamed to `layerCount` — that is
   `FS-TYPES-PRESETCOUNT-RENAME`, and it is confirmed rather than suspected now. It is never
-  rendered, only carried and pinned by six test fixtures, so it is a safe deletion.
+  rendered, only carried and pinned by six test fixtures, so it is a safe deletion. **Closed**
+  (`38e8ff3`): renamed rather than deleted, per that item's own fix.
 
 The B4 half of this item is **resolved and needs no change**: the backend asked (F8) whether the
 client was missing `rateSpeedMasterIndex`, and the answer from this side is no — the FX-sheet chip
@@ -2391,8 +2404,8 @@ documented as read by nothing, with the chip resolving the index itself. Deletin
 `FS-DEAD-DTO-FIELDS`' call.
 
 Landed as scoped: `cueStacksApi.ts`'s `presetCount` was left alone, per this item's own note that
-its deletion is `FS-TYPES-PRESETCOUNT-RENAME`'s job. `CueCurrentState.presetApplications` was
-deleted outright rather than replaced with the backend's new `layers` shape — that type is already
+its deletion is `FS-TYPES-PRESETCOUNT-RENAME`'s job — which has since landed (`38e8ff3`).
+`CueCurrentState.presetApplications` was deleted outright rather than replaced with the backend's new `layers` shape — that type is already
 flagged dead in full by `FS-DEAD-CURRENTCUESTATE`, so wiring up a replacement would be waste.
 
 ### ~~`FS-COORD-API-NORMALIZE`~~ — **landed with backend F1–F5, F8**
