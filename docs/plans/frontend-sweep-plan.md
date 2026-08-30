@@ -133,8 +133,8 @@ halves still owed are listed in §14 only.
 | `FS-PERF-PROVENANCE-REFETCH` | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
 | `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
 | `FS-RES-CUECARDEDITOR-DIR` | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
-| `FS-RES-PALETTERESULT` | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
-| `FS-RES-PRESETPICKER` | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
+| ~~`FS-RES-PALETTERESULT`~~ **done** | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
+| ~~`FS-RES-PRESETPICKER`~~ **done** | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
 | `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
 | ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ **done** | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
 | `FS-TEST-EDITOR-PINS` | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
@@ -189,11 +189,11 @@ halves still owed are listed in §14 only.
 | `FS-DUP-TARGETKEY` | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
 | `FS-PERF-LAYER-SIGNATURE` | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
 | `FS-PERF-TRANSPORT-ALLOC` | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
-| `FS-RES-ANON-CATCH` | Three bare `.catch(() => {})` where the codebase has a named helper for exactly that | S4 | P3 | C1 | haiku |
-| `FS-RES-LIGHTING-EDITOR-DIR` | `components/lighting-editor/` is a one-file directory named for a pre-Programmer era | S4 | P3 | C1 | haiku |
-| `FS-RES-LOOKREFVALUE-NAME` | `lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never… | S4 | P3 | C1 | haiku |
-| `FS-RES-PANECHROME` | `components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a | S4 | P3 | C1 | haiku |
-| `FS-RES-STRAY-CAPTURES` | Four `capture *.json` DMX debug dumps sit at the repo root | S4 | P3 | C1 | haiku |
+| ~~`FS-RES-ANON-CATCH`~~ **done** | Three bare `.catch(() => {})` where the codebase has a named helper for exactly that | S4 | P3 | C1 | haiku |
+| ~~`FS-RES-LIGHTING-EDITOR-DIR`~~ **done** | `components/lighting-editor/` is a one-file directory named for a pre-Programmer era | S4 | P3 | C1 | haiku |
+| ~~`FS-RES-LOOKREFVALUE-NAME`~~ **done** | `lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never… | S4 | P3 | C1 | haiku |
+| ~~`FS-RES-PANECHROME`~~ **done** | `components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a | S4 | P3 | C1 | haiku |
+| ~~`FS-RES-STRAY-CAPTURES`~~ **refuted** | Four `capture *.json` DMX debug dumps sit at the repo root | S4 | P3 | C1 | haiku |
 | `FS-TEST-INDICATOR-LINK` | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
 | `FS-TYPES-CLONE-COUNTS` | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
 | `FS-TYPES-ISBUILTIN` | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
@@ -1690,9 +1690,9 @@ into a peer module beside `beamOptics.ts` taking `three` types only. Must not br
 per-frame write path — these functions mutate vectors/materials in place from `useFrame`; making
 them allocate would cost per-frame garbage on the canvas.
 
-### `FS-RES-PRESETPICKER`
+### ~~`FS-RES-PRESETPICKER`~~ — **landed**
 **`FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset branch — and
-claim a suppression the code doesn't perform** · S3 · P2 · C1 · haiku
+claim a suppression the code doesn't perform**, `d2138c0` · S3 · P2 · C1 · haiku
 `src/components/fx/FxSection.tsx`
 
 The header says "Suppress this whole panel" for a preset mode that no longer exists; the code
@@ -1700,9 +1700,9 @@ suppresses nothing. The slot is filled by `LookTogglePicker` at both call sites.
 stale paragraph, rename the prop to `lookPicker` (three sites, one file). Value: the file stops
 advertising a third rendering mode a reader will hunt for.
 
-### `FS-RES-PALETTERESULT`
-**`UpdateDialog` renders an unreachable branch from a field the server deleted** · S3 · P2 · C1 ·
-haiku
+### ~~`FS-RES-PALETTERESULT`~~ — **landed**
+**`UpdateDialog` renders an unreachable branch from a field the server deleted**, `8a8437a` · S3 ·
+P2 · C1 · haiku
 `src/store/programmerOps.ts`, `src/components/programmer/UpdateDialog.tsx`
 
 The render half of `FS-TYPES-PALETTE-WIRE-ARMS`: a full `result.paletteResult &&` block with a
@@ -1711,34 +1711,41 @@ arm, and `PaletteUpdateResult`; `lookResult` is the live successor rendering the
 deliberate `ref:`-era keeps CLAUDE.md names (`validateLookRows`' rejection, `StateMigrations`'
 upgrade path) are backend-side and unaffected.
 
-### `FS-RES-LIGHTING-EDITOR-DIR`
-**`components/lighting-editor/` is a one-file directory named for a pre-Programmer era** · S4 · P3 ·
-C1 · haiku
+Noted in the landing, not fixed: that `invalidatesTags` arm was the *only* place `updateProgrammer`
+invalidated `Look`/`LookList`, and it was keyed on a field the server can no longer send — so a Mode
+A Update that writes a **Look** has never refreshed the Look caches, and still doesn't. Deleting the
+arm is behaviour-preserving (it could never fire). `recordLook` invalidates correctly, so the gap is
+Update-only; whoever takes `FS-TYPES-PALETTE-WIRE-ARMS` should decide whether `lookResult` earns the
+tags the palette arm was holding.
+
+### ~~`FS-RES-LIGHTING-EDITOR-DIR`~~ — **landed**
+**`components/lighting-editor/` is a one-file directory named for a pre-Programmer era**, `6ded2cc`
+· S4 · P3 · C1 · haiku
 
 Holds only `EditorContext.tsx`; all four consumers are programmer-side. Move it into
 `components/programmer/` (one consumer is a `vi.mock` path string). Keep the file's doc comment
 intact — it is the authoritative record of why there is no `cue` arm.
 
-### `FS-RES-LOOKREFVALUE-NAME`
-**`lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never handle**
-· S4 · P3 · C1 · haiku
+### ~~`FS-RES-LOOKREFVALUE-NAME`~~ — **landed**
+**`lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never handle**,
+`25b181e` · S4 · P3 · C1 · haiku
 `src/components/looks/lookRefValue.tsx`
 
 A reader grepping for surviving `ref:` machinery hits it first. Rename to `lookValueChips.tsx`
 (three importers). Don't touch the deliberate `ref:` survivors.
 
-### `FS-RES-PANECHROME`
-**`components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a** · S4 · P3 · C1
-· haiku
+### ~~`FS-RES-PANECHROME`~~ — **landed**
+**`components/cues/paneChrome.tsx` justifies its home with consumers deleted in 2a**, `32ff4fa` ·
+S4 · P3 · C1 · haiku
 `src/components/cues/paneChrome.tsx`
 
 Its only direct importer is `LookStack` — though `LookStack` is itself shared back to the cue side,
 so the doc is stale in its specifics rather than wholly false. Move beside `LookStack` (or inline)
 and drop the obsolete rationale; hand any caller-less export to the dead-code pass.
 
-### `FS-RES-ANON-CATCH`
-**Three bare `.catch(() => {})` where the codebase has a named helper for exactly that** · S4 · P3
-· C1 · haiku
+### ~~`FS-RES-ANON-CATCH`~~ — **landed**
+**Three bare `.catch(() => {})` where the codebase has a named helper for exactly that**, `e50c6e6`
+· S4 · P3 · C1 · haiku
 `src/hooks/useShowBarProps.ts`, `src/components/EffectsOverviewPanel.tsx`
 
 `ignoreReportedError` exists precisely to mark the deliberate sink (eight sites use it), and the
@@ -1746,12 +1753,17 @@ middleware file itself warns about the anonymous form. Replace the three; verify
 genuinely absent from `SILENT_ENDPOINTS` (they are) — a silenced endpoint plus an anonymous catch
 would be truly invisible.
 
-### `FS-RES-STRAY-CAPTURES`
+### ~~`FS-RES-STRAY-CAPTURES`~~ — **refuted at HEAD**
 **Four `capture *.json` DMX debug dumps sit at the repo root** · S4 · P3 · C1 · haiku
 repo root
 
 Committed debug artefacts. Delete (or move under a gitignored scratch dir) and add a `.gitignore`
 pattern so the next capture doesn't land in the tree.
+
+**Refuted at HEAD**: the four dumps are untracked working-tree scratch, not committed —
+`.gitignore:27` already carries `capture*.json` (added with the Stage 3D `profileHarness` work) and
+`git check-ignore` matches all four. There is nothing in the tree to delete and no pattern to add;
+what is left is a local file the operator can remove whenever they like.
 
 ## 12. Docs and stale rationale
 
