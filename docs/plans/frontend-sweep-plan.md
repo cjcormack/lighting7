@@ -129,7 +129,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
 | `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
 | `FS-PERF-CHANNELSOURCE-REBUILD` | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
-| `FS-PERF-FADE-DISPATCH` | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
+| ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
 | `FS-PERF-PROVENANCE-REFETCH` | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
 | `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
 | `FS-RES-CUECARDEDITOR-DIR` | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
@@ -661,9 +661,9 @@ through `useCueFade`"). Fix the source first (`FS-PERF-FADE-DISPATCH`), then the
 memo barrier (`FS-PERF-PROGRAMMER-MEMO-BARRIER`) — barriers added first would look effective while
 the frame-rate wake-up is still there, and some would become dead work.
 
-### `FS-PERF-FADE-DISPATCH`
-**Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame** · S3 ·
-P2 · C3 · fable
+### ~~`FS-PERF-FADE-DISPATCH`~~ — **landed**
+**Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame**,
+lighting-react `055a0c0` · S3 · P2 · C3 · fable
 `src/hooks/useRunnerAnimation.ts`, `src/store/runnerSlice.ts`, `src/store/index.ts`
 
 `useRunnerAnimation` dispatches `setFadeProgress` once per rAF for the whole fade. In production the
@@ -680,6 +680,11 @@ cadence (~10–15 Hz; the 0.1 s countdown can't tell). `startElapsedMs`/`serverT
 join semantics, `markDone` firing exactly once, and `cancelAnimations` must behave identically;
 `useShowTransport.test.tsx` and `ProgramView.test.tsx` are the guardrails. Also widen the dev-mode
 `ignoredPaths`.
+
+Grew in the landing: review found `markDone`'s kept-at-1.0 fade value was unreachable state (every
+consumer gates on `activeCueId` first), so `markDone` now clears both descriptors; and `startFade`
+clears a stale auto descriptor, closing a pre-existing hole where an unmount mid-countdown left the
+countdown pinned at 100% across a remount. Rig check filed as `FU-MANUAL-FADE-DISPATCH`.
 
 ### `FS-PERF-FADE-IN-SHOWBAR`
 **Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of

@@ -25,6 +25,7 @@ as a one-line row.
 | [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and Look compatibility still refreshes | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-FADE-DISPATCH`](#fu-manual-fade-dispatch) | fades still draw, join mid-fade, and complete once with the 60 Hz dispatch gone | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -439,6 +440,30 @@ other half still works: with the Look library open beside a second browser, add 
 a new family to a Look (`+ Effect` with a layer focused) and check it becomes offerable — it must
 appear in `LookTogglePicker` and stop disabling heads in `LayerPicker` without a manual reload.
 Rename a Look and delete one too; both must still refresh the library. 10 minutes.
+
+---
+
+## `FU-MANUAL-FADE-DISPATCH`
+
+**Fades animate identically now that progress never passes through Redux** · frontend sweep
+`FS-PERF-FADE-DISPATCH`, 2026-08-30
+
+The fade/auto-advance animation used to dispatch `setFadeProgress`/`setAutoProgress` into the
+runner slice once per rAF, re-rendering every `selectStackRunner` subscriber ~60×/s and putting
+four deep-scanned slices in front of the dev invariant middleware per frame. The slice now stores
+a write-once `(startMs, durationMs, cueId)` descriptor per animation and the drawing components
+compute progress locally (`useAnimatedProgress`). This is a **code-read** change: jsdom's rAF is a
+16 ms timer and no automated test watches a real fade draw, so smoothness and the timing seams are
+asserted, not measured.
+
+**Test**: run a stack with a long fade (5 s+) on `/show`. GO — the row's fade bar and the FADING
+countdown must animate smoothly to completion, the done tick must appear exactly once, and an
+auto-advance cue must count down and roll on as before. While the fade runs, open the same show on
+a second browser/tablet: it must join mid-fade at the right point, not restart from 0. Press BACK
+mid-fade (the bar must stop and the cursor return) and re-fire the live cue from another surface
+(the fade must restart). Then the point of the change: with the Programmer grid on screen during a
+long fade, the grid must feel no busier than the idle state — and in a dev build, a Performance
+profile during a fade should show no `runner/setFadeProgress` dispatch storm. 10 minutes.
 
 ---
 
