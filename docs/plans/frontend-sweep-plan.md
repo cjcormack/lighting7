@@ -90,7 +90,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
 | ~~`FS-BUG-EDITOR-SILENT-READONLY`~~ **done** | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
-| `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
+| ~~`FS-BUG-PIXEL-CACHE-PERMUTATION`~~ **done** | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | ~~`FS-PERF-CODE-SPLITTING`~~ **done** | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-COLLAPSED-PANELS`~~ **done** | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ **done** | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
@@ -427,9 +427,9 @@ boilerplate — the same drift risk this item exists to remove — so both now b
 `lib/syncStore.ts` `createSyncStore<T>` factory, and `usePersistentState`'s doc states its
 one-mounted-instance-per-key rule and points at it.
 
-### `FS-BUG-PIXEL-CACHE-PERMUTATION`
+### ~~`FS-BUG-PIXEL-CACHE-PERMUTATION`~~ — **landed**
 **`useGroupColourValues` never compares per-member colours, so a colour chase across a pixel bar
-freezes its segments** · S2 · P2 · C2 · sonnet
+freezes its segments**, lighting-react `99b39aa` · S2 · P2 · C2 · sonnet
 `src/hooks/useGroupPropertyValues.ts`, `src/components/fixtures/fixtureAppearance.tsx`
 
 The snapshot cache compares only aggregates (avg R/G/B/W/A/UV, `isUniform`, beam fields) — every
