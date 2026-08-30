@@ -104,7 +104,7 @@ halves still owed are listed in §14 only.
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
-| `FS-ARCH-ALERTDIALOG-DEP` | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
+| ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
 | `FS-ARCH-CURSOR-OWNERSHIP` | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
 | `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
 | `FS-ARCH-IMPORT-CYCLE` | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
@@ -116,7 +116,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
 | `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
 | ~~`FS-DEAD-CURRENTCUESTATE`~~ **done** | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
-| `FS-DEAD-DEVDEPS` | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
+| ~~`FS-DEAD-DEVDEPS`~~ **done** | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
 | ~~`FS-DEAD-EXPORTS`~~ **done** | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
 | ~~`FS-DEAD-ORPHAN-FILES`~~ **done** | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
 | `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
@@ -125,8 +125,8 @@ halves still owed are listed in §14 only.
 | `FS-DUP-OVERVIEW-TOGGLES` | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
 | `FS-DUP-REDIRECTS` | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
 | `FS-DUP-ROW-SUBSCRIPTION` | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
-| `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
-| `FS-EDITOR-PROPTYPES-PHANTOM` | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
+| ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ **done** | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
+| ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
 | `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
 | `FS-PERF-CHANNELSOURCE-REBUILD` | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
 | `FS-PERF-FADE-DISPATCH` | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
@@ -223,9 +223,13 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
    `FS-PERF-MOBILE-SHEET-FADE`, `FS-DUP-MARKER-ROW` and `FS-DUP-TARGETKEY`; pick an order and rebase
    the rest. `FS-DUP-TARGETKEY` supersedes `FS-DEAD-EXPORTS`' `targetEquals` line.
 6. **The script-editor cluster is one work package** (§5), `FS-EDITOR-LIFECYCLE` first — its
-   imperative handle is what the two bugs and the debounce fix need.
-7. **One manifest pass**: `FS-DEAD-DEVDEPS` + `FS-ARCH-ALERTDIALOG-DEP` +
-   `FS-EDITOR-PROPTYPES-PHANTOM`, then one `npm ci` + full check.
+   imperative handle is what the two bugs and the debounce fix need. Six of the eight are left:
+   `FS-EDITOR-PROPTYPES-PHANTOM` and `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` went with the manifest pass.
+7. ~~**One manifest pass**~~ — **spent** (`6398257`, `0146759`). `FS-DEAD-DEVDEPS` and
+   `FS-ARCH-ALERTDIALOG-DEP` landed as one commit, `FS-EDITOR-PROPTYPES-PHANTOM` as another. Note
+   for whatever touches `package.json` next: the agent sandbox blocks writes to npm's cache, so
+   `npm install` can **remove** packages but not add them — a manifest change that adds a dependency
+   cannot be split across two commits, and cannot be undone once installed.
 8. **`FS-ARCH-CURSOR-OWNERSHIP` is a decision before a cleanup** — it absorbs three
    would-be deletions that are not automatically safe (the two `standbyCueId`s carry different
    facts).
@@ -518,6 +522,12 @@ hold two real bugs and a band of fragility. All eight items below touch the same
 dispatch them as **one work package** (suggested: one sonnet agent, `FS-EDITOR-LIFECYCLE` first,
 since its imperative handle is what the two bugs' fixes need).
 
+Two of the eight left the cluster early, in the manifest pass:
+`FS-EDITOR-PROPTYPES-PHANTOM` (which §4 constraint 7 always assigned there) and
+`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`, which it could not be separated from. The remaining six are
+still one package, and `component.mjs` now has `component.d.mts` beside it — any prop the lifecycle
+and debounce work adds to the wrapper needs declaring there too.
+
 ### `FS-BUG-EDITOR-RESET-NOOP`
 **A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset silently
 does nothing** · S2 · P1 · C2 · sonnet
@@ -573,9 +583,9 @@ usually exceeds it — but the guard exists precisely for the hurried case. **Fi
 `getValue()` through the un-clobbered `getInstance` handle; dirty checks and the send handlers read
 through it (or at minimum flush on wrapper blur). Pin the Escape-after-typing case.
 
-### `FS-EDITOR-HIGHLIGHTONLY-PRESENCE`
+### ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ — **landed**
 **Read-only works only because React omits an `undefined` attribute — `highlightOnly="false"` would
-make every editor read-only** · S3 · P2 · C1 · sonnet
+make every editor read-only**, `0146759` · S3 · P2 · C1 · sonnet
 `src/components/scripts/ScriptEditor.tsx`, `src/kotlinScript/component.mjs`
 
 The widget tests attribute *presence*, not value; the natural tidy-up `String(readOnly)` flips every
@@ -584,6 +594,16 @@ editor to read-only with no type error and no failing test, and the whole prop s
 used (drops the `@ts-expect-error`), `highlightOnly` typed so the falsy case can only be
 `undefined`, and a call-site comment naming the presence semantics (same note for `autocomplete`
 and `matchBrackets`).
+
+Landed with `FS-EDITOR-PROPTYPES-PHANTOM` (see there for why they are inseparable), as
+`component.d.mts` / `index.d.mts` — TypeScript resolves a `.mjs` import to `.d.mts`, not `.d.ts`.
+One correction to the **Fix**, verified against `kotlin-playground`'s own source: only
+`highlightOnly` is presence-tested (`hasAttribute`, special-casing the literal `"nocursor"`).
+`autocomplete`, `matchBrackets`, `lines`, `highlightOnFly` and `autoIndent` are compared
+`=== "true"`, so `"false"` genuinely turns *those* off — the call-site comment names which rule
+applies to which rather than claiming presence semantics for all three. The landing also hoisted the
+`<ReactKotlinPlayground>` element out of `ScriptEditor`'s compact/non-compact ternary, which had
+mounted it byte-for-byte twice; `FS-EDITOR-DEAD-BRANCH` still owns deleting the dead arm.
 
 ### `FS-EDITOR-DEAD-BRANCH`
 **ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount verbatim**
@@ -595,9 +615,9 @@ their state are unreachable — and the surviving ternary renders a byte-identic
 **Fix**: drop the prop and branch, collapse the ternary, note the component is deliberately
 editor-only (the callers' own Compile/Run buttons differ in label, size and mutation and stay).
 
-### `FS-EDITOR-PROPTYPES-PHANTOM`
-**`prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares** · S3
-· P2 · C1 · haiku
+### ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ — **landed**
+**`prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares**,
+`0146759` · S3 · P2 · C1 · haiku
 `src/kotlinScript/component.mjs`, `package.json`
 
 Resolved only by hoisting through `react-qr-code`/`eslint-plugin-react`; React 19 no longer
@@ -605,6 +625,11 @@ validates propTypes, so the ~40-line block plus `cloneProps` is inert (and one e
 wrong per the presence finding). **Fix**: delete the propTypes machinery; keep the shape as the
 `.d.ts` above instead. Do **not** add `prop-types` to package.json. Third item for the one manifest
 pass (`FS-DEAD-DEVDEPS`, `FS-ARCH-ALERTDIALOG-DEP`).
+
+Grew in the landing: it took `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` with it, and could not have been
+landed without it. Adding declarations makes `ScriptEditor`'s `@ts-expect-error` an
+unused-directive error, so the `.d.ts` and the deletion are one change. Landed in its own commit,
+separate from the manifest pass.
 
 ### `FS-TEST-EDITOR-PINS`
 **The documented cross-type poisoning landmine is safe by construction today — and nothing pins any
@@ -772,6 +797,12 @@ justified).
 **Fix**: invalidate by what the request wrote — rows-only saves skip `Fixture`/`GroupList`; saves
 touching `effects` keep the full set (a Look gaining its first effect of a family must reappear in
 `LookTogglePicker`/`LayerPicker`).
+
+Follow-up, `b38f0c3`: review of the manifest pass found that `absorbLookEffects` — the `+ Effect`
+path, which is unambiguously an effect write — never invalidated `Fixture`/`GroupList` at all, so
+narrowing `saveLook` to the same rule left absorbing as the one effect write that stranded the
+compatibility lists. Fixed there, along with collapsing `saveLook`'s nested ternary, whose two arms
+repeated the same four base tags verbatim.
 
 Landed as `effects === undefined`, not "rows-only": the same argument acquits the metadata-only save
 `LookDetailSheet` sends, and presence of the `effects` key is the condition the wire actually
@@ -1267,9 +1298,9 @@ placeholder, comment it instead.
 Two of the six are already gone: `groupsApi.addFx`/`clearFx` went with `FS-COORD-GROUPS-WS`
 (lighting-react `c1a8c44`), which deleted the whole module. Four remain.
 
-### `FS-DEAD-DEVDEPS`
-**Eight unused devDependencies, including a Prettier-in-ESLint wiring never made** · S3 · P2 · C1 ·
-sonnet
+### ~~`FS-DEAD-DEVDEPS`~~ — **landed**
+**Eight unused devDependencies, including a Prettier-in-ESLint wiring never made**, `6398257` · S3
+· P2 · C1 · sonnet
 `package.json`, `eslint.config.js`
 
 `autoprefixer`, `postcss` (Tailwind v4 runs through `@tailwindcss/vite`), `tw-animate-css` (the
@@ -1280,6 +1311,13 @@ plus `npm ci` from clean. The Prettier pair is a decision: wire `eslint-config-p
 behaviour change to a real gate) or drop both and leave formatting to `npm run format`. Sibling
 finding: `FS-ARCH-ALERTDIALOG-DEP` *adds* a missing declaration — do them together as one manifest
 pass.
+
+Landed as seven removals, not eight: `eslint-config-prettier` was kept and wired in last in the flat
+config (the operator took the "wire it in" arm), so ESLint no longer holds formatting opinions,
+while Prettier itself still runs only from `npm run format`. Landed in **one commit with
+`FS-ARCH-ALERTDIALOG-DEP`** rather than two — `package.json` and `package-lock.json` cannot be split
+across two commits without an intermediate `npm install` that *adds* packages back, and the agent
+sandbox blocks writes to npm's cache, so only removals can be installed.
 
 ### ~~`FS-DEAD-CSS`~~ — **landed**
 **`.scrollbar-thin` and its three webkit child rules serve a deleted palette strip**, `51276c2` · S4
@@ -1515,9 +1553,9 @@ bare accesses in ThemeToggle and the cue-slot panel. **Fix**: try/catch with a
 what-degrades comment at all four; the boot-path one is the half that matters. Keep the raw string
 encodings — both keys predate the helper and migrating loses stored preferences.
 
-### `FS-ARCH-ALERTDIALOG-DEP`
+### ~~`FS-ARCH-ALERTDIALOG-DEP`~~ — **landed**
 **`@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting from the
-`radix-ui` umbrella** · S3 · P2 · C1 · haiku
+`radix-ui` umbrella**, `6398257` · S3 · P2 · C1 · haiku
 `package.json`, `src/components/ui/alert-dialog.tsx`, `src/components/ui/context-menu.tsx`
 
 The umbrella exists for one primitive (`context-menu`); removing or replacing it breaks the build at
@@ -1526,6 +1564,12 @@ not runtime, hence S3. **Fix**: declare it at the locked version; decide the umb
 deliberately (move alert-dialog onto it, or context-menu off it). Don't change alert-dialog's
 runtime version as a side effect — the sheet guard depends on its close semantics. Do with
 `FS-DEAD-DEVDEPS` as one manifest pass.
+
+Landed as: declare **both** primitives individually and drop the umbrella, rather than moving
+alert-dialog onto it — that matches the other twelve `@radix-ui/react-*` declarations, and the
+installed versions are byte-identical to what the umbrella pinned (alert-dialog 1.1.23,
+context-menu 2.3.7), so the sheet guard's close semantics are unchanged. Takes 841 lines out of
+`package-lock.json`, because the umbrella pulled in every Radix primitive.
 
 ### `FS-ARCH-SURFACES-PATTERN`
 **`store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the RTK
