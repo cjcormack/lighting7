@@ -24,6 +24,7 @@ as a one-line row.
 | [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
 | [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
+| [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and Look compatibility still refreshes | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -416,6 +417,28 @@ Updates tab, and the speed-master BPM readout including its beat indicator. Then
 under the client and confirm every one of those recovers on the reconnect. Finally, watch the
 browser console throughout: a `WebSocket: a message subscriber threw` line is the new isolation
 firing and means a real bug to file, and no frame should ever be reported as unparseable. 20 minutes.
+
+## `FU-MANUAL-SAVELOOK-INVALIDATION`
+
+**A layer-scope drag no longer refetches the fixture list, and compatibility still refreshes when
+it must** · frontend sweep `FS-PERF-SAVELOOK-INVALIDATION`, 2026-08-30
+
+`saveLook` used to invalidate `Fixture` and `GroupList` on every PUT. `LookRowStore` writes a
+rows-only body every 400 ms for the length of a layer-scope drag, so each tick refetched the
+fixture list — 48 consumers client-side, `loadLookCompatibilityInfos` + `detectCapabilities` per
+fixture server-side — and handed every consumer a new array identity mid-drag. Those two tags are
+now sent only when the body writes `effects`, which is the only thing `compatibleIdsFor` reads.
+This is a **code-read** change: the saving is arithmetic over a request that is no longer sent, not
+a measurement, and nothing in-tree drags a real grid against a real server.
+
+**Test**: on a rig with enough patched fixtures to make the list expensive, focus a LOOK layer in
+the Programmer and drag a value across several targeted heads for a few seconds. The grid must stay
+responsive and the rows must not visibly rebuild under the drag; in the network panel the 400 ms
+saves should appear with **no** accompanying `GET /fixtures` or `GET /groups`. Then confirm the
+other half still works: with the Look library open beside a second browser, add the first effect of
+a new family to a Look (`+ Effect` with a layer focused) and check it becomes offerable — it must
+appear in `LookTogglePicker` and stop disabling heads in `LayerPicker` without a manual reload.
+Rename a Look and delete one too; both must still refresh the library. 10 minutes.
 
 ---
 

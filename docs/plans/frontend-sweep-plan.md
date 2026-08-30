@@ -86,7 +86,7 @@ halves still owed are listed in §14 only.
 | `FS-PERF-FADE-IN-SHOWBAR` | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
 | `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
-| `FS-PERF-SAVELOOK-INVALIDATION` | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
+| ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ **done** | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
 | `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
@@ -755,8 +755,9 @@ the two most latency-sensitive bridges (programmer, speed masters) are registere
 throw was constructed (the server sends only kotlinx text frames), so this is hardening, not a live
 bug — take it as a rider on `FS-PERF-WS-SINGLE-PARSE`. Log failures; never swallow silently.
 
-### `FS-PERF-SAVELOOK-INVALIDATION`
-**A layer-scope drag refetches the whole fixture list every 400 ms** · S2 · P1 · C1 · sonnet
+### ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ — **landed**
+**A layer-scope drag refetches the whole fixture list every 400 ms**, `f4053b4` · S2 · P1 · C1 ·
+sonnet
 `src/store/looks.ts`, `src/components/programmer/LookRowStore.tsx`
 
 `saveLook` invalidates `['Look','LookList','Cue','CueList','Fixture','GroupList']` unconditionally,
@@ -771,6 +772,10 @@ justified).
 **Fix**: invalidate by what the request wrote — rows-only saves skip `Fixture`/`GroupList`; saves
 touching `effects` keep the full set (a Look gaining its first effect of a family must reappear in
 `LookTogglePicker`/`LayerPicker`).
+
+Landed as `effects === undefined`, not "rows-only": the same argument acquits the metadata-only save
+`LookDetailSheet` sends, and presence of the `effects` key is the condition the wire actually
+carries. Operator check filed as `FU-MANUAL-SAVELOOK-INVALIDATION`.
 
 ### `FS-PERF-BPM-INVALIDATION`
 **Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects`** · S3 · P1 · C2 · sonnet
