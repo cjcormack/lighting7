@@ -130,7 +130,7 @@ halves still owed are listed in §14 only.
 | `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
 | `FS-PERF-CHANNELSOURCE-REBUILD` | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
 | ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
-| `FS-PERF-PROVENANCE-REFETCH` | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
+| ~~`FS-PERF-PROVENANCE-REFETCH`~~ **done** | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
 | `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
 | `FS-RES-CUECARDEDITOR-DIR` | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PALETTERESULT`~~ **done** | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
@@ -242,10 +242,9 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
     the inert fields (`FS-BE-FORCE-FIELDS`). `FS-COORD-GROUPS-WS`'s ordering is spent: the
     `groupListChanged` prerequisite was refuted rather than filed — `fixturesChanged` already
     carries that signal — so the deletion landed without a backend half.
-    `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2, and `FS-PERF-PROVENANCE-REFETCH` should be
-    re-measured now that backend C3 (`d317d93`) has landed — it hoisted the winner-set resolve out
-    of the per-frame crossfade path, so the client cost this item assumes may be smaller than the
-    C3-sized effort it asks for.
+    `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2, and `FS-PERF-PROVENANCE-REFETCH`'s
+    re-measure is **spent**: the mechanism held at HEAD and the item landed 2026-08-30 with the
+    `programmerRevision` protocol change (lighting-react `90565f7`, lighting7 `86dedaa`).
 
 A reasonable dispatch order for what's left after those constraints: **the two live defects the
 backend landing created first** — `FS-COORD-ADMIN-GATE`'s `Projects.tsx` gating (an operator gets a
@@ -844,9 +843,9 @@ gate. What remains of this finding is only the `FxBadge` consolidation — read 
 `useActiveEffectsQuery` rather than a per-fixture query, which removes the fan-out class for
 genuine effect changes too. Don't break `useFxStateQuery` consumers.
 
-### `FS-PERF-PROVENANCE-REFETCH`
-**Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab** ·
-S3 · P2 · C3 · fable
+### ~~`FS-PERF-PROVENANCE-REFETCH`~~ — **landed**
+**Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab**,
+lighting-react `90565f7` (+ lighting7 `86dedaa`) · S3 · P2 · C3 · fable
 `src/api/programmerWsApi.ts`, backend `ProgrammerSocket`/`FxEngine`
 
 `applyProvenance` schedules a state refetch on every `provenanceState` frame; a crossfade republishes
@@ -860,6 +859,18 @@ every genuine off-connection write (MIDI, second tab, locate, template apply) �
 the grid, which is worse than the traffic. **Backend C3 is the server half** (it stops the
 crossfade re-running the full resolver at ~62 fps): coordinate the protocol change there, and
 re-measure this client cost after C3 lands before spending the effort here.
+
+Grew in the landing: the re-measure confirmed the mechanism at HEAD (C3 removed the resolver cost
+but the per-tick provenance emit and the client's unconditional refetch both survived). Landed as
+the monotonic-revision option — `programmerRevision` on `provenanceState`, bumped by every
+provenance trigger except the weight-only republish — after review refuted the fade-only-flag
+option: the broadcast flow is replay-1 + DROP_OLDEST, so a slow tab can drop the single unflagged
+frame a drained flag rides on, stranding an off-connection write. The review also added a second
+fix in the same commit: a provenance frame that changed nothing no longer calls
+`notifyState`/`notifyKeys` at all, ending the ~20 Hz snapshot-identity render churn on whole-state
+subscribers. An adjacent verified defect in the landed `FS-PERF-PROGRAMMER-MEMO-BARRIER`
+(`ProgrammerBody` held its own summary subscription, which `memo` cannot block) was fixed in its
+own commit, lighting-react `090e008`.
 
 ### `FS-PERF-SIGNATURE-CACHE`
 **`changedKeys` recomputes both sides' JSON signatures on every diff** · S3 · P2 · C2 · sonnet

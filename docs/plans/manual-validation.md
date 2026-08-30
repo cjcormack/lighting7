@@ -28,6 +28,7 @@ as a one-line row.
 | [`FU-MANUAL-FADE-DISPATCH`](#fu-manual-fade-dispatch) | fades still draw, join mid-fade, and complete once with the 60 Hz dispatch gone | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-SHOWBAR`](#fu-manual-fade-showbar) | the ShowBar's FADING countdown reads right at 10 Hz and the chrome sits out fades | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-PROVENANCE-REFETCH`](#fu-manual-provenance-refetch) | a crossfade no longer drives a refetch storm, and a MIDI write mid-fade still lands in the grid | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -498,15 +499,40 @@ Performance profile during the fade should show the bar's subtree rendering ~10�
 `ProgrammerBody` (the grid, rail, action bar and scope band below the page's chrome) had no memo
 barrier, so any re-render of `ProgrammerPage` — a `useProgrammerSummaryQuery` refresh, a project
 refetch, anything upstream of the bar — reconciled the entire subtree even outside a fade. It is now
-wrapped in `React.memo` on its one primitive prop (`projectId`). This is a **code-read** change: no
-automated test watches a reconcile storm, so the barrier holding is asserted (the grid-never-remounts
-test still passes), not measured.
+wrapped in `React.memo` on its one primitive prop (`projectId`), and (found in the
+`FS-PERF-PROVENANCE-REFETCH` review) no longer holds a summary subscription of its own — the Revert
+handler reads the include target at click time, because a subscription held by the barrier component
+is a wake `memo` cannot block. This is a **code-read** change: no automated test watches a reconcile
+storm, so the barrier holding is asserted (the grid-never-remounts test still passes), not measured.
 
 **Test**: on `/programmer`, drive summary traffic that doesn't touch the grid — Include/Update/Record
-from another surface, or just let the summary poll — while a dev Performance profile is running.
-`ProgrammerBody`'s subtree should not re-render on that traffic. Toggle Groups and switch the
+from another surface — while a dev Performance profile is running. `ProgrammerBody` itself and the
+grid/rail/scope-band subtree should not re-render on that traffic; the toolbar leaves that draw
+summary state (`ProgrammerSourceStrip`, `ProgrammerActionBar`, the sheets host) legitimately do,
+since they subscribe for what they render. After a Revert, the previously included cue must still
+re-Include (the handler now reads the target at click time). Toggle Groups and switch the
 Output/Local scope segment as before; the grid must still re-render (never remount) and behave
 identically to before this change. 10 minutes.
+
+---
+
+## `FU-MANUAL-PROVENANCE-REFETCH`
+
+**`programmerRevision` ends the crossfade refetch storm without stranding off-connection writes**
+· frontend sweep `FS-PERF-PROVENANCE-REFETCH`, 2026-08-30
+
+A crossfade's weight ticks republish `provenanceState` at ~20 Hz, and every frame made every tab
+re-request `programmer.state` (~10 requests/s per tab for the whole fade). Each frame now carries
+a monotonic `programmerRevision` that weight ticks don't bump, and the client refetches only when
+it moved. This is a **code-read** change; the stranding risk (a skipped refetch that should have
+fired) is exactly what only a rig can prove.
+
+**Test**: run a long crossfade (≥10 s) with the browser's network/WS inspector open on the
+programmer socket — during the fade there should be at most a couple of `programmer.state`
+requests (fade start/end), not a steady ~10/s stream. Then, mid-fade, write a programmer value
+from an off-connection source (a MIDI CC twist, or a second tab): the first tab's grid must show
+the new value within ~a quarter second, both mid-fade and after the fade completes. Locate and a
+template apply mid-fade should behave the same. 10 minutes.
 
 ---
 
