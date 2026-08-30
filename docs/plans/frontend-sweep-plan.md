@@ -105,7 +105,7 @@ halves still owed are listed in §14 only.
 | `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
-| `FS-ARCH-CURSOR-OWNERSHIP` | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
+| ~~`FS-ARCH-CURSOR-OWNERSHIP`~~ **done** | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
 | `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
 | `FS-ARCH-IMPORT-CYCLE` | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
 | `FS-ARCH-LOCALSTORAGE-BOOT` | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
@@ -1546,9 +1546,9 @@ wire.
 
 ## 10. Architecture
 
-### `FS-ARCH-CURSOR-OWNERSHIP`
-**Two stores own the live-cue/armed-next cursors; several of the resulting copies have no reader** ·
-S3 · P2 · C3 · fable
+### ~~`FS-ARCH-CURSOR-OWNERSHIP`~~ — **landed**
+**Two stores own the live-cue/armed-next cursors; several of the resulting copies have no reader**,
+`d368cb1` · S3 · P2 · C3 · fable
 `src/store/cueStacks.ts`, `src/store/runnerSlice.ts`, `src/hooks/useShowTransport.ts`
 
 One `cueRunStateChanged` frame is written into two stores, and which copy wins is arbitrary per
@@ -1566,6 +1566,15 @@ RTK cache is the natural home), reduce `runnerSlice` to the genuinely local anim
 what `ShowPage` currently hand-computes, and write down which cursor each surface reads and why.
 `useShowTransport.test.tsx` pins the reconciliation (deferred reset mid-fade, `serverNextCueId`
 preference, done-tick); GO/BACK must not restart a fade.
+
+Grew in the landing: the "second tracker" diagnosis was half wrong — `prevServerActiveCueRef` was
+never a workaround for the slice's `serverActiveCueId` being unexposed, because the two answer
+different questions (a first cut comparing the stores lost positional done ticks on multi-cue
+snapshot jumps and misfired on optimistic mutation patches, caught in review). Landed as: cache
+owns the server facts, `CueStack.standbyCueId` deleted, ShowPage's four hand-computed reads moved
+onto the exposed `serverActiveCueId`, and the two reconcile effects merged into one with the same
+change-detection semantics; the ownership map is written down in `useShowTransport`'s docblock and
+CLAUDE.md. Rig check filed as `FU-MANUAL-CURSOR-OWNERSHIP` in `manual-validation.md`.
 
 ### `FS-ARCH-BUSKING-GOD-HOOK`
 **`useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and four

@@ -30,6 +30,7 @@ as a one-line row.
 | [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROVENANCE-REFETCH`](#fu-manual-provenance-refetch) | a crossfade no longer drives a refetch storm, and a MIDI write mid-fade still lands in the grid | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -579,6 +580,28 @@ should animate and re-render per frame; other cards must not flash or reconcile.
 still reach 100% and clear at the same moment the card drops out of "fading". Toggle a card's
 expand/collapse and edit a cue name/number mid-fade to confirm the memoized card still responds to
 its own prop changes. 10 minutes.
+
+---
+
+## `FU-MANUAL-CURSOR-OWNERSHIP`
+
+**The transport's two reconcile effects became one, and the dead cache standby copy is gone**
+· frontend sweep `FS-ARCH-CURSOR-OWNERSHIP`, 2026-08-30
+
+`useShowTransport`'s two runner↔server reconcile effects merged into a single effect (same
+change-detection semantics, one ref more), ShowPage now reads the server cursor through the
+transport rather than hand-computing it, and the never-read `CueStack.standbyCueId` cache copy was
+deleted. The pinned behaviours (deferred reorder mid-fade, GO/BACK not restarting a fade, the
+two-cursor marker) are unit-tested, but the transport is the most live-desk-critical path in the
+tree and the merge is exactly the kind of refactor whose subtle diffs only two real sessions show.
+
+**Test**: two sessions on one show. Session A runs GOs with multi-second fades; session B follows.
+Confirm B's marker, NEXT pill and done ticks track A through GO, BACK, re-arm (standby), a cue
+reorder mid-fade, and "make live" onto another stack. Then background B's tab for a minute while A
+advances several cues, foreground it, and confirm B converges on the right live/next cursors and
+done ticks without a stuck fade or a spurious fade replay. On A, confirm its own GO never restarts
+or stutters the fade it is drawing, and that a standby armed mid-fade survives the fade ending.
+10 minutes.
 
 ---
 
