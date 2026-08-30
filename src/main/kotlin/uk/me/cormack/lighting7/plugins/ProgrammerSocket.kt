@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.plugins
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -361,6 +363,7 @@ data class ProvenanceEntryDto(
  * A crossfade's weight ticks are layer events too, so a running fade republishes this at
  * up to ~20 Hz — which is why [programmerRevision] exists.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 @SerialName("provenanceState")
 data class ProvenanceStateOutMessage(
@@ -372,8 +375,16 @@ data class ProvenanceStateOutMessage(
      * frame (not a per-frame flag) so the broadcast flow's DROP_OLDEST behaviour under a
      * slow collector cannot lose the signal. Additive and defaulted: a server that omits it
      * (or a client that ignores it) degrades to refetch-on-every-frame, the old behaviour.
+     *
+     * `@EncodeDefault(ALWAYS)` is load-bearing, not decoration: the WS content converter's
+     * `Json` has `encodeDefaults = false`, so without it this field vanishes from the wire
+     * on every frame while the counter is still at its 0 default — server startup, and any
+     * frame before the first non-fade trigger — and the client's "field missing" branch
+     * (written for an *older* server) reads that as unsupported and refetches every frame,
+     * silently reproducing the storm this field exists to stop.
      * See [uk.me.cormack.lighting7.fx.ProvenanceUpdate].
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val programmerRevision: Long = 0,
 ) : ProgrammerOutMessage()
 
