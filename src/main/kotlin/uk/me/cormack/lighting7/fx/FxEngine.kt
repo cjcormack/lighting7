@@ -398,8 +398,8 @@ class FxEngine(
     )
 
     /** Per-cue Layer 4 assignment bookkeeping and the within-cue stomp registry. */
-    val cueLayer: CueAssignmentLayer = CueAssignmentLayer(layerResolver, cascade) {
-        provenance.emitUpdate()
+    val cueLayer: CueAssignmentLayer = CueAssignmentLayer(layerResolver, cascade) { weightsOnly ->
+        provenance.emitUpdate(cueFadeOnly = weightsOnly)
     }
 
     /**

@@ -315,6 +315,19 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
+    fun `programmer domain — provenanceState carries programmerRevision on the wire`() {
+        // The refetch-suppression signal for crossfade weight ticks: the client refetches
+        // programmer.state only when the revision moved. It must survive encoding — a client
+        // that never sees it refetches ~10×/s for the whole fade, which is the regression
+        // this field exists to prevent. (A frame omitting it — an older server, or the
+        // pre-first-trigger default of 0 — makes the client refetch every frame: fail-safe.)
+        val out = ProvenanceStateOutMessage(entries = emptyList(), programmerRevision = 7)
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""programmerRevision":7"""))
+        assertEquals(out, assertIs<ProvenanceStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
     fun `programmer domain — set accepts an optional sourceGroup hint`() {
         // For clients that fan a group gesture out to members (group virtual dimmer, Highlight
         // release) rather than sending targetType=group. Optional, so existing senders are

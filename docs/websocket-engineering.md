@@ -442,7 +442,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.layerState` | `layers: [ProgrammerLayerDto]` | **Broadcast** — every tab, on `layersFlow` |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String` | Unicast reply |
-| `provenanceState` | `entries: [ProvenanceEntryDto]` | **Broadcast** — on every layer event, never per frame |
+| `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
 
 The three broadcast frames are broadcast for the same reason: the programmer is shared, so a
 second tab reordering the stack or pressing Include must not leave the first showing a stale view.
@@ -455,6 +455,17 @@ either, and other tabs kept a stale layer list indefinitely.
 (`PARKED`|`PROGRAMMER`|`EFFECT`|`CUE`), `cueId?`, `cueStackId?`, `effectId?`, `layerId?` and
 `layerSource?` — the last two so the desk can answer "why is this fixture this colour?" by naming
 *Warm Wash* rather than *a cue*.
+
+`provenanceState` doubles as the client's cue to refetch `programmer.state` — it is the one
+broadcast that fires for a programmer write made by a MIDI surface, a locate, or another tab.
+A crossfade's weight ticks are layer events too, so a running fade republishes provenance at up
+to ~20 Hz; each frame carries `programmerRevision`, a monotonic count of the triggers that could
+have moved the programmer's value set, which a weight-only republish (winner maps carried forward
+unchanged) does not bump — so the client refetches only when the revision moved, not ~10×/s for
+the whole fade. It is a counter on every frame rather than a per-frame flag because the broadcast
+flow is replay-1 + DROP_OLDEST and a slow tab can skip frames mid-fade: whatever frame does
+arrive carries the latest revision, so an off-connection write is never stranded. A frame
+omitting the field (an older server) makes the client refetch every frame — the old behaviour.
 
 On a warm desk the connect snapshot and the replayed flow value can each deliver
 `programmer.includeTarget`, `programmer.layerState` and `provenanceState` twice. Harmless: all

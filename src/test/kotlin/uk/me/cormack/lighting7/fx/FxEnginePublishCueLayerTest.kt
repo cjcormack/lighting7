@@ -371,6 +371,36 @@ class FxEnginePublishCueLayerTest {
     }
 
     @Test
+    fun `weight-only republishes leave the programmer revision alone, everything else bumps it`() {
+        // Unstarted engine → ProvenanceService emits synchronously per trigger, so the
+        // replay cache holds exactly the frame the last trigger produced.
+        val rig = newRig(firstChannel = 1)
+        val lastRevision = { rig.engine.provenance.flow.replayCache.last().programmerRevision }
+
+        rig.engine.cueLayer.setAssignments(10, listOf(ltpSlider(cueId = 10, priority = 1, value = 100u)))
+        val afterSet = lastRevision()
+
+        // A mid-fade weight tick carries winners forward unchanged — the client must be able
+        // to skip its refetch, so the revision must not move.
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.5))
+        assertEquals(afterSet, lastRevision(), "a weight-only tick cannot have moved the programmer")
+
+        // Any other layer event mid-fade must bump it, or the client would skip the refetch
+        // that propagates the change to other tabs.
+        rig.engine.cueLayer.setAssignments(20, listOf(ltpSlider(cueId = 20, priority = 2, value = 200u)))
+        val afterSecondSet = lastRevision()
+        assertTrue(afterSecondSet > afterSet, "a full republish could have changed anything")
+
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 0.75, 20 to 0.25))
+        assertEquals(afterSecondSet, lastRevision())
+
+        // A weight reaching 1.0 ends that cue's fade with a forced full republish — the
+        // fade's last frame must re-arm the client refetch.
+        rig.engine.cueLayer.updateFadeWeights(mapOf(10 to 1.0, 20 to 1.0))
+        assertTrue(lastRevision() > afterSecondSet, "fade completion is a full republish, not a weight tick")
+    }
+
+    @Test
     fun `updateCueFadeWeights unknown cue id is a no-op`() {
         val rig = newRig(firstChannel = 1)
         rig.engine.cueLayer.setAssignments(10, listOf(slider(cueId = 10, value = 180u)))

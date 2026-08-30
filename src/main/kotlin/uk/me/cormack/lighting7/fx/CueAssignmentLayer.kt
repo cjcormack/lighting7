@@ -20,8 +20,13 @@ package uk.me.cormack.lighting7.fx
 class CueAssignmentLayer internal constructor(
     private val layerResolver: LayerResolver,
     private val publisher: CascadePublisher,
-    /** Provenance hook — Layer 4 moves change provenance winners. */
-    private val onLayerChanged: () -> Unit,
+    /**
+     * Provenance hook — Layer 4 moves change provenance winners. The argument is
+     * [republishAssignments]'s `weightsOnly`: a weight-only republish carries the winner maps
+     * forward unchanged, so provenance leaves [ProvenanceUpdate.programmerRevision] alone and
+     * the client skips the `programmer.state` refetch it answers other frames with.
+     */
+    private val onLayerChanged: (weightsOnly: Boolean) -> Unit,
 ) {
     private val cueAssignments = HashMap<Int, List<CueAssignmentResolver.Assignment>>()
 
@@ -437,6 +442,6 @@ class CueAssignmentLayer internal constructor(
         // no caller describes as an arrival, and the guarantee that the two fade mechanisms never
         // compound on one key should not rest on every call site remembering it.
         publisher.publishCueLayerToControllers(before, layerResolver.current, honourRowFades && !weightsOnly)
-        onLayerChanged()
+        onLayerChanged(weightsOnly)
     }
 }

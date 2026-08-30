@@ -357,12 +357,24 @@ data class ProvenanceEntryDto(
 
 /**
  * Full provenance snapshot — pushed on every layer event (programmer mutation, cue
- * republish, effect lifecycle change, park change), never per frame.
+ * republish, effect lifecycle change, park change), coalesced to at most one per 50 ms.
+ * A crossfade's weight ticks are layer events too, so a running fade republishes this at
+ * up to ~20 Hz — which is why [programmerRevision] exists.
  */
 @Serializable
 @SerialName("provenanceState")
 data class ProvenanceStateOutMessage(
     val entries: List<ProvenanceEntryDto>,
+    /**
+     * Monotonic counter of triggers that could have moved the programmer's value set. A
+     * crossfade weight tick does not bump it, so the client refetches `programmer.state`
+     * only when the revision moved — instead of ~10×/s for the whole fade. Carried on every
+     * frame (not a per-frame flag) so the broadcast flow's DROP_OLDEST behaviour under a
+     * slow collector cannot lose the signal. Additive and defaulted: a server that omits it
+     * (or a client that ignores it) degrades to refetch-on-every-frame, the old behaviour.
+     * See [uk.me.cormack.lighting7.fx.ProvenanceUpdate].
+     */
+    val programmerRevision: Long = 0,
 ) : ProgrammerOutMessage()
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
@@ -421,7 +433,10 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     // one debounced refetch.
     scope.sendSnapshot {
         send(ProgrammerHandler.stateSnapshot(state))
-        send(buildProvenanceStateMessage(state.show.fxEngine.provenance.compute()))
+        send(buildProvenanceStateMessage(
+            state.show.fxEngine.provenance.compute(),
+            programmerRevision = state.show.fxEngine.provenance.currentProgrammerRevision,
+        ))
     }
 
     // StateFlow replays its current value, so a tab opened mid-show sees the live include
@@ -436,15 +451,20 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     scope.subscribe(scope.state.show.programmerStore.layersFlow) { layers ->
         scope.send(ProgrammerLayerStateOutMessage(layers.map { it.toDto() }))
     }
-    scope.subscribe(scope.state.show.fxEngine.provenance.flow) { entries ->
-        scope.send(buildProvenanceStateMessage(entries))
+    scope.subscribe(scope.state.show.fxEngine.provenance.flow) { update ->
+        scope.send(buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision))
     }
 }
 
-/** Shared by the connect snapshot and the live `provenance.flow` subscription. */
-private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>) =
+/**
+ * Shared by the connect snapshot and the live `provenance.flow` subscription. A fresh tab
+ * has never seen a revision, so whatever value its first frame carries re-arms the refetch —
+ * the connect snapshot just passes the current one.
+ */
+private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programmerRevision: Long) =
     ProvenanceStateOutMessage(
-        entries.map {
+        programmerRevision = programmerRevision,
+        entries = entries.map {
             ProvenanceEntryDto(
                 targetKey = it.targetKey,
                 propertyName = it.propertyName,

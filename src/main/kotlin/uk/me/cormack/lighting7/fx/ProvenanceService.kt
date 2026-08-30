@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** Which layer produced the current winning value for one (target, property). */
 enum class ProvenanceSource { PARKED, PROGRAMMER, EFFECT, CUE }
@@ -43,6 +44,24 @@ data class ProvenanceEntry(
      * be a lie the compiler could not find.
      */
     val layerSource: LayerSource? = null,
+)
+
+/**
+ * One coalesced provenance broadcast. [programmerRevision] bumps for every trigger that could
+ * have moved the programmer's value set — anything but a crossfade weight tick, whose
+ * republish carries the winner maps forward unchanged ([LayerResolver.reweightAssignments]).
+ * The client refetches `programmer.state` when the revision moves and skips the refetch when
+ * it hasn't, which is what stops a running fade turning into ~10 refetches/s per tab.
+ *
+ * A *revision* rather than a per-frame flag deliberately: the broadcast flow is replay-1 +
+ * DROP_OLDEST and each connection's collector does a suspending network send, so a slow tab
+ * can silently skip frames mid-fade. A drained boolean would put the whole refetch obligation
+ * on the one unflagged frame — dropped, the write never propagates. A monotonic counter
+ * survives arbitrary frame loss: whatever frame does arrive carries the latest value.
+ */
+data class ProvenanceUpdate(
+    val entries: List<ProvenanceEntry>,
+    val programmerRevision: Long,
 )
 
 /**
@@ -93,14 +112,14 @@ class ProvenanceService internal constructor(
     // — the owner of a property unchanged, its value moved. A StateFlow conflates exactly that
     // away and the refetch never fires. The connect frame is pushed explicitly from
     // `setupProgrammerSubscriptions` instead.
-    private val _flow = MutableSharedFlow<List<ProvenanceEntry>>(
+    private val _flow = MutableSharedFlow<ProvenanceUpdate>(
         replay = 1,
         extraBufferCapacity = 1,
         onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
     )
 
     /** Flow of full provenance snapshots for WebSocket broadcasting. */
-    val flow: SharedFlow<List<ProvenanceEntry>> = _flow.asSharedFlow()
+    val flow: SharedFlow<ProvenanceUpdate> = _flow.asSharedFlow()
 
     // Coalesces provenance recomputes: emitUpdate is called from every layer-event site —
     // including per-MIDI-CC programmer writes and per-crossfade-tick Layer 4 republishes that
@@ -109,7 +128,19 @@ class ProvenanceService internal constructor(
     // `dirty` is flipped false *before* computing so a mutation landing mid-compute schedules
     // a fresh cycle.
     private val dirty = AtomicBoolean(false)
+
+    // Bumped by every trigger that could have changed the programmer's value set — i.e.
+    // anything but a `cueFadeOnly` weight tick — and carried on every emitted frame. Read
+    // *after* compute() so a trigger landing mid-compute can only over-report "changed"
+    // (a spurious refetch), never under-report: a bump the frame misses is delivered by the
+    // next frame its own emitUpdate call guarantees (it either wins the `dirty` CAS or a
+    // cycle is already pending), so a wrongly-skipped refetch heals within one coalescing
+    // window and is never stranded.
+    private val programmerRevision = AtomicLong(0)
     @Volatile private var scope: CoroutineScope? = null
+
+    /** The current [ProvenanceUpdate.programmerRevision] — for the WS connect snapshot. */
+    val currentProgrammerRevision: Long get() = programmerRevision.get()
 
     /** Wire the coalescing scope and seed the replay — called from [FxEngine.start]. */
     fun start(scope: CoroutineScope) {
@@ -129,18 +160,26 @@ class ProvenanceService internal constructor(
      * lifecycle changes via `FxEngine.emitStateUpdate`) and by the park handlers. Cheap
      * enough to call while holding locks. Before [start] wires a scope (unit tests), the
      * recompute runs synchronously so assertions stay deterministic.
+     *
+     * [cueFadeOnly] may be passed as true only by a trigger that provably cannot have moved
+     * the programmer's value set — today, exactly the crossfade weight-only republish
+     * ([CueAssignmentLayer]'s `weightsOnly` path). Every other trigger bumps
+     * [ProvenanceUpdate.programmerRevision], which is what re-arms the client refetch.
      */
-    fun emitUpdate() {
+    fun emitUpdate(cueFadeOnly: Boolean = false) {
+        if (!cueFadeOnly) programmerRevision.incrementAndGet()
         val scope = scope
         if (scope == null) {
-            _flow.tryEmit(compute())
+            val entries = compute()
+            _flow.tryEmit(ProvenanceUpdate(entries, programmerRevision = programmerRevision.get()))
             return
         }
         if (dirty.compareAndSet(false, true)) {
             scope.launch(Dispatchers.Default) {
                 delay(COALESCE_MS)
                 dirty.set(false)
-                _flow.tryEmit(compute())
+                val entries = compute()
+                _flow.tryEmit(ProvenanceUpdate(entries, programmerRevision = programmerRevision.get()))
             }
         }
     }
