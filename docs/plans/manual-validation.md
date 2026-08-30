@@ -27,6 +27,7 @@ as a one-line row.
 | [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and Look compatibility still refreshes | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-DISPATCH`](#fu-manual-fade-dispatch) | fades still draw, join mid-fade, and complete once with the 60 Hz dispatch gone | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-SHOWBAR`](#fu-manual-fade-showbar) | the ShowBar's FADING countdown reads right at 10 Hz and the chrome sits out fades | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -486,6 +487,26 @@ vanish when the fade completes — no badge stuck on screen, none flickering. Wh
 speed-master tiles must stay live (beat indicator still pulsing, TAP still responsive) and a dev
 Performance profile during the fade should show the bar's subtree rendering ~10×/s, not 60. On
 `/programmer`, drag a slider mid-fade — the grid must feel no busier than idle. 10 minutes.
+
+---
+
+## `FU-MANUAL-PROGRAMMER-MEMO`
+
+**Non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree** · frontend sweep
+`FS-PERF-PROGRAMMER-MEMO-BARRIER`, 2026-08-30
+
+`ProgrammerBody` (the grid, rail, action bar and scope band below the page's chrome) had no memo
+barrier, so any re-render of `ProgrammerPage` — a `useProgrammerSummaryQuery` refresh, a project
+refetch, anything upstream of the bar — reconciled the entire subtree even outside a fade. It is now
+wrapped in `React.memo` on its one primitive prop (`projectId`). This is a **code-read** change: no
+automated test watches a reconcile storm, so the barrier holding is asserted (the grid-never-remounts
+test still passes), not measured.
+
+**Test**: on `/programmer`, drive summary traffic that doesn't touch the grid — Include/Update/Record
+from another surface, or just let the summary poll — while a dev Performance profile is running.
+`ProgrammerBody`'s subtree should not re-render on that traffic. Toggle Groups and switch the
+Output/Local scope segment as before; the grid must still re-render (never remount) and behave
+identically to before this change. 10 minutes.
 
 ---
 

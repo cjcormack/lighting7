@@ -85,7 +85,7 @@ halves still owed are listed in §14 only.
 | `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
 | ~~`FS-PERF-FADE-IN-SHOWBAR`~~ **done** | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
-| `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
+| ~~`FS-PERF-PROGRAMMER-MEMO-BARRIER`~~ **done** | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
 | ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ **done** | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
@@ -714,8 +714,9 @@ once `FS-PERF-MOBILE-SHEET-FADE` and `FS-PERF-PROMPTBOOK-FADE-DRILL` move the re
 them. `FS-PERF-PROGRAMMER-MEMO-BARRIER` is still owed for non-fade traffic. Rig check filed as
 `FU-MANUAL-FADE-SHOWBAR`.
 
-### `FS-PERF-PROGRAMMER-MEMO-BARRIER`
-**The programmer page has no memo barrier between chrome and body** · S2 · P1 · C2 · sonnet
+### ~~`FS-PERF-PROGRAMMER-MEMO-BARRIER`~~ — **landed**
+**The programmer page has no memo barrier between chrome and body**, lighting-react `feece73` · S2
+· P1 · C2 · sonnet
 `src/routes/ProgrammerPage.tsx`
 
 The page-level consequence of the above, worth its own item because it also bites on
