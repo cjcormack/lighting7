@@ -43,6 +43,21 @@ interface FixturesChangeListener {
      * invalidates the one template directly.
      */
     fun templateListChanged() {}
+
+    /**
+     * A Look or template contents edit changed what [cueIds] compose to.
+     *
+     * The *contents* counterpart to [lookListChanged] / [templateListChanged], and deliberately
+     * keyed rather than a bare signal: a retune moves a handful of cues, so naming them lets a
+     * client refresh exactly those reads instead of dropping every cue cache — which is the storm
+     * the two list signals refuse to be fired for.
+     *
+     * The ids are **every cue layering the edited record**, not only the live ones
+     * `republishForSourceEdit` rebuilt. `GET /cues/{id}/cooked` composes on read, so a dark cue's
+     * composed values go stale from the same edit that moves a live one; a client with that cue
+     * expanded needs the same refresh.
+     */
+    fun cuesRecomposed(cueIds: List<Int>) {}
     fun speedMasterListChanged() {}
     fun cueListChanged() {}
     fun cueStackListChanged() {}
@@ -344,6 +359,12 @@ class Fixtures {
     fun templateListChanged() {
         changeListeners.forEach {
             it.templateListChanged()
+        }
+    }
+
+    fun cuesRecomposed(cueIds: List<Int>) {
+        changeListeners.forEach {
+            it.cuesRecomposed(cueIds)
         }
     }
 

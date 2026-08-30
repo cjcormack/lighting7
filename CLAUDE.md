@@ -347,6 +347,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `groupsState` - Request/receive fixture groups state
 - `clearGroupFx` - Clear all effects for a group
 - `groupFxCleared` - Confirmation of group effect removal
+- `cuesRecomposed` - A Look/template *contents* edit changed what the named `cueIds` compose to. The keyed counterpart to `lookListChanged` / `templateListChanged`, which deliberately don't fire for a contents edit; carries every cue layering the edited record, not just the live ones re-transmitted
 - `cueRunStateChanged` - A cue stack's live cue, armed next, and fade timing. One frame per transition from `CueStackManager` (so REST, the MIDI surface and auto-advance all report), plus a snapshot on connect; clients animate the fade locally from `fadeElapsedMs`
 
 ## Database

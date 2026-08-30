@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -65,7 +66,8 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
         lookUuid,
         kind = "look",
         invalidate = { state.show.lookRegistry.invalidate(lookUuid) },
-        referencing = { activeCueIds -> activeCuesReferencingLook(state, lookUuid, activeCueIds) },
+        referencing = { activeCueIds -> cuesReferencingLook(state, lookUuid, activeCueIds) },
+        allReferencing = { cuesReferencingLook(state, lookUuid, restrictTo = null) },
     )
 
 /**
@@ -88,7 +90,8 @@ internal fun republishForTemplateEdit(state: State, templateUuid: UUID): LookRep
         // 50 Hz tick loop and open a transaction there — the one thing `prewarmTemplateColours`
         // exists to keep off that thread.
         invalidate = { state.show.templateRegistry.refresh(templateUuid) },
-        referencing = { activeCueIds -> activeCuesReferencingTemplate(state, templateUuid, activeCueIds) },
+        referencing = { activeCueIds -> cuesReferencingTemplate(state, templateUuid, activeCueIds) },
+        allReferencing = { cuesReferencingTemplate(state, templateUuid, restrictTo = null) },
     )
 
 private fun republishForSourceEdit(
@@ -97,6 +100,7 @@ private fun republishForSourceEdit(
     kind: String,
     invalidate: () -> Unit,
     referencing: (Set<Int>) -> Set<Int>,
+    allReferencing: () -> Set<Int>,
 ): LookRepublishOutcome {
     val engine = state.show.fxEngine
 
@@ -165,9 +169,21 @@ private fun republishForSourceEdit(
         engine.programmer.republishKeys(programmerKeys)
     }
 
+    // 5. Tell every *other* client which cues now compose differently, so an expanded cue grid
+    //    re-reads. Deliberately broader than `republished`, and named apart from it for that
+    //    reason: `republished` (the outcome field, and the REST responses' `cuesRepublished`) is
+    //    what moved on stage — the live cues whose Layer 4 rows were replaced — while
+    //    `GET /cues/{id}/cooked` composes on read, so a dark cue layering this record went stale
+    //    from the same edit and needs the same re-read. One indexed-FK query at save cadence, and
+    //    the frame is keyed, so a client refreshes those cues rather than dropping every cue cache
+    //    — which is exactly why `lookListChanged` refuses to be fired here.
+    val affected = allReferencing()
+    if (affected.isNotEmpty()) state.show.fixtures.cuesRecomposed(affected.toList())
+
     logger.info(
-        "{} {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished",
-        kind, sourceUuid, programmerKeys.size, republished.size, scanned.size,
+        "{} {} edited: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished, " +
+            "{} cue(s) announced stale",
+        kind, sourceUuid, programmerKeys.size, republished.size, scanned.size, affected.size,
     )
     return LookRepublishOutcome(
         programmerKeysRefreshed = programmerKeys.size,
@@ -176,46 +192,59 @@ private fun republishForSourceEdit(
 }
 
 /**
- * Which of [activeCueIds] depend on [lookUuid] — now only ever through a layer.
+ * Which cues depend on [lookUuid] — now only ever through a layer.
  *
  * A plain **indexed FK query**, which is the structural win of the merge: a layer references its
  * Look through a real column, where the palette era could only scan opaque `value` text for an
  * exact string match. That second scan retired with the `ref:` grammar in session 4.
+ *
+ * [restrictTo] narrows the answer to a candidate set — the republish loop passes the live cue ids,
+ * because rebuilding rows is only meaningful for a cue that has some. Pass `null` for every cue
+ * layering the Look, live or dark, which is what the staleness broadcast needs.
  */
-internal fun activeCuesReferencingLook(
+internal fun cuesReferencingLook(
     state: State,
     lookUuid: UUID,
-    activeCueIds: Set<Int>,
-): Set<Int> {
-    if (activeCueIds.isEmpty()) return emptySet()
-    return transaction(state.database) {
-        val look = DaoLook.find { DaoLooks.uuid eq lookUuid }.firstOrNull()
-
-        if (look == null) {
-            emptySet()
-        } else {
-            DaoCueLayer.find {
-                (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.look eq look.id)
-            }.map { it.cue.id.value }.toSet()
-        }
-    }
+    restrictTo: Set<Int>?,
+): Set<Int> = cuesLayering(state, restrictTo) {
+    DaoLook.find { DaoLooks.uuid eq lookUuid }.firstOrNull()?.let { DaoCueLayers.look eq it.id }
 }
 
 /**
- * Which of [activeCueIds] depend on [templateUuid]. The same indexed-FK query as
- * [activeCuesReferencingLook], on the other column.
+ * Which cues depend on [templateUuid]. The same indexed-FK query as [cuesReferencingLook], on the
+ * other column, and [restrictTo] means the same thing there.
  */
-internal fun activeCuesReferencingTemplate(
+internal fun cuesReferencingTemplate(
     state: State,
     templateUuid: UUID,
-    activeCueIds: Set<Int>,
+    restrictTo: Set<Int>?,
+): Set<Int> = cuesLayering(state, restrictTo) {
+    DaoTemplate.find { DaoTemplates.uuid eq templateUuid }.firstOrNull()
+        ?.let { DaoCueLayers.template eq it.id }
+}
+
+/**
+ * The shared body of the two queries above: the same scan with the same [restrictTo] semantics,
+ * differing only in which FK column names the edited record. Shared for the reason
+ * [republishForTemplateEdit] gives for sharing its own body — the restriction logic has two callers
+ * on two paths, and a change that lands on one and misses the other makes Look and template
+ * republish disagree silently.
+ *
+ * [fkMatch] runs inside the transaction and returns null when the record has gone, which is the one
+ * case that short-circuits to nothing.
+ */
+private fun cuesLayering(
+    state: State,
+    restrictTo: Set<Int>?,
+    fkMatch: () -> Op<Boolean>?,
 ): Set<Int> {
-    if (activeCueIds.isEmpty()) return emptySet()
+    // Distinct from `restrictTo == null`: an empty candidate set means "nothing to look for" and
+    // would generate an `IN ()`, where null means "no restriction at all".
+    if (restrictTo != null && restrictTo.isEmpty()) return emptySet()
     return transaction(state.database) {
-        val template = DaoTemplate.find { DaoTemplates.uuid eq templateUuid }.firstOrNull()
-            ?: return@transaction emptySet()
+        val match = fkMatch() ?: return@transaction emptySet()
         DaoCueLayer.find {
-            (DaoCueLayers.cue inList activeCueIds.toList()) and (DaoCueLayers.template eq template.id)
+            if (restrictTo == null) match else (DaoCueLayers.cue inList restrictTo.toList()) and match
         }.map { it.cue.id.value }.toSet()
     }
 }

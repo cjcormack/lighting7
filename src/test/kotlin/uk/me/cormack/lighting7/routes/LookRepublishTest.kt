@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -71,10 +72,22 @@ class LookRepublishTest : RouteIntegrationTest() {
      *
      * Until session 4 the dependency was a cue row whose value was `ref:{lookUuid}`. The `ref:` value
      * grammar retired; a layer naming the Look through a real FK is what makes a cue tour, and it is
-     * what `activeCuesReferencingLook` now scans for.
+     * what `cuesReferencingLook` now scans for.
      */
     private fun applyCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
-        val cueId = transaction(state.database) {
+        val cueId = seedCueReferencing(fixtureKey, lookUuid, hex)
+        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
+        applyCue(state, applyData, replaceAll = false)
+        return cueId
+    }
+
+    /**
+     * The same cue, left **dark** — written to the DB but never fired, so it has no Layer 4 rows to
+     * republish. Its composed values still move when the Look does, because `/cues/{id}/cooked`
+     * composes on read; that is the case the staleness broadcast exists for.
+     */
+    private fun seedCueReferencing(fixtureKey: String, lookUuid: UUID?, hex: String? = null): Int {
+        return transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             val stack = DaoCueStack.new {
                 this.project = project
@@ -106,9 +119,6 @@ class LookRepublishTest : RouteIntegrationTest() {
             }
             cue.id.value
         }
-        val applyData = transaction(state.database) { buildCueApplyData(DaoCue.findById(cueId)!!) }
-        applyCue(state, applyData, replaceAll = false)
-        return cueId
     }
 
     private fun cueColour(fixtureKey: String): CueAssignmentResolver.PropertyValue.Colour {
@@ -155,6 +165,44 @@ class LookRepublishTest : RouteIntegrationTest() {
         )
         assertTrue(literal !in outcome.cuesRepublished)
         assertEquals("#00ff00", cueColour("hex-2").value.toSerializedString(), "untouched")
+    }
+
+    @Test
+    fun `a look edit announces every cue layering it, live or dark`() = testApplication {
+        mountTestApp(state)
+        seedHex("hex-1", startChannel = 1)
+        seedHex("hex-2", startChannel = 20)
+
+        val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
+        val otherUuid = seedLook("Cold Blue", mapOf("hex-2" to "#0000ff"))
+        val live = applyCueReferencing("hex-1", lookUuid)
+        val dark = seedCueReferencing("hex-1", lookUuid)
+        val unrelated = seedCueReferencing("hex-2", otherUuid)
+
+        val announced = mutableListOf<List<Int>>()
+        val listener = object : FixturesChangeListener {
+            override fun cuesRecomposed(cueIds: List<Int>) {
+                announced += cueIds
+            }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            rewriteLookRows(lookUuid, mapOf("hex-1" to "#0000ff"))
+            val outcome = republishForLookEdit(state, lookUuid)
+
+            assertEquals(
+                listOf(live), outcome.cuesRepublished,
+                "only the live cue had Layer 4 rows to replace",
+            )
+            assertEquals(
+                setOf(live, dark), announced.single().toSet(),
+                "the dark cue's composed values moved from the same edit, so it is announced too — " +
+                    "this is what makes the frame wider than the REST field of the same name",
+            )
+            assertTrue(unrelated !in announced.single(), "a cue layering a different Look is untouched")
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
     }
 
     @Test

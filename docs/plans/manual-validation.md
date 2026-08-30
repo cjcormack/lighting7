@@ -33,6 +33,7 @@ as a one-line row.
 | [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CUE-REPUBLISH-FRAME`](#fu-manual-cue-republish-frame) | a cue expanded on one client refreshes when another retunes a Look it layers | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -659,6 +660,30 @@ step is the one genuinely open question in the cluster: the body is held mounted
 but the wrapper still collapses to zero height, and if dnd-kit re-measures droppable rects rather
 than using the ones cached at drag start, the drop resolves to nothing anyway. If it does vanish,
 the fix is to hold the wrapper open too, not just the body. 10 minutes.
+
+---
+
+## `FU-MANUAL-CUE-REPUBLISH-FRAME`
+
+**A cue expanded on one client refreshes when another client retunes a Look it layers** · frontend
+sweep `FS-BUG-CUE-TAG-STALE`, 2026-08-30
+
+`GET /cues/{id}/cooked` is tagged `Cue`, and until now nothing invalidated `Cue` from any socket
+frame — the two library CRUD signals deliberately don't fire for a contents edit, so a retune moved
+the rig while a second tab's read-only grid held pre-edit values indefinitely on a healthy socket.
+`republishForSourceEdit` now broadcasts `cuesRecomposed` naming every cue that layers the edited
+record, and `store/cues.ts` invalidates exactly those ids. The backend half has an integration test
+(`LookRepublishTest`); the client bridge and the two-tab behaviour do not, which is what this check
+is for.
+
+**Test**: two browsers on `/show`, same project. In A, expand a cue that layers a Look and note a
+composed value. In B, retune that Look (change a colour and save). A's grid must show the new value
+within a beat, with no reload — and the network panel should show one `GET /cues/{id}/cooked`, not
+a refetch of the whole cue list. Repeat with the cue **dark** (never fired), which is the case the
+frame is deliberately wider than the REST field of the same name to cover. Then repeat both with a
+template instead of a Look. Finally check the storm guard: with a Look library open in A, do a
+handful of rapid saves in B and confirm A issues one cooked read per save, not a cue-cache-wide
+refetch. 15 minutes.
 
 ---
 

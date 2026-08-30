@@ -321,13 +321,15 @@ Outbound-only, and the only frame a client sees before the show-scoped families 
 
 ### Broadcast — `BroadcastSocket.kt`
 
-Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged` and
-`cueRunStateChanged` is a **payload-free cache invalidation**: the client refetches over REST.
+Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged`,
+`cueRunStateChanged` and `cuesRecomposed` is a **payload-free cache invalidation**: the client
+refetches over REST.
 
 | Message | Payload | Meaning |
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
 | `templateListChanged` | — | A template was created, renamed or deleted |
+| `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD |
 | `cueStackListChanged` | — | Cue-stack CRUD |
 | `cueSlotListChanged` | — | Cue-slot CRUD |
@@ -341,6 +343,22 @@ Fired from the per-project `FixturesChangeListener`. Everything here except `sho
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
 | `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally |
+
+`cuesRecomposed` is the one broadcast that is keyed rather than payload-free, and the reason is the
+rule its two neighbours state: `lookListChanged` / `templateListChanged` are deliberately **not**
+fired for a contents edit, because a client treats them as "drop every cached expansion" and a
+retune would be an invalidation storm. A retune does still change what the cues layering that record
+compose to, so it gets its own frame naming them — a handful of ids, at save cadence, refreshing
+exactly those reads.
+
+Its ids are **every cue layering the edited record**, which is deliberately wider than the
+`cuesRepublished` field on the REST responses (`lookRepublish.kt`, `programmerRoutes.kt`,
+`lookRecord.kt`): that field is the live cues whose Layer 4 rows `republishForSourceEdit` actually
+replaced, while `GET /cues/{id}/cooked` composes on read, so a dark cue reads stale from the same
+edit. The frame answers "what should be re-read", the REST field answers "what moved on stage";
+they are different questions and only accidentally the same list. **That is why the frame is
+`cuesRecomposed` and not `cuesRepublished`** — the two names sat one line apart in
+`republishForSourceEdit` during review and were read as the same set twice.
 
 `cueRunStateChanged` is snapshotted on connect for every stack with run state, and the snapshot is
 captured **synchronously** at setup and only *sent* from the launched coroutine — reading it inside

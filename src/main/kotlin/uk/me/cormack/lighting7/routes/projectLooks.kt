@@ -544,7 +544,7 @@ private val lookJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = tru
  * session 4 there was a second half — an exact-equality scan over opaque `value` text for rows
  * holding `ref:{uuid}` — inherited from the named-palette era and counted separately as
  * `refRowCount`. It retired with the grammar. The delete guard must keep seeing exactly what `republishForLookEdit`'s
- * [activeCuesReferencingLook] sees, or a Look reported as "used by nothing" gets deleted out from
+ * [cuesReferencingLook] sees, or a Look reported as "used by nothing" gets deleted out from
  * under a cue that still resolves through it; both are now the same single FK query.
  */
 internal data class LookUsage(

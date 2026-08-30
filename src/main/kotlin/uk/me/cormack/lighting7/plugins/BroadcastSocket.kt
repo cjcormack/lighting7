@@ -38,6 +38,21 @@ data object LookListChangedOutMessage : BroadcastOutMessage()
 @SerialName("templateListChanged")
 data object TemplateListChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * A Look or template contents edit changed what [cueIds] compose to.
+ *
+ * The contents counterpart to the two list signals above, which is why it carries ids where they
+ * carry nothing: those refuse to fire on a contents edit because they invalidate *every* cached
+ * expansion, and a retune only moves a handful of cues. Naming them lets a client re-read exactly
+ * those, so the frame is affordable at save cadence.
+ *
+ * [cueIds] is every cue layering the edited record, not only the live ones whose Layer 4 rows were
+ * replaced: `GET /cues/{id}/cooked` composes on read, so a dark cue reads stale from the same edit.
+ */
+@Serializable
+@SerialName("cuesRecomposed")
+data class CuesRecomposedOutMessage(val cueIds: List<Int>) : BroadcastOutMessage()
+
 @Serializable
 @SerialName("cueListChanged")
 data object CueListChangedOutMessage : BroadcastOutMessage()
@@ -174,6 +189,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
 
         override fun lookListChanged() = fire(LookListChangedOutMessage)
         override fun templateListChanged() = fire(TemplateListChangedOutMessage)
+        override fun cuesRecomposed(cueIds: List<Int>) = fire(CuesRecomposedOutMessage(cueIds))
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)
         override fun cueSlotListChanged() = fire(CueSlotListChangedOutMessage)
