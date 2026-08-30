@@ -102,7 +102,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | ~~`FS-EDITOR-DEBOUNCE-DIRTY`~~ **done** | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
-| `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
+| ~~`FS-TYPES-TEMPLATE-TOGGLE-MASK`~~ **done** | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
 | ~~`FS-ARCH-CURSOR-OWNERSHIP`~~ **done** | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
@@ -1322,10 +1322,10 @@ A required boolean that is always `undefined` — the shape that later grows a g
 fires. The built-in/user distinction is real server-side but lives in *which endpoint served the
 row*. Delete the field.
 
-### `FS-TYPES-TEMPLATE-TOGGLE-MASK`
+### ~~`FS-TYPES-TEMPLATE-TOGGLE-MASK`~~ — **landed**
 **Template toggle discards the client's `propertyMask` and the server derives none, so every ⌥click
-and pad template layer is unmasked — against CLAUDE.md's stated gesture contract** · S3 · P1 · C1 ·
-sonnet
+and pad template layer is unmasked — against CLAUDE.md's stated gesture contract**,
+lighting-react `b2c8084` (+ lighting7 `f1acfec`) · S3 · P1 · C1 · sonnet
 `src/components/programmer/TemplateStrip.tsx`, `src/components/busking/BuskingView.tsx`, backend
 `ProgrammerLayerStack.toggle` / `projectTemplates.kt`
 
@@ -1339,8 +1339,8 @@ false in the layer data; the row still *displays* a family badge because `LookSt
 `info.families` from the library lookup, which is what keeps this S3 (rig output unaffected today —
 a template's rows are all one family — and the display lies in the right direction). **Fix**: needs
 the backend half — a `propertyMask` parameter on `toggle` with the family derived server-side
-(§14, `FS-BE-TEMPLATE-TOGGLE-MASK` — still owed, and not carried by the completed backend sweep);
-then fix the KDoc, and pin that the layer
+(§14, `FS-BE-TEMPLATE-TOGGLE-MASK` — taken here, having not been carried by the completed backend
+sweep); then fix the KDoc, and pin that the layer
 emitted in `programmer.layerState` after a toggle carries the family.
 
 ### `FS-TYPES-ADDLAYER-MASK-DROP`
@@ -2599,7 +2599,7 @@ raised. They are restated here as the backlog they now are; the right home is
 `../plans/followups.md` as `FU-` items, and promoting them is a decision for the desk owner rather
 than something an agent should do while landing a frontend item.
 
-Three of the six are settled:
+Five of the seven are settled:
 
 - ~~`FS-BE-STOP-ROWSONLY`~~ — refuted at HEAD: `removeEffectsForCue` clears Layer 4
   unconditionally (`b11d66a`), and `/apply` routes through `activateCueInStack` (`dcc511f`) so the
@@ -2614,8 +2614,14 @@ Three of the six are settled:
 - ~~`FS-BE-CUES-REPUBLISHED-FRAME`~~ — done, `6525ad6`, with `FS-BUG-CUE-TAG-STALE`. Landed as
   `cuesRecomposed`, carrying every cue layering the edited record rather than the REST responses'
   narrower `cuesRepublished` list — see that item for why the two are different questions.
+- ~~`FS-BE-TEMPLATE-TOGGLE-MASK`~~ — done, `f1acfec`, with `FS-TYPES-TEMPLATE-TOGGLE-MASK`.
+  `ProgrammerLayerStack.toggle` gained a `propertyMask` (kept **out** of the "already on" compare,
+  so a re-press with a different mask still toggles off), and the toggle route derives the family by
+  the same expression `DaoTemplate.toDto` uses. The response now returns the derived mask rather
+  than echoing the request's, which is what it needed to be able to disagree at all; the request
+  field survives as the caller's advisory belief.
 
-Still owed, and each blocking a frontend item from being finished honestly:
+Still owed — neither now blocks a frontend item, both are the desk owner's call:
 
 - `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
   capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
@@ -2623,10 +2629,6 @@ Still owed, and each blocking a frontend item from being finished honestly:
   also require row coverage. `FS-DOCS-COMPATIBLELOOKIDS` landed without it (`0bcda19`) by
   documenting the hole rather than claiming it closed, as that item required — so this is no longer
   blocking anything, only still true.
-- `FS-BE-TEMPLATE-TOGGLE-MASK` — `ProgrammerLayerStack.toggle` has no `propertyMask` parameter and
-  `projectTemplates.kt`'s toggle route derives none, while its KDoc claims the server derives the
-  family and cross-checks the echo (the echo can never disagree with itself). Backend half of
-  `FS-TYPES-TEMPLATE-TOGGLE-MASK`; that item is a client-side no-op without it.
 - `FS-BE-FORCE-FIELDS` *(new)* — **now unblocked.** `force` survives on the Record and Update
   request bodies, inert, solely because this repo used to send it on every submit (backend D1
   note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client sends it and
