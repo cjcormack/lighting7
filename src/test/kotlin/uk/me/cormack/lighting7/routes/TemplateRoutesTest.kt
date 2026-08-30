@@ -336,6 +336,51 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.layers.isEmpty())
     }
 
+    /**
+     * The mask is the server's answer, not the caller's. Pinned because the layer this asserts on is
+     * exactly what `programmer.layerState` emits — an unmasked template layer reads as "this could
+     * touch anything", and until the mask was derived here every ⌥click and pad press produced one.
+     *
+     * Both halves matter: a client that says nothing still gets the family, and a client that says
+     * the wrong thing does not get to impose it. The response reports what was applied, which is
+     * what makes a disagreement visible rather than silent.
+     */
+    @Test
+    fun `toggle masks the layer to the template's own family, whatever the caller claims`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val template = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+        assertEquals("COLOUR", template.family)
+        val targets = listOf(TemplateTargetDto("fixture", "hex-1"))
+
+        // Says nothing: the family is still applied.
+        val silent = client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets))
+        }.body<ToggleTemplateResponse>()
+        assertEquals("COLOUR", silent.propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+
+        client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets))
+        }
+
+        // Says the wrong thing: the template wins, and the response says so.
+        val wrong = client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets, propertyMask = "POSITION"))
+        }.body<ToggleTemplateResponse>()
+        assertEquals("applied", wrong.action)
+        assertEquals("COLOUR", wrong.propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+    }
+
     @Test
     fun `the family filter is an exact partition`() = testApplication {
         mountTestApp(state)

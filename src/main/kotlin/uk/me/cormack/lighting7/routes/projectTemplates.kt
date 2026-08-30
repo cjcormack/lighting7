@@ -279,21 +279,34 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()
-            val source = transaction(state.database) {
+            // Source *and* mask in one transaction: the mask is derived from the template's own rows
+            // by the same expression `toDto` uses for `family`, so the layer cannot be masked to
+            // something the template list never showed. Deriving it here rather than trusting
+            // `request.propertyMask` is also what gives the response an independent answer to
+            // report: an echo could never disagree with the caller.
+            val found = transaction(state.database) {
                 DaoTemplate.findById(resource.templateId)
                     ?.takeIf { it.project.id == project.id }
-                    ?.let { LayerSource.template(it.id.value, it.uuid, it.name) }
+                    ?.let { template ->
+                        val family = template.rows
+                            .orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)
+                            .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
+                            ?.name
+                        LayerSource.template(template.id.value, template.uuid, template.name) to family
+                    }
             }
-            if (source == null) {
+            if (found == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
                 return@withCurrentProject
             }
+            val (source, derivedMask) = found
             try {
                 val (action, effectCount) = state.show.programmerLayerStack.toggle(
                     source = source,
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
+                    propertyMask = derivedMask,
                 )
-                call.respond(ToggleTemplateResponse(action, effectCount, request.propertyMask))
+                call.respond(ToggleTemplateResponse(action, effectCount, derivedMask))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             }
@@ -417,9 +430,10 @@ internal data class TemplateSkipDto(
 internal data class ToggleTemplateRequest(
     val targets: List<TemplateTargetDto> = emptyList(),
     /**
-     * Echoed back rather than applied here. The mask a template layer wants is its own family, which
-     * the server derives — but the caller states what it *believed* it was masking to, so a client
-     * and server that disagree show up in the response instead of silently on the rig.
+     * What the caller *believed* it was masking to. Advisory: the mask actually applied is derived
+     * from the template's rows server-side, because the mask a template layer wants is a fact about
+     * the template rather than about the press. Stating it anyway is what lets a client and server
+     * that disagree show up in [ToggleTemplateResponse.propertyMask] instead of silently on the rig.
      */
     val propertyMask: String? = null,
 )
@@ -428,6 +442,11 @@ internal data class ToggleTemplateRequest(
 internal data class ToggleTemplateResponse(
     val action: String,
     val effectCount: Int,
+    /**
+     * The mask the layer actually carries — the template's own family, derived from its rows. Null
+     * only for a template whose rows name no known property. Compare against what was sent: this is
+     * the *server's* answer, not an echo, so the two genuinely can differ.
+     */
     val propertyMask: String? = null,
 )
 

@@ -199,10 +199,16 @@ class ProgrammerLayerStack(
      * Note a rows-only Look reports `0` either way, and a **template always does**: neither spawns
      * effects. That was true before this rewrite too, and it is why the pads' active ring cannot be
      * driven from the effect list alone.
+     *
+     * [propertyMask] applies to the *arriving* layer only. It is deliberately **not** part of the
+     * "already on" comparison: a pad that re-pressed with a different mask should still take its
+     * layer off rather than stack a second one, and the mask a template layer wants is a function of
+     * the template, not of the press. A Look passes null — a Look spans families by construction.
      */
     fun toggle(
         source: LayerSource,
         targets: List<CueTargetDto>,
+        propertyMask: String? = null,
         beatDivisionOverride: Double? = null,
     ): Pair<String, Int> {
         val existing = store.layers.firstOrNull {
@@ -214,6 +220,7 @@ class ProgrammerLayerStack(
             "applied" to add(
                 source = source,
                 targets = targets,
+                propertyMask = propertyMask,
                 beatDivisionOverride = beatDivisionOverride,
             ).second.effectsSpawned
         }
