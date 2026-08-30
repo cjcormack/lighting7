@@ -36,6 +36,7 @@ as a one-line row.
 | [`FU-MANUAL-CUE-REPUBLISH-FRAME`](#fu-manual-cue-republish-frame) | a cue expanded on one client refreshes when another retunes a Look it layers | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-WS-SEND-DROPPED`](#fu-manual-ws-send-dropped) | a WebSocket blip announces itself instead of eating every gesture silently | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CHANNEL-FANOUT`](#fu-manual-channel-fanout) | coalesced channel wake-ups still track the rig, on the sheet, the cards and the stage | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-MARQUEE-COUNT`](#fu-manual-marquee-count) | a large marquee drag on `/fixtures` stays smooth and still reports the right batch count | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -762,6 +763,33 @@ still change on the same frame it always did.
 Then the teardown case the coalescing has to get right: filter the list hard enough to unmount most
 rows mid-FX, clear the filter, and confirm every returning row is live rather than frozen at its
 last pre-unmount value. 15 minutes.
+
+---
+
+## `FU-MANUAL-MARQUEE-COUNT`
+
+**What it proves**: `batchCountFor` used to recompute the marquee's "Applying to N" count from
+scratch for every rendered cell on every pointer-move frame — an O(rows × columns) reduce over the
+whole selection, repeated per visible cell. That count is now hoisted into one `useMemo` keyed on
+the cell selection and the row list, so it's computed once per selection change rather than once
+per cell per frame. This is a code-read change with **no measurement**: the risk is not the saving
+but a count that goes stale or wrong, since the memo's correctness depends on `cellSelection` and
+`rows` identity actually changing when the underlying selection does.
+
+**Test**: with the desk running, on `/fixtures` with a large list (enough rows/columns to make the
+old per-cell recompute visible as lag):
+
+1. Drag a marquee across many rows and columns and confirm the drag itself stays smooth — no visible
+   stutter or dropped frames while the selection grows.
+2. Hover a cell inside the marquee and confirm the "Applying to N" popover shows the right count —
+   the upper bound across every selected column, matching what a commit would actually write (a
+   collapsed multi-head bar's cell counts its heads, not 1).
+3. Extend or shrink the marquee (drag further, or click to clear and reselect) and confirm the count
+   updates to match the new selection — it must not stick at a stale number from the previous drag.
+4. Commit a write over the marquee (e.g. a colour drag) and confirm what actually lands matches what
+   the popover promised.
+
+10 minutes.
 
 ---
 

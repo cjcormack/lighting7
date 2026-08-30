@@ -84,7 +84,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
 | ~~`FS-DUP-AGGREGATION`~~ **done** | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
 | ~~`FS-PERF-FADE-IN-SHOWBAR`~~ **done** | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
-| `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
+| ~~`FS-PERF-MARQUEE-COUNT`~~ **done** | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
 | ~~`FS-PERF-PROGRAMMER-MEMO-BARRIER`~~ **done** | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
 | ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ **done** | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
@@ -1032,9 +1032,9 @@ Each `ChannelSlider` holds a `{universe, channelNo}`-keyed cache entry whose `up
 keeping the per-channel split but taking Redux out of the 30 Hz path. Leave `channelsApi` batching
 and the mutation write path alone.
 
-### `FS-PERF-MARQUEE-COUNT`
+### ~~`FS-PERF-MARQUEE-COUNT`~~ — **landed**
 **`batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per pointer
-move** · S2 · P1 · C2 · sonnet
+move**, `8f67e1d` · S2 · P1 · C2 · sonnet
 `src/routes/FixturesList.tsx`, `src/components/fixtures-list/useCellSelection.ts`
 
 The marquee branch ignores `(row, col)` — it returns the same number for every selected cell — yet
