@@ -76,7 +76,7 @@ halves still owed are listed in §14 only.
 |---|---|---|---|---|---|
 | ~~`FS-BUG-CUESLOT-LIVENESS`~~ done | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
 | ~~`FS-BUG-STALE-ROW-SNAPSHOT`~~ **done** | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
-| `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
+| ~~`FS-BUG-EDITOR-RESET-NOOP`~~ **done** | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-FADE-KEY-SNAPSHOT`~~ **done** | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-FXROUTE-REGEX`~~ **done** | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
 | ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ **done** | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
@@ -89,7 +89,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ **done** | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
 | ~~`FS-PERF-WS-SINGLE-PARSE`~~ **done** | The channelState firehose is `JSON.parse`d 24 times per frame | S2 | P1 | C2 | sonnet |
 | ~~`FS-TEST-LOOKONLY-GATE`~~ **done** | The LOOK-only gate — the guard against silently converting a generic template to per-fixt… | S2 | P1 | C1 | sonnet |
-| `FS-BUG-EDITOR-SILENT-READONLY` | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
+| ~~`FS-BUG-EDITOR-SILENT-READONLY`~~ **done** | A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neith… | S2 | P2 | C2 | sonnet |
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | ~~`FS-PERF-CODE-SPLITTING`~~ **done** | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | ~~`FS-PERF-COLLAPSED-PANELS`~~ **done** | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
@@ -100,7 +100,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-WIRE-FIELD-DELETIONS`~~ **done** | The retired-concept wire fields are gone server-side under A2/D9 — every client site read… | S3 | P1 | C1 | haiku |
 | ~~`FS-COORD-GROUPS-WS`~~ **done** | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
-| `FS-EDITOR-DEBOUNCE-DIRTY` | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
+| ~~`FS-EDITOR-DEBOUNCE-DIRTY`~~ **done** | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
 | `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
 | `FS-TYPES-TEMPLATE-TOGGLE-MASK` | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
@@ -137,7 +137,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-RES-PRESETPICKER`~~ **done** | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
 | `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
 | ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ **done** | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
-| `FS-TEST-EDITOR-PINS` | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
+| ~~`FS-TEST-EDITOR-PINS`~~ **done** | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
 | `FS-TEST-PROGRAMMER-SCOPE` | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
 | `FS-TEST-PROVENANCE-PIN` | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
 | `FS-TYPES-ADDLAYER-MASK-DROP` | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
@@ -151,8 +151,8 @@ halves still owed are listed in §14 only.
 | `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
 | `FS-DEAD-DTO-FIELDS` | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
 | `FS-DEAD-WS-METHODS` | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
-| `FS-EDITOR-DEAD-BRANCH` | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
-| `FS-EDITOR-LIFECYCLE` | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
+| ~~`FS-EDITOR-DEAD-BRANCH`~~ **done** | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
+| ~~`FS-EDITOR-LIFECYCLE`~~ **done** | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
 | `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
 | `FS-PERF-LITKEYS-ALLOC` | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
 | ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
@@ -227,9 +227,10 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
    `FS-RES-RUNNER-DIR` + `FS-RES-CUECARDEDITOR-DIR` touch files carrying
    `FS-PERF-MOBILE-SHEET-FADE`, `FS-DUP-MARKER-ROW` and `FS-DUP-TARGETKEY`; pick an order and rebase
    the rest. `FS-DUP-TARGETKEY` supersedes `FS-DEAD-EXPORTS`' `targetEquals` line.
-6. **The script-editor cluster is one work package** (§5), `FS-EDITOR-LIFECYCLE` first — its
-   imperative handle is what the two bugs and the debounce fix need. Six of the eight are left:
-   `FS-EDITOR-PROPTYPES-PHANTOM` and `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` went with the manifest pass.
+6. ~~**The script-editor cluster is one work package**~~ — **spent**. All eight have landed:
+   `FS-EDITOR-PROPTYPES-PHANTOM` and `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` with the manifest pass
+   (`0146759`), the remaining six 2026-08-30 as `a402981` (code) + `8c429b6` (pins). Nothing
+   outstanding; see §5's cluster header for why those six are two commits and not six.
 7. ~~**One manifest pass**~~ — **spent** (`6398257`, `0146759`). `FS-DEAD-DEVDEPS` and
    `FS-ARCH-ALERTDIALOG-DEP` landed as one commit, `FS-EDITOR-PROPTYPES-PHANTOM` as another. Note
    for whatever touches `package.json` next: the agent sandbox blocks writes to npm's cache, so
@@ -566,7 +567,14 @@ The Kotlin editor subsystem (`src/kotlinScript/`, `src/components/scripts/`, plu
 CueTriggerEditor mounts) had **zero findings and zero tests** before the gap round; it turned out to
 hold two real bugs and a band of fragility. All eight items below touch the same two files —
 dispatch them as **one work package** (suggested: one sonnet agent, `FS-EDITOR-LIFECYCLE` first,
-since its imperative handle is what the two bugs' fixes need).
+since its imperative handle is what the two bugs' fixes need). **Spent** — all eight have landed.
+
+The last six landed 2026-08-30 as **two** commits, not six: `a402981` for the five code items and
+`8c429b6` for the pins. They interlock inside `component.mjs` — the echo suppression Reset needs
+has nothing to suppress until the change channel is undebounced, and the handle it writes through
+does not exist until `getInstance` stops clobbering the caller's — so a per-item split would have
+meant committing intermediate states that never existed and were never checked. Same argument the
+`0146759` pair below already carries.
 
 Two of the eight left the cluster early, in the manifest pass:
 `FS-EDITOR-PROPTYPES-PHANTOM` (which §4 constraint 7 always assigned there) and
@@ -574,9 +582,9 @@ Two of the eight left the cluster early, in the manifest pass:
 still one package, and `component.mjs` now has `component.d.mts` beside it — any prop the lifecycle
 and debounce work adds to the wrapper needs declaring there too.
 
-### `FS-BUG-EDITOR-RESET-NOOP`
+### ~~`FS-BUG-EDITOR-RESET-NOOP`~~ — **landed**
 **A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset silently
-does nothing** · S2 · P1 · C2 · sonnet
+does nothing**, `a402981` (+ `8c429b6`) · S2 · P1 · C2 · sonnet
 `src/kotlinScript/component.mjs`, `src/components/scripts/ScriptForm.tsx`
 
 `componentDidUpdate` only re-runs `initPlayground()`, which early-returns once the widget has
@@ -589,9 +597,19 @@ revert in `EditFxDefinitionSheet`, and theme-flip remounts discard cursor/undo f
 (`instance.codemirror.setValue(body)` with the **folded body only**, or `instance.update({code})`),
 compare before writing and suppress the echo `change`. Then pin Reset with a test.
 
-### `FS-BUG-EDITOR-SILENT-READONLY`
+Landed as a controlled path in `ScriptEditor`, not in `componentDidUpdate`: the compare has to be
+exact, and the wrapper's `value` prop is the *wrapped* source while `onChange` reports the body, so
+the marker arithmetic stayed where it already lives. The wrapper speaks the body on both sides.
+Grew in the landing, from the review: `EditFxDefinitionSheet` stored `edits.script` only when it
+trimmed unequal to the saved script and collapsed to `undefined` otherwise — harmless while the
+editor was uncontrolled, but it reverted the operator's text and caret mid-edit once it wasn't.
+The field now holds the editor's text verbatim and `hasChanged` asks the question instead. Also
+fixed: a `script.script` that changed while the widget was still coming up was dropped for good,
+since the effect does not re-run — the handle's arrival syncs too.
+
+### ~~`FS-BUG-EDITOR-SILENT-READONLY`~~ — **landed**
 **A failed `/api/script-editor/versions` drops every editor to read-only and the frontend neither
-detects nor reports it** · S2 · P2 · C2 · sonnet
+detects nor reports it**, `a402981` (+ `8c429b6`) · S2 · P2 · C2 · sonnet
 `src/kotlinScript/component.mjs`, `src/components/scripts/ScriptEditor.tsx`
 
 kotlin-playground's version probe resolves `undefined` on failure and falls back to
@@ -604,9 +622,16 @@ zero-instances/rejection as fallback, render an inline "language service unreach
 read-only" message with a Retry that bumps a key nonce (the widget nulls its version cache on
 failure, so a remount genuinely refetches). Wire `onError` while there.
 
-### `FS-EDITOR-LIFECYCLE`
+One correction to the mechanism, from the widget's source: the failed probe does **not** resolve
+with zero instances. It resolves with one, built `new ExecutableCode(node, {highlightOnly: true})`
+— two arguments, no event functions — so the detection that actually works is "did `getInstance`
+call back?", not "how long is the array?". Grew in the landing: `onError` raises the same banner
+rather than only being wired, so the mid-session case (a desk restart under a live editor) reports
+like the mount-time one.
+
+### ~~`FS-EDITOR-LIFECYCLE`~~ — **landed**
 **Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a
-write-only global that also clobbers the `getInstance` prop** · S3 · P3 · C1 · sonnet
+write-only global that also clobbers the `getInstance` prop**, `a402981` (+ `8c429b6`) · S3 · P3 · C1 · sonnet
 `src/kotlinScript/component.mjs`
 
 The widget exposes `destroy()`; the wrapper never calls it, so every sheet close, tab switch and
@@ -616,9 +641,9 @@ reach the live editor value today. **Fix**: `componentWillUnmount` → `destroy(
 the global with a pass-through to `this.props.getInstance`. This unlocks the imperative handle the
 two bugs above and the debounce item below need.
 
-### `FS-EDITOR-DEBOUNCE-DIRTY`
+### ~~`FS-EDITOR-DEBOUNCE-DIRTY`~~ — **landed**
 **onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every
-Compile/Run/Save read a copy that trails the editor** · S3 · P1 · C2 · sonnet
+Compile/Run/Save read a copy that trails the editor**, `a402981` (+ `8c429b6`) · S3 · P1 · C2 · sonnet
 `src/kotlinScript/component.mjs`, `src/components/scripts/ScriptForm.tsx`, `src/routes/FxLibrary.tsx`,
 `src/components/cues/CueTriggerEditor.tsx`
 
@@ -628,6 +653,13 @@ Downgraded from S2 because the window is ≤500 ms of idle and every consumer is
 usually exceeds it — but the guard exists precisely for the hurried case. **Fix**: expose
 `getValue()` through the un-clobbered `getInstance` handle; dirty checks and the send handlers read
 through it (or at minimum flush on wrapper blur). Pin the Escape-after-typing case.
+
+Landed by bypassing the debounce rather than reading around it: the wrapper no longer passes
+`onChange` to the widget at all, and listens to CodeMirror directly, so every consumer's state is
+never stale and no call site changed. The read-through-a-handle shape needed a second immediate
+channel anyway — the Sheet reads `unsavedChanges` from its render closure, so a flush inside the
+Escape keydown lands a render too late, and the guard can only work if the form already knows.
+The widget's own debounced handler still drives highlighting and completion, untouched.
 
 ### ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ — **landed**
 **Read-only works only because React omits an `undefined` attribute — `highlightOnly="false"` would
@@ -651,15 +683,19 @@ applies to which rather than claiming presence semantics for all three. The land
 `<ReactKotlinPlayground>` element out of `ScriptEditor`'s compact/non-compact ternary, which had
 mounted it byte-for-byte twice; `FS-EDITOR-DEAD-BRANCH` still owns deleting the dead arm.
 
-### `FS-EDITOR-DEAD-BRANCH`
-**ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount verbatim**
-· S3 · P3 · C2 · sonnet
+### ~~`FS-EDITOR-DEAD-BRANCH`~~ — **landed**
+**ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount verbatim**,
+`a402981` · S3 · P3 · C2 · sonnet
 `src/components/scripts/ScriptEditor.tsx`
 
 All four mount sites pass `compact`, so the name Card, footer actions, `onCompile`/`onRun` props and
 their state are unreachable — and the surviving ternary renders a byte-identical mount in both arms.
 **Fix**: drop the prop and branch, collapse the ternary, note the component is deliberately
 editor-only (the callers' own Compile/Run buttons differ in label, size and mutation and stay).
+
+`ScriptEditorScript` keeps its `name`, now unread here: it is the component's public DTO across
+five call sites and describes what is being edited. `LazyScriptEditor`'s fallback lost its
+`compact` arm with it.
 
 ### ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ — **landed**
 **`prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares**,
@@ -677,9 +713,9 @@ landed without it. Adding declarations makes `ScriptEditor`'s `@ts-expect-error`
 unused-directive error, so the `.d.ts` and the deletion are one change. Landed in its own commit,
 separate from the manifest pass.
 
-### `FS-TEST-EDITOR-PINS`
+### ~~`FS-TEST-EDITOR-PINS`~~ — **landed**
 **The documented cross-type poisoning landmine is safe by construction today — and nothing pins any
-of what makes it safe** · S3 · P2 · C2 · sonnet
+of what makes it safe**, `8c429b6` · S3 · P2 · C2 · sonnet
 `src/components/scripts/`, `src/kotlinScript/`
 
 Verified concretely: the module-global `server` is only ever assigned the one hardcoded
@@ -690,6 +726,15 @@ it is pinned — no test asserts the marker line comes first, the body survives 
 on the wrapper. **Fix**: `ScriptEditor.test.tsx` over a mocked widget pinning the value string per
 type, the round-trip using the widget's own arithmetic, the wrapper class, the
 `readOnly`-omits-attribute rule, and a grep-guard that `"/api/script-editor"` is assigned exactly once.
+
+Landed with `src/test/kotlinPlaygroundFake.ts`, which fakes the widget rather than mocking it away
+— the behaviours the wrapper reasons about are the widget's own, and are written down nowhere but
+its source. It paid for itself at once: the fake resolves `getInstance` synchronously, stricter
+than the real widget, and caught a teardown during a pending init discarding the instance that
+init was about to produce (the StrictMode double-mount path). The grep-guard walks the tree
+through `import.meta.glob(..., '?raw')` rather than `node:fs`, which the browser-targeted tsconfig
+has no types for. `ScriptForm.test.tsx` carries the two end-to-end pins the sibling items asked
+for: Reset, and Escape-after-typing.
 
 ## 6. Performance
 

@@ -126,6 +126,12 @@ type continuously for a minute in a GENERAL script — enough for many highlight
 round-trips. Watch for output stutter, dropped frames, or audible hesitation in moving-head motion.
 Repeat with an FX_CALC script, whose template differs.
 
+Also watch the **client** side now, which `FS-EDITOR-DEBOUNCE-DIRTY` changed (lighting-react
+`a402981`): the editor reports every keystroke to React instead of one value per 500 ms of idle,
+so the surrounding sheet re-renders per character where it used to coalesce. The compile and
+completion traffic this check was written for is untouched — that still runs through the widget's
+own debounce — so what to look for is local typing latency in the editor, not new server load.
+
 **If it stutters**, levers in order of bluntness: raise the client-side debounce, drop autocomplete
 on lower-powered desks, or gate the editor routes on the rig being idle. A second process is the
 last resort — it's what this change removed.
