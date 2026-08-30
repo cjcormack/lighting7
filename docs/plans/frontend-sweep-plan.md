@@ -75,7 +75,7 @@ halves still owed are listed in §14 only.
 | ID | Finding | Sev | Pri | Cx | Model |
 |---|---|---|---|---|---|
 | ~~`FS-BUG-CUESLOT-LIVENESS`~~ done | "Is this cue/stack live?" is derived from the FX effect stream, so a rows-only cue reads… | S1 | P1 | C2 | fable |
-| `FS-BUG-STALE-ROW-SNAPSHOT` | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
+| ~~`FS-BUG-STALE-ROW-SNAPSHOT`~~ **done** | Per-row programmer snapshot cache goes stale across an off→on subscription cycle | S1 | P1 | C2 | fable |
 | `FS-BUG-EDITOR-RESET-NOOP` | A changed `value` prop can never reach a live playground editor, so ScriptForm's Reset si… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-FADE-KEY-SNAPSHOT`~~ **done** | `PROGRAMMER_FADE_KEY` is shared by key but not by value — ShowBar's Blind uses a mount-ti… | S2 | P1 | C2 | sonnet |
 | `FS-BUG-FXROUTE-REGEX` | `isFxRoute` is an unanchored prefix match and fires on `/fx-library`, locking the effects… | S2 | P1 | C1 | sonnet |
@@ -124,7 +124,7 @@ halves still owed are listed in §14 only.
 | `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
 | `FS-DUP-OVERVIEW-TOGGLES` | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
 | `FS-DUP-REDIRECTS` | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
-| `FS-DUP-ROW-SUBSCRIPTION` | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
+| ~~`FS-DUP-ROW-SUBSCRIPTION`~~ **done** | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
 | ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ **done** | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
 | ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
 | `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
@@ -298,9 +298,9 @@ and activate/deactivate against a cue with no effects and one with effects. Note
 §14 (`FS-BE-STOP-ROWSONLY`): today `POST /cues/{cueId}/stop` cannot clear a rows-only cue fired
 outside its stack, so the client fix alone makes the pad *look* right without making stop work.
 
-### `FS-BUG-STALE-ROW-SNAPSHOT`
-**Per-row programmer snapshot cache goes stale across an off→on subscription cycle** · S1 · P1 · C2
-· fable
+### ~~`FS-BUG-STALE-ROW-SNAPSHOT`~~ — **landed**
+**Per-row programmer snapshot cache goes stale across an off→on subscription cycle**,
+lighting-react `0644a63` · S1 · P1 · C2 · fable
 `src/components/fixtures-list/useRowOwnership.ts`, `src/components/fixtures-list/useScopedRowValues.ts`
 
 Both `useRowOwnership.getSnapshot` and `useLocalRowValues.getSnapshot` cache on
@@ -323,6 +323,11 @@ version inside `subscribe`, or fold `subscribedKeys` into the cache key. Do it o
 not break: the cached snapshot identity (stops unrelated provenance pushes re-rendering the row),
 the per-`(target,property)` subscription split, empty-cells-means-off, and the blind-transition
 filter.
+
+Landed as *both* remedies, not one: the subscription set's identity joined the cache key (heals
+off→on during the re-entry render itself, no stale frame), and `subscribe` also bumps the version
+on registration — review found the two close different windows, the latter covering a notification
+landing between a row's render and its passive-effect subscription under a time-sliced render.
 
 ### ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ — **landed**
 **Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →
@@ -1376,9 +1381,9 @@ across explicitly or keep it deliberately separate; do not let unifying the swat
 what the stage paints. **Sequencing**: contains `FS-BUG-PIXEL-CACHE-PERMUTATION`'s host code —
 collapse first or fix the bug in the survivor (§4).
 
-### `FS-DUP-ROW-SUBSCRIPTION`
+### ~~`FS-DUP-ROW-SUBSCRIPTION`~~ — **landed**
 **`useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscription
-mechanism** · S3 · P2 · C2 · sonnet
+mechanism**, lighting-react `abb4266` · S3 · P2 · C2 · sonnet
 `src/components/fixtures-list/useRowOwnership.ts`, `src/components/fixtures-list/useScopedRowValues.ts`
 
 Same key-signature memo (same eslint-disable, same comment), same dedupe, same version-ref bump,
