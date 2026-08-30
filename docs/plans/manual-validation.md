@@ -29,6 +29,7 @@ as a one-line row.
 | [`FU-MANUAL-FADE-SHOWBAR`](#fu-manual-fade-showbar) | the ShowBar's FADING countdown reads right at 10 Hz and the chrome sits out fades | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROVENANCE-REFETCH`](#fu-manual-provenance-refetch) | a crossfade no longer drives a refetch storm, and a MIDI write mid-fade still lands in the grid | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -533,6 +534,31 @@ requests (fade start/end), not a steady ~10/s stream. Then, mid-fade, write a pr
 from an off-connection source (a MIDI CC twist, or a second tab): the first tab's grid must show
 the new value within ~a quarter second, both mid-fade and after the fade completes. Locate and a
 template apply mid-fade should behave the same. 10 minutes.
+
+---
+
+## `FU-MANUAL-MOBILE-SHEET-FADE`
+
+**The phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack**
+· frontend sweep `FS-PERF-MOBILE-SHEET-FADE`, 2026-08-30
+
+The phone runner's cue-list sheet used to prop-drill `fadeProgress`/`autoProgress` from `ShowPage`
+into every rendered `MobileCueRow`, and each row recomputed `completedCueIds.includes(cue.id)` —
+O(n) per row, so O(n²) over a 200-cue stack, on every fade frame, on a phone. Rows now read their
+own fade/auto-advance via `useCueFade`/`useCueAutoProgress` (gated by `fadeStackId`, only truthy
+for the active row), `MobileCueRow` is memoized, and the done-tick is a hoisted `Set`. The review
+found the desktop cue-stack view (`StackDetail.tsx`) had the identical `completedCueIds.includes()`
+cost, so that got the same `Set` hoist in this landing. This is a **code-read** change: no
+automated test watches a reconcile storm or profiles a real device, so the mechanism is asserted,
+not measured.
+
+**Test**: on a project with a 100+ cue stack, open the phone runner (`/show` on a phone or a
+narrow/touch-emulated viewport) and open the cue-list sheet mid-show with a dev Performance profile
+running. Fire a GO with a multi-second fade: only the active row's fade/auto-advance chrome should
+animate and re-render per frame, other rows must not flash or reconcile, and the done tick must
+appear exactly once per completed cue. Tap a row to select a cue and confirm `onSelectCue` still
+fires for the tapped row specifically (not the previously-active one). Then repeat the same big-stack
+fade on desktop `/programmer`'s cue-stack panel and confirm the same smoothness. 10 minutes.
 
 ---
 

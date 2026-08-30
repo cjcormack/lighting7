@@ -155,7 +155,7 @@ halves still owed are listed in §14 only.
 | `FS-EDITOR-LIFECYCLE` | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
 | `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
 | `FS-PERF-LITKEYS-ALLOC` | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
-| `FS-PERF-MOBILE-SHEET-FADE` | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
+| ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
 | `FS-PERF-PALETTE-QUERIES` | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
 | `FS-PERF-STAGE-BUFFER-UPLOADS` | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
 | `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
@@ -758,9 +758,9 @@ not-yet-pushed commits): the WS `Json` converter has `encodeDefaults = false`, s
 ticked past zero, reproducing the refetch storm that item was meant to fix. Fixed separately,
 lighting7 `4eb3a4f` — see that item's own entry below for the note.
 
-### `FS-PERF-MOBILE-SHEET-FADE`
-**Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick** · S3 · P3 · C2
-· sonnet
+### ~~`FS-PERF-MOBILE-SHEET-FADE`~~ — **landed**
+**Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick**,
+`0fa02f9` · S3 · P3 · C2 · sonnet
 `src/components/runner/run/RunMobile.tsx`, `src/components/runner/MobileCueListSheet.tsx`,
 `src/routes/ShowPage.tsx`
 
@@ -769,6 +769,11 @@ lighting7 `4eb3a4f` — see that item's own entry below for the note.
 comparisons per frame on a 200-cue stack, on a phone, while the sheet is open mid-show. Fix: rows
 read their own fade via `useCueFade`, memoize the row, hoist a `Set` for the done-tick. Only the
 active cue draws fade chrome; `onRequeueCue` stays inert off the playhead.
+
+Grew in the landing: code review (high effort) found the desktop cue-stack view
+(`StackDetail.tsx`) had the identical `completedCueIds.includes()` per-row cost this item fixed
+on mobile. Not named in this item's file list; taken as part of this landing rather than filed
+separately, since it's the same one-line-cause defect in the sibling view.
 
 ### `FS-PERF-TRANSPORT-ALLOC`
 **`useShowTransport` builds a whole-stack signature string per render** · S4 · P3 · C1 · haiku
