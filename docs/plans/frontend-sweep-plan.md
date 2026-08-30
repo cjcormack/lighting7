@@ -82,7 +82,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-BUG-PROGRAMMER-ERROR-DROPPED`~~ **done** | `programmer.error` frames are delivered to zero subscribers, so a busk that lands nowhere… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
-| `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
+| ~~`FS-DUP-AGGREGATION`~~ **done** | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
 | ~~`FS-PERF-FADE-IN-SHOWBAR`~~ **done** | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
 | ~~`FS-PERF-PROGRAMMER-MEMO-BARRIER`~~ **done** | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
@@ -211,9 +211,11 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
    some become dead work.
 2. **The S1 snapshot fix rides the hook consolidation.** Land `FS-BUG-STALE-ROW-SNAPSHOT` *through*
    `FS-DUP-ROW-SUBSCRIPTION`'s extraction, or the fix must be written twice.
-3. **Collapse the aggregation before fixing inside it.** `FS-BUG-PIXEL-CACHE-PERMUTATION`'s host
-   code is what `FS-DUP-AGGREGATION` deletes — unify first, or fix in the surviving implementation
-   only.
+3. ~~**Collapse the aggregation before fixing inside it.**~~ — **spent** (`de1959e`).
+   `FS-DUP-AGGREGATION` has landed, so `FS-BUG-PIXEL-CACHE-PERMUTATION` now has exactly one host:
+   the members-vs-aggregates compare gap sits in `useGroupColourValues`' snapshot cache, and its
+   siblings' uncompared fields (`values` on slider/setting, `members` on position) are still
+   unconsumed — the "delete them instead" half of that item's fix is still on offer.
 4. **One Layout/overview-panel refactor, not five patches.** `FS-PERF-COLLAPSED-PANELS`,
    `FS-PERF-CHANNELSOURCE-REBUILD`'s `isVisible` gate, `FS-DUP-OVERVIEW-TOGGLES`,
    `FS-BUG-FXROUTE-REGEX`, `FS-ARCH-IMPORT-CYCLE` and `FS-ARCH-LOCALSTORAGE-BOOT` all converge on
@@ -1420,9 +1422,9 @@ answered — `tsconfig.json` includes only `src`, so `model.ts` leaves the type-
 
 ## 9. Duplication
 
-### `FS-DUP-AGGREGATION`
-**Two implementations of "aggregate a property across heads", already numerically divergent** · S2 ·
-P1 · C3 · opus
+### ~~`FS-DUP-AGGREGATION`~~ — **landed**
+**Two implementations of "aggregate a property across heads", already numerically divergent**,
+lighting-react `de1959e` · S2 · P1 · C3 · opus
 `src/components/fixtures-list/useRowValues.ts`, `src/hooks/useGroupPropertyValues.ts`,
 `src/components/fixtures/PropertyVisualizers.tsx`, `src/components/fixtures/GroupPropertyVisualizers.tsx`
 
@@ -1437,6 +1439,17 @@ surviving site. `computeGroupColourValues` also feeds the 3D beam colour — car
 across explicitly or keep it deliberately separate; do not let unifying the swatch silently change
 what the stage paints. **Sequencing**: contains `FS-BUG-PIXEL-CACHE-PERMUTATION`'s host code —
 collapse first or fix the bug in the survivor (§4).
+
+Landed as the aggregation collapse only. The group hooks project their descriptors into
+`CellResolution`s and read through `aggregateCellValue`; the beam derivation was kept deliberately
+separate, with a comment saying why (it answers "what does the bar throw", where a mean muddies a
+red+blue bar to grey and hides one bright pixel on a dark one) — the stage paints what it painted
+before, pinned by test. The **`PropertyVisualizers` / `GroupPropertyVisualizers` widget family was
+not merged**: the **Fix** named the aggregation, and the ~1,130-line parallel widget set is a
+separate question nothing here forced. A second divergence surfaced alongside the first — the group
+card's `combinedCss` was `rgb(avgR, avgG, avgB)` where a single fixture's had always been
+`computeCombinedCss`, so the two paths opened the same `ColourPickerPopover` on different colours;
+unified with the emitter rule. `FS-BUG-PIXEL-CACHE-PERMUTATION` is untouched and now has one host.
 
 ### ~~`FS-DUP-ROW-SUBSCRIPTION`~~ — **landed**
 **`useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscription
