@@ -83,7 +83,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-BUG-RECONNECT-RESYNC`~~ **done** | Post-reconnect cache resync is a hand-maintained 15-tag list against 47 tagTypes; 20 tags… | S2 | P1 | C2 | sonnet |
 | ~~`FS-BUG-TIMEDLAYERS-RENAME`~~ **done** | Record's "timed effect(s) kept" note is dead: backend renamed `timedPresetApplications` →… | S2 | P1 | C1 | sonnet |
 | `FS-DUP-AGGREGATION` | Two implementations of "aggregate a property across heads", already numerically divergent | S2 | P1 | C3 | opus |
-| `FS-PERF-FADE-IN-SHOWBAR` | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
+| ~~`FS-PERF-FADE-IN-SHOWBAR`~~ **done** | Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of `Prog… | S2 | P1 | C3 | fable |
 | `FS-PERF-MARQUEE-COUNT` | `batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per… | S2 | P1 | C2 | sonnet |
 | `FS-PERF-PROGRAMMER-MEMO-BARRIER` | The programmer page has no memo barrier between chrome and body | S2 | P1 | C2 | sonnet |
 | ~~`FS-PERF-SAVELOOK-INVALIDATION`~~ **done** | A layer-scope drag refetches the whole fixture list every 400 ms | S2 | P1 | C1 | sonnet |
@@ -686,9 +686,9 @@ consumer gates on `activeCueId` first), so `markDone` now clears both descriptor
 clears a stale auto descriptor, closing a pre-existing hole where an unmount mid-countdown left the
 countdown pinned at 100% across a remount. Rig check filed as `FU-MANUAL-FADE-DISPATCH`.
 
-### `FS-PERF-FADE-IN-SHOWBAR`
+### ~~`FS-PERF-FADE-IN-SHOWBAR`~~ — **landed**
 **Fade progress is prop-drilled into the ShowBar, re-rendering the chrome (and all of
-`ProgrammerBody`) at frame rate** · S2 · P1 · C3 · fable
+`ProgrammerBody`) at frame rate**, lighting-react `8533c21` · S2 · P1 · C3 · fable
 `src/hooks/useShowBarProps.ts`, `src/hooks/useShowTransport.ts`, `src/components/ShowBar.tsx`,
 `src/routes/ProgrammerPage.tsx`
 
@@ -704,6 +704,15 @@ the runner through a leaf hook quantised to ~10 Hz, and memoize the bar and `Spe
 remount `ProgrammerGrid` (grid-never-remounts rule, pinned by `ProgrammerPage.test.tsx`'s
 `gridMounts`), must not change what the two cursors mean to cue rows, must leave `ProgramView`'s
 memo intact.
+
+Grew in the landing: review found the memoized bar alone left the headline `/programmer` case
+live — `useShowTransport`'s `useAnimatedProgress` calls re-render the host per rAF whether or not
+it reads the frame-rate values. The transport now takes `frameRateProgress` (default true) and the
+programmer page opts out, so it stops re-rendering per frame during fades entirely; the flag dies
+once `FS-PERF-MOBILE-SHEET-FADE` and `FS-PERF-PROMPTBOOK-FADE-DRILL` move the remaining
+`fadeProgress`/`autoProgress` consumers onto `useCueFade` and the transport can stop computing
+them. `FS-PERF-PROGRAMMER-MEMO-BARRIER` is still owed for non-fade traffic. Rig check filed as
+`FU-MANUAL-FADE-SHOWBAR`.
 
 ### `FS-PERF-PROGRAMMER-MEMO-BARRIER`
 **The programmer page has no memo barrier between chrome and body** · S2 · P1 · C2 · sonnet

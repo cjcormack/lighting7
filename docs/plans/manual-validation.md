@@ -26,6 +26,7 @@ as a one-line row.
 | [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and Look compatibility still refreshes | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-DISPATCH`](#fu-manual-fade-dispatch) | fades still draw, join mid-fade, and complete once with the 60 Hz dispatch gone | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-FADE-SHOWBAR`](#fu-manual-fade-showbar) | the ShowBar's FADING countdown reads right at 10 Hz and the chrome sits out fades | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -466,6 +467,25 @@ long fade, the grid must feel no busier than the idle state — and in a dev bui
 profile during a fade should show no `runner/setFadeProgress` dispatch storm. 10 minutes.
 
 ---
+
+## `FU-MANUAL-FADE-SHOWBAR`
+
+**The show-bar chrome sits out a fade; the FADING countdown still reads right** · frontend sweep
+`FS-PERF-FADE-IN-SHOWBAR`, 2026-08-30
+
+The bar used to take the remaining fade time as a per-frame prop, so every tile in it — the speed
+masters included — reconciled ~60×/s for the whole of every fade, on every view that mounts the
+bar. It now takes the fade's write-once descriptor, is memoized, and runs its own countdown off a
+100 ms interval. This is a **code-read** change: no automated test watches a real countdown tick or
+can see a reconcile storm, so the 10 Hz readout and the memo actually holding are asserted, not
+measured.
+
+**Test**: run a long fade (5 s+) on each of `/show`, `/programmer` and the Prompt Book. The amber
+FADING badge must appear at once, count down smoothly in 0.1 s steps to the real fade length, and
+vanish when the fade completes — no badge stuck on screen, none flickering. While it counts, the
+speed-master tiles must stay live (beat indicator still pulsing, TAP still responsive) and a dev
+Performance profile during the fade should show the bar's subtree rendering ~10×/s, not 60. On
+`/programmer`, drag a slider mid-fade — the grid must feel no busier than idle. 10 minutes.
 
 ---
 
