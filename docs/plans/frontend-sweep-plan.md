@@ -127,7 +127,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DUP-ROW-SUBSCRIPTION`~~ **done** | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
 | ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ **done** | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
 | ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
-| `FS-PERF-CHANNEL-FANOUT` | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
+| ~~`FS-PERF-CHANNEL-FANOUT`~~ **done** | One row's callback fires once per changed channel per batch, rebuilding its signature eac… | S3 | P2 | C2 | opus |
 | ~~`FS-PERF-CHANNELSOURCE-REBUILD`~~ **done** | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
 | ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
 | ~~`FS-PERF-PROVENANCE-REFETCH`~~ **done** | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
@@ -955,9 +955,9 @@ computed when installed. **Fix**: keep a parallel `Map<string,string>` of signat
 install, so a diff stringifies only the incoming side. Content-comparison semantics must stay
 exactly as documented — identity `!==` would defeat the per-key channel entirely.
 
-### `FS-PERF-CHANNEL-FANOUT`
-**One row's callback fires once per changed channel per batch, rebuilding its signature each time**
-· S3 · P2 · C2 · opus
+### ~~`FS-PERF-CHANNEL-FANOUT`~~ — **landed**
+**One row's callback fires once per changed channel per batch, rebuilding its signature each time**,
+`51b0abc` · S3 · P2 · C2 · opus
 `src/hooks/usePropertyValues.ts`, `src/components/fixtures-list/useRowValues.ts`
 
 `subscribeToChannels` registers the same callback once per channel, and each notification reruns
@@ -967,6 +967,13 @@ windows of collapsed multi-head bars/group rows. **Fix**: a set-level subscripti
 most once per debounced batch (or coalesce in `subscribeToChannels` on a microtask). Must not break
 per-channel granularity for `createFanOut`/derived sources, snapshot-identity caching, or
 `ChannelSource` threading.
+
+Landed as the microtask coalesce, inside `subscribeToChannels`, so it covers every source rather
+than each one — a single-channel set keeps the direct synchronous path, having nothing to coalesce.
+**Grew in the landing**: the review found `FixtureModel`'s `useLiveColour` hand-rolling the same
+per-channel registration, bypassing the helper entirely, and that turned out to be the larger half —
+a seven-channel colour beam reapplied its whole colour seven times per batch, per fixture, across
+the stage. Routed through the helper too. `FU-MANUAL-CHANNEL-FANOUT` carries the rig check.
 
 ### `FS-PERF-CHANNEL-CACHE-DISPATCH`
 **/channels holds one RTK Query cache entry per channel, dispatching per changed channel per frame**

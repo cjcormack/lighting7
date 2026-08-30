@@ -35,6 +35,7 @@ as a one-line row.
 | [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CUE-REPUBLISH-FRAME`](#fu-manual-cue-republish-frame) | a cue expanded on one client refreshes when another retunes a Look it layers | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-WS-SEND-DROPPED`](#fu-manual-ws-send-dropped) | a WebSocket blip announces itself instead of eating every gesture silently | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CHANNEL-FANOUT`](#fu-manual-channel-fanout) | coalesced channel wake-ups still track the rig, on the sheet, the cards and the stage | Frontend sweep, 2026-08-30 |
 
 ---
 
@@ -716,6 +717,45 @@ the network: the pill goes green, every control comes back live, and **nothing q
 rig must not suddenly blackout or move. Finally check the race the disable can't cover: begin a
 drag with the desk up, pull the network mid-drag, and confirm the one toast and no stuck state.
 15 minutes.
+
+---
+
+## `FU-MANUAL-CHANNEL-FANOUT`
+
+**What it proves**: a multi-channel value subscription used to be woken once per changed channel per
+33 ms batch, so a collapsed multi-head bar or a large group row reran its whole snapshot dozens of
+times a frame to produce one render. Those wake-ups are now coalesced onto a microtask, one per
+batch — which moves every multi-channel reader (the fixtures sheet's rows, the group cards, the
+virtual dimmer, the stage views) from a synchronous notification to a deferred one. Single-channel
+readers are unchanged and still synchronous. This is a code-read change with **no measurement**: the
+risk is not the saving but a wake-up that stops arriving, and a value that silently stops tracking
+the rig looks exactly like a rig that isn't moving.
+
+The 3D stage is the case to watch hardest. `FixtureModel`'s `useLiveColour` writes **straight to the
+scene**, deliberately outside React, so it has no reconciler to cover a missed wake-up; it now
+coalesces too, which is where most of the saving is (a seven-channel colour beam was reapplying its
+whole colour seven times a batch, per fixture). A microtask drains before paint, so a beam should
+still change on the same frame it always did.
+
+**Test**: with the desk running and DMX flowing, on `/fixtures`:
+
+1. Run an FX on a group and watch a *collapsed* multi-head bar row and a group row. Both must track
+   continuously — colour swatch, dimmer bar, the non-uniform indicator — with no visible stutter,
+   staleness or lag against a single-fixture row beside them.
+2. Expand the same bar and confirm the element rows and the parent agree.
+3. Drag a group colour on a group card and confirm the swatch follows the drag at input rate, then
+   settles on the value the sheet shows.
+4. On the 3D stage, run a colour effect on an RGBW/A/UV fixture with a separate dimmer and watch
+   the beam: hue and brightness must follow beat for beat, with no visible step or hold. Then pull
+   the dimmer down and confirm the beam darkens without the hue shifting.
+5. Open a stage view in Blind, change a colour in the programmer, and confirm the stage repaints —
+   this is the derived `createProgrammerChannelSource` fan-out, a different notifier from the wire.
+6. Leave a stage view and the sheet open side by side through a crossfade; they must not diverge,
+   and neither may end the fade holding a value the rig has left.
+
+Then the teardown case the coalescing has to get right: filter the list hard enough to unmount most
+rows mid-FX, clear the filter, and confirm every returning row is live rather than frozen at its
+last pre-unmount value. 15 minutes.
 
 ---
 
