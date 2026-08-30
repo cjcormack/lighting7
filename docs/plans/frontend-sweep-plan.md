@@ -93,7 +93,7 @@ halves still owed are listed in §14 only.
 | `FS-BUG-PIXEL-CACHE-PERMUTATION` | `useGroupColourValues` never compares per-member colours, so a colour chase across a pixe… | S2 | P2 | C2 | sonnet |
 | `FS-PERF-CODE-SPLITTING` | The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere | S2 | P2 | C2 | opus |
 | `FS-PERF-COLLAPSED-PANELS` | Collapsed overview panels keep doing full live work on every route | S2 | P2 | C2 | opus |
-| `FS-PERF-PROMPTBOOK-FADE-DRILL` | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
+| ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ **done** | Prompt Book prop-drills `fadeProgress` to every cue card in the whole show | S2 | P2 | C2 | sonnet |
 | `FS-TEST-PUBLICPATH` | The publicPath auth/boot-gate bypass predicate is untested and unexported | S2 | P2 | C2 | sonnet |
 | ~~`FS-COORD-ADMIN-GATE`~~ **done** | Gate Export/Import in `Projects.tsx` — F6 landed, so both controls are live 403 generator… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-CUEEDIT-RETIRE`~~ **done** | Delete the client's cueEdit remnants — D1 landed; the `force` senders must go before the ba… | S3 | P1 | C1 | sonnet |
@@ -725,9 +725,9 @@ small bar-owning child so the page stops subscribing to the runner slice. Same m
 constraint as above. Do after `FS-PERF-FADE-DISPATCH` so it protects against what remains, not
 against what should be removed.
 
-### `FS-PERF-PROMPTBOOK-FADE-DRILL`
-**Prompt Book prop-drills `fadeProgress` to every cue card in the whole show** · S2 · P2 · C2 ·
-sonnet
+### ~~`FS-PERF-PROMPTBOOK-FADE-DRILL`~~ — **landed**
+**Prompt Book prop-drills `fadeProgress` to every cue card in the whole show**, lighting-react
+`80fc9cb` · S2 · P2 · C2 · sonnet
 `src/routes/PromptBookPage.tsx`, `src/components/promptbook/CueStackPanel.tsx`,
 `src/components/promptbook/PromptBookCueCard.tsx`
 
@@ -739,6 +739,24 @@ nothing. The page even carries a comment admitting the render path runs every fa
 **Fix**: the live card reads its own fade via `useCueFade`; drop the two fields from `railProps`;
 memoize the card with stable per-row callbacks. Keep `statusOf`/`modeOf` semantics and the live
 card's viewMode-follows-GO behaviour.
+
+Landed as specified: Prompt Book now opts out of `useShowTransport`'s frame-rate progress
+(`frameRateProgress: false`) since the page never read `fadeProgress`/`fadeRemainMs` for anything
+but the drill; `PromptBookCueCard` is `React.memo`'d with the page's own stable per-row callbacks
+passed straight through (taking the cue/cueId themselves instead of being pre-bound per row).
+Review also found — and this fixed — a pre-existing `warningsByCue.get(...) ?? []` that allocated
+a fresh array every render for the common no-warnings case, which would have silently defeated the
+new memo for almost every row, and a duplicated `row.cue.stackId === activeStackId` check factored
+to one `isLiveStack` per row. Rig check filed as `FU-MANUAL-PROMPTBOOK-FADE`. The `frameRateProgress`
+flag itself is still owed to die once `FS-PERF-MOBILE-SHEET-FADE` also lands (per the note on
+`FS-PERF-FADE-IN-SHOWBAR` above).
+
+Review of the working tree also caught a live defect in the already-landed
+`FS-PERF-PROVENANCE-REFETCH` (unrelated to this item, but in scope for its own three
+not-yet-pushed commits): the WS `Json` converter has `encodeDefaults = false`, so
+`programmerRevision` (default 0) was silently omitted from the wire until the counter first
+ticked past zero, reproducing the refetch storm that item was meant to fix. Fixed separately,
+lighting7 `4eb3a4f` — see that item's own entry below for the note.
 
 ### `FS-PERF-MOBILE-SHEET-FADE`
 **Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick** · S3 · P3 · C2
@@ -871,6 +889,14 @@ fix in the same commit: a provenance frame that changed nothing no longer calls
 subscribers. An adjacent verified defect in the landed `FS-PERF-PROGRAMMER-MEMO-BARRIER`
 (`ProgrammerBody` held its own summary subscription, which `memo` cannot block) was fixed in its
 own commit, lighting-react `090e008`.
+
+A second defect surfaced later, during `FS-PERF-PROMPTBOOK-FADE-DRILL`'s review of the (at the
+time still unpushed) working tree: the WS content converter's `Json` instance has
+`encodeDefaults = false`, so `programmerRevision`'s `= 0` default was omitted from the wire
+whenever the counter was still at 0 — server startup, and any frame before the first non-fade
+trigger — and the client's field-missing branch (written for an *older* server) read that as
+unsupported and refetched every frame, silently reproducing the storm this item shipped to fix.
+Fixed with `@EncodeDefault(ALWAYS)`, lighting7 `4eb3a4f`.
 
 ### `FS-PERF-SIGNATURE-CACHE`
 **`changedKeys` recomputes both sides' JSON signatures on every diff** · S3 · P2 · C2 · sonnet

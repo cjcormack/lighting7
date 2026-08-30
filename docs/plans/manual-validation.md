@@ -536,6 +536,26 @@ template apply mid-fade should behave the same. 10 minutes.
 
 ---
 
+## `FU-MANUAL-PROMPTBOOK-FADE`
+
+**A live cue's fade in Prompt Book animates without re-rendering every other cue in the show**
+· frontend sweep `FS-PERF-PROMPTBOOK-FADE-DRILL`, 2026-08-30
+
+`fadeProgress`/`fadeRemainMs` used to be prop-drilled from the page into every rendered
+`PromptBookCueCard` in the whole show, ~60×/s during a fade. The live card now reads its own fade
+via `useCueFade`, and the card is memoized against the page's own stable per-row callbacks, so a
+fade frame re-renders only the one card that is actually fading. This is a **code-read** change:
+no automated test watches a reconcile storm.
+
+**Test**: open a multi-stack Prompt Book with several dozen cues expanded, open a dev Performance
+profile, and fire a GO with a multi-second fade. Only the live (green) card's amber fade bar/badge
+should animate and re-render per frame; other cards must not flash or reconcile. The fade bar must
+still reach 100% and clear at the same moment the card drops out of "fading". Toggle a card's
+expand/collapse and edit a cue name/number mid-fade to confirm the memoized card still responds to
+its own prop changes. 10 minutes.
+
+---
+
 ## Validated
 
 Passed on the rig, or retired unrun because the feature went away; the procedures are in this
