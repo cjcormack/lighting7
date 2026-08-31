@@ -158,7 +158,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
 | ~~`FS-PERF-PALETTE-QUERIES`~~ **done** | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
 | ~~`FS-PERF-STAGE-BUFFER-UPLOADS`~~ **done** | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
-| `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
+| ~~`FS-RES-CLOUDSYNC-SPLIT`~~ **done** | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
 | ~~`FS-RES-FIXTUREMODEL-SPLIT`~~ **done** | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
 | `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
 | ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
@@ -2085,13 +2085,15 @@ mis-filed as routes, one carrying a dead redirect export); `RunPage.tsx` is 63 l
 redirects rendering no page; `formatRepoUrl` is a pure helper exported from a route module; and
 `LegacyProgramRedirect` lives in `ProgrammerPage.tsx` rather than `ShowPage.tsx` — the exact
 `/program` vs `/programmer` confusion CLAUDE.md warns about, reproduced in file layout. **Fix**:
-move the two tab bodies to `components/`, `formatRepoUrl` to `lib/`, collect the legacy redirects
+move the two tab bodies to `components/`, `formatRepoUrl` to `lib/` (**already done** — it went
+with `FS-RES-CLOUDSYNC-SPLIT`, `68007b3`), collect the legacy redirects
 into one `routes/legacyRedirects.tsx` (absorbing `RunPage.tsx`), and write the convention down.
 Every URL and redirect target stays byte-identical — `?cue=` deep links are an external contract.
 
-### `FS-RES-CLOUDSYNC-SPLIT`
+### ~~`FS-RES-CLOUDSYNC-SPLIT`~~ — **landed**
 **`routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components — beside
-the populated `components/cloudSync/` directory it already imports from** · S3 · P3 · C1 · haiku
+the populated `components/cloudSync/` directory it already imports from**, lighting-react `68007b3`
+· S3 · P3 · C1 · haiku
 `src/routes/CloudSync.tsx`, `src/components/cloudSync/`
 
 (The exploration claim that the directory is *unused* was wrong — it holds `ConflictPanel`,
@@ -2101,6 +2103,19 @@ panels, dialog, row/badge components and pure helpers across, leaving the two ro
 redirect. Mechanical — but the five `connected === true && reauthRequired !== true` gates CLAUDE.md
 names (three live in this file) must survive verbatim; collapsing either half reintroduces the
 25-day silent-failure bug.
+
+Landed as nine modules rather than one: the existing `components/cloudSync/` directory is one
+component per file, so the panels went across that way, with only the tightly-coupled trios kept
+together (`ConfigPanel` + its attach/synced shapes; `StatusPanel` + `LastSyncedBody` +
+`RepoStatusBody`; `ActivityPanel` + `ActivityRow` + `activityLevelMeta`; `HistoryPanel` +
+`AttributionBadge`). The route module is 190 lines. Every moved block diffs byte-identical against
+the original — only import paths changed — so the three re-auth gates survived by construction.
+
+Grew in the landing: `formatRepoUrl` went to `lib/formatRepoUrl.ts`, not into the component
+directory. It is `FS-RES-ROUTES-CONVENTION`'s named destination for the same symbol, and
+`Projects.tsx` was the stray importing it from a route module, so that item's `formatRepoUrl` line
+is already taken. The frontend `CLAUDE.md` line listing where the five OAuth gates live was updated
+too: it said `CloudSync.tsx (×3)`, which after the split points at a file holding one.
 
 ### `FS-RES-PROMPTBOOK-GODPAGE`
 **`PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()` sites**
