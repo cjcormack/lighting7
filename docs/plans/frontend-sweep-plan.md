@@ -119,7 +119,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DEAD-DEVDEPS`~~ **done** | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
 | ~~`FS-DEAD-EXPORTS`~~ **done** | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
 | ~~`FS-DEAD-ORPHAN-FILES`~~ **done** | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
-| `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
+| ~~`FS-DEAD-RTKQ-HOOKS`~~ **done** | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
 | ~~`FS-DUP-COLOUR-POPOVER`~~ **done** | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
 | ~~`FS-DUP-EFFECT-COMPAT`~~ **done** | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
 | ~~`FS-DUP-OVERVIEW-TOGGLES`~~ **done** | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
@@ -1477,9 +1477,9 @@ dead-row surface at all. `FU-FE-HEALTH-BADGE` named the same two banners as two 
 `AssignmentHealth` renderers; one live renderer is left (`BindingMatrix.tsx`), so its trigger is now
 "a second surface", not a fourth.
 
-### `FS-DEAD-RTKQ-HOOKS`
-**Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints fully dead**
-· S3 · P2 · C2 · sonnet
+### ~~`FS-DEAD-RTKQ-HOOKS`~~ — **landed**
+**Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints fully dead**,
+lighting-react `07a1368` · S3 · P2 · C2 · sonnet
 `src/store/cues.ts`, `cueStacks.ts`, `templates.ts`, `fixtures.ts`, `fxDefinitions.ts`, `groups.ts`,
 `projects.ts`, `ai.ts`
 
@@ -1493,6 +1493,19 @@ definitions too where nothing else reaches them. **Coupled lists**: `NON_SAVE_EN
 so an endpoint and its list entries move in one change. `copyCue`'s SILENT entry cites
 `CopyCueDialog.tsx`, a file that does not exist — the one dead path among all paths that file
 names. Verify per symbol, not per module.
+
+Landed as fifteen hooks and fourteen endpoints (`useLazyProjectCueQuery` aside, every listed hook
+was also its endpoint's only reach — checked for `endpoints.X.initiate` / `.select` / `usePrefetch`,
+not just imports). The orphaned request/response types followed their only user out, and each
+deletion site keeps a one-line tombstone naming what does the job instead, per this repo's house
+style. **Grew in the landing** by two things the deletion made provably dead: `projectScripts`'
+`onQueryStarted` warmed a `projectScript` cache entry per row on every list fetch, for a cache
+nothing subscribed to; and the `Template` tag's only provider was the single-template read, so
+rather than leave a tag invalidated in three places and provided nowhere it was retired in favour
+of `TemplateList` (the operator's call — `RECONNECT_RESYNC_TAGS` is derived from `REST_TAG_TYPES`,
+so `FS-BUG-RECONNECT-RESYNC`'s resync followed for free). `docs/show-mode-engineering.md`'s GO
+rationale row, which argued for `goToCueInStack` over `advance`, records the reversal instead:
+standby is server-owned now, which is why that endpoint had no caller.
 
 ### ~~`FS-DEAD-CURRENTCUESTATE`~~ — **landed**
 **The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing reads —
