@@ -163,7 +163,7 @@ halves still owed are listed in §14 only.
 | `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
 | ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | ~~`FS-TYPES-SURFACE-DESCRIPTORS`~~ **done** | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
-| `FS-ARCH-BRIDGE-EVAL` | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
+| ~~`FS-ARCH-BRIDGE-EVAL`~~ **done** | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
 | ~~`FS-COORD-NEW-BROADCASTS`~~ **done** | B5 shipped `scriptListChanged`/`fxDefinitionListChanged`; this repo has no listener for e… | S4 | P2 | C1 | sonnet |
 | ~~`FS-DOCS-CLAUDEMD-CUE-ARM`~~ **done** | CLAUDE.md claims `EditorContextValue`'s `cue` arm is kept; the code removed it in 2b | S4 | P2 | C1 | haiku |
 | ~~`FS-DOCS-COMPATIBLELOOKIDS`~~ **done** | `compatibleLookIds` is documented as type-gated and deferred-only in three places; it is… | S4 | P2 | C1 | haiku |
@@ -172,7 +172,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DOCS-STALE-COMMENTS`~~ **done** | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
 | `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
 | ~~`FS-RES-RUNNER-DIR`~~ **done** | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
-| `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
+| ~~`FS-ARCH-SURFACES-PATTERN`~~ **done** | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
 | `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
 | ~~`FS-COORD-PING`~~ **done** | Landed with backend D5 as `c6ee984`; one flatten constraint survives it — see the item | S4 | P3 | C1 | haiku |
@@ -1942,9 +1942,9 @@ installed versions are byte-identical to what the umbrella pinned (alert-dialog 
 context-menu 2.3.7), so the sheet guard's close semantics are unchanged. Takes 841 lines out of
 `package-lock.json`, because the umbrella pulled in every Radix primitive.
 
-### `FS-ARCH-SURFACES-PATTERN`
+### ~~`FS-ARCH-SURFACES-PATTERN`~~ — **landed**
 **`store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the RTK
-pattern nine siblings use** · S4 · P3 · C2 · sonnet
+pattern nine siblings use**, lighting-react `17dae85` · S4 · P3 · C2 · sonnet
 `src/store/surfaces.ts`
 
 Real inconsistency, but the costs cited in exploration don't materialise (the two consumers are
@@ -1953,9 +1953,17 @@ sibling routes never mounted together; nothing wants to invalidate or select the
 subscribe-replays-last-snapshot-synchronously property must stay true of the seed, and the pickup
 Map reduction becomes a pure function.
 
-### `FS-ARCH-BRIDGE-EVAL`
-**~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is implicit**
-· S4 · P2 · C2 · sonnet
+Grew in the landing: keeping the seed equal to the last snapshot needed three new WS-layer getters
+(`getDevices` / `getBanks` / `getScaler`, mirroring `speedMasters.getState()`), because the
+synchronous replay is only available to a *subscriber* and a `queryFn` is not one. Two things the
+item did not name also had to move: the pickup map became a plain `Record` rather than a `Map`
+(Immer needs `enableMapSet` for a Map in the cache), which changed `BindingMatrix`'s one lookup to
+the shared `pickupKey()`; and each subscription now waits for `cacheDataLoaded`, since
+`updateCachedData` on an entry that does not exist yet is dropped silently.
+
+### ~~`FS-ARCH-BRIDGE-EVAL`~~ — **landed**
+**~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is
+implicit**, lighting-react `41ea9fa` · S4 · P2 · C2 · sonnet
 `src/store/*.ts`, `src/main.tsx`
 
 Most store slices subscribe at module scope; `looks`/`templates`/`oauthGithub` defer via
@@ -1968,6 +1976,14 @@ makes a slice "early-path". **Fix**: state it once (CLAUDE.md or a comment at `c
 with the full current census (the deferred trio and the ~20 module-scope sites), rather than
 migrating everything. Migrate only if `import/no-cycle` (see `FS-ARCH-IMPORT-CYCLE`) proves
 insufficient.
+
+Landed as the rule only, no migration: `CLAUDE.md` §"Where a WS bridge subscribes" in
+`lighting-react`, with a pointer at `lightingApi`'s export. The census corrects this item's own
+framing twice — the deferred set is **four** (`programmerErrors` joined after the finding was
+written), and module scope is **25 sites across 19 slices**, not ~23. It also writes down a third
+form the item does not name: the per-cache-entry `onCacheEntryAdded` subscription, which is what a
+*streamed* value uses rather than a bridge at all — nine slices, `surfaces` having become the ninth
+in `FS-ARCH-SURFACES-PATTERN` immediately before this.
 
 ## 11. Structure and naming
 
