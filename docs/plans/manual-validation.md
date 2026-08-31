@@ -42,6 +42,7 @@ as a one-line row.
 | [`FU-MANUAL-RENDER-IDENTITY`](#fu-manual-render-identity) | the newly-stabilised render inputs still track the desk — GO, a mid-fade reorder, the phone runner, the pads' layer ring | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group effects included | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-STAGE-BUFFER-UPLOADS`](#fu-manual-stage-buffer-uploads) | the 3D stage still draws every beam, pool and pixel wash now that only written buffers upload | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-SIGNATURE-CACHE`](#fu-manual-signature-cache) | programmer cells still repaint when a value moves, now that the diff trusts a cached signature | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -936,6 +937,42 @@ last frame's geometry or colour.
 7. Black out the whole rig and confirm every beam and pool goes, with no ghost left on screen.
 
 15 minutes.
+
+---
+
+## `FU-MANUAL-SIGNATURE-CACHE`
+
+**The programmer's per-key diff compares against cached signatures** · from frontend sweep
+`FS-PERF-SIGNATURE-CACHE`, 2026-08-31
+
+`programmerWsApi`'s `changedKeys` used to re-`JSON.stringify` *both* sides of every entry and
+provenance diff, per key, per frame — at 10–20 Hz under load. `entries` and `provenance` are now
+`signedMap`s, which carry each value's signature beside it, so a frame stringifies only what
+arrived. **Code-read** change — nothing was measured on a desk, and no frame time is claimed.
+
+The saving is not the risk; the cache going stale is. A signature left behind for a key whose value
+has moved makes the diff call that key unchanged, and the cell keeps painting the old value until
+something unrelated wakes it — a stale cell that looks perfectly fine. `signedMap` moves both maps in
+every mutator so a caller cannot desync them, and four unit tests pin the three paths that write an
+entry outside a state snapshot (the local echo, the single clear, clear-all) — each fails if its
+maintenance is removed. What they cannot see is a real desk's interleaving of an operator's own
+writes with off-connection ones.
+
+**Test**: with the desk running and a second browser tab open on `/programmer`:
+
+1. Drag a dimmer and a colour on the sheet and confirm both cells track the drag at input rate, then
+   settle on the server's value ~100 ms later rather than sticking at the drag's last frame.
+2. Drive the *same* property from the second tab (or a MIDI surface) and confirm the first tab's cell
+   follows within a beat — this is the echo-then-disagreeing-snapshot case.
+3. Clear one cell, then re-record it from the other tab, and confirm the cleared tab shows the value
+   again rather than staying blank.
+4. Press Clear All, then set the same property again, and confirm the cell repopulates.
+5. Run a crossfade with the programmer active and confirm cells do **not** flicker or repaint during
+   the fade — the revision gate and the content diff both still have to hold.
+6. Change a cue's layer so a key's provenance moves between a Look layer and a template layer, and
+   confirm the cell's provenance badge renames rather than keeping the old layer.
+
+10 minutes.
 
 ---
 

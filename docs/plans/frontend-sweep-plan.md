@@ -131,7 +131,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-CHANNELSOURCE-REBUILD`~~ **done** | `createProgrammerChannelSource.rebuild` re-resolves every programmer entry on frames that… | S3 | P2 | C1 | sonnet |
 | ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
 | ~~`FS-PERF-PROVENANCE-REFETCH`~~ **done** | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
-| `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
+| ~~`FS-PERF-SIGNATURE-CACHE`~~ **done** | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
 | ~~`FS-RES-CUECARDEDITOR-DIR`~~ **done** | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PALETTERESULT`~~ **done** | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PRESETPICKER`~~ **done** | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
@@ -1012,8 +1012,9 @@ trigger — and the client's field-missing branch (written for an *older* server
 unsupported and refetched every frame, silently reproducing the storm this item shipped to fix.
 Fixed with `@EncodeDefault(ALWAYS)`, lighting7 `4eb3a4f`.
 
-### `FS-PERF-SIGNATURE-CACHE`
-**`changedKeys` recomputes both sides' JSON signatures on every diff** · S3 · P2 · C2 · sonnet
+### ~~`FS-PERF-SIGNATURE-CACHE`~~ — **landed**
+**`changedKeys` recomputes both sides' JSON signatures on every diff**, `8eb4aca` · S3 · P2 · C2 ·
+sonnet
 `src/api/programmerWsApi.ts`
 
 `signature(previous)` and `signature(value)` both run per key per frame (entry and provenance maps,
@@ -1021,6 +1022,16 @@ at 10–20 Hz under load), re-stringifying the previous map from scratch each ti
 computed when installed. **Fix**: keep a parallel `Map<string,string>` of signatures built at
 install, so a diff stringifies only the incoming side. Content-comparison semantics must stay
 exactly as documented — identity `!==` would defeat the per-key channel entirely.
+
+Grew in the landing: the parallel map landed as a paired type, `signedMap`, rather than a bare
+`Map<string,string>` beside each value map. The review pointed out that the invariant has five
+mutation sites — a state snapshot, a provenance frame, the local echo, the single clear, clear-all —
+and that a comment across all five is how it eventually breaks, silently: a signature left behind for
+a key whose value moved makes the diff call that key unchanged, and the cell paints the old value
+until something unrelated wakes it. `signedMap` moves both maps in every mutator, which also hides
+the deliberate copy-on-write/in-place split (`values` is held by the state snapshot, the signatures
+never leave the closure). Four new tests pin the three non-snapshot paths and each fails if its
+maintenance is removed. Rig check filed as `FU-MANUAL-SIGNATURE-CACHE`.
 
 ### ~~`FS-PERF-CHANNEL-FANOUT`~~ — **landed**
 **One row's callback fires once per changed channel per batch, rebuilding its signature each time**,
