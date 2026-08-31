@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.623 0.214 259.815); }
+    a:hover { color: oklch(0.72 0.19 259.815); }
+    .box { border: 1.5px dashed oklch(0.45 0.01 286); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: oklch(0.62 0.012 286); font-size: 11px; }
+  </style>
+</helmet>
+<div style="width: 720px; height: 480px; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: oklch(0.141 0.005 285.823); color: oklch(0.985 0 0); font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden;">
+  <div style="display: flex; align-items: baseline; gap: 8px;">
+    <span style="font-size: 12px; font-weight: 700;">Option A — target rail left</span>
+    <span style="font-size: 10px; color: oklch(0.62 0.012 286);">low-fi sketch</span>
+  </div>
+  <div class="box" style="height: 28px;">ShowBar (unchanged)</div>
+  <div style="flex: 1 1 0%; display: flex; gap: 8px; min-height: 0;">
+    <div style="width: 140px; display: flex; flex-direction: column; gap: 5px;">
+      <div class="box" style="height: 30px;">All Movers ●</div>
+      <div class="box" style="height: 30px;">Front Wash ●</div>
+      <div class="box" style="height: 30px;">Back Truss</div>
+      <div class="box" style="height: 30px;">Blinders</div>
+      <div class="box" style="height: 30px;">MAC 250 #1</div>
+      <div class="box" style="height: 30px;">MAC 250 #2</div>
+      <div class="box" style="height: 30px;">LED Bar SL</div>
+      <div class="box" style="flex: 1 1 0%;">… scrolls</div>
+    </div>
+    <div style="flex: 1 1 0%; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+      <div class="box" style="flex: 3 1 0%;">TEMPLATE PADS — colour / position / beam / level</div>
+      <div style="flex: 2 1 0%; display: flex; gap: 8px;">
+        <div class="box" style="flex: 1 1 0%;">LOOKS</div>
+        <div class="box" style="flex: 1 1 0%;">CUES + STACKS</div>
+      </div>
+    </div>
+  </div>
+  <div class="box" style="height: 52px;">SPEED MASTERS — horizontal strip: M1 [TAP] · M2 Movement ½× · M3 Colour 1× · M4 Strobe [TAP]</div>
+  <div style="font-size: 10px; line-height: 1.5; color: oklch(0.62 0.012 286);">More targets visible at once and the rail scrolls independently — but the pads lose ~140px of width, and the speed strip competes with the ShowBar's own chip directly above it.</div>
+</div>
+</x-dc>
+</body>
+</html>

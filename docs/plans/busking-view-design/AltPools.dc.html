@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.623 0.214 259.815); }
+    a:hover { color: oklch(0.72 0.19 259.815); }
+    .box { border: 1.5px dashed oklch(0.45 0.01 286); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: oklch(0.62 0.012 286); font-size: 11px; }
+    .tab { border: 1.5px dashed oklch(0.45 0.01 286); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: oklch(0.62 0.012 286); font-size: 10px; height: 44px; }
+  </style>
+</helmet>
+<div style="width: 720px; height: 480px; display: flex; flex-direction: column; gap: 8px; padding: 12px; background: oklch(0.141 0.005 285.823); color: oklch(0.985 0 0); font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden;">
+  <div style="display: flex; align-items: baseline; gap: 8px;">
+    <span style="font-size: 12px; font-weight: 700;">Option B — paged pad banks</span>
+    <span style="font-size: 10px; color: oklch(0.62 0.012 286);">low-fi sketch</span>
+  </div>
+  <div class="box" style="height: 28px;">ShowBar (unchanged)</div>
+  <div class="box" style="height: 40px;">TARGETS — one row, horizontal scroll</div>
+  <div style="flex: 1 1 0%; display: flex; gap: 8px; min-height: 0;">
+    <div style="width: 84px; display: flex; flex-direction: column; gap: 5px;">
+      <div class="tab" style="border-style: solid; color: oklch(0.985 0 0);">Colour</div>
+      <div class="tab">Position</div>
+      <div class="tab">Beam</div>
+      <div class="tab">Looks</div>
+      <div class="tab">Cues</div>
+    </div>
+    <div style="flex: 1 1 0%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 6px; min-width: 0;">
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+      <div class="box"></div><div class="box"></div><div class="box"></div><div class="box"></div>
+    </div>
+    <div style="width: 130px; display: flex; gap: 5px;">
+      <div class="box" style="flex: 1 1 0%; writing-mode: vertical-rl;">M1 · 120</div>
+      <div class="box" style="flex: 1 1 0%; writing-mode: vertical-rl;">M2 ½×</div>
+      <div class="box" style="flex: 1 1 0%; writing-mode: vertical-rl;">M3 1×</div>
+      <div class="box" style="flex: 1 1 0%; writing-mode: vertical-rl;">M4 tap</div>
+    </div>
+  </div>
+  <div style="font-size: 10px; line-height: 1.5; color: oklch(0.62 0.012 286);">One bank on screen at a time, MA-style — the biggest possible pads, best for gloved hands in the dark, and the fader-shaped masters invite grabbing. Costs a mode switch per family, which the main design avoids.</div>
+</div>
+</x-dc>
+</body>
+</html>

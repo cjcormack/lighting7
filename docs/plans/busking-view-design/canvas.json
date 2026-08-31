@@ -1,0 +1,26 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1440, "h": 900, "title": "Busk view — main", "is_interactive": true },
+    { "file": "SpeedMasterSheet.dc.html", "x": 1540, "y": 0, "w": 448, "h": 780, "title": "Speed master sheet", "is_interactive": true },
+    { "file": "AltRail.dc.html", "x": 0, "y": 1090, "w": 720, "h": 480, "title": "Option A (low-fi)" },
+    { "file": "AltPools.dc.html", "x": 820, "y": 1090, "w": 720, "h": 480, "title": "Option B (low-fi)" }
+  ],
+  "annotations": [
+    {
+      "id": "note-flow",
+      "x": 0, "y": -200, "w": 420,
+      "text": "The flow: toggle targets in the top band, then press pads to put things on the selection. Every pad is a toggle (press again to remove); long-press would configure an effect or release a value, as on the current FX view. The presence ring language is unchanged: off / partial / lit. Try it — the artboard is clickable, including GO."
+    },
+    {
+      "id": "note-speed",
+      "x": 2068, "y": 0, "w": 320,
+      "text": "Speed-master model changes this leans on:\n\n• Default usage — a busked effect with no explicit master follows the master whose usage matches its family (movement chase → M2). That is what lets the pads stay one press: no speed picker per press.\n\n• Time signature — a master can follow M1 at a ratio (½, ⅓, ¼…). One TAP on M1 retunes the whole show; linked masters trade their TAP for ratio chips.\n\nThe sheet artboard on the left is where both are set."
+    },
+    {
+      "id": "note-alts",
+      "x": 1640, "y": 1090, "w": 340,
+      "text": "Two rougher layout directions in case the main arrangement doesn't feel right at the desk: A keeps a scrolling target rail on the left (more targets visible, narrower pads); B pages the pools MA-style (biggest pads, but a mode switch per family). Happy to build either out instead."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}

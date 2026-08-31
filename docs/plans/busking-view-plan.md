@@ -1,10 +1,12 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: PROPOSED.** Nothing here is built. The visual design is settled on a canvas —
-> <https://claude.ai/code/artifact/fdf63aa8-0145-4c8b-b98c-170a7489a4b3> — which holds a clickable
-> mock of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A:
-> left target rail, B: MA-style paged banks) that were considered and parked. This document is the
-> engineering half: the model changes, the decisions and their reasons, and the session split.
+> **Document status: PROPOSED.** Nothing here is built. The visual design is settled and checked
+> in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
+> of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left
+> target rail, B: MA-style paged banks) that were considered and parked. The live, pannable canvas
+> at <https://claude.ai/code/artifact/fdf63aa8-0145-4c8b-b98c-170a7489a4b3> is a convenience copy,
+> private to Chris; the checked-in files are the authority. This document is the engineering half:
+> the model changes, the decisions and their reasons, and the session split.
 
 ## 1. Context
 
@@ -130,7 +132,9 @@ rate scale is a deliberate binding, not a default worth guessing (§7).
 
 ## 4. UX
 
-The canvas is the source of truth for layout and copy; the summary, for grep-ability:
+[`busking-view-design/`](busking-view-design/INDEX.md) is the source of truth for layout and copy
+(`Main.dc.html` for the view, `SpeedMasterSheet.dc.html` for the sheet); the summary, for
+grep-ability:
 
 - **Target band** (top): groups then fixtures as toggle pads, two rows, horizontally scrolling,
   member-count badge on groups, selection summary + Clear. Replaces the desktop sidebar list;
