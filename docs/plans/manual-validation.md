@@ -41,6 +41,7 @@ as a one-line row.
 | [`FU-MANUAL-PALETTE-COLD-OPEN`](#fu-manual-palette-cold-open) | the first ⌘K of a session opens fully populated, not empty | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-RENDER-IDENTITY`](#fu-manual-render-identity) | the newly-stabilised render inputs still track the desk — GO, a mid-fade reorder, the phone runner, the pads' layer ring | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group effects included | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-STAGE-BUFFER-UPLOADS`](#fu-manual-stage-buffer-uploads) | the 3D stage still draws every beam, pool and pixel wash now that only written buffers upload | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -901,6 +902,40 @@ invalidation. **Code-read** change; nothing here was measured.
 5. Remove the effects and confirm both badges disappear rather than sticking at a stale count.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-STAGE-BUFFER-UPLOADS`
+
+**Only the emitter buffers a frame wrote get uploaded** · from frontend sweep
+`FS-PERF-STAGE-BUFFER-UPLOADS`, 2026-08-31
+
+`StageEmitters` used to flag all ~55 instanced attribute and matrix buffers dirty every frame; it
+now flags only the groups its writers touched. **Code-read** change — nothing was measured on a
+desk, and no frame time is claimed. `StageEmitters.test.ts` pins the mapping by diffing each
+writer's actual byte changes against what the flush flagged, so a *dropped* bit fails the suite.
+What the suite cannot see is a group whose writer is only reached by a rig shape no test builds,
+which is what this check is for: the failure mode is not a slow frame, it is a fixture frozen on
+last frame's geometry or colour.
+
+**Test**: with the desk running, on the 3D stage view:
+
+1. Fade a conventional up and down and confirm the beam cone, the floor pool and the lens all
+   track continuously, with no step or stick partway.
+2. Pan and tilt a mover through its full range, then zoom and focus it if it has those channels,
+   and confirm the cone, the floor pool and any wall pool follow the head without lag or freeze.
+3. Swing a gobo in and out (the beam should switch between the shell and the volumetric render),
+   then a prism in and out, and confirm the extra lobes appear, spin, and *disappear* — a parked
+   lobe left drawing is the signature of a missed matrix flag.
+4. Run a fixture over a stage region and confirm the region-top cookies light and extinguish as the
+   beam crosses them.
+5. On a rig with a pixel bar: run a per-pixel chase and confirm every pixel's floor wash updates,
+   then black the bar out and confirm the whole wash block clears rather than freezing lit.
+6. On a rig with **no** pixel bar — the case this change exists for — confirm the stage renders
+   normally and nothing stray appears on the floor.
+7. Black out the whole rig and confirm every beam and pool goes, with no ghost left on screen.
+
+15 minutes.
 
 ---
 

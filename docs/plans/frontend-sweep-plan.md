@@ -148,7 +148,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-TYPES-PRESETCOUNT-RENAME`~~ **done** | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
 | ~~`FS-TYPES-RIGGING-POSITION`~~ **done** | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
 | ~~`FS-ARCH-BUSKING-GOD-HOOK`~~ **done** | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
-| `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
+| ~~`FS-BUG-3D-PLACEHOLDER`~~ **done** | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
 | ~~`FS-DEAD-DTO-FIELDS`~~ **done** | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
 | ~~`FS-DEAD-WS-METHODS`~~ **done** | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-DEAD-BRANCH`~~ **done** | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
@@ -157,9 +157,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-LITKEYS-ALLOC`~~ **done** | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
 | ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
 | ~~`FS-PERF-PALETTE-QUERIES`~~ **done** | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
-| `FS-PERF-STAGE-BUFFER-UPLOADS` | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
+| ~~`FS-PERF-STAGE-BUFFER-UPLOADS`~~ **done** | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
 | `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
-| `FS-RES-FIXTUREMODEL-SPLIT` | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
+| ~~`FS-RES-FIXTUREMODEL-SPLIT`~~ **done** | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
 | `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
 | ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | ~~`FS-TYPES-SURFACE-DESCRIPTORS`~~ **done** | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
@@ -550,9 +550,9 @@ frame that never left the browser, and that MIDI Learn spun forever on a dropped
 `FU-MANUAL-WS-SEND-DROPPED` in [`manual-validation.md`](manual-validation.md) carries the rig check,
 including the one thing no test covers: that nothing queued fires on reconnect.
 
-### `FS-BUG-3D-PLACEHOLDER`
+### ~~`FS-BUG-3D-PLACEHOLDER`~~ — **landed**
 **The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a fully-lit
-warm-white lamp** · S3 · P3 · C1 · sonnet
+warm-white lamp**, lighting-react `6d63574` · S3 · P3 · C1 · sonnet
 `src/components/stage3d/FixtureModel.tsx`, `src/components/fixtures/fixtureAppearance.tsx`
 
 The shared dispatch renders a missing fixture record as a deliberate dim-grey placeholder; the 3D
@@ -563,6 +563,15 @@ also hard-coded where `DEFAULT_FIXTURE_COLOUR` is importable. **Fix**: add the p
 `PlaceholderBeamSync` with no channel subscriptions, respecting the fixed-hook-set-per-branch rule
 this dispatch depends on), import the shared constant at both literals, extend
 `FixtureModel.test.ts` with the fixture-undefined case.
+
+Landed as two test files, not one: `FS-RES-FIXTUREMODEL-SPLIT` went first in the same batch and
+renamed `FixtureModel.test.ts` away, so the fixture-undefined case landed in a new jsdom
+`FixtureModel.test.tsx` (with `ColourSync` exported for it — `FixtureModel` itself cannot render
+outside an R3F canvas). **Grew in the landing:** review pointed out that nothing pinned the 2D and
+3D dispatches together, which is precisely how this arm came to be missing from one of them, so
+`colourDispatchParity.test.tsx` now runs seven fixture scenarios through *both* and asserts they
+resolve the same colour and level. The two placeholder values became shared constants rather than a
+third and fourth literal.
 
 ### The script-editor cluster
 
@@ -1148,9 +1157,10 @@ Landed in two halves as written: the `isVisible` gate came free with
 `FS-PERF-COLLAPSED-PANELS` (the provider sits inside the stage panel's body, which now unmounts),
 and the identity guard is its own commit.
 
-### `FS-PERF-STAGE-BUFFER-UPLOADS`
+### ~~`FS-PERF-STAGE-BUFFER-UPLOADS`~~ — **landed**
 **`StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-uploads all
-of them — including both wash meshes on a show with no pixel bars** · S3 · P3 · C2 · sonnet
+of them — including both wash meshes on a show with no pixel bars**, lighting-react `c5e904e` · S3 ·
+P3 · C2 · sonnet
 `src/components/stage3d/StageEmitters.tsx`
 
 The priority-1 `useFrame` sets `needsUpdate = true` on ~50 instanced attributes plus five
@@ -1160,6 +1170,17 @@ waste: ~12,800 floats of `instanceMatrix` flagged per frame even when no fixture
 and the wash director never writes a byte. **Fix**: per-group dirty bits set by the writers; flag
 and clear only dirty groups, wash groups first (biggest buffer, most often untouched). Correct the
 comment.
+
+**Grew in the landing:** the scheme is three hand-maintained lists — the bits, the bit-to-buffer
+table, and a `|=` in each of fifteen writers — with nothing linking them, and `StageEmitters` had no
+test file at all. A dropped bit freezes a fixture on stale geometry with no typecheck, lint or test
+complaint, so `StageEmitters.test.ts` now drives each writer against a real build, diffs every
+buffer's bytes to find what it actually mutated, and asserts the flush flagged all of them — ground
+truth from the mutation, not from the table. `buildEmitters`, `makeHandle`, `dirtyGroups` and an
+extracted `flushDirty` are exported for it. Two facts it surfaced and now pins: three's
+`BufferAttribute.needsUpdate` is write-only (the setter bumps `version`; there is no getter), and
+`washRegionMesh.instanceMatrix` is baked once at build like `regionMesh`'s, so it belongs to no
+group.
 
 ### ~~`FS-PERF-PALETTE-QUERIES`~~ — **landed**
 **CommandPalette subscribes six list queries while closed, on every route**, lighting-react
@@ -2036,9 +2057,9 @@ with two capture handlers — a new edit affordance here silently fails to reset
 `useEditLock.test.tsx` and must hold. `routes/Stage.tsx` has the same shape at smaller scale — same
 treatment when touched.
 
-### `FS-RES-FIXTUREMODEL-SPLIT`
+### ~~`FS-RES-FIXTUREMODEL-SPLIT`~~ — **landed**
 **`FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forcing its
-unit test into jsdom** · S3 · P3 · C2 · sonnet
+unit test into jsdom**, lighting-react `d44e8bf` · S3 · P3 · C2 · sonnet
 `src/components/stage3d/FixtureModel.tsx`, `src/components/stage3d/beamOptics.ts`
 
 Four exported pure geometry functions live inside the component module, so their node-runnable test
@@ -2047,6 +2068,12 @@ documented pattern (`beamOptics.test.ts` runs in default node). **Fix**: move th
 into a peer module beside `beamOptics.ts` taking `three` types only. Must not break the imperative
 per-frame write path — these functions mutate vectors/materials in place from `useFrame`; making
 them allocate would cost per-frame garbage on the canvas.
+
+Landed as `beamCookies.ts`, with a fifth function: the private `coneReachesSphere` went with the
+four and is now exported, because `FixtureModel`'s per-pixel wash cull shares it. The emitter
+argument stays typed structurally — each function names only the one write method it calls, rather
+than importing `EmittersHandle` from the `StageEmitters` component module — which is what keeps the
+peer node-runnable and lets the test hand in a bare `vi.fn()`.
 
 ### ~~`FS-RES-PRESETPICKER`~~ — **landed**
 **`FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset branch — and
