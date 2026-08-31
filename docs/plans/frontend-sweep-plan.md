@@ -123,7 +123,7 @@ halves still owed are listed in §14 only.
 | `FS-DUP-COLOUR-POPOVER` | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
 | `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
 | ~~`FS-DUP-OVERVIEW-TOGGLES`~~ **done** | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
-| `FS-DUP-REDIRECTS` | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
+| ~~`FS-DUP-REDIRECTS`~~ **done** | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
 | ~~`FS-DUP-ROW-SUBSCRIPTION`~~ **done** | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
 | ~~`FS-EDITOR-HIGHLIGHTONLY-PRESENCE`~~ **done** | Read-only works only because React omits an `undefined` attribute — `highlightOnly="false… | S3 | P2 | C1 | sonnet |
 | ~~`FS-EDITOR-PROPTYPES-PHANTOM`~~ **done** | `prop-types` is a phantom dependency of the wrapper, and React 19 ignores what it declares | S3 | P2 | C1 | haiku |
@@ -1663,9 +1663,9 @@ one `ColourEditorBody`; each picker keeps its trigger and seeding. The
 reference-opens-at-resolved-colour and touching-the-picker-replaces-the-reference rules are
 documented behaviour and must survive; `FxColourListPicker.test.tsx` passes unchanged.
 
-### `FS-DUP-REDIRECTS`
-**Seventeen byte-identical "redirect to the current project's equivalent" components** · S3 · P2 ·
-C1 · haiku
+### ~~`FS-DUP-REDIRECTS`~~ — **landed**
+**Seventeen byte-identical "redirect to the current project's equivalent" components**,
+lighting-react `584787e` · S3 · P2 · C1 · haiku
 one per route file, mounted from `src/App.tsx`
 
 Same `useCurrentProjectQuery` + navigate-with-replace + spinner body, seventeen times, so the
@@ -1674,6 +1674,19 @@ loading/not-found behaviour has to be edited seventeen times. **Fix**: one
 small variants in as options. `LegacyProgramRedirect` must keep carrying the search string (`?cue=`
 deep links are an external contract), and the legacy `run`/`cues`/`cue-stacks` targets stay
 byte-identical.
+
+Landed as a new `src/components/CurrentProjectRedirect.tsx` (`to` path fragment +
+`preserveSearch`), with the two sub-path variants (`ChannelsRedirect`'s `:universe`,
+`ScriptsRedirect`'s `:scriptId`) keeping a three-line wrapper that composes `to` from the route
+param before delegating. Three look-alikes were identified and deliberately left out of the
+seventeen: `ChannelsBaseRedirect` and `ProjectOverviewRedirect` fall back to `/projects` with no
+current project, unlike the rest; `StageRedirect` mixes the imperative pattern with an
+unconditional trailing `Navigate` and lives in a lazily-loaded chunk. `PromptBookRedirect` stayed
+in its own module (delegating internally) rather than moving to `App.tsx`, so it still rides the
+same lazy chunk its target page needs. Review caught one real regression before commit:
+`ScriptsRedirect`'s consolidation silently dropped its full-height loading layout for the shared
+component's small boxed spinner — fixed with a `fullHeight` option rather than accepted as a
+cosmetic wash.
 
 ### ~~`FS-DUP-CHANNEL-SLIDER`~~ — **landed**
 **Four copies of the labelled 0–255 channel slider row**, `f1ce7c2` · S4 · P3 · C1 · haiku
