@@ -153,7 +153,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DEAD-WS-METHODS`~~ **done** | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-DEAD-BRANCH`~~ **done** | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-LIFECYCLE`~~ **done** | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
-| `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
+| ~~`FS-PERF-CHANNEL-CACHE-DISPATCH`~~ **done** | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
 | ~~`FS-PERF-LITKEYS-ALLOC`~~ **done** | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
 | ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
 | ~~`FS-PERF-PALETTE-QUERIES`~~ **done** | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
@@ -173,7 +173,7 @@ halves still owed are listed in §14 only.
 | `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
 | ~~`FS-RES-RUNNER-DIR`~~ **done** | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
 | ~~`FS-ARCH-SURFACES-PATTERN`~~ **done** | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
-| `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
+| ~~`FS-CHROME-BEAT-MAP-PRUNE`~~ **done** | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
 | ~~`FS-COORD-PING`~~ **done** | Landed with backend D5 as `c6ee984`; one flatten constraint survives it — see the item | S4 | P3 | C1 | haiku |
 | ~~`FS-COORD-STRICT-ENUMS`~~ **done** | Confirm-only: E4/E10 made the effect-enum write sites strict, and B3 lets the FX sheet se… | S4 | P3 | C1 | haiku |
@@ -1053,9 +1053,9 @@ per-channel registration, bypassing the helper entirely, and that turned out to 
 a seven-channel colour beam reapplied its whole colour seven times per batch, per fixture, across
 the stage. Routed through the helper too. `FU-MANUAL-CHANNEL-FANOUT` carries the rig check.
 
-### `FS-PERF-CHANNEL-CACHE-DISPATCH`
-**/channels holds one RTK Query cache entry per channel, dispatching per changed channel per frame**
-· S3 · P3 · C2 · sonnet
+### ~~`FS-PERF-CHANNEL-CACHE-DISPATCH`~~ — **landed**
+**/channels holds one RTK Query cache entry per channel, dispatching per changed channel per frame**,
+lighting-react `8a8a313` · S3 · P3 · C2 · sonnet
 `src/store/channels.ts`, `src/routes/Channels.tsx`
 
 Each `ChannelSlider` holds a `{universe, channelNo}`-keyed cache entry whose `updateCachedData` on a
@@ -1064,6 +1064,12 @@ Each `ChannelSlider` holds a `{universe, channelNo}`-keyed cache entry whose `up
 **Fix**: read values through `lightingApi.channels.subscribeToChannel` via `useSyncExternalStore`,
 keeping the per-channel split but taking Redux out of the 30 Hz path. Leave `channelsApi` batching
 and the mutation write path alone.
+
+Landed as `useChannelValue` in `hooks/usePropertyValues.ts` rather than a new module: that file
+already owns `getChannelValue` and `subscribeToChannels`, which is what the hook is made of. It
+takes `ChannelRef | null` because the channel dialog's query passed `skip` for an unparsed input
+and a hook cannot be skipped. `CLAUDE.md`'s "Where a WS bridge subscribes" gained the exception
+this creates: form 3 stays right for a stream, but not for one at frame rate.
 
 ### ~~`FS-PERF-MARQUEE-COUNT`~~ — **landed**
 **`batchCountFor` recomputes an O(rows × columns) marquee count for every rendered cell per pointer
@@ -1218,15 +1224,24 @@ an empty ring for up to 16 beats. The recovery is now explicit: `requestSpeedMas
 `requestBeat` on the WS api) asks for a frame without re-binding a subscription that was never the
 problem. Pinned by a test.
 
-### `FS-CHROME-BEAT-MAP-PRUNE`
-**Per-master beat subscribables are never pruned, so reconnects re-request beats nothing watches** ·
-S4 · P3 · C2 · sonnet
+### ~~`FS-CHROME-BEAT-MAP-PRUNE`~~ — **landed**
+**Per-master beat subscribables are never pruned, so reconnects re-request beats nothing watches**,
+lighting-react `df63fb2` · S4 · P3 · C2 · sonnet
 `src/api/speedMastersWsApi.ts`, `src/api/wsSubscriptionFactory.ts`
 
 Bounded and tiny (masters-ever-displayed per tab; a few extra frames per reconnect only — the
 re-request itself is deliberate and load-bearing for phase recovery). Give `createWsSubscribable` an
 emptiness signal and drop empty entries; keep re-requests for keys with live subscribers and master
 1's `''` convention.
+
+Grew in the landing: the emptiness signal went in as specified, but review pointed out that
+`channelSource`'s `createFanOut` is the same pool with the same identity-check comment written out
+again, and the consolidation was taken with the item rather than filed. `createKeyedWsSubscribable`
+in `wsSubscriptionFactory.ts` now owns the map, the prune and the identity check for both; what
+stays in `channelSource` is the before/after value diff, the only part that was ever about
+channels. The identity check became a tested invariant in a new `wsSubscriptionFactory.test.ts`.
+`channelsApi`'s own per-channel map stays unpruned on purpose — keyed by wire channel, so the patch
+bounds it.
 
 ### ~~`FS-PERF-CODE-SPLITTING`~~ — **landed**
 **The whole app ships as one 4 MB chunk — no route or vendor splitting anywhere**, `656ff33` ·

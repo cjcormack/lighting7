@@ -43,6 +43,8 @@ as a one-line row.
 | [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group effects included | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-STAGE-BUFFER-UPLOADS`](#fu-manual-stage-buffer-uploads) | the 3D stage still draws every beam, pool and pixel wash now that only written buffers upload | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-SIGNATURE-CACHE`](#fu-manual-signature-cache) | programmer cells still repaint when a value moves, now that the diff trusts a cached signature | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-CHANNEL-VALUE-HOOK`](#fu-manual-channel-value-hook) | raw channel sliders still track the rig and still write, with the per-channel RTK cache gone | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-BEAT-PRUNE`](#fu-manual-beat-prune) | beat indicators and the stage's derived sources survive the shared keyed-subscription pool | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -971,6 +973,80 @@ writes with off-connection ones.
    the fade — the revision gate and the content diff both still have to hold.
 6. Change a cue's layer so a key's provenance moves between a Look layer and a template layer, and
    confirm the cell's provenance badge renames rather than keeping the old layer.
+
+10 minutes.
+
+---
+
+## `FU-MANUAL-CHANNEL-VALUE-HOOK`
+
+**Raw channel values read their WS subscription instead of an RTK Query entry** · from frontend
+sweep `FS-PERF-CHANNEL-CACHE-DISPATCH`, 2026-08-31
+
+Every mounted raw-channel slider used to hold a `{universe, channelNo}`-keyed RTK Query cache entry
+whose `onCacheEntryAdded` called `updateCachedData` on each `channelState` frame — a Redux dispatch,
+reducer pass and subscriber scan per changed channel per frame, at up to 30 Hz, for a value nothing
+outside the slider consumes. They now read `lightingApi.channels.subscribeToChannel` through
+`useChannelValue`, a `useSyncExternalStore` hook beside the fixture-property readers. The per-channel
+split, `channelsApi`'s 33 ms batching and the write path are all unchanged. **Code-read** change —
+nothing was measured on a desk, and no frame time is claimed.
+
+The risk is the usual one for this shape: not the saving but a value that quietly stops tracking.
+Three surfaces read it, and one of them (the dialog) used to pass `skip` for an unparsed input,
+which is now a `null` channel reading 0.
+
+**Test**: with the desk running and DMX flowing:
+
+1. On `/channels` for a live universe, scroll the grid and confirm every visible row's level tracks
+   a running effect continuously, with no row frozen at an old value. Scroll away and back — the
+   returning rows must be live, not stale (this is the virtualizer remounting subscriptions).
+2. Drag a channel slider there and confirm the rig follows at input rate and the row settles on the
+   value the desk reports, not on the drag's last frame.
+3. Park a channel, confirm the row shows the parked value and stops following the show, then unpark
+   in Edit mode and confirm it rejoins.
+4. Open a fixture's detail sheet and confirm its per-channel sliders track and write the same way.
+5. Open the channel dialog, type a partial channel number (so the input is not yet a valid channel)
+   and confirm it reads 0 rather than showing a stale value from the previously-typed channel, then
+   complete the number and confirm Current jumps to the live level.
+6. Pull the network for a few seconds and reconnect; every row above must resume tracking without a
+   refresh.
+
+10 minutes.
+
+---
+
+## `FU-MANUAL-BEAT-PRUNE`
+
+**Per-master beat subscribables are dropped when their last subscriber leaves** · from frontend
+sweep `FS-CHROME-BEAT-MAP-PRUNE`, 2026-08-31
+
+`speedMastersWsApi` pools one subscribable per master uuid for `speedMasters.beat`, and used to keep
+every entry it ever created. On reconnect it re-requests a beat for each key in that map — which
+meant asking the desk for beats for every master ever displayed in the tab, including indicators
+unmounted long ago. Empty entries are now dropped, identity-checked so a repeated unsubscribe cannot
+delete a key that has since been re-pooled for a live subscriber. Master 1's `''` pre-load key and
+the reconnect re-request itself are unchanged — the re-request is load-bearing for phase recovery,
+and only its membership narrows.
+
+The pooling, the pruning and the identity check now live once in `createKeyedWsSubscribable`, and
+`channelSource`'s `createFanOut` — the per-channel notifier behind every derived stage source — was
+moved onto it in the same change. Its behaviour is meant to be identical (it had the same logic,
+hand-rolled), but that puts the stage views in scope for this check as well as the beat indicators.
+
+**Test**: with the desk running, a bank of at least two speed masters, and an effect on each:
+
+1. Open a surface showing beat indicators for two masters (the speed-master panel, or an FX list
+   with effects on different masters) and confirm both pulse at their own tempo.
+2. Navigate away so one master's indicator unmounts, then back, and confirm it re-locks phase
+   promptly rather than free-running — that is the re-pooled subscription re-requesting a beat.
+3. Pull the network for a few seconds and reconnect. Every *mounted* indicator must re-lock within a
+   beat or two; none may drift at the pre-drop tempo.
+4. Retune a master with a tap while indicators for both are mounted and confirm only that master's
+   indicator changes rate.
+5. Then the shared fan-out: open a stage view in Blind, change a colour in the programmer, and
+   confirm the stage repaints; navigate away from the stage and back and confirm it is live rather
+   than frozen. Same for a Next GO preview. A missed wake-up here looks exactly like a rig that
+   isn't moving.
 
 10 minutes.
 
