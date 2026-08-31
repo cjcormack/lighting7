@@ -40,6 +40,7 @@ as a one-line row.
 | [`FU-MANUAL-CHANNEL-THROTTLE`](#fu-manual-channel-throttle) | the channel stream still settles on its final value once the idle interval stops ticking | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-PALETTE-COLD-OPEN`](#fu-manual-palette-cold-open) | the first ⌘K of a session opens fully populated, not empty | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-RENDER-IDENTITY`](#fu-manual-render-identity) | the newly-stabilised render inputs still track the desk — GO, a mid-fade reorder, the phone runner, the pads' layer ring | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-FX-BADGE-COUNTS`](#fu-manual-fx-badge-counts) | the "N FX" badges still count what the per-target endpoints counted, indirect group effects included | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -871,6 +872,35 @@ on the reset gate that owns a mid-fade cue reorder — the one place this hook h
    value inside a layered Look and confirm the ring does *not* churn on the provenance traffic.
 
 15 minutes.
+
+## `FU-MANUAL-FX-BADGE-COUNTS`
+
+**The "N FX" badges count what the per-target endpoints counted** · frontend sweep
+`FS-PERF-BPM-INVALIDATION`, 2026-08-31
+
+`FxBadge` used to hold a `fx/fixture/{key}` or `groups/{name}/fx/active` subscription per card, so
+one `fxChanged` broadcast fanned out to one GET per badge on screen. It now derives its count from
+the rig-wide `fx/active` list every badge already shares. The count has to come out identical: for
+a group, the effects targeting it; for a fixture, its own effects **plus** the group effects that
+reach it through membership — the endpoint's `indirect` half, which the client now reconstructs
+from the fixture DTO's `groups`. A hierarchical group is the interesting case, since a fixture can
+be reached through a parent group it was never listed in directly. Freshness also moves: the badge
+now refreshes on the `fxChanged` broadcast rather than on the acting client's own tag
+invalidation. **Code-read** change; nothing here was measured.
+
+**Test**: with the desk running, on `/fixtures` and the groups view:
+
+1. Apply an effect directly to a fixture and confirm its card's badge appears and reads `1 FX`,
+   promptly, on the tab that applied it *and* on a second tab.
+2. Apply an effect to a group containing that fixture and confirm the fixture's badge goes to
+   `2 FX` and the group card's badge reads `1 FX`.
+3. If the rig has a group-of-groups, apply an effect to the *parent* group and confirm a member
+   fixture of a child group counts it.
+4. Pause the effect and confirm the badge drops to the muted variant without changing its count;
+   resume and confirm it lights again.
+5. Remove the effects and confirm both badges disappear rather than sticking at a stale count.
+
+10 minutes.
 
 ---
 

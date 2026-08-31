@@ -101,7 +101,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-GROUPS-WS`~~ **done** | Delete the client groups WS layer — D3 landed, and the question it waited on is answered:… | S3 | P1 | C1 | sonnet |
 | ~~`FS-COORD-LEGACY-TEMPO`~~ **done** | Migrated with backend D2 — see the item | S3 | P1 | C2 | sonnet |
 | ~~`FS-EDITOR-DEBOUNCE-DIRTY`~~ **done** | onChange is debounced 500 ms with no flush, so the unsaved-changes guard and every Compil… | S3 | P1 | C2 | sonnet |
-| `FS-PERF-BPM-INVALIDATION` | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
+| ~~`FS-PERF-BPM-INVALIDATION`~~ **done** | Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects` — **tempo half gone with D2**; only the `FxBadge` consolidation is left | S3 | P2 | C2 | sonnet |
 | ~~`FS-TYPES-TEMPLATE-TOGGLE-MASK`~~ **done** | Template toggle discards the client's `propertyMask` and the server derives none, so ever… | S3 | P1 | C1 | sonnet |
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
@@ -938,8 +938,9 @@ Landed as `effects === undefined`, not "rows-only": the same argument acquits th
 `LookDetailSheet` sends, and presence of the `effects` key is the condition the wire actually
 carries. Operator check filed as `FU-MANUAL-SAVELOOK-INVALIDATION`.
 
-### `FS-PERF-BPM-INVALIDATION`
-**Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects`** · S3 · P1 · C2 · sonnet
+### ~~`FS-PERF-BPM-INVALIDATION`~~ — **landed**
+**Any BPM change invalidates `FixtureEffects` + `GroupActiveEffects`**, lighting-react `ca333a9`
+· S3 · P1 · C2 · sonnet
 `src/api/fxApi.ts`, `src/store/fixtureFx.ts`, `src/store/groups.ts`
 
 `createFxApi` calls `notifyState` on a bpm-only `beatSync` (the backend sends one per tap), and two
@@ -953,6 +954,14 @@ from the `fxState` frame, so a tap no longer notifies the fx state at all and th
 gate. What remains of this finding is only the `FxBadge` consolidation — read the rig-wide
 `useActiveEffectsQuery` rather than a per-fixture query, which removes the fan-out class for
 genuine effect changes too. Don't break `useFxStateQuery` consumers.
+
+Landed as specified. The one thing the fix sentence doesn't say: the fixture badge's `indirect`
+half needs group membership, so `FxBadge`'s fixture variant now takes the fixture DTO's `groups`
+as a **required** prop — the backend fills that field from the same `Fixtures.groupsForFixture`
+that `getIndirectEffectsForFixture` calls, so the counts cannot drift, and making it required
+stops a call site dropping the indirect effects silently. `useFixtureEffectsQuery` and
+`useGroupActiveEffectsQuery` both stay for their other consumers. Operator check:
+`FU-MANUAL-FX-BADGE-COUNTS`.
 
 ### ~~`FS-PERF-PROVENANCE-REFETCH`~~ — **landed**
 **Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab**,
