@@ -114,7 +114,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-COORD-API-NORMALIZE`~~ **done** | Landed with backend F1–F5/F8 across five client commits — see the item | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-FXLIBRARY-PARAMS`~~ **done** | D7 ships real parameter types/defaults, so the FX sheet's never-exercised double-slider r… | S3 | P2 | C2 | sonnet |
 | ~~`FS-COORD-PREVIEW-DEAD`~~ **done** | D4 deleted the Look preview routes and `installPreview`, so every client `isPreview` filt… | S3 | P2 | C1 | sonnet |
-| `FS-DEAD-CUELAYER-HELPERS` | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
+| ~~`FS-DEAD-CUELAYER-HELPERS`~~ **done** | `reorderCueLayers` and `densifyCueLayerOrder` have no production caller | S3 | P2 | C2 | sonnet |
 | ~~`FS-DEAD-CURRENTCUESTATE`~~ **done** | The `currentCueState` chain is dead, and its wire-compat comment protects a type nothing… | S3 | P2 | C1 | haiku |
 | ~~`FS-DEAD-DEVDEPS`~~ **done** | Eight unused devDependencies, including a Prettier-in-ESLint wiring never made | S3 | P2 | C1 | sonnet |
 | ~~`FS-DEAD-EXPORTS`~~ **done** | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
@@ -142,15 +142,15 @@ halves still owed are listed in §14 only.
 | ~~`FS-TEST-PROVENANCE-PIN`~~ **done** | The provenance-signature test pins field names that no longer exist, and the `layerSource… | S3 | P2 | C1 | sonnet |
 | ~~`FS-TYPES-ADDLAYER-MASK-DROP`~~ **done** | `ProgrammerLookStack.handleAdd` drops `propertyMask` when forwarding LayerPicker's layer | S3 | P2 | C1 | haiku |
 | ~~`FS-TYPES-CUE-STOMP`~~ **done** | Cue-level `stomp` is absent from the `Cue`/`CueInput` mirror, so duplicating a cue silent… | S3 | P2 | C1 | sonnet |
-| `FS-TYPES-EFFECTTYPE-UNION` | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
-| `FS-TYPES-MASKGROUP-DUP` | `PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily` | S3 | P2 | C2 | sonnet |
-| `FS-TYPES-PALETTE-WIRE-ARMS` | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
+| ~~`FS-TYPES-EFFECTTYPE-UNION`~~ **done** | `EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast | S3 | P2 | C2 | sonnet |
+| ~~`FS-TYPES-MASKGROUP-DUP`~~ **done** | `PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily` | S3 | P2 | C2 | sonnet |
+| ~~`FS-TYPES-PALETTE-WIRE-ARMS`~~ **done** | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
 | ~~`FS-TYPES-PRESETCOUNT-RENAME`~~ **done** | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
-| `FS-TYPES-RIGGING-POSITION` | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
+| ~~`FS-TYPES-RIGGING-POSITION`~~ **done** | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
 | `FS-ARCH-BUSKING-GOD-HOOK` | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
 | `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
-| `FS-DEAD-DTO-FIELDS` | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
-| `FS-DEAD-WS-METHODS` | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
+| ~~`FS-DEAD-DTO-FIELDS`~~ **done** | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
+| ~~`FS-DEAD-WS-METHODS`~~ **done** | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-DEAD-BRANCH`~~ **done** | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-LIFECYCLE`~~ **done** | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
 | `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
@@ -1286,9 +1286,9 @@ Landed as scoped: the rename and the five fixtures only. The optional half has n
 site that currently shows a layers-only cue as empty. Left available, as the backend's own KDoc
 frames it.
 
-### `FS-TYPES-RIGGING-POSITION`
-**`FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never render** ·
-S3 · P2 · C2 · sonnet
+### ~~`FS-TYPES-RIGGING-POSITION`~~ — **landed**
+**`FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never render**,
+lighting-react `5b84ea6` · S3 · P2 · C2 · sonnet
 `src/api/patchApi.ts`, `src/components/stage/StageMarker.tsx`
 
 The backend folded the free-text field into first-class Rigging rows (`sync-engineering.md` records
@@ -1297,9 +1297,16 @@ marker's amber rigging badge is unreachable dead UI. **Fix**: delete the field f
 and the fixtures; then decide the badge's replacement — the rigging *name* resolved from
 `riggingUuid` is the honest one, C2 because that half is a design choice.
 
-### `FS-TYPES-EFFECTTYPE-UNION`
-**`EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast** · S3
-· P2 · C2 · sonnet
+Landed with the rigging-name arm taken, on the operator's call: `StageOverviewPanel` reads the
+rigging list it already has cached, maps `uuid` → `name`, and passes a `riggingName` prop to
+`StageMarker`. The badge renders nothing both for a free-standing patch and while that list is in
+flight — a placeholder there would be a claim about the rig. Also closes the matching open
+follow-up in the frontend repo's `docs/3d-stage-view-plan.md`, which had been waiting for the 2D
+view to retire; it did not need to.
+
+### ~~`FS-TYPES-EFFECTTYPE-UNION`~~ — **landed**
+**`EffectType` is a closed 20-literal union with no backend counterpart, laundered by a cast**,
+lighting-react `df8f5f1` · S3 · P2 · C2 · sonnet
 `src/api/groupsApi.ts`, `src/components/busking/useBuskingState.ts`
 
 The real vocabulary is data-driven (`fx/index.txt` + each `.fx.kts` `id:` + user-defined
@@ -1311,8 +1318,9 @@ constrains nothing and misdescribes the vocabulary. **Fix**: widen to `string` (
 FX library query at runtime. Never canonicalise the sent name — the registry's normalisation is what
 makes it work.
 
-### `FS-TYPES-MASKGROUP-DUP`
-**`PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily`** · S3 · P2 · C2 · sonnet
+### ~~`FS-TYPES-MASKGROUP-DUP`~~ — **landed**
+**`PropertyMaskGroup` is a second, free-standing copy of `AttributeFamily`**, lighting-react
+`04d5985` · S3 · P2 · C2 · sonnet
 `src/lib/attributeFamily.ts`, `src/store/programmerOps.ts`, `src/components/programmer/maskPicker.tsx`
 
 One Kotlin enum, two independent client unions, silently interchangeable and in fact mixed
@@ -1324,9 +1332,9 @@ unrelated, so a literal added to one still typechecks. **Fix**: make `PropertyMa
 `ATTRIBUTE_FAMILIES` + `FAMILY_LABELS`. Don't write a new vocabulary test — it exists. Wire form
 (uppercase, `serializePropertyMask` null-normalisation, family order) must not change.
 
-### `FS-TYPES-PALETTE-WIRE-ARMS`
-**Retired palette wire arms kept alive by "still on the wire" claims that are now false** · S3 · P2
-· C2 · sonnet
+### ~~`FS-TYPES-PALETTE-WIRE-ARMS`~~ — **landed**
+**Retired palette wire arms kept alive by "still on the wire" claims that are now false**,
+lighting-react `136f1c2` · S3 · P2 · C2 · sonnet
 `src/store/programmerOps.ts`, `src/api/programmerWsApi.ts`, `src/lib/includedTarget.ts`,
 `src/lib/programmerSource.ts`
 
@@ -1339,6 +1347,11 @@ PALETTE arm from all four modules and the pinning tests; `includedTargetKey`'s o
 guarantee and the LOOK arm's `updateIncludedLook` write-back stay untouched. See also
 `FS-BE-INCLUDEDTARGET-PALETTE` (§14) for the backend half, and `FS-RES-PALETTERESULT` for the
 unreachable `UpdateDialog` branch.
+
+Landed with no backend half owed: the seam this item cited had already closed. `IncludedTargetDto`
+carries no `palette*` fields, `IncludedTarget.Kind` has only `CUE` and `LOOK`, and
+`ProgrammerIncludeResponse` is built at exactly two sites, one per kind — so `IncludeResponse.kind`
+lost its `PALETTE` arm too, which the **Fix** did not name.
 
 ### ~~`FS-TYPES-GROUPFX-WS`~~ — **landed with `FS-COORD-GROUPS-WS`**
 **groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls**,
@@ -1490,8 +1503,9 @@ their last caller out as this item anticipated: `deepEqual` (whose only non-recu
 as written — errorToastMiddleware's prose already names the wire literal rather than the constant,
 so nothing there needed changing.
 
-### `FS-DEAD-CUELAYER-HELPERS`
-**`reorderCueLayers` and `densifyCueLayerOrder` have no production caller** · S3 · P2 · C2 · sonnet
+### ~~`FS-DEAD-CUELAYER-HELPERS`~~ — **landed**
+**`reorderCueLayers` and `densifyCueLayerOrder` have no production caller**, lighting-react
+`8a3017a` · S3 · P2 · C2 · sonnet
 `src/lib/cueUtils.ts`, `src/lib/cueUtils.test.ts`
 
 The cue-layer drag they served died with the three-pane editor; the only `LayerHandlers` host is the
@@ -1503,9 +1517,14 @@ a decision**: delete both plus their describe block, or keep them as they now st
 tidy `cueUtils.test.ts`'s field-by-field pin into a deep-equal — that shape is deliberate, and
 `FS-TEST-CUEUTILS-TRIGGERS` (`771ce87`) extended it to the trigger list.
 
-### `FS-DEAD-DTO-FIELDS`
-**Wire-mirror fields never read by the client, several naming retired concepts** · S3 · P3 · C2 ·
-sonnet
+Landed as the delete arm, on the operator's call. The rule the helpers encoded moved to where it
+binds rather than dying with them: the frontend `CLAUDE.md` composition section and a comment at
+`ProgrammerLookStack.onMove` now both say that `sortOrder` is authoritative and a client-side
+reorder would have to restate every entry. The `buildCueInput` pin is untouched.
+
+### ~~`FS-DEAD-DTO-FIELDS`~~ — **landed**
+**Wire-mirror fields never read by the client, several naming retired concepts**, lighting-react
+`43f042d` · S3 · P3 · C2 · sonnet
 `src/store/fixtureFx.ts`, `src/api/groupsApi.ts`, `src/api/fxApi.ts`,
 `src/components/programmer/FxSheet.tsx`, `src/api/surfacesApi.ts`, `src/api/looksApi.ts`
 
@@ -1524,8 +1543,17 @@ than deleting: the gap round found the divergence runs both ways there
 `usedByCueNames` are already on the wire and unread — `FU-FE-SHARED-LOOK-EDIT-GUARD`'s missing usage
 count needs no backend work.
 
-### `FS-DEAD-WS-METHODS`
-**Six WS API methods declared, implemented, never called** · S3 · P3 · C2 · sonnet
+Landed as one field pair, not the list above: by the time this ran, `FS-COORD-WIRE-FIELD-DELETIONS`
+had already taken all three `presetId` declarations and `FxSheet.toEffectContext`'s pass-through, so
+only `FxEffectState.speedMasterIndex` was left. **Grew in the landing:** `rateSpeedMasterIndex` two
+lines below is the same mirror for the rate master, equally unread and not named in the finding —
+deleting one of an identical pair only leaves the other to be re-found, so both went. The surfaces
+feedback cluster was consciously left, per `FS-TYPES-SURFACE-DESCRIPTORS`' finding that the
+divergence there runs both ways.
+
+### ~~`FS-DEAD-WS-METHODS`~~ — **landed**
+**Six WS API methods declared, implemented, never called**, lighting-react `419df4a` · S3 · P3 ·
+C2 · sonnet
 `src/api/cloudSyncWsApi.ts`, `src/api/surfacesApi.ts`, `src/api/groupsApi.ts`
 
 `cloudSyncWsApi.subscribeStarted` (strands `CloudSyncStartedEvent`), three
