@@ -1,0 +1,245 @@
+# The Busk view — a pad-first performance surface, and speed masters that route and follow
+
+> **Document status: PROPOSED.** Nothing here is built. The visual design is settled on a canvas —
+> <https://claude.ai/code/artifact/fdf63aa8-0145-4c8b-b98c-170a7489a4b3> — which holds a clickable
+> mock of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A:
+> left target rail, B: MA-style paged banks) that were considered and parked. This document is the
+> engineering half: the model changes, the decisions and their reasons, and the session split.
+
+## 1. Context
+
+Two asks, one surface.
+
+**The busking view.** `/projects/:id/fx` (`routes/FxBusking.tsx` → `components/busking/BuskingView`
+in lighting-react) already has the right bones: select targets, press pads. But it is off-nav and
+reachable only by URL, its target list is a sidebar list rather than a bank of toggle pads, its
+pads cover effects, Looks-with-deferred-effects and templates but **not cues or cue stacks**, and
+it says nothing about tempo — the thing a busking operator adjusts most. Other desks' busking
+surfaces (the research behind `DEFAULT_SPEED_MASTER_COUNT`'s "visible bank of four") put
+group/fixture select pads, palette pools, executor/cue pads and rate masters on one page. That is
+the shape the design canvas draws.
+
+**Speed masters.** Today a master is a name, an index and a tempo
+(`models/speedMasters.kt`: `masterIndex`, `name`, `bpm`, `source`, `notes`, `uuid`;
+`fx/SpeedMasterBank.kt`: slot 0 is master 1, every unassigned effect resolves there). Two things
+it cannot yet say:
+
+- **What it is *for*.** "Movement" is a name, not a fact — nothing routes a busked movement chase
+  to the movement master. Every pad press that wants a non-global tempo needs a picker
+  (`BuskingView`'s `defaultSpeedMasterUuid` dropdown), which is exactly the extra press a busking
+  surface exists to remove.
+- **A relationship to master 1.** A show where movement runs at half the colour tempo needs two
+  taps kept in step by hand. A *time signature* — "M2 is ½ of M1" — makes one TAP on M1 retune the
+  whole show.
+
+Both changes exist to make the busk view's speed rail mean something: the rail shows M1 big with
+TAP, followers with ratio chips instead of TAP, and a usage badge on each explaining where an
+unassigned effect will land.
+
+## 2. Decisions taken
+
+- **D1 — usage routing is apply-time stamping, not engine resolution.** When the busk view (or any
+  future caller) creates an effect with no explicit master, it looks up the project's master whose
+  `usage` matches the effect's library `category` and stamps that master's uuid into the instance.
+  A null `speedMasterUuid` keeps meaning **master 1**, everywhere, forever — the invariant
+  `SpeedMasterBank` and the wire protocol are built on (`null → slot 0`) does not move. The
+  routing is visible and editable afterwards in `EffectParameterForm`, and the engine is untouched.
+- **D2 — a following master keeps a real `MasterClock`.** Follow is implemented in the bank as
+  write-through: whenever M1's tempo changes (`setBpm`, `tap`, load), the bank recomputes every
+  follower's bpm as `m1.bpm × ratio` and calls the follower's own `setBpm`. The engine, `slotFor`,
+  the persister and the WS streams all see an ordinary master whose tempo happens to move; no new
+  clock type, no engine changes. Beat-**phase** lock to M1 is explicitly out of scope (§7).
+- **D3 — the ratio is stored as two ints** (`follow_num` / `follow_den`, both null = manual).
+  Floats invite `1/3 ≠ 0.333…` comparison bugs on both sides of the wire; the pair also prints
+  itself (`1/2` → ½). The UI vocabulary is the five chips **2× · 1× · ½ · ⅓ · ¼**; the backend
+  accepts any positive pair so a custom ratio is a UI follow-up, not a schema change.
+- **D4 — follow targets master 1 only.** `follow_num` non-null means "follows M1"; there is no
+  follow-target column. No chains, therefore no cycles, no propagation ordering, and the sheet's
+  copy ("Follow Master 1") is the whole truth. Master 1 itself is refused a ratio at the write
+  boundary.
+- **D5 — TAP and typed tempos are refused on a follower**, with a structured error, not silently
+  ignored and not auto-unlink. Auto-unlink would mean a stray TAP mid-show silently severs the
+  relationship the operator set up deliberately; the refusal names the fix ("unlink in the sheet").
+  The UI removes the affordance anyway (ratio chips where TAP was), so the refusal is a backstop
+  for stale clients and the script API.
+- **D6 — one master per usage, enforced at the write boundary.** Two masters both claiming
+  `position` would make routing ambiguous. Not a DB unique index: the column is nullable, partial
+  indexes are awkward through Exposed, and the check needs a friendly 409 anyway. Pinned by test.
+- **D7 — the usage vocabulary is the effect library's `category` strings** (`dimmer`, `colour`,
+  `position` — `controls` deliberately excluded; a settings slider has no tempo). `FxRegistry.category`
+  is what the routing has to match at apply time, so minting a parallel enum would just add a
+  mapping to keep in step. The frontend already knows these strings (`EFFECT_CATEGORY_INFO`).
+  *Caveat for the implementer:* `category` is a free string supplied by script definitions —
+  session 1 must pin the canonical set with a test and decide what an unknown category routes to
+  (answer: nowhere — null → M1).
+- **D8 — the view is `/projects/:id/busk`, on-nav, the fourth ShowBar host.** "Busk" enters
+  `navItems`; the page spreads `useShowBarProps` like the other three live views. `/fx` and
+  `/projects/:id/fx` redirect from `legacyRedirects.tsx` (the path no longer names a view). The
+  existing `components/busking/` machinery (`useBuskingState`, presence, the effect pads) is the
+  foundation, not a rewrite.
+- **D9 — busk pads move the playhead without an arming confirm.** This is a deliberate contrast
+  with `/show`, whose confirm-gated arming exists because *browsing* must not fire cues. The busk
+  view has no browsing: every control on it exists to be pressed, a pinned-cue pad names exactly
+  what it fires, and the operator chose to stand at a performance surface. The show lock is not
+  consulted either — busking is the live use, and the lock is a stray-click guard for editing
+  surfaces, not a transport gate (same reasoning as `canOperate`).
+- **D10 — pinned cues are a per-cue flag** (`pinned_to_busk` on cues), set from the cue's
+  properties sheet / row menu in Show. A separate pin-list table would allow ordering and
+  cross-project pins nobody has asked for; a flag survives export/import for free.
+- **D11 — the busk speed rail edits the live tempo only.** Same rule as the ShowBar tiles and the
+  Speed Masters page: the stored boot default is editable solely in the detail sheet, where it can
+  be labelled as such.
+
+## 3. The model
+
+### 3.1 Schema
+
+`speed_masters` gains three nullable columns, all additive:
+
+| column | type | meaning |
+| --- | --- | --- |
+| `usage` | varchar(16), null | effect-library category this master is the default for; null = routes nothing |
+| `follow_num` | int, null | time-signature numerator; null = manual tempo |
+| `follow_den` | int, null | denominator; must be non-null exactly when `follow_num` is |
+
+Write-boundary validation (one place, used by REST and any future script surface): master 1 may
+not follow; a follower's pair must be positive; `usage` must be in the canonical set and unique
+within the project (D6, D7).
+
+### 3.2 The bank
+
+`SpeedMasterSnapshot`, `MasterState` and the live-state wire shape each gain `usage` and the ratio
+pair. On `load` and on every M1 `Change`, the bank sweeps followers and writes
+`m1.bpm × num / den` through each follower's clock — synchronously, on the caller's thread, in the
+same place the change listener already runs, so the persister and the WS `changes` flow see the
+follower moves as ordinary `Change` events and every surface (ShowBar tiles, busk rail, manage
+page) updates with no new wiring. `setBpm`/`tap` on a follower return the D5 refusal before
+touching the clock.
+
+Rounding: the derived bpm is stored and streamed as the exact double (`120 × 1/3 = 40.0`, but
+`126 × 1/3 = 42.000…4` is fine); display formatting is the client's existing `formatBpm`.
+
+### 3.3 Routing at apply time
+
+The busk view's effect-apply path (today: `useBuskingFxActions` sending the picker's
+`defaultSpeedMasterUuid`) instead resolves: explicit per-press choice from the configure sheet if
+one was made → project master with `usage == effect.category` → null (M1). The picker row in the
+pad header is removed; the configure sheet (long-press) keeps a master picker as the per-press
+override. WALL_CLOCK effects are untouched: `rateSpeedMasterUuid` stays an explicit choice — a
+rate scale is a deliberate binding, not a default worth guessing (§7).
+
+## 4. UX
+
+The canvas is the source of truth for layout and copy; the summary, for grep-ability:
+
+- **Target band** (top): groups then fixtures as toggle pads, two rows, horizontally scrolling,
+  member-count badge on groups, selection summary + Clear. Replaces the desktop sidebar list;
+  the mobile bottom-sheet picker stays.
+- **Pools**: templates in four family columns (colour pads carry swatches), Looks with deferred
+  effects, and the effect pads that exist today. Pool dimming + hint banner when nothing is
+  selected; presence rings unchanged (`EffectPadButton`'s none/some/all ladder).
+- **Cue stacks**: one card per stack — name, live pip, current → next cue, Release, GO. GO on an
+  inactive stack activates at its first cue (the existing go-to semantics); on the active stack it
+  advances. Below, **pinned cues** as pads (number, name, owning stack), lit green when live.
+- **Speed rail** (right): M1 big with TAP; followers show derived bpm, a link glyph
+  ("follows M1 · ½×") and the five ratio chips in place of TAP; manual masters keep TAP. A usage
+  badge per master; one caption explains routing. "Manage speed masters" footer link.
+- **The sheet** (`/speed-masters` detail): Name · Default usage (select, with the one-per-usage
+  rule in the helper text) · Tempo (Manual | Follow Master 1 segmented; ratio chips + a
+  120 → ½× → 60 preview when following; Default BPM only when manual).
+- **ShowBar tiles** (`SpeedMasters.tsx` `MasterTile`): a follower's TAP cell becomes its ratio
+  label; click-to-type is disabled with the sheet named in the tooltip. Everything else unchanged.
+
+## 5. Implementation — four sessions
+
+### Session 1 — speed masters: usage and time signature (backend)
+
+Columns + validation (§3.1), bank write-through + refusal (§3.2), wire fields on the list REST
+route and the `speedMasters.*` socket frames, `ensureDefaultSpeedMasters` unchanged (new masters
+are manual, usage-less). Tests: follower tracks M1 through setBpm *and* tap; refusal on follower
+writes; one-per-usage 409; master-1-may-not-follow; ratio arithmetic including ⅓; export/import
+carries the three columns (uuid references already survive via `ExportUuidRemapper`).
+Deliberately invisible to the desk: every new wire field is additive with a null default, so an
+old client renders today's bank untouched.
+
+### Session 2 — speed masters: frontend
+
+`store/speedMasters.ts` types; the detail sheet's two new sections; the manage page's list
+columns; the ShowBar follower arm; the busk-routing swap in `useBuskingFxActions` + removal of the
+`defaultSpeedMasterUuid` header picker (configure-sheet override stays). Pin the
+category-set mirror with a test the way `maskPicker.test.ts` pins family lists.
+
+### Session 3 — the Busk view becomes a place
+
+Route rename + `navItems` entry + legacy redirects; ShowBar host wiring; the target band replacing
+the desktop sidebar; template pads grouped into family columns; the speed rail component (reads
+the live query for tempo, the list query for usage/ratio — the two-BPM rule from
+`SpeedMasters.tsx` applies). No new backend.
+
+### Session 4 — cues and stacks on pads
+
+`pinned_to_busk` flag + pin affordance in Show's cue properties; stack cards wired to the existing
+transport (go-to for activation, GO for advance — session verifies whether Release needs a new
+deactivate route or an existing one serves); pinned-cue pads via the go-to-cue path; live/next
+state from the same cache `useShowTransport` owns — **no second cache copy of a run cursor**, per
+the standing rule in lighting-react's CLAUDE.md.
+
+## 6. Migration
+
+Nothing to migrate — all three columns are additive and nullable, created by the startup schema
+pass. Existing masters come up manual and usage-less, which is exactly today's behaviour. A desk
+restart is required for the schema change (SQLite dev DBs take no Postgres-gated migrations; the
+startup pass is what adds columns). No rollback shims: a rolled-back binary ignores the columns.
+
+## 7. Explicitly out of scope
+
+- **Beat-phase locking a follower to M1.** Write-through keeps *tempo* in step; the follower's
+  tick counter still free-runs, so its beat boundary can sit anywhere inside M1's beat. Fixing
+  that means a follower samples M1's tick instead of owning a timer — engine plumbing
+  (`Frame`/`slotFor` changes), not a bank tweak. Recorded as a follow-up; the audible effect at
+  musical ratios is small because both clocks tick at exact multiples.
+- **Usage routing for `rateSpeedMasterUuid`.** A wall-clock rate binding is a deliberate scaling
+  choice; guessing it from category would surprise.
+- **Custom ratios in the UI.** The backend stores any pair (D3); the chips stay five.
+- **Momentary pads** (flash/solo — value while held). Real busking desks have them; our pads are
+  toggles today and stay toggles this round.
+- **Layout alternates A and B** from the canvas — parked, revisit only if the main arrangement
+  fails at a real desk.
+- **MIDI surface bindings** for ratio chips and busk pads (`SurfaceActions` has TAP already;
+  extending the binding vocabulary is its own piece of work).
+
+## 8. Follow-ups to record
+
+On landing, add to `followups.md`:
+
+- `FU-SPEED-PHASE-LOCK` — follower beat boundaries free-run within M1's beat (§7, first bullet).
+- `FU-BUSK-MOMENTARY` — pads are toggles; no flash/solo gesture.
+- `FU-SPEED-CUSTOM-RATIO` — backend accepts any positive pair; UI offers five.
+
+## 9. Verification
+
+Unit: the session 1 list above. Desk checks (two browsers where marked):
+
+1. Set M2 to follow M1 at ½ with a movement chase running on it: TAP a new tempo on M1 and the
+   chase rate halves in step, with no phase restart (setBpm preserves the tick counter). Both
+   tabs' rails and ShowBar tiles show the follower move (two browsers).
+2. Busk a movement effect with no explicit master onto a selection → it lands on the
+   `position`-usage master; the configure sheet shows that master selected; retagging the
+   effect's master afterwards works.
+3. TAP on a follower from a stale client → structured refusal, tempo unmoved.
+4. GO from a busk stack card and from `/show` interleaved → one cursor, both surfaces agree
+   (two browsers).
+5. Pin a cue in Show → pad appears on Busk; press it → playhead jumps, pad ring goes live;
+   the Show view's cursor and OffPlayheadBanner state agree.
+6. Export → import a project with a follower and a usage: ratio, usage and the M1 relationship
+   survive the uuid remap.
+
+## 10. Scope honesty
+
+Guessed, to be verified in-session: whether stack Release maps to an existing deactivate route or
+needs one (session 4); the exact set of `FxRegistry.category` values in the shipped effect library
+(D7's caveat — the canonical-set test settles it); whether the target band's two-row grid earns
+its keep below tablet width or the mobile arm keeps the sheet picker (session 3, on the mock it
+does). The speed-master half is deliberately conservative — write-through and apply-time stamping
+were chosen over engine changes precisely so sessions 1–2 cannot destabilise effect processing;
+if phase lock later becomes a real complaint, that is the moment the engine gets touched.
