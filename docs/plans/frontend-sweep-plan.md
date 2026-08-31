@@ -154,9 +154,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-EDITOR-DEAD-BRANCH`~~ **done** | ScriptEditor's entire non-compact branch is unreachable and duplicates the widget mount v… | S3 | P3 | C2 | sonnet |
 | ~~`FS-EDITOR-LIFECYCLE`~~ **done** | Playground instances are never destroyed on unmount, and `window.playgroundInstance` is a… | S3 | P3 | C1 | sonnet |
 | `FS-PERF-CHANNEL-CACHE-DISPATCH` | /channels holds one RTK Query cache entry per channel, dispatching per changed channel pe… | S3 | P3 | C2 | sonnet |
-| `FS-PERF-LITKEYS-ALLOC` | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
+| ~~`FS-PERF-LITKEYS-ALLOC`~~ **done** | `useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read | S3 | P3 | C1 | haiku |
 | ~~`FS-PERF-MOBILE-SHEET-FADE`~~ **done** | Phone cue-list sheet re-renders every row per fade frame with an O(n²) done-tick | S3 | P3 | C2 | sonnet |
-| `FS-PERF-PALETTE-QUERIES` | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
+| ~~`FS-PERF-PALETTE-QUERIES`~~ **done** | CommandPalette subscribes six list queries while closed, on every route | S3 | P3 | C1 | haiku |
 | `FS-PERF-STAGE-BUFFER-UPLOADS` | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
 | `FS-RES-CLOUDSYNC-SPLIT` | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
 | `FS-RES-FIXTUREMODEL-SPLIT` | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
@@ -187,8 +187,8 @@ halves still owed are listed in §14 only.
 | `FS-DUP-MARKER-ROW` | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
 | `FS-DUP-MINISTAGE-GEL` | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
 | `FS-DUP-TARGETKEY` | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
-| `FS-PERF-LAYER-SIGNATURE` | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
-| `FS-PERF-TRANSPORT-ALLOC` | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
+| ~~`FS-PERF-LAYER-SIGNATURE`~~ **done** | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
+| ~~`FS-PERF-TRANSPORT-ALLOC`~~ **done** | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-ANON-CATCH`~~ **done** | Three bare `.catch(() => {})` where the codebase has a named helper for exactly that | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-LIGHTING-EDITOR-DIR`~~ **done** | `components/lighting-editor/` is a one-file directory named for a pre-Programmer era | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-LOOKREFVALUE-NAME`~~ **done** | `lookRefValue.tsx` is named for the retired `ref:` grammar its own doc says it can never… | S4 | P3 | C1 | haiku |
@@ -197,7 +197,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-TEST-INDICATOR-LINK`~~ **done** | `ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself i… | S4 | P3 | C1 | haiku |
 | ~~`FS-TYPES-CLONE-COUNTS`~~ **done** | `CloneProjectResponse` drops four of the server's content counts, and the dialog discards… | S4 | P3 | C1 | haiku |
 | ~~`FS-TYPES-ISBUILTIN`~~ **done** | `FxDefinition.isBuiltin` has no producer and no consumer | S4 | P3 | C1 | haiku |
-| `FS-WS-DEBOUNCE-TICK` | `debounceMapUpdates` keeps its interval alive one no-op tick past idle | S4 | P3 | C1 | haiku |
+| ~~`FS-WS-DEBOUNCE-TICK`~~ **done** | `debounceMapUpdates` keeps its interval alive one no-op tick past idle | S4 | P3 | C1 | haiku |
 
 ## 4. Sequencing and collisions
 
@@ -862,8 +862,9 @@ Grew in the landing: code review (high effort) found the desktop cue-stack view
 on mobile. Not named in this item's file list; taken as part of this landing rather than filed
 separately, since it's the same one-line-cause defect in the sibling view.
 
-### `FS-PERF-TRANSPORT-ALLOC`
-**`useShowTransport` builds a whole-stack signature string per render** · S4 · P3 · C1 · haiku
+### ~~`FS-PERF-TRANSPORT-ALLOC`~~ — **landed**
+**`useShowTransport` builds a whole-stack signature string per render**, lighting-react `be926f6`
+· S4 · P3 · C1 · haiku
 `src/hooks/useShowTransport.ts`, `src/routes/ShowPage.tsx`
 
 `stackCueSig` (`cues.map(id).join(',')`) and `animCue = cues.find(...)` run unmemoized in a hook
@@ -1045,8 +1046,9 @@ selection-wide count into one `useMemo` keyed on the cell selection and `rows`; 
 branches as they are. The count stays a documented *upper bound*, and collapsed multi-head bars must
 keep their per-row "Applying to 12".
 
-### `FS-PERF-LITKEYS-ALLOC`
-**`useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read** · S3 · P3 · C1 · haiku
+### ~~`FS-PERF-LITKEYS-ALLOC`~~ — **landed**
+**`useLitFixtureKeys` rebuilds a Set and spreads it on every snapshot read**, lighting-react
+`2dd75e9` · S3 · P3 · C1 · haiku
 `src/components/fixtures-list/useLitFixtureKeys.ts`
 
 O(fixtures) allocation per 33 ms batch *and* per render even when membership is unchanged. Count
@@ -1054,15 +1056,20 @@ matches against the cached set while iterating; allocate only on divergence. The
 notification contract must hold — a fade that changes values but not who is lit must return the
 cached identity, or every row memo churns mid-fade.
 
-### `FS-PERF-LAYER-SIGNATURE`
-**`programmerLayers` stringifies the whole layer stack on every programmer notification** · S4 · P3
-· C1 · haiku
+### ~~`FS-PERF-LAYER-SIGNATURE`~~ — **landed**
+**`programmerLayers` stringifies the whole layer stack on every programmer notification**,
+lighting-react `ec2cd29` · S4 · P3 · C1 · haiku
 `src/store/programmer.ts`
 
 Real but tiny (a handful of layers, usually `[]`; tens of microseconds at busk cadence), and the
 whole-object compare is the *correct* part — a hand-rolled field list would be a maintenance hazard.
 Note it; take it only if a cheap change-counter falls out of other programmer work. The
 `layerState`-broadcast-reaches-every-tab invariant and `reset()` propagation must hold.
+
+Landed as an array-identity fast path, not a change counter: `programmerWsApi` only ever reassigns
+`layers` and a provenance frame doesn't touch them, so identity settles the dominant path for free
+and the stringify stays as the backstop for frames that rebuild the array. No second source of
+truth, so none of the maintenance hazard the item warned a field list would carry.
 
 ### Always-mounted chrome
 
@@ -1142,8 +1149,9 @@ and the wash director never writes a byte. **Fix**: per-group dirty bits set by 
 and clear only dirty groups, wash groups first (biggest buffer, most often untouched). Correct the
 comment.
 
-### `FS-PERF-PALETTE-QUERIES`
-**CommandPalette subscribes six list queries while closed, on every route** · S3 · P3 · C1 · haiku
+### ~~`FS-PERF-PALETTE-QUERIES`~~ — **landed**
+**CommandPalette subscribes six list queries while closed, on every route**, lighting-react
+`b546fa3` · S3 · P3 · C1 · haiku
 `src/components/CommandPalette.tsx`
 
 Fixture/group/park/channel-mapping invalidations refetch lists and re-render the palette on pages
@@ -1203,13 +1211,20 @@ boundary anywhere, and four `React.lazy` sites make a stale-chunk 404 reachable 
 — acute here because the Windows updater rewrites the running install's statics in place — which
 unguarded unmounts the whole desk. On-rig check filed as `FU-MANUAL-CODE-SPLITTING`.
 
-### `FS-WS-DEBOUNCE-TICK`
-**`debounceMapUpdates` keeps its interval alive one no-op tick past idle** · S4 · P3 · C1 · haiku
+### ~~`FS-WS-DEBOUNCE-TICK`~~ — **landed**
+**`debounceMapUpdates` keeps its interval alive one no-op tick past idle**, lighting-react
+`3f5d0a5` · S4 · P3 · C1 · haiku
 `src/api/channelsApi.ts`
 
 Harmless (one empty callback per idle transition) but the function reads as a self-cancelling
 debounce and isn't. Clear when nothing is pending, or switch to a trailing re-armed `setTimeout`;
 all entries from one call must still fire together.
+
+Landed as a deadline throttle rather than either offered form: both of those still leave one timer
+armed past the last batch, because neither can know at flush time that no more is coming. Holding
+the last emit time instead means the timer is armed only while something is pending, at the cost
+of one deliberate behaviour change — a burst after a quiet period now flushes immediately rather
+than on the old interval's phase.
 
 ## 7. Contract drift — phantom fields and unpinned mirrors
 

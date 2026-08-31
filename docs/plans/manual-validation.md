@@ -37,6 +37,9 @@ as a one-line row.
 | [`FU-MANUAL-WS-SEND-DROPPED`](#fu-manual-ws-send-dropped) | a WebSocket blip announces itself instead of eating every gesture silently | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CHANNEL-FANOUT`](#fu-manual-channel-fanout) | coalesced channel wake-ups still track the rig, on the sheet, the cards and the stage | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-MARQUEE-COUNT`](#fu-manual-marquee-count) | a large marquee drag on `/fixtures` stays smooth and still reports the right batch count | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CHANNEL-THROTTLE`](#fu-manual-channel-throttle) | the channel stream still settles on its final value once the idle interval stops ticking | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-PALETTE-COLD-OPEN`](#fu-manual-palette-cold-open) | the first ⌘K of a session opens fully populated, not empty | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-RENDER-IDENTITY`](#fu-manual-render-identity) | the newly-stabilised render inputs still track the desk — GO, a mid-fade reorder, the phone runner, the pads' layer ring | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -790,6 +793,84 @@ old per-cell recompute visible as lag):
    the popover promised.
 
 10 minutes.
+
+## `FU-MANUAL-CHANNEL-THROTTLE`
+
+**The channel stream still settles on its final value with no idle timer running** · frontend sweep
+`FS-WS-DEBOUNCE-TICK` + `FS-PERF-LITKEYS-ALLOC`, 2026-08-31
+
+`debounceMapUpdates` was a `setInterval` that kept ticking until a tick found an empty batch; it is
+now a throttle that remembers the last emit time and arms a `setTimeout` only while something is
+pending, so no timer is alive when the rig is still. The risk is entirely at the *end* of a burst:
+the last batch of a fade must still be delivered, not left in the pending map. `useLitFixtureKeys`
+changed on the same 33 ms path — it now counts matches against its cached set and allocates a new
+one only on divergence, so a fade that moves levels without lighting or darkening anything must
+still return the identical set. Both are **code-read** changes; nothing here was measured.
+
+**Test**: with the desk running and DMX moving:
+
+1. Run a slow fade to a settled level (a cue with a long fade, or a fader move) and confirm the
+   channel readouts on `/channels` and the fixtures grid land on the *exact* final value — not one
+   batch short of it. Repeat a few times: an off-by-one-batch bug shows as a value that sticks a
+   step below where the desk actually is, and only sometimes.
+2. Blackout and confirm everything reads 0 rather than freezing at the last mid-fade value.
+3. On `/fixtures`, switch the list to the "only lit" filter, then fade a group up from zero and back
+   down. Rows must appear as fixtures cross above zero and disappear as they reach it, and the list
+   must not flicker or reorder during the middle of the fade, when membership is unchanged.
+4. With the filter still on, park a channel and unpark it, and confirm the row list follows.
+
+10 minutes.
+
+## `FU-MANUAL-PALETTE-COLD-OPEN`
+
+**The first ⌘K of a session opens fully populated** · frontend sweep `FS-PERF-PALETTE-QUERIES`,
+2026-08-31
+
+The command palette is mounted on every route and used to hold six list subscriptions open while
+closed — refetching and re-rendering on every fixture, group, park and channel-mapping
+invalidation, on pages that show none of them. Those queries are now skipped until the palette is
+first opened, latched so reopens stay instant. The flag is set in the same state batch as `open`,
+so a warm cache should render immediately; what an operator session proves is the **cold** case,
+where the palette is the first thing touched after a page load.
+
+**Test**: with the desk running, hard-reload the client and — without visiting the fixtures, groups
+or channels pages first — press ⌘K:
+
+1. Confirm the Navigation, Actions and Projects groups are there, and that Fixtures & Groups
+   populates (immediately, or within a blink of the fetch landing) rather than staying empty.
+2. Type a fixture name and confirm it matches; select it and confirm it lands on the list view with
+   the row selected.
+3. Close and reopen the palette and confirm it is instant and complete this time.
+4. Park a channel from `/channels`, then open the palette and confirm "View Parked Channels" shows
+   the right count and "Go to Parked Channel..." lists it with its fixture name.
+
+10 minutes.
+
+## `FU-MANUAL-RENDER-IDENTITY`
+
+**The newly-stabilised render inputs still track the desk** · frontend sweep
+`FS-PERF-TRANSPORT-ALLOC` + `FS-PERF-LAYER-SIGNATURE`, 2026-08-31
+
+Three per-render allocations became stable identities: `useShowTransport`'s cue signature and
+`animCue` are memoized on the active stack, `ShowPage`'s `runnerDisplay` is memoized on its six
+fields, and the programmer layer cache now short-circuits on array identity before stringifying.
+Each is invisible when right and looks like a stuck display when wrong, and the transport pair sits
+on the reset gate that owns a mid-fade cue reorder — the one place this hook has had a real defect.
+
+**Test**: with the desk running and a stack of a dozen-plus cues:
+
+1. GO and BACK several times and confirm the live/next cursors, the done ticks and the fade chrome
+   all follow, including across a stack boundary.
+2. Mid-fade, reorder cues (the out-of-order banner's "Fix Order" is the one-press way) and confirm
+   the fade the operator is watching runs to completion rather than stopping dead, and that the
+   cursors are correct once it lands.
+3. Add and delete a cue while the stack is live, and confirm the runner re-cursors.
+4. On a phone (or a narrow window), confirm the mobile runner's active/standby cue cards, the done
+   ticks and the next-stack label update on GO.
+5. On the busking pads, add and remove a Look layer and confirm the active ring follows, then edit a
+   value inside a layered Look and confirm the ring does *not* churn on the provenance traffic.
+
+15 minutes.
 
 ---
 
