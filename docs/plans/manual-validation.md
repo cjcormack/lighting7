@@ -45,6 +45,7 @@ as a one-line row.
 | [`FU-MANUAL-SIGNATURE-CACHE`](#fu-manual-signature-cache) | programmer cells still repaint when a value moves, now that the diff trusts a cached signature | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-CHANNEL-VALUE-HOOK`](#fu-manual-channel-value-hook) | raw channel sliders still track the rig and still write, with the per-channel RTK cache gone | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BEAT-PRUNE`](#fu-manual-beat-prune) | beat indicators and the stage's derived sources survive the shared keyed-subscription pool | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
 
 ---
 
@@ -1049,6 +1050,45 @@ hand-rolled), but that puts the stage views in scope for this check as well as t
    isn't moving.
 
 10 minutes.
+
+---
+
+## `FU-MANUAL-PROMPTBOOK-RELOCK`
+
+**One capture boundary replaces fifteen `noteEdit()` calls, and the rail's expansion moved onto the
+shared hook** · from frontend sweep `FS-RES-PROMPTBOOK-GODPAGE`, 2026-08-31
+
+The auto-relock idle timer used to be fed by fifteen hand-placed calls spread through the page and a
+four-deep `onEditInteraction` prop chain. It is now fed once, by `onPointerDownCapture` /
+`onKeyDownCapture` / `onInputCapture` on the page root — the same shape `ShowPage` uses at its body
+boundary. The claim that needs a human is that **nothing that edits the book sits outside that
+boundary**: the annotation sheet, the cut confirmation and the anchor picker are Radix portals, and
+the reasoning that they are still covered rests on React propagating through the React tree rather
+than the DOM tree. That is correct, and the tests pass, but a 2-minute idle timer tearing a half-typed
+note off the screen mid-show is not a failure anyone wants to discover live.
+
+In the same change the rail's card expansion moved onto the shared `useCueExpansion`, which brings
+one deliberate behaviour change: a live card the operator collapsed used to spring back open when a
+*different standby* was armed, and now stays shut until the playhead actually leaves that cue.
+
+**Test**: with the desk running a show that has a prompt book and at least four cues:
+
+1. Unlock the book mid-show. Confirm the amber ring and the countdown chrome appear.
+2. Start a note on an annotation, and a cue rename in the rail, and in each case leave it sitting
+   for over two minutes while typing occasionally. Neither may be torn down — the countdown must
+   reset on every keystroke.
+3. Repeat with the anchor picker open and with the cut-confirmation dialog open: interact, wait,
+   confirm the countdown resets rather than running down behind the dialog.
+4. If dictation is available on the tablet, dictate into a cue note for over two minutes without
+   touching the keyboard. This is the `onInputCapture` arm and the only one no keystroke covers.
+5. Then leave the book genuinely untouched for two minutes and confirm it *does* re-lock, with the
+   10-second countdown visible first. A boundary that never stops firing is the opposite failure.
+6. Expansion: collapse the live card, then arm a different standby. The live card must stay
+   collapsed. Then GO, and confirm the new live and next cards open.
+7. Open two non-live cards by hand, confirm both stay open together, then GO and confirm they close
+   and only the new live/next pair is open.
+
+15 minutes.
 
 ---
 

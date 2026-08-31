@@ -68,9 +68,10 @@ claims are trivially checkable at fix time and are flagged there.
 
 ## 3. Index
 
-124 findings: 2 × S1, 19 × S2, 68 × S3, 35 × S4. Sorted by severity then priority. The
-`FS-COORD-*` rows were the backend seam (§14); all eleven have now landed. The `FS-BE-*` backend
-halves still owed are listed in §14 only.
+124 findings: 2 × S1, 19 × S2, 68 × S3, 35 × S4. Sorted by severity then priority. **All 124 have
+now landed** (one, `FS-RES-STRAY-CAPTURES`, refuted at HEAD rather than fixed) — the sweep is
+complete. The `FS-COORD-*` rows were the backend seam (§14); all eleven landed. The `FS-BE-*`
+backend halves still owed are listed in §14 only.
 
 | ID | Finding | Sev | Pri | Cx | Model |
 |---|---|---|---|---|---|
@@ -160,7 +161,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-STAGE-BUFFER-UPLOADS`~~ **done** | `StageEmitters` marks every instanced attribute dirty every frame, so a static rig re-upl… | S3 | P3 | C2 | sonnet |
 | ~~`FS-RES-CLOUDSYNC-SPLIT`~~ **done** | `routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components —… | S3 | P3 | C1 | haiku |
 | ~~`FS-RES-FIXTUREMODEL-SPLIT`~~ **done** | `FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forci… | S3 | P3 | C2 | sonnet |
-| `FS-RES-PROMPTBOOK-GODPAGE` | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
+| ~~`FS-RES-PROMPTBOOK-GODPAGE`~~ **done** | `PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()`… | S3 | P3 | C3 | sonnet |
 | ~~`FS-TYPES-GROUPFX-WS`~~ **done** | groupsApi's WS layer declares a frame the backend never emits and two methods nothing calls | S3 | P3 | C1 | haiku |
 | ~~`FS-TYPES-SURFACE-DESCRIPTORS`~~ **done** | Control-surface descriptors omit `touchCc` and `programChange`, and type `BankButtonContr… | S3 | P3 | C1 | haiku |
 | ~~`FS-ARCH-BRIDGE-EVAL`~~ **done** | ~23 module-scope WS-bridge subscriptions vs three documented deferred ones — the rule is… | S4 | P2 | C2 | sonnet |
@@ -254,6 +255,10 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
     `FS-PERF-BPM-INVALIDATION`'s tempo half went with D2, and `FS-PERF-PROVENANCE-REFETCH`'s
     re-measure is **spent**: the mechanism held at HEAD and the item landed 2026-08-30 with the
     `programmerRevision` protocol change (lighting-react `90565f7`, lighting7 `86dedaa`).
+
+**The dispatch order below is spent** — every item has landed, the last being
+`FS-RES-PROMPTBOOK-GODPAGE` (lighting-react `fabaa6d`). It is kept as the record of how the sweep
+was sequenced, and because the ten constraints above still bind whatever touches those files next.
 
 A reasonable dispatch order for what's left after those constraints: **the two live defects the
 backend landing created first** — `FS-COORD-ADMIN-GATE`'s `Projects.tsx` gating (an operator gets a
@@ -2125,9 +2130,9 @@ directory. It is `FS-RES-ROUTES-CONVENTION`'s named destination for the same sym
 is already taken. The frontend `CLAUDE.md` line listing where the five OAuth gates live was updated
 too: it said `CloudSync.tsx (×3)`, which after the split points at a file holding one.
 
-### `FS-RES-PROMPTBOOK-GODPAGE`
-**`PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()` sites**
-· S3 · P3 · C3 · sonnet
+### ~~`FS-RES-PROMPTBOOK-GODPAGE`~~ — **landed**
+**`PromptBookViewerPage` is ~1,000 lines with 54 hook calls and 15 hand-placed `noteEdit()` sites**,
+lighting-react `fabaa6d` · S3 · P3 · C3 · sonnet
 `src/routes/PromptBookPage.tsx`
 
 764 lines of hook body before any JSX; anchor CRUD, annotation dialog, region resolution, desync
@@ -2139,6 +2144,27 @@ with two capture handlers — a new edit affordance here silently fails to reset
 `useEditLock`'s shared-slice semantics and transition-only re-arm are pinned by
 `useEditLock.test.tsx` and must hold. `routes/Stage.tsx` has the same shape at smaller scale — same
 treatment when touched.
+
+Landed as six hooks under `lib/promptBook/` (`useCueIndex`, `useCueRunStatus`, `useBookAnchors`,
+`useAnnotationEditor`, `useScriptDocument`, `useCardViewMode`), page down to 655 lines. The boundary
+is the **page root**, not the body: the annotation sheet, the cut confirmation and the anchor picker
+are Radix portals, and React propagates through the React tree, so a root handler covers them while
+a body handler would not. `onInputCapture` joins pointerdown/keydown — the only one that catches a
+value arriving without a keystroke (dictation, an IME commit, dropped text), which is the edit most
+likely to outlast the timer. The whole `onEditInteraction` prop chain went with the call sites.
+
+Grew in the landing: the review found `useRailExpansion` standing up a second expansion model beside
+the shared `useCueExpansion`, and the reconciliation was taken rather than filed. `useCueExpansion`
+now keeps its one rule and hands the operator's slot to the caller — Show's `?cue=` is single by
+contract, the rail wants a set — plus an optional `nextCueId`; `useRailExpansion` is a 25-line
+storage adapter over it and `CueStackPanel` takes the `isExpanded` predicate its two siblings
+already took. One behaviour change falls out and is an improvement: a dismissed live card used to
+spring back open when the operator merely armed a different standby, and now stays shut until the
+playhead leaves it, matching Show. Both arms are pinned (`useCueExpansion.test.tsx`,
+`useRailExpansion.test.tsx`); ShowPage's existing pins pass unchanged.
+
+`routes/Stage.tsx`'s same-shape-at-smaller-scale note is untaken and still stands for whoever
+touches that file.
 
 ### ~~`FS-RES-FIXTUREMODEL-SPLIT`~~ — **landed**
 **`FixtureModel.tsx` mixes a 1,500-line R3F component with pure beam-cookie geometry, forcing its
