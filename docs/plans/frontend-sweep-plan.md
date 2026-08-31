@@ -183,9 +183,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-DOCS-CLAUDEMD-PROVENANCE`~~ **done** | CLAUDE.md's provenance section names `lookId`/`lookName`, replaced by `layerSource` | S4 | P3 | C1 | haiku |
 | ~~`FS-DOCS-OUTOFSCOPE-COMMENT`~~ **done** | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
 | ~~`FS-DOCS-REF-RATIONALE`~~ **done** | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
-| `FS-DUP-CHANNEL-SLIDER` | Four copies of the labelled 0–255 channel slider row | S4 | P3 | C1 | haiku |
+| ~~`FS-DUP-CHANNEL-SLIDER`~~ **done** | Four copies of the labelled 0–255 channel slider row | S4 | P3 | C1 | haiku |
 | `FS-DUP-MARKER-ROW` | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
-| `FS-DUP-MINISTAGE-GEL` | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
+| ~~`FS-DUP-MINISTAGE-GEL`~~ **done** | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
 | `FS-DUP-TARGETKEY` | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
 | ~~`FS-PERF-LAYER-SIGNATURE`~~ **done** | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
 | ~~`FS-PERF-TRANSPORT-ALLOC`~~ **done** | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
@@ -1675,14 +1675,23 @@ small variants in as options. `LegacyProgramRedirect` must keep carrying the sea
 deep links are an external contract), and the legacy `run`/`cues`/`cue-stacks` targets stay
 byte-identical.
 
-### `FS-DUP-CHANNEL-SLIDER`
-**Four copies of the labelled 0–255 channel slider row** · S4 · P3 · C1 · haiku
+### ~~`FS-DUP-CHANNEL-SLIDER`~~ — **landed**
+**Four copies of the labelled 0–255 channel slider row**, `f1ce7c2` · S4 · P3 · C1 · haiku
 `src/components/fixtures/ExtendedChannelSlider.tsx`, `src/components/fx/FxColourListPicker.tsx`,
 `src/components/fixtures/PropertyVisualizers.tsx`, `src/components/fixtures/GroupPropertyVisualizers.tsx`
 
 One shared component exists and one picker imports it; its list sibling redeclares it byte-identical,
 and two more private copies differ only in label styling. Fold to one with the label style as a
 prop; rendered markup must not change (popover widths are tuned to it).
+
+Landed as two components, not one: the two clauses of that fix can't both hold, because the four
+copies are two different DOM shapes. The popover pair stacks a label row above a full-width slider;
+the two `ColourChannelSlider` copies are a horizontal label/slider/value row. One component could
+only span both behind a layout branch no caller ever varies, so "rendered markup must not change"
+settles it. `FxColourListPicker`'s byte-identical copy was deleted in favour of the shared
+`ExtendedChannelSlider`, and the two horizontal copies became a new shared
+`fixtures/ColourChannelSlider` taking `labelClassName` / `labelStyle`, with each caller keeping its
+own metrics constant so both surfaces render exactly as before.
 
 ### `FS-DUP-TARGETKEY`
 **Three spellings of the `type:key` target encoding; the named owner has no users** · S4 · P3 · C1
@@ -1706,9 +1715,9 @@ separator in the phone list and the Prompt Book rail. **Fix**: `ProgramMarkerRow
 renders `MarkerRow`, keeping the grip-column spacer so rows don't shift as the lock flips; the
 unlocked branch (grip, rename, delete) is the genuinely different job and stays.
 
-### `FS-DUP-MINISTAGE-GEL`
-**`MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch** · S4 ·
-P3 · C1 · haiku
+### ~~`FS-DUP-MINISTAGE-GEL`~~ — **landed**
+**`MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch**,
+`833848a` · S4 · P3 · C1 · haiku
 `src/components/cues/MiniStage.tsx`
 
 It re-implements the gel/default tail of `FixtureAppearanceSource` minus the `acceptsGel` gate the
