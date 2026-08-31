@@ -106,7 +106,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-WS-ERROR-ISOLATION`~~ **done** | `notifyEvent` has no per-subscriber error isolation, and the programmer bridge is registe… | S3 | P1 | C1 | sonnet |
 | ~~`FS-ARCH-ALERTDIALOG-DEP`~~ **done** | `@radix-ui/react-alert-dialog` is an undeclared dependency, resolved only by hoisting fro… | S3 | P2 | C1 | haiku |
 | ~~`FS-ARCH-CURSOR-OWNERSHIP`~~ **done** | Two stores own the live-cue/armed-next cursors; several of the resulting copies have no r… | S3 | P2 | C3 | fable |
-| `FS-ARCH-GRID-IN-ROUTES` | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
+| ~~`FS-ARCH-GRID-IN-ROUTES`~~ **done** | `FixturesListContainer` — the shared value grid — lives in a route module a component imp… | S3 | P2 | C2 | sonnet |
 | ~~`FS-ARCH-IMPORT-CYCLE`~~ **done** | The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`,… | S3 | P2 | C1 | sonnet |
 | ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ **done** | Unguarded `localStorage` on the boot path, against the policy the tree states explicitly | S3 | P2 | C1 | haiku |
 | ~~`FS-BUG-CUE-TAG-STALE`~~ **done** | The `Cue` tag has no WS invalidation on any path, so an expanded cue's composed values go… | S3 | P2 | C2 | opus |
@@ -1939,9 +1939,9 @@ absolutely because a repo-relative name resolves against the *linted file's* dir
 restoring the pre-`934025d` cycle and watching the rule report it. `eslint-import-resolver-typescript`
 would read the tsconfig `paths` directly and should replace the shim if it ever needs to do more.
 
-### `FS-ARCH-GRID-IN-ROUTES`
-**`FixturesListContainer` — the shared value grid — lives in a route module a component imports** ·
-S3 · P2 · C2 · sonnet
+### ~~`FS-ARCH-GRID-IN-ROUTES`~~ — **landed**
+**`FixturesListContainer` — the shared value grid — lives in a route module a component imports**,
+`536be5d` (+ `58b4a0a`) · S3 · P2 · C2 · sonnet
 `src/routes/FixturesList.tsx`, `src/components/programmer/ProgrammerGrid.tsx`
 
 The only component→route import in the tree, for the single most-reused grid in the app; four
@@ -1950,6 +1950,11 @@ modules in `components/fixtures-list/` already document themselves against the c
 `components/fixtures-list/`, leaving the route as the thin page. Must be a pure move preserving
 component identity — `useListSelection` clears its Redux scope on unmount and
 `ProgrammerPage.test.tsx` pins `gridMounts`; don't touch the null-scope-vs-Output distinction.
+
+Grew in the landing: the review found `renderToolbar`'s multi-paragraph JSDoc sitting above
+`columnVisibility`'s own one-line JSDoc, so it bound to no declaration and the prop hovered
+undocumented. Pre-existing and carried across verbatim by the byte-identical move, so it was
+reattached in a second, comment-only commit rather than folded into the relocation.
 
 ### ~~`FS-ARCH-LOCALSTORAGE-BOOT`~~ — **landed**
 **Unguarded `localStorage` on the boot path, against the policy the tree states explicitly**,
