@@ -170,7 +170,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DOCS-ELEMENT-KEY-INVARIANT`~~ **done** | `LookRowStore` cites `syntheticFixture.ts` as the record of the element-key invariant; th… | S4 | P2 | C1 | sonnet |
 | ~~`FS-DOCS-SPEEDMASTERS`~~ **done** | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
 | ~~`FS-DOCS-STALE-COMMENTS`~~ **done** | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
-| `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
+| ~~`FS-RES-ROUTES-CONVENTION`~~ **done** | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
 | ~~`FS-RES-RUNNER-DIR`~~ **done** | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
 | ~~`FS-ARCH-SURFACES-PATTERN`~~ **done** | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-MAP-PRUNE`~~ **done** | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
@@ -2072,9 +2072,9 @@ Landed as one commit with `FS-RES-CUECARDEDITOR-DIR` (see the note there). The S
 `ShowView` and `ShowMarkerRow`; `docs/show-mode-engineering.md`'s component map and the frontend
 `CLAUDE.md` moved with them.
 
-### `FS-RES-ROUTES-CONVENTION`
+### ~~`FS-RES-ROUTES-CONVENTION`~~ — **landed**
 **`routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper — the
-convention is real but undocumented, with three genuine strays** · S4 · P2 · C2 · sonnet
+convention is real but undocumented, with three genuine strays**, `bedd77d` · S4 · P2 · C2 · sonnet
 `src/routes/Riggings.tsx`, `src/routes/StageRegions.tsx`, `src/routes/RunPage.tsx`,
 `src/routes/CloudSync.tsx`, `src/routes/ProgrammerPage.tsx`
 
@@ -2089,6 +2089,14 @@ move the two tab bodies to `components/`, `formatRepoUrl` to `lib/` (**already d
 with `FS-RES-CLOUDSYNC-SPLIT`, `68007b3`), collect the legacy redirects
 into one `routes/legacyRedirects.tsx` (absorbing `RunPage.tsx`), and write the convention down.
 Every URL and redirect target stays byte-identical — `?cue=` deep links are an external contract.
+
+Grew in the landing: `CuesLegacyRedirect` (`/cues*` → `/show`) moved into `legacyRedirects.tsx`
+too, though the item did not name it. It is the same shape as the three that were named — a
+retired path with no module of its own — and leaving it in `ShowPage.tsx` would have meant writing
+the convention with an exception to itself. The rule as written down is now: a redirect that
+*resolves* a live resource stays with that resource's module; a redirect for a path that no longer
+names a view goes in `legacyRedirects.tsx`. The convention landed in the frontend `CLAUDE.md` under
+"Components", with `docs/show-mode-engineering.md`'s component table updated to match.
 
 ### ~~`FS-RES-CLOUDSYNC-SPLIT`~~ — **landed**
 **`routes/CloudSync.tsx` is a 1,306-line module holding two routes and twenty components — beside
