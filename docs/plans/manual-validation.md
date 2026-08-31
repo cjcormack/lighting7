@@ -11,6 +11,9 @@ as a one-line row.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
+| [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running effect, second-tab agreement | Desk simplification S2a, 2026-08-23 |
+| [`FU-MANUAL-DESK-S2B`](#fu-manual-desk-s2b) | the Run/Show merge's edit lock protects a running show, and off-playhead browsing is safe | Desk simplification S2b, 2026-08-23 |
+| [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) | one template resolves per head across three colour types, two tilt ranges and a white/amber policy | Desk simplification S3, 2026-08-23 |
 | [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour) | a running effect follows the template its parameter names | Palette removal, 2026-08-24 |
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
@@ -90,6 +93,93 @@ trapped a floating layer — every tooltip and popover inside a cue card should 
 
 **If anything here fails**, promote it to a `FU-` item in [`followups.md`](followups.md) rather than
 fixing inline — Session 2 is already the largest of the three.
+
+## `FU-MANUAL-DESK-S2A`
+
+**The programmer stack, composing on a rig** · from desk simplification Session 2a, 2026-08-23
+
+Session 2a shipped on browser verification alone, and had two defects that a green suite called
+working. The looks-and-layers arc before it found two more on a desk that no test had — a
+provenance branch that never named the winning layer, and a layer frame that reached only the
+acting tab. Both are in exactly this area, so assume the pattern holds.
+
+**The composing pass.** Build three Looks and an effect inside one session. Retune a Look mid-scene
+and watch the stage. Drag a layer while its effect is running and confirm the phase survives the
+reorder. Record values *and* effects into one Look, then confirm a second tab sees the stack change
+— and that the scope falls back when the focused layer goes away.
+
+**The two only a rig can answer.**
+
+1. **Is the layer-scope save cadence tolerable?** It is roughly two writes a second, so the rig
+   **steps** rather than glides under a drag. If it is not tolerable, the answer is a bound-row
+   preview channel, not a faster `PUT` — `LookPreviewRequest` is deferred-only, so it cannot carry
+   this.
+2. **Does landing in Local rather than on the cook read right at the desk?** Only an operator at
+   the desk can judge where a busked value should appear.
+
+Anything that fails becomes a `FU-` item in [`followups.md`](followups.md) rather than an inline
+fix.
+
+## `FU-MANUAL-DESK-S2B`
+
+**The Run/Show merge and its edit lock** · from desk simplification Session 2b, 2026-08-23
+
+2b is the half that can hurt a running show: it folded Run into Show behind an edit lock, which
+moved show-critical playback into an authoring change. What made that acceptable is that the lock
+is a pre-existing, proven mechanism rather than something invented here — this check is where that
+claim gets tested on a rig.
+
+**With the show running.** Try to drag a cue and fail. Press `L`, edit, press GO, and confirm it
+re-locked itself. Leave it unlocked and idle, and watch the countdown re-lock it. Confirm Blind
+appears beside DBO **only** while unlocked, and that it actually gates the rig.
+
+**With the show stopped.** Confirm it is simply editable, with no lock chrome anywhere.
+
+**On a phone.** Confirm it is locked and cannot be unlocked.
+
+**The two-cursor rule.** Switch stacks from the tab strip while a cue fades. The fade must animate
+*and* the marker must not jitter. This is the one that will be got wrong.
+
+**The browse/arm split.** Browse to a sibling stack and confirm **GO still fires the live one** —
+that guarantee is what makes off-playhead browsing safe at all. Then press *Make this stack live*
+with a cue on stage: it must ask first, and the blip it warns about (`go-to` fires the target's
+first cue before the desk darkens it) is worth watching for, since only a rig can show it.
+
+The `cueEdit` check this list originally carried is retired: there is no client-side session to
+open. That is a structural guarantee now rather than a behavioural one — the arm and its API module
+are deleted.
+
+## `FU-MANUAL-DESK-S3`
+
+**Templates resolving per head** · from desk simplification Session 3, 2026-08-23
+
+Session 3 removed the fixture type from a template and made resolution per head. That is the
+conceptually interesting part of the desk-simplification arc and also where its cost is: the
+resolution has to be right in the engine *and* visible in the editor, or it is worse than the
+constraint it replaced. Almost all of that is only answerable on a rig, which is why this session
+has more checks than the others.
+
+1. **One colour template across three colour types at once** — an RGBWA hex, a white-only head and
+   the MAC 250's colour *wheel* — and each should read as the same colour. The wheel is the one to
+   judge by eye: the editor's ΔE says how close the desk believes it got, and only the rig says
+   whether that belief is right. A bad annotation lands as
+   [`FU-TMPL-WHEEL-PREVIEWS`](followups.md#fu-tmpl-wheel-previews).
+2. **Retune it and watch every tracking layer move**, in a cue and in the programmer's own stack.
+   That is `republishForTemplateEdit`, and it is the touring feature.
+3. **The two gestures are visibly different.** Click, then retune — the busked values must *not*
+   move. ⌥click, then retune — they must.
+4. **A position template in degrees across two ranges.** The Shehds tilts 0–270°, the MAC 250
+   0–257°: the same degrees must land on different DMX, and a clamp must be reported in the panel
+   *and* true on stage.
+5. **The white/amber policy on a head that has both.** Extract should look brighter and cleaner
+   than RGB-only at the same hue, which is the whole claim.
+6. **A beam template says out loud that it cannot carry a gobo** — the disabled rows with their
+   reasons, rather than the property simply being absent.
+7. **New from selection**, first on heads that agree, then on heads that differ: the first must come
+   out *Generic*, the second *Per fixture*, and the toast says which.
+
+New routes, classes or fields need a **restart** — the backend hot-swaps changed handler bodies but
+not new surface area, and the desk may be driving a live rig. Ask the operator first.
 
 ## `FU-MANUAL-RUN-STATE-TWO-SESSIONS`
 

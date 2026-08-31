@@ -20,7 +20,7 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * *bound*, which is exactly a recorded Look's shape. `hasDeferredRows` could therefore never
  * separate the two, and the design's "one backend table, two front doors" does not survive contact
  * with the most useful kind of template there is. See
- * `docs/plans/desk-simplification-plan.md` §Session 3.
+ * `docs/plans/completed/desk-simplification-plan.md` §Session 3.
  *
  * What a template deliberately does **not** have, each for its own reason:
  *

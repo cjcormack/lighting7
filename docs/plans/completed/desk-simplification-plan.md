@@ -1,8 +1,11 @@
 # Desk simplification — the Programmer as a place, Templates as a thing
 
-> **Document status: ALL SESSIONS BUILT (2026-08-23).** Four sessions — Session 2 split, as §8
-> anticipated. **1, 2a, 2b and 3 have all shipped.** No session has had a desk pass; §7 is the
-> outstanding list.
+> **Document status: RETIRED 2026-08-31 — all sessions built and shipped (2026-08-23).** Four
+> sessions; Session 2 split, as §8 anticipated. **1, 2a, 2b and 3 have all shipped.** §6's
+> follow-ups all reached [`followups.md`](../followups.md), and §7's desk passes — none of which had
+> been done — were promoted on retirement to [`manual-validation.md`](../manual-validation.md) as
+> `FU-MANUAL-DESK-S1`, `-S2A`, `-S2B` and `-S3`. Nothing here is outstanding; read it for the
+> reasoning behind a change, not as a work queue.
 >
 > **Amended 2026-08-23 (fourth amendment) — 3 is built, and it took the entity split §Session 3
 > declined.** `desk-simplification-design/TwoThings` argues "one backend table, two front doors —
@@ -60,7 +63,7 @@
 >
 > **Nothing here has left the dev environment.** No migrations, no rollback shims, no
 > compatibility windows — data shapes change freely and hard, the same call
-> [looks-and-layers-plan.md](completed/looks-and-layers-plan.md) made for the same reason. If a
+> [looks-and-layers-plan.md](looks-and-layers-plan.md) made for the same reason. If a
 > session finds itself writing a migration, it has misread this line.
 >
 > This plan is deliberately written as **outcomes**, not implementations. It says what the operator
@@ -68,7 +71,7 @@
 > is to stop a wrong turn, not to prescribe a design.
 >
 > Supersedes the "programmer surfaces" half of
-> [programmer-redesign-proposal.md](completed/programmer-redesign-proposal.md) and the §Navigation
+> [programmer-redesign-proposal.md](programmer-redesign-proposal.md) and the §Navigation
 > Registry note in `lighting-react`'s `CLAUDE.md` about there being no `programmer` nav entry.
 >
 > **Amended 2026-08-23 (third amendment) — 2b is built.** The Run/Show merge landed: `/run` is a
@@ -184,8 +187,8 @@
 >    Run and transport sections are what 2b rewrites wholesale, and correcting them now would mean
 >    writing them twice.
 >
-> Two follow-ups came out of 2a: [`FU-FE-CUEGRID-PER-CELL-LAYER`](followups.md#fu-fe-cuegrid-per-cell-layer)
-> and [`FU-PROG-FOCUS-PREVIEW-LAYER`](followups.md#fu-prog-focus-preview-layer).
+> Two follow-ups came out of 2a: [`FU-FE-CUEGRID-PER-CELL-LAYER`](../followups.md#fu-fe-cuegrid-per-cell-layer)
+> and [`FU-PROG-FOCUS-PREVIEW-LAYER`](../followups.md#fu-prog-focus-preview-layer).
 >
 > **2a has not had a desk pass.** It was verified in a browser. The three checks that need a rig are
 > in §7: phase survival on a layer drag while a chase runs, whether the layer-scope save cadence is
@@ -272,7 +275,7 @@ of which it already has. *(design: `AddEffect`.)*
 
 **D8 — Templates never nest inside a Look.** A Look built from templates flattens their values at
 Record time. Templates are entries in a *stack*, and a Look is not a stack. This is what keeps
-[`FU-LOOK-NESTED`](followups.md#fu-look-nested) closed; do not generalise past it.
+[`FU-LOOK-NESTED`](../followups.md#fu-look-nested) closed; do not generalise past it.
 
 **D9 — Manual cue and Look creation go away.** No "Add Cue", no "New Look". Cues and Looks are
 recorded from the programmer or promoted from a selection. Separators, stacks and templates keep
@@ -286,7 +289,7 @@ hand.)* A second device is a **second window onto one desk, not a second seat**:
 elsewhere sees exactly what the desk sees and can edit it. Concurrent authorship is not a scenario
 this desk designs for, so there is no merge rule to invent and no per-user store — the rig shows one
 value per property because DMX has one byte per channel, and "whose?" is a question worth never
-having to answer. [`FU-PROG-PER-USER`](followups.md#fu-prog-per-user) is Rejected, with the two
+having to answer. [`FU-PROG-PER-USER`](../followups.md#fu-prog-per-user) is Rejected, with the two
 places its cost estimate was wrong recorded there.
 
 **D11 — Run and Show are one view, separated by a lock rather than a route.** *(Taken 2026-08-23,
@@ -628,9 +631,9 @@ colour, resolved per head, with the resolution visible before you save.
 - **The value grid disappears from the template editor.** Removing the fixture type removes the thing
   the grid was built out of; do not try to keep both.
 
-**Non-goals.** No per-property blend ([`FU-LOOK-PERPROP-BLEND`](followups.md#fu-look-perprop-blend)).
+**Non-goals.** No per-property blend ([`FU-LOOK-PERPROP-BLEND`](../followups.md#fu-look-perprop-blend)).
 No positional-list conversion
-([`FU-PAL-POSITIONAL-CONVERSION`](followups.md#fu-pal-positional-conversion)) — for this session.
+([`FU-PAL-POSITIONAL-CONVERSION`](../followups.md#fu-pal-positional-conversion)) — for this session.
 "Palette" continued to mean exactly one thing here (the positional ordered colour list FX parameters
 index as `P1`/`P2`) and then, in the follow-on change, stopped meaning anything: that list was
 **deleted**, and an effect parameter now names a colour template (`tmpl:{uuid}`) instead. The
@@ -652,7 +655,7 @@ finish all three families.
 - **Per-user programmers — decided, not deferred.** This entry used to ask for a decision before
   Session 2. It was taken on 2026-08-23: **the programmer stays one shared state**, and that is the
   design rather than a tradeoff. See D12, and
-  [`FU-PROG-PER-USER`](followups.md#fu-prog-per-user), now a Rejected decision record.
+  [`FU-PROG-PER-USER`](../followups.md#fu-prog-per-user), now a Rejected decision record.
 - ~~**Run and Prompt Book *layouts*.**~~ **Superseded for Run** — the merge is now Session 2's, and
   the reasoning that put it here has inverted. This entry argued that redesigning a Run card "would
   put show-critical layout in the same change as an authoring rework". True, and unavoidable: Session
@@ -670,10 +673,10 @@ finish all three families.
 
 ## 6. Follow-ups to record
 
-- [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) (Ready) collides with the scoped grid:
+- [`FU-LOOK-ELEMENT-ROWS`](../followups.md#fu-look-element-rows) (Ready) collides with the scoped grid:
   a Look's element rows compose nowhere, so per-head rows in a focused layer will render as empty.
   Either pick it up inside Session 2 or state in the UI that element rows are not composed.
-- ~~[`FU-CUE-APPLYDATA-ONE-BUILDER`](followups.md#fu-cue-applydata-one-builder)~~ — landed inside
+- ~~[`FU-CUE-APPLYDATA-ONE-BUILDER`](../followups.md#fu-cue-applydata-one-builder)~~ — landed inside
   backend sweep item C5, `ab8c791`; there is one builder now.
 - New, from Session 2: the shared-Look edit guard needs a **usage count** at the point of edit. If
   that is not already cheap to ask for, log it rather than fetching a Look's full detail per keystroke.
@@ -700,8 +703,16 @@ found two bugs on a desk that no test had, both in exactly this area (a provenan
 named the winning layer, and a layer frame that reached only the acting tab). Assume that pattern
 holds.
 
-Per session, on a live desk. **Neither S1's nor S2a's desk pass has been done** — both shipped on
+Per session, on a live desk. **No session's desk pass has been done** — every one shipped on
 browser verification alone, and 2a specifically had two defects that a green suite called working.
+
+**These four lists now live in [`manual-validation.md`](../manual-validation.md)** as
+[`FU-MANUAL-DESK-S1`](../manual-validation.md#fu-manual-desk-s1),
+[`-S2A`](../manual-validation.md#fu-manual-desk-s2a),
+[`-S2B`](../manual-validation.md#fu-manual-desk-s2b) and
+[`-S3`](../manual-validation.md#fu-manual-desk-s3), which is where an operator will look for them.
+What follows is the original text, kept for its reasoning; the copies over there are the ones to
+work from.
 
 1. **S1** — busk, read the source strip, drag-select a block, Record. Resize to 380px and confirm
    every master is still reachable.

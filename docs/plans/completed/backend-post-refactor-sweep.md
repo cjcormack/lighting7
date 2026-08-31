@@ -1,6 +1,12 @@
 # Backend post-refactor architectural sweep — findings and cleanup plan
 
-> **Document status: BACKLOG, ALL WAVES (0–6) COMPLETE.** This is the output of the
+> **Document status: RETIRED 2026-08-31 — all waves (0–6) complete.** Every lettered item is
+> struck through: 60 landed, and C9 + C10 (the two never scheduled into a wave) were promoted on
+> retirement to [`FU-FX-TICKFLOW-UNUSED`](../followups.md#fu-fx-tickflow-unused) and
+> [`FU-PERF-FXSCRIPT-CACHE-BOUND`](../followups.md#fu-perf-fxscript-cache-bound). Nothing here is
+> outstanding; read it for the reasoning behind a change, not as a work queue.
+>
+> This is the output of the
 > post-refactor architectural sweep: a categorized backlog for later fix agents, organised into
 > execution waves. Items cite file:line as of `b5067e5`; expect drift as waves land. A matching
 > frontend sweep happens separately — the "Frontend-coordination register" at the bottom is its
@@ -359,13 +365,18 @@ means updating a live instance's parameters in place, which is a feature rather 
 its hashing was memoised. Measured on a new sixth `FxEngineBenchmark` scenario — none of the five
 reaches `CueComposer`, so there was no before/after without it.
 
-**C9. `MasterClock.tickFlow` emits to nobody** — low / P2 / S / sonnet
+~~**C9. `MasterClock.tickFlow` emits to nobody**~~ — **promoted, 2026-08-31**, to
+[`FU-FX-TICKFLOW-UNUSED`](../followups.md#fu-fx-tickflow-unused). low / P2 / S / sonnet
 `MasterClock.kt:202`: production is driven by `onTick`/wake channel; only tests collect the flow.
-**Fix:** delete or gate on subscriber count; fix the `docs/fx-engineering.md:31` diagram.
+**Fix:** delete or gate on subscriber count; fix the `docs/fx-engineering.md:31` diagram. The
+documentation half landed with the H wave; the code half was never scheduled into a wave, so it
+retires as a follow-up rather than as done.
 
-**C10. `FxScriptCompiler` cache grows unboundedly** — medium / P2 / S / sonnet
+~~**C10. `FxScriptCompiler` cache grows unboundedly**~~ — **promoted, 2026-08-31**, to
+[`FU-PERF-FXSCRIPT-CACHE-BOUND`](../followups.md#fu-perf-fxscript-cache-bound). medium / P2 / S / sonnet
 `FxScriptCompiler.kt:30,51`: one entry (with classloader) per compiled content hash, never evicted.
-**Fix:** LRU bound.
+**Fix:** LRU bound. Never scheduled into a wave — the cache became process-wide after this was
+written, which sharpened both the argument for it and the constraint on the fix.
 
 ## D — Dead code and retirements
 

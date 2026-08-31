@@ -49,7 +49,7 @@ import kotlin.test.Test
  *    [CueComposer] rather than [FxEngine]: the cook runs per stack mutation and per cue GO,
  *    which no tick-path rig reaches. Like scenario 5 it reports both shapes in one run.
  *
- * See `docs/plans/backend-post-refactor-sweep.md` §C. Scenarios 2-4 exist because the
+ * See `docs/plans/completed/backend-post-refactor-sweep.md` §C. Scenarios 2-4 exist because the
  * original rig touches none of those paths: measuring a C-wave "before" on scenario 1 alone
  * would be measuring code the fix does not run.
  *

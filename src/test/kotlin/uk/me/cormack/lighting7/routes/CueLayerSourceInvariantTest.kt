@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * Regression tests for B7 (`docs/plans/backend-post-refactor-sweep.md`): the
+ * Regression tests for B7 (`docs/plans/completed/backend-post-refactor-sweep.md`): the
  * `DaoCueLayers.look`/`template` exactly-one invariant used to be enforced three ways with three
  * behaviours, and a *fourth* path wrote violations of it.
  *

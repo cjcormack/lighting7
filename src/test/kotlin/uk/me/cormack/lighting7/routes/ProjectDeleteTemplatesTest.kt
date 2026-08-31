@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 /**
- * Regression test for A1 (`docs/plans/backend-post-refactor-sweep.md`): `DELETE /project/{id}`
+ * Regression test for A1 (`docs/plans/completed/backend-post-refactor-sweep.md`): `DELETE /project/{id}`
  * had no teardown loop for `templates`, so a project holding one could never be deleted —
  * `templates.project_id` has no `ON DELETE` cascade and `project.delete()` would fail.
  */

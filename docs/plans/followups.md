@@ -22,22 +22,28 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
 | [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
+| [`FU-FX-TICKFLOW-UNUSED`](#fu-fx-tickflow-unused) | Ready | Perf | — |
+| [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Rejected | FE | decision record — no surface hosts it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
 | [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
 | [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
+| [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
+| [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
+| [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
+| [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
@@ -151,6 +157,53 @@ dropped tail then misses on the tick, so the cap is a trade rather than a fix.
 The operator-visible symptom to watch for is in `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
 ---
+
+### `FU-FX-TICKFLOW-UNUSED`
+
+**`MasterClock.tickFlow` emits to nobody** · Ready · backend post-refactor sweep C9, 2026-08-24
+
+`MasterClock` publishes every tick twice: `currentTick` (a `@Volatile` field the `SpeedMasterBank`
+samples once per engine pass, so that one pass sees one coherent frame) and `_tickFlow.tryEmit(tick)`
+at `MasterClock.kt:204`. Production drives off `onTick` / the wake channel and reads `currentTick`;
+the only collectors of `tickFlow` anywhere are in `SpeedMasterBankTest`. A `beatFlow` alongside it
+was already removed when the `beatSync` push was retired.
+
+It costs almost nothing — `tryEmit` to zero subscribers returns immediately — so this is hygiene,
+not performance. The reason to close it is that a public `SharedFlow` on the clock invites a future
+consumer to collect it and silently inherit its drop semantics: `extraBufferCapacity = 1`, so the
+stream is strictly increasing but *not* gap-free, which `SpeedMasterBankTest` pins and a new caller
+would not expect.
+
+**Fix**: delete it and rewrite those two tests against `currentTick` plus `onTick`, or keep it and
+gate the emit on `subscriptionCount`. C9's documentation half is already done —
+`docs/fx-engineering.md`'s MasterClock table states the truth today — so whichever way this goes,
+that row changes with it.
+
+### `FU-PERF-FXSCRIPT-CACHE-BOUND`
+
+**`FxScriptCompiler`'s process-wide cache is never evicted** · Trigger · backend post-refactor
+sweep C10, 2026-08-24
+
+`FxScriptCompiler.cache` is a `ConcurrentHashMap<String, CompiledFxScript>` keyed on effect mode +
+script body, deliberately shared for the **process** rather than per `Show`. That sharing is
+load-bearing and its KDoc explains why: a `Show` is built per project switch (and, in the test
+suite, per test), and a per-instance cache made every one of those re-evaluate all 28 built-in
+`.fx.kts` effects — 28 jar loads, 28 classloaders and ~70 ms to arrive at lambdas byte-identical to
+the previous `Show`'s.
+
+Nothing evicts from it. Each entry carries a compiled script and its classloader, and *failures* are
+cached too — also deliberately, because the common case for a failing compile is a user hitting
+"Test" on a broken FX definition repeatedly, and each miss runs the whole Kotlin compiler inside
+`runBlocking` on a request thread. So a long FX-authoring session accumulates one entry, with a
+classloader, per distinct edit, on a process that is meant to stay up for a show. In normal
+operation the key set is small and fixed, which is why this was never scheduled into a sweep wave.
+
+**Fix**: an LRU bound. A plain size cap is not quite enough — evicting the built-ins would undo the
+sharing argument above — so either pin the `FxFileLoader` entries or set the bound well above the
+built-in count.
+
+**Trigger**: metaspace or classloader count that tracks FX-*editing* activity rather than show size.
+Metaspace is the one to watch, not heap.
 
 ## Frontend polish
 
@@ -368,6 +421,26 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 ---
 
+### `FU-API-FORCE-FIELDS`
+
+**`force` survives inert on the Record and Update request bodies** · Ready · frontend sweep §14
+`FS-BE-FORCE-FIELDS`, 2026-08-29
+
+`ProgrammerRecordRequest.force` (`routes/programmerRoutes.kt:85`) and
+`ProgrammerUpdateRequest.force` (`:297`) are read by nothing. Backend sweep item D1 retired the
+`cueEdit.*` family, so there is no session to record underneath and no conflict for a force to
+override. They were kept only because `RecordSheet` and `UpdateDialog` sent the field on *every*
+submit rather than only on a conflict retry, and the route's `Json` is strict about unknown keys —
+so deleting it server-side would have 400'd every Record until the frontend caught up.
+
+**That ordering constraint is spent.** `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react
+`62b64eb`, and no client sends `force` on either body today. Both fields and both KDoc blocks
+explaining their survival can go whenever wanted; nothing 400s either way now.
+
+This is only the two *programmer* fields. The `force` on the template, Look and speed-master DELETE
+routes is the live `?force=true` guard-override convention from
+[`../api-conventions.md`](../api-conventions.md) and must stay.
+
 ### `FU-LOOK-PERPROP-BLEND`
 
 **Per-property blend override within a layer** · Trigger · Looks-and-layers §3.4, cut as
@@ -460,6 +533,31 @@ Judge granularity only after that has been used on a rig — the Layer 3/4 bound
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
+
+### `FU-LOOK-COMPAT-ROW-COVERAGE`
+
+**Look compatibility ignores rows, so a rows-only Look is compatible with everything** · Trigger ·
+frontend sweep §14 `FS-BE-COMPATIBLEIDS`, 2026-08-29
+
+`compatibleIdsFor` (`routes/lightFixtures.kt`) filters a Look against a target by its *inferred
+effect capabilities* only. A Look holding no effects has an empty capability set, `all {}` over it
+is vacuously true, and the Look is therefore reported compatible with every fixture and group in
+the rig — so `LookTogglePicker` offers pads that assert nothing about the head under them.
+
+`FixtureDetails.compatibleLookIds`'s KDoc says this deliberately ("a Look holding no effect is
+compatible with everything"), on the grounds that a Look's *rows* name their own targets so the only
+open question is its effects. That is defensible for a Look whose rows happen to cover the target
+and wrong for one whose rows cover nothing near it.
+
+**The decision to take** is whether compatibility should also require row coverage — and if so,
+whether that means "covers at least one of the target's fixtures" or "covers all of them". Row
+coverage is per fixture, so the group case needs its own answer.
+
+`FS-DOCS-COMPATIBLELOOKIDS` landed (`0bcda19`) by documenting the hole rather than claiming it
+closed, which is why nothing is blocked on this; it is only still true.
+
+**Trigger**: an operator presses a Look pad the picker offered and nothing on the selected head
+moves.
 
 ### `FU-TMPL-VIRTUAL-DIMMER`
 

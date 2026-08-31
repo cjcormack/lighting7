@@ -151,7 +151,7 @@ class ProjectImporterReplaceTest {
 
     @Test
     fun `replace does not duplicate or orphan templates`() {
-        // A1 regression (docs/plans/backend-post-refactor-sweep.md): replaceFromWorkingTree had no
+        // A1 regression (docs/plans/completed/backend-post-refactor-sweep.md): replaceFromWorkingTree had no
         // teardown loop for templates, so re-import re-inserted the JSON templates onto the
         // untouched survivors and tripped uniqueIndex(project, name).
         val projectId = seedRichProject(state)

@@ -1,7 +1,13 @@
 # Frontend sweep — what the refactors left behind
 
-> **Document status: findings catalogue, reconciled against the completed backend sweep
-> (2026-08-29); awaiting triage.** Produced 2026-08-24 by a two-round
+> **Document status: RETIRED 2026-08-31 — all 124 findings landed** (one,
+> `FS-RES-STRAY-CAPTURES`, refuted at HEAD rather than fixed), including all eleven `FS-COORD-*`
+> backend-seam items. The two `FS-BE-*` backend halves §14 left owed were promoted on retirement to
+> [`FU-LOOK-COMPAT-ROW-COVERAGE`](../followups.md#fu-look-compat-row-coverage) and
+> [`FU-API-FORCE-FIELDS`](../followups.md#fu-api-force-fields). Nothing here is outstanding; read it
+> for the reasoning behind a change, not as a work queue.
+>
+> Produced 2026-08-24 by a two-round
 > multi-agent sweep of `lighting-react` (31 reviewer/verifier agents: nine audit dimensions plus a
 > completeness critic, then five gap dimensions the critic identified; every finding adversarially
 > verified against the code, S1s twice independently, and the S1/S2 band re-read by hand). Scope is
@@ -552,7 +558,7 @@ grid was inert was incoherent. The review also found the grid's `pointer-events-
 mouse-only (the cell triggers are tabbable, so Tab-then-Enter walked past it), that the three
 WS-backed RTK mutations (`parkChannel`, `unparkChannel`, `updateChannel`) fabricated success for a
 frame that never left the browser, and that MIDI Learn spun forever on a dropped `beginLearn`.
-`FU-MANUAL-WS-SEND-DROPPED` in [`manual-validation.md`](manual-validation.md) carries the rig check,
+`FU-MANUAL-WS-SEND-DROPPED` in [`manual-validation.md`](../manual-validation.md) carries the rig check,
 including the one thing no test covers: that nothing queued fires on reconnect.
 
 ### ~~`FS-BUG-3D-PLACEHOLDER`~~ — **landed**
@@ -2891,19 +2897,23 @@ Five of the seven are settled:
   than echoing the request's, which is what it needed to be able to disagree at all; the request
   field survives as the caller's advisory belief.
 
-Still owed — neither now blocks a frontend item, both are the desk owner's call:
+Both remaining ones were **promoted on retirement (2026-08-31)**, which is what this section asked
+for — neither blocks a frontend item, and both are now pickable from `followups.md`:
 
-- `FS-BE-COMPATIBLEIDS` — `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
+- ~~`FS-BE-COMPATIBLEIDS`~~ — promoted to
+  [`FU-LOOK-COMPAT-ROW-COVERAGE`](../followups.md#fu-look-compat-row-coverage) (Trigger).
+  `compatibleIdsFor` (`routes/lightFixtures.kt`) filters on inferred effect
   capabilities only, so a rows-only Look (empty capability set) is reported compatible with every
   target and `LookTogglePicker` offers pads that assert nothing. Decide whether compatibility should
   also require row coverage. `FS-DOCS-COMPATIBLELOOKIDS` landed without it (`0bcda19`) by
   documenting the hole rather than claiming it closed, as that item required — so this is no longer
   blocking anything, only still true.
-- `FS-BE-FORCE-FIELDS` *(new)* — **now unblocked.** `force` survives on the Record and Update
-  request bodies, inert, solely because this repo used to send it on every submit (backend D1
-  note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client sends it and
-  the two fields can be deleted server-side whenever the desk owner wants them gone. The ordering
-  constraint is spent; nothing 400s either way now.
+- ~~`FS-BE-FORCE-FIELDS`~~ *(new)* — promoted to
+  [`FU-API-FORCE-FIELDS`](../followups.md#fu-api-force-fields) (Ready). `force` survives on the Record
+  and Update request bodies, inert, solely because this repo used to send it on every submit
+  (backend D1 note 1). `FS-COORD-CUEEDIT-RETIRE` landed as lighting-react `62b64eb`, so no client
+  sends it and the two fields can be deleted server-side whenever the desk owner wants them gone.
+  The ordering constraint is spent; nothing 400s either way now.
 
 And one remark, not an item: `programmerRecord.kt`'s rename-breadcrumb KDoc pattern ("Was
 `timedPresetApplications`", still there at `:61-64`) is what let `FS-BUG-TIMEDLAYERS-RENAME` be
