@@ -120,8 +120,8 @@ halves still owed are listed in §14 only.
 | ~~`FS-DEAD-EXPORTS`~~ **done** | Sixteen exported symbols with zero references anywhere | S3 | P2 | C1 | haiku |
 | ~~`FS-DEAD-ORPHAN-FILES`~~ **done** | Six files unreachable from `main.tsx` (and from any test) | S3 | P2 | C1 | haiku |
 | `FS-DEAD-RTKQ-HOOKS` | Fourteen exported RTK Query hooks with zero importers; three FX-definition endpoints full… | S3 | P2 | C2 | sonnet |
-| `FS-DUP-COLOUR-POPOVER` | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
-| `FS-DUP-EFFECT-COMPAT` | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
+| ~~`FS-DUP-COLOUR-POPOVER`~~ **done** | `FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body | S3 | P2 | C2 | sonnet |
+| ~~`FS-DUP-EFFECT-COMPAT`~~ **done** | Effect compatibility and sentinel-property resolution implemented twice | S3 | P2 | C2 | sonnet |
 | ~~`FS-DUP-OVERVIEW-TOGGLES`~~ **done** | Four near-identical Overview toggles plus three alias hooks for one persistent toggle | S3 | P2 | C1 | haiku |
 | ~~`FS-DUP-REDIRECTS`~~ **done** | Seventeen byte-identical "redirect to the current project's equivalent" components | S3 | P2 | C1 | haiku |
 | ~~`FS-DUP-ROW-SUBSCRIPTION`~~ **done** | `useRowOwnership` and `useLocalRowValues` duplicate the whole per-row programmer subscrip… | S3 | P2 | C2 | sonnet |
@@ -135,7 +135,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-RES-CUECARDEDITOR-DIR`~~ **done** | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PALETTERESULT`~~ **done** | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PRESETPICKER`~~ **done** | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
-| `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
+| ~~`FS-TEST-COLOUR-TEMPLATES`~~ **done** | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
 | ~~`FS-TEST-CUEUTILS-TRIGGERS`~~ **done** | `cueUtils.test.ts` pins fourteen layer fields (CLAUDE.md says thirteen) and none of the t… | S3 | P2 | C1 | haiku |
 | ~~`FS-TEST-EDITOR-PINS`~~ **done** | The documented cross-type poisoning landmine is safe by construction today — and nothing… | S3 | P2 | C2 | sonnet |
 | ~~`FS-TEST-PROGRAMMER-SCOPE`~~ **done** | `focusLayer`'s membership guard and the removed-layer fallback are unpinned | S3 | P2 | C1 | sonnet |
@@ -147,7 +147,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-TYPES-PALETTE-WIRE-ARMS`~~ **done** | Retired palette wire arms kept alive by "still on the wire" claims that are now false | S3 | P2 | C2 | sonnet |
 | ~~`FS-TYPES-PRESETCOUNT-RENAME`~~ **done** | `CueStackCueEntry.presetCount` mirrors a field renamed to `layerCount` — confirmed gone s… | S3 | P2 | C1 | haiku |
 | ~~`FS-TYPES-RIGGING-POSITION`~~ **done** | `FixturePatch.riggingPosition` is a phantom; the StageMarker badge it drives can never re… | S3 | P2 | C2 | sonnet |
-| `FS-ARCH-BUSKING-GOD-HOOK` | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
+| ~~`FS-ARCH-BUSKING-GOD-HOOK`~~ **done** | `useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and fou… | S3 | P3 | C2 | sonnet |
 | `FS-BUG-3D-PLACEHOLDER` | The imperative 3D colour copy has no placeholder arm — an unmatched patch draws as a full… | S3 | P3 | C1 | sonnet |
 | ~~`FS-DEAD-DTO-FIELDS`~~ **done** | Wire-mirror fields never read by the client, several naming retired concepts | S3 | P3 | C2 | sonnet |
 | ~~`FS-DEAD-WS-METHODS`~~ **done** | Six WS API methods declared, implemented, never called | S3 | P3 | C2 | sonnet |
@@ -1666,8 +1666,9 @@ virtualised). **Fix**: extract one hook owning subscription mechanics; consumers
 aggregation on top. Land the S1 fix through this extraction. Preserve: `useRowOwnership`'s public
 shape, empty-cells-means-off, Local's `entry.owner !== 'layers'` predicate, the per-key split.
 
-### `FS-DUP-EFFECT-COMPAT`
-**Effect compatibility and sentinel-property resolution implemented twice** · S3 · P2 · C2 · sonnet
+### ~~`FS-DUP-EFFECT-COMPAT`~~ — **landed**
+**Effect compatibility and sentinel-property resolution implemented twice**,
+lighting-react `bd1baf0` · S3 · P2 · C2 · sonnet
 `src/components/fx/AddEditFxSheet.tsx`, `src/components/busking/useBuskingState.ts`
 
 `allPropertyNames` (with the `'setting'`/`'slider'` sentinels and the dimmer/uv exclusion
@@ -1691,9 +1692,9 @@ inconsistency (Stage: hand-rolled SVG in the toolbar, lucide `Theater` in the pa
 the three `usePersistentToggle` alias hooks; keep the effects panel's lock + tooltip; pick one Stage
 icon. Part of the Layout cluster (§4).
 
-### `FS-DUP-COLOUR-POPOVER`
-**`FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body** · S3 · P2 ·
-C2 · sonnet
+### ~~`FS-DUP-COLOUR-POPOVER`~~ — **landed**
+**`FxColourPicker` and `FxColourListPicker` duplicate the whole colour-popover body**,
+lighting-react `282ead8` · S3 · P2 · C2 · sonnet
 `src/components/fx/FxColourPicker.tsx`, `src/components/fx/FxColourListPicker.tsx`
 
 Same five blocks in the same order (HexColorPicker, hex input with the same commit guard, swatch
@@ -1702,6 +1703,14 @@ effect. Only dnd-kit ordering and list serialisation are genuinely list-specific
 one `ColourEditorBody`; each picker keeps its trigger and seeding. The
 reference-opens-at-resolved-colour and touching-the-picker-replaces-the-reference rules are
 documented behaviour and must survive; `FxColourListPicker.test.tsx` passes unchanged.
+
+Landed as `ColourEditorBody`, with one mechanism inverted rather than moved. The extracted body
+seeds its hex field **during render** instead of from a reseed-on-open effect: an effect there runs
+a render behind, because child effects run before parent effects, so on the render where the popover
+opens the body seeds from `FxColourPicker`'s still-unresolved colour, the parent then resolves the
+template, and the wheel repaints at the resolved colour while the field beside it still reads the
+old one. The render-phase mirror cannot lag, and subsumes the case the effect existed for — a
+reference whose template list arrived late now updates without reopening the popover.
 
 ### ~~`FS-DUP-REDIRECTS`~~ — **landed**
 **Seventeen byte-identical "redirect to the current project's equivalent" components**,
@@ -1821,9 +1830,9 @@ onto the exposed `serverActiveCueId`, and the two reconcile effects merged into 
 change-detection semantics; the ownership map is written down in `useShowTransport`'s docblock and
 CLAUDE.md. Rig check filed as `FU-MANUAL-CURSOR-OWNERSHIP` in `manual-validation.md`.
 
-### `FS-ARCH-BUSKING-GOD-HOOK`
+### ~~`FS-ARCH-BUSKING-GOD-HOOK`~~ — **landed**
 **`useBuskingState` is a 617-line hook mixing selection, derivation, presence rules and four
-mutation paths** · S3 · P3 · C2 · sonnet
+mutation paths**, lighting-react `455aa52` · S3 · P3 · C2 · sonnet
 `src/components/busking/useBuskingState.ts`
 
 Four `useState`s, five derived memos, eleven callbacks; the group-vs-fixture request builder written
@@ -1833,6 +1842,19 @@ comprehension, not renders.) **Fix**: split along its own comment boundaries —
 authoring (share the request builder), presence — and pull the property-name derivation from
 `FS-DUP-EFFECT-COMPAT`'s shared module. `programmerEntryFor`'s `owner === 'web'` rule is
 load-bearing: a pad must not light on, or clear, a Locate's or a layer's entry.
+
+Grew in the landing: the shared request builder came out of `components/busking/` as
+`lib/fxCreateRequest.ts`, and `AddEditFxSheet`'s two *create* branches go through it too — that is
+where the drift the item describes actually was, four copies of "start this effect" of which only
+some sent `stepTiming`. The two *update* routes stay hand-written: they take a nested `body` with a
+shape of their own (a group update spells its distribution `distributionStrategy`, unlike a group
+create) and only the sheet issues them. `FxCreateRequest.distribution` is deliberately one optional
+field whose absence means different things per route — the group route falls back to `LINEAR`, the
+fixture route omits the key — which is what preserves both surfaces' existing payloads. Review also
+took the four remaining inline copies of the group-member filter in `BuskingView` and
+`ActiveEffectSheet` onto `groupMemberFixtures`, and moved `hasEffect` / `lookLayerTarget` into
+`buskingTypes` so the presence and action hooks stopped importing each other. Two returns were
+dropped as unconsumed: `compatibleEffects` and `resolveProperty`.
 
 ### ~~`FS-ARCH-IMPORT-CYCLE`~~ — **landed**
 **The tree's only runtime import cycle: `CueSlotOverviewPanel` ↔ `CueSlotEditAssignPanel`, with no
@@ -2309,9 +2331,9 @@ it can't re-rot). The docstring claims triggers are pinned field-by-field too, b
 a docstring that says it's guarded. **Fix**: a trigger with six non-default fields, pinned
 individually in the layer test's style, plus the `scriptName`-is-stripped assertion.
 
-### `FS-TEST-COLOUR-TEMPLATES`
-**`FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states** ·
-S3 · P2 · C2 · sonnet
+### ~~`FS-TEST-COLOUR-TEMPLATES`~~ — **landed**
+**`FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states**,
+lighting-react `98d5992` · S3 · P2 · C2 · sonnet
 `src/components/fx/FxColourTemplates.tsx`, `CLAUDE.md`
 
 The only suite touching `useColourTemplates` runs the no-project path. And `isOfferable` requires
@@ -2320,6 +2342,12 @@ generic colour template is silently unofferable and nothing says so. **Fix**: a 
 mocked template list pinning all three exclusions and the `labelFor` loading/resolved/dangling
 split; decide whether the `rows.length === 1` clause is intended and state it in CLAUDE.md either
 way.
+
+Decided in the landing: the clause is **intended and stays**. Every consumer on this side reads
+`rows[0]` and only `rows[0]` — `swatchFor`, the chip's swatch, the chip's tooltip — so offering a
+two-row template would apply one of its rows under a name claiming both. Stated in CLAUDE.md's
+offerability bullet and at `isOfferable`, both noting that lifting it means first deciding what a
+multi-row colour template *means* to a single-colour output.
 
 ### ~~`FS-TEST-INDICATOR-LINK`~~ — **landed**
 **`ProgrammerIndicator`'s link-vs-inert split is unpinned (the CLAUDE.md path trap itself is now
