@@ -132,7 +132,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-PERF-FADE-DISPATCH`~~ **done** | Fade animation dispatches into Redux at 60 Hz; dev builds deep-scan four slices per frame | S3 | P2 | C3 | fable |
 | ~~`FS-PERF-PROVENANCE-REFETCH`~~ **done** | Every cue crossfade tick drives a `programmer.state` request/response at up to 10 Hz per tab | S3 | P2 | C3 | fable |
 | `FS-PERF-SIGNATURE-CACHE` | `changedKeys` recomputes both sides' JSON signatures on every diff | S3 | P2 | C2 | sonnet |
-| `FS-RES-CUECARDEDITOR-DIR` | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
+| ~~`FS-RES-CUECARDEDITOR-DIR`~~ **done** | `runner/program/CueCardEditor/` is a directory owned by nobody | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PALETTERESULT`~~ **done** | `UpdateDialog` renders an unreachable branch from a field the server deleted | S3 | P2 | C1 | haiku |
 | ~~`FS-RES-PRESETPICKER`~~ **done** | `FxSection`'s `presetPicker` prop and doc describe a deleted synthetic-fixture preset bra… | S3 | P2 | C1 | haiku |
 | `FS-TEST-COLOUR-TEMPLATES` | `FxColourTemplates` is untested, and its offerable filter is stricter than CLAUDE.md states | S3 | P2 | C2 | sonnet |
@@ -171,7 +171,7 @@ halves still owed are listed in §14 only.
 | ~~`FS-DOCS-SPEEDMASTERS`~~ **done** | CLAUDE.md §Speed Masters and two code comments describe the deleted 2..N split and a `Spe… | S4 | P2 | C1 | haiku |
 | ~~`FS-DOCS-STALE-COMMENTS`~~ **done** | Batch: ~14 rationale comments naming callers, renderers or files that no longer exist | S4 | P2 | C1 | haiku |
 | `FS-RES-ROUTES-CONVENTION` | `routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper —… | S4 | P2 | C2 | sonnet |
-| `FS-RES-RUNNER-DIR` | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
+| ~~`FS-RES-RUNNER-DIR`~~ **done** | `components/runner/`'s `program/` and `run/` subdirs are named for deleted routes | S4 | P2 | C2 | sonnet |
 | `FS-ARCH-SURFACES-PATTERN` | `store/surfaces.ts` streams four WS states through `useState`+`useEffect` instead of the… | S4 | P3 | C2 | sonnet |
 | `FS-CHROME-BEAT-MAP-PRUNE` | Per-master beat subscribables are never pruned, so reconnects re-request beats nothing wa… | S4 | P3 | C2 | sonnet |
 | ~~`FS-CHROME-BEAT-RESUBSCRIBE`~~ **done** | Folded into `FS-COORD-LEGACY-TEMPO`, as that item said to | S4 | P3 | C2 | sonnet |
@@ -184,9 +184,9 @@ halves still owed are listed in §14 only.
 | ~~`FS-DOCS-OUTOFSCOPE-COMMENT`~~ **done** | `RecordSkipReason.OUT_OF_SCOPE`'s comment names "palette routes" and claims they are the… | S4 | P3 | C1 | haiku |
 | ~~`FS-DOCS-REF-RATIONALE`~~ **done** | `programmerValue.ts` and `useCellWriters` still teach the retired `ref:` grammar as current | S4 | P3 | C1 | haiku |
 | ~~`FS-DUP-CHANNEL-SLIDER`~~ **done** | Four copies of the labelled 0–255 channel slider row | S4 | P3 | C1 | haiku |
-| `FS-DUP-MARKER-ROW` | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
+| ~~`FS-DUP-MARKER-ROW`~~ **done** | The same cue separator renders two different ways depending on surface | S4 | P3 | C1 | sonnet |
 | ~~`FS-DUP-MINISTAGE-GEL`~~ **done** | `MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch | S4 | P3 | C1 | haiku |
-| `FS-DUP-TARGETKEY` | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
+| ~~`FS-DUP-TARGETKEY`~~ **done** | Three spellings of the `type:key` target encoding; the named owner has no users | S4 | P3 | C1 | haiku |
 | ~~`FS-PERF-LAYER-SIGNATURE`~~ **done** | `programmerLayers` stringifies the whole layer stack on every programmer notification | S4 | P3 | C1 | haiku |
 | ~~`FS-PERF-TRANSPORT-ALLOC`~~ **done** | `useShowTransport` builds a whole-stack signature string per render | S4 | P3 | C1 | haiku |
 | ~~`FS-RES-ANON-CATCH`~~ **done** | Three bare `.catch(() => {})` where the codebase has a named helper for exactly that | S4 | P3 | C1 | haiku |
@@ -223,10 +223,13 @@ load-bearing. The completeness critic mapped these; verified and consolidated:
    (lighting-react `52660a6`, `8d3e906`, `6cdd030`, `934025d`, `e773197`, `fbeddfa`, plus
    `6365894`, `0ed1b31`, `4d7946a` and `1a9ebdb` for the cycle guard and the two review passes).
    Nothing outstanding.
-5. **The `components/runner/` tree: move first or last, never interleaved.**
-   `FS-RES-RUNNER-DIR` + `FS-RES-CUECARDEDITOR-DIR` touch files carrying
-   `FS-PERF-MOBILE-SHEET-FADE`, `FS-DUP-MARKER-ROW` and `FS-DUP-TARGETKEY`; pick an order and rebase
-   the rest. `FS-DUP-TARGETKEY` supersedes `FS-DEAD-EXPORTS`' `targetEquals` line.
+5. ~~**The `components/runner/` tree: move first or last, never interleaved.**~~ — **spent**. All
+   four landed 2026-08-31 as one batch, moves last: `FS-DUP-TARGETKEY` (`028cf4c`),
+   `FS-DUP-MARKER-ROW` (`658d36e`), then `FS-RES-CUECARDEDITOR-DIR` + `FS-RES-RUNNER-DIR` together
+   as `0828227` (one commit — see either item for why two do not build). `FS-DUP-TARGETKEY`'s
+   supersession of `FS-DEAD-EXPORTS`' `targetEquals` line is taken. Nothing outstanding; the tree is
+   now `runner/` + `runner/mobile/`, with the cue-editor modules in `components/cues/` and the
+   layer pickers in `components/programmer/`.
 6. ~~**The script-editor cluster is one work package**~~ — **spent**. All eight have landed:
    `FS-EDITOR-PROPTYPES-PHANTOM` and `FS-EDITOR-HIGHLIGHTONLY-PRESENCE` with the manifest pass
    (`0146759`), the remaining six 2026-08-30 as `a402981` (code) + `8c429b6` (pins). Nothing
@@ -1715,9 +1718,9 @@ settles it. `FxColourListPicker`'s byte-identical copy was deleted in favour of 
 `fixtures/ColourChannelSlider` taking `labelClassName` / `labelStyle`, with each caller keeping its
 own metrics constant so both surfaces render exactly as before.
 
-### `FS-DUP-TARGETKEY`
-**Three spellings of the `type:key` target encoding; the named owner has no users** · S4 · P3 · C1
-· haiku
+### ~~`FS-DUP-TARGETKEY`~~ — **landed**
+**Three spellings of the `type:key` target encoding; the named owner has no users**, `028cf4c` · S4
+· P3 · C1 · haiku
 `src/components/runner/program/CueCardEditor/targetUtils.ts`, `src/components/busking/buskingTypes.ts`
 
 `targetUtils.targetKey`/`targetEquals` are imported by nothing (only `collectCueTargets` is, and it
@@ -1727,8 +1730,9 @@ call sites also hand-spell the template literal. **Fix**: one `lib/` helper taki
 unused pair. Note: `components/surfaces/targetUtils.ts` is a different, live module — leave it.
 Coordinate with `FS-RES-CUECARDEDITOR-DIR`, which moves the file (§4).
 
-### `FS-DUP-MARKER-ROW`
-**The same cue separator renders two different ways depending on surface** · S4 · P3 · C1 · sonnet
+### ~~`FS-DUP-MARKER-ROW`~~ — **landed**
+**The same cue separator renders two different ways depending on surface**, `658d36e` · S4 · P3 · C1
+· sonnet
 `src/components/runner/MarkerRow.tsx`, `src/components/runner/program/ProgramMarkerRow.tsx`
 
 Of the four cue-row renderers flagged in exploration, only this pair truly overlaps (the others do
@@ -1736,6 +1740,13 @@ distinct jobs): a locked separator on desktop Show renders a different structure
 separator in the phone list and the Prompt Book rail. **Fix**: `ProgramMarkerRow`'s locked branch
 renders `MarkerRow`, keeping the grip-column spacer so rows don't shift as the lock flips; the
 unlocked branch (grip, rename, delete) is the genuinely different job and stays.
+
+Grew in the landing: review found the same markup a third time, in `ShowOverview`'s
+`SortableSeparatorEntry` — the stack-overview separator, whose comment already claimed it followed
+"the same rule … as `ProgramMarkerRow`" but only by coincidence. Converted in the same pass, keeping
+its own `py-1.5`. `MarkerRow` gained an optional `className` (merged through `cn`) so both callers
+can suppress its horizontal padding: their wrappers already supply the row padding around the grip
+column, and stacking both moved the divider ~14px right.
 
 ### ~~`FS-DUP-MINISTAGE-GEL`~~ — **landed**
 **`MiniStage.pickColour` is a third, divergent copy of the gel arm of the colour dispatch**,
@@ -1892,8 +1903,8 @@ insufficient.
 Where things live and what they're called. Individually small; collectively they are why a new agent
 gets lost. Most are best done as one coordinated pass (§4).
 
-### `FS-RES-CUECARDEDITOR-DIR`
-**`runner/program/CueCardEditor/` is a directory owned by nobody** · S3 · P2 · C1 · haiku
+### ~~`FS-RES-CUECARDEDITOR-DIR`~~ — **landed**
+**`runner/program/CueCardEditor/` is a directory owned by nobody**, `0828227` · S3 · P2 · C1 · haiku
 `src/components/runner/program/CueCardEditor/`, `src/components/cues/`
 
 Leftover of the deleted three-pane editor: `CuePropsPane`'s sole consumer is
@@ -1908,9 +1919,13 @@ in the same pass. **Fix**: move `CuePropsPane` + `targetUtils` into `components/
 their consumer. Pure moves; the two test files' import/mock paths move with them. Do in the same
 pass as `FS-RES-RUNNER-DIR`.
 
-### `FS-RES-RUNNER-DIR`
-**`components/runner/`'s `program/` and `run/` subdirs are named for deleted routes** · S4 · P2 ·
-C2 · sonnet
+Landed as one commit with `FS-RES-RUNNER-DIR`, not two: §4's constraint 5 makes them a single pass,
+and splitting them yields a first commit whose tree does not build — `StackDetail` cannot both drop
+`ProgramCueRow` and stay in a directory the second commit removes.
+
+### ~~`FS-RES-RUNNER-DIR`~~ — **landed**
+**`components/runner/`'s `program/` and `run/` subdirs are named for deleted routes**, `0828227` ·
+S4 · P2 · C2 · sonnet
 `src/components/runner/program/`, `src/components/runner/run/`, `src/routes/ShowPage.tsx`
 
 The verifier cut this down from "rename the whole tree": `runner` itself is legitimate (the docs
@@ -1921,6 +1936,10 @@ phone takeover its own note describes), rename `ProgramView`/`ProgramMarkerRow` 
 `ShowPage.test.tsx` mocks five of these by path string — update in the same commit. Do together
 with `FS-RES-CUECARDEDITOR-DIR` and after the perf items touching these files, or before all of
 them — not interleaved (§4).
+
+Landed as one commit with `FS-RES-CUECARDEDITOR-DIR` (see the note there). The Show-era names are
+`ShowView` and `ShowMarkerRow`; `docs/show-mode-engineering.md`'s component map and the frontend
+`CLAUDE.md` moved with them.
 
 ### `FS-RES-ROUTES-CONVENTION`
 **`routes/` mixes route modules, settings-tab bodies, orphan redirects and a pure helper — the
