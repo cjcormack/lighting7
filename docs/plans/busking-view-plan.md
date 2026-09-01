@@ -1,6 +1,7 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: PROPOSED.** Nothing here is built. The visual design is settled and checked
+> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391`; sessions 2–4 are not built.
+> The visual design is settled and checked
 > in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
 > of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left
 > target rail, B: MA-style paged banks) that were considered and parked. The live, pannable canvas
@@ -156,7 +157,7 @@ grep-ability:
 
 ## 5. Implementation — four sessions
 
-### Session 1 — speed masters: usage and time signature (backend)
+### Session 1 — speed masters: usage and time signature (backend) — done, `6b1c391`
 
 Columns + validation (§3.1), bank write-through + refusal (§3.2), wire fields on the list REST
 route and the `speedMasters.*` socket frames, `ensureDefaultSpeedMasters` unchanged (new masters
