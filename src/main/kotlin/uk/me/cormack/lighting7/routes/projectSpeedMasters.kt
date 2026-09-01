@@ -343,7 +343,10 @@ internal fun createSpeedMaster(
     // D5's typed-tempo rule, same as the PUT: a follower's tempo is derived from Master 1, so
     // a bpm sent alongside a ratio would be a 201 telling the caller a tempo that the load
     // sweep immediately overwrites. Refused here so create and update agree.
-    if (request.bpm != null && request.followNum != null) {
+    // Both halves, so a half-specified ratio falls through to validateSpeedMasterSettings and
+    // is reported as SPEED_MASTER_INVALID ("must be set together") rather than being told to
+    // unlink a ratio it never had.
+    if (request.bpm != null && request.followNum != null && request.followDen != null) {
         return CreateSpeedMasterOutcome.Invalid(
             "A master created with a follow ratio derives its tempo from Master 1 — omit bpm, " +
                 "or create it without the ratio",

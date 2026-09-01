@@ -262,10 +262,11 @@ class AiTools(private val state: State) {
             is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.UnknownMaster ->
                 return errorResult(unknownSpeedMasterMessage(requested))
             is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.RefusedFollower ->
+                // The shared phrasing plus this surface's own advice, per
+                // RefusedFollower.describe's contract — a wording change lands in one place.
                 return errorResult(
-                    "${outcome.name} follows Master 1 at ${outcome.num}/${outcome.den}, so its tempo " +
-                        "is derived — retune Master 1 instead, or have the operator unlink it in the " +
-                        "speed-master sheet"
+                    "${outcome.describe}. From here, retune Master 1 instead: its followers " +
+                        "move with it."
                 )
         }
         return ToolExecutionResult(

@@ -359,6 +359,7 @@ class SpeedMasterBankTest {
 
         // Tapped to 60 while manual, then linked at ½ of 120: the sweep derives the same 60,
         // but the TAP badge must not survive on a master that refuses taps.
+        val changes = captureChanges(bank)
         bank.load(
             listOf(
                 snapshot(u1, 1, bpm = 120.0),
@@ -367,6 +368,24 @@ class SpeedMasterBankTest {
         )
 
         assertEquals(SpeedMasterSource.MANUAL, bank.masterStates()[1].source)
+        // ...and the correction has to be *emitted*, or the row keeps its TAP forever: no bpm
+        // moved, so the emission can only come from the source half of the sweep's check.
+        assertEquals(
+            listOf(u2 to SpeedMasterSource.MANUAL),
+            changes.map { it.uuid to it.source },
+            "the source correction must reach the persister, got $changes",
+        )
+
+        // ...and only once: the reload after the flush sees MANUAL and stays quiet, so the
+        // persister's debounce is not re-armed forever.
+        changes.clear()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, bpm = 60.0, follow = 1 to 2),
+            )
+        )
+        assertTrue(changes.isEmpty(), "the healed reload must be idempotent, got $changes")
     }
 
     @Test

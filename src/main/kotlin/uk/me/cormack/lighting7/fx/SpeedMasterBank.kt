@@ -456,6 +456,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             if (entry === slots[0]) return@filter false
             val ratio = entry.follow ?: return@filter false
             val before = entry.clock.bpm.value
+            val beforeSource = entry.source
             entry.clock.setBpm(m1Bpm * ratio.num / ratio.den)
             // A follower's tempo is derived, so its provenance reads MANUAL — no new source
             // value on the wire (the session's additive-only promise), and the follower's UI
@@ -463,7 +464,12 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             // to 60 and then linked at ½ of 120 derives the same 60, and leaving its stored
             // TAP standing would badge a master that refuses taps as tap-sourced.
             entry.source = SpeedMasterSource.MANUAL
-            entry.clock.bpm.value != before
+            // Reported when *either* half moved, not just the bpm: the source correction above
+            // only reaches the row through an emitted Change, and the ½-of-120 case moves no
+            // bpm at all — without this the row keeps `TAP` for a master that refuses taps,
+            // and exports/clones carry it. Still terminating: once the flush has written
+            // MANUAL, every later sweep sees `beforeSource == MANUAL` and emits nothing.
+            entry.clock.bpm.value != before || beforeSource != SpeedMasterSource.MANUAL
         }
     }
 
