@@ -378,6 +378,7 @@ internal fun DaoCue.toCueDetails(
         notes = this.notes,
         cueType = this.cueType,
         stomp = this.stomp,
+        pinnedToBusk = this.pinnedToBusk,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
     )

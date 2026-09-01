@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -72,6 +73,48 @@ class CueCrudRoundTripTest : RouteIntegrationTest() {
                 .firstOrNull { it.id == cueId },
             "deleted cue should not appear in list",
         )
+    }
+
+    /**
+     * The busk pin is a plain PATCHable flag, defaulting off.
+     *
+     * The two halves matter separately: a cue is not pinned until someone says so (the busk pad
+     * grid is an operator's own arrangement, not every cue in the show), and the flag must survive
+     * a PATCH that names other fields — the cue properties sheet writes one field at a time.
+     */
+    @Test
+    fun `pinnedToBusk defaults off, PATCHes on, and survives an unrelated PATCH`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val stackId = client.post("/api/rest/projects/$projectId/cue-stacks") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCueStack(name = "pins"))
+        }.body<CueStackDetails>().id
+
+        val created = client.post("/api/rest/projects/$projectId/cues") {
+            contentType(ContentType.Application.Json)
+            setBody(NewCue(name = "pin-me", cueStackId = stackId))
+        }.body<CueDetails>()
+        assertFalse(created.pinnedToBusk, "a new cue is not pinned to the busk view")
+
+        val pinned = client.patch("/api/rest/projects/$projectId/cues/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("pinnedToBusk", JsonPrimitive(true)) })
+        }.body<CueDetails>()
+        assertTrue(pinned.pinnedToBusk)
+
+        val afterNotes = client.patch("/api/rest/projects/$projectId/cues/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("notes", JsonPrimitive("still pinned")) })
+        }.body<CueDetails>()
+        assertTrue(afterNotes.pinnedToBusk, "a PATCH that does not name the flag must leave it alone")
+
+        val unpinned = client.patch("/api/rest/projects/$projectId/cues/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("pinnedToBusk", JsonPrimitive(false)) })
+        }.body<CueDetails>()
+        assertFalse(unpinned.pinnedToBusk)
     }
 
     @Test

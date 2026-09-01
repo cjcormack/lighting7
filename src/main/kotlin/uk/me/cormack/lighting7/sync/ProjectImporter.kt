@@ -653,6 +653,7 @@ class ProjectImporter(private val state: State) {
             notes = c.notes
             cueType = c.cueType
             stomp = c.stomp
+            pinnedToBusk = c.pinnedToBusk
             this.uuid = uuid
         }
         uuid to dao

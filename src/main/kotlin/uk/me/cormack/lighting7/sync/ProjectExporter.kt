@@ -162,6 +162,7 @@ class ProjectExporter(private val state: State) {
                     notes = c.notes,
                     cueType = c.cueType,
                     stomp = c.stomp,
+                    pinnedToBusk = c.pinnedToBusk,
                 )
             }
 

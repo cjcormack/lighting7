@@ -427,6 +427,7 @@ data class CueJson(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
+    val pinnedToBusk: Boolean = false,
 )
 
 @Serializable
