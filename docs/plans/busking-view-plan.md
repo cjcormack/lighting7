@@ -1,6 +1,7 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391`; sessions 2–4 are not built.
+> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391` and session 2 as `ca4bc20`
+> in [lighting-react](../../../lighting-react); sessions 3–4 are not built.
 > The visual design is settled and checked
 > in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
 > of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left
@@ -167,12 +168,35 @@ carries the three columns (uuid references already survive via `ExportUuidRemapp
 Deliberately invisible to the desk: every new wire field is additive with a null default, so an
 old client renders today's bank untouched.
 
-### Session 2 — speed masters: frontend
+### Session 2 — speed masters: frontend — done, `ca4bc20` (lighting-react)
 
 `store/speedMasters.ts` types; the detail sheet's two new sections; the manage page's list
 columns; the ShowBar follower arm; the busk-routing swap in `useBuskingFxActions` + removal of the
 `defaultSpeedMasterUuid` header picker (configure-sheet override stays). Pin the
 category-set mirror with a test the way `maskPicker.test.ts` pins family lists.
+
+Landed as planned, with four things worth carrying forward:
+
+- **`lib/speedMasterModel.ts`** is the mirror module — vocabulary, ratio chips as int pairs,
+  `resolveSpeedMasterForCategory`. Its test pins the usage set against `EFFECT_CATEGORY_INFO`,
+  the twin of `SpeedMasterUsageVocabularyTest` on this side.
+- **Three tap surfaces, not one.** §4 named the ShowBar tiles; the phone popover row and the
+  manage-page row offer the same tap + click-to-type pair and all three needed the follower arm.
+  `EffectsOverviewPanel`'s fourth TAP did not — it taps master 1, which can never follow.
+- **The configure sheet pre-selects the routed master** rather than showing "Default" and routing
+  on send, so the routing is visible at the moment of the press. That also made
+  `defaultSpeedMasterUuid` a *derived* value, which had to come out of the reset effect's
+  dependencies: a usage retagged in another tab would otherwise wipe an open sheet mid-edit.
+- **The live-bank merge compares before writing** for these three fields, unlike the four beside
+  them. They are optional on the wire and the server encodes no defaults, so an unrouted master
+  arrives with the keys absent and an unconditional `undefined` write is a mutation to Immer —
+  every master gets a fresh identity on every tempo push, which is the exact churn that
+  field-wise merge exists to prevent. Caught in review, not by a test; there is no guard for it
+  (importing that slice under test needs a `speedMasters` namespace in `backendMock.ts`), so the
+  invariant lives in a comment.
+
+The `speedMasters.error` frame gained its first consumer here, which session 1 left unconsumed:
+a per-master toast, the backstop for writers with no affordance to remove.
 
 ### Session 3 — the Busk view becomes a place
 
