@@ -218,6 +218,14 @@ data class SpeedMasterJson(
     val bpm: Double = 120.0,
     val source: String = "MANUAL",
     val notes: String? = null,
+    /**
+     * Routing/follow settings (busking-view plan, session 1). All three are additive optional
+     * fields with null defaults — no formatVersion bump, per the "new optional field" rule in
+     * docs/sync-engineering.md.
+     */
+    val usage: String? = null,
+    val followNum: Int? = null,
+    val followDen: Int? = null,
 )
 
 /**

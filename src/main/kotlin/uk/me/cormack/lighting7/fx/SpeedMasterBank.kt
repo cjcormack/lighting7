@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import uk.me.cormack.lighting7.models.SpeedMasterSource
+import uk.me.cormack.lighting7.models.speedMasterFollowRatioOrNull
 import java.util.UUID
 
 /**
@@ -27,6 +28,11 @@ data class SpeedMasterSnapshot(
     val name: String,
     val bpm: Double,
     val source: SpeedMasterSource,
+    /** Effect-library category this master is the apply-time default for; null routes nothing. */
+    val usage: String? = null,
+    /** Follow ratio over master 1 — both null = manual, both positive = follower (D2). */
+    val followNum: Int? = null,
+    val followDen: Int? = null,
 )
 
 /**
@@ -61,7 +67,48 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val bpm: Double,
         val isRunning: Boolean,
         val source: SpeedMasterSource,
+        /** Effect-library category this master is the apply-time default for; null routes nothing. */
+        val usage: String? = null,
+        /** Follow ratio over master 1; both null = manual. */
+        val followNum: Int? = null,
+        val followDen: Int? = null,
     )
+
+    /** A follower's time signature over master 1: `bpm = m1.bpm × num / den`. */
+    data class Ratio(val num: Int, val den: Int)
+
+    /**
+     * What a tempo write ([setBpm]/[tap]) did. Richer than the old Boolean because a follower
+     * refusal (D5) must be reported distinctly from a dropped write to an unknown uuid.
+     */
+    sealed interface TempoWriteOutcome {
+        data object Applied : TempoWriteOutcome
+
+        /** Uuid names no master — a dropped write, never a fallback to master 1. */
+        data object UnknownMaster : TempoWriteOutcome
+
+        /**
+         * D5: the master follows master 1, so its tempo is derived, not set. Refused rather
+         * than auto-unlinked — a stray TAP mid-show must not silently sever a relationship the
+         * operator set up deliberately; the fix is to unlink in the speed-master sheet.
+         */
+        data class RefusedFollower(
+            val uuid: UUID?,
+            val index: Int,
+            val name: String,
+            val num: Int,
+            val den: Int,
+        ) : TempoWriteOutcome {
+            /**
+             * The operator-facing refusal, one phrasing for every surface (WS error frame,
+             * MIDI log) — the advice names the fix, so a wording change must not have to hunt
+             * per-surface copies. (The AI tool appends model-specific advice of its own.)
+             */
+            val describe: String
+                get() = "$name follows Master 1 at $num/$den — unlink it in the " +
+                    "speed-master sheet to set its tempo"
+        }
+    }
 
     /** One master's tempo moved (setBpm / tap). Streamed to clients and the persister. */
     data class Change(
@@ -90,6 +137,8 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         @Volatile var name: String,
         val clock: MasterClock,
         @Volatile var source: SpeedMasterSource,
+        @Volatile var usage: String? = null,
+        @Volatile var follow: Ratio? = null,
     )
 
     /**
@@ -218,6 +267,9 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             bpm = entry.clock.bpm.value,
             isRunning = entry.clock.isRunning.value,
             source = entry.source,
+            usage = entry.usage,
+            followNum = entry.follow?.num,
+            followDen = entry.follow?.den,
         )
     }
 
@@ -255,7 +307,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * master 1, whose uuid changes on the first load.
      */
     fun load(rows: List<SpeedMasterSnapshot>) {
-        synchronized(lock) {
+        val swept: List<Entry> = synchronized(lock) {
             val previous = bindings.slots
             val previousByUuid = previous.mapNotNull { e -> e.uuid?.let { it to e } }.toMap()
             val firstLoad = previous.size == 1 && previous[0].uuid == null
@@ -272,6 +324,11 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     } else {
                         Entry(row.uuid, row.index, row.name, existing.clock, existing.source)
                     }
+                    // Refreshed on the reuse branch as much as the rebuild branch: a usage or
+                    // ratio edit arrives as a reload of the same uuid, and stale values here
+                    // would silently ignore it.
+                    entry.usage = row.usage
+                    entry.follow = followRatioOf(row)
                     if (firstLoad && entry.clock === previous[0].clock) {
                         entry.clock.setBpm(row.bpm)
                         entry.source = row.source
@@ -283,7 +340,12 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     clock.onTick = { wake.trySend(Unit) }
                     clock.onBeat = { beat -> emitBeat(clock, beat) }
                     startedScope?.let { clock.start(it) }
-                    newSlots.add(Entry(row.uuid, row.index, row.name, clock, row.source))
+                    newSlots.add(
+                        Entry(
+                            row.uuid, row.index, row.name, clock, row.source,
+                            usage = row.usage, follow = followRatioOf(row),
+                        )
+                    )
                 }
             }
             if (newSlots.isEmpty() || newSlots[0].index != 1) {
@@ -302,8 +364,26 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     .toMap(),
                 version = bindings.version + 1,
             )
+
+            // D2's "on load" half: a follower adopts `m1.bpm × ratio` immediately, overriding
+            // whatever stored bpm its row carried — a boot or import with a follower comes up
+            // already in step. The no-change check inside the sweep keeps an ordinary CRUD
+            // reload (derived value already persisted) from emitting anything.
+            sweepFollowersLocked()
         }
+        swept.forEach { emitChange(it) }
     }
+
+    /**
+     * A snapshot's follow ratio, or null when manual/malformed/on master 1 — the single rule
+     * lives in [speedMasterFollowRatioOrNull] (models), shared with `DaoSpeedMaster.followRatio`
+     * so a row reads the same on every surface. An index-1 row claiming a ratio is ignored
+     * outright: master 1 is what followers derive from, and honouring it would make the
+     * sweep's source amount to a self-reference.
+     */
+    private fun followRatioOf(row: SpeedMasterSnapshot): Ratio? =
+        speedMasterFollowRatioOrNull(row.index, row.followNum, row.followDen)
+            ?.let { (num, den) -> Ratio(num, den) }
 
     fun start(scope: CoroutineScope) {
         startedScope = scope
@@ -317,23 +397,74 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
 
     /**
      * Retune one master (null → master 1). [source] records how — MANUAL for typed, TAP for
-     * tapped. Returns false when [uuid] names no master, which is a dropped write rather than a
-     * fallback (see [entryFor]) — callers that report an outcome must not claim success on it.
+     * tapped. An unknown uuid is a dropped write, not a fallback (see [entryFor]); a follower
+     * is refused before its clock is touched (D5). A write to master 1 sweeps its followers.
      */
-    fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): Boolean {
-        val entry = entryFor(uuid) ?: return false
-        entry.clock.setBpm(bpm)
-        entry.source = source
-        emitChange(entry)
-        return true
+    fun setBpm(uuid: UUID?, bpm: Double, source: SpeedMasterSource): TempoWriteOutcome =
+        tempoWrite(uuid) { entry ->
+            entry.clock.setBpm(bpm)
+            entry.source = source
+        }
+
+    /** Tap one master's tempo (null → master 1). Same refusal rules as [setBpm]. */
+    fun tap(uuid: UUID?): TempoWriteOutcome =
+        tempoWrite(uuid) { entry ->
+            entry.clock.tap()
+            entry.source = SpeedMasterSource.TAP
+        }
+
+    /**
+     * The shared write path. The lock is held over the clock writes only — [emitChange] (and
+     * therefore the persister's [onChangeSync]) runs outside it, so a hook can never deadlock
+     * the bank — and master 1's change is emitted before its followers', which is the causal
+     * order a client wants.
+     */
+    private inline fun tempoWrite(uuid: UUID?, write: (Entry) -> Unit): TempoWriteOutcome {
+        val moved: List<Entry> = synchronized(lock) {
+            val entry = entryFor(uuid) ?: return TempoWriteOutcome.UnknownMaster
+            entry.follow?.let {
+                return TempoWriteOutcome.RefusedFollower(entry.uuid, entry.index, entry.name, it.num, it.den)
+            }
+            write(entry)
+            if (entry === bindings.slots[0]) listOf(entry) + sweepFollowersLocked() else listOf(entry)
+        }
+        moved.forEach { emitChange(it) }
+        return TempoWriteOutcome.Applied
     }
 
-    /** Tap one master's tempo (null → master 1). */
-    fun tap(uuid: UUID?) {
-        val entry = entryFor(uuid) ?: return
-        entry.clock.tap()
-        entry.source = SpeedMasterSource.TAP
-        emitChange(entry)
+    /**
+     * Write-through follow (D2): recompute every follower as `m1.bpm × num / den` on the
+     * follower's own clock, returning the entries whose tempo actually moved, slot order.
+     * Caller holds [lock] and emits the changes after releasing it.
+     *
+     * - **No recursion**: this writes `entry.clock.setBpm` directly, never [setBpm], and the
+     *   only trigger is a write to slot 0, which is never itself a follower (validation at the
+     *   write boundary plus the slot-0 guard here) — so there is no chain to propagate (D4).
+     * - **The no-change check is the persist/reload loop-breaker**: a flush writes the derived
+     *   bpm to the row, the next [load] sweeps and derives the same value, nothing is emitted,
+     *   nothing re-arms the persister's debounce.
+     * - **Multiply before dividing**: `126.0 * 1 / 3` is exactly `42.0` in IEEE 754;
+     *   `126.0 * (1.0 / 3.0)` is not.
+     * - M1 reads back through its clock, so a derived bpm outside the clock's range clamps the
+     *   same way a typed one does, and the next sweep re-derives from M1's live bpm rather than
+     *   the clamped value — no ratchet.
+     */
+    private fun sweepFollowersLocked(): List<Entry> {
+        val slots = bindings.slots
+        val m1Bpm = slots[0].clock.bpm.value
+        return slots.filter { entry ->
+            if (entry === slots[0]) return@filter false
+            val ratio = entry.follow ?: return@filter false
+            val before = entry.clock.bpm.value
+            entry.clock.setBpm(m1Bpm * ratio.num / ratio.den)
+            // A follower's tempo is derived, so its provenance reads MANUAL — no new source
+            // value on the wire (the session's additive-only promise), and the follower's UI
+            // shows a ratio chip, not TAP. Unconditional, not only-on-change: a master tapped
+            // to 60 and then linked at ½ of 120 derives the same 60, and leaving its stored
+            // TAP standing would badge a master that refuses taps as tap-sourced.
+            entry.source = SpeedMasterSource.MANUAL
+            entry.clock.bpm.value != before
+        }
     }
 
     /**

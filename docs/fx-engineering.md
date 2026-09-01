@@ -73,6 +73,31 @@ carries no tempo.
 
 Masters are persisted per project (`speed_masters` table, portable in sync — the stored bpm
 is the *starting* tempo; live changes write through with a 750 ms trailing debounce).
+
+### Usage routing and follow (time signature)
+
+Two nullable per-master settings, added for the busk view (see
+`docs/plans/busking-view-plan.md` §2, decisions D1–D7):
+
+- **`usage`** (`dimmer` / `colour` / `position` — the effect library's own `category`
+  vocabulary, pinned by `SpeedMasterUsageVocabularyTest`) names the master an *apply-time
+  caller* should stamp into an effect created with no explicit master. This is D1: routing is
+  visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
+  meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
+  routable; effects in those categories land on master 1. One master per usage per project,
+  enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
+- **`follow_num` / `follow_den`** make the master a *follower*: its tempo is derived as
+  `m1.bpm × num / den`. Follow is write-through in the bank (D2): on `load` and on every
+  master-1 tempo write, `sweepFollowersLocked` recomputes each follower on its own clock, so
+  the engine, `slotFor`, the persister and the WS streams all see an ordinary master whose
+  tempo happens to move. Followers target master 1 only (D4 — no chains, no cycles), master 1
+  is refused a ratio at the write boundary, and `setBpm`/`tap` on a follower return
+  `TempoWriteOutcome.RefusedFollower` rather than silently unlinking (D5) — surfaced as a 400
+  (`SPEED_MASTER_FOLLOWER`) on REST, a `speedMasters.error` frame on WS, and a distinct tool
+  error on the AI surface. Derived tempos clamp to the clock's 20–300 range and re-derive
+  from master 1's live bpm on the next sweep, so a clamp never ratchets. Beat-**phase** lock
+  to master 1 is explicitly out of scope (`FU-SPEED-PHASE-LOCK`): the follower's tick counter
+  free-runs, so only its *rate* is kept in step.
 Effects reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → master 1) and
 the engine binds that to a runtime slot index at add/update time, re-binding when the
 bank's membership changes; a deleted master's effects degrade to master 1, never stop.
@@ -1009,11 +1034,18 @@ project-scoped too:
 ```
 GET    /api/rest/projects/{id}/speed-masters        → [SpeedMasterDto...]  (lazily seeds 4)
 GET    /api/rest/projects/{id}/speed-masters/{mid}  → SpeedMasterDto
-POST   /api/rest/projects/{id}/speed-masters        ← { name?, bpm?, notes? }
-PUT    /api/rest/projects/{id}/speed-masters/{mid}  ← { name?, bpm?, notes? }
+POST   /api/rest/projects/{id}/speed-masters        ← { name?, bpm?, notes?, usage?, followNum?, followDen? }
+PUT    /api/rest/projects/{id}/speed-masters/{mid}  ← same keys, patch semantics (present keys change;
+                                                      the follow pair must travel together)
 DELETE /api/rest/projects/{id}/speed-masters/{mid}  → 409 SPEED_MASTER_PROTECTED (master 1)
                                                      | 409 SPEED_MASTER_IN_USE (?force=true overrides)
 ```
+
+Usage/follow refusal codes (see §"Usage routing and follow"): `SPEED_MASTER_INVALID` (400 —
+malformed usage or ratio, half-sent pair), `SPEED_MASTER_CANNOT_FOLLOW` (400 — ratio on master 1),
+`SPEED_MASTER_USAGE_TAKEN` (409 — another master already holds that usage), and
+`SPEED_MASTER_FOLLOWER` (400 — a `bpm` sent for a follower, on POST and PUT alike; the tempo is
+derived, so retune master 1 or unlink first).
 
 ### Effect Management
 

@@ -212,15 +212,53 @@ class DefaultSurfaceActions(
      * degrading to master 1 — a corrupt binding payload must not be able to retune the
      * global tempo. (An unknown-but-well-formed uuid is dropped one layer down, by the
      * bank's own write resolution.)
+     *
+     * Every dropped or refused write is logged — this surface has no reply channel, so the
+     * log line is the only trace a MIDI-only operator gets of why their TAP/knob did nothing.
+     * Throttled: a knob bound to a follower sends CC at ~100 msg/s, and one line per message
+     * would flood the log for as long as the operator keeps turning it.
      */
-    private inline fun withSpeedMasterTarget(raw: String?, write: (java.util.UUID?) -> Unit) {
-        if (raw == null) {
+    private inline fun withSpeedMasterTarget(
+        raw: String?,
+        write: (java.util.UUID?) -> SpeedMasterBank.TempoWriteOutcome,
+    ) {
+        val outcome = if (raw == null) {
             write(null)
-            return
+        } else {
+            val uuid = speedMasterUuidOrNull(raw)
+            if (uuid == null) {
+                warnTempoWriteDropped("Surface tempo write dropped: binding target '$raw' is not a uuid")
+                return
+            }
+            write(uuid)
         }
-        speedMasterUuidOrNull(raw)?.let(write)
+        when (outcome) {
+            is SpeedMasterBank.TempoWriteOutcome.Applied -> {}
+
+            is SpeedMasterBank.TempoWriteOutcome.UnknownMaster -> warnTempoWriteDropped(
+                "Surface tempo write dropped: no speed master with uuid '$raw' — " +
+                    "re-learn the binding if the master was deleted",
+            )
+
+            is SpeedMasterBank.TempoWriteOutcome.RefusedFollower -> warnTempoWriteDropped(
+                "Surface tempo write refused: ${outcome.describe}",
+            )
+        }
+    }
+
+    @Volatile
+    private var lastTempoDropWarnMs = 0L
+
+    /** One WARN per [TEMPO_DROP_WARN_INTERVAL_MS] window, not one per MIDI message. */
+    private fun warnTempoWriteDropped(message: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastTempoDropWarnMs < TEMPO_DROP_WARN_INTERVAL_MS) return
+        lastTempoDropWarnMs = now
+        logger.warn(message)
     }
 }
+
+private const val TEMPO_DROP_WARN_INTERVAL_MS = 5_000L
 
 // --- Small helpers that turn the existing throwing lookups into nullable returns.
 

@@ -69,7 +69,12 @@ stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
 templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
-speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default
+speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
+                               # optional `usage` + `followNum`/`followDen` (busk-view routing
+                               # and follow — additive nullable fields, no formatVersion bump;
+                               # the exporter writes the ratio through the sanitising
+                               # `followRatio` getter, the importer writes it verbatim and the
+                               # bank degrades malformed pairs to manual)
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output

@@ -140,6 +140,42 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
+    fun `speedMasters domain — state decodes with and without the routing fields`() {
+        // The additive-with-null-defaults promise: a frame from a pre-usage/follow server (or
+        // to a pre-usage/follow client) must decode as today's bank, untouched.
+        val without = json.decodeFromString<OutMessage>(
+            """{"type":"speedMasters.state","masters":[{"uuid":null,"index":1,"name":"Master 1",""" +
+                """"bpm":120.0,"isRunning":false,"source":"MANUAL"}]}"""
+        )
+        val bare = assertIs<SpeedMastersStateOutMessage>(without).masters.single()
+        assertEquals(null, bare.usage)
+        assertEquals(null, bare.followNum)
+        assertEquals(null, bare.followDen)
+
+        val with = json.decodeFromString<OutMessage>(
+            """{"type":"speedMasters.state","masters":[{"uuid":null,"index":2,"name":"Movement",""" +
+                """"bpm":60.0,"isRunning":true,"source":"MANUAL","usage":"position",""" +
+                """"followNum":1,"followDen":2}]}"""
+        )
+        val follower = assertIs<SpeedMastersStateOutMessage>(with).masters.single()
+        assertEquals("position", follower.usage)
+        assertEquals(1, follower.followNum)
+        assertEquals(2, follower.followDen)
+    }
+
+    @Test
+    fun `speedMasters domain — error out message round-trips with discriminator`() {
+        val out = SpeedMasterErrorOutMessage(
+            masterUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2",
+            code = "SPEED_MASTER_FOLLOWER",
+            message = "Movement follows Master 1 at 1/2 — unlink it in the speed-master sheet to set its tempo",
+        )
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"speedMasters.error""""))
+        assertEquals(out, assertIs<SpeedMasterErrorOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
     fun `speedMasters domain — changed out message round-trips with discriminator`() {
         val out = SpeedMasterChangedOutMessage(
             masterUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2",

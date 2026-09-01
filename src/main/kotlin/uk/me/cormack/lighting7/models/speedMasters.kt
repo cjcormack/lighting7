@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.models
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.eq
@@ -52,6 +53,26 @@ object DaoSpeedMasters : IntIdTable("speed_masters") {
      */
     val bpmSource = varchar("source", 10).default(SpeedMasterSource.MANUAL.name)
     val notes = text("notes").nullable()
+
+    /**
+     * Effect-library category (`dimmer` / `colour` / `position`) this master is the apply-time
+     * default for; null routes nothing. Named `usageCategory` in Kotlin because "usage" already
+     * means reference-counting in this codebase (`SpeedMasterUsage`, the delete guard); the
+     * column itself is `usage`. Unique per project, enforced by [validateSpeedMasterSettings]
+     * rather than a partial index — the check needs a friendly 409 with a code, and
+     * `friendlyConstraintMessage` would render a constraint hit as a codeless generic.
+     */
+    val usageCategory = varchar("usage", 16).nullable()
+
+    /**
+     * Time-signature numerator/denominator: both null = manual tempo, both positive = this
+     * master follows master 1 at `num/den` (write-through in `SpeedMasterBank`). There is
+     * deliberately no follow-target column — follow means master 1, so there are no chains,
+     * no cycles and no propagation ordering. Master 1 itself is refused a ratio at the write
+     * boundary.
+     */
+    val followNum = integer("follow_num").nullable()
+    val followDen = integer("follow_den").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -69,15 +90,148 @@ class DaoSpeedMaster(id: EntityID<Int>) : IntEntity(id) {
     var bpm by DaoSpeedMasters.bpm
     var source by DaoSpeedMasters.bpmSource
     var notes by DaoSpeedMasters.notes
+    var usageCategory by DaoSpeedMasters.usageCategory
+    var followNum by DaoSpeedMasters.followNum
+    var followDen by DaoSpeedMasters.followDen
     var uuid by DaoSpeedMasters.uuid
 
     /** [source] as the enum, defaulting to MANUAL when the stored string is unrecognised. */
     val sourceEnum: SpeedMasterSource
         get() = SpeedMasterSource.entries.firstOrNull { it.name == source } ?: SpeedMasterSource.MANUAL
+
+    /**
+     * The follow ratio, or null when this master is manual — see [speedMasterFollowRatioOrNull]
+     * for the (single) rule. Every read path (bank snapshot, DTO, export, the PUT's
+     * carried-forward values) goes through this.
+     */
+    val followRatio: Pair<Int, Int>?
+        get() = speedMasterFollowRatioOrNull(masterIndex, followNum, followDen)
+}
+
+/**
+ * THE rule for whether a stored num/den pair is a live follow ratio: non-null only when BOTH
+ * values are set and positive — a half-written or hand-edited row degrades to "manual" rather
+ * than dividing by zero — and always null on master 1, which is what followers derive from.
+ * One function so the DAO getter and `SpeedMasterBank.followRatioOf` cannot drift
+ * (`validateSpeedMasterSettings` enforces the same shape at the write boundary, with errors
+ * instead of degradation).
+ */
+fun speedMasterFollowRatioOrNull(masterIndex: Int, num: Int?, den: Int?): Pair<Int, Int>? {
+    if (masterIndex == 1) return null
+    if (num == null || den == null) return null
+    if (num <= 0 || den <= 0) return null
+    return num to den
 }
 
 /** How many masters a project starts with. A visible bank of four, per the console research. */
 const val DEFAULT_SPEED_MASTER_COUNT = 4
+
+/**
+ * The categories a speed master's `usage` may name — the effect library's own `category`
+ * vocabulary (busking-view plan D7), so apply-time routing compares like with like and no
+ * parallel enum needs keeping in step. `controls` is deliberately excluded (a settings slider
+ * has no tempo), and so is `composite` (spans families); effects in either category route to
+ * master 1 via a null `speedMasterUuid`. Pinned against the shipped `.fx.kts` files by
+ * `SpeedMasterUsageVocabularyTest`.
+ */
+val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position")
+
+// The write-boundary half of the speed-master error vocabulary (shared by REST and the WS
+// socket). The delete-guard half (CODE_SPEED_MASTER_PROTECTED / _IN_USE) follows the house
+// convention and lives in routes/projectSpeedMasters.kt — grep both files for the full set.
+
+/** Error code for a tempo write (typed or tapped) refused because the master follows master 1. */
+const val CODE_SPEED_MASTER_FOLLOWER = "SPEED_MASTER_FOLLOWER"
+
+/** Error code for claiming a usage another master in the project already holds (409). */
+const val CODE_SPEED_MASTER_USAGE_TAKEN = "SPEED_MASTER_USAGE_TAKEN"
+
+/** Error code for putting a follow ratio on master 1, which everything else follows. */
+const val CODE_SPEED_MASTER_CANNOT_FOLLOW = "SPEED_MASTER_CANNOT_FOLLOW"
+
+/** Error code for a malformed usage string or follow-ratio pair. */
+const val CODE_SPEED_MASTER_INVALID = "SPEED_MASTER_INVALID"
+
+/** Error code for a well-formed uuid that names no master (WS tempo writes). */
+const val CODE_SPEED_MASTER_UNKNOWN = "SPEED_MASTER_UNKNOWN"
+
+/**
+ * Canonicalise a client-supplied usage string: trim, lowercase, `color` → `colour`. Blank (or
+ * null) is null — "routes nothing". Validation against [SPEED_MASTER_USAGES] is separate, in
+ * [validateSpeedMasterSettings]; this only normalises spelling.
+ */
+fun normaliseSpeedMasterUsage(raw: String?): String? {
+    val trimmed = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+    return if (trimmed == "color") "colour" else trimmed
+}
+
+/**
+ * Rejection from [validateSpeedMasterSettings], split so callers map to 400 vs 409 without
+ * parsing strings. [code] is the machine-readable error code a client branches on.
+ */
+sealed interface SpeedMasterSettingsError {
+    val message: String
+    val code: String
+
+    /** Malformed settings — a 400. */
+    data class Invalid(override val message: String, override val code: String) : SpeedMasterSettingsError
+
+    /** Settings that collide with another master — a 409. */
+    data class Conflict(override val message: String, override val code: String) : SpeedMasterSettingsError
+}
+
+/**
+ * The write boundary for a master's routing/follow settings — one place shared by REST and any
+ * future script surface. Call with the *resulting* (post-write) values so create and update
+ * share the implementation; [usage] must already be normalised via [normaliseSpeedMasterUsage].
+ * [excludeId] is the row being edited (null on create). Must be called inside a transaction —
+ * the uniqueness check queries the project's masters.
+ */
+fun validateSpeedMasterSettings(
+    project: DaoProject,
+    masterIndex: Int,
+    usage: String?,
+    followNum: Int?,
+    followDen: Int?,
+    excludeId: Int? = null,
+): SpeedMasterSettingsError? {
+    if ((followNum == null) != (followDen == null)) {
+        return SpeedMasterSettingsError.Invalid(
+            "followNum and followDen must be set together (both null unlinks)",
+            CODE_SPEED_MASTER_INVALID,
+        )
+    }
+    if ((followNum != null && followNum <= 0) || (followDen != null && followDen <= 0)) {
+        return SpeedMasterSettingsError.Invalid(
+            "Follow ratio must be a pair of positive integers",
+            CODE_SPEED_MASTER_INVALID,
+        )
+    }
+    if (followNum != null && masterIndex == 1) {
+        return SpeedMasterSettingsError.Invalid(
+            "Master 1 is the global master and cannot follow another master",
+            CODE_SPEED_MASTER_CANNOT_FOLLOW,
+        )
+    }
+    if (usage != null) {
+        if (usage !in SPEED_MASTER_USAGES) {
+            return SpeedMasterSettingsError.Invalid(
+                "Unknown usage '$usage' — must be one of ${SPEED_MASTER_USAGES.sorted().joinToString(", ")}",
+                CODE_SPEED_MASTER_INVALID,
+            )
+        }
+        val holder = DaoSpeedMaster
+            .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.usageCategory eq usage) }
+            .firstOrNull { it.id.value != excludeId }
+        if (holder != null) {
+            return SpeedMasterSettingsError.Conflict(
+                "'$usage' is already routed to ${holder.name}",
+                CODE_SPEED_MASTER_USAGE_TAKEN,
+            )
+        }
+    }
+    return null
+}
 
 /**
  * Seed the default bank if [project] has no masters yet. Runs at project create and lazily at

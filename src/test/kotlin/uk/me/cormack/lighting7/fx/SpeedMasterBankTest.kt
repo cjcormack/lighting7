@@ -21,7 +21,9 @@ class SpeedMasterBankTest {
         name: String = "Master $index",
         bpm: Double = 120.0,
         source: SpeedMasterSource = SpeedMasterSource.MANUAL,
-    ) = SpeedMasterSnapshot(uuid, index, name, bpm, source)
+        usage: String? = null,
+        follow: Pair<Int, Int>? = null,
+    ) = SpeedMasterSnapshot(uuid, index, name, bpm, source, usage, follow?.first, follow?.second)
 
     // ─── Slot binding ────────────────────────────────────────────────────
 
@@ -166,6 +168,239 @@ class SpeedMasterBankTest {
         assertEquals(u1, change.uuid)
         assertEquals(128.0, change.bpm)
         assertEquals(SpeedMasterSource.MANUAL, change.source)
+    }
+
+    // ─── Follow (time signature) ─────────────────────────────────────────
+
+    /** Capture emissions synchronously — the same hook the persister uses. */
+    private fun captureChanges(bank: SpeedMasterBank): MutableList<SpeedMasterBank.Change> {
+        val changes = mutableListOf<SpeedMasterBank.Change>()
+        bank.onChangeSync = { changes.add(it) }
+        return changes
+    }
+
+    @Test
+    fun `a follower tracks master 1 through setBpm, follower change after master 1's`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, follow = 1 to 2)))
+        val changes = captureChanges(bank)
+
+        val outcome = bank.setBpm(u1, 100.0, SpeedMasterSource.MANUAL)
+
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, outcome)
+        assertEquals(50.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "follower must derive m1 × ½")
+        assertEquals(
+            listOf(u1 to 100.0, u2 to 50.0),
+            changes.map { it.uuid to it.bpm },
+            "master 1's change must be emitted before its follower's — the causal order clients want",
+        )
+    }
+
+    @Test
+    fun `a follower tracks master 1 through tap`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, follow = 1 to 2)))
+
+        // Two real taps; whatever tempo they land on, the follower must sit at half of it.
+        bank.tap(u1)
+        Thread.sleep(400)
+        bank.tap(u1)
+
+        val m1Bpm = bank.master1().bpm.value
+        assertNotEquals(120.0, m1Bpm, "the second tap must have moved master 1")
+        assertEquals(
+            m1Bpm / 2, bank.clockFor(bank.slotFor(u2)).bpm.value,
+            "the tap path must sweep followers exactly like setBpm",
+        )
+    }
+
+    @Test
+    fun `one third ratio is exact — multiply before dividing`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1), snapshot(u2, 2, follow = 1 to 3)))
+
+        bank.setBpm(u1, 126.0, SpeedMasterSource.MANUAL)
+
+        // `126.0 * 1 / 3` is exactly 42.0 in IEEE 754; `126.0 * (1.0 / 3.0)` is not. Pins the
+        // operation order in the sweep.
+        assertEquals(42.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
+    }
+
+    @Test
+    fun `load derives a follower's bpm, ignoring its stored bpm`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+
+        // The row claims 200; a follower's stored bpm is meaningless while linked.
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, bpm = 200.0, follow = 1 to 2)))
+
+        assertEquals(60.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "boot/import must come up in step")
+    }
+
+    @Test
+    fun `a reload with unchanged tempo emits no follower change`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, follow = 1 to 2)))
+        val changes = captureChanges(bank)
+
+        // The persister has flushed the derived 60 to the row; the CRUD reload re-derives the
+        // same value. Emitting here would re-arm the persister's debounce forever.
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, bpm = 60.0, follow = 1 to 2)))
+
+        assertTrue(changes.isEmpty(), "an idempotent reload must not emit follower changes, got $changes")
+    }
+
+    @Test
+    fun `setBpm and tap on a follower are refused and leave the clock alone`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, name = "Movement", follow = 1 to 2)))
+        val changes = captureChanges(bank)
+
+        val fromSet = bank.setBpm(u2, 90.0, SpeedMasterSource.MANUAL)
+        val fromTap = bank.tap(u2)
+
+        val expected = SpeedMasterBank.TempoWriteOutcome.RefusedFollower(u2, 2, "Movement", 1, 2)
+        assertEquals(expected, fromSet)
+        assertEquals(expected, fromTap)
+        assertEquals(60.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "the refusal must precede any clock write")
+        assertTrue(changes.isEmpty(), "a refused write must not emit")
+    }
+
+    @Test
+    fun `a ratio edit takes effect on reload of the same uuid`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, bpm = 90.0)))
+        assertEquals(90.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
+
+        // The reuse branch of load must refresh the follow settings, not just the name — a
+        // ratio edit arrives as exactly this reload, and a stale entry would silently drop it.
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, follow = 1 to 2)))
+        assertEquals(60.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "the link must take effect")
+
+        // And the unlink direction: back to manual, keeping the live (derived) tempo.
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, bpm = 60.0)))
+        val outcome = bank.setBpm(u2, 95.0, SpeedMasterSource.MANUAL)
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, outcome, "an unlinked master takes writes again")
+    }
+
+    @Test
+    fun `a derived bpm outside the clock range clamps, and un-clamps by re-derivation`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, follow = 2 to 1)))
+
+        bank.setBpm(u1, 200.0, SpeedMasterSource.MANUAL)
+        assertEquals(300.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "2× of 200 clamps at MAX_BPM")
+        assertEquals(300.0, bank.masterStates()[1].bpm, "every surface reports the clamped truth")
+
+        // The sweep derives from M1's live bpm, never the follower's previous (clamped) value —
+        // the naive implementation would ratchet and stick at 300.
+        bank.setBpm(u1, 100.0, SpeedMasterSource.MANUAL)
+        assertEquals(200.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
+    }
+
+    @Test
+    fun `master 1 is never a follower, even if a row says so`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+
+        // A hand-edited or imported row claiming master 1 follows itself must degrade to
+        // manual — validation refuses this at the write boundary, and the bank must not trust
+        // rows it didn't validate.
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0, follow = 1 to 2)))
+
+        assertEquals(
+            SpeedMasterBank.TempoWriteOutcome.Applied,
+            bank.setBpm(u1, 100.0, SpeedMasterSource.MANUAL),
+            "master 1 must keep taking tempo writes",
+        )
+        assertEquals(100.0, bank.master1().bpm.value)
+        assertNull(bank.masterStates().single().followNum, "the claimed ratio must be discarded")
+    }
+
+    @Test
+    fun `a half-written or non-positive ratio degrades to manual`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        val u3 = UUID.randomUUID()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                SpeedMasterSnapshot(u2, 2, "Half", 90.0, SpeedMasterSource.MANUAL, null, 1, null),
+                snapshot(u3, 3, bpm = 80.0, follow = 0 to 2),
+            )
+        )
+
+        assertEquals(90.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "a half-written pair must not divide by zero")
+        assertEquals(80.0, bank.clockFor(bank.slotFor(u3)).bpm.value, "a non-positive pair is manual")
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.setBpm(u2, 95.0, SpeedMasterSource.MANUAL))
+    }
+
+    @Test
+    fun `a linked follower reads MANUAL even when the derived tempo equals its stored one`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+
+        // Tapped to 60 while manual, then linked at ½ of 120: the sweep derives the same 60,
+        // but the TAP badge must not survive on a master that refuses taps.
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, bpm = 60.0, source = SpeedMasterSource.TAP, follow = 1 to 2),
+            )
+        )
+
+        assertEquals(SpeedMasterSource.MANUAL, bank.masterStates()[1].source)
+    }
+
+    @Test
+    fun `writes to unknown uuids report UnknownMaster`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 120.0)))
+
+        assertEquals(
+            SpeedMasterBank.TempoWriteOutcome.UnknownMaster,
+            bank.setBpm(UUID.randomUUID(), 90.0, SpeedMasterSource.MANUAL),
+        )
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.UnknownMaster, bank.tap(UUID.randomUUID()))
+        assertEquals(120.0, bank.master1().bpm.value)
+    }
+
+    @Test
+    fun `masterStates reports usage and ratio`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, usage = "dimmer"),
+                snapshot(u2, 2, usage = "position", follow = 1 to 2),
+            )
+        )
+
+        val states = bank.masterStates()
+        assertEquals("dimmer", states[0].usage)
+        assertNull(states[0].followNum)
+        assertEquals("position", states[1].usage)
+        assertEquals(1, states[1].followNum)
+        assertEquals(2, states[1].followDen)
     }
 
     // ─── Beat fan-out ────────────────────────────────────────────────────

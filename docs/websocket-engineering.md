@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **95 message types**
-(37 inbound, 58 outbound) across eleven domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **96 message types**
+(37 inbound, 59 outbound) across eleven domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -251,13 +251,15 @@ client can ask about master 1 with a null uuid but must not expect to recognise 
 | Message | Fields | Effect |
 |---|---|---|
 | `speedMasters.state` | — | Resync: replies `speedMasters.state` |
-| `speedMasters.setBpm` | `bpm: Double`, `masterUuid: String?` | Retunes; replies with the full bank state |
-| `speedMasters.tap` | `masterUuid: String?` | Tap tempo; replies with the full bank state |
+| `speedMasters.setBpm` | `bpm: Double`, `masterUuid: String?` | Retunes; replies with the full bank state (a `speedMasters.error` first if refused) |
+| `speedMasters.tap` | `masterUuid: String?` | Tap tempo; replies with the full bank state (a `speedMasters.error` first if refused) |
 | `speedMasters.requestBeat` | `masterUuid: String?` | One-shot: releases the next `speedMasters.beat` frame past the throttle. No reply |
 
-A present-but-garbled `masterUuid` **drops** a tempo write rather than degrading it to master 1 —
-a corrupt frame must not retune the global tempo. The state reply still goes out, so a stale
-client re-syncs. CRUD (create / rename / delete) is REST, with a `speedMasters.listChanged`
+A present-but-garbled or unknown `masterUuid` **drops** a tempo write rather than degrading it to
+master 1 — a corrupt frame must not retune the global tempo — and answers a `speedMasters.error`
+with `SPEED_MASTER_UNKNOWN`. A write to a *follower* (a master with a `followNum`/`followDen`
+ratio, whose tempo is derived from master 1) is refused with `SPEED_MASTER_FOLLOWER`. The state
+reply still goes out in every case, so a stale client re-syncs. CRUD (create / rename / delete) is REST, with a `speedMasters.listChanged`
 invalidation broadcast.
 
 ### Programmer — `ProgrammerSocket.kt`
@@ -401,11 +403,14 @@ bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `Effect
 
 | Message | Payload | When |
 |---|---|---|
-| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source}]` | Connect snapshot, on request, and as the reply to every write |
-| `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate |
+| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, usage?, followNum?, followDen?}]` | Connect snapshot, on request, and as the reply to every write |
+| `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate — a follower's derived moves ride this like any other |
 | `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat` |
+| `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`) or a dropped one (`SPEED_MASTER_UNKNOWN`); always followed by the state reply |
 
 `source` is `MANUAL` or `TAP`. `uuid`/`masterUuid` is null only for the synthetic pre-load master 1.
+`usage` and the `followNum`/`followDen` ratio are the routing/follow settings from the busk-view
+work — all additive with null defaults, so a pre-follow client decodes today's bank untouched.
 Beats are throttled deliberately: the client runs a local timer off `bpm` between frames and only
 needs the server to correct its drift.
 

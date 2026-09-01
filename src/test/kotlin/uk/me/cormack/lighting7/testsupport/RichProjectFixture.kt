@@ -207,12 +207,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         masterIndex = 1; name = "House Tempo"
         bpm = 128.0; source = SpeedMasterSource.TAP.name
         notes = "tapped at soundcheck"
+        // Master 1 may not follow, so it carries the usage instead of the ratio.
+        usageCategory = "dimmer"
     }
     val slowMaster = DaoSpeedMaster.new {
         this.project = project
         masterIndex = 2; name = "Slow Wash"
         bpm = 64.0; source = SpeedMasterSource.MANUAL.name
         notes = "half-time position waves"
+        usageCategory = "position"
+        followNum = 1; followDen = 2
     }
 
     // 2 looks covering both targeting modes, because they exercise different code paths.

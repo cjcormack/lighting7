@@ -65,9 +65,14 @@ abstract class FxApplicationScript(
     val masterClock: MasterClock get() = fxEngine.masterClock
     val speedMasters: SpeedMasterBank get() = fxEngine.speedMasters
     val bpm: Double get() = masterClock.bpm.value
-    fun setBpm(bpm: Double) =
+    // Block bodies on purpose: the bank returns a TempoWriteOutcome, and an expression body
+    // would leak it as the script API's return type. Master 1 can never be a follower.
+    fun setBpm(bpm: Double) {
         speedMasters.setBpm(null, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL)
-    fun tapTempo() = speedMasters.tap(null)
+    }
+    fun tapTempo() {
+        speedMasters.tap(null)
+    }
 
     /** A specific speed master's clock by 1-based index, or master 1 when unknown. */
     fun speedMaster(index: Int): MasterClock =

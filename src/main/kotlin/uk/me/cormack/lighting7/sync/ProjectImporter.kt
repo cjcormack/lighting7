@@ -456,6 +456,12 @@ class ProjectImporter(private val state: State) {
                 bpm = m.bpm
                 source = m.source
                 notes = m.notes
+                // Written verbatim like every other imported row — the write-boundary rules
+                // don't run on import, and the bank degrades a malformed pair (or a ratio on
+                // master 1) to "manual" rather than failing the show.
+                usageCategory = m.usage
+                followNum = m.followNum
+                followDen = m.followDen
                 this.uuid = uuid
             }
             uuid to dao

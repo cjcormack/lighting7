@@ -202,6 +202,30 @@ class Show(
         // from a control surface propagate at transmit time.
         globalScalerState.attach()
 
+        // Write live tempo changes back to their rows, so the stored bpm is "wherever the
+        // tempo was last set" and the next boot/import starts there. Trailing-debounced:
+        // taps arrive ~2/s and recompute BPM each time, so per-tap writes would be churn.
+        // The capture is the bank's SYNCHRONOUS hook, not a changes-flow collector — a
+        // collector can be cancelled at close() with an emission still buffered, losing the
+        // very last tap; the hook lands in the pending map before setBpm/tap even returns,
+        // so the final flush in [close] can't miss it.
+        //
+        // Installed BEFORE the first reloadSpeedMasters(): load's follower sweep emits a
+        // Change when a follower's stored bpm disagrees with the derived value (stale row,
+        // older export), and that boot-time correction must reach the row like any other.
+        speedMasterBank.onChangeSync = { change ->
+            change.uuid?.let { uuid ->
+                pendingSpeedMasterWrites[uuid] = change
+                speedMasterFlushSignal.trySend(Unit)
+            }
+        }
+        speedMasterFlushJob = GlobalScope.launch {
+            for (signal in speedMasterFlushSignal) {
+                delay(SPEED_MASTER_WRITE_DEBOUNCE_MS)
+                flushSpeedMasterWrites()
+            }
+        }
+
         // Load (or lazily seed) this project's speed masters before the engine starts, so
         // every clock begins at its stored tempo rather than the 120 default.
         reloadSpeedMasters()
@@ -216,26 +240,6 @@ class Show(
         // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real
         // lifecycle owner, this should move onto it too.
         fxEngine.start(GlobalScope)
-
-        // Write live tempo changes back to their rows, so the stored bpm is "wherever the
-        // tempo was last set" and the next boot/import starts there. Trailing-debounced:
-        // taps arrive ~2/s and recompute BPM each time, so per-tap writes would be churn.
-        // The capture is the bank's SYNCHRONOUS hook, not a changes-flow collector — a
-        // collector can be cancelled at close() with an emission still buffered, losing the
-        // very last tap; the hook lands in the pending map before setBpm/tap even returns,
-        // so the final flush in [close] can't miss it.
-        speedMasterBank.onChangeSync = { change ->
-            change.uuid?.let { uuid ->
-                pendingSpeedMasterWrites[uuid] = change
-                speedMasterFlushSignal.trySend(Unit)
-            }
-        }
-        speedMasterFlushJob = GlobalScope.launch {
-            for (signal in speedMasterFlushSignal) {
-                delay(SPEED_MASTER_WRITE_DEBOUNCE_MS)
-                flushSpeedMasterWrites()
-            }
-        }
 
         // Load user-created FX definitions from the database into the registry
         loadUserFxDefinitions()
@@ -309,6 +313,9 @@ class Show(
                     name = it.name,
                     bpm = it.bpm,
                     source = it.sourceEnum,
+                    usage = it.usageCategory,
+                    followNum = it.followRatio?.first,
+                    followDen = it.followRatio?.second,
                 )
             }
         }
@@ -321,6 +328,9 @@ class Show(
      */
     fun setSpeedMasterBpmIfCurrent(projectId: Int, masterUuid: java.util.UUID, bpm: Double) {
         if (projectId != project.id.value) return
+        // Outcome deliberately dropped: the REST route refuses a bpm on a follower before it
+        // gets here, and an unknown uuid means the master was deleted between the row write
+        // and this retune — the stored default still landed, which is all that write meant.
         speedMasterBank.setBpm(masterUuid, bpm, SpeedMasterSource.MANUAL)
     }
 

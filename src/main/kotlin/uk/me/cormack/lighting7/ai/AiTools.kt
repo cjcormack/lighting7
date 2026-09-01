@@ -252,11 +252,22 @@ class AiTools(private val state: State) {
         val master = resolveSpeedMaster(requested)
             ?: return errorResult(unknownSpeedMasterMessage(requested))
         // The bank looks the uuid up again, so a master deleted between the two lookups makes
-        // this a dropped write — report that rather than the success the resolve implied.
-        val applied = state.show.fxEngine.speedMasters.setBpm(
+        // this a dropped write — report that rather than the success the resolve implied. A
+        // follower is refused distinctly: the fix is to unlink it or retune master 1, not to
+        // retry with another uuid.
+        when (val outcome = state.show.fxEngine.speedMasters.setBpm(
             master.uuid, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL
-        )
-        if (!applied) return errorResult(unknownSpeedMasterMessage(requested))
+        )) {
+            is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.Applied -> {}
+            is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.UnknownMaster ->
+                return errorResult(unknownSpeedMasterMessage(requested))
+            is uk.me.cormack.lighting7.fx.SpeedMasterBank.TempoWriteOutcome.RefusedFollower ->
+                return errorResult(
+                    "${outcome.name} follows Master 1 at ${outcome.num}/${outcome.den}, so its tempo " +
+                        "is derived — retune Master 1 instead, or have the operator unlink it in the " +
+                        "speed-master sheet"
+                )
+        }
         return ToolExecutionResult(
             success = true,
             description = "Set ${master.name} to $bpm BPM",
@@ -357,6 +368,12 @@ class AiTools(private val state: State) {
                             put("name", master.name)
                             put("bpm", master.bpm)
                             put("isRunning", master.isRunning)
+                            // Routing/follow settings, so the model knows a follower's tempo
+                            // is derived (set_bpm refuses it) and which master an unassigned
+                            // effect of each category will land on.
+                            master.usage?.let { put("usage", it) }
+                            master.followNum?.let { put("followNum", it) }
+                            master.followDen?.let { put("followDen", it) }
                         }
                     }
                 })

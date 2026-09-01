@@ -179,6 +179,16 @@ class ProjectCloneTest {
                 "clone must mint a fresh master identity",
             )
 
+            // The routing/follow columns (busking-view session 1) travel with the master —
+            // "export/import carries the three columns" is exactly this assertion.
+            assertEquals("position", cloneMaster.usageCategory)
+            assertEquals(1, cloneMaster.followNum)
+            assertEquals(2, cloneMaster.followDen)
+            assertEquals(
+                "dimmer",
+                clone.speedMasters.single { it.masterIndex == 1 }.usageCategory,
+            )
+
             val lookEffect = clone.looks.flatMap { it.effects.toList() }.single()
             assertEquals(
                 cloneMaster.uuid, lookEffect.speedMasterUuid,

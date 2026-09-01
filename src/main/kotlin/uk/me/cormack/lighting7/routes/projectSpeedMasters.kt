@@ -23,13 +23,23 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_INVALID
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoSpeedMasters
+import uk.me.cormack.lighting7.models.SpeedMasterSettingsError
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.ensureDefaultSpeedMasters
+import uk.me.cormack.lighting7.models.normaliseSpeedMasterUsage
+import uk.me.cormack.lighting7.models.validateSpeedMasterSettings
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+
+// The delete-guard half of the speed-master error vocabulary. The write-boundary half
+// (CODE_SPEED_MASTER_FOLLOWER / _USAGE_TAKEN / _CANNOT_FOLLOW / _INVALID / _UNKNOWN) lives in
+// models/speedMasters.kt beside validateSpeedMasterSettings, because the socket needs it too —
+// grep both files for the full client-facing set.
 
 /** Error code for deleting the protected global master (index 1). */
 internal const val CODE_SPEED_MASTER_PROTECTED = "SPEED_MASTER_PROTECTED"
@@ -75,10 +85,10 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
             val request = call.receive<CreateSpeedMasterRequest>()
             when (val outcome = createSpeedMaster(state, project, request)) {
                 is CreateSpeedMasterOutcome.Invalid ->
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.error))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.error, code = outcome.code))
 
                 is CreateSpeedMasterOutcome.Conflict ->
-                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.error))
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.error, code = outcome.code))
 
                 is CreateSpeedMasterOutcome.Created ->
                     call.respond(HttpStatusCode.Created, outcome.dto)
@@ -87,10 +97,16 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
     }
 
     /**
-     * Rename / notes / bpm. The stored bpm is the master's starting default; when the project
-     * is live, the write also retunes the running clock so a typed tempo takes effect
-     * immediately. (Knob-drag / tap tempo goes over the `speedMasters.*` WS family instead —
-     * this route is the "typed a number into a form" path.)
+     * Rename / notes / bpm / usage / follow ratio. The stored bpm is the master's starting
+     * default; when the project is live, the write also retunes the running clock so a typed
+     * tempo takes effect immediately. (Knob-drag / tap tempo goes over the `speedMasters.*` WS
+     * family instead — this route is the "typed a number into a form" path.)
+     *
+     * Patch semantics: only present keys change. The follow pair moves together — if either
+     * `followNum` or `followDen` is present both must be, so unlink is
+     * `{"followNum":null,"followDen":null}` and a half-patch is a 400 rather than a silent
+     * half-write. A `bpm` on an (effectively) following master is refused (D5's typed-tempo
+     * half): a follower's tempo is derived, and its stored default is meaningless while linked.
      */
     put<ProjectSpeedMasterResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -100,27 +116,79 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
                 return@withProject
             }
+            if (("followNum" in body) != ("followDen" in body)) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(
+                        "followNum and followDen must be sent together (both null unlinks)",
+                        code = CODE_SPEED_MASTER_INVALID,
+                    ),
+                )
+                return@withProject
+            }
 
             val result = transaction(state.database) {
                 val master = DaoSpeedMaster.findById(resource.masterId)
-                    ?: return@transaction Pair<SpeedMasterDto?, String?>(null, SPEED_MASTER_NOT_FOUND)
+                    ?: return@transaction UpdateSpeedMasterOutcome.NotFound
                 if (master.project.id != project.id) {
-                    return@transaction Pair<SpeedMasterDto?, String?>(null, SPEED_MASTER_NOT_FOUND)
+                    return@transaction UpdateSpeedMasterOutcome.NotFound
+                }
+
+                // Effective post-write values: what the row will hold if this write lands.
+                // Carried-forward values come through the same sanitisers every read path
+                // uses (`followRatio`; an untouched usage skips re-validation), NOT the raw
+                // columns — an imported row is written verbatim by design (see
+                // ProjectImporter), and validating its untouched junk here would 400/409
+                // every later PUT on it, rename and notes edits included. Only what this
+                // request actually sends goes through the write-boundary rules.
+                val usagePatched = "usage" in body
+                val effectiveUsage = if (usagePatched) {
+                    normaliseSpeedMasterUsage(body["usage"].nullableString())
+                } else {
+                    master.usageCategory
+                }
+                val storedRatio = master.followRatio
+                val followPatched = "followNum" in body
+                val effectiveNum = if (followPatched) body["followNum"].nullableInt() else storedRatio?.first
+                val effectiveDen = if (followPatched) body["followDen"].nullableInt() else storedRatio?.second
+
+                validateSpeedMasterSettings(
+                    project = project,
+                    masterIndex = master.masterIndex,
+                    usage = if (usagePatched) effectiveUsage else null,
+                    followNum = effectiveNum,
+                    followDen = effectiveDen,
+                    excludeId = master.id.value,
+                )?.let { error ->
+                    return@transaction when (error) {
+                        is SpeedMasterSettingsError.Invalid ->
+                            UpdateSpeedMasterOutcome.Invalid(error.message, error.code)
+
+                        is SpeedMasterSettingsError.Conflict ->
+                            UpdateSpeedMasterOutcome.Conflict(error.message, error.code)
+                    }
+                }
+                if (requestedBpm != null && effectiveNum != null) {
+                    return@transaction UpdateSpeedMasterOutcome.Invalid(
+                        "${master.name} follows Master 1 at $effectiveNum/$effectiveDen — " +
+                            "unlink it to set its tempo, or retune Master 1 instead",
+                        CODE_SPEED_MASTER_FOLLOWER,
+                    )
                 }
 
                 body["name"].nullableString()?.let { newName ->
                     val trimmed = newName.trim()
                     if (trimmed.isEmpty()) {
-                        return@transaction Pair<SpeedMasterDto?, String?>(
-                            null, "Speed master name must not be blank",
+                        return@transaction UpdateSpeedMasterOutcome.Invalid(
+                            "Speed master name must not be blank", code = null,
                         )
                     }
                     val collision = DaoSpeedMaster.find {
                         (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.name eq trimmed)
                     }.firstOrNull()
                     if (collision != null && collision.id != master.id) {
-                        return@transaction Pair<SpeedMasterDto?, String?>(
-                            null, "A speed master called '$trimmed' already exists",
+                        return@transaction UpdateSpeedMasterOutcome.Conflict(
+                            "A speed master called '$trimmed' already exists", code = null,
                         )
                     }
                     master.name = trimmed
@@ -128,29 +196,45 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 if ("notes" in body) {
                     master.notes = body["notes"].nullableString()?.trim()?.takeIf { it.isNotEmpty() }
                 }
+                master.usageCategory = effectiveUsage
+                master.followNum = effectiveNum
+                master.followDen = effectiveDen
                 requestedBpm?.let {
                     master.bpm = it
                     master.source = SpeedMasterSource.MANUAL.name
                 }
 
-                Pair<SpeedMasterDto?, String?>(master.toDto(speedMasterUsage(project, master.uuid)), null)
+                UpdateSpeedMasterOutcome.Updated(master.toDto(speedMasterUsage(project, master.uuid)))
             }
-            val (dto, error) = result
-            if (error != null) {
-                val code = if (error == SPEED_MASTER_NOT_FOUND) HttpStatusCode.NotFound else HttpStatusCode.Conflict
-                call.respond(code, ErrorResponse(error))
-                return@withProject
+            val dto = when (result) {
+                UpdateSpeedMasterOutcome.NotFound -> {
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(SPEED_MASTER_NOT_FOUND))
+                    return@withProject
+                }
+
+                is UpdateSpeedMasterOutcome.Invalid -> {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error, code = result.code))
+                    return@withProject
+                }
+
+                is UpdateSpeedMasterOutcome.Conflict -> {
+                    call.respond(HttpStatusCode.Conflict, ErrorResponse(result.error, code = result.code))
+                    return@withProject
+                }
+
+                is UpdateSpeedMasterOutcome.Updated -> result.dto
             }
             // Guarded like the create/delete sites: a rename in a non-current project must
-            // not reload the live show's bank.
+            // not reload the live show's bank. For a follower link/unlink or ratio change,
+            // the reload is also what re-derives the live tempo and streams the move.
             if (state.isCurrentProject(project)) state.show.reloadSpeedMasters()
             // The reload deliberately keeps surviving clocks' live tempo, so a typed bpm
             // must retune the running clock explicitly — and only for the live project.
             requestedBpm?.let {
-                state.show.setSpeedMasterBpmIfCurrent(project.id.value, UUID.fromString(dto!!.uuid), it)
+                state.show.setSpeedMasterBpmIfCurrent(project.id.value, UUID.fromString(dto.uuid), it)
             }
             state.show.fixtures.speedMasterListChanged()
-            call.respond(dto!!)
+            call.respond(dto)
         }
     }
 
@@ -222,11 +306,19 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
 internal sealed interface CreateSpeedMasterOutcome {
     data class Created(val dto: SpeedMasterDto) : CreateSpeedMasterOutcome
 
-    /** Malformed request — blank name, out-of-range bpm. */
-    data class Invalid(val error: String) : CreateSpeedMasterOutcome
+    /** Malformed request — blank name, out-of-range bpm, bad usage/ratio. */
+    data class Invalid(val error: String, val code: String? = null) : CreateSpeedMasterOutcome
 
-    /** A master of that name already exists in the project. */
-    data class Conflict(val error: String) : CreateSpeedMasterOutcome
+    /** A master of that name — or claiming that usage — already exists in the project. */
+    data class Conflict(val error: String, val code: String? = null) : CreateSpeedMasterOutcome
+}
+
+/** What the PUT did. Mirrors [CreateSpeedMasterOutcome] so 400 and 409 stay distinguishable. */
+private sealed interface UpdateSpeedMasterOutcome {
+    data class Updated(val dto: SpeedMasterDto) : UpdateSpeedMasterOutcome
+    data object NotFound : UpdateSpeedMasterOutcome
+    data class Invalid(val error: String, val code: String?) : UpdateSpeedMasterOutcome
+    data class Conflict(val error: String, val code: String?) : UpdateSpeedMasterOutcome
 }
 
 /**
@@ -248,6 +340,17 @@ internal fun createSpeedMaster(
         return CreateSpeedMasterOutcome.Invalid("Speed master name must not be blank")
     }
     validateBpm(request.bpm)?.let { return CreateSpeedMasterOutcome.Invalid(it) }
+    // D5's typed-tempo rule, same as the PUT: a follower's tempo is derived from Master 1, so
+    // a bpm sent alongside a ratio would be a 201 telling the caller a tempo that the load
+    // sweep immediately overwrites. Refused here so create and update agree.
+    if (request.bpm != null && request.followNum != null) {
+        return CreateSpeedMasterOutcome.Invalid(
+            "A master created with a follow ratio derives its tempo from Master 1 — omit bpm, " +
+                "or create it without the ratio",
+            CODE_SPEED_MASTER_FOLLOWER,
+        )
+    }
+    val usage = normaliseSpeedMasterUsage(request.usage)
 
     val outcome = transaction(state.database) {
         ensureDefaultSpeedMasters(project)
@@ -259,12 +362,31 @@ internal fun createSpeedMaster(
                 "A speed master called '$name' already exists",
             )
         }
+        validateSpeedMasterSettings(
+            project = project,
+            masterIndex = nextIndex,
+            usage = usage,
+            followNum = request.followNum,
+            followDen = request.followDen,
+            excludeId = null,
+        )?.let { error ->
+            return@transaction when (error) {
+                is SpeedMasterSettingsError.Invalid ->
+                    CreateSpeedMasterOutcome.Invalid(error.message, error.code)
+
+                is SpeedMasterSettingsError.Conflict ->
+                    CreateSpeedMasterOutcome.Conflict(error.message, error.code)
+            }
+        }
         val master = DaoSpeedMaster.new {
             this.project = project
             masterIndex = nextIndex
             this.name = name
             request.bpm?.let { bpm = it }
             this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
+            usageCategory = usage
+            followNum = request.followNum
+            followDen = request.followDen
         }
         CreateSpeedMasterOutcome.Created(master.toDto(SpeedMasterUsage.NONE))
     }
@@ -310,6 +432,11 @@ data class SpeedMasterDto(
     /** `MANUAL` / `TAP` — how the tempo was last set. Display only. */
     val source: String,
     val notes: String? = null,
+    /** Effect-library category this master is the apply-time default for; null routes nothing. */
+    val usage: String? = null,
+    /** Follow ratio over master 1 (`bpm = m1 × num/den`); both null = manual tempo. */
+    val followNum: Int? = null,
+    val followDen: Int? = null,
     /** Persisted rows referencing this master. Gates delete. */
     val referenceCount: Int,
 )
@@ -320,6 +447,11 @@ data class CreateSpeedMasterRequest(
     val name: String? = null,
     val bpm: Double? = null,
     val notes: String? = null,
+    /** See [SpeedMasterDto.usage]; validated against the canonical set. */
+    val usage: String? = null,
+    /** See [SpeedMasterDto.followNum]; both-or-neither, positive. */
+    val followNum: Int? = null,
+    val followDen: Int? = null,
 )
 
 @Serializable
@@ -451,8 +583,11 @@ private fun validateBpm(bpm: Double?): String? {
     return null
 }
 
-/** Must be called inside a transaction. [usage] is resolved by the caller so a list can batch it. */
-private fun DaoSpeedMaster.toDto(usage: SpeedMasterUsage): SpeedMasterDto = SpeedMasterDto(
+/**
+ * Must be called inside a transaction. [references] is resolved by the caller so a list can
+ * batch it. (Named `references`, not `usage` — that now means the routing category.)
+ */
+private fun DaoSpeedMaster.toDto(references: SpeedMasterUsage): SpeedMasterDto = SpeedMasterDto(
     id = id.value,
     uuid = uuid.toString(),
     masterIndex = masterIndex,
@@ -460,5 +595,8 @@ private fun DaoSpeedMaster.toDto(usage: SpeedMasterUsage): SpeedMasterDto = Spee
     bpm = bpm,
     source = source,
     notes = notes,
-    referenceCount = usage.total,
+    usage = usageCategory,
+    followNum = followRatio?.first,
+    followDen = followRatio?.second,
+    referenceCount = references.total,
 )

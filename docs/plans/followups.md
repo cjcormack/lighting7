@@ -32,6 +32,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
+| [`FU-SPEED-PHASE-LOCK`](#fu-speed-phase-lock) | Trigger | Speed | a follower's beat offset is visibly wrong on a real rig |
+| [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
+| [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
+| [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
@@ -302,6 +306,71 @@ machinery that exists nowhere else in that class. The nearest existing shape,
 
 **Trigger**: an operator taps from hardware and asks why the button doesn't acknowledge, or a
 second momentary-with-no-steady-state target appears and the two can share the machinery.
+
+### `FU-SPEED-PHASE-LOCK`
+
+**Follower beat boundaries free-run within master 1's beat** · Trigger · Busking-view plan
+session 1 (2026-08-31), §7
+
+Follow is write-through *tempo* only: `SpeedMasterBank.sweepFollowersLocked` retunes a
+follower's own `MasterClock`, and `MasterClock.setBpm` deliberately preserves the tick counter
+(that is what keeps phase continuous for the effects already running on it). So a follower at ½
+ticks at exactly half master 1's rate, but its beat boundary sits wherever its counter happened
+to be when it was linked — anywhere inside master 1's beat. Fixing it means a follower samples
+master 1's tick instead of owning a timer: `Frame`/`slotFor` plumbing in the engine, not a bank
+tweak. At musical ratios the audible effect is small because both clocks tick at exact
+multiples. Do **not** "fix" it by resetting the follower's counter on link — that snaps every
+effect on that master (see the counter-preservation test in `SpeedMasterBankTest`).
+
+**Trigger**: an operator reports a follower's chase landing visibly off master 1's beat on a
+real rig.
+
+### `FU-SPEED-CUSTOM-RATIO`
+
+**Backend accepts any positive follow ratio; the UI offers five** · Trigger · Busking-view plan
+session 1 (2026-08-31), D3/§7
+
+`validateSpeedMasterSettings` accepts any positive `followNum`/`followDen` pair, so 3/4 or 2/3
+polyrhythms are a UI affordance away — the schema, wire and sweep all already handle them. The
+sheet's vocabulary is deliberately the five chips (2× · 1× · ½ · ⅓ · ¼) until someone asks.
+
+**Trigger**: an operator asks for a ratio the chips don't offer.
+
+### `FU-SPEED-SCRIPT-RAW-CLOCK`
+
+**The script API hands out raw `MasterClock`s, bypassing the bank** · Trigger · Busking-view plan
+session 1 review, 2026-09-01
+
+`scriptDef.kt`'s `speedMaster(index)` (and the `masterClock` property behind `bpm`) return the
+`MasterClock` itself, so a script can call `setBpm` on it directly. That bypasses everything the
+bank's write-through provides: no follower sweep (a script retuning master 1 this way leaves
+followers at their old derived tempo until the next bank-routed write), no `SPEED_MASTER_FOLLOWER`
+refusal (a script can retune a follower and the value silently sticks until master 1 next moves),
+and no `Change` emission — neither the persister nor `speedMasters.changed` sees the move, so
+every surface shows a stale tempo. A pre-existing seam (the accessor predates follow) that the
+follow feature re-exposes; the top-level `setBpm()`/`tapTempo()` are already bank-routed. The fix
+shape is `speedMaster(index)` returning a bank-routed facade rather than the clock — a script-API
+semantics change that wants its own decision, which is why it was not folded into the session 1
+review fixes.
+
+**Trigger**: a script retunes a master by index and an operator reports surfaces showing the wrong
+tempo, or a follower failing to track.
+
+### `FU-SPEED-LINK-PUT-STALE-BPM`
+
+**A link PUT's response DTO carries the pre-link stored bpm** · Trigger · Busking-view plan
+session 1 review, 2026-09-01
+
+A `PUT /speed-masters/{mid}` that links a follower (sets `followNum`/`followDen`) responds with a
+DTO whose `bpm` is still the stored pre-link value next to the ratio it just accepted — internally
+contradictory until the bank's sweep derives m1 × num/den and the persister's debounced flush
+writes it through. `speedMasters.state` / `speedMasters.changed` correct it immediately, so a
+client consuming the WS stream (as ours does) never shows the contradiction. Left alone in the
+session 1 review because a route-side fix means the route re-deriving the tempo the bank already
+owns — duplication for a transient the socket already repairs.
+
+**Trigger**: a client renders the link response body without also consuming `speedMasters.state`,
+and the contradiction is visible for long enough to matter.
 
 ### `FU-SPEED-RATEMASTER-STATEFUL`
 

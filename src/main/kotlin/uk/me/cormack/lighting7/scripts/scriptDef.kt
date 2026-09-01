@@ -39,11 +39,17 @@ abstract class LightingScript(
      * Set master 1's BPM. Routed through the bank so the change is tracked, pushed to
      * clients, and written through to the stored default.
      */
-    fun setBpm(bpm: Double) =
+    fun setBpm(bpm: Double) {
+        // Block body on purpose: the bank returns a TempoWriteOutcome, and an expression body
+        // would leak it as this script API's return type. Master 1 can never be a follower,
+        // so the outcome here is always Applied.
         speedMasters.setBpm(null, bpm, uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL)
+    }
 
     /** Tap tempo (master 1) - call repeatedly to set BPM from timing */
-    fun tapTempo() = speedMasters.tap(null)
+    fun tapTempo() {
+        speedMasters.tap(null)
+    }
 
     /** A specific speed master's clock by 1-based index, or master 1 when unknown. */
     fun speedMaster(index: Int): MasterClock =

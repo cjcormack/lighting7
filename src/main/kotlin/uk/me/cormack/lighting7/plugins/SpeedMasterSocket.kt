@@ -5,6 +5,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_UNKNOWN
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import java.util.UUID
 
@@ -71,6 +73,11 @@ data class SpeedMasterStateJson(
     val isRunning: Boolean,
     /** `MANUAL` / `TAP` — how the tempo was last set. */
     val source: String,
+    /** Effect-library category this master is the apply-time default for; null routes nothing. */
+    val usage: String? = null,
+    /** Follow ratio over master 1 (`bpm = m1 × num/den`); both null = manual tempo. */
+    val followNum: Int? = null,
+    val followDen: Int? = null,
 )
 
 /** Full bank snapshot — sent on connect, on request, and as the reply to every write. */
@@ -89,6 +96,22 @@ data class SpeedMasterChangedOutMessage(
     val bpm: Double,
     val source: String,
     val timestampMs: Long,
+) : SpeedMasterOutMessage()
+
+/**
+ * A tempo write was refused — the narrow failure ack (docs/websocket-engineering.md §"Reply
+ * shape", option 2, the `surfaceLearn.error` precedent). Unicast to the writer, followed by the
+ * usual full-state reply so a stale client snaps back to the truth it disagreed with.
+ * [code] is `SPEED_MASTER_FOLLOWER` (the master follows master 1 — unlink it in the sheet) or
+ * `SPEED_MASTER_UNKNOWN` (well-formed uuid naming no master — the write was dropped, not
+ * redirected to master 1).
+ */
+@Serializable
+@SerialName("speedMasters.error")
+data class SpeedMasterErrorOutMessage(
+    val masterUuid: String?,
+    val code: String,
+    val message: String,
 ) : SpeedMasterOutMessage()
 
 /**
@@ -119,11 +142,13 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
     when (message) {
         is SpeedMastersStateInMessage -> scope.send(buildSpeedMastersState(bank))
         is SpeedMastersSetBpmInMessage -> {
-            withWriteTarget(message.masterUuid) { bank.setBpm(it, message.bpm, SpeedMasterSource.MANUAL) }
+            val outcome = withWriteTarget(message.masterUuid) { bank.setBpm(it, message.bpm, SpeedMasterSource.MANUAL) }
+            reportTempoWrite(scope, message.masterUuid, outcome)
             scope.send(buildSpeedMastersState(bank))
         }
         is SpeedMastersTapInMessage -> {
-            withWriteTarget(message.masterUuid) { bank.tap(it) }
+            val outcome = withWriteTarget(message.masterUuid) { bank.tap(it) }
+            reportTempoWrite(scope, message.masterUuid, outcome)
             scope.send(buildSpeedMastersState(bank))
         }
         is SpeedMastersRequestBeatInMessage -> {
@@ -149,16 +174,44 @@ suspend fun handleSpeedMasters(scope: SocketScope, message: SpeedMasterInMessage
 /**
  * Resolve a tempo-write target. Null/omitted means master 1 (the strip's M1 tile, and any
  * caller with no uuid yet); a present-but-garbled uuid DROPS the write — degrading it to master 1
- * would let a corrupt frame retune the global tempo. (An unknown-but-well-formed uuid is
- * dropped one layer down, by [SpeedMasterBank]'s write resolution.) The state reply still
- * goes out either way, so a stale client re-syncs.
+ * would let a corrupt frame retune the global tempo — and reports [UnknownMaster], the same
+ * outcome the bank's own write resolution answers for an unknown-but-well-formed uuid. The
+ * state reply still goes out either way, so a stale client re-syncs.
  */
-private inline fun withWriteTarget(raw: String?, write: (UUID?) -> Unit) {
-    if (raw == null) {
-        write(null)
-        return
+private inline fun withWriteTarget(
+    raw: String?,
+    write: (UUID?) -> SpeedMasterBank.TempoWriteOutcome,
+): SpeedMasterBank.TempoWriteOutcome {
+    if (raw == null) return write(null)
+    val uuid = speedMasterUuidOrNull(raw) ?: return SpeedMasterBank.TempoWriteOutcome.UnknownMaster
+    return write(uuid)
+}
+
+/** Send the failure ack for a refused/dropped tempo write; [TempoWriteOutcome.Applied] is silent. */
+private suspend fun reportTempoWrite(
+    scope: SocketScope,
+    requestedUuid: String?,
+    outcome: SpeedMasterBank.TempoWriteOutcome,
+) {
+    when (outcome) {
+        SpeedMasterBank.TempoWriteOutcome.Applied -> {}
+
+        SpeedMasterBank.TempoWriteOutcome.UnknownMaster -> scope.send(
+            SpeedMasterErrorOutMessage(
+                masterUuid = requestedUuid,
+                code = CODE_SPEED_MASTER_UNKNOWN,
+                message = "No speed master with that uuid — the write was dropped",
+            )
+        )
+
+        is SpeedMasterBank.TempoWriteOutcome.RefusedFollower -> scope.send(
+            SpeedMasterErrorOutMessage(
+                masterUuid = requestedUuid,
+                code = CODE_SPEED_MASTER_FOLLOWER,
+                message = outcome.describe,
+            )
+        )
     }
-    speedMasterUuidOrNull(raw)?.let(write)
 }
 
 // ─── Subscriptions ──────────────────────────────────────────────────────
@@ -215,6 +268,9 @@ private fun buildSpeedMastersState(bank: SpeedMasterBank): SpeedMastersStateOutM
                 bpm = it.bpm,
                 isRunning = it.isRunning,
                 source = it.source.name,
+                usage = it.usage,
+                followNum = it.followNum,
+                followDen = it.followDen,
             )
         },
     )

@@ -357,6 +357,12 @@ class ProjectExporter(private val state: State) {
                     bpm = m.bpm,
                     source = m.source,
                     notes = m.notes,
+                    usage = m.usageCategory,
+                    // Through the sanitising getter, not the raw columns: a half-written or
+                    // non-positive pair (or a ratio on master 1) reads as "manual" on every
+                    // other surface, and exporting the junk verbatim would clone/sync it.
+                    followNum = m.followRatio?.first,
+                    followDen = m.followRatio?.second,
                 )
             }
 
