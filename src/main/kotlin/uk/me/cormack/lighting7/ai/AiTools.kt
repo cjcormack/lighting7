@@ -375,6 +375,7 @@ class AiTools(private val state: State) {
                             master.usage?.let { put("usage", it) }
                             master.followNum?.let { put("followNum", it) }
                             master.followDen?.let { put("followDen", it) }
+                            master.followTargetUuid?.let { put("followTargetUuid", it.toString()) }
                         }
                     }
                 })

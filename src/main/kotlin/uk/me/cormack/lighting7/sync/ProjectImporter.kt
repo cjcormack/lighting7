@@ -462,6 +462,7 @@ class ProjectImporter(private val state: State) {
                 usageCategory = m.usage
                 followNum = m.followNum
                 followDen = m.followDen
+                followTargetUuid = m.followTargetUuid?.let { UUID.fromString(it) }
                 this.uuid = uuid
             }
             uuid to dao

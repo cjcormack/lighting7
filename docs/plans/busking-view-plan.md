@@ -388,7 +388,8 @@ startup pass is what adds columns). No rollback shims: a rolled-back binary igno
 
 On landing, add to `followups.md`:
 
-- `FU-SPEED-PHASE-LOCK` — follower beat boundaries free-run within M1's beat (§7, first bullet).
+- ~~`FU-SPEED-PHASE-LOCK`~~ — recorded, then landed (2026-09): a follower's clock is now driven
+  by its leader's tick, and follow gained a *target* so it need not be M1.
 - `FU-BUSK-MOMENTARY` — pads are toggles; no flash/solo gesture.
 - `FU-SPEED-CUSTOM-RATIO` — backend accepts any positive pair; UI offers five.
 

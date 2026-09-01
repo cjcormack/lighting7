@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.java.javaUUID
+import java.util.UUID
 
 /**
  * How a speed master's current BPM was last set. Display-only — nothing branches on it; the
@@ -66,13 +67,25 @@ object DaoSpeedMasters : IntIdTable("speed_masters") {
 
     /**
      * Time-signature numerator/denominator: both null = manual tempo, both positive = this
-     * master follows master 1 at `num/den` (write-through in `SpeedMasterBank`). There is
-     * deliberately no follow-target column — follow means master 1, so there are no chains,
-     * no cycles and no propagation ordering. Master 1 itself is refused a ratio at the write
-     * boundary.
+     * master follows [followTargetUuid] at `num/den`. The leader *drives this master's clock*
+     * (see `SpeedMasterBank`), so the ratio is a rate and a phase relationship, not just a
+     * tempo derivation. Master 1 itself is refused a ratio at the write boundary.
      */
     val followNum = integer("follow_num").nullable()
     val followDen = integer("follow_den").nullable()
+
+    /**
+     * Which master this one follows, or null for master 1 — null is what every row written
+     * before follow targets existed holds, and "the global master" is the right reading of it.
+     * Stored as the leader's **uuid**, not its int id or index, for the reason the whole file
+     * gives: ids are re-minted on import and indices are editable, uuids survive both.
+     *
+     * Chains are allowed (M3 → M2 → M1) and cycles are not: [validateSpeedMasterSettings]
+     * walks the chain at the write boundary, and `SpeedMasterBank.load` degrades any cycle or
+     * dangling target that reaches it anyway (an import, a hand-edited row) to manual. A
+     * forced delete of a leader unlinks its followers rather than leaving one dangling.
+     */
+    val followTargetUuid = javaUUID("follow_target_uuid").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -93,6 +106,7 @@ class DaoSpeedMaster(id: EntityID<Int>) : IntEntity(id) {
     var usageCategory by DaoSpeedMasters.usageCategory
     var followNum by DaoSpeedMasters.followNum
     var followDen by DaoSpeedMasters.followDen
+    var followTargetUuid by DaoSpeedMasters.followTargetUuid
     var uuid by DaoSpeedMasters.uuid
 
     /** [source] as the enum, defaulting to MANUAL when the stored string is unrecognised. */
@@ -106,12 +120,21 @@ class DaoSpeedMaster(id: EntityID<Int>) : IntEntity(id) {
      */
     val followRatio: Pair<Int, Int>?
         get() = speedMasterFollowRatioOrNull(masterIndex, followNum, followDen)
+
+    /**
+     * Who this master follows: its stored target, or master 1 when the row names none — and
+     * null when it isn't following at all, so a leader stored on a manual row (an unlink that
+     * left the column set, an import) is never mistaken for a live link. Read through this
+     * rather than the raw column, the same way [followRatio] guards the pair.
+     */
+    val followTarget: UUID?
+        get() = if (followRatio == null) null else followTargetUuid
 }
 
 /**
  * THE rule for whether a stored num/den pair is a live follow ratio: non-null only when BOTH
  * values are set and positive — a half-written or hand-edited row degrades to "manual" rather
- * than dividing by zero — and always null on master 1, which is what followers derive from.
+ * than dividing by zero — and always null on master 1, which every chain ultimately roots at.
  * One function so the DAO getter and `SpeedMasterBank.followRatioOf` cannot drift
  * (`validateSpeedMasterSettings` enforces the same shape at the write boundary, with errors
  * instead of degradation).
@@ -146,8 +169,18 @@ const val CODE_SPEED_MASTER_FOLLOWER = "SPEED_MASTER_FOLLOWER"
 /** Error code for claiming a usage another master in the project already holds (409). */
 const val CODE_SPEED_MASTER_USAGE_TAKEN = "SPEED_MASTER_USAGE_TAKEN"
 
-/** Error code for putting a follow ratio on master 1, which everything else follows. */
+/** Error code for putting a follow ratio on master 1, the root every chain ends at. */
 const val CODE_SPEED_MASTER_CANNOT_FOLLOW = "SPEED_MASTER_CANNOT_FOLLOW"
+
+/**
+ * Error code for a follow link that would close a loop — following yourself, or following a
+ * master that (directly or through its own leader) follows you. Chains are legal; cycles are
+ * the one shape that has no tempo.
+ */
+const val CODE_SPEED_MASTER_FOLLOW_CYCLE = "SPEED_MASTER_FOLLOW_CYCLE"
+
+/** Error code for a follow target uuid that names no master in this project. */
+const val CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN = "SPEED_MASTER_FOLLOW_TARGET_UNKNOWN"
 
 /** Error code for a malformed usage string or follow-ratio pair. */
 const val CODE_SPEED_MASTER_INVALID = "SPEED_MASTER_INVALID"
@@ -186,6 +219,14 @@ sealed interface SpeedMasterSettingsError {
  * share the implementation; [usage] must already be normalised via [normaliseSpeedMasterUsage].
  * [excludeId] is the row being edited (null on create). Must be called inside a transaction —
  * the uniqueness check queries the project's masters.
+ *
+ * [checkFollowTarget] is the same "only what this request actually sends goes through the
+ * write-boundary rules" carve-out the usage check already has: an update that merely carries
+ * the stored target forward passes false, because a target that names no master here (an
+ * imported row, a hand-edited one) is upstream of this write and would
+ * otherwise 400 every later PUT on the row — rename and notes edits included — while the bank
+ * has already degraded the link to manual. Create, and any write that actually touches the
+ * link, leaves it true.
  */
 fun validateSpeedMasterSettings(
     project: DaoProject,
@@ -193,7 +234,9 @@ fun validateSpeedMasterSettings(
     usage: String?,
     followNum: Int?,
     followDen: Int?,
+    followTargetUuid: UUID? = null,
     excludeId: Int? = null,
+    checkFollowTarget: Boolean = true,
 ): SpeedMasterSettingsError? {
     if ((followNum == null) != (followDen == null)) {
         return SpeedMasterSettingsError.Invalid(
@@ -213,6 +256,9 @@ fun validateSpeedMasterSettings(
             CODE_SPEED_MASTER_CANNOT_FOLLOW,
         )
     }
+    if (followNum != null && checkFollowTarget) {
+        validateFollowTarget(project, followTargetUuid, excludeId)?.let { return it }
+    }
     if (usage != null) {
         if (usage !in SPEED_MASTER_USAGES) {
             return SpeedMasterSettingsError.Invalid(
@@ -229,6 +275,69 @@ fun validateSpeedMasterSettings(
                 CODE_SPEED_MASTER_USAGE_TAKEN,
             )
         }
+    }
+    return null
+}
+
+/**
+ * The follow-target half of [validateSpeedMasterSettings]: the named leader must exist, and
+ * the chain above it must not come back to the master being written.
+ *
+ * A null [targetUuid] alongside a ratio means master 1 — the pre-follow-target spelling, and
+ * the reading the column's default deserves. Master 1 can never follow, so a walk that reaches
+ * it terminates; the `visited` set is belt-and-braces for a cycle that predates this write
+ * (a hand-edited or imported row), which is upstream and not this write's
+ * fault — the bank degrades it to manual at load. [excludeId] is the row being edited, and is
+ * null on create, where a cycle is impossible because the row does not exist yet.
+ *
+ * Must be called inside a transaction.
+ */
+private fun validateFollowTarget(
+    project: DaoProject,
+    targetUuid: UUID?,
+    excludeId: Int?,
+): SpeedMasterSettingsError? {
+    val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }.toList()
+    val byUuid = masters.associateBy { it.uuid }
+    val master1 = masters.firstOrNull { it.masterIndex == 1 }
+
+    // A *named* target that isn't there resolves to nothing, never to master 1: the elvis
+    // shorthand for this reads the same and quietly turns "follows a master that no longer
+    // exists" into "follows master 1", which is a link the caller never asked for.
+    fun resolve(uuid: UUID?): DaoSpeedMaster? = if (uuid == null) master1 else byUuid[uuid]
+
+    fun leaderOf(row: DaoSpeedMaster): DaoSpeedMaster? =
+        if (row.followRatio == null) null else resolve(row.followTargetUuid)
+
+    val target = resolve(targetUuid)
+    if (target == null) {
+        return SpeedMasterSettingsError.Invalid(
+            if (targetUuid == null) {
+                "This project has no master 1 for it to follow"
+            } else {
+                "Follow target names no speed master in this project"
+            },
+            CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN,
+        )
+    }
+    if (target.id.value == excludeId) {
+        return SpeedMasterSettingsError.Invalid(
+            "A speed master cannot follow itself",
+            CODE_SPEED_MASTER_FOLLOW_CYCLE,
+        )
+    }
+
+    val visited = mutableSetOf(target.id.value)
+    var current: DaoSpeedMaster? = leaderOf(target)
+    while (current != null) {
+        if (current.id.value == excludeId) {
+            return SpeedMasterSettingsError.Invalid(
+                "${target.name} already follows this master — a follow chain cannot loop",
+                CODE_SPEED_MASTER_FOLLOW_CYCLE,
+            )
+        }
+        if (!visited.add(current.id.value)) break
+        current = leaderOf(current)
     }
     return null
 }

@@ -86,18 +86,67 @@ Two nullable per-master settings, added for the busk view (see
   meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
   routable; effects in those categories land on master 1. One master per usage per project,
   enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
-- **`follow_num` / `follow_den`** make the master a *follower*: its tempo is derived as
-  `m1.bpm × num / den`. Follow is write-through in the bank (D2): on `load` and on every
-  master-1 tempo write, `sweepFollowersLocked` recomputes each follower on its own clock, so
-  the engine, `slotFor`, the persister and the WS streams all see an ordinary master whose
-  tempo happens to move. Followers target master 1 only (D4 — no chains, no cycles), master 1
-  is refused a ratio at the write boundary, and `setBpm`/`tap` on a follower return
-  `TempoWriteOutcome.RefusedFollower` rather than silently unlinking (D5) — surfaced as a 400
-  (`SPEED_MASTER_FOLLOWER`) on REST, a `speedMasters.error` frame on WS, and a distinct tool
-  error on the AI surface. Derived tempos clamp to the clock's 20–300 range and re-derive
-  from master 1's live bpm on the next sweep, so a clamp never ratchets. Beat-**phase** lock
-  to master 1 is explicitly out of scope (`FU-SPEED-PHASE-LOCK`): the follower's tick counter
-  free-runs, so only its *rate* is kept in step.
+- **`follow_num` / `follow_den` / `follow_target_uuid`** make the master a *follower* of
+  another master (null target = master 1). Following is **phase lock, not just tempo**: a
+  follower has no timer of its own. `MasterClock.adoptDriven` cancels it, and every leader tick
+  maps onto the follower's counter as
+
+  ```
+  followerTick = 1 + floor((leaderTick - 1) × num / den)
+  ```
+
+  so a ½ follower's beat boundaries land on every second leader beat and *stay* there, which is
+  what an operator means by "follow". (The `-1`/`+1` is the clocks' 1-based numbering, where a
+  beat lands on the first tick of the beat; without it a follower beats one leader tick early —
+  enough to pass a rate test and obvious on two beat lamps.) The cascade runs from inside the
+  leader's own tick callback, depth-first, so a follower's beat carries the leader tick's
+  timestamp exactly. Linking snaps the follower's effects once; unlinking does not
+  (`start(resetCounter = false)` hands the timer back where the leader left it).
+
+  The snap is not incidental — `adoptDriven` **zeroes the counter on the transition**, and it
+  has to. A master that has been free-running carries a counter of its own, the tick its new
+  leader maps to is usually *below* it (a ½ follower's target is half the leader's count, and
+  two clocks started together give a mapped tick roughly half the follower's), and `driveTo` is
+  monotonic. Without the reset the follower would refuse every drive until its leader overtook
+  it — frozen for as long as the desk had been up, silently. Zeroing lets the leader's next tick
+  assign the mapped value outright; an already-driven clock is left alone so a reload stays a
+  no-op.
+
+  Chains are allowed — M3 → M2 → M1 — and nested floors compose (`floor(floor(t/2)/2) ==
+  floor(t/4)`), so a grandchild is aligned to the root, not merely to its parent.
+  `validateSpeedMasterSettings` walks the chain at the write boundary and refuses a loop
+  (`SPEED_MASTER_FOLLOW_CYCLE`) or a target that names no master
+  (`SPEED_MASTER_FOLLOW_TARGET_UNKNOWN`); master 1 is refused a ratio outright
+  (`SPEED_MASTER_CANNOT_FOLLOW`). Deleting a master something follows is a
+  `SPEED_MASTER_IN_USE` 409 carrying `followerNames`, overridable with `?force=true` — and the
+  forced path **unlinks those followers** (`unlinkFollowersOf`) rather than leaving them naming
+  a master that is gone. That is what keeps the two reports of a follow agreeing: REST serves
+  the stored columns while the bank serves its resolved graph, so a row left dangling would
+  advertise a ratio for a master the desk is running manually — hiding TAP on the manage page
+  and 400ing a ratio-chip press. One level, not transitively: force-deleting the middle of
+  M3 → M2 → M1 leaves M3 manual rather than inventing a link to M1 at a ratio that no longer
+  means what the operator set.
+
+  Degradation at `load` remains the backstop for the rows that route never sees — an import, a
+  hand-edited database: a dangling target, a self-follow, and every member of a cycle *plus
+  anything following into one* become manual, because no timer exists anywhere upstream of them.
+  For the same reason the target check is gated on the write actually touching the link
+  (`checkFollowTarget`), the carve-out an untouched `usage` already has: an imported row can
+  store a leader this project doesn't have, and judging a later rename on it would lock the
+  operator out of every edit except the unlink.
+
+  The **reported** bpm is still swept: `sweepFollowersLocked` walks `bindings.driveOrder`
+  (leaders first, so a chain resolves in one pass) after `load` and after any tempo write, and
+  writes `leader.bpm × num / den` through `MasterClock.setDerivedBpm`. That deliberately does
+  *not* clamp to 20–300 the way a typed tempo does: the range guards the tick timer, a driven
+  clock has no timer, and clamping 2× of 200 to 300 would make the strip's readout, the
+  persisted row and `rateScales` all disagree with the master's real rate. The range comes back
+  the moment the clock does: `applyClockRolesLocked` re-clamps a master on its way *out* of
+  being driven — and emits the correction, so the row stops storing a tempo the write boundary
+  would refuse — because it is about to run a timer at that figure again. `setBpm`/`tap` on a
+  follower return `TempoWriteOutcome.RefusedFollower` (naming the leader to retune instead)
+  rather than silently unlinking (D5) — a 400 (`SPEED_MASTER_FOLLOWER`) on REST, a
+  `speedMasters.error` frame on WS, a distinct tool error on the AI surface.
 Effects reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → master 1) and
 the engine binds that to a runtime slot index at add/update time, re-binding when the
 bank's membership changes; a deleted master's effects degrade to master 1, never stop.

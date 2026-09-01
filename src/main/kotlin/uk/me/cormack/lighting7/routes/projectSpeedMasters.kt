@@ -105,8 +105,12 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
      * Patch semantics: only present keys change. The follow pair moves together — if either
      * `followNum` or `followDen` is present both must be, so unlink is
      * `{"followNum":null,"followDen":null}` and a half-patch is a 400 rather than a silent
-     * half-write. A `bpm` on an (effectively) following master is refused (D5's typed-tempo
-     * half): a follower's tempo is derived, and its stored default is meaningless while linked.
+     * half-write. `followTargetUuid` rides along with that pair: sent, it re-points the link;
+     * absent on a ratio-only edit, the stored leader is carried forward (null — master 1 — for
+     * a client that predates follow targets, which is exactly what such a client means); and an
+     * unlink clears it. A `bpm` on an (effectively) following master is refused (D5's
+     * typed-tempo half): a follower's tempo is derived, and its stored default is meaningless
+     * while linked.
      */
     put<ProjectSpeedMasterResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -151,6 +155,27 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 val followPatched = "followNum" in body
                 val effectiveNum = if (followPatched) body["followNum"].nullableInt() else storedRatio?.first
                 val effectiveDen = if (followPatched) body["followDen"].nullableInt() else storedRatio?.second
+                val effectiveTarget = when {
+                    effectiveNum == null -> null
+                    "followTargetUuid" in body -> {
+                        val raw = body["followTargetUuid"].nullableString()
+                        val parsed = raw?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                        if (raw != null && parsed == null) {
+                            return@transaction UpdateSpeedMasterOutcome.Invalid(
+                                "followTargetUuid is not a uuid",
+                                CODE_SPEED_MASTER_INVALID,
+                            )
+                        }
+                        parsed
+                    }
+
+                    else -> master.followTargetUuid
+                }
+                // Same carve-out as the untouched usage above: a target this request did not
+                // send is carried-forward junk, and a leader force-deleted out from under the
+                // row would otherwise 400 every later PUT on it — rename and notes edits
+                // included — for a link the bank has already degraded to manual.
+                val followTargetPatched = followPatched || "followTargetUuid" in body
 
                 validateSpeedMasterSettings(
                     project = project,
@@ -158,7 +183,9 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                     usage = if (usagePatched) effectiveUsage else null,
                     followNum = effectiveNum,
                     followDen = effectiveDen,
+                    followTargetUuid = effectiveTarget,
                     excludeId = master.id.value,
+                    checkFollowTarget = followTargetPatched,
                 )?.let { error ->
                     return@transaction when (error) {
                         is SpeedMasterSettingsError.Invalid ->
@@ -169,9 +196,12 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                     }
                 }
                 if (requestedBpm != null && effectiveNum != null) {
+                    // Names the leader it will actually derive from, so the advice is
+                    // actionable on a bank where that is no longer always Master 1.
+                    val leaderName = leaderNameFor(project, effectiveTarget)
                     return@transaction UpdateSpeedMasterOutcome.Invalid(
-                        "${master.name} follows Master 1 at $effectiveNum/$effectiveDen — " +
-                            "unlink it to set its tempo, or retune Master 1 instead",
+                        "${master.name} follows $leaderName at $effectiveNum/$effectiveDen — " +
+                            "unlink it to set its tempo, or retune $leaderName instead",
                         CODE_SPEED_MASTER_FOLLOWER,
                     )
                 }
@@ -199,6 +229,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 master.usageCategory = effectiveUsage
                 master.followNum = effectiveNum
                 master.followDen = effectiveDen
+                master.followTargetUuid = effectiveTarget
                 requestedBpm?.let {
                     master.bpm = it
                     master.source = SpeedMasterSource.MANUAL.name
@@ -259,6 +290,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 if (usage.total > 0 && !resource.force) {
                     return@transaction SpeedMasterDeleteOutcome.InUse(usage)
                 }
+                unlinkFollowersOf(project, master)
                 master.delete()
                 SpeedMasterDeleteOutcome.Deleted
             }
@@ -285,6 +317,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                         cueAdHocEffectCount = outcome.usage.cueAdHocEffects,
                         cueLayerCount = outcome.usage.cueLayers,
                         cueIds = outcome.usage.cueIds,
+                        followerNames = outcome.usage.followers,
                     ),
                 )
 
@@ -348,10 +381,17 @@ internal fun createSpeedMaster(
     // unlink a ratio it never had.
     if (request.bpm != null && request.followNum != null && request.followDen != null) {
         return CreateSpeedMasterOutcome.Invalid(
-            "A master created with a follow ratio derives its tempo from Master 1 — omit bpm, " +
-                "or create it without the ratio",
+            "A master created with a follow ratio derives its tempo from the master it " +
+                "follows — omit bpm, or create it without the ratio",
             CODE_SPEED_MASTER_FOLLOWER,
         )
+    }
+    val followTarget = request.followTargetUuid?.let { raw ->
+        runCatching { UUID.fromString(raw) }.getOrNull()
+            ?: return CreateSpeedMasterOutcome.Invalid(
+                "followTargetUuid is not a uuid",
+                CODE_SPEED_MASTER_INVALID,
+            )
     }
     val usage = normaliseSpeedMasterUsage(request.usage)
 
@@ -371,6 +411,7 @@ internal fun createSpeedMaster(
             usage = usage,
             followNum = request.followNum,
             followDen = request.followDen,
+            followTargetUuid = followTarget,
             excludeId = null,
         )?.let { error ->
             return@transaction when (error) {
@@ -390,6 +431,7 @@ internal fun createSpeedMaster(
             usageCategory = usage
             followNum = request.followNum
             followDen = request.followDen
+            followTargetUuid = followTarget
         }
         CreateSpeedMasterOutcome.Created(master.toDto(SpeedMasterUsage.NONE))
     }
@@ -437,10 +479,12 @@ data class SpeedMasterDto(
     val notes: String? = null,
     /** Effect-library category this master is the apply-time default for; null routes nothing. */
     val usage: String? = null,
-    /** Follow ratio over master 1 (`bpm = m1 × num/den`); both null = manual tempo. */
+    /** Follow ratio over [followTargetUuid] (`bpm = leader × num/den`); both null = manual. */
     val followNum: Int? = null,
     val followDen: Int? = null,
-    /** Persisted rows referencing this master. Gates delete. */
+    /** The master this one follows; null means master 1. Only meaningful with a ratio set. */
+    val followTargetUuid: String? = null,
+    /** Persisted rows referencing this master, plus the masters following it. Gates delete. */
     val referenceCount: Int,
 )
 
@@ -455,6 +499,8 @@ data class CreateSpeedMasterRequest(
     /** See [SpeedMasterDto.followNum]; both-or-neither, positive. */
     val followNum: Int? = null,
     val followDen: Int? = null,
+    /** See [SpeedMasterDto.followTargetUuid]; omitted (or null) with a ratio means master 1. */
+    val followTargetUuid: String? = null,
 )
 
 @Serializable
@@ -468,6 +514,12 @@ data class SpeedMasterInUseResponse(
     /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
     val cueLayerCount: Int,
     val cueIds: List<Int>,
+    /**
+     * Masters that follow this one, by name — a reference like any other, and the one the
+     * client can act on directly ("unlink Movement, then delete"). Deleting anyway with
+     * `?force=true` leaves them dangling, and the bank degrades a dangling leader to manual.
+     */
+    val followerNames: List<String> = emptyList(),
 )
 
 /** Persisted references to one speed master. Live FX instances are excluded — they rebind to master 1. */
@@ -478,13 +530,20 @@ internal data class SpeedMasterUsage(
     /** Per-layer speed-master overrides (`DaoCueLayers`). Was `cuePresetApplications`. */
     val cueLayers: Int,
     val cueIds: List<Int>,
+    /**
+     * Names of the masters following this one. A follow link is a reference too: deleting the
+     * leader out from under a follower would silently re-time it (the bank degrades a dangling
+     * leader to manual), so it gates the delete exactly like a stored effect reference does.
+     */
+    val followers: List<String> = emptyList(),
 ) {
-    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers
+    val total: Int get() = lookEffects + cueAdHocEffects + cueLayers + followers.size
 
     fun describe(): String = buildList {
         if (lookEffects > 0) add("$lookEffects look effect${if (lookEffects == 1) "" else "s"}")
         if (cueAdHocEffects > 0) add("$cueAdHocEffects cue effect${if (cueAdHocEffects == 1) "" else "s"}")
         if (cueLayers > 0) add("$cueLayers cue layer${if (cueLayers == 1) "" else "s"}")
+        if (followers.isNotEmpty()) add("${followers.joinToString(", ")} following it")
     }.joinToString(" and ")
 
     companion object {
@@ -514,6 +573,18 @@ internal fun speedMasterUsageFor(
     if (masterUuids.isEmpty()) return emptyMap()
     val uuidSet = masterUuids.toSet()
     val uuidStrings = uuidSet.associateBy { it.toString() }
+
+    // Followers, read through the sanitising getter so a row that merely *stores* a stale
+    // target without a live ratio doesn't pin its old leader in place. A follower of master 1
+    // that names no target counts against master 1, which is the link it actually has.
+    val projectMasters = DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }.toList()
+    val master1Uuid = projectMasters.firstOrNull { it.masterIndex == 1 }?.uuid
+    val followerNames = mutableMapOf<UUID, MutableList<String>>()
+    projectMasters.forEach { row ->
+        if (row.followRatio == null) return@forEach
+        val leaderUuid = row.followTargetUuid ?: master1Uuid ?: return@forEach
+        if (leaderUuid in uuidSet) followerNames.getOrPut(leaderUuid) { mutableListOf() }.add(row.name)
+    }
 
     // Both roles count. A master referenced only as a wall-clock *rate* master is just as
     // much in use as one an effect runs on, and counting only the latter would let the
@@ -574,8 +645,70 @@ internal fun speedMasterUsageFor(
             cueAdHocEffects = adHocCues.size,
             cueLayers = layerCues.size,
             cueIds = (adHocCues + layerCues).distinct().sorted(),
+            followers = followerNames[uuid].orEmpty().sorted(),
         )
     }
+}
+
+/**
+ * Cut the links pointing at [master] before it is deleted, leaving its followers manual at
+ * whatever tempo they were last derived to.
+ *
+ * The delete guard refuses while anything follows it, so this only ever runs under
+ * `?force=true` — where the operator has already been shown the follower names and chosen to
+ * go ahead anyway. Fixing the *rows* rather than teaching the readers to cope with a dangling
+ * target is what keeps the two reports of a follow agreeing: `SpeedMasterBank` degrades a
+ * dangling leader to manual, so without this the desk would run the master manually while REST
+ * still advertised a ratio for it — hiding TAP on the manage page, and 400ing a ratio-chip
+ * press with `SPEED_MASTER_FOLLOW_TARGET_UNKNOWN`. The bank's degradation stays as the backstop
+ * for the rows this route never sees: imports, and hand-edited databases.
+ *
+ * Only an explicitly-named target can dangle. A follower of master 1 stores no target, and
+ * master 1 cannot be deleted (`SpeedMasterDeleteOutcome.Protected`), so the null spelling has
+ * nothing to lose. The stored bpm is deliberately left alone: it is the tempo the master was
+ * last derived to, which is what it should carry on running at — and the bank re-clamps it on
+ * the way out of `driven` if the ratio had pushed it past the timer's range.
+ *
+ * A chain unlinks one level, not transitively: force-deleting the middle of M3 → M2 → M1
+ * leaves M3 manual, because "follows a master that is gone" has no honest reading other than
+ * "follows nothing". Silently re-pointing it at M2's own leader would invent a link the
+ * operator never asked for, at a ratio that no longer means what they set.
+ *
+ * Must be called inside a transaction.
+ */
+private fun unlinkFollowersOf(project: DaoProject, master: DaoSpeedMaster) {
+    DaoSpeedMaster
+        .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.followTargetUuid eq master.uuid) }
+        .forEach { follower ->
+            // The ratio only needs clearing where the link was live; the target column is
+            // cleared either way, so no row is left naming a master that no longer exists.
+            // One that merely stored a stale target would otherwise poison the PUT's
+            // carry-forward: a client re-linking with `followNum`/`followDen` alone would
+            // carry the dead uuid forward and get a 400 it could not have predicted.
+            if (follower.followRatio != null) {
+                follower.followNum = null
+                follower.followDen = null
+            }
+            follower.followTargetUuid = null
+        }
+}
+
+/**
+ * Display name of the master [targetUuid] names, or master 1's when it names none — the
+ * spelling every follow refusal uses so the advice points at a master the operator can see.
+ * Falls back to the literal "Master 1" only for a project with no index-1 row at all, which
+ * `ensureDefaultSpeedMasters` makes unreachable in practice.
+ *
+ * Must be called inside a transaction.
+ */
+private fun leaderNameFor(project: DaoProject, targetUuid: UUID?): String {
+    val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }
+    val leader = if (targetUuid == null) {
+        masters.firstOrNull { it.masterIndex == 1 }
+    } else {
+        masters.firstOrNull { it.uuid == targetUuid }
+    }
+    return leader?.name ?: "Master 1"
 }
 
 private fun validateBpm(bpm: Double?): String? {
@@ -601,5 +734,6 @@ private fun DaoSpeedMaster.toDto(references: SpeedMasterUsage): SpeedMasterDto =
     usage = usageCategory,
     followNum = followRatio?.first,
     followDen = followRatio?.second,
+    followTargetUuid = followTarget?.toString(),
     referenceCount = references.total,
 )

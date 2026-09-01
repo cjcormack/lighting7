@@ -30,9 +30,11 @@ data class SpeedMasterSnapshot(
     val source: SpeedMasterSource,
     /** Effect-library category this master is the apply-time default for; null routes nothing. */
     val usage: String? = null,
-    /** Follow ratio over master 1 — both null = manual, both positive = follower (D2). */
+    /** Follow ratio over [followTargetUuid] — both null = manual, both positive = follower (D2). */
     val followNum: Int? = null,
     val followDen: Int? = null,
+    /** Which master this one follows; null means master 1, the pre-follow-target spelling. */
+    val followTargetUuid: UUID? = null,
 )
 
 /**
@@ -43,8 +45,15 @@ data class SpeedMasterSnapshot(
  * the bank holds a synthetic master 1 at [MasterClock.DEFAULT_BPM], so `null → master 1`
  * always resolves — mid-boot, in tests, and after a hand-edited DB alike.
  *
- * **One processing pass, N timebases.** Each clock advances its own tick counter on its own
- * timer, but no clock drives effect processing directly: every tick nudges the CONFLATED
+ * **Following is phase lock, not just tempo.** A master with a [Follow] link has no timer of
+ * its own: its leader's tick is mapped onto its counter (`floor(leaderTick × num / den)`,
+ * anchored at tick 0), so a ½ follower's beats land on every second leader beat and stay
+ * there. Chains are allowed and rooted at master 1; cycles and dangling targets degrade to
+ * manual at [load]. Everything else — the engine, [slotFor], the persister, the WS streams —
+ * still sees an ordinary master whose tempo happens to move.
+ *
+ * **One processing pass, N timebases.** Each manual clock advances its own tick counter on its
+ * own timer, but no clock drives effect processing directly: every tick nudges the CONFLATED
  * [wake] channel, and the engine runs *one* pass per wake-up over one coherent [Frame] of
  * per-master ticks ([snapshotFrame]). Ticks landing while a pass is in flight collapse into
  * a single wake, so the pass rate is bounded by the fastest master and never backlogs — and
@@ -69,13 +78,23 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val source: SpeedMasterSource,
         /** Effect-library category this master is the apply-time default for; null routes nothing. */
         val usage: String? = null,
-        /** Follow ratio over master 1; both null = manual. */
+        /** Follow ratio over [followTargetUuid]; both null = manual. */
         val followNum: Int? = null,
         val followDen: Int? = null,
+        /**
+         * The master this one follows, null when it follows master 1 or isn't following at
+         * all — [followNum] tells the two apart. Reported as the *resolved* leader, so a row
+         * whose stored target was dangling or looped reads back as the manual master the bank
+         * degraded it to, rather than as a link that isn't running.
+         */
+        val followTargetUuid: UUID? = null,
     )
 
-    /** A follower's time signature over master 1: `bpm = m1.bpm × num / den`. */
-    data class Ratio(val num: Int, val den: Int)
+    /**
+     * A follower's time signature over its leader: it ticks — and therefore beats — at the
+     * leader's rate times `num / den`. [target] is the leader's uuid, or null for master 1.
+     */
+    data class Follow(val target: UUID?, val num: Int, val den: Int)
 
     /**
      * What a tempo write ([setBpm]/[tap]) did. Richer than the old Boolean because a follower
@@ -88,9 +107,10 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         data object UnknownMaster : TempoWriteOutcome
 
         /**
-         * D5: the master follows master 1, so its tempo is derived, not set. Refused rather
-         * than auto-unlinked — a stray TAP mid-show must not silently sever a relationship the
-         * operator set up deliberately; the fix is to unlink in the speed-master sheet.
+         * D5: the master follows another master, so its tempo is derived, not set. Refused
+         * rather than auto-unlinked — a stray TAP mid-show must not silently sever a
+         * relationship the operator set up deliberately; the fix is to unlink in the
+         * speed-master sheet.
          */
         data class RefusedFollower(
             val uuid: UUID?,
@@ -98,6 +118,8 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             val name: String,
             val num: Int,
             val den: Int,
+            /** The leader's display name, so the refusal names the master to retune instead. */
+            val leaderName: String,
         ) : TempoWriteOutcome {
             /**
              * The operator-facing refusal, one phrasing for every surface (WS error frame,
@@ -105,7 +127,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
              * per-surface copies. (The AI tool appends model-specific advice of its own.)
              */
             val describe: String
-                get() = "$name follows Master 1 at $num/$den — unlink it in the " +
+                get() = "$name follows $leaderName at $num/$den — unlink it in the " +
                     "speed-master sheet to set its tempo"
         }
     }
@@ -138,7 +160,16 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val clock: MasterClock,
         @Volatile var source: SpeedMasterSource,
         @Volatile var usage: String? = null,
-        @Volatile var follow: Ratio? = null,
+        /**
+         * The live link, or null for a manual master. Set from the row at [load] and cleared
+         * there when the row's target is dangling or loops — so everything downstream can read
+         * "follow != null" as "this clock is driven", with no second validity question.
+         */
+        @Volatile var follow: Follow? = null,
+        /** Resolved leader, non-null exactly when [follow] is. */
+        @Volatile var leader: Entry? = null,
+        /** Resolved followers, in slot order. Empty for most masters; the tick cascade's edge list. */
+        @Volatile var followers: List<Entry> = emptyList(),
     )
 
     /**
@@ -174,6 +205,12 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val slots: Array<Entry>,
         val slotByUuid: Map<UUID, Int>,
         val version: Long,
+        /**
+         * Every follower, leaders before their own followers — the order a chain must be
+         * recomputed in, and empty in the (usual) all-manual bank, which is what lets the
+         * per-tick hot path skip the cascade with one reference read.
+         */
+        val driveOrder: List<Entry> = emptyList(),
     )
 
     @Volatile
@@ -210,8 +247,56 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
     private var startedScope: CoroutineScope? = null
 
     init {
-        master1Clock.onTick = { wake.trySend(Unit) }
+        master1Clock.onTick = { onClockTick(master1Clock) }
         master1Clock.onBeat = { beat -> emitBeat(master1Clock, beat) }
+    }
+
+    /**
+     * One master ticked: nudge the engine, then hand the tick down to anything following this
+     * master (and to whatever follows *those*, transitively).
+     *
+     * Runs on the ticking clock's own timer coroutine and takes no lock — it reads the single
+     * volatile [bindings] reference, so a concurrent [load] swaps a whole consistent graph in
+     * rather than being observed half-built. The all-manual bank pays one reference read and a
+     * list-empty check per tick; the identity scan only happens when something is following.
+     */
+    private fun onClockTick(clock: MasterClock) {
+        wake.trySend(Unit)
+        val current = bindings
+        if (current.driveOrder.isEmpty()) return
+        val entry = current.slots.firstOrNull { it.clock === clock } ?: return
+        driveFollowers(entry)
+    }
+
+    /**
+     * Map a leader's tick onto each of its followers' clocks, depth-first.
+     *
+     * `followerTick = 1 + floor((leaderTick - 1) × num / den)` — anchored at the counters'
+     * shared origin rather than at the moment of linking, which is *the* reason follow now
+     * means what an operator expects: a ½ follower's beat boundaries land on every second
+     * leader beat, permanently, instead of free-running at wherever its own counter happened
+     * to sit (`FU-SPEED-PHASE-LOCK`). The cost is that linking snaps this master's effects
+     * once, which is the behaviour the feature is asking for.
+     *
+     * The `-1`/`+1` is the clocks' 1-based tick numbering, where a beat lands on the *first*
+     * tick of the beat: without it a ½ follower beats one leader tick early, which is small
+     * enough to pass a rate test and obvious to anyone watching two beat lamps.
+     *
+     * Nested floors compose exactly — `floor(floor(t/2)/2) == floor(t/4)` — so a chain's
+     * grandchild is aligned to the root, not merely to its parent.
+     */
+    private fun driveFollowers(entry: Entry) {
+        val followers = entry.followers
+        if (followers.isEmpty()) return
+        val tick = entry.clock.currentTick
+        for (follower in followers) {
+            val follow = follower.follow ?: continue
+            follower.clock.driveTo(
+                1 + Math.floorDiv((tick.tickNumber - 1) * follow.num, follow.den.toLong()),
+                tick.timestampMs,
+            )
+            driveFollowers(follower)
+        }
     }
 
     /**
@@ -270,6 +355,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             usage = entry.usage,
             followNum = entry.follow?.num,
             followDen = entry.follow?.den,
+            followTargetUuid = entry.leader?.uuid,
         )
     }
 
@@ -328,7 +414,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     // ratio edit arrives as a reload of the same uuid, and stale values here
                     // would silently ignore it.
                     entry.usage = row.usage
-                    entry.follow = followRatioOf(row)
+                    entry.follow = followOf(row)
                     if (firstLoad && entry.clock === previous[0].clock) {
                         entry.clock.setBpm(row.bpm)
                         entry.source = row.source
@@ -337,13 +423,12 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                 } else {
                     val clock = MasterClock()
                     clock.setBpm(row.bpm)
-                    clock.onTick = { wake.trySend(Unit) }
+                    clock.onTick = { onClockTick(clock) }
                     clock.onBeat = { beat -> emitBeat(clock, beat) }
-                    startedScope?.let { clock.start(it) }
                     newSlots.add(
                         Entry(
                             row.uuid, row.index, row.name, clock, row.source,
-                            usage = row.usage, follow = followRatioOf(row),
+                            usage = row.usage, follow = followOf(row),
                         )
                     )
                 }
@@ -357,42 +442,158 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             val kept = newSlots.mapTo(HashSet()) { it.clock }
             previous.filter { it.clock !in kept }.forEach { it.clock.stop() }
 
+            val slotByUuid = newSlots.withIndex()
+                .mapNotNull { (i, e) -> e.uuid?.let { it to i } }
+                .toMap()
+            val driveOrder = resolveFollowGraph(newSlots, slotByUuid)
+
             bindings = Bindings(
                 slots = newSlots.toTypedArray(),
-                slotByUuid = newSlots.withIndex()
-                    .mapNotNull { (i, e) -> e.uuid?.let { it to i } }
-                    .toMap(),
+                slotByUuid = slotByUuid,
                 version = bindings.version + 1,
+                driveOrder = driveOrder,
             )
 
-            // D2's "on load" half: a follower adopts `m1.bpm × ratio` immediately, overriding
-            // whatever stored bpm its row carried — a boot or import with a follower comes up
-            // already in step. The no-change check inside the sweep keeps an ordinary CRUD
-            // reload (derived value already persisted) from emitting anything.
-            sweepFollowersLocked()
+            val clamped = applyClockRolesLocked(newSlots)
+
+            // D2's "on load" half: a follower adopts `leader.bpm × ratio` immediately,
+            // overriding whatever stored bpm its row carried — a boot or import with a
+            // follower comes up already in step. The no-change check inside the sweep keeps an
+            // ordinary CRUD reload (derived value already persisted) from emitting anything.
+            clamped + sweepFollowersLocked()
         }
         swept.forEach { emitChange(it) }
     }
 
     /**
-     * A snapshot's follow ratio, or null when manual/malformed/on master 1 — the single rule
+     * A snapshot's follow link, or null when manual/malformed/on master 1 — the ratio rule
      * lives in [speedMasterFollowRatioOrNull] (models), shared with `DaoSpeedMaster.followRatio`
      * so a row reads the same on every surface. An index-1 row claiming a ratio is ignored
-     * outright: master 1 is what followers derive from, and honouring it would make the
-     * sweep's source amount to a self-reference.
+     * outright: master 1 is the root every chain ends at, and honouring it would make the
+     * graph's source amount to a self-reference. Whether the *target* is usable is a separate
+     * question, answered in [resolveFollowGraph] where the whole bank is visible.
      */
-    private fun followRatioOf(row: SpeedMasterSnapshot): Ratio? =
+    private fun followOf(row: SpeedMasterSnapshot): Follow? =
         speedMasterFollowRatioOrNull(row.index, row.followNum, row.followDen)
-            ?.let { (num, den) -> Ratio(num, den) }
+            ?.let { (num, den) -> Follow(row.followTargetUuid, num, den) }
 
-    fun start(scope: CoroutineScope) {
-        startedScope = scope
-        bindings.slots.forEach { it.clock.start(scope) }
+    /**
+     * Resolve every row's stored target into a live leader, drop the links that can't work,
+     * and return the followers leaders-first.
+     *
+     * Three degradations, all to "manual", all silent by design — this runs on a reload, not
+     * on a write, and the alternative to degrading is a master with no tempo at all:
+     *
+     * - **Dangling target**: the named master isn't in this bank — an import that carried a
+     *   follower but not its leader, or a hand-edited row. (Not a forced delete: that route
+     *   unlinks the followers itself, so the stored columns and this graph agree.) Same
+     *   principle as an effect whose speed master vanished: fall back to something that runs.
+     * - **Self-follow**: only reachable from a hand-edited row; the write boundary refuses it.
+     * - **Cycles, and anything following into one**: an entry whose leader chain never reaches
+     *   a manual master has no timer anywhere upstream, so nothing would ever drive it. Every
+     *   member is degraded, not just the one the iteration happened to reach first — leaving a
+     *   half-broken chain standing would be a link the write boundary would have rejected.
+     *
+     * Called under [lock] as part of [load], and mutates the entries it is given before they
+     * are published in a new [Bindings].
+     */
+    private fun resolveFollowGraph(slots: List<Entry>, slotByUuid: Map<UUID, Int>): List<Entry> {
+        val master1 = slots[0]
+        slots.forEach { it.leader = null; it.followers = emptyList() }
+
+        for (entry in slots) {
+            val follow = entry.follow ?: continue
+            val leader = if (follow.target == null) master1 else slotByUuid[follow.target]?.let { slots[it] }
+            if (leader == null || leader === entry) {
+                entry.follow = null
+            } else {
+                entry.leader = leader
+            }
+        }
+
+        // A walk longer than the bank is a loop, by pigeonhole. Evaluated against the graph as
+        // it stands, before anything is cleared, so every member of a cycle fails together.
+        val looping = slots.filter { entry ->
+            if (entry.follow == null) return@filter false
+            var hops = 0
+            var current = entry.leader
+            while (current != null) {
+                if (hops++ > slots.size) return@filter true
+                current = current.leader
+            }
+            false
+        }
+        looping.forEach { it.follow = null; it.leader = null }
+
+        val byLeader = slots.filter { it.follow != null }.groupBy { it.leader }
+        slots.forEach { entry -> entry.followers = byLeader[entry].orEmpty() }
+
+        // Leaders before their followers, so one pass of the bpm sweep derives a whole chain.
+        // Cycles are gone by now, so this always drains.
+        val ordered = ArrayList<Entry>()
+        val remaining = slots.filter { it.follow != null }.toMutableList()
+        while (remaining.isNotEmpty()) {
+            val ready = remaining.filter { it.leader?.follow == null || it.leader in ordered }
+            if (ready.isEmpty()) break
+            ordered.addAll(ready)
+            remaining.removeAll(ready)
+        }
+        return ordered
     }
 
+    /**
+     * Give every clock the role its row asks for: a follower's timer is cancelled and its
+     * ticks come from its leader ([MasterClock.adoptDriven]), a manual master runs its own.
+     *
+     * An unlink resumes the timer **without resetting the tick counter**, so the master picks
+     * up its own timing from exactly where its leader left it — the operator stopped following,
+     * they didn't ask every effect on that master to jump. (Linking *does* snap, unavoidably:
+     * that is what phase alignment means.) [MasterClock.start] no-ops on an already-running
+     * clock, so this is safe to run for the whole bank on every reload.
+     *
+     * Returns the entries whose tempo had to be pulled back into [MasterClock.MIN_BPM]..
+     * [MasterClock.MAX_BPM] on the way out of being driven, for the caller to emit once the
+     * lock is released: a derived tempo is deliberately unclamped ([MasterClock.setDerivedBpm]),
+     * so an unlinked 2×-of-200 master would otherwise hand its own timer 400 BPM — a rate the
+     * write boundary refuses to accept and the row would go on storing.
+     */
+    private fun applyClockRolesLocked(slots: List<Entry>): List<Entry> {
+        val scope = startedScope
+        val clamped = mutableListOf<Entry>()
+        slots.forEach { entry ->
+            if (entry.follow != null) {
+                entry.clock.adoptDriven()
+            } else {
+                if (entry.clock.driven) {
+                    val before = entry.clock.bpm.value
+                    entry.clock.setBpm(before)
+                    if (entry.clock.bpm.value != before) clamped.add(entry)
+                }
+                scope?.let { entry.clock.start(it, resetCounter = false) }
+            }
+        }
+        return clamped
+    }
+
+    fun start(scope: CoroutineScope) {
+        // Under the lock, unlike the old body: this now assigns clock *roles*, and a load
+        // landing halfway through would leave a follower with both a timer and a leader.
+        val clamped = synchronized(lock) {
+            startedScope = scope
+            // Followers are driven by their leader rather than by a timer of their own, so they
+            // are handed their role here too — otherwise a bank started after load would give
+            // every follower back its own free-running clock.
+            applyClockRolesLocked(bindings.slots.toList())
+        }
+        clamped.forEach { emitChange(it) }
+    }
+
+    /** Under [lock] like [start], so a concurrent [load] cannot restart a clock after this. */
     fun stop() {
-        startedScope = null
-        bindings.slots.forEach { it.clock.stop() }
+        synchronized(lock) {
+            startedScope = null
+            bindings.slots.forEach { it.clock.stop() }
+        }
     }
 
     /**
@@ -423,41 +624,49 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val moved: List<Entry> = synchronized(lock) {
             val entry = entryFor(uuid) ?: return TempoWriteOutcome.UnknownMaster
             entry.follow?.let {
-                return TempoWriteOutcome.RefusedFollower(entry.uuid, entry.index, entry.name, it.num, it.den)
+                return TempoWriteOutcome.RefusedFollower(
+                    entry.uuid, entry.index, entry.name, it.num, it.den,
+                    leaderName = entry.leader?.name ?: "Master 1",
+                )
             }
             write(entry)
-            if (entry === bindings.slots[0]) listOf(entry) + sweepFollowersLocked() else listOf(entry)
+            // Any master can now have followers, so every write sweeps. The sweep's no-change
+            // filter makes that free for the (usual) case of a write to a master nothing
+            // follows — where the old slot-0 test was the shape of the answer, not an
+            // optimisation.
+            listOf(entry) + sweepFollowersLocked()
         }
         moved.forEach { emitChange(it) }
         return TempoWriteOutcome.Applied
     }
 
     /**
-     * Write-through follow (D2): recompute every follower as `m1.bpm × num / den` on the
-     * follower's own clock, returning the entries whose tempo actually moved, slot order.
-     * Caller holds [lock] and emits the changes after releasing it.
+     * Recompute every follower's *reported* tempo as `leader.bpm × num / den`, returning the
+     * entries whose tempo actually moved, leaders first. Caller holds [lock] and emits the
+     * changes after releasing it.
      *
-     * - **No recursion**: this writes `entry.clock.setBpm` directly, never [setBpm], and the
-     *   only trigger is a write to slot 0, which is never itself a follower (validation at the
-     *   write boundary plus the slot-0 guard here) — so there is no chain to propagate (D4).
+     * This is bookkeeping, not timing: a follower's clock is driven tick-for-tick by its
+     * leader ([driveFollowers]), so what its rate *is* never depends on this pass. What
+     * depends on it is what the strip displays, what the row persists, and the wall-clock
+     * rate multiplier in [rateScales] — which is exactly why it uses
+     * [MasterClock.setDerivedBpm] and not [MasterClock.setBpm]: clamping 2× of 200 BPM to the
+     * timer's 300 ceiling would report a tempo the master is demonstrably not running at.
+     *
+     * - **Chains in one pass**: `bindings.driveOrder` is leaders-first, so a grandchild sees
+     *   its parent's already-derived value.
      * - **The no-change check is the persist/reload loop-breaker**: a flush writes the derived
      *   bpm to the row, the next [load] sweeps and derives the same value, nothing is emitted,
      *   nothing re-arms the persister's debounce.
      * - **Multiply before dividing**: `126.0 * 1 / 3` is exactly `42.0` in IEEE 754;
      *   `126.0 * (1.0 / 3.0)` is not.
-     * - M1 reads back through its clock, so a derived bpm outside the clock's range clamps the
-     *   same way a typed one does, and the next sweep re-derives from M1's live bpm rather than
-     *   the clamped value — no ratchet.
      */
     private fun sweepFollowersLocked(): List<Entry> {
-        val slots = bindings.slots
-        val m1Bpm = slots[0].clock.bpm.value
-        return slots.filter { entry ->
-            if (entry === slots[0]) return@filter false
+        return bindings.driveOrder.filter { entry ->
             val ratio = entry.follow ?: return@filter false
+            val leader = entry.leader ?: return@filter false
             val before = entry.clock.bpm.value
             val beforeSource = entry.source
-            entry.clock.setBpm(m1Bpm * ratio.num / ratio.den)
+            entry.clock.setDerivedBpm(leader.clock.bpm.value * ratio.num / ratio.den)
             // A follower's tempo is derived, so its provenance reads MANUAL — no new source
             // value on the wire (the session's additive-only promise), and the follower's UI
             // shows a ratio chip, not TAP. Unconditional, not only-on-change: a master tapped

@@ -364,6 +364,7 @@ class ProjectExporter(private val state: State) {
                     // other surface, and exporting the junk verbatim would clone/sync it.
                     followNum = m.followRatio?.first,
                     followDen = m.followRatio?.second,
+                    followTargetUuid = m.followTarget?.toString(),
                 )
             }
 

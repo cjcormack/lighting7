@@ -316,6 +316,7 @@ class Show(
                     usage = it.usageCategory,
                     followNum = it.followRatio?.first,
                     followDen = it.followRatio?.second,
+                    followTargetUuid = it.followTarget,
                 )
             }
         }

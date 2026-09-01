@@ -188,6 +188,23 @@ class ProjectCloneTest {
                 "dimmer",
                 clone.speedMasters.single { it.masterIndex == 1 }.usageCategory,
             )
+            assertNull(
+                cloneMaster.followTargetUuid,
+                "a follower of master 1 stores no target, and must not acquire one in the clone",
+            )
+
+            // A follow target is a uuid reference like any other: the cloned chain must point
+            // at the clone's own leader, not at the source project's master.
+            val cloneChained = clone.speedMasters.single { it.name == "Crawl" }
+            assertEquals(
+                cloneMaster.uuid, cloneChained.followTargetUuid,
+                "the follow target must be re-pointed at the clone's own leader",
+            )
+            assertNotEquals(
+                source.speedMasters.single { it.name == "Crawl" }.followTargetUuid,
+                cloneChained.followTargetUuid,
+                "…and must not still name the source project's master",
+            )
 
             val lookEffect = clone.looks.flatMap { it.effects.toList() }.single()
             assertEquals(

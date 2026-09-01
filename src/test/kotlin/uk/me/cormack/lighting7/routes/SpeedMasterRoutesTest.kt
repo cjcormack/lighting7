@@ -19,6 +19,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_CANNOT_FOLLOW
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOW_CYCLE
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_INVALID
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_USAGE_TAKEN
 import uk.me.cormack.lighting7.models.CueStackType
@@ -529,6 +531,210 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         val fetched = client.masterAt(2)
         assertNull(fetched.followNum)
         assertNull(fetched.followDen)
+
+        // The same rule for a *whole* link naming a master this project doesn't have — an
+        // import that carried a follower but not its leader. The forced delete cleans its own
+        // followers up, so an import is the only way this row shape still arrives, and a PUT
+        // that touches neither half of the link must still not be judged on it.
+        val master3 = client.masterAt(3)
+        transaction(state.database) {
+            val dao = DaoSpeedMaster.findById(master3.id)!!
+            dao.followNum = 1
+            dao.followDen = 2
+            dao.followTargetUuid = UUID.randomUUID()
+        }
+        val notesEdit = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("notes", JsonPrimitive("still editable")) })
+        }
+        assertEquals(HttpStatusCode.OK, notesEdit.status, notesEdit.bodyAsText())
+    }
+
+    @Test
+    fun `a master may follow a master other than master 1`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val master2 = client.masterAt(2)
+        val master3 = client.masterAt(3)
+
+        client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("bpm", JsonPrimitive(90.0)) })
+        }
+        val link = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                    put("followTargetUuid", JsonPrimitive(master2.uuid))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.OK, link.status, link.bodyAsText())
+        assertEquals(master2.uuid, link.body<SpeedMasterDto>().followTargetUuid)
+        assertEquals(master2.uuid, client.masterAt(3).followTargetUuid, "and it survives a re-read")
+
+        // The live bank derives from *that* master, not from master 1.
+        val live = state.show.speedMasterBank.masterStates().single { it.index == 3 }
+        assertEquals(45.0, live.bpm, "½ of master 2's 90, not of master 1's 120")
+
+        // A ratio-only patch keeps the stored leader — the target rides with the pair, but an
+        // edit that doesn't send it must not silently re-point the link at master 1.
+        val reratio = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(4))
+                }
+            )
+        }
+        assertEquals(master2.uuid, reratio.body<SpeedMasterDto>().followTargetUuid)
+
+        // …and an unlink clears it, so a later re-link starts from master 1 rather than from a
+        // leader the operator can no longer see.
+        val unlink = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonNull)
+                    put("followDen", JsonNull)
+                }
+            )
+        }
+        assertNull(unlink.body<SpeedMasterDto>().followTargetUuid)
+    }
+
+    @Test
+    fun `a follow chain is allowed but a cycle is refused`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val master2 = client.masterAt(2)
+        val master3 = client.masterAt(3)
+
+        // M2 → M1, then M3 → M2: chains are legal (the answer to "can a follower be followed").
+        client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                }
+            )
+        }
+        val chain = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                    put("followTargetUuid", JsonPrimitive(master2.uuid))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.OK, chain.status, chain.bodyAsText())
+        assertEquals(30.0, state.show.speedMasterBank.masterStates().single { it.index == 3 }.bpm)
+
+        // Closing the loop is the one shape with no tempo: M2 would derive from M3, which
+        // derives from M2, and nothing upstream has a timer.
+        val cycle = client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                    put("followTargetUuid", JsonPrimitive(master3.uuid))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, cycle.status)
+        assertEquals(CODE_SPEED_MASTER_FOLLOW_CYCLE, cycle.body<ErrorResponse>().code)
+
+        val self = client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(1))
+                    put("followTargetUuid", JsonPrimitive(master2.uuid))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, self.status)
+        assertEquals(CODE_SPEED_MASTER_FOLLOW_CYCLE, self.body<ErrorResponse>().code)
+    }
+
+    @Test
+    fun `a follow target that names no master is refused`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val master2 = client.masterAt(2)
+
+        val resp = client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                    put("followTargetUuid", JsonPrimitive(UUID.randomUUID().toString()))
+                }
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        assertEquals(CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN, resp.body<ErrorResponse>().code)
+    }
+
+    @Test
+    fun `deleting a master another one follows is refused, force overrides`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val master2 = client.masterAt(2)
+        val master3 = client.masterAt(3)
+
+        client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put("name", JsonPrimitive("Movement"))
+                    put("followNum", JsonPrimitive(1))
+                    put("followDen", JsonPrimitive(2))
+                    put("followTargetUuid", JsonPrimitive(master2.uuid))
+                }
+            )
+        }
+
+        // A follow link is a reference like a stored effect's: deleting the leader would
+        // silently re-time the follower, so it gates the delete the same way.
+        assertEquals(1, client.masterAt(2).referenceCount)
+        val del = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}")
+        assertEquals(HttpStatusCode.Conflict, del.status)
+        val inUse = del.body<SpeedMasterInUseResponse>()
+        assertEquals(CODE_SPEED_MASTER_IN_USE, inUse.code)
+        assertEquals(listOf("Movement"), inUse.followerNames)
+
+        val forced = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}?force=true")
+        assertEquals(HttpStatusCode.NoContent, forced.status)
+
+        // The force unlinks the followers rather than leaving them naming a master that is
+        // gone. Both halves of the ratio and the target go, so REST and the live bank tell the
+        // same story: without this the desk runs the master manually (the bank degrades a
+        // dangling leader) while the row still advertises a ratio, which hides TAP on the
+        // manage page and 400s a ratio-chip press.
+        val orphanRow = client.masterAt(3)
+        assertNull(orphanRow.followNum, "a follower whose leader was force-deleted goes manual")
+        assertNull(orphanRow.followDen)
+        assertNull(orphanRow.followTargetUuid, "and stores no target naming the deleted master")
+        val orphanLive = state.show.speedMasterBank.masterStates().single { it.name == "Movement" }
+        assertNull(orphanLive.followNum, "the live bank must agree with the row")
+
+        // Manual on the write path too, not merely in the reporting.
+        val retune = client.put("/api/rest/projects/$projectId/speed-masters/${master3.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("bpm", JsonPrimitive(96.0)) })
+        }
+        assertEquals(HttpStatusCode.OK, retune.status, retune.bodyAsText())
+        assertEquals(96.0, retune.body<SpeedMasterDto>().bpm)
     }
 
     @Test

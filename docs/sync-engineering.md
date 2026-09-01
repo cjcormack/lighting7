@@ -70,11 +70,15 @@ fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
 templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
-                               # optional `usage` + `followNum`/`followDen` (busk-view routing
-                               # and follow — additive nullable fields, no formatVersion bump;
-                               # the exporter writes the ratio through the sanitising
-                               # `followRatio` getter, the importer writes it verbatim and the
-                               # bank degrades malformed pairs to manual)
+                               # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
+                               # (busk-view routing and follow — additive nullable fields, no
+                               # formatVersion bump; the exporter writes the ratio through the
+                               # sanitising `followRatio` getter, the importer writes it verbatim
+                               # and the bank degrades a malformed pair, a dangling target or a
+                               # cycle to manual). `followTargetUuid` is a uuid reference like
+                               # any other, so ExportUuidRemapper re-points it on clone; null
+                               # with a ratio set means master 1, which is what every export
+                               # written before follow targets says
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output

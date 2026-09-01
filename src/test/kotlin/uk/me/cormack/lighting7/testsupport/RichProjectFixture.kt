@@ -199,7 +199,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         )
     }
 
-    // 2 speed masters with every optional column set to a non-default value — master 1 is
+    // 3 speed masters with every optional column set to a non-default value — master 1 is
     // the protected global master and would normally sit at its defaults, so the fixture
     // seeds masters 1 and 2 both off-default to keep the canonical-JSON round-trip honest.
     DaoSpeedMaster.new {
@@ -216,7 +216,20 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         bpm = 64.0; source = SpeedMasterSource.MANUAL.name
         notes = "half-time position waves"
         usageCategory = "position"
+        // No target: the pre-follow-target spelling of "follows master 1", which still has to
+        // survive a round trip as the null it is.
         followNum = 1; followDen = 2
+    }
+    // A third master following master 2 rather than master 1 — the follow *target* is a uuid
+    // reference like any other, so it has to be exported, re-pointed by ExportUuidRemapper on
+    // clone, and imported. A chain also proves the exporter doesn't quietly flatten one.
+    DaoSpeedMaster.new {
+        this.project = project
+        masterIndex = 3; name = "Crawl"
+        bpm = 32.0; source = SpeedMasterSource.MANUAL.name
+        notes = "half of the half"
+        followNum = 1; followDen = 2
+        followTargetUuid = slowMaster.uuid
     }
 
     // 2 looks covering both targeting modes, because they exercise different code paths.

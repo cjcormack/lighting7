@@ -32,7 +32,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
-| [`FU-SPEED-PHASE-LOCK`](#fu-speed-phase-lock) | Trigger | Speed | a follower's beat offset is visibly wrong on a real rig |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
 | [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
@@ -307,24 +306,6 @@ machinery that exists nowhere else in that class. The nearest existing shape,
 
 **Trigger**: an operator taps from hardware and asks why the button doesn't acknowledge, or a
 second momentary-with-no-steady-state target appears and the two can share the machinery.
-
-### `FU-SPEED-PHASE-LOCK`
-
-**Follower beat boundaries free-run within master 1's beat** · Trigger · Busking-view plan
-session 1 (2026-08-31), §7
-
-Follow is write-through *tempo* only: `SpeedMasterBank.sweepFollowersLocked` retunes a
-follower's own `MasterClock`, and `MasterClock.setBpm` deliberately preserves the tick counter
-(that is what keeps phase continuous for the effects already running on it). So a follower at ½
-ticks at exactly half master 1's rate, but its beat boundary sits wherever its counter happened
-to be when it was linked — anywhere inside master 1's beat. Fixing it means a follower samples
-master 1's tick instead of owning a timer: `Frame`/`slotFor` plumbing in the engine, not a bank
-tweak. At musical ratios the audible effect is small because both clocks tick at exact
-multiples. Do **not** "fix" it by resetting the follower's counter on link — that snaps every
-effect on that master (see the counter-preservation test in `SpeedMasterBankTest`).
-
-**Trigger**: an operator reports a follower's chase landing visibly off master 1's beat on a
-real rig.
 
 ### `FU-SPEED-CUSTOM-RATIO`
 
@@ -1427,6 +1408,12 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-SPEED-PHASE-LOCK` — a follower no longer runs a timer of its own: its leader's tick maps
+  onto its counter (`1 + floor((leaderTick - 1) × num / den)`), so its beats land on the
+  leader's rather than free-running inside them. Shipped together with follow *targets* — a
+  master may follow any other master, chains allowed and cycles refused — which is what made
+  the cascade worth building rather than a special case for master 1. See
+  `docs/fx-engineering.md` §"Usage routing and follow"
 - `FU-BUSK-TARGET-CAP` — retired by deletion rather than by the batched query it asked for. The
   eight-slot fan-out existed to read effect presence off the FX list for the busk view's effect
   pads; those pads went when the view was cut back to the library pads its design draws, and both

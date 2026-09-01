@@ -219,13 +219,19 @@ data class SpeedMasterJson(
     val source: String = "MANUAL",
     val notes: String? = null,
     /**
-     * Routing/follow settings (busking-view plan, session 1). All three are additive optional
+     * Routing/follow settings (busking-view plan, session 1). All four are additive optional
      * fields with null defaults — no formatVersion bump, per the "new optional field" rule in
      * docs/sync-engineering.md.
+     *
+     * [followTargetUuid] is the leader's uuid and travels as a uuid for the usual reason —
+     * `ExportUuidRemapper` rewrites it on clone, where an int id or a master index would
+     * dangle or silently re-point. Null with a ratio set means master 1, which is what every
+     * export written before follow targets existed says.
      */
     val usage: String? = null,
     val followNum: Int? = null,
     val followDen: Int? = null,
+    val followTargetUuid: String? = null,
 )
 
 /**

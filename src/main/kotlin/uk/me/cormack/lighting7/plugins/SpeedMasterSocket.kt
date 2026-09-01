@@ -75,9 +75,15 @@ data class SpeedMasterStateJson(
     val source: String,
     /** Effect-library category this master is the apply-time default for; null routes nothing. */
     val usage: String? = null,
-    /** Follow ratio over master 1 (`bpm = m1 × num/den`); both null = manual tempo. */
+    /** Follow ratio over [followTargetUuid] (`bpm = leader × num/den`); both null = manual. */
     val followNum: Int? = null,
     val followDen: Int? = null,
+    /**
+     * The master being followed; null means master 1. This is the *resolved* leader, so a
+     * stored target the bank had to degrade (dangling, looped) never reaches a client as a
+     * link that isn't running.
+     */
+    val followTargetUuid: String? = null,
 )
 
 /** Full bank snapshot — sent on connect, on request, and as the reply to every write. */
@@ -271,6 +277,7 @@ private fun buildSpeedMastersState(bank: SpeedMasterBank): SpeedMastersStateOutM
                 usage = it.usage,
                 followNum = it.followNum,
                 followDen = it.followDen,
+                followTargetUuid = it.followTargetUuid?.toString(),
             )
         },
     )

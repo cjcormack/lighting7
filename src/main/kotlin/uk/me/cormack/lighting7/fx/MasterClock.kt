@@ -159,11 +159,16 @@ class MasterClock {
      * parent. The deadline form keeps long-run ratios exact.
      *
      * @param scope The coroutine scope to run the clock in
+     * @param resetCounter Start the tick counter at zero. False when a clock that was being
+     *   [driven] by another master is unlinked and takes over its own timing: the counter is
+     *   what effect phase is computed from, so resetting it there would snap every effect on
+     *   this master at the moment the operator merely stopped following.
      */
-    fun start(scope: CoroutineScope) {
+    fun start(scope: CoroutineScope, resetCounter: Boolean = true) {
         if (clockJob?.isActive == true) return
 
-        totalTicks.set(0)
+        driven = false
+        if (resetCounter) totalTicks.set(0)
         _isRunning.value = true
 
         clockJob = scope.launch(Dispatchers.Default) {
@@ -217,8 +222,98 @@ class MasterClock {
      */
     fun stop() {
         _isRunning.value = false
+        driven = false
         clockJob?.cancel()
         clockJob = null
+    }
+
+    /**
+     * Whether this clock's ticks come from another master rather than from its own timer —
+     * see [driveTo]. Set by [adoptDriven], cleared by [start] and [stop].
+     */
+    @Volatile
+    var driven: Boolean = false
+        private set
+
+    /**
+     * Hand this clock's timing over to a leader: cancel its timer without touching the tick
+     * counter, and keep reporting as running, because from every reader's point of view it
+     * still is — a follower's effects animate exactly as before, just on someone else's beat.
+     *
+     * Idempotent, so [SpeedMasterBank.load] can call it for every follower on every reload.
+     *
+     * The counter is zeroed **on the transition only**, and that is load-bearing rather than
+     * tidy-up: a clock that has been free-running carries a counter of its own, and the tick
+     * its new leader maps to is very often *below* it — a ½ follower's target is half the
+     * leader's count, so two clocks started together give a mapped tick roughly half the
+     * follower's. [driveTo] is monotonic, so without this the follower would refuse every
+     * drive until its leader's counter overtook it: minutes on a desk that has been up
+     * minutes, hours on one that has been up hours, with the master silently frozen the whole
+     * time. Zeroing makes the leader's next tick assign the mapped value outright, which is
+     * the "linking snaps once" the feature is asking for. An already-driven clock is left
+     * alone so a reload stays a no-op.
+     */
+    fun adoptDriven() {
+        clockJob?.cancel()
+        clockJob = null
+        if (!driven) totalTicks.set(0)
+        driven = true
+        _isRunning.value = true
+    }
+
+    /**
+     * Advance a driven clock to [tickNumber], the absolute tick its leader's tick maps to.
+     *
+     * The counter is *assigned*, not incremented, which is the whole point: a follower's tick
+     * is a pure function of its leader's, so its beat boundaries land on the leader's rather
+     * than wherever its own counter happened to start. Ticks are monotonic — a leader that
+     * resyncs backwards after a stall is ignored rather than rewinding effect phase.
+     *
+     * [onBeat] fires once per beat *crossed*, collapsed to the newest beat: a ratio above 1
+     * maps one leader tick to several follower ticks, and a link mid-show jumps the counter
+     * outright, neither of which should emit a burst of stale beat events. [onTick] is
+     * deliberately NOT invoked — the bank drives followers from inside the leader's own tick
+     * callback, which has already nudged the engine's (conflated) wake channel for this pass.
+     */
+    fun driveTo(tickNumber: Long, timestampMs: Long) {
+        val previous = totalTicks.get()
+        if (tickNumber <= previous) return
+        totalTicks.set(tickNumber)
+
+        // The counter is 1-based and a beat lands on its first tick, exactly as the timer loop
+        // numbers them. Getting this convention wrong is invisible in every reading of the
+        // clock *except* the one the whole feature is for: a follower's beats would sit one
+        // tick off its leader's, close enough to look right in a test that compares rates and
+        // wrong to an operator watching two beat lamps.
+        val beatNumber = (tickNumber - 1) / TICKS_PER_BEAT
+        val tickInBeat = ((tickNumber - 1) % TICKS_PER_BEAT).toInt()
+        val tick = ClockTick(
+            tickNumber = tickNumber,
+            beatNumber = beatNumber,
+            tickInBeat = tickInBeat,
+            phase = tickInBeat.toDouble() / TICKS_PER_BEAT,
+            timestampMs = timestampMs,
+        )
+        currentTick = tick
+        _tickFlow.tryEmit(tick)
+
+        val previousBeat = if (previous < 1) -1L else (previous - 1) / TICKS_PER_BEAT
+        if (beatNumber != previousBeat) {
+            onBeat?.invoke(BeatEvent(beatNumber, timestampMs))
+        }
+    }
+
+    /**
+     * Set a *derived* tempo — a follower's `leader.bpm × num / den`.
+     *
+     * Unlike [setBpm] this does not clamp to [MIN_BPM]..[MAX_BPM]. The range exists to keep
+     * the tick *timer* sane, and a driven clock has no timer: its rate is its leader's rate
+     * times the ratio, exactly, whatever number that comes to. Clamping the reported figure
+     * would make the strip's BPM readout disagree with what the master is audibly doing, and
+     * would feed a wrong multiplier to [SpeedMasterBank.rateScales] for wall-clock effects.
+     */
+    fun setDerivedBpm(newBpm: Double) {
+        _bpm.value = newBpm
     }
 
     /**

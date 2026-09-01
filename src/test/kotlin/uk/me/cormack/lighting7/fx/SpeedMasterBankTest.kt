@@ -23,7 +23,10 @@ class SpeedMasterBankTest {
         source: SpeedMasterSource = SpeedMasterSource.MANUAL,
         usage: String? = null,
         follow: Pair<Int, Int>? = null,
-    ) = SpeedMasterSnapshot(uuid, index, name, bpm, source, usage, follow?.first, follow?.second)
+        followTarget: UUID? = null,
+    ) = SpeedMasterSnapshot(
+        uuid, index, name, bpm, source, usage, follow?.first, follow?.second, followTarget,
+    )
 
     // ─── Slot binding ────────────────────────────────────────────────────
 
@@ -270,7 +273,7 @@ class SpeedMasterBankTest {
         val fromSet = bank.setBpm(u2, 90.0, SpeedMasterSource.MANUAL)
         val fromTap = bank.tap(u2)
 
-        val expected = SpeedMasterBank.TempoWriteOutcome.RefusedFollower(u2, 2, "Movement", 1, 2)
+        val expected = SpeedMasterBank.TempoWriteOutcome.RefusedFollower(u2, 2, "Movement", 1, 2, "Master 1")
         assertEquals(expected, fromSet)
         assertEquals(expected, fromTap)
         assertEquals(60.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "the refusal must precede any clock write")
@@ -297,18 +300,23 @@ class SpeedMasterBankTest {
     }
 
     @Test
-    fun `a derived bpm outside the clock range clamps, and un-clamps by re-derivation`() {
+    fun `a derived bpm outside the clock range is reported exactly, not clamped`() {
         val bank = SpeedMasterBank()
         val u1 = UUID.randomUUID()
         val u2 = UUID.randomUUID()
         bank.load(listOf(snapshot(u1, 1, bpm = 120.0), snapshot(u2, 2, follow = 2 to 1)))
 
         bank.setBpm(u1, 200.0, SpeedMasterSource.MANUAL)
-        assertEquals(300.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "2× of 200 clamps at MAX_BPM")
-        assertEquals(300.0, bank.masterStates()[1].bpm, "every surface reports the clamped truth")
 
-        // The sweep derives from M1's live bpm, never the follower's previous (clamped) value —
-        // the naive implementation would ratchet and stick at 300.
+        // MIN/MAX_BPM guard the tick *timer*, and a follower has no timer — its clock is
+        // driven by its leader's, so it genuinely runs at 400. Clamping to 300 (which is what
+        // this did while follow was tempo-only) would make the strip's readout, the persisted
+        // row and `rateScales` all disagree with the master's real rate.
+        assertEquals(400.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "2× of 200 is 400, timer range or not")
+        assertEquals(400.0, bank.masterStates()[1].bpm, "every surface reports the same derived truth")
+
+        // Still derived from the leader's live bpm rather than the follower's previous value,
+        // so nothing ratchets.
         bank.setBpm(u1, 100.0, SpeedMasterSource.MANUAL)
         assertEquals(200.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
     }
@@ -420,6 +428,286 @@ class SpeedMasterBankTest {
         assertEquals("position", states[1].usage)
         assertEquals(1, states[1].followNum)
         assertEquals(2, states[1].followDen)
+        assertEquals(
+            u1, states[1].followTargetUuid,
+            "a row that names no target follows master 1, and reports it *resolved* — a client " +
+                "should not have to know that null once meant master 1",
+        )
+    }
+
+    // ─── Follow: phase lock, targets and chains ──────────────────────────
+
+    /**
+     * Run [bank] for [forMs] and stop it, so both clocks are static when the assertions read
+     * them. A follower is driven from inside its leader's tick callback, so sampling a running
+     * pair can catch the leader one tick ahead of the follower — hence the stop, and hence the
+     * one-tick tolerance in the relations below.
+     */
+    private fun runBank(bank: SpeedMasterBank, forMs: Long = 600) = runBlocking {
+        bank.start(this)
+        delay(forMs)
+        bank.stop()
+    }
+
+    private fun tickOf(bank: SpeedMasterBank, uuid: UUID): Long =
+        bank.clockFor(bank.slotFor(uuid)).currentTick.tickNumber
+
+    @Test
+    fun `a follower's tick counter is a pure function of its leader's`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val half = UUID.randomUUID()
+        val double = UUID.randomUUID()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 300.0),
+                snapshot(half, 2, follow = 1 to 2),
+                snapshot(double, 3, follow = 2 to 1),
+            )
+        )
+
+        runBank(bank)
+
+        // This is the fix for FU-SPEED-PHASE-LOCK: the follower's counter is derived from the
+        // leader's, anchored at tick 0, rather than free-running at whatever offset its own
+        // timer happened to start on.
+        val leaderTick = tickOf(bank, u1)
+        assertTrue(leaderTick > 24, "the leader must have run, got $leaderTick")
+        assertTrue(
+            (1 + (leaderTick - 1) / 2) - tickOf(bank, half) in 0..1,
+            "½ must tick at half the leader's count",
+        )
+        assertTrue(
+            (1 + (leaderTick - 1) * 2) - tickOf(bank, double) in 0..2,
+            "2× must tick at twice the leader's count",
+        )
+    }
+
+    @Test
+    fun `a follower's beats land on its leader's, not between them`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 2)))
+
+        val beats = collectBeats(bank, forMs = 1_200)
+
+        val leaderBeats = beats.filter { it.uuid == u1 }
+        val followerBeats = beats.filter { it.uuid == u2 }
+        assertTrue(followerBeats.isNotEmpty(), "the follower must beat at all")
+        // Identical timestamps, not merely close ones: a driven beat is emitted from inside the
+        // leader tick that produced it, carrying that tick's timestamp. This is the assertion
+        // an operator would make by eye, and the one the old free-running follower failed.
+        val leaderInstants = leaderBeats.map { it.timestampMs }.toSet()
+        assertTrue(
+            followerBeats.all { it.timestampMs in leaderInstants },
+            "every ½ follower beat must coincide with a leader beat, got ${followerBeats.map { it.timestampMs }} " +
+                "against $leaderInstants",
+        )
+        assertTrue(
+            followerBeats.all { follower -> leaderBeats.any { it.timestampMs == follower.timestampMs && it.beatNumber == follower.beatNumber * 2 } },
+            "a ½ follower's beat n must land on the leader's beat 2n",
+        )
+    }
+
+    @Test
+    fun `a follower runs driven, with no timer of its own`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 2)))
+
+        runBlocking {
+            bank.start(this)
+            delay(100)
+            val follower = bank.clockFor(bank.slotFor(u2))
+            assertTrue(follower.driven, "a follower's ticks come from its leader")
+            assertTrue(follower.isRunning.value, "…and it still reports as running, because it is")
+            assertTrue(!bank.master1().driven, "a manual master keeps its own timer")
+            bank.stop()
+        }
+    }
+
+    @Test
+    fun `a master can follow a master other than master 1`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        val u3 = UUID.randomUUID()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, bpm = 90.0),
+                snapshot(u3, 3, follow = 1 to 2, followTarget = u2),
+            )
+        )
+
+        assertEquals(45.0, bank.clockFor(bank.slotFor(u3)).bpm.value, "½ of master 2, not of master 1")
+        assertEquals(u2, bank.masterStates()[2].followTargetUuid)
+
+        // Retuning master 1 must not touch it; retuning its actual leader must.
+        bank.setBpm(u1, 200.0, SpeedMasterSource.MANUAL)
+        assertEquals(45.0, bank.clockFor(bank.slotFor(u3)).bpm.value)
+        bank.setBpm(u2, 100.0, SpeedMasterSource.MANUAL)
+        assertEquals(50.0, bank.clockFor(bank.slotFor(u3)).bpm.value)
+
+        val refusal = bank.setBpm(u3, 70.0, SpeedMasterSource.MANUAL)
+        assertEquals(
+            SpeedMasterBank.TempoWriteOutcome.RefusedFollower(u3, 3, "Master 3", 1, 2, "Master 2"),
+            refusal,
+            "the refusal must name the leader to retune instead, which is no longer always master 1",
+        )
+    }
+
+    @Test
+    fun `a chain derives and ticks through its leader`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        val u3 = UUID.randomUUID()
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, follow = 1 to 2),
+                snapshot(u3, 3, follow = 1 to 2, followTarget = u2),
+            )
+        )
+
+        // One sweep pass, leaders first: the grandchild sees its parent's already-derived value.
+        assertEquals(60.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
+        assertEquals(30.0, bank.clockFor(bank.slotFor(u3)).bpm.value)
+
+        bank.setBpm(u1, 240.0, SpeedMasterSource.MANUAL)
+        assertEquals(120.0, bank.clockFor(bank.slotFor(u2)).bpm.value)
+        assertEquals(60.0, bank.clockFor(bank.slotFor(u3)).bpm.value, "a chain propagates the whole way down")
+
+        runBank(bank)
+        // Nested floors compose — floor(floor(t/2)/2) == floor(t/4) — so the grandchild is
+        // aligned to the root, not just to its parent.
+        val leaderTick = tickOf(bank, u1)
+        assertTrue(leaderTick > 24, "the root must have run, got $leaderTick")
+        assertTrue(
+            (1 + (leaderTick - 1) / 4) - tickOf(bank, u3) in 0..1,
+            "the grandchild must tick at a quarter of the root",
+        )
+    }
+
+    @Test
+    fun `a follow cycle degrades every member to manual`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        val u3 = UUID.randomUUID()
+
+        // The write boundary refuses this; a hand-edited row or a half-imported project can
+        // still produce it, and nothing upstream of the pair has a timer to drive either one.
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, bpm = 90.0, follow = 1 to 2, followTarget = u3),
+                snapshot(u3, 3, bpm = 80.0, follow = 1 to 2, followTarget = u2),
+            )
+        )
+
+        val states = bank.masterStates()
+        assertNull(states[1].followNum, "a cycle member must not read as following")
+        assertNull(states[2].followNum, "…and neither must the other one")
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.setBpm(u2, 95.0, SpeedMasterSource.MANUAL))
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.setBpm(u3, 85.0, SpeedMasterSource.MANUAL))
+    }
+
+    @Test
+    fun `a dangling follow target degrades to manual`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+
+        // What a forced delete of the leader leaves behind. Same principle as an effect whose
+        // speed master vanished: fall back to something that runs.
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 120.0),
+                snapshot(u2, 2, bpm = 90.0, follow = 1 to 2, followTarget = UUID.randomUUID()),
+            )
+        )
+
+        assertEquals(90.0, bank.clockFor(bank.slotFor(u2)).bpm.value, "it keeps its own stored tempo")
+        assertNull(bank.masterStates()[1].followNum)
+        assertEquals(SpeedMasterBank.TempoWriteOutcome.Applied, bank.setBpm(u2, 95.0, SpeedMasterSource.MANUAL))
+    }
+
+    @Test
+    fun `unlinking hands the timer back without resetting the tick counter`() = runBlocking {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 1)))
+
+        bank.start(this)
+        delay(400)
+        val whileLinked = tickOf(bank, u2)
+
+        // Linking snaps — that is what phase alignment costs — but *unlinking* must not: the
+        // operator stopped following, they didn't ask every effect on this master to jump.
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, bpm = 300.0)))
+        delay(300)
+        val afterUnlink = tickOf(bank, u2)
+        val clock = bank.clockFor(bank.slotFor(u2))
+        bank.stop()
+
+        assertTrue(whileLinked > 24, "the follower must have been driven, got $whileLinked")
+        assertTrue(afterUnlink > whileLinked, "its own timer must take over, got $afterUnlink after $whileLinked")
+        assertTrue(!clock.driven, "and it is no longer driven")
+    }
+
+    @Test
+    fun `linking a master that has been running snaps its counter instead of freezing it`() = runBlocking {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, bpm = 300.0)))
+
+        bank.start(this)
+        delay(800)
+        val freeRunning = tickOf(bank, u2)
+
+        // The link is made *after* both have been free-running, which is the only way an
+        // operator ever makes one. The tick M1 maps to at ½ is about half M2's own count, and
+        // `driveTo` is monotonic — so a follower that kept its counter on adoption would refuse
+        // every drive until its leader overtook it, i.e. sit frozen for as long as the desk had
+        // been up. Adoption zeroes the counter so the next leader tick assigns the mapped one.
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 2)))
+        delay(300)
+        val afterLink = tickOf(bank, u2)
+        val leader = tickOf(bank, u1)
+        bank.stop()
+
+        assertTrue(freeRunning > 24, "the follower must have free-run first, got $freeRunning")
+        assertTrue(
+            afterLink < freeRunning,
+            "linking must snap the counter down onto its leader's, got $afterLink after $freeRunning",
+        )
+        assertTrue(
+            (1 + (leader - 1) / 2) - afterLink in 0..1,
+            "…and it must then be driven from there, got $afterLink against a leader at $leader",
+        )
+    }
+
+    @Test
+    fun `unlinking pulls an out-of-range derived tempo back into the timer's range`() {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 200.0), snapshot(u2, 2, follow = 2 to 1)))
+        assertEquals(
+            400.0, bank.clockFor(bank.slotFor(u2)).bpm.value,
+            "a derived tempo is deliberately unclamped — a driven clock has no timer to protect",
+        )
+
+        // …but the moment it is handed its own timer back it does, and 400 BPM is a rate the
+        // write boundary would refuse and the row must not go on storing.
+        bank.load(listOf(snapshot(u1, 1, bpm = 200.0), snapshot(u2, 2, bpm = 400.0)))
+        assertEquals(MasterClock.MAX_BPM, bank.clockFor(bank.slotFor(u2)).bpm.value)
     }
 
     // ─── Beat fan-out ────────────────────────────────────────────────────
