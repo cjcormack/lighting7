@@ -1,7 +1,9 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391`; sessions 2 and 3 landed in
-> [lighting-react](../../../lighting-react) as `ca4bc20` and `2ba1d2e`. Session 4 is not built.
+> **Document status: CODE COMPLETE, UNVERIFIED ON A DESK.** All four sessions have landed —
+> session 1 as `6b1c391`, sessions 2 and 3 in [lighting-react](../../../lighting-react) as
+> `ca4bc20` and `2ba1d2e`, session 4 as `462d0ff` here and `6d6113f` there. What is *not* done is
+> §9: **no desk check has been run for any session**, so nothing below has been seen on a rig.
 > The visual design is settled and checked
 > in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
 > of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left
@@ -254,13 +256,69 @@ Two things left open, both recorded rather than resolved:
 Session 4 inherits a left column whose pools stack full-width. §4 draws Looks at `2fr` beside a
 `3fr` cue-stack column, so that split is the session's first move rather than a new region.
 
-### Session 4 — cues and stacks on pads
+### Session 4 — cues and stacks on pads — done, `462d0ff` (lighting7) + `6d6113f` (lighting-react)
 
 `pinned_to_busk` flag + pin affordance in Show's cue properties; stack cards wired to the existing
 transport (go-to for activation, GO for advance — session verifies whether Release needs a new
 deactivate route or an existing one serves); pinned-cue pads via the go-to-cue path; live/next
 state from the same cache `useShowTransport` owns — **no second cache copy of a run cursor**, per
 the standing rule in lighting-react's CLAUDE.md.
+
+Both §10 guesses resolved in favour of what already existed, and one thing needed adding that the
+plan had assumed away:
+
+- **Release needs no new route.** `POST /cue-stacks/{stackId}/deactivate` serves it, already
+  wired as `useDeactivateCueStackMutation`. It is disabled rather than hidden on a stack that is
+  not running, so the two buttons keep their positions as stacks go live.
+- **`/show/go-to` gained an optional `cueId`.** This is the one addition beyond the flag, and the
+  reason is D9 rather than convenience: a pinned pad names a cue in a stack that may not be live,
+  so it has to move the playhead *and* fire that cue. Go-to-then-activate fires the target stack's
+  **first** cue on the way past — a visible blip on a live rig, in the single gesture the plan
+  calls out as naming exactly what it fires. The cue is validated inside the same transaction that
+  moves the playhead, before the assignment, because it is the one error here reachable from
+  client-supplied data (a pad naming a cue since deleted or moved).
+- **The flag rides `CueStackCueEntry`, not just `CueDetails`.** A pad and the stack card above it
+  then read their live/next state out of *one* cache — the stack list the transport already owns.
+  Sourcing pads from `/cues` would have been two caches and two answers to "is this cue on stage",
+  which disagree mid-fade.
+- **A MARKER is refused a pin**, at both ends: the toggle is hidden on one (a lone greyed-out
+  switch reads as breakage rather than as "not for this kind of cue"), and the pad list filters
+  them out anyway, because an imported project can carry the flag and `goToCue` refuses a marker
+  server-side.
+- **The empty-selection dim moved off the scroller onto each `CategorySection`.** Session 3 put
+  `[&_button]:pointer-events-none` on the pool container; the cue column now shares that scroller
+  and answers to the playhead rather than to the selection, so a subtree-wide rule would have made
+  GO inert for want of a selected fixture. Pinned by `BuskPools.test.tsx`.
+- **The transport is passed into `BuskingView`, not mounted there.** A second `useShowTransport`
+  on the page would run a second rAF loop and a second reconcile effect writing one runner slice —
+  the defect adopting `useShowBarProps` removed from the Prompt Book. The *stack list*, by
+  contrast, is read by `BuskCueStacks` directly: that is the same RTK Query cache entry, keyed and
+  deduplicated, not a second copy.
+
+Two things the review found afterwards are worth keeping, because both were defects the code's own
+comments claimed to have prevented:
+
+- **The `cueId` pre-check had no MARKER arm.** It exists precisely so a bad cue cannot fail *after*
+  the playhead moves, and then deferred the marker case to `goToCue` — which rejects one only once
+  the transaction has committed `project.activeStackId` and `deactivateStack(previous)` has run.
+  A marker `cueId` would therefore have answered 400 with the previous stack torn down and the show
+  parked on a stack holding nothing: a dark rig from a rejected press. Reachable from an import
+  carrying the flag on a marker, or from a MIDI surface, a script or a stale tab.
+- **A released live stack still drew the live pip.** `deactivateStack` stops a stack without
+  clearing `project.activeStackId`, so "holds the playhead" and "is running" come apart — and only
+  ever because of a press on the new card. Keying the card off the playhead alone showed the green
+  pip beside "Inactive — GO fires …", and sent GO to the transport, which would have crossed into
+  the next stack rather than firing the cue the card had just named.
+
+Still outstanding: **the desk checks**. §9 items 4 and 5 (interleaved GO from a busk card and
+`/show`; pin → pad → press → cursors agree) need two browsers and have not been run, and neither
+have session 3's. The automated gate is all that has passed — `./gradlew cleanTest test` (1826
+tests, 0 failures) and `npm run check` (build + 1555 tests + lint at `--max-warnings 0`).
+
+One process note, because it nearly shipped a false record: the first claim that this gate passed
+was written off a `timeout 900 ./gradlew test` that never ran — macOS has no `timeout`, so the
+command died before Gradle and still exited 0. A failing test read as green for the whole build
+phase. Read the result, not the exit code.
 
 ## 6. Migration
 
@@ -296,6 +354,10 @@ On landing, add to `followups.md`:
 
 ## 9. Verification
 
+**None of the desk checks below has been run.** Every session's automated gate passes, and that is
+the whole of the evidence: the six items here need a rig, and two of them need two browsers. They
+are the outstanding work on this plan.
+
 Unit: the session 1 list above. Desk checks (two browsers where marked):
 
 1. Set M2 to follow M1 at ½ with a movement chase running on it: TAP a new tempo on M1 and the
@@ -314,8 +376,8 @@ Unit: the session 1 list above. Desk checks (two browsers where marked):
 
 ## 10. Scope honesty
 
-Guessed, to be verified in-session: whether stack Release maps to an existing deactivate route or
-needs one (session 4); the exact set of `FxRegistry.category` values in the shipped effect library
+Guessed, to be verified in-session: ~~whether stack Release maps to an existing deactivate route or
+needs one (session 4)~~ — it does, `/deactivate`; the exact set of `FxRegistry.category` values in the shipped effect library
 (D7's caveat — the canonical-set test settles it); whether the target band's two-row grid earns
 its keep below tablet width or the mobile arm keeps the sheet picker (session 3, on the mock it
 does). The speed-master half is deliberately conservative — write-through and apply-time stamping
