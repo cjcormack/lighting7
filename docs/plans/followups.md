@@ -38,6 +38,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
+| [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
+| [`FU-BUSK-TARGET-CAP`](#fu-busk-target-cap) | Trigger | Busk | a selection past eight targets misreports pad presence |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
@@ -411,6 +413,42 @@ plus an authoring surface that can name a constituent), not just a per-output ph
 
 **Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
 express it as separate instances.
+
+---
+
+## Busk
+
+### `FU-BUSK-MOMENTARY`
+
+**Every busk pad is a toggle; there is no flash or solo gesture** · Trigger · Busking-view plan
+session 3 (2026-09-01), §7
+
+A press latches: an effect pad adds or removes an instance, a template pad applies or releases, a
+target pad selects or deselects. Real desks also have *momentary* pads — the value holds while the
+button is held and drops on release — which is how a busking operator punches a blinder on a
+downbeat without a second press to find. Doing it means a press/release pair rather than a click,
+on `EffectPadButton`, `LookPadButton` and `PropertyPadButton` (which already has its own third
+long-press implementation, so the three would want unifying first), plus a decision about what
+release means for an effect *instance* as opposed to a programmer value.
+
+**Trigger**: an operator asks to flash a pad rather than latch it, or a second surface wants the
+same gesture and the press-handling can be shared.
+
+### `FU-BUSK-TARGET-CAP`
+
+**Only the first eight selected targets contribute effect presence** · Trigger · Busking-view plan
+session 3 (2026-09-01)
+
+`useSelectedTargetEffects` in `components/busking/BuskingView.tsx` has eight fixed RTK Query hook
+slots — hooks cannot be called in a loop, so the count is static — and truncates the selection to
+that. Past eight, a pad's presence ring is computed from a subset, so it can read `all` while the
+ninth target is untouched. This is pre-existing and unchanged by session 3, but the target band
+makes a wide selection much easier to build than the sidebar list it replaced (a pad each, two
+rows, one press per target), so the ceiling is easier to reach than it was. The fix is a single
+batched query over the selection rather than N per-target ones, which is a backend route as much
+as a frontend change.
+
+**Trigger**: an operator selects more than eight targets and a pad's ring disagrees with the rig.
 
 ---
 

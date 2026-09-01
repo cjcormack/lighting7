@@ -1,7 +1,7 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391` and session 2 as `ca4bc20`
-> in [lighting-react](../../../lighting-react); sessions 3–4 are not built.
+> **Document status: IN PROGRESS.** Session 1 landed as `6b1c391`; sessions 2 and 3 landed in
+> [lighting-react](../../../lighting-react) as `ca4bc20` and `2ba1d2e`. Session 4 is not built.
 > The visual design is settled and checked
 > in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
 > of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left
@@ -16,12 +16,17 @@ Two asks, one surface.
 
 **The busking view.** `/projects/:id/fx` (`routes/FxBusking.tsx` → `components/busking/BuskingView`
 in lighting-react) already has the right bones: select targets, press pads. But it is off-nav and
-reachable only by URL, its target list is a sidebar list rather than a bank of toggle pads, its
+reachable only by URL[^offnav], its target list is a sidebar list rather than a bank of toggle pads, its
 pads cover effects, Looks-with-deferred-effects and templates but **not cues or cue stacks**, and
 it says nothing about tempo — the thing a busking operator adjusts most. Other desks' busking
 surfaces (the research behind `DEFAULT_SPEED_MASTER_COUNT`'s "visible bank of four") put
 group/fixture select pads, palette pools, executor/cue pads and rate masters on one page. That is
 the shape the design canvas draws.
+
+[^offnav]: Wrong when written, and left standing as the record of what session 3 set out from: a
+    `navItems` entry for `/fx` already existed, in the `live` group. What was true is the rest of
+    the sentence — no ShowBar, no tempo, no show chrome — so D8's "enters `navItems`" was in
+    practice a rename of the entry rather than a new one, which is why it kept `id: "fx"`.
 
 **Speed masters.** Today a master is a name, an index and a tempo
 (`models/speedMasters.kt`: `masterIndex`, `name`, `bpm`, `source`, `notes`, `uuid`;
@@ -198,12 +203,56 @@ Landed as planned, with four things worth carrying forward:
 The `speedMasters.error` frame gained its first consumer here, which session 1 left unconsumed:
 a per-master toast, the backstop for writers with no affordance to remove.
 
-### Session 3 — the Busk view becomes a place
+### Session 3 — the Busk view becomes a place — done, `2ba1d2e` (lighting-react)
 
 Route rename + `navItems` entry + legacy redirects; ShowBar host wiring; the target band replacing
 the desktop sidebar; template pads grouped into family columns; the speed rail component (reads
 the live query for tempo, the list query for usage/ratio — the two-BPM rule from
 `SpeedMasters.tsx` applies). No new backend.
+
+Landed as planned. Five things worth carrying into session 4:
+
+- **Busk took the full live-view chrome, not just the bar.** §4 drew only a ShowBar, but a live
+  view reachable solely from the sidebar would be the one destination the Programmer / Show /
+  Prompt Book switcher could not get to. `ShowView` is four now, and `LABEL_AT_760` went back to
+  `@[820px]` — the number it had when Run was a view — because that threshold tracks the pill
+  count, and is asserted so the fifth pill cannot be added for free.
+- **The rail reads the live query for everything drawn.** §5's "list query for usage/ratio" is out
+  of date: session 2's field-wise merge copies `usage` and the follow pair into the live state, so
+  the REST list is needed only for the numeric `id` a ratio-chip PUT addresses. Both queries stay,
+  for that narrower reason.
+- **The rail's ratio chips are the second surface that can write a follow ratio.** They keep the
+  detail sheet's two rules — both halves or neither, and never `bpm` alongside — and *linking*
+  and *unlinking* deliberately stay in the sheet: retuning a link mid-show belongs on a
+  performance surface, deciding whether to have one does not.
+- **Two things were removed rather than repointed.** `SelectedTargetSummary` went with the
+  sidebar it headed (and took `Breadcrumbs`' `extra` prop with it, its last consumer), and the
+  Effects Overview panel's route lock went entirely — a panel forced open and made unclosable by
+  one route was buying nothing once that route had a speed rail and pad presence rings. Its
+  `isLocked`-gated Kill All became unconditional rather than disappearing.
+- **The empty-selection state is now dim-and-inert, not a placeholder page.** Seeing the library
+  before picking a target is most of what makes a pad grid learnable, and nothing can be pressed
+  by mistake: presence is `none` for every pad while the selection is empty. The inertness has to
+  go on the **buttons**, not on the pool's own scroll container: `pointer-events-none` there takes
+  it out of hit-testing, so the wheel and a touch drag find no scrollable ancestor and the library
+  the operator was just invited to read is stuck at its first screenful. Caught in review, not by
+  a test that could have known — the pads render either way.
+
+Two things left open, both recorded rather than resolved:
+
+- **Kill All is now unconditional in `EffectsOverviewPanel`**, where it used to appear only while
+  the busk view held the panel locked open. The panel's visibility is persisted and it renders on
+  every route, so an unconfirmed, undoable "remove every running effect" press is reachable
+  anywhere the panel is open, for operators as well as admins. Route-gating it was the wrong shape
+  — one control in two places depending on where you came from — but the blast radius is a
+  separate question, and a confirm gated on a non-empty stage (the asymmetry `ApplyUpdateDialog`
+  already uses) would cost nothing. Revisit if it bites.
+- **No desk check has been run.** Everything below in §9 that needs a browser or two is still
+  outstanding for the session-3 items; the automated gate (build, 1542 tests, lint at
+  `--max-warnings 0`) is all that has passed.
+
+Session 4 inherits a left column whose pools stack full-width. §4 draws Looks at `2fr` beside a
+`3fr` cue-stack column, so that split is the session's first move rather than a new region.
 
 ### Session 4 — cues and stacks on pads
 
