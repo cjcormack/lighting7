@@ -39,7 +39,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
-| [`FU-BUSK-TARGET-CAP`](#fu-busk-target-cap) | Trigger | Busk | a selection past eight targets misreports pad presence |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
@@ -423,32 +422,21 @@ express it as separate instances.
 **Every busk pad is a toggle; there is no flash or solo gesture** · Trigger · Busking-view plan
 session 3 (2026-09-01), §7
 
-A press latches: an effect pad adds or removes an instance, a template pad applies or releases, a
-target pad selects or deselects. Real desks also have *momentary* pads — the value holds while the
-button is held and drops on release — which is how a busking operator punches a blinder on a
-downbeat without a second press to find. Doing it means a press/release pair rather than a click,
-on `EffectPadButton`, `LookPadButton` and `PropertyPadButton` (which already has its own third
-long-press implementation, so the three would want unifying first), plus a decision about what
-release means for an effect *instance* as opposed to a programmer value.
+A press latches: a template pad applies or releases, a Look pad adds or removes a layer, a target
+pad selects or deselects. Real desks also have *momentary* pads — the value holds while the button
+is held and drops on release — which is how a busking operator punches a blinder on a downbeat
+without a second press to find. Doing it means a press/release pair rather than a click.
+
+Smaller than it was written. The effect and property pads it also named were removed when the busk
+view was cut back to the library pads its design draws (see the busking-view plan's §4 note), so
+"what does release mean for an effect *instance* as opposed to a programmer value" is no longer part
+of the question — every pad left is a layer toggle. And the three duplicated long-press
+implementations it wanted unifying first are now one shared hook,
+`lighting-react/src/hooks/useLongPress.ts`, which is where a `onPressStart`/`onPressEnd` pair would
+be added.
 
 **Trigger**: an operator asks to flash a pad rather than latch it, or a second surface wants the
 same gesture and the press-handling can be shared.
-
-### `FU-BUSK-TARGET-CAP`
-
-**Only the first eight selected targets contribute effect presence** · Trigger · Busking-view plan
-session 3 (2026-09-01)
-
-`useSelectedTargetEffects` in `components/busking/BuskingView.tsx` has eight fixed RTK Query hook
-slots — hooks cannot be called in a loop, so the count is static — and truncates the selection to
-that. Past eight, a pad's presence ring is computed from a subset, so it can read `all` while the
-ninth target is untouched. This is pre-existing and unchanged by session 3, but the target band
-makes a wide selection much easier to build than the sidebar list it replaced (a pad each, two
-rows, one press per target), so the ceiling is easier to reach than it was. The fix is a single
-batched query over the selection rather than N per-target ones, which is a backend route as much
-as a frontend change.
-
-**Trigger**: an operator selects more than eight targets and a pad's ring disagrees with the rig.
 
 ---
 
@@ -1436,6 +1424,14 @@ one the heuristic picks, and the operator finds the slider unusable.
 
 One line each: slug, what shipped, commit. Full narratives live in the commit messages and in this
 file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
+
+### 2026-09
+
+- `FU-BUSK-TARGET-CAP` — retired by deletion rather than by the batched query it asked for. The
+  eight-slot fan-out existed to read effect presence off the FX list for the busk view's effect
+  pads; those pads went when the view was cut back to the library pads its design draws, and both
+  surviving pad kinds read the programmer's **layer stack**, which needs only the targets. No cap
+  left to raise — lighting-react, busk-view design alignment
 
 ### 2026-08
 

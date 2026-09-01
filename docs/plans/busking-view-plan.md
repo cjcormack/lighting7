@@ -149,8 +149,9 @@ grep-ability:
   member-count badge on groups, selection summary + Clear. Replaces the desktop sidebar list;
   the mobile bottom-sheet picker stays.
 - **Pools**: templates in four family columns (colour pads carry swatches), Looks with deferred
-  effects, and the effect pads that exist today. Pool dimming + hint banner when nothing is
-  selected; presence rings unchanged (`EffectPadButton`'s none/some/all ladder).
+  effects, and ~~the effect pads that exist today~~ **nothing else** — see the reversal note below.
+  Pool dimming + hint banner when nothing is selected; presence rings unchanged (the none/some/all
+  ladder).
 - **Cue stacks**: one card per stack — name, live pip, current → next cue, Release, GO. GO on an
   inactive stack activates at its first cue (the existing go-to semantics); on the active stack it
   advances. Below, **pinned cues** as pads (number, name, owning stack), lit green when live.
@@ -162,6 +163,45 @@ grep-ability:
   120 → ½× → 60 preview when following; Default BPM only when manual).
 - **ShowBar tiles** (`SpeedMasters.tsx` `MasterTile`): a follower's TAP cell becomes its ratio
   label; click-to-type is disabled with the sheet named in the tooltip. Everything else unchanged.
+
+### 4a. The effect pads went after all (reversed, 2026-09-01)
+
+§4 above said the effect pads that existed before this plan would stay alongside the new library
+pads. They did not: the design canvas draws six regions — targets, templates, Looks, cue stacks,
+pinned cues, speed masters — and drawing those *plus* three pools of ad-hoc effect pads, a Controls
+pool of hold-to-slide property pads and a beat-division toggle to parameterise whatever those minted
+put two instruments on one page. A busk pad presses a **named thing from the library** onto the
+selection; a second grid minting anonymous FX instances with their own timing model is a different
+gesture wearing the same clothes.
+
+Removed on the frontend: `EffectPadButton`, `PropertyPadButton`, `ConfigureEffectSheet`,
+`useBuskingFxActions`, `useBuskingPresence`, and the eight-slot per-target effect fan-out in
+`BuskingView` (which is how `FU-BUSK-TARGET-CAP` retired). `EffectPad` became `BuskPools`.
+`ActiveEffectSheet` survives — the Programmer's `FxSheet` mounts it too. No backend change.
+
+Three consequences worth carrying forward:
+
+- **An ad-hoc effect now reaches the stage through a Look with deferred effects, a cue, or the
+  Programmer's `+ Effect`**, and a raw level through an intensity template or the Programmer.
+  Nothing on the busk view mints an FX instance any more.
+- **D1's apply-time usage routing has no caller.** The stamping is client-side, and the effect pads
+  were the only surface doing it — the backend stores and serves `usage` but does not resolve it.
+  Everything else about the rule stands (a master still declares a usage, the sheet still sets it,
+  `EffectParameterForm` still shows and edits an effect's master, null still means master 1), so
+  `useSpeedMasterForCategory` is kept and documented as uncalled rather than deleted. The rail's
+  caption was reworded off the promise it could no longer keep: it now says what a usage badge
+  *means* rather than what a press there does.
+- **A speed-master card gained a fader.** Hold it and drag: the busk view's own hold-to-slide
+  gesture, inherited from the property pads that were deleted in the same pass, and the third way to
+  set a tempo beside typing it and tapping it. It trims a tempo that is nearly right, which TAP and
+  a typed number both do badly. The travel is 60..180 — the same window as `BindingTarget.
+  SpeedMasterBpm` and for that comment's reason — and it **applies as it goes**: the tempo is judged
+  by ear against a running show, so the rig moves under the drag rather than on the release. Writes
+  are deduplicated on the whole BPM and floored at 50 ms, with the release bypassing both. A
+  follower refuses the drag exactly as it refuses TAP and typing.
+- **The rail is also the way into `SpeedMasterDetailSheet`**, through the sliders glyph in a card's
+  title row. A performance surface that shows a master's usage badge should be able to change it,
+  and `/speed-masters` was the only route to that sheet.
 
 ## 5. Implementation — four sessions
 
