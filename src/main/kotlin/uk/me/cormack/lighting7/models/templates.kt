@@ -285,4 +285,24 @@ data class TemplateEffectDto(
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). */
     val rateSpeedMasterUuid: String? = null,
+    /**
+     * `BEAT` or `WALL_CLOCK`, **resolved server-side on read and ignored on write** — the same
+     * contract [TemplateRowDto.health] has, and for the same reason: it is the registry's answer
+     * about [effectType], not a fact the author gets to assert.
+     *
+     * It is here because without it [beatDivision] is unreadable. The field is beats for a `BEAT`
+     * effect and *seconds* for a `WALL_CLOCK` one, so `2.0` is either two beats or two seconds —
+     * two readings a tempo apart — and every surface that renders a template's speed would
+     * otherwise have to fetch the whole FX library to find out which. Three already would: the
+     * library row, the editor's *Runs on* panel and the busk pad.
+     *
+     * Null where the stored `effectType` does not resolve in the registry, and a reader should then
+     * say nothing about the speed rather than guess a unit. Two ways that happens, and the second is
+     * the reachable one: an import from a desk carrying script-registered effects this one lacks
+     * (the write boundary refuses authoring such a template, but not importing one), and — because
+     * the registry is the **current show's** — reading *another* project's library, where an effect
+     * only that project's scripts register is unknown here. The template list route serves any
+     * project, so that is an ordinary page view rather than a corrupt state.
+     */
+    val timingSource: String? = null,
 )

@@ -342,6 +342,15 @@ answer null and are refused by name; so is `beam`, deliberately by name rather t
 happening to ship no beam effect, so a script-registered one cannot mint a Beam effect template
 behind the rule.
 
+Two things about the effect are the **registry's** answer rather than the author's, and both are
+checked or filled at the boundary rather than trusted. `category` is stored, and the write boundary
+refuses a row whose registration disagrees with it. `timingSource` is not stored at all and is
+resolved into `TemplateEffectDto` on every read — an effect's timing source belongs to the effect
+*type*, so a column would be a second copy that a re-registered script could contradict. It is on
+the DTO because without it `beatDivision` cannot be read: the field is beats for a `BEAT` effect and
+*seconds* for a `WALL_CLOCK` one, and a client would otherwise have to fetch the whole FX library to
+tell a two-beat pulse from a two-second one.
+
 **The cook gained no new path.** `CueComposer.effectsForLayer` was already the single fan-out shared
 by `cookEffects` and `cookAll`; it now takes `LayerContent.effects` rather than a `LookSnapshot`, so
 a template's one target-less effect goes down the same *deferred* arm a Look's does. The

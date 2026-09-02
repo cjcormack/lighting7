@@ -231,7 +231,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
                     sortOrder = row.sortOrder
                 }
             }
-            template.toDto()
+            template.toDto(state.show.fxRegistry)
         }
         if (created == null) {
             call.respond(

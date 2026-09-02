@@ -838,6 +838,83 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `the DTO reports the effect's timing source, so beatDivision has a unit`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // Without this field `beatDivision` is unreadable: it is beats for a BEAT effect and
+        // *seconds* for a WALL_CLOCK one, and nothing else on the DTO says which. A client would
+        // otherwise have to fetch the whole FX library to render a template's speed.
+        val beat = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+        assertEquals("BEAT", beat.effect?.timingSource)
+
+        val wallClock = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "candle",
+                    effect = colourEffect(effectType = "Candle Flicker", category = "dimmer"),
+                )
+            )
+        }.body<TemplateDto>()
+        assertEquals("WALL_CLOCK", wallClock.effect?.timingSource)
+    }
+
+    @Test
+    fun `timingSource is null when the effect type does not resolve here`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        // Stand in for the two ways this is reachable, neither of them a corrupt state: an import
+        // from a desk carrying script-registered effects this one lacks, and — because the registry
+        // is the *current show's* — reading another project's library, where an effect only that
+        // project's scripts register is unknown here. `validateTemplateContents` refuses authoring
+        // such a template, so the DAO is the only way to stand one up.
+        transaction(state.database) {
+            DaoTemplate.findById(breathe.id)!!.effect!!.effectType = "NotInThisRegistry"
+        }
+
+        // Null rather than a defaulted "BEAT": the two readings of `beatDivision` are a tempo apart,
+        // so a client is meant to drop the speed clause entirely rather than state a wrong unit.
+        // Defaulting here would put the guess back on the server where no reader can see it.
+        val reRead = client.get("${base()}/${breathe.id}").body<TemplateDto>()
+        assertEquals("NotInThisRegistry", reRead.effect?.effectType)
+        assertNull(reRead.effect?.timingSource)
+    }
+
+    @Test
+    fun `timingSource is resolved on read and ignored on write`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        // The registry is the authority — the same stance the write boundary takes on `category`,
+        // which it checks against the registration rather than trusting. A client that asserts a
+        // timing source its effect does not have is answered with the real one, not obeyed: the
+        // field is not stored, so there is nowhere for the lie to live.
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "liar",
+                    effect = colourEffect().copy(timingSource = "WALL_CLOCK"),
+                )
+            )
+        }.body<TemplateDto>()
+        assertEquals("BEAT", created.effect?.timingSource)
+
+        val reRead = client.get("${base()}/${created.id}").body<TemplateDto>()
+        assertEquals("BEAT", reRead.effect?.timingSource)
+    }
+
+    @Test
     fun `a template holding both a value and an effect is refused`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

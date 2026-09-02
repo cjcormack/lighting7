@@ -89,7 +89,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     .orderBy(DaoTemplates.sortOrder to SortOrder.ASC, DaoTemplates.name to SortOrder.ASC)
                     .toList()
                 val usage = templateUsageFor(all.map { it.id.value })
-                all.map { it.toDto(usage[it.id.value]) }
+                all.map { it.toDto(state.show.fxRegistry, usage[it.id.value]) }
             }
             // Filtered after the DTOs are built, because the family is derived from the rows and
             // there is no column to query on — the same reason `/looks` filters in memory.
@@ -106,7 +106,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
             val dto = transaction(state.database) {
                 val template = DaoTemplate.findById(resource.templateId) ?: return@transaction null
                 if (template.project.id != project.id) return@transaction null
-                template.toDto(templateUsage(template.id.value))
+                template.toDto(state.show.fxRegistry, templateUsage(template.id.value))
             }
             if (dto == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
@@ -207,7 +207,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     createTemplateEffect(template, effect)
                 }
                 TemplateWriteOutcome.Written(
-                    template.toDto(templateUsage(template.id.value)),
+                    template.toDto(state.show.fxRegistry, templateUsage(template.id.value)),
                     template.uuid,
                     // An effect-only edit is a contents change like a rows edit: without it
                     // `republishForTemplateEdit` never runs, and retuning an effect template would
@@ -697,7 +697,7 @@ internal fun performTemplateCreate(
         }
         createTemplateRows(template, rows)
         effect?.let { createTemplateEffect(template, it) }
-        template.toDto(templateUsage(template.id.value))
+        template.toDto(state.show.fxRegistry, templateUsage(template.id.value))
     } ?: return TemplateCreateResult.Duplicate(
         "A template named '$name' already exists in this project",
     )
@@ -979,8 +979,14 @@ internal fun DaoTemplateRow.toDto() = TemplateRowDto(
     sortOrder = sortOrder,
 )
 
-/** One stored template effect on the wire. Must be called inside a transaction. */
-internal fun DaoTemplateEffect.toDto() = TemplateEffectDto(
+/**
+ * One stored template effect on the wire. Must be called inside a transaction.
+ *
+ * Takes the registry rather than defaulting it away, so [TemplateEffectDto.timingSource] cannot be
+ * silently omitted by a new call site: a DTO without it makes `beatDivision` unreadable, and the
+ * failure is a client rendering "2 Bars" for a two-second cycle rather than anything that throws.
+ */
+internal fun DaoTemplateEffect.toDto(registry: FxRegistry) = TemplateEffectDto(
     effectType = effectType,
     category = category,
     propertyName = propertyName,
@@ -994,6 +1000,11 @@ internal fun DaoTemplateEffect.toDto() = TemplateEffectDto(
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+    // The registry is the authority, exactly as it is for `category` — which the write boundary
+    // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
+    // timing source is a property of the *effect type*, so a column would be a second copy that a
+    // re-registered script could contradict.
+    timingSource = registry.getRegistration(effectType)?.timingSource?.name,
 )
 
 /**
@@ -1018,7 +1029,7 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
         ?: effect?.let { familyForEffectCategory(it.category) }
 
 /** Must be called inside a transaction. */
-internal fun DaoTemplate.toDto(usage: TemplateUsage? = null): TemplateDto {
+internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = null): TemplateDto {
     // `sortedBy`, not Exposed's `orderBy`, for the reason [familyOf] gives: the PUT route reads
     // the rows before it validates, so by the time this runs the collection is loaded and
     // re-ordering it throws.
@@ -1038,7 +1049,7 @@ internal fun DaoTemplate.toDto(usage: TemplateUsage? = null): TemplateDto {
         isGeneric = if (storedEffect != null) true else rowList.isNotEmpty() && rowList.all { it.isDeferred },
         kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
         rows = rowList.map { it.toDto() },
-        effect = storedEffect?.toDto(),
+        effect = storedEffect?.toDto(registry),
         layerCount = resolvedUsage.layerCount,
     )
 }
