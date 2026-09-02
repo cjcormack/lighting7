@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      --vio:oklch(0.606 0.25 292.717);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:oklch(0.141 0.005 285.823); color:var(--fg); }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:6px; padding:0 6px; font-size:10px; line-height:16px; white-space:nowrap; box-sizing:border-box; flex:0 0 auto; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .badge.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--bd);
+      background:transparent; color:var(--fg); font-size:14px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.xs { height:24px; font-size:11px; padding:0 8px; border-radius:6px; }
+    .btn.h7 { height:28px; font-size:12px; padding:0 8px; border-radius:6px; }
+    .btn.dis { opacity:0.5; }
+    .chip { display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid var(--bd); padding:4px 8px; font-size:12px; white-space:nowrap; box-sizing:border-box; }
+    .sw { width:12px; height:12px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; box-sizing:border-box; }
+    .tog { display:inline-flex; align-items:center; height:28px; padding:0 10px; border-radius:6px; font-size:12px; color:var(--mfg); }
+    .tog.on { background:var(--muted); color:var(--fg); }
+    .mg { border-radius:8px; border:1px solid var(--bd); overflow:hidden; }
+    .mgh { display:grid; grid-template-columns:150px repeat(4, 1fr); font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--mfg); border-bottom:1px solid var(--bd); }
+    .mgh > div { padding:6px 8px; }
+    .mr { display:grid; grid-template-columns:150px repeat(4, 1fr); height:34px; align-items:center; border-bottom:1px solid var(--bd); font-size:12px; }
+    .mr:last-child { border-bottom:0; }
+    .mr > div { padding:0 6px; overflow:hidden; white-space:nowrap; }
+    .cell { display:flex; align-items:center; gap:6px; height:24px; padding:0 6px; border-radius:4px; box-sizing:border-box; font-size:11px; }
+    .o-look { box-shadow:inset 0 0 0 1px oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.35); }
+    .o-prog { box-shadow:inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .inert { opacity:0.35; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sech { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; }
+    .layer { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-radius:4px; border:1px solid var(--bd); background:var(--card); padding:8px; font-size:12px; box-sizing:border-box; }
+    .layer.focus { box-shadow:0 0 0 1px var(--pri); }
+    .namechip { display:inline-flex; align-items:center; gap:4px; border-radius:6px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.6); padding:1px 4px; font-size:12px; white-space:nowrap; }
+    .ibtn { width:24px; height:24px; display:grid; place-items:center; border-radius:6px; color:var(--mfg); flex:0 0 auto; }
+    .ibtn.sec2 { background:var(--muted); color:var(--fg); }
+    .amt { display:inline-flex; align-items:center; justify-content:flex-end; height:24px; width:56px; padding:0 4px; border-radius:6px; border:1px solid var(--bd); font-size:11px; box-sizing:border-box; }
+    .fxrow { display:flex; align-items:center; gap:8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:6px 8px; font-size:12px; box-sizing:border-box; position:relative; }
+    .dot { width:6px; height:6px; border-radius:999px; background:var(--vio); flex:0 0 auto; }
+    .menu { position:absolute; right:8px; top:34px; width:196px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.21 0.006 285.885); box-shadow:0 8px 24px rgba(0,0,0,0.45); padding:4px; z-index:2; }
+    .mi { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; }
+    .mi.hl { background:var(--muted); }
+    .tip { border-radius:6px; background:oklch(0.985 0 0); color:oklch(0.141 0.005 285.823); padding:6px 10px; font-size:11px; line-height:1.4; max-width:340px; box-shadow:0 4px 14px rgba(0,0,0,0.35); }
+    .notice { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-radius:8px; background:oklch(0.274 0.006 286.033 / 0.4); padding:6px 8px; font-size:12px; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1400px; height:900px; box-sizing:border-box; display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- scope band -->
+  <div style="display:flex; align-items:center; gap:10px; padding:8px 16px; border-bottom:1px solid var(--bd); font-size:12px;">
+    <span style="color:var(--mfg);">Showing</span>
+    <nav style="display:inline-flex; gap:2px; border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:2px;">
+      <span class="tog">Output</span><span class="tog">Local</span><span class="tog on">One layer</span>
+    </nav>
+    <span class="namechip">
+      <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/></svg>
+      <svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+      Amber Breathe</span>
+    <span style="color:var(--mfg);">asserts Colour &middot; 4 targets</span>
+  </div>
+
+  <div style="flex:1; min-height:0; display:flex;">
+
+    <!-- grid side -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; padding:14px 16px; border-right:1px solid var(--bd);">
+
+      <!-- template strip -->
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px;">
+          <span class="badge out" style="color:oklch(0.82 0.11 305); border-color:oklch(0.45 0.16 300);">Colour</span>
+          <span class="chip"><span class="sw" style="background:#ff9d4a;"></span>Amber Key</span>
+          <span class="chip"><span class="sw" style="background:#5aa2ff;"></span>Steel Blue</span>
+          <span class="chip"><span class="sw" style="background:#fff3d6;"></span>Warm White</span>
+          <span style="width:1px; height:18px; background:var(--bd); margin:0 2px;"></span>
+          <span class="chip" style="border-color:oklch(0.45 0.16 300);"><svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>Amber Breathe</span>
+          <span class="chip"><svg class="ico12" style="color:var(--mfg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>Rainbow Drift</span>
+          <span class="btn h7" style="border-style:dashed; color:var(--mfg);"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New from selection</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:flex-start;">
+          <div class="tip">Click to run a copy of <b>Amber Breathe</b> on the selection &middot; &#8997;click to add a layer that tracks it</div>
+          <p class="cap" style="flex:1; padding-top:2px;">The strip follows the cell selection as it does now. Colour cells offer colour values and colour effects, on either side of a hairline. The two gestures are the value gestures: <b style="color:var(--fg);">click</b> is &ldquo;this, now&rdquo; and <b style="color:var(--fg);">&#8997;click</b> is &ldquo;this, tracked&rdquo;.</p>
+        </div>
+      </div>
+
+      <!-- grid -->
+      <div class="mg">
+        <div class="mgh"><div>Fixture</div><div>Dimmer</div><div>Colour</div><div>Pan</div><div>Tilt</div></div>
+        <div class="mr"><div>SL Wash 1</div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell o-look"><span class="sw" style="background:#ff9d4a;"></span><svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="mono" style="font-size:9.5px;">&frac12;</span></span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div></div>
+        <div class="mr"><div>SL Wash 2</div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell o-look"><span class="sw" style="background:#c46a1a;"></span><svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="mono" style="font-size:9.5px;">&frac12;</span></span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div></div>
+        <div class="mr"><div>SR Wash 1</div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell o-look"><span class="sw" style="background:#5a2a05;"></span><svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="mono" style="font-size:9.5px;">&frac12;</span></span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div></div>
+        <div class="mr"><div>SR Wash 2</div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell o-look"><span class="sw" style="background:#2a1200;"></span><svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="mono" style="font-size:9.5px;">&frac12;</span></span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div></div>
+        <div class="mr" style="opacity:0.5;"><div>Mover 1</div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div><div><span class="cell inert mono">&mdash;</span></div></div>
+      </div>
+
+      <div class="notice">
+        <span class="badge out">template</span>
+        <span>&ldquo;Amber Breathe&rdquo; runs one effect for the whole family &mdash; the grid shows the live value under it, and the wave marks the cells it drives.</span>
+        <span style="color:oklch(0.707 0.165 254.624); text-decoration:underline;">Edit template</span>
+      </div>
+
+      <p class="cap">In <b style="color:var(--fg);">One layer</b> scope on an effect template, the grid is a read: the cells show what the effect is producing right now, ringed in the layer colour, with the wave and the division in the cell. Nothing here is typeable &mdash; a template cell never was &mdash; and the notice says where the edit goes.</p>
+
+      <span style="flex:1;"></span>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div style="border-radius:8px; border:1px solid var(--pri); background:oklch(0.623 0.214 259.815 / 0.08); padding:9px 12px;">
+          <div class="zlab" style="color:oklch(0.707 0.165 254.624); margin-bottom:4px;">click &mdash; a copy, yours until recorded</div>
+          <p class="cap" style="color:var(--fg);">Mints a programmer-band effect on the selected heads with the template&rsquo;s settings, exactly as <b>+ Effect</b> does. It shows in FX running as <i>programmer band</i>; Record writes it onto the cue as an ad-hoc effect. Retuning the template later does not move it.</p>
+        </div>
+        <div style="border-radius:8px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); padding:9px 12px;">
+          <div class="zlab" style="color:oklch(0.82 0.11 305); margin-bottom:4px;">&#8997;click &mdash; a layer that tracks it</div>
+          <p class="cap" style="color:var(--fg);">Adds a template layer masked to Colour on the selected heads &mdash; the busk pad&rsquo;s press. The effect appears in FX running as <i>in Amber Breathe &middot; layer 3</i>. Record writes the layer into the cue, and retuning the template retimes every cue using it.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- rail -->
+    <div style="width:404px; flex:0 0 auto; display:flex; flex-direction:column; gap:12px; padding:14px 16px; overflow:hidden;">
+
+      <div class="sec">
+        <div class="sech">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+          Layers <span class="badge sec num">3</span>
+          <span style="flex:1;"></span>
+          <span class="btn xs"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add</span>
+        </div>
+
+        <div class="layer">
+          <svg class="ico" style="color:var(--mfg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="badge sec mono">1</span>
+          <span class="namechip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Front Look</span>
+          <span class="badge out">Intensity</span><span class="badge out">Position</span>
+          <span class="btn xs" style="border-color:transparent; color:var(--mfg);">Mix</span>
+          <span class="ibtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/></svg></span>
+          <span style="font-size:10px; color:var(--mfg);">look&rsquo;s own targets</span>
+          <span style="flex:1;"></span>
+          <span class="amt">100</span><span style="font-size:11px; color:var(--mfg);">%</span>
+        </div>
+
+        <div class="layer">
+          <svg class="ico" style="color:var(--mfg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="badge sec mono">2</span>
+          <span class="namechip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/></svg>Amber Key</span>
+          <span class="badge out">Colour</span>
+          <span class="btn xs" style="border-color:transparent; color:var(--mfg);">[Colour]</span>
+          <span class="ibtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/></svg></span>
+          <span class="badge out">Front Wash</span>
+          <span style="flex:1;"></span>
+          <span class="amt">100</span><span style="font-size:11px; color:var(--mfg);">%</span>
+        </div>
+
+        <div class="layer focus">
+          <svg class="ico" style="color:var(--mfg);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>
+          <span class="badge sec mono">3</span>
+          <span class="namechip">
+            <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/></svg>
+            <svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+            Amber Breathe</span>
+          <span class="badge out">Colour</span>
+          <span class="btn xs" style="border-color:transparent; color:var(--mfg);">[Colour]</span>
+          <span class="ibtn"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/></svg></span>
+          <span class="badge out">Front Wash</span>
+          <span style="flex:1;"></span>
+          <span class="amt">100</span><span style="font-size:11px; color:var(--mfg);">%</span>
+        </div>
+        <p class="cap" style="font-size:10px;">Row anatomy unchanged. The name chip is <span class="mono">LookNameBadge</span> with the wave added beside the palette glyph when the template holds an effect; the family badge and mask come from the template as they do for a value.</p>
+      </div>
+
+      <div style="height:1px; background:var(--bd);"></div>
+
+      <div class="sec">
+        <div class="sech">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+          FX running <span class="badge sec num">2</span>
+          <span style="flex:1;"></span>
+          <span class="btn xs dis"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Effect</span>
+        </div>
+
+        <div class="fxrow">
+          <span class="dot"></span>
+          <span style="font-weight:500;">Colour Pulse</span>
+          <span class="badge out mono">&rarr; rgbColour</span>
+          <span style="flex:1;"></span>
+          <span class="badge out">M2</span>
+          <span class="badge out mono">1/2</span>
+          <span class="badge sec">in Amber Breathe</span>
+          <span style="font-size:10px; color:var(--mfg);">layer 3</span>
+        </div>
+
+        <div class="fxrow" style="border-color:var(--pri);">
+          <span class="dot"></span>
+          <span style="font-weight:500;">Colour Pulse</span>
+          <span class="badge out mono">&rarr; rgbColour</span>
+          <span style="flex:1;"></span>
+          <span class="badge out">M2</span>
+          <span class="badge out mono">1/2</span>
+          <span class="badge pri">programmer band</span>
+          <span class="ibtn sec2"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+          <div class="menu">
+            <div class="mi">Edit&hellip;</div>
+            <div class="mi hl"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/></svg>Save as template&hellip;</div>
+            <div class="mi" style="color:oklch(0.704 0.191 22.216);">Stop</div>
+          </div>
+        </div>
+
+        <div style="height:70px;"></div>
+
+        <p class="cap" style="font-size:10px;"><b style="color:var(--fg);">Save as template&hellip;</b> on a programmer-band effect is the effect twin of the strip&rsquo;s <i>New from selection</i>: it asks for a name and creates a template in the effect&rsquo;s family with these settings, leaving the running copy where it is. It is offered on an effect the programmer owns, not on one a Look or a template already owns.</p>
+        <p class="cap" style="font-size:10px;"><b style="color:var(--fg);">+ Effect</b> stays disabled while an effect-template layer is focused, for the value template&rsquo;s reason reworded: <i>A template holds one effect. Switch to Local for an effect on this cue, or focus a look layer to put one in its look.</i></p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

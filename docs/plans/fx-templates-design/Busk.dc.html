@@ -1,0 +1,212 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:oklch(0.141 0.005 285.823); color:var(--fg); }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .colh { font-size:10px; font-weight:600; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .tpad { display:flex; align-items:center; gap:8px; height:52px; padding:0 14px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; box-sizing:border-box; color:var(--fg); }
+    .tpad svg { color:var(--mfg); }
+    .tpad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tpad.on svg { color:var(--pri); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); box-sizing:border-box; }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { margin-top:2px; font-size:10px; line-height:1.2; color:var(--mfg); }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .fxdiv { display:flex; align-items:center; gap:6px; margin:4px 0 0; }
+    .fxdiv::before, .fxdiv::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .fxdiv span { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.82 0.11 305); }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .wave { color:var(--mfg); }
+    .pad.all .wave, .pad.some .wave { color:var(--pri); }
+    .stack { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .gobtn { width:64px; height:44px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .ghost { height:44px; padding:0 10px; border-radius:8px; font-size:11px; font-weight:500; color:var(--mfg); display:grid; place-items:center; }
+    .cuepad { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:52px; padding:8px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--card); box-sizing:border-box; }
+    .cuepad.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .master { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .tap { height:44px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+    .usage { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; background:var(--muted); font-size:9px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); text-transform:uppercase; }
+    .chip { min-width:34px; height:30px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; border:1px solid var(--bd); font-size:12px; font-weight:700; color:var(--mfg); box-sizing:border-box; }
+    .chip.on { border-color:var(--pri); background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .beat { width:6px; height:6px; border-radius:50%; background:#4ade80; }
+  </style>
+</helmet>
+
+<div class="app" style="width:1440px; height:880px; display:flex; flex-direction:column; overflow:hidden;">
+
+  <!-- ShowBar -->
+  <div style="height:48px; flex-shrink:0; display:flex; align-items:stretch; gap:8px; padding:6px 12px; border-bottom:1px solid var(--bd);">
+    <div style="display:flex; align-items:center; padding:0 12px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:11px; font-weight:700; letter-spacing:0.08em; color:var(--mfg);">DBO</div>
+    <div style="display:flex; align-items:center; padding:0 12px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:11px; font-weight:700; letter-spacing:0.08em; color:var(--mfg);">BLIND</div>
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; padding:0 8px;">
+      <span class="lbl">Main Show</span>
+      <span style="font-size:13px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Cue 12 &middot; Verse 2 &nbsp;&rarr;&nbsp; Next 13 &middot; Chorus</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid var(--bd); border-radius:8px; background:var(--card);">
+      <span class="beat"></span>
+      <span class="mono num" style="font-size:13px; font-weight:700;">120</span>
+      <span style="font-size:10px; color:var(--mfg);">+3</span>
+    </div>
+    <div style="display:flex; align-items:center; padding:0 16px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:12px; font-weight:600;">BACK</div>
+    <div class="gobtn" style="height:auto;">GO</div>
+  </div>
+
+  <div style="flex:1; min-height:0; display:flex;">
+
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+      <!-- Targets -->
+      <div style="flex-shrink:0; border-bottom:1px solid var(--bd); padding:10px 16px 12px;">
+        <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:8px;">
+          <span class="lbl">Targets</span>
+          <span style="font-size:11px; color:var(--mfg); flex:1;">Front Wash &middot; 4 fixtures</span>
+          <span class="ghost" style="height:24px; padding:0 8px;">Clear</span>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span class="tpad on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span style="flex:1; text-align:left;">Front Wash</span><span class="cnt">4</span></span>
+          <span class="tpad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span style="flex:1; text-align:left;">Movers</span><span class="cnt">6</span></span>
+          <span class="tpad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg><span style="flex:1; text-align:left;">Bars</span><span class="cnt">4</span></span>
+          <span class="tpad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg><span>Hex 1</span></span>
+          <span class="tpad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg><span>Hex 2</span></span>
+          <span class="tpad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg><span>Mover 1</span></span>
+        </div>
+      </div>
+
+      <!-- Pools -->
+      <div style="flex:1; min-height:0; padding:14px 16px 16px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+
+        <div>
+          <div class="lbl" style="margin-bottom:8px;">Templates</div>
+          <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px;">
+
+            <div class="col">
+              <span class="colh">Colour</span>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#ff9d4a;"></span><span class="padname">Amber Key</span></span><span class="paddetail">Colour</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#5aa2ff;"></span><span class="padname">Steel Blue</span></span><span class="paddetail">Colour</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><span class="sw" style="background:#fff3d6;"></span><span class="padname">Warm White</span></span><span class="paddetail">Colour</span></div>
+              <div class="fxdiv"><span>Effects</span></div>
+              <div class="pad all"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Amber Breathe</span></span><span class="paddetail">Colour Pulse &middot; &frac12; &middot; M2</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Rainbow Drift</span></span><span class="paddetail">Rainbow Cycle &middot; 2 bars &middot; M2</span></div>
+            </div>
+
+            <div class="col">
+              <span class="colh">Position</span>
+              <div class="pad"><span class="padname">Downstage Centre</span><span class="paddetail">8 heads</span></div>
+              <div class="pad"><span class="padname">Band</span><span class="paddetail">6 heads</span></div>
+              <div class="fxdiv"><span>Effects</span></div>
+              <div class="pad some"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Figure 8 Drift</span></span><span class="paddetail">Figure 8 &middot; 2 bars &middot; M3</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Slow Sweep</span></span><span class="paddetail">Pan Sweep &middot; 1 bar &middot; M3</span></div>
+            </div>
+
+            <div class="col">
+              <span class="colh">Beam</span>
+              <div class="pad"><span class="padname">Tight &amp; Sharp</span><span class="paddetail">Beam</span></div>
+              <div class="pad"><span class="padname">Wide Soft</span><span class="paddetail">Beam</span></div>
+            </div>
+
+            <div class="col">
+              <span class="colh">Intensity</span>
+              <div class="pad"><span class="padname">Half Up</span><span class="paddetail">Intensity</span></div>
+              <div class="pad"><span class="padname">Full</span><span class="paddetail">Intensity</span></div>
+              <div class="fxdiv"><span>Effects</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Slow Breathe</span></span><span class="paddetail">Breathe &middot; 1 bar &middot; M1</span></div>
+              <div class="pad"><span style="display:flex; align-items:center; gap:6px;"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Strobe Hit</span></span><span class="paddetail">Strobe &middot; &frac14; &middot; M1</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:2fr 3fr; gap:16px;">
+          <div>
+            <div class="lbl" style="margin-bottom:8px;">Looks</div>
+            <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px;">
+              <div class="pad"><span class="padname">Storm Wash</span><span class="paddetail">2 effects &middot; 3 values</span></div>
+              <div class="pad"><span class="padname">Disco</span><span class="paddetail">3 effects</span></div>
+            </div>
+            <div style="display:flex; justify-content:center; gap:14px; margin-top:10px; font-size:12px; color:var(--mfg);"><span>Manage templates &rarr;</span><span>Manage looks &rarr;</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div class="lbl">Cue stacks</div>
+            <div class="stack">
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;">
+                <span style="font-size:13px; font-weight:600;">Main Show</span>
+                <span style="font-size:11px; color:var(--mfg);">Live &middot; 12 Verse 2 &rarr; 13 Chorus</span>
+              </div>
+              <span class="ghost">Release</span>
+              <span class="gobtn">GO</span>
+            </div>
+            <div class="lbl" style="margin-top:4px;">Pinned cues</div>
+            <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px;">
+              <div class="cuepad live"><span class="mono num" style="font-size:13px; font-weight:700;">12</span><span style="font-size:11px; color:var(--mfg);">Verse 2</span></div>
+              <div class="cuepad"><span class="mono num" style="font-size:13px; font-weight:700;">13</span><span style="font-size:11px; color:var(--mfg);">Chorus</span></div>
+              <div class="cuepad"><span class="mono num" style="font-size:13px; font-weight:700;">20</span><span style="font-size:11px; color:var(--mfg);">Blackout</span></div>
+              <div class="cuepad"><span class="mono num" style="font-size:13px; font-weight:700;">S1</span><span style="font-size:11px; color:var(--mfg);">Strobe Hit</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:12px;">
+          <div style="flex:1; border-radius:8px; border:1px solid oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); padding:9px 12px;">
+            <p class="cap" style="color:var(--fg);"><b>Effect pads live in their family column, under a hairline.</b> The column is the family; the hairline is the kind. Press puts a layer on the selection, press again takes it off &mdash; the same toggle a value pad already is, so a lit effect pad reads exactly like a lit colour pad, presence dot included. Long-press still opens the editor.</p>
+          </div>
+          <div style="flex:1; border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px;">
+            <p class="cap"><b style="color:var(--fg);">Beam has no effects</b>, so its column has no hairline. <b style="color:var(--fg);">The Looks pool is unchanged</b>: a Look with deferred effects is still the multi-family or multi-effect chase, and it stays where it is. Tempo for a busked effect template follows its own master; the rail retunes it live.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Speed rail -->
+    <div style="width:288px; flex-shrink:0; border-left:1px solid var(--bd); display:flex; flex-direction:column; gap:10px; padding:12px; overflow:hidden;">
+      <div>
+        <div class="lbl">Speed</div>
+        <div style="font-size:10px; line-height:1.4; color:var(--mfg); margin-top:2px;">A usage badge names the family whose effect templates default to this master.</div>
+      </div>
+      <div class="master">
+        <span class="lbl" style="display:flex; align-items:center; gap:6px;"><span class="beat"></span>M1 &middot; Master</span>
+        <div style="display:flex; align-items:baseline; gap:6px;"><span class="mono num" style="font-size:30px; font-weight:700; line-height:1;">120</span><span style="font-size:10px; color:var(--mfg);">BPM</span></div>
+        <span class="tap">Tap</span>
+      </div>
+      <div class="master" style="border-color:oklch(0.45 0.16 300 / 0.7);">
+        <span class="lbl" style="display:flex; align-items:center; gap:6px;"><span class="beat" style="animation:none; opacity:0.6;"></span>M2 &middot; Chases <span class="usage" style="margin-left:auto;">Colour</span></span>
+        <div style="display:flex; align-items:baseline; gap:6px;"><span class="mono num" style="font-size:30px; font-weight:700; line-height:1;">60</span><span style="font-size:10px; color:var(--mfg);">BPM &middot; follows M1</span></div>
+        <div style="display:flex; gap:4px;"><span class="chip">&frac14;&times;</span><span class="chip on">&frac12;&times;</span><span class="chip">1&times;</span><span class="chip">2&times;</span></div>
+      </div>
+      <div class="master">
+        <span class="lbl" style="display:flex; align-items:center; gap:6px;"><span class="beat" style="animation:none; opacity:0.6;"></span>M3 &middot; Movement <span class="usage" style="margin-left:auto;">Position</span></span>
+        <div style="display:flex; align-items:baseline; gap:6px;"><span class="mono num" style="font-size:30px; font-weight:700; line-height:1;">96</span><span style="font-size:10px; color:var(--mfg);">BPM</span></div>
+        <span class="tap">Tap</span>
+      </div>
+      <span style="flex:1;"></span>
+      <div style="font-size:12px; color:var(--mfg); text-align:center;">Manage speed masters &rarr;</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

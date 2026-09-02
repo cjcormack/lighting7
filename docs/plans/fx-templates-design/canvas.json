@@ -1,0 +1,17 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "The model", "x": 0, "y": 0, "w": 1400, "h": 820 },
+    { "file": "NewTemplate.dc.html", "title": "1 · New template", "x": 1500, "y": 0, "w": 1080, "h": 840 },
+    { "file": "Library.dc.html", "title": "2 · Templates view", "x": 0, "y": 980, "w": 1180, "h": 740 },
+    { "file": "Busk.dc.html", "title": "3 · Busk view", "x": 1280, "y": 980, "w": 1440, "h": 880 },
+    { "file": "Programmer.dc.html", "title": "4 · Programmer", "x": 0, "y": 2000, "w": 1400, "h": 900 },
+    { "file": "Elsewhere.dc.html", "title": "5 · Everywhere else", "x": 1500, "y": 2000, "w": 1180, "h": 760 }
+  ],
+  "annotations": [
+    { "id": "q-one-effect", "x": 2700, "y": 0, "w": 300, "text": "Open: one effect per template, or several?\n\nDrafted as one. \"Amber Breathe\" is one named thing; two effects together is what a Look with deferred effects already is." },
+    { "id": "q-speed-master", "x": 2700, "y": 200, "w": 300, "text": "Open: the default speed master.\n\nDrafted as \"By usage\": the project master whose usage matches the family. This gives the busk plan's D1 routing its first caller. Alternative: plain M1 default, as the Add Effect sheet has today." },
+    { "id": "q-click", "x": 2700, "y": 420, "w": 300, "text": "Open: what a plain click does on an effect chip in the programmer strip.\n\nDrafted as \"mint a programmer-band copy\" (the + Effect path), so click/⌥click mean the same as for a value chip. Alternative: both gestures add a layer, and the copy path is only Save as template." },
+    { "id": "q-beam", "x": 2700, "y": 660, "w": 300, "text": "Beam cannot hold an effect: the effect library has dimmer, colour and position categories only. The Effect choice under Holds is disabled under Beam, and the Beam busk column has no Effects hairline." }
+  ],
+  "launch": { "view": "canvas" }
+}

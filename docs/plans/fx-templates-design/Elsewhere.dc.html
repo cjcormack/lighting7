@@ -1,0 +1,172 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      --vio:oklch(0.606 0.25 292.717);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:oklch(0.141 0.005 285.823); color:var(--fg); }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .zlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:6px; padding:0 6px; font-size:10px; line-height:16px; white-space:nowrap; box-sizing:border-box; flex:0 0 auto; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--bd);
+      background:transparent; color:var(--fg); font-size:13px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .btn.des { background:oklch(0.704 0.191 22.216); border-color:oklch(0.704 0.191 22.216); color:oklch(0.985 0 0); }
+    .btn.xs { height:24px; font-size:11px; padding:0 8px; border-radius:6px; }
+    .tile { border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:12px 14px; display:flex; flex-direction:column; gap:9px; min-height:0; box-sizing:border-box; }
+    .tile .th { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; }
+    .tile .th .zlab { margin-left:auto; }
+    .sw { width:14px; height:14px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; box-sizing:border-box; }
+    .fxg { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:4px; flex:0 0 auto; box-sizing:border-box; }
+    .fxg svg { width:11px; height:11px; }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .layer { display:flex; flex-wrap:wrap; align-items:center; gap:8px; border-radius:4px; border:1px solid var(--bd); background:oklch(0.176 0.005 285.9); padding:8px; font-size:12px; box-sizing:border-box; }
+    .namechip { display:inline-flex; align-items:center; gap:4px; border-radius:6px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.6); padding:1px 4px; font-size:12px; white-space:nowrap; }
+    .prow { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--bd); font-size:12px; }
+    .prow:last-child { border-bottom:0; }
+    .list { border-radius:8px; border:1px solid var(--bd); overflow:hidden; }
+    .chip { display:inline-flex; align-items:center; gap:4px; height:24px; padding:0 6px 0 4px; border-radius:4px; border:1px solid var(--bd); font-size:11px; box-sizing:border-box; }
+    .ov { display:flex; align-items:center; gap:8px; font-size:11px; }
+    .ov .k { width:56px; color:var(--mfg); flex:0 0 auto; }
+    .dlg { border-radius:10px; border:1px solid var(--bd); background:oklch(0.176 0.005 285.9); padding:14px; display:flex; flex-direction:column; gap:8px; }
+    .bubble { border-radius:10px; padding:8px 10px; font-size:12px; line-height:1.4; max-width:100%; }
+    .bubble.me { background:var(--pri); color:oklch(0.21 0.006 285.885); align-self:flex-end; border-bottom-right-radius:3px; }
+    .bubble.ai { background:var(--muted); align-self:flex-start; border-bottom-left-radius:3px; }
+    .tool { display:inline-flex; align-items:center; gap:6px; border-radius:6px; border:1px solid var(--bd); padding:3px 8px; font-size:11px; align-self:flex-start; }
+    .kb { display:inline-block; border-radius:4px; border:1px solid var(--bd); background:var(--muted); padding:0 5px; font-size:10px; }
+    .cmd { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; }
+    .cmd.hl { background:var(--muted); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1180px; height:760px; box-sizing:border-box; padding:22px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+
+  <div>
+    <div style="font-size:17px; font-weight:650; letter-spacing:-0.01em;">Everywhere else a template appears</div>
+    <p class="cap" style="margin-top:4px; font-size:12px; max-width:1000px;">Each surface that already draws a template draws an effect template with the same anatomy plus the wave. Two surfaces need a real rule rather than a glyph: the effect colour picker, and the delete guard.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr 1fr; gap:12px; flex:1; min-height:0;">
+
+    <!-- 1 cue editor -->
+    <div class="tile">
+      <div class="th">Cue editor &middot; layer row and panel <span class="zlab">read surface + edit</span></div>
+      <div class="layer">
+        <span class="badge sec mono">3</span>
+        <span class="namechip">
+          <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/></svg>
+          <svg class="ico12" style="color:oklch(0.82 0.11 305);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>
+          Amber Breathe</span>
+        <span class="badge out">Colour</span>
+        <span class="badge out">[Colour]</span>
+        <span class="badge out">STOMP</span>
+        <span class="badge out">Front Wash</span>
+        <span style="flex:1;"></span>
+        <span class="mono num" style="font-size:11px; color:var(--mfg);">100%</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span class="zlab" style="color:oklch(0.82 0.11 305);">This layer&rsquo;s overrides</span>
+        <div class="ov"><span class="k">Tempo</span><span class="btn xs" style="flex:1; justify-content:space-between;">M2 &middot; Chases <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></span></div>
+        <div class="ov"><span class="k">Amount</span><span style="position:relative; height:5px; flex:1; border-radius:999px; background:var(--muted);"><span style="position:absolute; inset-block:0; left:0; width:100%; border-radius:999px; background:var(--pri);"></span></span><span class="mono num" style="width:32px; text-align:right; color:var(--mfg);">100%</span></div>
+        <div class="ov"><span class="k">Asserts</span><span class="badge out">Colour</span><span class="cap" style="font-size:10px;">the template&rsquo;s family</span></div>
+      </div>
+      <p class="cap" style="font-size:10px;">Timed layers work too: a template effect layer with a delay is a chase that arrives on cue. Editing the <i>effect</i> goes through the template with the <b style="color:var(--fg);">All N layers</b> guard a Look edit gets.</p>
+    </div>
+
+    <!-- 2 add layer picker -->
+    <div class="tile">
+      <div class="th">Add layer &middot; picker <span class="zlab">programmer + cue editor</span></div>
+      <div>
+        <div style="font-size:12px; font-weight:600;">Templates</div>
+        <p class="cap">One value or effect each. These take their fixtures from the layer.</p>
+      </div>
+      <div class="list">
+        <div class="prow"><span class="sw" style="background:#ff9d4a;"></span><span style="flex:1;">Amber Key</span><span class="badge out">Colour</span></div>
+        <div class="prow"><span class="fxg f-col"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span><span style="flex:1;">Amber Breathe</span><span class="badge out">Colour</span></div>
+        <div class="prow"><span class="mono num" style="font-size:11px; color:var(--mfg);">270&deg;, 135&deg;</span><span style="flex:1;">Downstage Centre</span><span class="badge out">Position</span></div>
+        <div class="prow"><span class="fxg f-int"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span><span style="flex:1;">Slow Breathe</span><span class="badge out">Intensity</span></div>
+      </div>
+      <p class="cap" style="font-size:10px;">The hint gains two words. The targets step still greys heads without the family&rsquo;s capability, and confirms with <span class="mono">propertyMask = family</span>, as now.</p>
+    </div>
+
+    <!-- 3 colour picker -->
+    <div class="tile" style="border-color:oklch(0.45 0.16 300);">
+      <div class="th">Effect colour parameter &middot; Templates row <span class="zlab" style="color:oklch(0.82 0.11 305);">a rule</span></div>
+      <div style="border-radius:8px; border:1px solid var(--bd); padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
+        <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.05em; color:var(--mfg);">Templates</span>
+        <div style="display:flex; flex-wrap:wrap; gap:4px;">
+          <span class="chip" style="border-color:var(--pri);"><span class="sw" style="background:#ff9d4a;"></span>Amber Key</span>
+          <span class="chip"><span class="sw" style="background:#5aa2ff;"></span>Steel Blue</span>
+          <span class="chip"><span class="sw" style="background:#fff3d6;"></span>Warm White</span>
+          <span class="chip"><span class="sw" style="background:#d16bff;"></span>Lavender</span>
+        </div>
+        <span style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--mfg);"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Save #FF9D4A as template&hellip;</span>
+      </div>
+      <p class="cap" style="color:var(--fg);"><b>Only value colour templates are offered.</b> An effect template is not a colour, so it never appears here &mdash; the existing <i>generic, one row, Colour</i> rule already excludes it. The other direction is allowed and useful: <b>Amber Breathe</b>&rsquo;s Colour A names <b>Amber Key</b>, and retuning the key retunes the breathe. A template cannot name itself.</p>
+    </div>
+
+    <!-- 4 delete guard -->
+    <div class="tile">
+      <div class="th">Delete guard <span class="zlab">templates view</span></div>
+      <div class="dlg">
+        <div style="font-size:14px; font-weight:600;">This template is still applied</div>
+        <p class="cap" style="color:var(--fg);"><b>Amber Breathe</b> is tracked by 4 cue layers and is running on the programmer now. Deleting it stops the effect everywhere it runs.</p>
+        <p class="cap">Affected cues: 12 Verse 2, 13 Chorus, 31 Bridge, S1 Strobe Hit</p>
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:4px;">
+          <span class="btn">Keep it</span>
+          <span class="btn des">Delete anyway</span>
+        </div>
+      </div>
+      <p class="cap" style="font-size:10px;">Same dialog, one more sentence: an effect template can be live on the programmer without any cue layer, which a value cannot. The programmer-band copies a click minted are not affected &mdash; they are literals.</p>
+    </div>
+
+    <!-- 5 cmd-k + AI -->
+    <div class="tile">
+      <div class="th">Command palette &middot; AI <span class="zlab">entry points</span></div>
+      <div style="border-radius:8px; border:1px solid var(--bd); padding:4px;">
+        <div class="cmd hl"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New Template <span style="margin-left:auto;" class="cap">value or effect</span></div>
+        <div class="cmd"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/></svg>Colour Templates</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span class="bubble me">Give me a slow amber breathe I can busk onto the wash.</span>
+        <span class="tool"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>create_template &middot; Amber Breathe</span>
+        <span class="bubble ai">Made <b>Amber Breathe</b> &mdash; a Colour Pulse between Amber Key and near-black, one bar on M2. It is in the Colour column of the busk view.</span>
+      </div>
+      <p class="cap" style="font-size:10px;"><span class="mono">create_template</span> gains an optional effect; the palette keeps one <i>New Template</i> action, because the kind is chosen inside the sheet.</p>
+    </div>
+
+    <!-- 6 looks page + sync -->
+    <div class="tile">
+      <div class="th">Looks view &middot; sync <span class="zlab">unchanged, one sentence each</span></div>
+      <div style="border-radius:8px; border:1px dashed var(--bd); padding:8px 10px;">
+        <p class="cap">Looking for a single value or effect like <i>Amber Key</i> or <i>Slow Breathe</i>? Those are templates &mdash; one attribute family each, applied to a selection.</p>
+      </div>
+      <p class="cap" style="font-size:10px;">The Looks cross-link gains two words. A Look with deferred effects stays what it is, with its own busk pool; <i>effects follow the layer</i> still marks it in the list.</p>
+      <div style="height:1px; background:var(--bd);"></div>
+      <p class="cap" style="font-size:10px;"><b style="color:var(--fg);">Sync</b>: an effect template is portable show content like a value template, so it travels with the project and clones with it. Nothing to show &mdash; the sync UI names no tables today and should not start.</p>
+      <p class="cap" style="font-size:10px;"><b style="color:var(--fg);">Include</b> does not surface templates today and still does not: a template arrives as a layer, never as an include.</p>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

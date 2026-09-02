@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:oklch(0.141 0.005 285.823); color:var(--fg); }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:6px; padding:0 6px; font-size:10px; line-height:16px; white-space:nowrap; box-sizing:border-box; flex:0 0 auto; }
+    .badge.out { border:1px solid var(--bd); }
+    .badge.sec { background:var(--muted); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid var(--bd);
+      background:transparent; color:var(--fg); font-size:14px; font-weight:500; white-space:nowrap; box-sizing:border-box; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .pill.on { background:var(--muted); color:var(--fg); }
+    .lrow { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:44px; box-sizing:border-box; border-bottom:1px solid var(--bd); }
+    .lrow:last-child { border-bottom:0; }
+    .nm { font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sub { font-size:11px; color:var(--mfg); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sw { width:16px; height:16px; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; box-sizing:border-box; }
+    .fxg { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:4px; flex:0 0 auto; box-sizing:border-box; }
+    .fxg svg { width:11px; height:11px; }
+    .more { width:28px; height:28px; display:grid; place-items:center; color:var(--mfg); flex:0 0 auto; }
+    .zlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+  </style>
+</helmet>
+
+<div class="app" style="width:1180px; height:740px; box-sizing:border-box; display:flex; overflow:hidden;">
+
+  <!-- the page -->
+  <div style="width:760px; flex:0 0 auto; border-right:1px solid var(--bd); display:flex; flex-direction:column; overflow:hidden;">
+    <div style="padding:16px; display:flex; flex-direction:column; gap:14px;">
+      <div class="cap" style="display:flex; align-items:center; gap:6px;">Main Show <span>&rsaquo;</span> <span style="color:var(--fg);">Templates</span></div>
+      <div style="display:flex; align-items:flex-start; gap:12px;">
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:18px; font-weight:600;">Templates</div>
+          <p style="margin:2px 0 0; font-size:14px; color:var(--mfg); line-height:1.4;">Named values <span style="color:var(--fg);">and effects</span> you build looks and cues out of. One attribute family each, applied to whatever you have selected.</p>
+        </div>
+        <span class="btn pri" style="flex:0 0 auto;">
+          <svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New template</span>
+      </div>
+      <nav style="display:inline-flex; align-self:flex-start; align-items:center; gap:2px; border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:2px;">
+        <span class="pill on"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>All</span>
+        <span class="pill"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>Intensity</span>
+        <span class="pill"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><path d="m5 9-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3"/></svg>Position</span>
+        <span class="pill"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".8"/><circle cx="17.5" cy="10.5" r=".8"/><circle cx="6.5" cy="12.5" r=".8"/><circle cx="8.5" cy="7.5" r=".8"/></svg>Colour</span>
+        <span class="pill"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="m14.31 8 5.74 9.94M9.69 8h11.48M7.38 12l5.74-9.94M9.69 16 3.95 6.06M14.31 16H2.83M16.62 12l-5.74 9.94"/></svg>Beam</span>
+      </nav>
+    </div>
+
+    <div style="padding:0 16px 16px; flex:1; min-height:0; overflow:hidden;">
+      <div style="border-radius:10px; border:1px solid var(--bd); overflow:hidden;">
+
+        <div class="lrow">
+          <div style="flex:1; min-width:0;"><div class="nm">Amber Key</div><div class="sub">Generic &middot; any fixture with colour</div></div>
+          <span class="sw" style="background:#ff9d4a;"></span>
+          <span class="badge out">Colour</span>
+          <span class="badge sec num">9 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow" style="background:oklch(0.27 0.09 302 / 0.12);">
+          <div style="flex:1; min-width:0;"><div class="nm">Amber Breathe</div><div class="sub">Effect &middot; Colour Pulse &middot; &frac12; beat &middot; M2 Chases</div></div>
+          <span class="fxg f-col"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span>
+          <span class="badge out">Colour</span>
+          <span class="badge sec num">4 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow">
+          <div style="flex:1; min-width:0;"><div class="nm">Steel Blue</div><div class="sub">Generic &middot; any fixture with colour</div></div>
+          <span class="sw" style="background:#5aa2ff;"></span>
+          <span class="badge out">Colour</span>
+          <span class="badge sec num">3 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow" style="background:oklch(0.27 0.09 302 / 0.12);">
+          <div style="flex:1; min-width:0;"><div class="nm">Rainbow Drift</div><div class="sub">Effect &middot; Rainbow Cycle &middot; 2 bars &middot; M2 Chases</div></div>
+          <span class="fxg f-col"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span>
+          <span class="badge out">Colour</span>
+          <span class="badge sec num">0 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow">
+          <div style="flex:1; min-width:0;"><div class="nm">Downstage Centre</div><div class="sub">Per fixture &middot; 8 heads</div></div>
+          <span class="mono num" style="font-size:11px; color:var(--mfg);">270&deg;, 135&deg;</span><span class="cap" style="font-size:10px;">+7</span>
+          <span class="badge out">Position</span>
+          <span class="badge sec num">12 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow" style="background:oklch(0.27 0.09 302 / 0.12);">
+          <div style="flex:1; min-width:0;"><div class="nm">Figure 8 Drift</div><div class="sub">Effect &middot; Figure 8 &middot; 2 bars &middot; M3 Movement</div></div>
+          <span class="fxg f-pos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span>
+          <span class="badge out">Position</span>
+          <span class="badge sec num">2 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow">
+          <div style="flex:1; min-width:0;"><div class="nm">Half Up</div><div class="sub">Generic &middot; any fixture with a dimmer</div></div>
+          <span class="mono num" style="font-size:11px; color:var(--mfg);">50%</span>
+          <span class="badge out">Intensity</span>
+          <span class="badge sec num">21 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow" style="background:oklch(0.27 0.09 302 / 0.12);">
+          <div style="flex:1; min-width:0;"><div class="nm">Slow Breathe</div><div class="sub">Effect &middot; Breathe &middot; 1 bar &middot; M1</div></div>
+          <span class="fxg f-int"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></span>
+          <span class="badge out">Intensity</span>
+          <span class="badge sec num">6 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+
+        <div class="lrow">
+          <div style="flex:1; min-width:0;"><div class="nm">Tight &amp; Sharp</div><div class="sub">Generic &middot; any fixture with the beam role</div></div>
+          <span class="mono num" style="font-size:11px; color:var(--mfg);">14%</span><span class="cap" style="font-size:10px;">+1</span>
+          <span class="badge out">Beam</span>
+          <span class="badge sec num">2 layers</span>
+          <span class="more"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- notes -->
+  <div style="flex:1; min-width:0; padding:22px; display:flex; flex-direction:column; gap:14px; background:oklch(0.176 0.005 285.9);">
+    <div>
+      <div style="font-size:16px; font-weight:650; letter-spacing:-0.01em;">The Templates view</div>
+      <p class="cap" style="margin-top:5px;">One list, as today. Effect templates are rows in it, not a section or a second tab &mdash; the family bar is the only filter, and an effect belongs to a family exactly as a value does.</p>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div style="border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:10px 12px;">
+        <div class="zlab" style="margin-bottom:4px;">The tile is the tell</div>
+        <p class="cap">A value row keeps its swatch or its readout. An effect row shows the <b style="color:var(--fg);">wave tile</b>, tinted by family, in the same slot. The faint violet wash on the row is optional and probably unnecessary once the tile is there &mdash; drawn so it can be judged.</p>
+      </div>
+      <div style="border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:10px 12px;">
+        <div class="zlab" style="margin-bottom:4px;">The subtitle says what it does</div>
+        <p class="cap">A value reads <i>Generic &middot; any fixture with colour</i>. An effect reads <i>Effect &middot; Colour Pulse &middot; &frac12; beat &middot; M2 Chases</i>: the effect, its speed, its master. Notes still win the line when set, as now.</p>
+      </div>
+      <div style="border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:10px 12px;">
+        <div class="zlab" style="margin-bottom:4px;">Layer count means the same thing</div>
+        <p class="cap">Cue layers tracking the template. It gates delete the same way &mdash; and an effect template can also be <i>running</i> on the programmer, which the delete guard names (see Elsewhere).</p>
+      </div>
+      <div style="border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:10px 12px;">
+        <div class="zlab" style="margin-bottom:4px;">Order is the operator&rsquo;s</div>
+        <p class="cap">Sort order interleaves values and effects however they are arranged here. The busk pads split them at a hairline and keep this order within each half, so arranging the library arranges the pads.</p>
+      </div>
+    </div>
+
+    <span style="flex:1;"></span>
+
+    <div style="border-radius:8px; border:1px dashed oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.35); padding:10px 12px;">
+      <div class="zlab" style="color:oklch(0.828 0.189 84.429); margin-bottom:4px;">Row menu</div>
+      <p class="cap" style="color:var(--fg);">Edit &middot; Delete, unchanged. Edit opens the same sheet with the Holds segment locked, the way the family is locked today. No Duplicate: a second effect is a second template, and the sheet is short.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
