@@ -1,6 +1,6 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: IN PROGRESS — sessions 1–2 done (`bba3efc`, `PENDING`).** The backend model,
+> **Document status: IN PROGRESS — sessions 1–2 done (`bba3efc`, `a35250e`).** The backend model,
 > write boundary, cook, sync wiring and both apply gestures have landed; the two frontend sessions
 > (3–4) have not. §11 lists where the landed backend differs from §2–§5, for the sessions that
 > read it. The visual design is
@@ -238,7 +238,7 @@ the part that can break a show.
 
 Gate: `./gradlew test` green; `SyncCoverageTest` is what proves step 2 was not skipped.
 
-### Session 2 — the gestures (lighting7) — done, `PENDING`
+### Session 2 — the gestures (lighting7) — done, `a35250e`
 
 1. `routes/templateApply.kt`: the effect arm (D9). One instance per selected head, `WEB`-owned,
    stamped from the template's spec with no override; response carries the instance ids.
