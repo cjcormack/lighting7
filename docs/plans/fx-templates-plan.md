@@ -1,8 +1,8 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: IN PROGRESS — session 1 done.** The backend model, write boundary, cook and
-> sync wiring have landed; sessions 2–4 have not. Five decisions were revised in the doing and are
-> recorded in §11 rather than edited silently into the text above. The visual design is
+> **Document status: IN PROGRESS — session 1 done (`bba3efc`).** The backend model, write
+> boundary, cook and sync wiring have landed; sessions 2–4 have not. §11 lists where the landed
+> backend differs from §2–§5, for the sessions that read it. The visual design is
 > settled and checked in beside this plan at [`fx-templates-design/`](fx-templates-design/INDEX.md)
 > — six static artboards: the model, the New template sheet, the Templates view, the busk view,
 > the programmer, and everywhere else a template appears. The live canvas at
@@ -208,10 +208,7 @@ Grep-able summary of what `fx-templates-design/` draws; the artboards win on lay
 Backend first, because every frontend surface reads the new DTO fields, and the composer change is
 the part that can break a show.
 
-### Session 1 — the model and the cook (lighting7) — done
-
-Landed as planned bar the five revisions in §11 and three correctness holes the plan had not
-spotted (§11.6). `./gradlew test` green.
+### Session 1 — the model and the cook (lighting7) — done, `bba3efc`
 
 1. `models/templates.kt`: `DaoTemplateEffects` + DAO; rewrite the "No effects" KDoc paragraph
    into the D1–D3 rule. `Schema.kt` `ALL_TABLES`.
@@ -312,7 +309,8 @@ cross-version case worth a test.
 
 ## 8. Follow-ups to record
 
-On landing, add to `followups.md`:
+Recorded in `followups.md` on landing (`FU-TMPL-FX-EDIT-NO-RETIME` and
+`FU-PROG-STALE-SOURCE-NAME` were added too, both found in the doing):
 
 - `FU-TMPL-MULTI-EFFECT` — Trigger: an operator keeps making Looks that are exactly two deferred
   effects of one family with no rows.
@@ -336,8 +334,10 @@ Unit: the per-session lists above. Desk checks, none run:
    tile.
 2. Select Front Wash on the busk view, press the pad → the effect runs on the four heads on M2's
    tempo; press again → it stops; the presence dot follows the layer stack, not the effect list.
-3. Retune M2 → the running effect retimes; edit the template's beat division → every layer
-   tracking it retimes; a programmer-band copy minted by a strip click does not.
+3. Retune M2 → the running effect retimes. Edit the template's beat division → re-press the pad
+   and it runs at the new division; the *live* instance keeps its old one until then
+   (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look effects). A programmer-band copy
+   minted by a strip click never follows the template.
 4. In the programmer, ⌥click the chip with two heads selected, then Record → the cue holds a
    template layer; GO on that cue runs the effect; the cue editor's layer panel shows tempo and
    amount overrides that work.
@@ -364,97 +364,20 @@ click: if a copy-on-click proves surprising beside a pad that toggles, the fallb
 gestures add a layer" and the copy path is *Save as template…* alone — the sticky note on the
 canvas says the same.
 
-## 11. What session 1 revised
+## 11. Where the landed backend differs from §2–§5
 
-Recorded here rather than edited into §2 so the reasoning stays visible. Sessions 2–4 should read
-this section as amending the decisions above.
+Session 1 only. Kept because sessions 2–4 read this document as their brief; the reasoning is in
+`bba3efc` and the durable half is in `docs/lighting-composition-model.md`
+§"A template holds a value *or* an effect" and `docs/sync-engineering.md` §"Version 8".
 
-### 11.1 D7 — `sourceRef` is `LayerSource`, and the wire stays additive
+| § | Says | Actually |
+| --- | --- | --- |
+| D7 | `FxInstance.lookId` becomes a polymorphic `sourceRef` | `FxInstance.source: LayerSource?`. **`EffectDto` keeps `lookId` meaning a Look** and gains `templateId` + `sourceName` — read those |
+| D13 | No `formatVersion` bump | v8, `minReader` 5, in `ProjectImporter`'s gate constants too. No FE action |
+| D4 | Beam has no category, so the sheet disables Effect under Beam | `composite` and `controls` are refused as well; the sheet must disable on all three |
+| §3.2 | Validate the resulting (post-write) contents | Only what the request sends, plus a separate Holds check — `TemplateInput.effect` needs **no** `effectPresent` flag |
+| §3.3 | `TemplateSummary` / `TemplateDto` gain `effect` + `kind` | Server-side there is only `TemplateDto`; it gains `effect`, `kind` and no `runningCount` — that is on the delete guard's 409 body |
+| §6 | The importer must skip an effect template from a newer writer | Dropped; the v8 gate makes it unreachable |
 
-`FxInstance.lookId` became `FxInstance.source: LayerSource?` — the existing type, whose KDoc
-already argues for collapsing `lookId`/`lookUuid`/`lookName` into one kind-carrying value so the
-compiler finds every reader. `lookId` and a new `templateId` are *derived* from it.
-
-`EffectDto` did **not** rename its field. `lookId` is read by the shipped frontend bundle and its
-KDoc calls it "the field the busking pads' active ring matches on": a polymorphic int there would
-let template id 3 ring Look id 3's pad. So the DTO keeps `lookId` meaning a Look, and gains
-`templateId` and `sourceName`. Sessions 3–4 read the new fields; nothing shipped breaks.
-
-### 11.2 D13 — v8, and the gate is two constants
-
-D13 said "additive, no format bump", by the letter of the "new optional field" rule. That rule has
-a sharp edge this field falls the wrong side of: `effect` is the record's *whole content*, so a v7
-reader imports an effect template as a hollow rows-less record — one its own write boundary would
-refuse — and writes that back over the effect on its next push. v6 and v7 both bumped the writer
-for exactly this shape.
-
-So: `formatVersion` 7 → **8**, `minReader` stays **5**. And note the gate is
-`SUPPORTED_FORMAT_VERSION` / `MIN_SUPPORTED_FORMAT_VERSION` in `ProjectImporter.kt`, not the DTO —
-`FormatVersionJson.minReader` is written but never read, so bumping the DTO alone leaves it open.
-`docs/sync-engineering.md` §"Version 8" is the worked example, and the general rule there now says
-to ask "would an older reader import this record *wrong*?" rather than "is the field nullable?".
-
-### 11.3 §6 — no importer skip
-
-§6 asked the importer to skip an effect template from a newer writer with a logged warning.
-Dropped: `ProjectImporter` has no warn-and-drop precedent and argues against one in its own comments
-(archive JSON is untrusted input on a call that can fail, so it fails), and the v8 bump makes the
-case unreachable anyway — an older install refuses the repo at the gate. There is nothing left to
-test cross-version.
-
-### 11.4 D4 — the map already existed, and refuses more than Beam
-
-`familyForEffectCategory` was already in `routes/projectLooks.kt`, private; it is now `internal` and
-shared, so a Look's derived families and a template's derived family cannot disagree. Two
-consequences the plan missed: **`composite`** is refused as well as `controls` (LightningStrike
-spans families, so it has no column to sit in), and **`beam` is refused by name** rather than by the
-library happening to ship no beam effect — otherwise a script-registered beam effect could mint a
-Beam effect template behind the rule.
-
-### 11.5 Storage details
-
-`parameters` uses the typed `json<Map<String, String>>` column, not `text` — matching
-`DaoLookEffects`, and required because `templateFxReferenceCount` splits values on `,` rather than
-substring-matching the JSON. There is no `TemplateSummary` server-side; §3.3's name is client-side,
-and `TemplateDto` is still the single read shape. `TemplateInput.effect` needs **no**
-`effectPresent` flag: an effect can be replaced but never cleared, because clearing it would flip
-Holds, which is now refused.
-
-### 11.6 Three correctness holes the plan had not spotted
-
-- **Record's stage capture.** `captureCurrentState` forked on `effect.lookId != null` and filed
-  anything else as a **loose ad-hoc cue effect**. With a template layer spawning effects, Record
-  would have written them onto the cue as children, severing the tracking the feature exists for,
-  silently. It now keys by `LayerSource` and emits `CueLayerDto(lookId | templateId)`.
-  `programmerInclude`'s "genuinely loose band effect" predicate had the same shape.
-- **`cookEffects` had no `resolveTemplate`.** It is the only cook entry point without one and the
-  sole cook the *timed-fire* path uses, so a template effect would have fired on GO and silently
-  not on a delayed or recurring layer. The parameter is required rather than defaulted, which is
-  what made the compiler surface all four call sites.
-- **`templateFxReferenceCount` scanned two tables.** D12 lets an effect template's colour parameter
-  name a value colour template; without a third arm for `template_effects`, that value template
-  stayed deletable out from under a running effect — the exact failure the guard exists to prevent.
-
-A fourth, caught in review rather than by a test: §3.2 says to validate the **resulting**
-(post-write) contents so create and update share the implementation. That is right for the *Holds*
-rule, which is meaningless without the stored state — and wrong for the content rules, because it
-re-checks contents that are upstream of the write. The importer writes an effect verbatim on
-purpose, so a category from a newer build can be in the table, and re-validating would 400 every
-later rename. `validateSpeedMasterSettings` documents exactly this carve-out for its follow target;
-the PUT now follows it, checking only what the request actually sends, with the Holds check kept
-separate because it is the one rule that genuinely needs the stored row.
-
-Two smaller ones, both from `SizedIterable`: `familyOf` and `toDto` now sort rows with `sortedBy`
-rather than Exposed's `orderBy`, because the PUT route reads the rows before it validates and
-re-ordering a loaded collection throws "Can't order already loaded data". And the PUT's validation
-now runs *before* the rename — Exposed commits a transaction that returns normally, so a rename
-applied ahead of a rejection would have survived it.
-
-### 11.7 One desk check in §9 is wrong as written
-
-Check 3 says "edit the template's beat division → every layer tracking it retimes". It does not:
-`recookIfReferences` cooks `withEffects = false` on purpose, so an edit refreshes the snapshot and
-the *next* application runs the new effect while the live instance keeps its timing. This is
-inherited from deferred Look effects unchanged, and is now recorded as
-`FU-TMPL-FX-EDIT-NO-RETIME`. The check should read "re-press the pad and it runs at the new
-division".
+Session 2's `POST /templates/{id}/apply` arm is still the plan's; the route is a no-op on an effect
+template until it lands.
