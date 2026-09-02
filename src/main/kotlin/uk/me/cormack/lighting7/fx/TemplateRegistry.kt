@@ -27,14 +27,27 @@ data class TemplateRowEntry(
     val isDeferred: Boolean get() = target == null
 }
 
-/** A template's identity and contents, read out of the DB and held immutably. */
+/**
+ * A template's identity and contents, read out of the DB and held immutably.
+ *
+ * [rows] and [effect] are mutually exclusive — a template holds a value **or** an effect (D1),
+ * enforced at the write boundary. Both empty means a template whose rows have all been deleted,
+ * which the composer treats as asserting nothing rather than as an error.
+ */
 data class TemplateSnapshot(
     val templateId: Int,
     val templateUuid: UUID,
     val name: String,
     val fadeDurationMs: Long?,
-    /** Rows in `sortOrder`. */
+    /** Rows in `sortOrder`. Empty for an effect template. */
     val rows: List<TemplateRowEntry>,
+    /**
+     * The one effect an effect template holds, null for a value template (D2).
+     *
+     * Its `target` is always null (D3), which is why this is an [EffectEntry] rather than a
+     * template-specific type: the composer's deferred fan-out reads it with no special case.
+     */
+    val effect: EffectEntry? = null,
 )
 
 /**
@@ -46,6 +59,11 @@ data class TemplateSnapshot(
  * invalidate every entry. A template has no group rows and no literals to flatten — its rows are
  * intents resolved per head by [TemplateResolver] at cook time — so there is nothing patch-shaped
  * in the cache and a repatch cannot make an entry stale. Only a template's own edit can.
+ *
+ * A template's **effect** keeps that true only because it is always generic (D3): it names no
+ * target, so it holds no expanded fixture keys either. A bound, group-targeted template effect
+ * would put patch-shaped data back in this cache and is refused at the write boundary for exactly
+ * this reason.
  *
  * The generation re-check in [snapshot] is the same guard [LookRegistry.expanded] carries, and for
  * the same reason: an invalidation landing while a load is in flight has no entry to evict, so a
@@ -274,5 +292,29 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
                         value = row.value,
                     )
                 },
+            // One more query inside the transaction this already opens, rather than a second
+            // transaction: `invalidateAll`'s re-warm reads every requested template on the calling
+            // thread against a size-1 pool (`FU-TMPL-REWARM-BOUND`), so the cost that matters is
+            // round trips, not rows.
+            effect = template.effect?.let { fx ->
+                EffectEntry(
+                    // Always null — a template effect is generic by construction (D3), so there is
+                    // no stored discriminator to read and nothing to drop as corrupt.
+                    target = null,
+                    effectType = fx.effectType,
+                    category = fx.category,
+                    propertyName = fx.propertyName,
+                    beatDivision = fx.beatDivision,
+                    blendMode = fx.blendMode,
+                    distribution = fx.distribution,
+                    phaseOffset = fx.phaseOffset,
+                    elementMode = fx.elementMode,
+                    elementFilter = fx.elementFilter,
+                    stepTiming = fx.stepTiming,
+                    parameters = fx.parameters,
+                    speedMasterUuid = fx.speedMasterUuid,
+                    rateSpeedMasterUuid = fx.rateSpeedMasterUuid,
+                )
+            },
         )
     }

@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateEffect
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
@@ -299,6 +300,36 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoTemplateRow.new {
         template = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
         propertyName = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
+    }
+
+    // An **effect** template: no rows, one target-less effect (fx-templates D1–D3). Seeded with a
+    // non-default value on every optional field, because canonical JSON omits defaults — a field
+    // left at its default is invisible to the round-trip and clone tests, so a copier that drops it
+    // would look correct.
+    //
+    // Its colour parameter names `colourTemplate` as `tmpl:{uuid}` (D12's allowed direction), which
+    // is what proves `ExportUuidRemapper` rewrites a reference *inside a parameters map* on clone —
+    // the analogue of the retired `ref:{boundLook.uuid}` case.
+    val effectTemplate = DaoTemplate.new {
+        this.project = project
+        name = "amber-breathe"
+        notes = "slow warm breathe on the selection"
+        sortOrder = 2
+        // Deliberately null: an effect has no arrival, so an effect template has no fade. Left as
+        // the one default here so a copier inventing a fade for it is caught.
+        fadeDurationMs = null
+    }
+    DaoTemplateEffect.new {
+        template = effectTemplate
+        effectType = "ColourPulse"; category = "colour"; propertyName = "rgbColour"
+        beatDivision = 2.0; blendMode = "MAX"; distribution = "CENTER_OUT"
+        phaseOffset = 0.125
+        elementMode = "FLAT"
+        elementFilter = "EVEN"
+        stepTiming = false
+        parameters = mapOf("colours" to "tmpl:${colourTemplate.uuid}", "depth" to "0.6")
+        speedMasterUuid = slowMaster.uuid
+        rateSpeedMasterUuid = slowMaster.uuid
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own degrees. Seeded

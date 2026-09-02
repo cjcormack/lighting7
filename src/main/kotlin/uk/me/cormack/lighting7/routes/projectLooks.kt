@@ -740,11 +740,15 @@ private fun DaoLook.derivedFamilies(state: State): List<String> {
  * The attribute family an effect's declared [category] belongs to.
  *
  * The category vocabulary is the effect library's own (`"dimmer"` / `"colour"` / `"position"` /
- * `"controls"`), the same set [inferPresetCapabilities] switches on. `"controls"` and anything
- * unrecognised answer null rather than defaulting into BEAM, so an unknown category under-banks
- * rather than mis-banks.
+ * `"controls"`, plus `"composite"`), the same set [inferPresetCapabilities] switches on.
+ * `"controls"`, `"composite"` and anything unrecognised answer null rather than defaulting into
+ * BEAM, so an unknown category under-banks rather than mis-banks.
+ *
+ * `internal` rather than private because the *template* write boundary derives an effect
+ * template's family from the same map (fx-templates D4) — `validateTemplateContents`. Two copies
+ * would be two answers to "which column of the busk view does this belong in".
  */
-private fun familyForEffectCategory(category: String): PropertyMaskGroup? = when (category.lowercase()) {
+internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = when (category.lowercase()) {
     "dimmer" -> PropertyMaskGroup.INTENSITY
     "colour", "color" -> PropertyMaskGroup.COLOUR
     "position" -> PropertyMaskGroup.POSITION

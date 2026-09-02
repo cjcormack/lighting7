@@ -613,7 +613,7 @@ class CueComposerTest {
             name = "Muted",
             rows = emptyList(),
             effects = listOf(
-                LookEffectEntry(
+                EffectEntry(
                     target = null,
                     effectType = "SineWave",
                     category = "dimmer",
@@ -637,12 +637,14 @@ class CueComposerTest {
         assertEquals(
             1,
             CueComposer.cookEffects(
-                fixtures, cueId, listOf(layer(withEffect, 0, targets = target)), registry::snapshot,
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target)),
+                registry::snapshot, resolveTemplate = { null },
             ).size,
         )
         assertTrue(
             CueComposer.cookEffects(
-                fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)), registry::snapshot,
+                fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)),
+                registry::snapshot, resolveTemplate = { null },
             ).isEmpty(),
         )
     }
@@ -976,9 +978,9 @@ class CueComposerTest {
 
     @Test
     fun `a template layer still takes a rank, because it contributes values`() {
-        // The exclusion cookEffects applies to templates deliberately sits *outside* the helper:
-        // a template contributes rows, so it must be numbered, or skipping it for effects would
-        // renumber every layer above it and shift their programmer-band priorities.
+        // Numbering is `contributingLayers`' job and belongs to no kind: a template layer takes a
+        // rank whether it contributes rows or one effect, and if it did not, every layer above it
+        // would renumber and their programmer-band priorities would shift.
         val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
         val templateLayer = CookLayer(
             source = LayerSource.template(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),

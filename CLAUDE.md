@@ -208,6 +208,15 @@ once it had drifted a file behind the resources and nothing but tests constructe
 - **Position**: Circle, Figure8, Sweep, PanSweep, TiltSweep, RandomPosition, StaticPosition
 - **Composite**: LightningStrike (dimmer; its colour half is computed but not applied)
 
+A **template** may hold one effect instead of values — an *effect template*, the busking pad for a
+named effect. It is always generic (it names no target; the layer's targets are the fan-out), always
+exactly one effect, and never both an effect and rows: which one a template holds is its identity,
+refused at the write boundary if a write would flip it. Its family is derived from the effect's
+library `category` via `familyForEffectCategory`, so `controls`, `composite` and `beam` are refused
+by name. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
+template's one effect goes down the same *deferred* arm a Look's does. See
+`docs/lighting-composition-model.md` §"A template holds a value *or* an effect".
+
 Scripts name an effect rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user effects included:
 ```kotlin
@@ -526,7 +535,7 @@ For deeper technical details, see the docs in `docs/`:
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
-- [Composition Model](docs/lighting-composition-model.md) - The five layers, and §"Looks and layers" for the cook step: a cue's ordered Look layers plus its local rows flatten to one contributor per (fixture, property) before the resolver, which is what makes within-cue precedence one rule for every attribute
+- [Composition Model](docs/lighting-composition-model.md) - The five layers, and §"Looks, templates and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, property) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A template holds a value *or* an effect" is the D7 reversal and the three rules that keep it narrow
 - [Desk Accounts](docs/desk-accounts.md) - Desk-local users, the two roles and where they're enforced, cookie sessions + live 4401 revocation, the QR password reset, and the `RESET-ADMIN` break-glass recovery
 - [Windows Updates](docs/windows-updates.md) - The pinned MSI UpgradeCode, MSI version rules, `BuildInfo` in both jars, the GitHub release check, and the backend→launcher marker handshake that applies an update
 

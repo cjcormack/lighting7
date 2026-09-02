@@ -237,6 +237,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                 // blocks project.delete() outright.
                 project.templates.forEach { template ->
                     template.rows.forEach { it.delete() }
+                    template.effects.forEach { it.delete() }
                     template.delete()
                 }
                 project.fixtureGroups.forEach { group ->

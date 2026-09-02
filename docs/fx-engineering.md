@@ -1293,6 +1293,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
 | `resources/fx/**/*.fx.kts` | Every built-in effect's metadata + calculate body (28 files) |
 | `fx/TemplateColourSource.kt` | Colour-template resolution, and `createEffectWithTemplates` — the one spawn helper every string-named effect goes through |
+| `fx/TemplateRegistry.kt` | Template snapshots cached by uuid — rows, or the one effect an effect template holds; the scoped version a running effect's colour cache watches |
 | `fx/EffectSpawner.kt` | Stored effect spec → live `FxInstance` on a live `FxTarget`; the one spawn path for cues, triggers, the programmer stack and Include |
 | `fx/CueApply.kt` | The cue-apply domain: `CueApplyData` and its builders, cue-derived priority, Layer 4 row construction, stomp overlap |
 | `fixture/trait/WithPosition.kt` | Position trait for moving heads |
@@ -1477,7 +1478,7 @@ and the failure surfaces much later, when the row is applied.
 | `models/cues.kt` | `DaoCues`, `DaoCueLayers`, `DaoCueAdHocEffects` tables |
 | `routes/projectCues.kt` | Cue CRUD, apply, from-state endpoints |
 | `models/looks.kt` | `DaoLooks`, `DaoLookRows`, `DaoLookEffects` tables |
-| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning |
+| `fx/CueComposer.kt` | The cook step, layer blending, layer-ordered effect spawning (a Look layer's effects and an effect template's one, through the same fan-out) |
 | `fx/LookRegistry.kt` | Cached per-fixture Look expansion; two invalidation triggers |
 | `routes/projectLooks.kt` | Look CRUD, derived family banking, `LOOK_IN_USE` delete guard |
 

@@ -183,13 +183,21 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 6`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 8`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
 * New required field, removed field, or semantic change → bump
   `formatVersion`.
 * Truly breaking change → bump both `formatVersion` and `minReader`.
+
+**The first rule has a sharp edge, and v8 is where it showed.** "Optional" means *optional to the
+parser*; the question the rule is really asking is what an older reader does with the field
+missing. Where the answer is a valid state, no bump is needed — `SpeedMasterJson`'s four
+routing/follow fields are the worked example: a null usage means "routes nothing", so a v7 reader
+handles a v8 master correctly by ignoring them. Where the answer is a **degraded record**, the
+writer must bump so the older install refuses the repo instead. Ask "would an older reader import
+this record wrong, and then write its mistake back?" rather than "is the field nullable?".
 
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
@@ -210,6 +218,25 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 8 — a template may hold an effect
+
+**v8 is the worked example of an optional field that still needs a bump.** `template_effects`
+travels inline as `TemplateJson.effect: TemplateEffectJson? = null` — one new optional field with a
+null default, which the rule of thumb above would wave through.
+
+It bumps anyway, because that field is the *record's whole content* rather than an enrichment. A
+template holds values **or** one effect (fx-templates D1), so an effect template has no rows at all:
+a v7 reader would import it as a hollow, rows-less template — one its own write boundary would
+refuse — and then write that hollow record back over the effect on its next push. `minReader` stays
+at **5**, since every older archive still imports untouched; only the writer's number moves, which
+is exactly the v6/v7 shape.
+
+Nothing else in the sync layer needed changing, and that is worth recording: `ExportUuidRemapper`
+collects identities from *any* field named `uuid` at any nesting depth and substitutes blindly
+across the JSON text, so the nested `effect.uuid`, both speed-master references, and a `tmpl:{uuid}`
+colour reference **inside the `parameters` map** are all re-pointed on clone with no field-aware
+code. A new inline child is remapped correctly by construction.
 
 ### Version 6 — templates as their own entity
 
@@ -1598,10 +1625,14 @@ same `CommitInfo[]` shape as before, with the added attribution fields described
    `MachineLocal`, or `Excluded`. The last two need a stated reason.
 4. **Portable only**: add a DTO to `sync/dto/SyncDtos.kt`, write it in
    `ProjectExporter`, read it in `ProjectImporter`, seed rows in
-   `testsupport/RichProjectFixture.kt`, and add the project-delete cascade in
-   `routes/projects.kt` plus `ProjectImporter.replaceFromWorkingTree`. Cloning
-   is automatic. Renaming or removing a JSON field later is a `formatVersion`
-   change; removing a required one is a `minReader` bump.
+   `testsupport/RichProjectFixture.kt` **with a non-default value on every
+   optional field** (canonical JSON omits defaults, so a field left at its
+   default is invisible to the round-trip and clone tests), and add the
+   project-delete cascade in `routes/projects.kt` plus
+   `ProjectImporter.replaceFromWorkingTree`. Cloning is automatic. Renaming or
+   removing a JSON field later is a `formatVersion` change; removing a required
+   one is a `minReader` bump — and see v8 under "Format versioning" for when a
+   merely *added* optional field needs a bump too.
 5. **Machine-local**: prefer a `machine_overrides` row via `sync/Overrides.kt`
    for per-record fields. Give it its own local-only table only when the data
    is wholly machine-local rather than a per-record override (e.g.

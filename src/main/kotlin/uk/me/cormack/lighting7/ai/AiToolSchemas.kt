@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.ai
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 // ─── Tool Schema Definitions ───────────────────────────────────────
@@ -569,13 +570,42 @@ internal val updateFromProgrammerTool = AnthropicToolDef(
     }
 )
 
+/**
+ * The effect an *effect template* holds — [adHocEffectSchema] minus `targetType` / `targetKey`.
+ *
+ * A template effect names no target (fx-templates D3): it fans over whatever applies it, so
+ * offering the model a target field would invite it to write one the write boundary then refuses.
+ */
+private val templateEffectSchema = buildJsonObject {
+    put("type", "object")
+    put("description", "One effect. It has no target — an effect template runs on whatever the layer names.")
+    put("properties", buildJsonObject {
+        adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
+            if (key != "targetType" && key != "targetKey" && key != "category") put(key, value)
+        }
+        // Narrowed from the ad-hoc enum: `controls` and `composite` belong to no attribute family
+        // and the library has no beam effects, so the write boundary refuses all three (D4).
+        // Offering them here only buys a rejected call and a retry.
+        put("category", buildJsonObject {
+            put("type", "string")
+            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position") })
+        })
+    })
+    put("required", buildJsonArray { add("effectType"); add("category"); add("beatDivision"); add("blendMode") })
+}
+
 internal val createTemplateTool = AnthropicToolDef(
     name = "create_template",
-    description = "Create a template — a named, referenceable value (a colour, a position, an intensity) that " +
-            "effects and cue layers point at instead of restating it. This is what replaced the old positional " +
-            "colour palette: retuning the template moves everything referencing it. Returns the uuid, which a " +
-            "colour parameter names as 'tmpl:{uuid}'. A template holds one attribute family; leave every row " +
-            "deferred (the default) to make a generic one that can be aimed at any fixture.",
+    description = "Create a template — a named, referenceable value (a colour, a position, an intensity) " +
+            "or a named effect, that effects and cue layers point at instead of restating it. This is what " +
+            "replaced the old positional colour palette: retuning the template moves everything referencing " +
+            "it. Returns the uuid, which a colour parameter names as 'tmpl:{uuid}'. A template holds one " +
+            "attribute family, and holds values OR one effect, never both — for both together, record a " +
+            "look. Pass 'rows' for a value template (leave every row deferred, the default, to make a " +
+            "generic one that can be aimed at any fixture) or 'effect' for an effect template, which always " +
+            "runs on whatever the applying layer or selection names. An effect template's category must be " +
+            "dimmer, colour or position: 'controls' and 'composite' belong to no attribute family, and the " +
+            "library has no beam effects.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -607,7 +637,12 @@ internal val createTemplateTool = AnthropicToolDef(
                     put("required", buildJsonArray { add("propertyName"); add("value") })
                 })
             })
+            put("effect", templateEffectSchema)
         })
-        put("required", buildJsonArray { add("name"); add("rows") })
+        // `rows` is no longer required: exactly one of rows / effect is, which JSON Schema cannot
+        // say in a way this API's validator enforces — so `executeCreateTemplate` says it, and the
+        // description above tells the model which field to reach for.
+        put("required", buildJsonArray { add("name") })
     }
 )
+

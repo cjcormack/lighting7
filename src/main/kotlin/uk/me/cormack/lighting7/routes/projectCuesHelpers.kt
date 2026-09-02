@@ -84,19 +84,32 @@ internal data class CapturedState(
 internal fun captureCurrentState(state: State): CapturedState {
     val activeEffects = state.show.fxEngine.getActiveEffects()
 
-    // Keyed by Look: an effect names the Look it came from and nothing else. A Look applied twice
-    // to different targets therefore collapses into one layer covering both — which is the honest
-    // reading of a *snapshot*, since the stage cannot tell you it was two gestures.
-    val layerTargets = mutableMapOf<Int, MutableList<CueTargetDto>>()
+    // Keyed by the **source record**, Look or template: an effect names where it came from and
+    // nothing else, so one record applied twice to different targets collapses into one layer
+    // covering both — the honest reading of a *snapshot*, since the stage cannot tell you it was
+    // two gestures.
+    //
+    // Keyed by (kind, id) rather than by a bare int, and this is load-bearing rather than tidy.
+    // A template layer spawns effects since fx-templates D5, so the old `effect.lookId != null`
+    // fork sent every one of them down the ad-hoc arm below — Record would have written a
+    // template's effect onto the cue as a loose child, silently severing the tracking that is the
+    // entire point of layering a template. The kind has to be part of the key for the same reason
+    // it is part of `CueLayerDto`: id 3 as a Look and id 3 as a template are different records.
+    //
+    // (kind, id) rather than the whole `LayerSource`: its `name` is part of its equality, and an
+    // instance stamped before a rename holds the old label — so keying on the whole value would
+    // split one record into two layers whenever a Look or template was renamed with its effects
+    // still up, which is exactly the collapse this map exists to do.
+    val layerTargets = mutableMapOf<Pair<LayerSourceKind, Int>, MutableList<CueTargetDto>>()
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
 
     for (effect in activeEffects) {
         val targetType = if (effect.isGroupEffect) "group" else "fixture"
         val targetKey = effect.target.targetKey
 
-        val lookId = effect.lookId
-        if (lookId != null) {
-            val targets = layerTargets.getOrPut(lookId) { mutableListOf() }
+        val source = effect.source
+        if (source != null) {
+            val targets = layerTargets.getOrPut(source.kind to source.id) { mutableListOf() }
             val target = CueTargetDto(type = targetType, key = targetKey)
             if (target !in targets) {
                 targets.add(target)
@@ -124,8 +137,16 @@ internal fun captureCurrentState(state: State): CapturedState {
         }
     }
 
-    val layerDtos = layerTargets.entries.mapIndexed { index, (lookId, targets) ->
-        CueLayerDto(lookId = lookId, targets = targets, sortOrder = index)
+    val layerDtos = layerTargets.entries.mapIndexed { index, (key, targets) ->
+        val (kind, sourceId) = key
+        // Exactly one of the two, which is what `CueLayerDto` requires on write — see
+        // `layerSourceShape`.
+        CueLayerDto(
+            lookId = sourceId.takeIf { kind == LayerSourceKind.LOOK },
+            templateId = sourceId.takeIf { kind == LayerSourceKind.TEMPLATE },
+            targets = targets,
+            sortOrder = index,
+        )
     }
 
     val propertyAssignments = captureCueAssignments(state)
@@ -704,8 +725,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
-        // Only a Look can own an effect (D7); `cookEffects` never yields a template layer here.
-        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
+        instance.source = layer.source
         instance.cueLayerId = layer.layerId
         instance.cueId = cueData.cueId
         instance.priority = priority

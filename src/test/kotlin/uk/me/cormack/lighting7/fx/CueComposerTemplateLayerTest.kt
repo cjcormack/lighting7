@@ -45,6 +45,37 @@ class CueComposerTemplateLayerTest {
         rows = rows.toList(),
     )
 
+    /** An **effect** template: no rows, one target-less effect (D1/D3). */
+    private fun effectTemplate(
+        name: String,
+        effectType: String = "Pulse",
+        category: String = "dimmer",
+        propertyName: String? = "dimmer",
+    ) = TemplateSnapshot(
+        templateId = name.hashCode(),
+        templateUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
+        name = name,
+        fadeDurationMs = null,
+        rows = emptyList(),
+        effect = EffectEntry(
+            // Always null — that is the whole of D3, and what puts this down the deferred arm.
+            target = null,
+            effectType = effectType,
+            category = category,
+            propertyName = propertyName,
+            beatDivision = 0.5,
+            blendMode = "OVERRIDE",
+            distribution = "LINEAR",
+            phaseOffset = 0.0,
+            elementMode = null,
+            elementFilter = null,
+            stepTiming = null,
+            parameters = emptyMap(),
+            speedMasterUuid = null,
+            rateSpeedMasterUuid = null,
+        ),
+    )
+
     private fun genericRow(propertyName: String, value: String) =
         TemplateRowEntry(target = null, propertyName = propertyName, value = value)
 
@@ -255,15 +286,97 @@ class CueComposerTemplateLayerTest {
         assertEquals(128u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
     }
 
+    /**
+     * The value arm still contributes nothing to the effect half — but for a different reason than
+     * it used to. Before the fx-templates plan, `cookEffects` skipped every template layer by name;
+     * now it resolves the template and finds a value template holds no effect. The observable
+     * answer is identical, which is why this test is worth keeping rather than replacing.
+     */
     @Test
-    fun `a template layer contributes no effects, because a template holds none`() {
+    fun `a value template layer contributes no effects, because it holds none`() {
         val amber = template("Amber Key", genericRow("rgbColour", "#FF9D4A;policy=extract"))
         val effects = CueComposer.cookEffects(
             fixtures = mixedRig(),
             cueId = cueId,
             layers = listOf(layerFor(amber, targets = listOf(CueTargetDto("fixture", "hex-1")))),
             resolveLook = { null },
+            resolveTemplate = { amber },
         )
         assertTrue(effects.isEmpty())
+    }
+
+    // ─── Effect templates ───────────────────────────────────────────────
+
+    @Test
+    fun `an effect template layer fans its one effect over the layer's targets`() {
+        val breathe = effectTemplate("Amber Breathe")
+        val effects = CueComposer.cookEffects(
+            fixtures = mixedRig(),
+            cueId = cueId,
+            layers = listOf(
+                layerFor(
+                    breathe,
+                    targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+                ),
+            ),
+            resolveLook = { null },
+            resolveTemplate = { breathe },
+        )
+        // One instance per head: the layer names the targets, the template names the effect.
+        assertEquals(listOf("hex-1", "hex-2"), effects.map { it.third.key })
+        assertTrue(effects.all { it.second.effectType == "Pulse" })
+    }
+
+    /**
+     * The counterpart of the deferred-Look-effect warning, and the reason `effectsForLayer` is one
+     * implementation: an effect with nowhere to go spawns nothing rather than fanning over the
+     * whole rig.
+     */
+    @Test
+    fun `an effect template layer naming no targets spawns nothing`() {
+        val breathe = effectTemplate("Amber Breathe")
+        val effects = CueComposer.cookEffects(
+            fixtures = mixedRig(),
+            cueId = cueId,
+            layers = listOf(layerFor(breathe, targets = emptyList())),
+            resolveLook = { null },
+            resolveTemplate = { breathe },
+        )
+        assertTrue(effects.isEmpty())
+    }
+
+    /**
+     * `cookAll` and `cookEffects` must agree — the combined cook exists so the programmer does not
+     * ask twice, and a template arm that only one of them knew about would be a new way for the
+     * two answers to drift.
+     */
+    @Test
+    fun `cookAll spawns an effect template's effect and still ranks the layers above it`() {
+        val breathe = effectTemplate("Amber Breathe")
+        val amber = template("Amber Key", genericRow("rgbColour", "#FF9D4A;policy=extract"))
+        val target = listOf(CueTargetDto("fixture", "hex-1"))
+        val fxLayer = layerFor(breathe, sortOrder = 0, targets = target, layerId = 1)
+        val valueLayer = layerFor(amber, sortOrder = 1, targets = target, layerId = 2)
+
+        val cooked = CueComposer.cookAll(
+            fixtures = mixedRig(),
+            cueId = cueId,
+            priority = 0,
+            layers = listOf(fxLayer, valueLayer),
+            localRows = emptyList(),
+            resolveLook = { null },
+            resolveTemplate = { uuid ->
+                listOf(breathe, amber).firstOrNull { it.templateUuid == uuid }
+            },
+            withEffects = true,
+        )
+
+        assertEquals(1, cooked.effects.size)
+        assertEquals("hex-1", cooked.effects.single().third.key)
+        // The effect layer contributes no *values*, but it still took rank 0 — so the value layer
+        // above it is 1, not 0. This is the invariant every deleted "skip after numbering" comment
+        // was protecting, and removing the skip has to keep it.
+        assertEquals(0, cooked.ranks[fxLayer.layerId])
+        assertEquals(1, cooked.ranks[valueLayer.layerId])
     }
 }

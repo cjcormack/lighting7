@@ -312,4 +312,52 @@ class ProgrammerLayerStackTest {
         assertEquals("removed", removed.first)
         assertTrue(rig.store.layers.isEmpty())
     }
+
+    /**
+     * A pad must keep working after the record behind it is renamed.
+     *
+     * `LayerSource` is a `data class`, so its equality includes `name` — and a name is mutable.
+     * Matching on the whole value meant a rename left the pad unable to turn its own layer off:
+     * the stored layer held the old name, the press carried the new one, so "already on" said no
+     * and a second layer stacked on top. The first was then removable only by id from the FX
+     * sheet. `toggle` matches on `source.uuid`, which is what identity actually means here.
+     */
+    @Test
+    fun `a renamed record's pad still toggles its own layer off`() {
+        val rig = newRig()
+        val uuid = rig.look("Warm", 200)
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+
+        rig.stack.toggle(LayerSource.look(1, uuid, "Warm"), targets)
+        assertEquals(1, rig.store.layers.size)
+
+        // The same record, renamed — same id and uuid, new name.
+        val renamed = rig.stack.toggle(LayerSource.look(1, uuid, "Warm Wash"), targets)
+
+        assertEquals("removed", renamed.first, "a rename must not make the pad stack a second layer")
+        assertTrue(rig.store.layers.isEmpty())
+        assertNull(rig.valueOf("hex-1"))
+    }
+
+    /**
+     * The int PK is *not* enough on its own, which is why the match is not simply `source.id`: a
+     * Look and a template can share one, and their pads must not cancel each other.
+     */
+    @Test
+    fun `a Look and a template sharing an int PK toggle independently`() {
+        val rig = newRig()
+        val uuid = rig.look("Warm", 200)
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+
+        rig.stack.toggle(LayerSource.look(7, uuid, "Warm"), targets)
+        // Same id, different record. The template resolves to null here (the rig has no templates),
+        // so it contributes no values — but it must still take a layer of its own.
+        rig.stack.toggle(
+            LayerSource.template(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"),
+            targets,
+        )
+
+        assertEquals(2, rig.store.layers.size, "sharing an int PK must not collapse two pads into one")
+        assertEquals(200, rig.valueOf("hex-1"), "the Look's pad is still on")
+    }
 }

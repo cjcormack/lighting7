@@ -39,6 +39,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
+| [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
@@ -49,6 +50,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
+| [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | Looks made of exactly two deferred effects of one family, no rows |
+| [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
+| [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Tmpl | an operator retunes an effect template and the live effect keeps its old timing |
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
@@ -464,6 +468,39 @@ fan-out that would need is already demonstrated in eight lines by `ownAccountCha
 (`plugins/MachineSocket.kt`). The house precedent for the other direction is `cueEdit`, which
 chose **exclusion over merging** — one session per project, everyone else gets a 409.
 
+### `FU-PROG-STALE-SOURCE-NAME`
+
+**A programmer layer caches its source's name, so a rename goes stale** · Trigger: an operator
+renames a Look or template that is live on the programmer and sees the old name · found fixing the
+`toggle` identity bug, 2026-09-02
+
+`ProgrammerLayer.source` and `FxInstance.source` both hold a whole `LayerSource`, captured when the
+layer was added. Two of its three fields are immutable identity (`id`, `uuid`); `name` is not. So
+renaming a record leaves every already-added layer and already-spawned effect reporting the *old*
+name — visible in the layer stack (`ProgrammerLayerDto.source`) and in `FX running`
+(`EffectDto.sourceName`). Nothing refreshes it: a rename-only PUT is not a contents change, so it
+takes the `templateListChanged` / `lookListChanged` branch and never reaches the layer stack.
+
+This is display-only now. The *functional* half of the same root cause — `toggle` comparing whole
+`LayerSource` values, so a rename stopped a pad turning its own layer off — is fixed: it matches on
+`source.uuid`. Cue layers are unaffected, because `DaoCueLayer.source` reads the row fresh.
+
+Two shapes, and the reason neither was done inline:
+
+- **Refresh the stored sources on rename.** Correct, but it needs a new `ProgrammerStore` mutation
+  and a hook in a path that currently and deliberately does nothing to the programmer on a rename.
+  That is a real change to the store's mutation surface for a stale label.
+- **Re-derive the name at serialisation time**, the way `IncludedTargetDto` already does with
+  `DaoLook.findById(lookId)?.name`. Cheap for the layer stack; **not** cheap for `toEffectDto`,
+  which is the only producer of `EffectDto` and is called from the FX state flow — a transaction
+  per effect per publish is exactly what this codebase keeps off that path.
+
+If it fires, prefer the first shape, and note that fixing it also removes the last reason
+`LayerSource` equality is dangerous — at which point `toggle`'s uuid match becomes belt-and-braces
+rather than load-bearing.
+
+---
+
 ### `FU-PROG-STAGED-CLEAR`
 
 **MA-style staged three-press Clear** · Trigger · Programmer redesign §5 decision 6, promoted
@@ -653,6 +690,76 @@ template on the same head would fight over the same bytes — which is a real qu
 mask means, not an implementation detail.
 
 **Ready**: no gate, and the resolver is the one place it lands.
+
+### `FU-TMPL-MULTI-EFFECT`
+
+**More than one effect per template** · Trigger: an operator keeps making Looks that are exactly two
+deferred effects of one family with no rows · fx-templates session 1, 2026-09-02
+
+D2 caps an effect template at one effect, on the grounds that several together is what a Look with
+deferred effects already is — and a Look has its own busk pool, so nothing is unreachable. The cap
+is enforced twice: `uniqueIndex(template)` on `template_effects`, and by name at the write boundary
+so it surfaces as a 400 rather than a constraint violation.
+
+The trigger to watch for is a Look that is *only* a pair of same-family deferred effects with no
+rows: that is an operator working around the cap, and it is the shape the cap gets in the way of. If
+it fires, the storage change is small (drop the unique index, add `sort_order`) but three things
+follow it: `TemplateSnapshot.effect` becomes a list, `TemplateDto.kind` needs to stay a string
+because a third arm becomes plausible, and the *Runs on* preview has to say which effect it is
+previewing.
+
+---
+
+### `FU-TMPL-USAGE-RETAG`
+
+**Retagging a speed master's usage does not move stamped templates** · Trigger: someone retags a
+master's usage and expects existing effect templates to follow it · fx-templates session 1,
+2026-09-02
+
+D8 stamps `speed_master_uuid` at *authoring* time from the project master whose `usage` matches the
+family. "By usage" is how the default is labelled in the sheet, not a stored mode — deliberately,
+because the alternative is a second meaning for `null`, and the `null → slot 0` invariant is what
+the bank and the whole `speedMasters.*` wire protocol are built on.
+
+The accepted cost is that retagging a master's usage later leaves templates already stamped
+pointing at the old master. That is defensible (the stamp is what an operator saw at the moment of
+authoring) right up until someone reorganises their masters and expects the library to follow.
+
+If it fires, resist adding a stored "by usage" mode. The cheaper shape is a *migration on retag*:
+the usage PUT already knows the old and new holders, so it can offer to re-stamp the effect
+templates of that family — visible, one-time, and leaving the invariant alone.
+
+---
+
+### `FU-TMPL-FX-EDIT-NO-RETIME`
+
+**An effect edit does not tour to what is already on stage** · Trigger: an operator retunes an
+effect template's beat division and the running effect keeps its old timing · fx-templates session
+1, 2026-09-02
+
+Editing an effect template *is* a contents change: the PUT takes the republish branch, the registry
+snapshot refreshes, and the next application runs the new effect. But
+`ProgrammerLayerStack.recookIfReferences` cooks `withEffects = false` on purpose — an edit touring
+to an already-applied layer "is not the layer arriving", and re-spawning would restart the effect
+mid-show on every nudge of a parameter. So the live instance keeps its timing until the layer is
+re-applied.
+
+This is **inherited from Looks unchanged**, not new: a deferred Look effect behaves identically, and
+has since the layer stack was written. It is recorded here because an effect template makes it much
+more visible — the whole *point* of an effect template is the one thing the operator retunes, so
+"nothing happened" is a likelier reaction than it was for a Look. `TemplateRoutesTest`'s
+`an effect-only edit refreshes the snapshot without restarting what is on stage` pins both halves so
+the asymmetry stays deliberate.
+
+Note the plan's desk check 3 ("edit the template's beat division → every layer tracking it
+retimes") states the *opposite*, and is wrong as written; it should read "re-press the pad and it
+runs at the new division".
+
+If it fires, the shape is not "always re-spawn": it is to distinguish a *timing* edit (division,
+speed master) from a parameter edit, and tour only the former — which needs `FxEngine.updateEffect`
+to retime in place rather than retract and respawn, or the cure is the disease.
+
+---
 
 ### `FU-TMPL-STROBE-HZ`
 

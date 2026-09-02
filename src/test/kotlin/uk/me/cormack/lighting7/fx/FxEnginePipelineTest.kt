@@ -1105,7 +1105,7 @@ class FxEnginePipelineTest {
             // are irrelevant to suppression, so any stamped values do.
             it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
                 layerId = 3,
-                effect = LookEffectEntry(
+                effect = EffectEntry(
                     target = null, effectType = "StaticValue", category = "dimmer",
                     propertyName = "dimmer", beatDivision = 1.0, blendMode = "ADDITIVE",
                     distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,

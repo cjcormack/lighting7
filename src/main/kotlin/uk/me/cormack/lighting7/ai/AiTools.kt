@@ -1148,7 +1148,32 @@ class AiTools(private val state: State) {
                 value = obj["value"]?.jsonPrimitive?.contentOrNull
                     ?: return errorResult("A template row is missing 'value'"),
             )
-        } ?: return errorResult("Missing 'rows'")
+        } ?: emptyList()
+
+        // An effect template instead of rows (D1). Reuses `parseLookEffect`, which is where the
+        // enum checks live, then drops the fields a template effect has no place for — the target
+        // (D3) and the sort order (D2).
+        val effect = input["effect"]?.jsonObject?.let { obj ->
+            val spec = parseLookEffect(obj)
+            TemplateEffectDto(
+                effectType = spec.effectType,
+                category = spec.category,
+                propertyName = spec.propertyName,
+                beatDivision = spec.beatDivision,
+                blendMode = spec.blendMode,
+                distribution = spec.distribution,
+                phaseOffset = spec.phaseOffset,
+                elementMode = spec.elementMode,
+                elementFilter = spec.elementFilter,
+                stepTiming = spec.stepTiming,
+                parameters = spec.parameters,
+                speedMasterUuid = spec.speedMasterUuid,
+                rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
+            )
+        }
+        // Said here rather than left to the write boundary only because the model reads this
+        // message and retries: "must hold at least one value" would not tell it which field to add.
+        if (rows.isEmpty() && effect == null) return errorResult("Missing 'rows' or 'effect'")
 
         val result = performTemplateCreate(
             state,
@@ -1158,6 +1183,7 @@ class AiTools(private val state: State) {
                 notes = input["notes"]?.jsonPrimitive?.contentOrNull,
                 fadeDurationMs = input["fadeDurationMs"]?.jsonPrimitive?.longOrNull,
                 rows = rows,
+                effect = effect,
             ),
         )
 
@@ -1167,12 +1193,16 @@ class AiTools(private val state: State) {
             is TemplateCreateResult.Ok -> ToolExecutionResult(
                 success = true,
                 description = "Created template '${result.template.name}' " +
-                    "(${result.template.rows.size} row(s)) — reference it as tmpl:${result.template.uuid}",
+                    (result.template.effect
+                        ?.let { "(effect: ${it.effectType})" }
+                        ?: "(${result.template.rows.size} row(s))") +
+                    " — reference it as tmpl:${result.template.uuid}",
                 result = buildJsonObject {
                     put("templateId", result.template.id)
                     put("uuid", result.template.uuid)
                     put("name", result.template.name)
                     put("family", result.template.family)
+                    put("kind", result.template.kind)
                     put("isGeneric", result.template.isGeneric)
                     put("rowCount", result.template.rows.size)
                 }.toString()

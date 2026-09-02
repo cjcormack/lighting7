@@ -993,7 +993,7 @@ class FxEngineBenchmark {
             name = "Cook Effects",
             rows = emptyList(),
             effects = (0 until COOK_LOOK_EFFECTS).map { i ->
-                LookEffectEntry(
+                EffectEntry(
                     target = TargetRef.Fixture(heads[i % heads.size]),
                     effectType = "SineWave",
                     category = "dimmer",
@@ -1091,7 +1091,7 @@ class FxEngineBenchmark {
                 fixtures = r.fixtures, cueId = 1, priority = 1, layers = r.layers,
                 localRows = emptyList(), resolveLook = r.resolveLook, resolveTemplate = r.resolveTemplate,
             )
-            CueComposer.cookEffects(r.fixtures, 1, r.layers, r.resolveLook)
+            CueComposer.cookEffects(r.fixtures, 1, r.layers, r.resolveLook, r.resolveTemplate)
             CueComposer.contributingLayers(r.layers)
                 .withIndex()
                 .associate { (index, layer) -> layer.layerId to index }

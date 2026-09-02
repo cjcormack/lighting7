@@ -282,12 +282,16 @@ private fun spawnIncludedFx(
         // resembles. The child's own live instance still matches it exactly — same target,
         // property and registration, and no layer provenance either — so a live cue's children
         // are still skipped rather than doubled, which is the rule this guard exists for.
+        //
+        // `source == null` rather than `lookId == null`: a **template** layer owns effects since
+        // fx-templates D5, and `lookId` is null for those, so the old test read a template layer's
+        // effect as a loose child and let Include mask a genuine one behind it.
         val registrationId = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.id
         val duplicate = running.any {
             it.target.targetKey == target.key &&
                 it.target.propertyName == effectSpec.propertyName &&
                 it.registrationId == registrationId &&
-                it.lookId == null && it.cueLayerId == null
+                it.source == null && it.cueLayerId == null
         }
         if (duplicate) {
             alreadyRunning++

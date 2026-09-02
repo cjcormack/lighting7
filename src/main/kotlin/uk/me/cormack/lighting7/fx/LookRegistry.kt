@@ -31,10 +31,21 @@ data class LookRowEntry(
 )
 
 /**
- * One stored Look effect. Unlike [LookRowEntry], [target] may be null: a *deferred* effect fans
- * over the targets of the layer applying the Look.
+ * One stored effect, as the composer reads it out of a **Look or a template**.
+ *
+ * Named `LookEffectEntry` until the fx-templates plan gave a template one of its own; nothing about
+ * the type was ever Look-specific, so the rename is mechanical. Unlike [LookRowEntry], [target] may
+ * be null: a *deferred* Look effect fans over the targets of the layer applying it, and a
+ * template's effect is **always** target-less (D3), so it arrives here as the same shape.
+ *
+ * **Carries no source identity, deliberately, and must not grow one.**
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerEffectKey] freezes a hash over the whole entry so that
+ * editing an effect produces a *different* key and the stale instance retracts. A `sourceUuid`
+ * field here would make every key change on the first recook after an upgrade, retracting and
+ * respawning every programmer-layer effect on the desk. Where an effect came from lives on
+ * [FxInstance.source] instead.
  */
-data class LookEffectEntry(
+data class EffectEntry(
     val target: TargetRef?,
     val effectType: String,
     val category: String,
@@ -61,7 +72,7 @@ data class LookSnapshot(
     /** Rows in `sortOrder`. */
     val rows: List<LookRowEntry>,
     /** Effects in `sortOrder`. */
-    val effects: List<LookEffectEntry>,
+    val effects: List<EffectEntry>,
 )
 
 /**
@@ -281,7 +292,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                     } else {
                         TargetRef.ofOrNull(effect.targetType, effect.targetKey) ?: return@mapNotNull null
                     }
-                    LookEffectEntry(
+                    EffectEntry(
                         target = target,
                         effectType = effect.effectType,
                         category = effect.category,
@@ -311,9 +322,10 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
  * anyway.
  *
  * The target is deliberately dropped: it is the caller's business, because a deferred effect's
- * target comes from the layer rather than from the effect.
+ * target comes from the layer rather than from the effect — and a template's effect has none at
+ * all (D3), which is what lets a template effect cross this same bridge unchanged.
  */
-internal fun LookEffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
+internal fun EffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
     effectType = effectType,
     category = category,
     propertyName = propertyName,

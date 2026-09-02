@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
+import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
@@ -62,6 +63,50 @@ class ProjectRoundTripTest {
         ProjectExporter(state).export(imported.projectId, exportDirB)
 
         assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+    }
+
+    /**
+     * The byte-for-byte test above already proves the importer keeps every field the exporter
+     * writes. What it cannot prove is that a *value* template stays free of the new key: a field
+     * missing from both sides is missing symmetrically and passes. So this asserts on the export
+     * text directly, the way the machine-local address test does.
+     */
+    @Test
+    fun `templates carry an effect only when they hold one`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val templates = Files.list(exportDirA.resolve("templates")).use { stream ->
+            stream.toList().map { canonicalDecode(TemplateJson.serializer(), Files.readString(it)) }
+        }
+
+        val effectTemplate = templates.single { it.effect != null }
+        assertEquals("amber-breathe", effectTemplate.name)
+        assertTrue(effectTemplate.rows.isEmpty(), "an effect template holds no rows (D1)")
+        val effect = effectTemplate.effect!!
+        assertEquals("ColourPulse", effect.effectType)
+        assertEquals("colour", effect.category)
+        // The off-default fields, which are the ones a copier can silently drop: canonical JSON
+        // omits defaults, so a field left at its default is invisible to the round trip.
+        assertEquals(0.125, effect.phaseOffset)
+        assertEquals("CENTER_OUT", effect.distribution)
+        assertEquals("MAX", effect.blendMode)
+        assertEquals("EVEN", effect.elementFilter)
+        assertEquals(false, effect.stepTiming)
+        assertTrue(effect.parameters.getValue("colours").startsWith("tmpl:"))
+
+        // The other two templates hold values, and `explicitNulls = false` must keep the key out
+        // of their documents entirely rather than writing `"effect": null`.
+        val valueDocs = Files.list(exportDirA.resolve("templates")).use { stream ->
+            stream.toList()
+                .map { Files.readString(it) }
+                .filter { !it.contains("amber-breathe") }
+        }
+        assertEquals(2, valueDocs.size)
+        assertTrue(
+            valueDocs.none { it.contains("\"effect\"") },
+            "a value template must not carry the effect key at all",
+        )
     }
 
     @Test

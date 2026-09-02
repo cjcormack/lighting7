@@ -205,9 +205,9 @@ internal object CueComposer {
      * - **timed and unfired** — a timed layer asserts nothing until [CueTriggerManager] fires it,
      *   at which point its `layerId` arrives in [includeTimed] and the cue is re-cooked whole.
      *
-     * A template layer is *not* excluded. It contributes values, so it takes a rank; that it holds
-     * no effects is [cookEffects]'s own business, applied after numbering so skipping it there
-     * cannot renumber the layers above.
+     * A template layer is *not* excluded, and since the fx-templates plan it needs no special case
+     * anywhere else either: it contributes values *or* one effect, and both halves are cooked from
+     * the same [LayerContent] the Look arm uses.
      */
     fun contributingLayers(layers: List<CookLayer>, includeTimed: Set<Int> = emptySet()): List<CookLayer> =
         layers
@@ -271,7 +271,7 @@ internal object CueComposer {
     internal data class FullCook(
         val values: CookResult,
         /** As [cookEffects] returns them; empty when the cook was asked for values only. */
-        val effects: List<Triple<CookLayer, LookEffectEntry, TargetRef>>,
+        val effects: List<Triple<CookLayer, EffectEntry, TargetRef>>,
         /**
          * `layerId → rank` among the contributing layers — the same number [CookWinner.index]
          * carries, so a caller turning a rank into an effect priority cannot disagree with the rows.
@@ -319,7 +319,7 @@ internal object CueComposer {
         resolveLook: (UUID) -> LookSnapshot?,
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int>,
-        collectEffects: MutableList<Triple<CookLayer, LookEffectEntry, TargetRef>>?,
+        collectEffects: MutableList<Triple<CookLayer, EffectEntry, TargetRef>>?,
     ): FullCook {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -356,12 +356,11 @@ internal object CueComposer {
             val keys = HashMap<String, MutableSet<String>>()
             applyLayer(fixtures, cueId, layer, index, content, acc, keys, layerTargets)
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
-            // Off the content already resolved above. A template layer never reaches the `OfLook`
-            // arm, which is the same "templates hold no effects" skip [cookEffects] applies by
-            // name — and applied here after numbering, for the same reason: a template layer takes
-            // a rank, so skipping it must not renumber the layers above.
-            if (collectEffects != null && content is LayerContent.OfLook) {
-                effectsForLayer(fixtures, cueId, layer, content.look, layerTargets, collectEffects)
+            // Off the content already resolved above, and off [LayerContent.effects] rather than a
+            // cast to the Look arm: a template layer contributes its one effect through exactly
+            // this fan-out (D5), so there is no kind to test here any more.
+            if (collectEffects != null) {
+                effectsForLayer(fixtures, cueId, layer, content.effects, layerTargets, collectEffects)
             }
         }
 
@@ -476,45 +475,53 @@ internal object CueComposer {
         layers: List<CookLayer>,
         /** How a LOOK layer's `source.uuid` becomes a [LookSnapshot]; see [cook]'s own parameter. */
         resolveLook: (UUID) -> LookSnapshot?,
+        /**
+         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot].
+         *
+         * Required rather than defaulted, and that is the point. This is the only cook the
+         * timed-fire path uses ([CueTriggerManager]), so a default of `{ null }` would leave a
+         * template effect firing on GO and silently *not* on a delayed or recurring layer — an
+         * asymmetry that reads as a timing bug rather than a missing argument.
+         */
+        resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-    ): List<Triple<CookLayer, LookEffectEntry, TargetRef>> {
-        val out = ArrayList<Triple<CookLayer, LookEffectEntry, TargetRef>>()
+    ): List<Triple<CookLayer, EffectEntry, TargetRef>> {
+        val out = ArrayList<Triple<CookLayer, EffectEntry, TargetRef>>()
         for (layer in contributingLayers(layers, includeTimed)) {
-            // Templates hold no effects at all (D7 — effects live in a Look or on a cue), so a
-            // template layer contributes nothing here rather than being resolved and found empty.
-            // Note this is *not* part of [contributingLayers]: a template layer does contribute
-            // values, so it still takes a rank, and skipping it here must not renumber the rest.
-            if (layer.source.isTemplate) continue
-            val look = resolveLook(layer.source.uuid) ?: continue
-            effectsForLayer(fixtures, cueId, layer, look, LayerTargets(fixtures, cueId, layer), out)
+            val content = resolveContent(layer.source, resolveLook, resolveTemplate) ?: continue
+            effectsForLayer(fixtures, cueId, layer, content.effects, LayerTargets(fixtures, cueId, layer), out)
         }
         return out
     }
 
     /**
-     * One Look layer's effect triples, appended to [out].
+     * One layer's effect triples, appended to [out].
      *
      * Shared by [cookEffects] and [cookAll] so the two cannot disagree about which effects a layer
      * spawns — the combined cook exists precisely to stop the programmer asking twice, and a second
-     * copy of this fan-out would be a new way for the two answers to drift.
+     * copy of this fan-out would be a new way for the two answers to drift. Since the fx-templates
+     * plan it is shared by the two *layer kinds* as well (D5): it takes [effects] rather than a
+     * [LookSnapshot], so a template's one target-less effect goes down the same deferred arm a
+     * Look's does and neither can acquire a fan-out of its own.
      */
     private fun effectsForLayer(
         fixtures: Fixtures,
         cueId: Int,
         layer: CookLayer,
-        look: LookSnapshot,
+        /** The layer's content's effects: a Look's, in `sortOrder`, or a template's single one. */
+        effects: List<EffectEntry>,
         /** The layer's own target set, expanded once — see [LayerTargets]. */
         layerTargets: LayerTargets,
-        out: MutableList<Triple<CookLayer, LookEffectEntry, TargetRef>>,
+        out: MutableList<Triple<CookLayer, EffectEntry, TargetRef>>,
     ) {
         val refs = layerTargets.refs
-        for (effect in look.effects) {
+        for (effect in effects) {
             val effectTarget = effect.target
             if (effectTarget == null) {
                 if (refs.isEmpty()) {
                     logger.warn(
-                        "cue {}: look '{}' has a deferred effect but its layer names no targets — skipping",
-                        cueId, layer.source.name,
+                        "cue {}: {} '{}' has a deferred effect but its layer names no targets — skipping",
+                        cueId, layer.source.kind, layer.source.name,
                     )
                     continue
                 }
@@ -543,6 +550,15 @@ internal object CueComposer {
         /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
         val rows: List<SourceRow>
 
+        /**
+         * The effects this content contributes, in the shape [effectsForLayer] consumes.
+         *
+         * On the interface rather than reached by a cast to [OfLook], which is what it was before
+         * a template could hold one: the cast *was* the "templates hold no effects" rule, and with
+         * that rule reversed (D5) both arms answer here and the cook has no kind to test.
+         */
+        val effects: List<EffectEntry>
+
         /** A Look: literal values and its own effects. */
         class OfLook(val look: LookSnapshot) : LayerContent {
             override val rows: List<SourceRow> = look.rows.map {
@@ -551,6 +567,9 @@ internal object CueComposer {
                 // [LayerContent] doing.
                 SourceRow(it.target, it.propertyName, it.value, it.elementKey, it.fadeDurationMs)
             }
+
+            /** Bound or deferred, in `sortOrder`; [effectsForLayer] tells the two apart. */
+            override val effects: List<EffectEntry> = look.effects
         }
 
         /** A template: [TemplateIntent]s, resolved per head by [TemplateResolver]. */
@@ -563,6 +582,15 @@ internal object CueComposer {
                 // together. Copying it onto each row is what lets `applyLayer` treat both arms alike.
                 SourceRow(it.target, it.propertyName, it.value, elementKey = null, template.fadeDurationMs)
             }
+
+            /**
+             * Zero or one, and always target-less (D3), so [effectsForLayer]'s deferred arm fans it
+             * over the layer's targets — which is the whole of what an effect template means.
+             *
+             * D1 makes this and [rows] mutually exclusive, so a template layer contributes to one
+             * half of the cook or the other, never both.
+             */
+            override val effects: List<EffectEntry> = listOfNotNull(template.effect)
         }
     }
 

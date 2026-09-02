@@ -278,10 +278,10 @@ Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. D
 ## Looks, templates and layers
 
 A **Look** is a named, reusable bundle of property values and effects over *named fixtures*. A
-**Template** is a named value for exactly *one attribute family*, with no targets of its own. A
-**Layer** applies either, inside a cue at a declared position in that cue's stack — `DaoCueLayers`
-carries two nullable FKs (`look_id` / `template_id`) with exactly one set, and `DaoCueLayer.source`
-is the only reader.
+**Template** is a named value **or a single named effect** for exactly *one attribute family*, with
+no targets of its own. A **Layer** applies either, inside a cue at a declared position in that
+cue's stack — `DaoCueLayers` carries two nullable FKs (`look_id` / `template_id`) with exactly one
+set, and `DaoCueLayer.source` is the only reader.
 
 These were one entity until session 3, distinguished by the row's targeting mode: a **bound** row
 named its own fixture, a **deferred** one took its targets from the applying layer, and one entity
@@ -309,10 +309,47 @@ that computed its own ΔE would promise what the rig does not do.
 
 A template's property vocabulary is **closed** (`TemplateProperty`), which is where "a template
 cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
-recorded Look, which names a head and can hold anything that head has. A template also holds no
-effects at all (D7). It has always held no positional colour list either — and now nothing does,
-because that grammar is gone: an effect parameter names a colour template rather than indexing a
-list, so a template *is* the named colour instead of being one more scope that holds several.
+recorded Look, which names a head and can hold anything that head has. It has always held no
+positional colour list either — and now nothing does, because that grammar is gone: an effect
+parameter names a colour template rather than indexing a list, so a template *is* the named colour
+instead of being one more scope that holds several.
+
+### A template holds a value *or* an effect
+
+D7 used to say a template holds **no** effects at all — "effects live in a Look or on a cue, never
+on a layer". The fx-templates plan reverses that, because it left the most useful busking gesture
+homeless: "a slow amber breathe on whatever I have selected" is one named thing, of one family,
+with no targets of its own — the definition of a template — and it was reachable only as a Look
+with zero rows and one deferred effect, which lands in the Looks pool rather than the family column.
+
+Three rules keep the reversal narrow, and each removes a way for it to complicate the cook:
+
+- **A value *or* an effect, never both** (`template_effects` has a unique `template_id`, and the
+  write boundary refuses a mix). A colour *and* a chase is a Look, which already holds rows plus
+  deferred effects. Which one a template holds is its identity, like its family: `validateTemplateContents`
+  refuses a PUT that would flip it, so the cook's template arm never needs both halves.
+- **One effect.** Several together is, again, what a Look with deferred effects already is.
+- **Always generic** — no `target_type` / `target_key`, unlike `look_effects`, whose
+  deferred/bound split survives for a reason that does not apply here. An effect fans over whatever
+  the layer names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
+  snapshots on the argument that nothing patch-shaped is in the cache, so a repatch cannot make an
+  entry stale — and a bound, group-targeted template effect would be exactly that.
+
+The family is then **derived from the effect's library `category`**, through the same
+`familyForEffectCategory` map a Look's derived families use (`dimmer` → Intensity, `colour` →
+Colour, `position` → Position). `controls` has no tempo and `composite` spans families, so both
+answer null and are refused by name; so is `beam`, deliberately by name rather than by the library
+happening to ship no beam effect, so a script-registered one cannot mint a Beam effect template
+behind the rule.
+
+**The cook gained no new path.** `CueComposer.effectsForLayer` was already the single fan-out shared
+by `cookEffects` and `cookAll`; it now takes `LayerContent.effects` rather than a `LookSnapshot`, so
+a template's one target-less effect goes down the same *deferred* arm a Look's does. The
+`isTemplate` skip and the `is OfLook` cast are gone — they *were* the old rule — and layer
+numbering is untouched, which the three deleted comments were all protecting: a template layer takes
+a rank whether it contributes rows or an effect.
+
+`POST /looks/{id}/absorb-effects` remains the way a *running* effect joins a Look.
 
 A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
 boundary, so **Looks do not nest** and resolution can never recurse. The `ref:` *value grammar* itself
@@ -466,7 +503,16 @@ Two rules that fall out of that, both enforced rather than conventional:
 - **Only a generic colour template can be named.** An effect's output is one colour applied to every
   head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
   as though the head were RGBW, which makes it identical to the same template applied as a layer on
-  any RGBW/RGBWA head. A per-fixture template holds no single colour and is refused.
+  any RGBW/RGBWA head. A per-fixture template holds no single colour and is refused, and so is an
+  **effect** template: it has no rows at all, so it holds no colour to resolve. Both sides already
+  say so by construction — the AI prompt's list and `resolveColourGeneric` both need a single
+  deferred Colour row — but the write boundary also refuses a template's effect naming *its own*
+  uuid, which is the one shape that would recurse in `createEffectWithTemplates`.
+
+  The other direction is allowed and useful: an **effect template's** colour parameter may name a
+  *value* colour template, which is how "Amber Breathe" follows "Amber Key". `template_effects` is
+  therefore the third table `templateFxReferenceCount` scans, or that value template would stay
+  deletable out from under a running effect — the exact failure the delete guard exists to prevent.
 
   **The cost lands on heads with no white emitter, and it is sharper than "one emitter short".**
   Under `extract` the neutral is taken out of RGB at resolve time, and `applyExtendedChannel` then

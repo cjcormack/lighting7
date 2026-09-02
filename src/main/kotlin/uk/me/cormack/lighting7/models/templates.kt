@@ -1,19 +1,21 @@
 package uk.me.cormack.lighting7.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
+import org.jetbrains.exposed.v1.json.json
 
 /**
  * A **Template**: a named value for one attribute family, applied to a selection.
  *
  * The other half of the split [DaoLooks] used to serve alone. A Look *composes cues* — any
  * families, its own fixtures, its own effects, added to a stack as a layer with order, mask,
- * amount, timing and stomp. A Template *composes values* — exactly one family, no effects, no
- * targets of its own, and either applied to a selection as literals or tracked by a layer.
+ * amount, timing and stomp. A Template *composes one thing* — exactly one family, no targets of
+ * its own, and either applied to a selection as literals or tracked by a layer.
  *
  * Two tables rather than a `kind` column on `looks`, and the reason is the **per-fixture** case: a
  * focus position — eight heads aimed at one spot — holds eight different pan/tilts, so its rows are
@@ -29,18 +31,28 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  *   Aura and refused to the LED bar beside it (D6). A template stores an *intent*
  *   ([uk.me.cormack.lighting7.fx.TemplateIntent]) resolved per head at cook, so there is no mode to
  *   resolve it against and nothing to declare.
- * - **No effects.** D7: effects live in a Look or on a cue, never on a layer — and a template is
- *   the thing a layer tracks. `POST /looks/{id}/absorb-effects` remains the way a running effect
- *   joins a library entity.
+ * - **No *values and* effects.** A template holds a value **or** an effect, never both
+ *   ([DaoTemplateEffects], the fx-templates plan D1) — a colour *and* a chase is a Look, which
+ *   already holds rows plus deferred effects and has its own busk pool. `Holds` is the template's
+ *   identity like its family is: the write boundary refuses a flip either way, so "a template is
+ *   one named thing" stays true and the cook's template arm never needs both halves.
+ *
+ *   This reverses the original D7 ("effects live in a Look or on a cue, never on a layer"). What
+ *   D7 got right survives as D2 and D3 below — one effect, and never a *bound* one. What it got
+ *   wrong is that it left "a slow amber breathe on the selection" — one named thing, of one
+ *   family, with no targets of its own, which is the definition of a template — reachable only as
+ *   a Look with zero rows. `POST /looks/{id}/absorb-effects` remains the way a *running* effect
+ *   joins a Look.
  * - **No positional colour list.** There used to be one on every cue, stack and Look — the `P1` /
  *   `P2` grammar FX parameters indexed, cascading `look > cue > global` — and a template
  *   deliberately did not join it. That whole grammar is now gone, and the inverse arrangement is
  *   what replaced it: an effect parameter names a *template*
  *   ([uk.me.cormack.lighting7.fx.templateColourSource]), so a template is the colour rather than a
  *   scope that holds a list of them.
- * - **No stored family.** Which family a template is in is *derived* from its rows, exactly as a
- *   Look's `families` are, and validated to be **exactly one** at the write boundary. A declared
- *   column would be a second source of truth for something the rows already say.
+ * - **No stored family.** Which family a template is in is *derived* — from its rows, exactly as a
+ *   Look's `families` are, or from its effect's library `category` — and validated to be
+ *   **exactly one** at the write boundary. A declared column would be a second source of truth for
+ *   something the contents already say.
  */
 object DaoTemplates : IntIdTable("templates") {
     val project = reference("project_id", DaoProjects)
@@ -77,6 +89,24 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
     var fadeDurationMs by DaoTemplates.fadeDurationMs
     var uuid by DaoTemplates.uuid
     val rows by DaoTemplateRow referrersOn DaoTemplateRows.template
+
+    /**
+     * The effect rows, of which there is at most one — see [effect].
+     *
+     * A plain `referrersOn` rather than a one-to-one back reference, deliberately: the delete paths
+     * (the route's guard, the importer's wipe, the project cascade) all want to iterate, and a
+     * back reference would throw rather than iterate if a hand-edited database ever held two.
+     */
+    val effects by DaoTemplateEffect referrersOn DaoTemplateEffects.template
+
+    /**
+     * This template's one effect, or null for a value template.
+     *
+     * D2: at most one, enforced by `uniqueIndex(template)` and at the write boundary. `firstOrNull`
+     * rather than `single` because a read is not the place to throw over data the index already
+     * forbids.
+     */
+    val effect: DaoTemplateEffect? get() = effects.firstOrNull()
 }
 
 /**
@@ -151,3 +181,108 @@ data class TemplateRowDto(
 
     val target: TargetRef? get() = if (isDeferred) null else TargetRef.of(targetType, targetKey)
 }
+
+// ─── Template Effects table ────────────────────────────────────────────
+
+/**
+ * The one effect an *effect template* holds — the fx-templates plan's D1–D3.
+ *
+ * Mirrors [DaoLookEffects] column for column, minus three:
+ *
+ * - **No [targetType] / [targetKey]** (D3). An effect template is always **generic**: an effect
+ *   fans over whatever the applying layer names, so there is no per-fixture effect to describe.
+ *   The composer treats it exactly as a *deferred* Look effect. This is load-bearing beyond
+ *   tidiness — [uk.me.cormack.lighting7.fx.TemplateRegistry] caches snapshots on the argument that
+ *   "nothing patch-shaped is in the cache, so a repatch cannot make an entry stale", and a bound
+ *   effect naming a group would be precisely that.
+ * - **No `sort_order`** (D2). One effect per template, so there is no order to keep. Enforced by
+ *   the unique index below *and* at the write boundary, because the index alone would surface as a
+ *   constraint violation rather than a named 400.
+ *
+ * [parameters] may hold a `tmpl:{uuid}` colour reference (D12) — the useful direction, an effect
+ * template's colour parameter naming a *value* colour template. Naming its own uuid is refused at
+ * the write boundary, and `templateFxReferenceCount` scans this table so the referenced template
+ * cannot be deleted out from under it.
+ */
+object DaoTemplateEffects : IntIdTable("template_effects") {
+    val template = reference("template_id", DaoTemplates)
+    val effectType = varchar("effect_type", 255)
+
+    /** The effect library's own `category` — D4 derives the template's family from it. */
+    val category = varchar("category", 50)
+    val propertyName = varchar("property_name", 255).nullable()
+    val beatDivision = double("beat_division")
+    val blendMode = varchar("blend_mode", 50)
+    val distribution = varchar("distribution", 50)
+    val phaseOffset = double("phase_offset").default(0.0)
+    val elementMode = varchar("element_mode", 50).nullable()
+    val elementFilter = varchar("element_filter", 50).nullable()
+    val stepTiming = bool("step_timing").nullable()
+    val parameters = json<Map<String, String>>("parameters", Json)
+
+    /**
+     * Speed master this effect subscribes to (null → master 1).
+     *
+     * Stamped at *authoring* time from the project master whose `usage` matches the family (D8),
+     * not resolved at apply time: "by usage" is how the default is labelled in the sheet, not a
+     * stored mode, so the `null → slot 0` invariant the bank and the wire protocol are built on
+     * does not move. The accepted cost is that retagging a master's usage later does not move
+     * templates already stamped — `FU-TMPL-USAGE-RETAG`.
+     */
+    val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
+    val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
+    val uuid = javaUUID("uuid").autoGenerate()
+
+    init {
+        // D2, at the storage layer. One row per template, so a template can never grow a second
+        // effect behind the write boundary's back — an import or a hand edit included.
+        uniqueIndex(template)
+    }
+}
+
+class DaoTemplateEffect(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoTemplateEffect>(DaoTemplateEffects)
+
+    var template by DaoTemplate referencedOn DaoTemplateEffects.template
+    var effectType by DaoTemplateEffects.effectType
+    var category by DaoTemplateEffects.category
+    var propertyName by DaoTemplateEffects.propertyName
+    var beatDivision by DaoTemplateEffects.beatDivision
+    var blendMode by DaoTemplateEffects.blendMode
+    var distribution by DaoTemplateEffects.distribution
+    var phaseOffset by DaoTemplateEffects.phaseOffset
+    var elementMode by DaoTemplateEffects.elementMode
+    var elementFilter by DaoTemplateEffects.elementFilter
+    var stepTiming by DaoTemplateEffects.stepTiming
+    var parameters by DaoTemplateEffects.parameters
+    var speedMasterUuid by DaoTemplateEffects.speedMasterUuid
+    var rateSpeedMasterUuid by DaoTemplateEffects.rateSpeedMasterUuid
+    var uuid by DaoTemplateEffects.uuid
+}
+
+/**
+ * A template's effect on the wire — [LookEffectDto] minus the target and the sort order (D2/D3).
+ *
+ * Deliberately **not** [LookEffectSpec], despite holding the same fields: that is the shared
+ * *spawn* shape, with no `uuid` and no place for one, and this is a client-supplied *authoring*
+ * shape that a route validates. The bridge between them is
+ * [uk.me.cormack.lighting7.fx.EffectEntry.toEffectSpec], the same one a Look effect crosses.
+ */
+@Serializable
+data class TemplateEffectDto(
+    val effectType: String,
+    val category: String,
+    val propertyName: String? = null,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val phaseOffset: Double = 0.0,
+    val elementMode: String? = null,
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null,
+    val parameters: Map<String, String> = emptyMap(),
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [DaoTemplateEffects.speedMasterUuid]. */
+    val speedMasterUuid: String? = null,
+    /** Wall-clock rate master (null → unscaled). */
+    val rateSpeedMasterUuid: String? = null,
+)

@@ -211,11 +211,9 @@ class CueStackManager(
             )
             instance.cueId = cueData.cueId
             instance.cueStackId = stackId
-            // Only a Look can own an effect, so only a Look id belongs in this field.
-            // `cookEffects` already skips template layers, which makes this structurally
-            // unreachable rather than merely unlikely — stated because the alternative writes
-            // a template id into a field named `lookId`.
-            instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
+            // The whole source, kind included: a template layer owns effects now (D5), and
+            // `FxInstance.lookId` derives the Look-only id from this.
+            instance.source = layer.source
             instance.cueLayerId = layer.layerId
             spawning += instance
         }

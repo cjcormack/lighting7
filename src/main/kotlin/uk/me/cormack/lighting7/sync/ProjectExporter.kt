@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
+import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
 import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
@@ -63,7 +64,7 @@ import java.util.UUID
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /looks/{uuid}.json               -- rows and effects embedded inline
- * /templates/{uuid}.json           -- rows embedded inline
+ * /templates/{uuid}.json           -- rows, or one effect, embedded inline
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
@@ -347,6 +348,25 @@ class ProjectExporter(private val state: State) {
                                 sortOrder = r.sortOrder,
                             )
                         },
+                    // At most one (D2), so no `sortedWith` — there is no order to stabilise.
+                    effect = t.effect?.let { e ->
+                        TemplateEffectJson(
+                            uuid = e.uuid.toString(),
+                            effectType = e.effectType,
+                            category = e.category,
+                            propertyName = e.propertyName,
+                            beatDivision = e.beatDivision,
+                            blendMode = e.blendMode,
+                            distribution = e.distribution,
+                            phaseOffset = e.phaseOffset,
+                            elementMode = e.elementMode,
+                            elementFilter = e.elementFilter,
+                            stepTiming = e.stepTiming,
+                            parameters = e.parameters,
+                            speedMasterUuid = e.speedMasterUuid?.toString(),
+                            rateSpeedMasterUuid = e.rateSpeedMasterUuid?.toString(),
+                        )
+                    },
                 )
             }
 

@@ -199,7 +199,10 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
         // Through the same write boundary as a hand-authored template. It cannot legitimately fail
         // here — the vocabulary check above is the same one — but going round it would make this the
         // one path that can seed an invalid template.
-        validateTemplateRows(rows)?.let { problem ->
+        // Rows only: *New from selection* records what the heads are doing, which is values by
+        // definition — an effect template's twin gesture is *Save as template…* on a running
+        // effect, and it posts to the create route rather than here.
+        validateTemplateContents(rows, effect = null, registry = state.show.fxRegistry)?.let { problem ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
             return@withCurrentProject
         }

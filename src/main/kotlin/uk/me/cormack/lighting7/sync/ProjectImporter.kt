@@ -46,6 +46,7 @@ import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateEffect
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
@@ -94,7 +95,7 @@ import kotlin.io.path.isDirectory
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 7
+internal const val SUPPORTED_FORMAT_VERSION = 8
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -240,6 +241,7 @@ class ProjectImporter(private val state: State) {
             // the JSON templates on top of it, tripping `uniqueIndex(project, name)`.
             project.templates.forEach { template ->
                 template.rows.forEach { it.delete() }
+                template.effects.forEach { it.delete() }
                 template.delete()
             }
             project.speedMasters.forEach { it.delete() }
@@ -704,6 +706,29 @@ class ProjectImporter(private val state: State) {
                     value = r.value
                     sortOrder = r.sortOrder
                     this.uuid = UUID.fromString(r.uuid)
+                }
+            }
+            // Written verbatim, like an imported Look effect and for the same reason: the write
+            // boundary's rules don't run on import, so a snapshot from a *newer* build whose
+            // category or blend mode this one does not recognise still lands rather than aborting
+            // the pull. `EffectSpecCoercion.Lenient` warns if it eventually fails to spawn.
+            t.effect?.let { e ->
+                DaoTemplateEffect.new {
+                    template = dao
+                    effectType = e.effectType
+                    category = e.category
+                    propertyName = e.propertyName
+                    beatDivision = e.beatDivision
+                    blendMode = e.blendMode
+                    distribution = e.distribution
+                    phaseOffset = e.phaseOffset
+                    elementMode = e.elementMode
+                    elementFilter = e.elementFilter
+                    stepTiming = e.stepTiming
+                    parameters = e.parameters
+                    speedMasterUuid = e.speedMasterUuid?.let { m -> UUID.fromString(m) }
+                    rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { m -> UUID.fromString(m) }
+                    this.uuid = UUID.fromString(e.uuid)
                 }
             }
             uuid to dao

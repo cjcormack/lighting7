@@ -239,6 +239,47 @@ class ProjectCloneTest {
                 cloneMaster.uuid, layer.rateSpeedMasterUuid,
                 "the preset application's rate override must point at the clone's master",
             )
+
+            // The effect template's two master columns are the same kind of reference, in a table
+            // `ExportUuidRemapper` knows nothing about — which is the point: the remap is a blind
+            // uuid substitution across the export text, so a new inline child is covered with no
+            // code of its own.
+            val templateEffect = clone.templates.mapNotNull { it.effect }.single()
+            assertEquals(
+                cloneMaster.uuid, templateEffect.speedMasterUuid,
+                "the template effect's reference must point at the clone's master",
+            )
+            assertEquals(cloneMaster.uuid, templateEffect.rateSpeedMasterUuid)
+        }
+    }
+
+    /**
+     * The reference *inside a parameters map* — D12's allowed direction, an effect template's
+     * colour parameter naming a value colour template.
+     *
+     * Worth its own test rather than folding into the master one above: the master columns are
+     * real uuid columns, whereas this is a uuid embedded in a `tmpl:` string inside a JSON value,
+     * and only the remapper being deliberately *not* field-aware makes it work. A cloned effect
+     * still naming the source project's template would resolve to nothing and silently run white.
+     */
+    @Test
+    fun `clone rewires a template reference inside an effect parameter`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-tmpl-ref", description = null)
+
+        transaction(state.database) {
+            val clone = DaoProject.findById(result.projectId)!!
+            val source = DaoProject.findById(sourceId)!!
+
+            val cloneColour = clone.templates.single { it.name == "amber-key" }
+            val sourceColour = source.templates.single { it.name == "amber-key" }
+            assertNotEquals(sourceColour.uuid, cloneColour.uuid, "clone must mint a fresh identity")
+
+            val effect = clone.templates.single { it.name == "amber-breathe" }.effect!!
+            assertEquals(
+                "tmpl:${cloneColour.uuid}", effect.parameters["colours"],
+                "the parameter must name the clone's own colour template",
+            )
         }
     }
 

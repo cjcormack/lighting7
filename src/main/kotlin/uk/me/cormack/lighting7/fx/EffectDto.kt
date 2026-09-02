@@ -42,8 +42,16 @@ data class EffectDto(
     /**
      * The Look this effect came from, when it came from one. The field the busking pads' active
      * ring matches on.
+     *
+     * Stays Look-only now that a **template** can own an effect too (fx-templates D7), rather than
+     * becoming a polymorphic id: a client matching a pad on a bare int would otherwise ring Look 3
+     * for template 3. [templateId] is the other half, and [sourceName] the label.
      */
     val lookId: Int? = null,
+    /** The template this effect came from, when it came from one. Never set beside [lookId]. */
+    val templateId: Int? = null,
+    /** That record's name — what `FX running` renders as *in Amber Breathe*, with no second lookup. */
+    val sourceName: String? = null,
     /** The programmer layer that spawned this effect, when one did. */
     val programmerLayerId: Int? = null,
     val cueId: Int? = null,
@@ -117,6 +125,8 @@ internal fun FxInstance.toEffectDto(
         elementFilter = if (showDistribution && elementFilter != ElementFilter.ALL) elementFilter.name else null,
         stepTiming = stepTiming,
         lookId = lookId,
+        templateId = templateId,
+        sourceName = source?.name,
         programmerLayerId = programmerLayerId,
         cueId = cueId,
         cueStackId = cueStackId,

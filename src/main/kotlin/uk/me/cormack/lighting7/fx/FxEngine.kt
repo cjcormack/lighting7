@@ -813,7 +813,7 @@ class FxEngine(
             ).apply {
                 id = existing.id
                 registrationId = newRegistrationId ?: existing.registrationId
-                lookId = existing.lookId
+                source = existing.source
                 // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
                 // Record reads to tell a layer's effect from a loose one. Dropping them here
                 // un-stomps an edited layer effect and makes Record write it back a second

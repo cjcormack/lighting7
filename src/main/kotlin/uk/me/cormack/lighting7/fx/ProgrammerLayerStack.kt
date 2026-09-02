@@ -186,19 +186,30 @@ class ProgrammerLayerStack(
     /**
      * The busking pad's gesture: put this Look or template on these targets, or take it off again.
      *
-     * "Already on" means **a layer with the same source and the same target set** — the
+     * "Already on" means **a layer with the same source *identity* and the same target set** — the
      * pad's own reading, and the one that lets the same Look sit on two different target sets as two
-     * independently-toggleable pads. Matching on the whole [LayerSource] rather than on an id is
-     * what keeps a Look and a template that happen to share an int PK from cancelling each other.
+     * independently-toggleable pads.
+     *
+     * Matched on `source.uuid`, which is neither of the two obvious things and deliberately so.
+     * Not the int `id`, because a Look and a template can share an int PK and would then cancel
+     * each other's pads. Not the whole [LayerSource] either, though that is what this did first:
+     * it is a `data class`, so its equality includes `name` — and a name is *mutable*. Rename a
+     * record while its pad is lit and the pad stopped being able to turn it off, because the
+     * layer held the old name and the press carried the new one; it stacked a second layer
+     * instead, and the first could then only be removed by id from the FX sheet. A uuid is unique
+     * across both tables and never changes, which is exactly the identity "already on" means —
+     * the same reason [recookIfReferences] matches on it alone.
+     *
      * The target comparison is order-insensitive ([sameTargets]): a pad re-sending its own target
      * list in a different order — the client re-derived it from a `Set`, say — must still toggle the
      * existing layer off rather than stacking a second, functionally-identical one on top.
      * Returns `"applied"`/`"removed"` and how many effects moved, which is the contract
      * `togglePresetOnTargets` had and the pads still read.
      *
-     * Note a rows-only Look reports `0` either way, and a **template always does**: neither spawns
-     * effects. That was true before this rewrite too, and it is why the pads' active ring cannot be
-     * driven from the effect list alone.
+     * Note a rows-only Look reports `0` either way, and so does a **value** template. An *effect*
+     * template reports one per target since the fx-templates plan, which is why the pads' active
+     * ring still cannot be driven from the effect list alone: the number is zero for one kind of
+     * template and non-zero for the other.
      *
      * [propertyMask] applies to the *arriving* layer only. It is deliberately **not** part of the
      * "already on" comparison: a pad that re-pressed with a different mask should still take its
@@ -212,7 +223,7 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
     ): Pair<String, Int> {
         val existing = store.layers.firstOrNull {
-            it.source == source && sameTargets(it.targets, targets)
+            it.source.uuid == source.uuid && sameTargets(it.targets, targets)
         }
         return if (existing != null) {
             "removed" to remove(existing.layerId).effectsRetracted
@@ -569,7 +580,7 @@ class ProgrammerLayerStack(
      */
     private fun build(
         layer: CookLayer,
-        effect: LookEffectEntry,
+        effect: EffectEntry,
         target: TargetRef,
         key: ProgrammerLayerEffectKey,
         priority: Int,
@@ -609,10 +620,10 @@ class ProgrammerLayerStack(
             )
             return null
         }
-        // `lookId` and the band key are the honest fields for where this came from.
-        // Only a Look can own an effect (D7), so only a Look id belongs here — a template layer
-        // never reaches `build` because a template holds no effects to spawn.
-        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
+        // `source` and the band key are the honest fields for where this came from — a template
+        // layer reaches here too now (D5), which is why this is the whole source rather than an
+        // id that could only ever mean a Look.
+        instance.source = layer.source
         // The key is the instance's identity in the band: [syncEffects] classifies the engine's
         // live instances by it on the next recook, so an unstamped instance would be retracted
         // as unrecognised and respawned every mutation.

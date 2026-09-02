@@ -26,6 +26,18 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v8: a template may hold an **effect** instead of values. `template_effects` travels inline
+    // as `TemplateJson.effect`. `minReader` stays at **5**: the field is optional with a null
+    // default, so every older archive still imports unchanged.
+    //
+    // The writer's version moves even though the rule of thumb ("new optional field → no bump")
+    // would let it stand still, and for the reason v6 spells out below: this field is the
+    // *record's whole content*, not an enrichment. A v7 reader would import an effect template as
+    // a hollow rows-less template — one the write boundary would refuse — and then write that back
+    // over the effect on its next push. Bumping the writer makes a v7 install refuse the repo
+    // instead, which is the only outcome that does not lose data. Contrast `SpeedMasterJson`'s four
+    // routing fields, which took no bump: a null usage there is a *valid state* ("routes nothing").
+    //
     // v7: the positional colour list is gone. `palette` leaves `looks/`, `cues/` and `cueStacks/`,
     // and `updateGlobalPalette` leaves `cues/`; an effect that wants a named colour references a
     // **template** from its own parameters instead. `minReader` stays at **5**: every removed field
@@ -55,7 +67,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 7,
+    val formatVersion: Int = 8,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -183,15 +195,47 @@ data class TemplateRowJson(
 )
 
 /**
- * A template — portable show content, rows embedded inline.
+ * A template's one effect — [LookEffectJson] minus `targetType` / `targetKey` (an effect template
+ * is always generic, fx-templates D3) and `sortOrder` (at most one, D2).
+ *
+ * `parameters` may hold a `tmpl:{uuid}` colour reference. It needs no special handling here for
+ * the same reason `LookEffectJson`'s does not: `ExportUuidRemapper` rewrites every uuid *string*
+ * in the export text, so the reference and the two master uuids are re-pointed on clone with no
+ * field-aware code.
+ */
+@Serializable
+data class TemplateEffectJson(
+    val uuid: String,
+    val effectType: String,
+    val category: String,
+    val propertyName: String? = null,
+    val beatDivision: Double,
+    val blendMode: String,
+    val distribution: String,
+    val phaseOffset: Double = 0.0,
+    val elementMode: String? = null,
+    val elementFilter: String? = null,
+    val stepTiming: Boolean? = null,
+    val parameters: Map<String, String> = emptyMap(),
+    /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+)
+
+/**
+ * A template — portable show content, rows *or* one effect embedded inline.
  *
  * Rows address fixtures by *key*, the same as a Look's do, so nothing inside needs reference
  * remapping; the record's own `uuid` matters because a cue layer points at it.
  *
- * There is deliberately **no family field and no fixture type**. The family is derived from the
- * rows (and validated to be exactly one at the write boundary), and a template has no fixture type
- * by design — the values are intents resolved per head at cook. Both would be second sources of
- * truth for something the rows already say.
+ * [rows] and [effect] are mutually exclusive (fx-templates D1), enforced at the write boundary
+ * rather than by the format — the importer writes what it is given, as it does for every other
+ * record.
+ *
+ * There is deliberately **no family field and no fixture type**. The family is derived — from the
+ * rows, or from the effect's library `category` — and validated to be exactly one at the write
+ * boundary; a template has no fixture type by design, since the values are intents resolved per
+ * head at cook. Both would be second sources of truth for something the contents already say.
  */
 @Serializable
 data class TemplateJson(
@@ -201,6 +245,7 @@ data class TemplateJson(
     val sortOrder: Int = 0,
     val fadeDurationMs: Long? = null,
     val rows: List<TemplateRowJson> = emptyList(),
+    val effect: TemplateEffectJson? = null,
 )
 
 /**

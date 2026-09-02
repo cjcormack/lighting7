@@ -125,11 +125,15 @@ class CueTriggerManager(
                 fired.add(layer.layerId)
 
                 // Effects first, so a fire that spawns nothing still publishes its values.
-                for ((firedLayer, lookEffect, target) in CueComposer.cookEffects(
-                    state.show.fixtures, cueId, listOf(layer), state.show.lookRegistry::snapshot,
+                for ((firedLayer, layerEffect, target) in CueComposer.cookEffects(
+                    state.show.fixtures, cueId, listOf(layer),
+                    state.show.lookRegistry::snapshot,
+                    // A timed *template* layer spawns its effect too (D5), so this path resolves
+                    // both kinds. Passing it is not optional — see `cookEffects`.
+                    state.show.templateRegistry::snapshot,
                     includeTimed = setOf(layer.layerId),
                 )) {
-                    applyLookEffectToTarget(firedLayer, lookEffect, target, cueId, cueStackId, effectIds)
+                    applyLayerEffectToTarget(firedLayer, layerEffect, target, cueId, cueStackId, effectIds)
                 }
 
                 val cooked = fireCook.cook(fired.toSet())
@@ -311,19 +315,19 @@ class CueTriggerManager(
     }
 
     /**
-     * Spawn effects for a timed Look application. Takes the Look's effects list preloaded
-     * by the caller so the fire path can share one DB transaction with the Layer 4 property-
-     * assignment lookup.
+     * Spawn one effect for a timed layer application — a Look's or a template's (D5). Takes the
+     * cooked effect triple from the caller so the fire path can share one DB transaction with the
+     * Layer 4 property-assignment lookup.
      */
-    private fun applyLookEffectToTarget(
+    private fun applyLayerEffectToTarget(
         layer: CookLayer,
-        lookEffect: LookEffectEntry,
+        layerEffect: EffectEntry,
         target: uk.me.cormack.lighting7.models.TargetRef,
         cueId: Int,
         cueStackId: Int?,
         effectIds: MutableList<Long>,
     ) {
-        val effectSpec = lookEffect.toEffectSpec()
+        val effectSpec = layerEffect.toEffectSpec()
         val fxTarget = try {
             EffectSpawner.resolveTargetForCue(state, CueTargetDto(target), effectSpec)
         } catch (e: Exception) {
@@ -339,11 +343,7 @@ class CueTriggerManager(
             overrideSpeedMasterUuid = layer.speedMasterUuid,
             overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
         )
-        // Only a Look can own an effect, so only a Look id belongs in this field.
-        // `cookEffects` already skips template layers, which makes this structurally
-        // unreachable rather than merely unlikely — stated because the alternative writes a
-        // template id into a field named `lookId`.
-        instance.lookId = layer.source.id.takeUnless { layer.source.isTemplate }
+        instance.source = layer.source
         instance.cueLayerId = layer.layerId
         instance.cueId = cueId
         instance.cueStackId = cueStackId

@@ -11,8 +11,11 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.TemplateEffectDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -38,6 +41,20 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     private fun colourRow(value: String = "#FF9D4A;policy=extract") = TemplateRowDto(
         targetType = DEFERRED_TARGET_TYPE, targetKey = "",
         propertyName = "rgbColour", value = value,
+    )
+
+    private fun colourEffect(
+        effectType: String = "ColourPulse",
+        category: String = "colour",
+        parameters: Map<String, String> = emptyMap(),
+    ) = TemplateEffectDto(
+        effectType = effectType,
+        category = category,
+        propertyName = "rgbColour",
+        beatDivision = 0.5,
+        blendMode = "OVERRIDE",
+        distribution = "UNIFIED",
+        parameters = parameters,
     )
 
     @Test
@@ -322,8 +339,10 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             setBody(ToggleTemplateRequest(targets = targets, propertyMask = "COLOUR"))
         }.body<ToggleTemplateResponse>()
         assertEquals("applied", on.action)
-        // A template holds no effects at all, so the count is always zero — the pads' ring cannot be
-        // driven from the effect list, which is why `lookLayerPresence` reads the layer stack.
+        // A *value* template holds no effect, so its count is zero. Still not what drives the pads'
+        // active ring, and that is the point of asserting it: an effect template reports non-zero
+        // (see below), so a ring driven off this number would light for one kind of template and not
+        // the other. `lookLayerPresence` reads the layer stack for exactly that reason.
         assertEquals(0, on.effectCount)
         assertEquals(1, state.show.programmerStore.layers.size)
         assertTrue(state.show.programmerStore.layers.single().source.isTemplate)
@@ -566,5 +585,399 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.BadRequest, nothingSet.status)
         assertTrue(nothingSet.bodyAsText().contains("Nothing to record"), nothingSet.bodyAsText())
+    }
+
+    // ─── Effect templates ───────────────────────────────────────────────
+
+    @Test
+    fun `an effect template round-trips and is banked by its effect's category`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        assertEquals("effect", created.kind)
+        // Derived from the effect's `category`, not from rows it does not have (D4).
+        assertEquals("COLOUR", created.family)
+        assertTrue(created.rows.isEmpty())
+        assertEquals("ColourPulse", created.effect?.effectType)
+        // An effect fans over whatever the layer names, so there is no per-fixture case for it to
+        // be — true rather than the false an "all rows are deferred" test would give (D3).
+        assertTrue(created.isGeneric, "an effect template is always generic")
+
+        // The list route's family filter reads the same derivation.
+        val colourTab = client.get("${base()}?family=COLOUR").body<List<TemplateDto>>()
+        assertTrue(colourTab.any { it.id == created.id }, "effect template missing from its family tab")
+    }
+
+    @Test
+    fun `a template holding both a value and an effect is refused`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val resp = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "both", rows = listOf(colourRow()), effect = colourEffect()))
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        assertTrue(resp.bodyAsText().contains("never both"), resp.bodyAsText())
+    }
+
+    /**
+     * The two categories that belong to no attribute family, and the reason the family map is
+     * consulted rather than assumed: there is no column for a template with no family to sit in.
+     */
+    @Test
+    fun `an effect whose category has no family is refused by name`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        for ((effectType, category) in listOf("LightningStrike" to "composite", "Whatever" to "controls")) {
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "no-family-$category",
+                        effect = colourEffect(effectType = effectType, category = category),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, "category '$category' should be refused")
+            assertTrue(resp.bodyAsText().contains("has none"), resp.bodyAsText())
+        }
+    }
+
+    /**
+     * Beam is refused by *name* rather than by the library happening to ship no beam effect — so a
+     * script-registered beam effect cannot mint a Beam effect template behind the rule.
+     */
+    @Test
+    fun `a beam-category effect is refused with the reason`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val resp = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "beamy",
+                    effect = colourEffect(effectType = "Zoomy", category = "beam"),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        assertTrue(resp.bodyAsText().contains("BEAM template cannot hold an effect"), resp.bodyAsText())
+    }
+
+    @Test
+    fun `an unknown effect type is refused, and so is a category the library disagrees with`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+
+            val unknown = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(name = "nope", effect = colourEffect(effectType = "NotAnEffect"))
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, unknown.status)
+            assertTrue(unknown.bodyAsText().contains("not an effect this desk knows"), unknown.bodyAsText())
+
+            // A real dimmer effect declared as colour: the template would bank under Colour and
+            // run as Intensity, so the library is the authority and the two must agree.
+            val mismatched = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "mislabelled",
+                        effect = colourEffect(effectType = "Pulse", category = "colour"),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, mismatched.status)
+            assertTrue(mismatched.bodyAsText().contains("is a dimmer effect"), mismatched.bodyAsText())
+        }
+
+    /**
+     * D12 both ways: an effect template's colour parameter may name a *value* colour template, but
+     * not itself — the latter would recurse in `createEffectWithTemplates`.
+     */
+    @Test
+    fun `an effect parameter may name another template but not this one`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val amber = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "amber-breathe",
+                    effect = colourEffect(parameters = mapOf("colours" to "tmpl:${amber.uuid}")),
+                )
+            )
+        }.body<TemplateDto>()
+        assertEquals("tmpl:${amber.uuid}", breathe.effect?.parameters?.get("colours"))
+
+        val selfRef = client.put("${base()}/${breathe.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    effect = colourEffect(parameters = mapOf("colours" to "tmpl:${breathe.uuid}")),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.BadRequest, selfRef.status)
+        assertTrue(selfRef.bodyAsText().contains("reference the template itself"), selfRef.bodyAsText())
+    }
+
+    /**
+     * Holds is identity, like the family: the sheet locks the segment, and the server says so too
+     * because the AI surface and a hand-rolled PUT reach the same route.
+     */
+    @Test
+    fun `a PUT cannot flip what a template holds, and refuses before it renames`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        val rowsOnEffect = client.put("${base()}/${breathe.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "renamed", rows = listOf(colourRow())))
+        }
+        assertEquals(HttpStatusCode.BadRequest, rowsOnEffect.status)
+        assertTrue(rowsOnEffect.bodyAsText().contains("holds an effect"), rowsOnEffect.bodyAsText())
+
+        // Exposed commits a transaction that returns normally, so a rename applied before the
+        // rejection would have survived it. The validation runs first for exactly this reason.
+        val after = client.get("${base()}/${breathe.id}").body<TemplateDto>()
+        assertEquals("amber-breathe", after.name, "a refused PUT must not have renamed anything")
+
+        val amber = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+        val effectOnValue = client.put("${base()}/${amber.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(effect = colourEffect()))
+        }
+        assertEquals(HttpStatusCode.BadRequest, effectOnValue.status)
+        assertTrue(effectOnValue.bodyAsText().contains("holds values"), effectOnValue.bodyAsText())
+    }
+
+    @Test
+    fun `toggling an effect template spawns its effect on every head the layer names`() =
+        testApplication {
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+            val client = jsonClient()
+
+            val breathe = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+            }.body<TemplateDto>()
+            val targets = listOf(
+                TemplateTargetDto("fixture", "hex-1"),
+                TemplateTargetDto("fixture", "hex-2"),
+            )
+
+            val on = client.post("${base()}/${breathe.id}/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = targets))
+            }.body<ToggleTemplateResponse>()
+            assertEquals("applied", on.action)
+            // One per head — the layer names the targets, the template names the effect. This is
+            // the number that was structurally always zero before the fx-templates plan.
+            assertEquals(2, on.effectCount)
+            // Derived server-side from the effect's category, not echoed from the request: an
+            // unmasked layer would assert across every family instead of the effect's own.
+            assertEquals("COLOUR", on.propertyMask)
+
+            val running = state.show.fxEngine.getActiveEffects()
+            assertEquals(2, running.size)
+            // Provenance is the template, so `FX running` can say *in Amber Breathe* — and Record
+            // can put it back as a template layer rather than a loose ad-hoc child.
+            assertTrue(running.all { it.templateId == breathe.id }, "effects should name the template")
+            assertTrue(running.all { it.lookId == null }, "a template is not a Look")
+
+            val off = client.post("${base()}/${breathe.id}/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = targets))
+            }.body<ToggleTemplateResponse>()
+            assertEquals("removed", off.action)
+            assertEquals(2, off.effectCount)
+            assertTrue(state.show.fxEngine.getActiveEffects().isEmpty())
+        }
+
+    @Test
+    fun `the delete guard counts a template running on the programmer`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+        client.post("${base()}/${breathe.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+        }
+
+        val blocked = client.delete("${base()}/${breathe.id}")
+        assertEquals(HttpStatusCode.Conflict, blocked.status)
+        val guard = blocked.body<TemplateInUseResponse>()
+        // No cue layers — this is live programmer state with no row of its own, which is why it is
+        // counted separately from `layerCount`.
+        assertEquals(0, guard.layerCount)
+        assertEquals(1, guard.runningCount)
+        assertTrue(guard.error.contains("the programmer now"), guard.error)
+
+        assertEquals(HttpStatusCode.NoContent, client.delete("${base()}/${breathe.id}?force=true").status)
+    }
+
+    /**
+     * An effect-only PUT is a **contents** change, so it goes down the republish branch and
+     * refreshes the cached snapshot — the next application of the template runs the new effect.
+     *
+     * What it deliberately does *not* do is retime an instance already on stage.
+     * `ProgrammerLayerStack.recookIfReferences` cooks `withEffects = false` on purpose: an edit
+     * touring to an already-applied layer "is not the layer arriving", and re-spawning would make
+     * every nudge of a parameter restart the effect mid-show. A template inherits that rule from a
+     * Look unchanged, and this test pins both halves so the asymmetry is deliberate rather than
+     * discovered.
+     */
+    @Test
+    fun `an effect-only edit refreshes the snapshot without restarting what is on stage`() =
+        testApplication {
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            val client = jsonClient()
+
+            val breathe = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+            }.body<TemplateDto>()
+            val targets = listOf(TemplateTargetDto("fixture", "hex-1"))
+            client.post("${base()}/${breathe.id}/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = targets))
+            }
+            assertEquals(0.5, state.show.fxEngine.getActiveEffects().single().timing.beatDivision)
+
+            val edited = client.put("${base()}/${breathe.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        effect = colourEffect().copy(beatDivision = 2.0, effectType = "RainbowCycle"),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.OK, edited.status)
+            assertEquals("RainbowCycle", edited.body<TemplateDto>().effect?.effectType)
+
+            // Still the old instance, untouched — see the KDoc.
+            val duringEdit = state.show.fxEngine.getActiveEffects().single()
+            assertEquals(0.5, duringEdit.timing.beatDivision)
+            assertEquals(breathe.id, duringEdit.templateId, "provenance must survive the republish")
+
+            // Re-applying reads the refreshed snapshot, which is what proves the effect-only PUT
+            // took the `contentsChanged` branch: the `templateListChanged` branch would have left
+            // the registry serving its pre-edit snapshot.
+            for (i in 0..1) {
+                client.post("${base()}/${breathe.id}/toggle") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ToggleTemplateRequest(targets = targets))
+                }
+            }
+            val respawned = state.show.fxEngine.getActiveEffects().single()
+            assertEquals(2.0, respawned.timing.beatDivision, "re-applying did not pick up the edit")
+            assertEquals("RainbowCycle", respawned.registrationId)
+        }
+
+    /**
+     * Record's stage capture, through the route that exposes it.
+     *
+     * The regression this guards is specific and silent: `captureCurrentState` used to fork on
+     * `effect.lookId != null`, so a template layer's effect — which has no Look id — was filed as a
+     * loose **ad-hoc** cue effect. Record would have written it onto the cue as a child, severing
+     * the tracking that is the entire point of layering a template, with nothing to show it had
+     * happened.
+     */
+    @Test
+    fun `capture files an effect template's effect as a template layer, not an ad-hoc effect`() =
+        testApplication {
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            val client = jsonClient()
+
+            val breathe = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+            }.body<TemplateDto>()
+            client.post("${base()}/${breathe.id}/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+            }
+
+            val captured = client
+                .get("/api/rest/projects/$projectId/cues/current-state")
+                .body<CueCurrentStateResponse>()
+
+            assertTrue(captured.adHocEffects.isEmpty(), "a tracked effect is not an ad-hoc child")
+            val layer = captured.layers.single()
+            assertEquals(breathe.id, layer.templateId)
+            assertNull(layer.lookId, "exactly one of lookId / templateId is set")
+            assertEquals(listOf("hex-1"), layer.targets.map { it.key })
+        }
+
+    /**
+     * The write boundary checks only what a request actually *sends* — the carve-out
+     * `validateSpeedMasterSettings` documents for its follow target.
+     *
+     * Contents already stored are upstream of this write: the importer writes an effect verbatim
+     * on purpose, so a category from a newer build can land in the table. Re-validating on every
+     * PUT would then 400 a rename, which is a write that has nothing to do with the contents.
+     */
+    @Test
+    fun `a rename survives stored contents this build would refuse`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        // Stand in for what an import from a newer build leaves behind: a category this build maps
+        // to no family, which `validateTemplateContents` refuses outright.
+        transaction(state.database) {
+            DaoTemplate.findById(breathe.id)!!.effect!!.category = "hologram"
+        }
+
+        val renamed = client.put("${base()}/${breathe.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe-2", notes = "renamed", notesPresent = true))
+        }
+        assertEquals(HttpStatusCode.OK, renamed.status, renamed.bodyAsText())
+        assertEquals("amber-breathe-2", renamed.body<TemplateDto>().name)
+
+        // But a write that does touch the effect still goes through the rules.
+        val edited = client.put("${base()}/${breathe.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(effect = colourEffect(category = "hologram")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, edited.status)
     }
 }

@@ -17,11 +17,14 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.LayerSource
+import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.serializeTemplateColourRef
+import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
@@ -30,10 +33,12 @@ import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateEffect
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.TemplateEffectDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.state.State
 
@@ -128,23 +133,55 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     // PUT /projects/{id}/templates/{templateId}
     //
     // Unlike the Look PUT this takes a typed body rather than a raw `JsonObject`. The
-    // absent-versus-empty distinction that forced the raw decode there does not arise: a template
-    // has one child collection, and a template with no rows is not a thing you can save — so
-    // "rows omitted" and "rows empty" both mean "leave the rows alone", which a nullable field says
-    // exactly.
+    // absent-versus-empty distinction that forced the raw decode there does not arise for either
+    // child: neither a rows-less value template nor an effect-less effect template is a thing you
+    // can save, so "omitted" and "empty" both mean "leave that half alone" — which a nullable
+    // field says exactly. That is also why `effect` needs no `effectPresent` twin the way `notes`
+    // does: an effect can be replaced but never cleared, because clearing it would flip Holds,
+    // which the write boundary refuses outright.
+    //
+    // The validation therefore has to run *inside* the transaction, against the template's stored
+    // Holds — a rows body arriving for an effect template is only detectable with the record in
+    // hand.
     put<ProjectTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<TemplateInput>()
-            request.rows?.let { rows ->
-                validateTemplateRows(rows)?.let { problem ->
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
-                    return@withCurrentProject
-                }
-            }
             val outcome = transaction(state.database) {
                 val template = DaoTemplate.findById(resource.templateId)
                     ?: return@transaction TemplateWriteOutcome.NotFound
                 if (template.project.id != project.id) return@transaction TemplateWriteOutcome.NotFound
+
+                // Holds is the template's identity, like its family: a value template stays a
+                // value template (D1). Refused here rather than trusted to the sheet's locked
+                // segment, because the AI surface and a hand-rolled PUT reach the same route.
+                val holdsEffect = template.effect != null
+                if (request.rows?.isNotEmpty() == true && holdsEffect) {
+                    return@transaction TemplateWriteOutcome.Invalid(
+                        "'${template.name}' holds an effect — a template cannot hold values as " +
+                            "well, and what it holds is fixed when it is created",
+                    )
+                }
+                if (request.effect != null && !holdsEffect && !template.rows.empty()) {
+                    return@transaction TemplateWriteOutcome.Invalid(
+                        "'${template.name}' holds values — a template cannot hold an effect as " +
+                            "well, and what it holds is fixed when it is created",
+                    )
+                }
+                // Only what this request actually *sends* goes through the content rules — the
+                // same carve-out `validateSpeedMasterSettings` documents. Contents already stored
+                // are upstream of this write (an import writes them verbatim, deliberately, so a
+                // category from a newer build can land here), and re-checking them would 400
+                // every later PUT on the row, rename and notes edits included. The Holds check
+                // above is the one rule that genuinely needs the stored state, which is why it is
+                // separate.
+                if (request.rows != null || request.effect != null) {
+                    validateTemplateContents(
+                        request.rows ?: emptyList(),
+                        request.effect,
+                        state.show.fxRegistry,
+                        template.uuid,
+                    )?.let { return@transaction TemplateWriteOutcome.Invalid(it) }
+                }
 
                 request.name?.trim()?.takeIf { it.isNotEmpty() }?.let { newName ->
                     if (newName != template.name) {
@@ -164,10 +201,18 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     template.rows.forEach { it.delete() }
                     createTemplateRows(template, rows)
                 }
+                val effect = request.effect
+                if (effect != null) {
+                    template.effects.forEach { it.delete() }
+                    createTemplateEffect(template, effect)
+                }
                 TemplateWriteOutcome.Written(
                     template.toDto(templateUsage(template.id.value)),
                     template.uuid,
-                    contentsChanged = rows != null,
+                    // An effect-only edit is a contents change like a rows edit: without it
+                    // `republishForTemplateEdit` never runs, and retuning an effect template would
+                    // reach nothing already live — which is the feature.
+                    contentsChanged = rows != null || effect != null,
                 )
             }
             when (outcome) {
@@ -177,6 +222,8 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     HttpStatusCode.Conflict,
                     ErrorResponse("A template named '${outcome.name}' already exists in this project"),
                 )
+                is TemplateWriteOutcome.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message))
                 is TemplateWriteOutcome.Written -> {
                     if (outcome.contentsChanged) {
                         // A contents change republishes the live consumers directly — one retune
@@ -200,13 +247,19 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     ?: return@transaction TemplateDeleteOutcome.NotFound
                 if (template.project.id != project.id) return@transaction TemplateDeleteOutcome.NotFound
                 val usage = templateUsage(template.id.value)
-                // Two kinds of usage, and both must block. A layer *applies* the template; an
-                // effect parameter *references* it by uuid (`tmpl:{uuid}`) — and deleting out from
-                // under one of those is worse than out from under a layer, because the effect keeps
-                // running and its colour silently falls back to white.
+                // Three kinds of usage, and all must block. A cue layer *applies* the template; a
+                // programmer layer is *running* it right now; an effect parameter *references* it
+                // by uuid (`tmpl:{uuid}`) — and deleting out from under that last one is worse than
+                // out from under a layer, because the effect keeps running and its colour silently
+                // falls back to white.
                 val fxRefs = templateFxReferenceCount(template.uuid)
-                if ((usage.layerCount > 0 || fxRefs > 0) && !resource.force) {
-                    return@transaction TemplateDeleteOutcome.InUse(usage, fxRefs)
+                // Read off the in-memory stack, not the DB: a programmer layer is live state with
+                // no row of its own, which is exactly why this cannot live in `TemplateUsage`.
+                val running = state.show.programmerStore.layers.count {
+                    it.source.isTemplate && it.source.uuid == template.uuid
+                }
+                if ((usage.layerCount > 0 || fxRefs > 0 || running > 0) && !resource.force) {
+                    return@transaction TemplateDeleteOutcome.InUse(usage, fxRefs, running)
                 }
                 // No DB-level ON DELETE CASCADE — SQLite does not enforce cascades without a
                 // per-connection pragma, so children go first, explicitly.
@@ -214,8 +267,10 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     DaoCueLayer.find { DaoCueLayers.template eq template.id }.forEach { it.delete() }
                 }
                 template.rows.forEach { it.delete() }
+                template.effects.forEach { it.delete() }
+                val uuid = template.uuid
                 template.delete()
-                TemplateDeleteOutcome.Deleted
+                TemplateDeleteOutcome.Deleted(uuid)
             }
             when (outcome) {
                 is TemplateDeleteOutcome.NotFound ->
@@ -224,15 +279,26 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     HttpStatusCode.Conflict,
                     TemplateInUseResponse(
                         error = "This template is still in use by " +
-                            describeTemplateUse(outcome.usage, outcome.fxReferenceCount),
+                            describeTemplateUse(
+                                outcome.usage, outcome.fxReferenceCount, outcome.runningCount,
+                            ),
                         code = CODE_TEMPLATE_IN_USE,
                         layerCount = outcome.usage.layerCount,
                         cueIds = outcome.usage.cueIds,
                         cueNames = outcome.usage.cueNames,
                         fxReferenceCount = outcome.fxReferenceCount,
+                        runningCount = outcome.runningCount,
                     ),
                 )
                 is TemplateDeleteOutcome.Deleted -> {
+                    // *Delete anyway* releases the programmer layers the guard counted, the same
+                    // way it deleted the cue-layer rows. Nothing else can: a layer naming a uuid
+                    // with no row behind it resolves to null on every recook, so it sits in the
+                    // stack asserting nothing while the effect it spawned keeps running, and the
+                    // operator has no template left to press to take it off.
+                    state.show.programmerStore.layers
+                        .filter { it.source.isTemplate && it.source.uuid == outcome.uuid }
+                        .forEach { state.show.programmerLayerStack.remove(it.layerId) }
                     state.show.fixtures.templateListChanged()
                     call.respond(HttpStatusCode.NoContent)
                 }
@@ -244,7 +310,11 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<TemplateResolveResource> { resource ->
         withProject(state, resource.parent.projectId) { _ ->
             val request = call.receive<TemplateResolveRequest>()
-            validateTemplateRows(request.rows)?.let { problem ->
+            // Rows only: the panel answers "what will each head receive", which an effect template
+            // has no answer to — its *Runs on* panel is a head count and a client-side preview.
+            validateTemplateContents(
+                request.rows, effect = null, registry = state.show.fxRegistry,
+            )?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withProject
             }
@@ -279,20 +349,21 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()
-            // Source *and* mask in one transaction: the mask is derived from the template's own rows
-            // by the same expression `toDto` uses for `family`, so the layer cannot be masked to
-            // something the template list never showed. Deriving it here rather than trusting
-            // `request.propertyMask` is also what gives the response an independent answer to
-            // report: an echo could never disagree with the caller.
+            // Source *and* mask in one transaction: the mask is derived by the same [familyOf]
+            // `toDto` uses for `family`, so the layer cannot be masked to something the template
+            // list never showed. Deriving it here rather than trusting `request.propertyMask` is
+            // also what gives the response an independent answer to report: an echo could never
+            // disagree with the caller.
+            //
+            // One shared derivation rather than the row expression this inlined before: an effect
+            // template has no rows, so the inline copy would have answered null and added an
+            // *unmasked* layer — which asserts across every family instead of the effect's own.
             val found = transaction(state.database) {
                 DaoTemplate.findById(resource.templateId)
                     ?.takeIf { it.project.id == project.id }
                     ?.let { template ->
-                        val family = template.rows
-                            .orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)
-                            .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
-                            ?.name
-                        LayerSource.template(template.id.value, template.uuid, template.name) to family
+                        LayerSource.template(template.id.value, template.uuid, template.name) to
+                            template.familyOf()?.name
                     }
             }
             if (found == null) {
@@ -342,12 +413,13 @@ internal data class ToggleTemplateResource(val parent: ProjectTemplatesResource,
 // ─── DTOs ───────────────────────────────────────────────────────────────
 
 /**
- * A template as the library lists it — **rows included**, unlike `LookDto`.
+ * A template as the library lists it — **contents included**, unlike `LookDto`.
  *
  * A Look needs a summary/detail split because its derived counts would go stale beside its contents.
- * A template has no effects, no palette and few rows (one for a generic template, one per head for a
- * focus position), so one shape serves the list and the editor — and the library row can preview the
- * actual value without a second fetch, which is what `LookLibrary`'s row does with `preview`.
+ * A template holds no palette and either one effect or few rows (one for a generic template, one per
+ * head for a focus position), so one shape still serves the list and the editor — and the library
+ * row can preview the actual value without a second fetch, which is what `LookLibrary`'s row does
+ * with `preview`.
  */
 @Serializable
 internal data class TemplateDto(
@@ -358,18 +430,37 @@ internal data class TemplateDto(
     val sortOrder: Int,
     val fadeDurationMs: Long? = null,
     /**
-     * The one family this template is in, **derived** from its rows — never stored. Null only for a
-     * template whose rows have all been deleted, which the write boundary does not allow but a
-     * hand-edited database could produce.
+     * The one family this template is in, **derived** — from its rows, or from its effect's library
+     * category (D4) — never stored. Null only for a template whose contents have all been deleted,
+     * which the write boundary does not allow but a hand-edited database could produce.
      */
     val family: String? = null,
     /**
      * True when every row takes its targets from whatever applies the template (the *Generic* case);
      * false when the rows name their own heads (the *Per fixture* case, a focus position).
+     *
+     * Always true for an **effect** template: an effect fans over whatever the layer names, so
+     * there is no per-fixture case for it to be (D3).
      */
     val isGeneric: Boolean,
+    /**
+     * What this template holds — `"value"` or `"effect"` (D1). Derived, and the field the library
+     * row branches its swatch on.
+     *
+     * A string rather than a boolean because it is a two-arm vocabulary the UI renders by name, and
+     * because `FU-TMPL-MULTI-EFFECT` would give it a third arm before it gave it a second flag.
+     */
+    val kind: String,
     val rows: List<TemplateRowDto> = emptyList(),
-    /** How many layers apply this template. Gates delete. */
+    /** The one effect an effect template holds; null for a value template. */
+    val effect: TemplateEffectDto? = null,
+    /**
+     * How many **cue** layers apply this template. Gates delete.
+     *
+     * Cue layers only, deliberately — programmer layers tracking it live are counted by the delete
+     * guard instead ([TemplateInUseResponse.runningCount]), because that count needs the in-memory
+     * store and this mapping has only the row.
+     */
     val layerCount: Int,
 )
 
@@ -379,6 +470,10 @@ internal data class TemplateDto(
  * `notes` and `fadeDurationMs` carry an explicit presence flag rather than relying on null, because
  * for both of them null is a *value* an operator can set (clear the notes, use the caller's default
  * fade) and PUT has to be able to tell that from "leave it alone".
+ *
+ * `rows` and `effect` need no such flag: null cannot mean "clear" for either, because clearing
+ * would leave a template holding nothing — or flip its Holds, which the write boundary refuses
+ * (D1). Exactly one of them is set on create.
  */
 @Serializable
 internal data class TemplateInput(
@@ -389,6 +484,8 @@ internal data class TemplateInput(
     val fadeDurationMs: Long? = null,
     val fadeDurationMsPresent: Boolean = false,
     val rows: List<TemplateRowDto>? = null,
+    /** The effect an effect template holds (D1/D2). Never set beside a non-empty [rows]. */
+    val effect: TemplateEffectDto? = null,
 )
 
 @Serializable
@@ -400,6 +497,15 @@ internal data class TemplateInUseResponse(
     val cueNames: List<String>,
     /** Effect parameters holding a `tmpl:{uuid}` reference to this template. */
     val fxReferenceCount: Int = 0,
+    /**
+     * Programmer layers tracking this template *right now*.
+     *
+     * Live state with no row of its own, so it is absent from [layerCount] (which counts stored
+     * cue layers) and from `TemplateUsage` — the dialog reports the two separately because
+     * *Delete anyway* undoes them differently: a cue layer row is deleted, a programmer layer is
+     * simply released.
+     */
+    val runningCount: Int = 0,
 )
 
 @Serializable
@@ -487,23 +593,37 @@ internal data class TemplateResolutionDto(
 private sealed interface TemplateWriteOutcome {
     data object NotFound : TemplateWriteOutcome
     data class NameTaken(val name: String) : TemplateWriteOutcome
+
+    /**
+     * The body would have written contents the write boundary refuses — a 400.
+     *
+     * Separate from [NameTaken]'s 409 because these are two different client mistakes: a clash is
+     * about the project's *other* templates, this is about this template's own contents.
+     */
+    data class Invalid(val message: String) : TemplateWriteOutcome
     data class Written(val dto: TemplateDto, val uuid: java.util.UUID, val contentsChanged: Boolean) :
         TemplateWriteOutcome
 }
 
 private sealed interface TemplateDeleteOutcome {
     data object NotFound : TemplateDeleteOutcome
-    data class InUse(val usage: TemplateUsage, val fxReferenceCount: Int) : TemplateDeleteOutcome
-    data object Deleted : TemplateDeleteOutcome
+    data class InUse(
+        val usage: TemplateUsage,
+        val fxReferenceCount: Int,
+        val runningCount: Int,
+    ) : TemplateDeleteOutcome
+
+    /** Carries the uuid so the handler can release the programmer layers naming it. */
+    data class Deleted(val uuid: java.util.UUID) : TemplateDeleteOutcome
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────
 
-/**
- * The template write boundary. Returns the problem, or null when the rows are acceptable.
+/*
+ * The template write boundary lives in [validateTemplateContents] below, and every rule there is
+ * load-bearing rather than defensive.
  *
- * Four rules, and each is load-bearing rather than defensive:
- *
+ * A **value** template's rows:
  *  1. **Exactly one family.** This is what makes a template a template — `TwoThings` calls it the
  *     single real backend ask — and it is enforced here because there is no column to constrain.
  *  2. **A closed property vocabulary** ([TemplateProperty]), which is where "a template cannot carry
@@ -512,7 +632,13 @@ private sealed interface TemplateDeleteOutcome {
  *     client bug, and storing it would produce a row that resolves to nothing on every head.
  *  4. **No group rows.** A template names no targets of its own; the only reason a row names a
  *     fixture is that its value is specific to that head, which a group cannot be.
+ *
+ * An **effect** template's one effect (fx-templates D1–D4, D12): exactly one of rows/effect, a
+ * category that maps to a bankable family, a type the [FxRegistry] resolves whose own category
+ * agrees with the stored one, enum-valued fields the desk recognises, and no `tmpl:` parameter
+ * naming the template itself.
  */
+
 internal sealed interface TemplateCreateResult {
     data class Ok(val template: TemplateDto) : TemplateCreateResult
     data class Invalid(val message: String) : TemplateCreateResult
@@ -523,9 +649,10 @@ internal sealed interface TemplateCreateResult {
  * Create a template — the shared body behind `POST /templates` and the AI surface's
  * `create_template`.
  *
- * Shared rather than copied because the validation *is* the feature: [validateTemplateRows]
- * enforces one attribute family per template and rejects slotted properties, and a second caller
- * that skipped it could write a template no consumer can resolve.
+ * Shared rather than copied because the validation *is* the feature: [validateTemplateContents]
+ * enforces one attribute family per template, rejects slotted properties, and refuses an effect
+ * whose category no family banks — and a second caller that skipped it could write a template no
+ * consumer can resolve.
  */
 internal fun performTemplateCreate(
     state: State,
@@ -536,7 +663,11 @@ internal fun performTemplateCreate(
     if (name.isEmpty()) return TemplateCreateResult.Invalid("Template name must not be blank")
 
     val rows = input.rows ?: emptyList()
-    validateTemplateRows(rows)?.let { return TemplateCreateResult.Invalid(it) }
+    val effect = input.effect
+    // No `ownUuid`: the template does not exist yet, so it cannot name itself. The self-reference
+    // rule is the update route's to enforce.
+    validateTemplateContents(rows, effect, state.show.fxRegistry)
+        ?.let { return TemplateCreateResult.Invalid(it) }
 
     val created = transaction(state.database) {
         val duplicate = DaoTemplate.find {
@@ -553,6 +684,7 @@ internal fun performTemplateCreate(
             this.fadeDurationMs = input.fadeDurationMs
         }
         createTemplateRows(template, rows)
+        effect?.let { createTemplateEffect(template, it) }
         template.toDto(templateUsage(template.id.value))
     } ?: return TemplateCreateResult.Duplicate(
         "A template named '$name' already exists in this project",
@@ -562,8 +694,29 @@ internal fun performTemplateCreate(
     return TemplateCreateResult.Ok(created)
 }
 
-internal fun validateTemplateRows(rows: List<TemplateRowDto>): String? {
-    if (rows.isEmpty()) return "A template must hold at least one value"
+/**
+ * The template write boundary: a value template's rows *or* an effect template's one effect.
+ *
+ * Called with the **resulting** (post-write) contents, so create and update share the
+ * implementation — the [uk.me.cormack.lighting7.models.validateSpeedMasterSettings] pattern.
+ * [ownUuid] is the template being edited (null on create), needed for the self-reference rule.
+ *
+ * Returns the problem, or null when the contents are acceptable.
+ */
+internal fun validateTemplateContents(
+    rows: List<TemplateRowDto>,
+    effect: TemplateEffectDto?,
+    registry: FxRegistry,
+    ownUuid: java.util.UUID? = null,
+): String? {
+    // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
+    // which already holds rows plus deferred effects and has its own busk pool.
+    if (rows.isNotEmpty() && effect != null) {
+        return "A template holds a value or an effect, never both — for both together, record a look"
+    }
+    if (rows.isEmpty() && effect == null) return "A template must hold at least one value"
+    if (effect != null) return validateTemplateEffect(effect, registry, ownUuid)
+
     val families = LinkedHashSet<PropertyMaskGroup>()
     for (row in rows) {
         if (row.targetType != DEFERRED_TARGET_TYPE) {
@@ -591,6 +744,78 @@ internal fun validateTemplateRows(rows: List<TemplateRowDto>): String? {
     return null
 }
 
+/**
+ * Rules 2–5 for the effect arm of [validateTemplateContents].
+ *
+ * Split out rather than inlined because the row arm's four rules and these four answer different
+ * questions — the rows arm asks "is this a resolvable value", this asks "is this a runnable
+ * effect of a family a template can be banked under".
+ */
+private fun validateTemplateEffect(
+    effect: TemplateEffectDto,
+    registry: FxRegistry,
+    ownUuid: java.util.UUID?,
+): String? {
+    // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
+    // derived families use. `controls` has no tempo, `composite` spans families, and BEAM is
+    // refused by name rather than by the library happening to ship no beam effect — a
+    // script-registered one must not be able to mint a Beam effect template behind this rule.
+    val family = familyForEffectCategory(effect.category)
+        ?: return "A template cannot hold a '${effect.category}' effect — an effect template is " +
+            "banked by family, and that category has none. Effect templates are: " +
+            TEMPLATE_EFFECT_FAMILIES.joinToString { it.name }
+    if (family !in TEMPLATE_EFFECT_FAMILIES) {
+        return "A ${family.name} template cannot hold an effect — the effect library has no " +
+            "${family.name.lowercase()} category. A beam effect lives in a recorded look."
+    }
+
+    // Rule 3: the library is the authority on what an effect *is*; the stored `category` is a
+    // denormalisation for the family derivation and the list DTO, so it must agree or the two
+    // disagree silently — the template banks under one family and runs as another.
+    val registration = registry.getRegistration(effect.effectType)
+        ?: return "'${effect.effectType}' is not an effect this desk knows"
+    if (!registration.category.equals(effect.category, ignoreCase = true)) {
+        return "'${effect.effectType}' is a ${registration.category} effect, not ${effect.category}"
+    }
+
+    // Rule 4: the enum-valued fields, exactly as `validateLookEffects` checks them and for the
+    // reason its KDoc gives — an unrecognised `blendMode` reaches `varchar(50)` intact, reads back
+    // as itself and renders in the UI as the template's blend, while every spawn warns and plays
+    // `OVERRIDE`. `EffectSpecCoercion.Lenient` exists to *survive* that, not to be the only thing
+    // standing between an authoring route and a template that permanently misreports itself.
+    EffectSpecCoercion.Strict.problem(
+        blendMode = effect.blendMode,
+        distribution = effect.distribution,
+        elementMode = effect.elementMode,
+        elementFilter = effect.elementFilter,
+    )?.let { return it }
+
+    // Rule 5 (D12): a template naming itself would recurse in `createEffectWithTemplates`. The
+    // other direction — an effect template's colour parameter naming a *value* colour template —
+    // is allowed and is the useful case.
+    if (ownUuid != null) {
+        val selfRef = serializeTemplateColourRef(ownUuid)
+        val namesSelf = effect.parameters.values.any { value ->
+            value.split(",").any { it.trim().equals(selfRef, ignoreCase = true) }
+        }
+        if (namesSelf) return "A template's effect cannot reference the template itself"
+    }
+    return null
+}
+
+/**
+ * The families an effect template can be banked under (D4).
+ *
+ * Not all of [PropertyMaskGroup]: BEAM is absent because the effect library has no beam category,
+ * so there would be nothing to put in the column. Adding one is an FX-library change, not a
+ * template change.
+ */
+private val TEMPLATE_EFFECT_FAMILIES = setOf(
+    PropertyMaskGroup.INTENSITY,
+    PropertyMaskGroup.COLOUR,
+    PropertyMaskGroup.POSITION,
+)
+
 /** Must be called inside a transaction. */
 private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>) {
     for ((index, row) in rows.withIndex()) {
@@ -602,6 +827,39 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
             value = row.value
             sortOrder = if (row.sortOrder != 0) row.sortOrder else index
         }
+    }
+}
+
+/**
+ * Write a template's one effect (D2). Must be called inside a transaction, on a template with none.
+ *
+ * The enum-valued fields go in as given rather than being coerced here: the write boundary has
+ * already rejected an unrecognised blend / distribution / element mode through
+ * `EffectSpecCoercion.Strict`, exactly as `validateLookEffects` does, and spawn time coerces
+ * leniently — the same treatment a Look effect gets, so the two cannot disagree about what a
+ * stored effect means.
+ */
+private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDto) {
+    DaoTemplateEffect.new {
+        this.template = template
+        effectType = effect.effectType
+        category = effect.category
+        propertyName = effect.propertyName
+        beatDivision = effect.beatDivision
+        blendMode = effect.blendMode
+        distribution = effect.distribution
+        phaseOffset = effect.phaseOffset
+        elementMode = effect.elementMode
+        elementFilter = effect.elementFilter
+        stepTiming = effect.stepTiming
+        parameters = effect.parameters
+        // `speedMasterUuidOrNull`, not `UUID.fromString`: this is a client-supplied string, and
+        // the bare parse throws `IllegalArgumentException` out of the transaction and out of the
+        // handler — a 500 on a malformed body. The Look path (`createLookChildren`) already goes
+        // through the tolerant helper, and null here means master 1, which is the documented
+        // meaning of an absent master everywhere else.
+        speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
+        rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     }
 }
 
@@ -623,9 +881,9 @@ internal data class TemplateUsage(
  * How many **effect parameters** reference this template by uuid.
  *
  * Deliberately not folded into [TemplateUsage]: that is computed on every library read, and this is
- * a scan of two JSON columns rather than an indexed FK lookup. Delete is rare; listing is not.
+ * a scan of three JSON columns rather than an indexed FK lookup. Delete is rare; listing is not.
  *
- * The scan is over the whole show's ad-hoc and Look effects rather than a `LIKE` on the JSON text,
+ * The scan is over the whole show's ad-hoc, Look and template effects rather than a `LIKE` on the JSON text,
  * because the stored form is a serialised `Map<String, String>` and a substring match on it would
  * also hit a parameter whose *name* happened to contain the uuid. Effect counts are in the hundreds.
  *
@@ -642,16 +900,28 @@ internal fun templateFxReferenceCount(templateUuid: java.util.UUID): Int {
     }
     val adHoc = DaoCueAdHocEffect.all().count { it.parameters.holdsRef() }
     val look = DaoLookEffect.all().count { it.parameters.holdsRef() }
-    return adHoc + look
+    // The third carrier of effect parameters, since a template can hold an effect (D12): an effect
+    // template's colour parameter naming a *value* colour template is the allowed and useful
+    // direction, and without this arm that value template stays deletable out from under a running
+    // effect — the exact failure this guard exists to prevent.
+    val templateEffect = DaoTemplateEffect.all().count { it.parameters.holdsRef() }
+    return adHoc + look + templateEffect
 }
 
-/** Phrase both kinds of usage for the 409 body. */
-private fun describeTemplateUse(usage: TemplateUsage, fxReferenceCount: Int): String {
+/** Phrase all three kinds of usage for the 409 body. */
+private fun describeTemplateUse(
+    usage: TemplateUsage,
+    fxReferenceCount: Int,
+    runningCount: Int,
+): String {
     val parts = buildList {
         if (usage.layerCount > 0) add(usage.describe())
         if (fxReferenceCount > 0) {
             add(if (fxReferenceCount == 1) "1 effect parameter" else "$fxReferenceCount effect parameters")
         }
+        // Phrased as a state rather than a count: an operator does not think of the programmer as
+        // holding "2 layers", they think of the template as being up right now.
+        if (runningCount > 0) add("the programmer now")
     }
     return if (parts.isEmpty()) "nothing" else parts.joinToString(" and ")
 }
@@ -688,9 +958,60 @@ internal fun templateUsageFor(templateIds: Collection<Int>): Map<Int, TemplateUs
 
 // ─── Mapping ────────────────────────────────────────────────────────────
 
+/** One stored template row on the wire. Must be called inside a transaction. */
+internal fun DaoTemplateRow.toDto() = TemplateRowDto(
+    targetType = targetType,
+    targetKey = targetKey,
+    propertyName = propertyName,
+    value = value,
+    sortOrder = sortOrder,
+)
+
+/** One stored template effect on the wire. Must be called inside a transaction. */
+internal fun DaoTemplateEffect.toDto() = TemplateEffectDto(
+    effectType = effectType,
+    category = category,
+    propertyName = propertyName,
+    beatDivision = beatDivision,
+    blendMode = blendMode,
+    distribution = distribution,
+    phaseOffset = phaseOffset,
+    elementMode = elementMode,
+    elementFilter = elementFilter,
+    stepTiming = stepTiming,
+    parameters = parameters,
+    speedMasterUuid = speedMasterUuid?.toString(),
+    rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
+)
+
+/**
+ * The one family this template is in — the **single** derivation, from rows or from the effect's
+ * library category (D4).
+ *
+ * One function because there are two readers that must never disagree: [toDto], which is what the
+ * library banks the template under, and the toggle route, which masks the programmer layer it adds
+ * to that same family. They were two copies of the row expression before an effect template
+ * existed, at which point the toggle route's copy would have derived null and added an unmasked
+ * layer.
+ *
+ * Must be called inside a transaction.
+ */
+internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
+    // `sortedBy` rather than Exposed's `orderBy`: this is called from `toDto` *after* the rows have
+    // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
+    // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
+    // this function safe to call whatever the caller has already read.
+    rows.sortedBy { it.sortOrder }
+        .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
+        ?: effect?.let { familyForEffectCategory(it.category) }
+
 /** Must be called inside a transaction. */
 internal fun DaoTemplate.toDto(usage: TemplateUsage? = null): TemplateDto {
-    val rowList = rows.orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC).toList()
+    // `sortedBy`, not Exposed's `orderBy`, for the reason [familyOf] gives: the PUT route reads
+    // the rows before it validates, so by the time this runs the collection is loaded and
+    // re-ordering it throws.
+    val rowList = rows.sortedBy { it.sortOrder }
+    val storedEffect = effect
     val resolvedUsage = usage ?: templateUsage(id.value)
     return TemplateDto(
         id = id.value,
@@ -699,20 +1020,22 @@ internal fun DaoTemplate.toDto(usage: TemplateUsage? = null): TemplateDto {
         notes = notes,
         sortOrder = sortOrder,
         fadeDurationMs = fadeDurationMs,
-        family = rowList.firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }?.name,
-        isGeneric = rowList.isNotEmpty() && rowList.all { it.isDeferred },
-        rows = rowList.map {
-            TemplateRowDto(
-                targetType = it.targetType,
-                targetKey = it.targetKey,
-                propertyName = it.propertyName,
-                value = it.value,
-                sortOrder = it.sortOrder,
-            )
-        },
+        family = familyOf()?.name,
+        // An effect template is generic by construction (D3) — it names no target at all, so the
+        // "every row is deferred" test has nothing to run over and would answer false.
+        isGeneric = if (storedEffect != null) true else rowList.isNotEmpty() && rowList.all { it.isDeferred },
+        kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
+        rows = rowList.map { it.toDto() },
+        effect = storedEffect?.toDto(),
         layerCount = resolvedUsage.layerCount,
     )
 }
+
+/** [TemplateDto.kind] for a template holding rows. */
+internal const val TEMPLATE_KIND_VALUE = "value"
+
+/** [TemplateDto.kind] for a template holding one effect. */
+internal const val TEMPLATE_KIND_EFFECT = "effect"
 
 // ─── Resolve ────────────────────────────────────────────────────────────
 
