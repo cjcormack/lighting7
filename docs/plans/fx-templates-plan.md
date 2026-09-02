@@ -1,8 +1,8 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: IN PROGRESS — sessions 1–2 done (`bba3efc`, `a35250e`).** The backend model,
-> write boundary, cook, sync wiring and both apply gestures have landed; the two frontend sessions
-> (3–4) have not. §11 lists where the landed backend differs from §2–§5, for the sessions that
+> **Document status: IN PROGRESS — sessions 1–3 done (`bba3efc`, `a35250e`, `2c5c82f` +
+> `900719e`).** The backend model, write boundary, cook, sync wiring and both apply gestures have
+> landed, as have the library and the editor; session 4 has not. §11 lists where the landed backend differs from §2–§5, for the sessions that
 > read it. The visual design is
 > settled and checked in beside this plan at [`fx-templates-design/`](fx-templates-design/INDEX.md)
 > — six static artboards: the model, the New template sheet, the Templates view, the busk view,
@@ -247,7 +247,7 @@ Gate: `./gradlew test` green; `SyncCoverageTest` is what proves step 2 was not s
    the programmer, Record writes them as ad-hoc effects, and a later template edit does not move
    them; apply on a value template is byte-for-byte what it was.
 
-### Session 3 — library and editor (lighting-react)
+### ~~Session 3 — library and editor (lighting-react)~~ — done, `2c5c82f` (lighting-react) + `900719e` (lighting7)
 
 1. `templatesApi.ts` types: `effect`, `kind`, `runningCount`.
 2. `TemplateEditor.tsx`: the Holds segment; the effect branch reuses `EffectParameterForm`'s
@@ -274,10 +274,11 @@ Gate: `./gradlew test` green; `SyncCoverageTest` is what proves step 2 was not s
    it up for free.
 3. `TemplateStrip.tsx`: effect chips after a hairline; click calls the apply route's effect arm,
    ⌥click toggles as now; tooltip copy.
-4. `LayerRowNotices.tsx` copy for an effect template; `ProgrammerAddEffect.tsx` tooltip reworded;
-   `ProgrammerFxList.tsx` home badge from the D7 source name; `LayerPicker.tsx` hint; the delete
-   dialog's `runningCount` sentence; `Looks.tsx` cross-link; `CommandPalette` keywords gain
-   `effect`, `chase`.
+4. `LayerRowNotices.tsx` copy for an effect template; ~~`ProgrammerAddEffect.tsx` tooltip
+   reworded~~ (done in 3 — the old wording was wrong on screen the moment 3 landed);
+   `ProgrammerFxList.tsx` home badge from the D7 source name; `LayerPicker.tsx` hint; ~~the delete
+   dialog's `runningCount` sentence~~ (done in 3); `Looks.tsx` cross-link; `CommandPalette` keywords
+   gain `effect`, `chase`.
 5. Grid read in *One layer* scope on an effect-template layer: live value ringed, wave and
    division in the cell. This is the one piece of new grid rendering and the most likely to slip
    to a follow-up if it fights `ProgrammerGrid`'s cell model — if it does, ship the notice and the
@@ -378,10 +379,11 @@ Session 1 only. Kept because sessions 2–4 read this document as their brief; t
 | --- | --- | --- |
 | D7 | `FxInstance.lookId` becomes a polymorphic `sourceRef` | `FxInstance.source: LayerSource?`. **`EffectDto` keeps `lookId` meaning a Look** and gains `templateId` + `sourceName` — read those |
 | D13 | No `formatVersion` bump | v8, `minReader` 5, in `ProjectImporter`'s gate constants too. No FE action |
-| D4 | Beam has no category, so the sheet disables Effect under Beam | `composite` and `controls` are refused as well; the sheet must disable on all three |
+| D4 | Beam has no category, so the sheet disables Effect under Beam | `composite` and `controls` are refused as well. The **sheet** still only disables Beam — it is family-driven, and those two are not families — but any surface reaching a family *from a category* must handle all three, which is what `familyForEffectCategory` returning null is for |
 | §3.2 | Validate the resulting (post-write) contents | Only what the request sends, plus a separate Holds check — `TemplateInput.effect` needs **no** `effectPresent` flag |
 | §3.3 | `TemplateSummary` / `TemplateDto` gain `effect` + `kind` | Server-side there is only `TemplateDto`; it gains `effect`, `kind` and no `runningCount` — that is on the delete guard's 409 body |
 | §6 | The importer must skip an effect template from a newer writer | Dropped; the v8 gate makes it unreachable |
+| §3.3 | (unstated) | `TemplateEffectDto` gained **`timingSource`** in session 3, resolved from the registry on read and ignored on write. Without it `beatDivision` has no unit — beats for `BEAT`, seconds for `WALL_CLOCK` — and three client surfaces would each have had to fetch the whole FX library to render a speed. Not stored: an effect's timing source belongs to the *effect type*, so a column would be a second copy a re-registered script could contradict |
 
 Session 2 rows:
 
