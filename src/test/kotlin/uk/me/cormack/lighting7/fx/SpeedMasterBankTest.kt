@@ -483,6 +483,83 @@ class SpeedMasterBankTest {
         )
     }
 
+    /**
+     * Re-pointing a *live* follower at a smaller ratio must snap its counter, not freeze it.
+     *
+     * A follower driven at 2× carries twice its leader's tick count; ½ maps it to a quarter of
+     * where it stands, and [MasterClock.driveTo] is monotonic — so without the re-anchor the
+     * clock refuses every drive until the leader's counter quadruples, which on a desk that has
+     * been up an hour is another hour. Nothing about that failure is loud: the tempo readout
+     * still reads the derived bpm, so the rail looks right while the beat lamp never lights and
+     * every effect on the master stands still. Ratios *above* the old one hide it — they map
+     * ahead of the counter and drive on the first tick — which is why 2× looked fine while ½,
+     * ⅓ and ¼ did not.
+     */
+    @Test
+    fun `lowering a live follower's ratio snaps it instead of freezing it`() = runBlocking {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 2 to 1)))
+        bank.start(this)
+        delay(400)
+
+        // What the busk rail's ratio chips do: a PUT, then a reload of the same uuid.
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 2)))
+        delay(50)
+        val first = tickOf(bank, u2)
+        delay(300)
+        val second = tickOf(bank, u2)
+        bank.stop()
+
+        assertTrue(second > first, "the follower must keep ticking, got $first then $second")
+    }
+
+    /**
+     * The other half of the snap rule: a reload that does not touch the mapping must not
+     * re-anchor. Renames, usage retags and stored-tempo edits all arrive as a reload of the
+     * same uuid, and snapping on those is not the no-op it looks like — the counter lands back
+     * on the same mapped value (it is a pure function of the leader's tick), but the zeroed
+     * counter makes [MasterClock.driveTo] read "no previous beat" and fire [onBeat] again for
+     * the beat already in progress. The visible cost is a beat lamp that double-flashes every
+     * time anything about the master is edited, so the assertion is on the beat *sequence*
+     * rather than on the counter, which cannot see this at all.
+     */
+    @Test
+    fun `a reload that leaves the ratio alone does not re-fire the follower's beat`() = runBlocking {
+        val bank = SpeedMasterBank()
+        val u1 = UUID.randomUUID()
+        val u2 = UUID.randomUUID()
+        bank.load(listOf(snapshot(u1, 1, bpm = 300.0), snapshot(u2, 2, follow = 1 to 2)))
+
+        val beats = ConcurrentLinkedQueue<SpeedMasterBank.Beat>()
+        val collector = launch(Dispatchers.Default) { bank.beats.collect { beats.add(it) } }
+        delay(50)
+        bank.start(this)
+        // 300 BPM halves to a 400 ms follower beat, so 500 ms lands the reload squarely
+        // *inside* beat 1 — a reload that coincided with a boundary would re-fire the beat it
+        // was already emitting and hide the difference.
+        delay(500)
+
+        // A rename: same uuid, same ratio, same leader.
+        bank.load(
+            listOf(
+                snapshot(u1, 1, bpm = 300.0),
+                snapshot(u2, 2, name = "Renamed", follow = 1 to 2),
+            )
+        )
+        delay(500)
+        bank.stop()
+        collector.cancel()
+
+        val numbers = beats.filter { it.uuid == u2 }.map { it.beatNumber }
+        assertTrue(numbers.size > 1, "the follower must have beaten either side of the reload, got ${'$'}numbers")
+        assertEquals(
+            numbers.distinct(), numbers,
+            "a rename must not re-fire a beat the follower has already emitted",
+        )
+    }
+
     @Test
     fun `a follower's beats land on its leader's, not between them`() {
         val bank = SpeedMasterBank()

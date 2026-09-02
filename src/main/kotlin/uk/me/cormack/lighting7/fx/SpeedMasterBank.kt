@@ -400,6 +400,10 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
 
             val ordered = rows.sortedBy { it.index }
             val newSlots = ArrayList<Entry>(ordered.size.coerceAtLeast(1))
+            // Clocks whose *mapping* changed — a new ratio or a new leader — which is the one
+            // reload that must re-anchor an already-driven counter rather than leave it where
+            // it stands. See [MasterClock.adoptDriven]'s `snap`.
+            val snapping = HashSet<MasterClock>()
             for (row in ordered) {
                 val existing = previousByUuid[row.uuid]
                     ?: if (row.index == 1) previous[0] else null
@@ -414,7 +418,13 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     // ratio edit arrives as a reload of the same uuid, and stale values here
                     // would silently ignore it.
                     entry.usage = row.usage
+                    // Read before the write: on the reuse branch `entry` *is* `existing`, so
+                    // the old spec is gone the moment the new one lands.
+                    val previousFollow = existing.follow
                     entry.follow = followOf(row)
+                    if (entry.follow != null && entry.follow != previousFollow) {
+                        snapping.add(entry.clock)
+                    }
                     if (firstLoad && entry.clock === previous[0].clock) {
                         entry.clock.setBpm(row.bpm)
                         entry.source = row.source
@@ -454,7 +464,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                 driveOrder = driveOrder,
             )
 
-            val clamped = applyClockRolesLocked(newSlots)
+            val clamped = applyClockRolesLocked(newSlots, snapping)
 
             // D2's "on load" half: a follower adopts `leader.bpm × ratio` immediately,
             // overriding whatever stored bpm its row carried — a boot or import with a
@@ -548,7 +558,9 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * An unlink resumes the timer **without resetting the tick counter**, so the master picks
      * up its own timing from exactly where its leader left it — the operator stopped following,
      * they didn't ask every effect on that master to jump. (Linking *does* snap, unavoidably:
-     * that is what phase alignment means.) [MasterClock.start] no-ops on an already-running
+     * that is what phase alignment means — and so does a *re-*link at a new ratio or onto a new
+     * leader, which is what [snapping] carries; a follower driven at one ratio holds a counter
+     * that means nothing under the next one.) [MasterClock.start] no-ops on an already-running
      * clock, so this is safe to run for the whole bank on every reload.
      *
      * Returns the entries whose tempo had to be pulled back into [MasterClock.MIN_BPM]..
@@ -557,12 +569,15 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
      * so an unlinked 2×-of-200 master would otherwise hand its own timer 400 BPM — a rate the
      * write boundary refuses to accept and the row would go on storing.
      */
-    private fun applyClockRolesLocked(slots: List<Entry>): List<Entry> {
+    private fun applyClockRolesLocked(
+        slots: List<Entry>,
+        snapping: Set<MasterClock> = emptySet(),
+    ): List<Entry> {
         val scope = startedScope
         val clamped = mutableListOf<Entry>()
         slots.forEach { entry ->
             if (entry.follow != null) {
-                entry.clock.adoptDriven()
+                entry.clock.adoptDriven(snap = entry.clock in snapping)
             } else {
                 if (entry.clock.driven) {
                     val before = entry.clock.bpm.value

@@ -123,10 +123,13 @@ data class SpeedMasterErrorOutMessage(
 /**
  * One master crossed a beat boundary.
  *
- * Throttled to one frame per [BEAT_FRAME_INTERVAL] beats (plus `speedMasters.requestBeat`):
- * the client runs a local timer off [bpm] between frames and only needs the server to correct
- * its drift. Every master rides this stream, master 1 included — under its real uuid once the
- * bank has loaded, so a client keys beats exactly as it keys `speedMasters.state`.
+ * Throttled to one frame per [BEAT_FRAME_INTERVAL] beats, plus one on `speedMasters.requestBeat`
+ * and one on the beat after any tempo move: the client runs a local timer off [bpm] between
+ * frames and only needs the server to correct its drift — but a retune makes that timer wrong
+ * about the *rate*, not merely drifted, so it cannot wait out the throttle.
+ *
+ * Every master rides this stream, master 1 included — under its real uuid once the bank has
+ * loaded, so a client keys beats exactly as it keys `speedMasters.state`.
  */
 @Serializable
 @SerialName("speedMasters.beat")
@@ -230,6 +233,20 @@ fun setupSpeedMasterSubscriptions(scope: SocketScope) {
     scope.sendSnapshot { send(buildSpeedMastersState(bank)) }
 
     scope.subscribe(bank.changes) { change ->
+        // A tempo move invalidates the client's local beat timer: it is still free-running at
+        // the old rate, and the throttle below would leave it there for up to
+        // BEAT_FRAME_INTERVAL beats (~8s at 120 BPM, ~48s at the 20 BPM floor) — the numbers
+        // snap to the new tempo while the dot visibly does not. Arm this master's next beat
+        // frame, the same one-shot the client asks for by hand on `speedMasters.requestBeat`,
+        // so phase re-locks within one beat. A TAP burst re-arms an already-armed master,
+        // which the set collapses; the cost is at most one extra frame per beat while tapping.
+        //
+        // A null uuid is resolved the same way `speedMasters.requestBeat` resolves one, and for
+        // the same reason: null tags only the synthetic pre-load master 1, so a write that lands
+        // in the boot window would otherwise park a `null` that no post-load beat can ever match
+        // — the request stays armed for the life of the connection and the retune it was meant
+        // to answer waits out the throttle anyway.
+        scope.pendingBeatRequests.add(change.uuid ?: bank.master1Uuid())
         scope.send(
             SpeedMasterChangedOutMessage(
                 masterUuid = change.uuid?.toString(),
@@ -244,10 +261,15 @@ fun setupSpeedMasterSubscriptions(scope: SocketScope) {
     // One subscription for the whole bank, not one per master: `bank.beats` is already
     // tagged at emit time, so a master added or removed by a reload needs no re-binding
     // here. `remove` is the consume half of the one-shot request — it returns whether the
-    // request was pending AND clears it, so the throttle resumes on the next beat.
+    // request was pending AND clears it, so the throttle resumes on the next beat. It runs
+    // FIRST and unconditionally for exactly that reason: behind the interval test it would be
+    // short-circuited by the one beat in sixteen that is *also* a throttle beat, leaving the
+    // request armed by the very frame that satisfied it and releasing a redundant second frame
+    // on the next beat — a one-in-sixteen event now that every tempo move arms a request.
     scope.subscribe(
         bank.beats.filter { beat ->
-            beat.beatNumber % BEAT_FRAME_INTERVAL == 0L || scope.pendingBeatRequests.remove(beat.uuid)
+            val requested = scope.pendingBeatRequests.remove(beat.uuid)
+            requested || beat.beatNumber % BEAT_FRAME_INTERVAL == 0L
         }
     ) { beat ->
         scope.send(

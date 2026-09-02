@@ -242,21 +242,31 @@ class MasterClock {
      *
      * Idempotent, so [SpeedMasterBank.load] can call it for every follower on every reload.
      *
-     * The counter is zeroed **on the transition only**, and that is load-bearing rather than
-     * tidy-up: a clock that has been free-running carries a counter of its own, and the tick
-     * its new leader maps to is very often *below* it — a ½ follower's target is half the
+     * The counter is zeroed on the manual→driven transition, and that is load-bearing rather
+     * than tidy-up: a clock that has been free-running carries a counter of its own, and the
+     * tick its new leader maps to is very often *below* it — a ½ follower's target is half the
      * leader's count, so two clocks started together give a mapped tick roughly half the
      * follower's. [driveTo] is monotonic, so without this the follower would refuse every
      * drive until its leader's counter overtook it: minutes on a desk that has been up
      * minutes, hours on one that has been up hours, with the master silently frozen the whole
      * time. Zeroing makes the leader's next tick assign the mapped value outright, which is
-     * the "linking snaps once" the feature is asking for. An already-driven clock is left
-     * alone so a reload stays a no-op.
+     * the "linking snaps once" the feature is asking for.
+     *
+     * [snap] extends that to an *already-driven* clock, and the caller owes it exactly when
+     * the mapping itself changed — a new ratio or a new leader ([SpeedMasterBank.load]
+     * decides). The same arithmetic bites: a follower driven at 2× carries twice its leader's
+     * count, so re-pointing it at ½ maps it to a quarter of where it stands and it freezes
+     * until the leader's counter quadruples. Without [snap] the freeze is silent and *looks*
+     * like the ratio simply not taking — the tempo readout is right (that comes from the
+     * derived bpm, not the clock), while the beat lamp never lights again and every effect on
+     * the master stops dead. Ordinary reloads — a rename, a usage retag, a stored-tempo edit —
+     * pass false and stay the no-op they were, which is what keeps effect phase continuous
+     * across unrelated CRUD.
      */
-    fun adoptDriven() {
+    fun adoptDriven(snap: Boolean = false) {
         clockJob?.cancel()
         clockJob = null
-        if (!driven) totalTicks.set(0)
+        if (!driven || snap) totalTicks.set(0)
         driven = true
         _isRunning.value = true
     }

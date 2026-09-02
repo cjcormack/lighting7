@@ -109,8 +109,21 @@ Two nullable per-master settings, added for the busk view (see
   two clocks started together give a mapped tick roughly half the follower's), and `driveTo` is
   monotonic. Without the reset the follower would refuse every drive until its leader overtook
   it — frozen for as long as the desk had been up, silently. Zeroing lets the leader's next tick
-  assign the mapped value outright; an already-driven clock is left alone so a reload stays a
-  no-op.
+  assign the mapped value outright.
+
+  **Changing the ratio (or the leader) on a *live* follower snaps it too** — `load` compares the
+  row's follow spec against the one the entry held and passes `adoptDriven(snap = true)` when it
+  moved. The same arithmetic bites a second time otherwise: a follower driven at 2× carries twice
+  its leader's count, so re-pointing it at ½ maps it to a quarter of where it stands and the
+  monotonic guard freezes it until the leader's counter quadruples. That failure is silent in
+  the worst way — the tempo readout keeps showing the derived bpm, because that comes from the
+  *bpm*, not the clock, so the rail looks correct while the beat lamp never lights again and
+  every effect on the master stands still. Ratios above the previous one hide it (they map ahead
+  of the counter and drive on the first tick), which is why 2× behaved and ½, ⅓ and ¼ did not.
+  A reload that leaves the mapping alone — a rename, a usage retag, a stored-tempo edit — must
+  *not* snap: the counter would land on the same mapped value, but a zeroed counter reads as "no
+  previous beat" and re-fires the beat already in progress, double-flashing every beat lamp on
+  the desk for a text edit.
 
   Chains are allowed — M3 → M2 → M1 — and nested floors compose (`floor(floor(t/2)/2) ==
   floor(t/4)`), so a grandchild is aligned to the root, not merely to its parent.
@@ -1215,6 +1228,10 @@ master's clock. It is sent:
 
 - Every 16 beats (~8 seconds at 120 BPM) for periodic drift correction
 - On-demand when the client sends `speedMasters.requestBeat` for that master
+- On the first beat after that master's tempo moves — the throttle assumes the local timer is
+  merely drifting, and a retune makes it wrong about the rate instead. Without this the dot
+  goes on flashing at the old tempo for up to 16 beats while the BPM readout beside it has
+  already changed
 
 Between frames the client free-runs a local timer off the last `bpm` it was told, and each
 frame re-aligns it. That interpolation is load-bearing, and was not always exercised: the

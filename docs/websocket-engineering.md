@@ -405,14 +405,16 @@ bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `Effect
 |---|---|---|
 | `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, usage?, followNum?, followDen?}]` | Connect snapshot, on request, and as the reply to every write |
 | `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate — a follower's derived moves ride this like any other |
-| `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat` |
+| `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat`, plus the first beat after that master's tempo moves |
 | `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`) or a dropped one (`SPEED_MASTER_UNKNOWN`); always followed by the state reply |
 
 `source` is `MANUAL` or `TAP`. `uuid`/`masterUuid` is null only for the synthetic pre-load master 1.
 `usage` and the `followNum`/`followDen` ratio are the routing/follow settings from the busk-view
 work — all additive with null defaults, so a pre-follow client decodes today's bank untouched.
 Beats are throttled deliberately: the client runs a local timer off `bpm` between frames and only
-needs the server to correct its drift.
+needs the server to correct its drift. A tempo move is the exception — it makes that timer wrong
+about the *rate* rather than merely drifted — so `speedMasters.changed` arms the same one-shot
+`requestBeat` uses and the next beat frame goes out immediately.
 
 ### Machine — `MachineSocket.kt`
 

@@ -32,15 +32,20 @@ fun ApplicationTestBuilder.createWsClient(): HttpClient = createClient {
  *
  * Frames from different families are ordered only within one `setupXxx`, so never assert on a
  * position in the burst — wait for the type you want.
+ *
+ * [where] narrows further, for a family that fans several subjects onto one message type — the
+ * per-master `speedMasters.beat` stream, say, where a bare type match hands back whichever
+ * master beat first and invites a comparison between two unrelated counters.
  */
 suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitOfType(
     maxFrames: Int = 100,
+    where: (T) -> Boolean = { true },
 ): T {
     repeat(maxFrames) {
         val msg = receiveDeserialized<OutMessage>()
-        if (msg is T) return msg
+        if (msg is T && where(msg)) return msg
     }
-    error("Never saw ${T::class.simpleName} after $maxFrames frames")
+    error("Never saw a matching ${T::class.simpleName} after $maxFrames frames")
 }
 
 /**
