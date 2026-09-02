@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.TemplateEffectDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -318,6 +319,229 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertEquals(0, body.written)
         assertEquals(1, body.skipped.size)
         assertEquals("haze-1", body.skipped.single().fixtureKey)
+    }
+
+    // ─── Apply — the effect arm ─────────────────────────────────────────
+
+    /**
+     * The click gesture on an effect template, and the decision that shapes it: the copy is
+     * **detached**.
+     *
+     * It carries no [uk.me.cormack.lighting7.models.LayerSource], which is why `templateId` is null
+     * here and `breathe.id` in the toggle test above. That asymmetry is the feature — click is the
+     * effect twin of the value arm's literals, and the value arm leaves no template attribution in
+     * the programmer either. `Record files a clicked copy as an ad-hoc effect` is the half of it
+     * that would actually bite an operator.
+     */
+    @Test
+    fun `click-apply on an effect template mints detached band copies`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        val applied = client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ApplyTemplateRequest(
+                    targets = listOf(
+                        TemplateTargetDto("fixture", "hex-1"),
+                        TemplateTargetDto("fixture", "hex-2"),
+                    )
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        val body = applied.body<ApplyTemplateResponse>()
+        assertEquals(2, body.effectIds.size, "one copy per target")
+        assertTrue(body.skipped.isEmpty(), "both hexes take colour")
+        // An effect writes no programmer values, so the value arm's counter stays at zero rather
+        // than being repurposed into an effect count.
+        assertEquals(0, body.written)
+
+        val running = state.show.fxEngine.getActiveEffects()
+        assertEquals(2, running.size)
+        assertEquals(body.effectIds.sorted(), running.map { it.id }.sorted())
+        assertTrue(
+            running.all { FxEngine.isProgrammerFxPriority(it.priority) },
+            "a clicked copy sits in the programmer's band, as `+ Effect` does",
+        )
+        assertTrue(running.all { it.source == null }, "the copy names no template")
+        assertTrue(running.all { it.templateId == null }, "so `FX running` shows it as band-owned")
+        // Not a layer, which is the other half of "detached": nothing tracks the template, so
+        // nothing recooks or retracts the copy.
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "click adds no layer")
+        assertTrue(running.all { it.programmerLayerId == null })
+    }
+
+    /**
+     * Fan-out follows `CueComposer.effectsForLayer`, which spawns over a layer's targets **as
+     * authored** — so a group stays one group-targeted effect with its distribution intact rather
+     * than becoming one instance per member. Clicking and ⌥clicking the same selection then put the
+     * same thing on stage, which is the whole promise of the two gestures being a pair.
+     */
+    @Test
+    fun `click-apply keeps a group target's shape`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        val body = client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("group", "front-wash"))))
+        }.body<ApplyTemplateResponse>()
+
+        assertEquals(1, body.effectIds.size, "a group is one effect, not one per member")
+        val running = state.show.fxEngine.getActiveEffects().single()
+        assertTrue(running.isGroupEffect)
+        assertEquals("front-wash", running.target.targetKey)
+    }
+
+    /**
+     * The reason the copy carries no source, pinned on both Record forks — they key on different
+     * fields and would otherwise disagree about the same instance.
+     *
+     * `fxInstancesToCueChildren` (programmer Record) skips an effect with a `programmerLayerId`;
+     * `captureCurrentState` (the stage snapshot behind `/cues/current-state`) forks on `source`.
+     * Stamp the template on a clicked copy and the second one rebuilds it as a *tracking* template
+     * layer — the exact opposite of "yours until recorded". The tracked case is the twin test
+     * `capture files an effect template's effect as a template layer`.
+     */
+    @Test
+    fun `Record files a clicked copy as an ad-hoc effect, not a template layer`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+        client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+        }
+
+        val captured = client
+            .get("/api/rest/projects/$projectId/cues/current-state")
+            .body<CueCurrentStateResponse>()
+        assertTrue(captured.layers.isEmpty(), "a detached copy is nobody's layer")
+        val snapshotChild = captured.adHocEffects.single()
+        assertEquals("hex-1", snapshotChild.targetKey)
+        assertEquals("ColourPulse", snapshotChild.effectType)
+
+        val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
+        val recorded: ProgrammerRecordResponse = client.post("/api/rest/programmer/record") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
+                )
+            )
+        }.body()
+        assertTrue(recorded.cue.layers.isEmpty(), "and nobody's layer on the programmer path either")
+        assertEquals("ColourPulse", recorded.cue.adHocEffects.single().effectType)
+    }
+
+    /**
+     * The copy carries no `programmerLayerEffectKey`, so `ProgrammerLayerStack.syncEffects` — which
+     * classifies only the instances in `FxEngine.programmerLayerEffects()` — cannot see it. Nothing
+     * a later edit does reaches it.
+     *
+     * A *layer* gets the same answer for a different reason (`recookIfReferences` cooks
+     * `withEffects = false`; see `FU-TMPL-FX-EDIT-NO-RETIME`), and there it is a limitation. Here it
+     * is the contract: a clicked copy is a literal, and retuning the template must not move it.
+     */
+    @Test
+    fun `a template edit does not move a clicked copy`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+        client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+        }
+        assertEquals(0.5, state.show.fxEngine.getActiveEffects().single().timing.beatDivision)
+
+        val edited = client.put("${base()}/${breathe.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    effect = colourEffect().copy(beatDivision = 2.0, effectType = "RainbowCycle"),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.OK, edited.status, edited.bodyAsText())
+
+        val still = state.show.fxEngine.getActiveEffects().single()
+        assertEquals(0.5, still.timing.beatDivision, "the copy kept its own timing")
+        assertEquals("ColourPulse", still.registrationId, "and its own effect")
+    }
+
+    /**
+     * `FxTargetFactory` never fails by design — `"rgbColour"` resolves to a `ColourTarget` whether
+     * or not the head has colour — so without an explicit capability check the effect would run
+     * into nothing and the click would report success. The value arm gets the same honesty from
+     * [uk.me.cormack.lighting7.fx.TemplateResolver]; this is its effect twin, and the counterpart
+     * to `applying to a head the template cannot reach` above.
+     */
+    @Test
+    fun `click-apply reports a head that cannot take the effect`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "hazer", "haze-1", 1)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+
+        val body = client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "haze-1"))))
+        }.body<ApplyTemplateResponse>()
+
+        assertTrue(body.effectIds.isEmpty(), "nothing was spawned")
+        assertEquals("haze-1", body.skipped.single().fixtureKey)
+        assertTrue(state.show.fxEngine.getActiveEffects().isEmpty())
+    }
+
+    /** Clear sweeps the band, and a clicked copy is in it — the operator's way to take one off. */
+    @Test
+    fun `Clear releases a clicked copy`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val breathe = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-breathe", effect = colourEffect()))
+        }.body<TemplateDto>()
+        client.post("${base()}/${breathe.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+        }
+        assertEquals(1, state.show.fxEngine.getActiveEffects().size)
+
+        assertEquals(1, clearProgrammerCompletely(state).effectsCleared)
+        assertTrue(state.show.fxEngine.getActiveEffects().isEmpty())
     }
 
     // ─── Toggle ─────────────────────────────────────────────────────────

@@ -9,12 +9,8 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.group.*
-import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.group.clearFx
@@ -300,47 +296,13 @@ private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyLi
 /**
  * Check whether a group supports a given property, either directly on the
  * fixtures or via multi-element fixture elements.
+ *
+ * The dispatch itself is [fixturesSupportProperty], shared with the effect arm of a template apply
+ * — a head is a group of one, and two copies of the trait dispatch could disagree about the same
+ * fixture.
  */
-private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String): Boolean {
-    val allFixtures = group.fixtures
-    if (allFixtures.isEmpty()) return false
-
-    val normalised = propertyName.lowercase()
-
-    // Check direct support first
-    val directSupport = when (normalised) {
-        "dimmer" -> allFixtures.all { it is WithDimmer }
-        "colour", "color", "rgbcolour" -> allFixtures.all { it is WithColour }
-        "position" -> allFixtures.all { it is WithPosition }
-        "uv" -> allFixtures.all { it is WithUv }
-        else -> {
-            // Check for slider or setting property by name
-            allFixtures.all { fixture ->
-                val prop = (fixture as? Fixture)?.fixtureProperty(propertyName)
-                val value = prop?.classProperty?.call(fixture)
-                value is Slider || value is DmxFixtureSetting<*>
-            }
-        }
-    }
-    if (directSupport) return true
-
-    // Check multi-element fixtures — all must be MultiElementFixture with
-    // elements that have the property
-    val multiElementFixtures = allFixtures.filterIsInstance<MultiElementFixture<*>>()
-    if (multiElementFixtures.size != allFixtures.size) return false
-    if (multiElementFixtures.isEmpty()) return false
-
-    return multiElementFixtures.all { mef ->
-        val firstElement = mef.elements.firstOrNull() ?: return@all false
-        when (normalised) {
-            "dimmer" -> firstElement is WithDimmer
-            "colour", "color", "rgbcolour" -> firstElement is WithColour
-            "position" -> firstElement is WithPosition
-            "uv" -> firstElement is WithUv
-            else -> false
-        }
-    }
-}
+private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String): Boolean =
+    fixturesSupportProperty(group.fixtures, propertyName)
 
 private fun applyGroupEffect(
     state: State,

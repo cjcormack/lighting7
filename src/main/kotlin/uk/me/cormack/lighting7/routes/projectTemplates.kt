@@ -519,10 +519,22 @@ internal data class ApplyTemplateRequest(
 
 @Serializable
 internal data class ApplyTemplateResponse(
-    /** Programmer entries written. */
+    /**
+     * Programmer entries written. Always 0 for an **effect** template, which writes no values —
+     * its count is [effectIds]`.size`.
+     */
     val written: Int,
     /** Heads the template could not reach, with the reason — the same notes the panel shows. */
     val skipped: List<TemplateSkipDto> = emptyList(),
+    /**
+     * The programmer-band effects a click on an **effect** template minted, one per target it
+     * named; empty for a value template.
+     *
+     * Ids rather than a count, because the caller has to be able to take *these* copies off again
+     * without sweeping the whole band — the copies carry no template identity to find them by, by
+     * design (see `applyEffectTemplateToProgrammer`).
+     */
+    val effectIds: List<Long> = emptyList(),
 )
 
 @Serializable

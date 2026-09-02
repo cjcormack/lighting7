@@ -1,8 +1,9 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: IN PROGRESS — session 1 done (`bba3efc`).** The backend model, write
-> boundary, cook and sync wiring have landed; sessions 2–4 have not. §11 lists where the landed
-> backend differs from §2–§5, for the sessions that read it. The visual design is
+> **Document status: IN PROGRESS — sessions 1–2 done (`bba3efc`, `PENDING`).** The backend model,
+> write boundary, cook, sync wiring and both apply gestures have landed; the two frontend sessions
+> (3–4) have not. §11 lists where the landed backend differs from §2–§5, for the sessions that
+> read it. The visual design is
 > settled and checked in beside this plan at [`fx-templates-design/`](fx-templates-design/INDEX.md)
 > — six static artboards: the model, the New template sheet, the Templates view, the busk view,
 > the programmer, and everywhere else a template appears. The live canvas at
@@ -237,7 +238,7 @@ the part that can break a show.
 
 Gate: `./gradlew test` green; `SyncCoverageTest` is what proves step 2 was not skipped.
 
-### Session 2 — the gestures (lighting7)
+### Session 2 — the gestures (lighting7) — done, `PENDING`
 
 1. `routes/templateApply.kt`: the effect arm (D9). One instance per selected head, `WEB`-owned,
    stamped from the template's spec with no override; response carries the instance ids.
@@ -317,6 +318,9 @@ Recorded in `followups.md` on landing (`FU-TMPL-FX-EDIT-NO-RETIME` and
 - `FU-TMPL-USAGE-RETAG` — Trigger: retagging a master's usage and expecting existing effect
   templates to follow it.
 - `FU-TMPL-GRID-FX-CELL` — only if session 4 step 5 ships without the in-cell glyph.
+- `FU-TMPL-CLICK-GROUP-PARTIAL` — recorded in session 2. Trigger: a click on a mixed group spawns
+  nothing where ⌥click lights the capable heads. Absorbs the group-key skip label, the overlapping-
+  target duplication, and the two capability models the click arm now chains.
 
 Gates in the existing index worth reading before starting: `FU-FE-SHARED-LOOK-EDIT-GUARD`
 (Ready) is the shared-edit guard an effect-template edit wants when the template is tracked by
@@ -379,5 +383,12 @@ Session 1 only. Kept because sessions 2–4 read this document as their brief; t
 | §3.3 | `TemplateSummary` / `TemplateDto` gain `effect` + `kind` | Server-side there is only `TemplateDto`; it gains `effect`, `kind` and no `runningCount` — that is on the delete guard's 409 body |
 | §6 | The importer must skip an effect template from a newer writer | Dropped; the v8 gate makes it unreachable |
 
-Session 2's `POST /templates/{id}/apply` arm is still the plan's; the route is a no-op on an effect
-template until it lands.
+Session 2 rows:
+
+| § | Says | Actually |
+| --- | --- | --- |
+| §5 s2.2 | `fxState` / `fxChanged` carry the D7 source name | Already landed in session 1 — `FxStateOutMessage` carries `EffectDto` directly, and `toEffectDto` is its one builder. No change |
+| D9, §5 s2.1 | The clicked copy is provenanced to the template | **No `source` at all.** Stamping it would make `captureCurrentState` (which forks on `source`) rebuild a detached copy as a *tracking* layer, and would take it out of D11's *Save as template…* |
+| §5 s2.1 | One instance per selected **head** | One per **target ref**, groups preserved — `effectsForLayer`'s fan-out, so click and ⌥click agree on a group selection |
+| §3.3 | Returns the ids "alongside the existing `applied` / `skips` shape" | The fields are `written` / `skipped`; the new one is `effectIds`. `written` stays 0 for an effect template |
+| — | (unstated) | The arm needs its own capability check — `FxTargetFactory` never fails, so `"rgbColour"` resolves to a `ColourTarget` on a hazer. `groupSupportsProperty`'s dispatch moved to `fixturesSupportProperty` in `fixture/group/GroupCapabilities.kt` and is shared rather than copied |

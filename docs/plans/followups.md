@@ -53,6 +53,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | Looks made of exactly two deferred effects of one family, no rows |
 | [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
 | [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Tmpl | an operator retunes an effect template and the live effect keeps its old timing |
+| [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | a click on a mixed group spawns nothing where ⌥click lights the capable heads |
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
@@ -758,6 +759,40 @@ runs at the new division".
 If it fires, the shape is not "always re-spawn": it is to distinguish a *timing* edit (division,
 speed master) from a parameter edit, and tour only the former — which needs `FxEngine.updateEffect`
 to retime in place rather than retract and respawn, or the cure is the disease.
+
+---
+
+### `FU-TMPL-CLICK-GROUP-PARTIAL`
+
+**A clicked effect template is all-or-nothing on a mixed group; a ⌥clicked one is not** · Trigger:
+an operator clicks an effect pad with a mixed group selected, gets nothing, and ⌥clicks to find the
+capable heads light · fx-templates session 2 review, 2026-09-02
+
+`applyEffectTemplateToProgrammer` gates each target on `fixturesSupportProperty`, which requires
+**every** member to have the property — the same all-members rule `POST /groups/{name}/fx` has
+always applied. The layer path (`ProgrammerLayerStack.build`) has no capability check at all: it
+resolves a `ColourTarget` for the group and lets `FxInstance` warn per head. So on a group of hexes
+plus a hazer, click reports the whole group skipped and ⌥click runs the effect on the hexes. The
+docs' parity claim is qualified for exactly this case.
+
+Three smaller things sit behind the same gate and are worth doing together if it fires:
+
+- **The skip's `fixtureKey` holds a group key** on this arm, where every value-arm skip holds a real
+  fixture key. The panel that renders these notes resolves the field against the patch, so a group
+  skip renders as an unknown head. Expanding a group skip to its unsupported members fixes the
+  report and the granularity in one move.
+- **Overlapping targets duplicate.** The value arm collapses through `expandTargetsToFixtureKeys`;
+  this arm iterates refs, so a selection naming both `front-wash` and its member `hex-1` puts two
+  band effects on `hex-1`. `effectsForLayer` behaves the same way, which is why it was left.
+- **Two capability models meet in series here.** `EffectSpawner.resolveTargetForCue` picks a
+  property from `detectCapabilities()` (a reflective element-group-descriptor scan needing ≥2
+  elements); `fixturesSupportProperty`'s multi-element fallback tests `elements.first() is
+  WithColour`. They disagree on a 1-element `MultiElementFixture`, and on a head exposing an
+  `@FixtureProperty` colour without the trait. Pre-existing divergence, newly composed.
+
+Relaxing the gate to "any member supports it" is the obvious shape, but it changes the group FX
+route's contract too if the helper stays shared — which it should, since two copies disagreeing
+about one fixture is what sharing it prevented.
 
 ---
 

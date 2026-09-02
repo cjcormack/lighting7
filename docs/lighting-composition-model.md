@@ -349,6 +349,32 @@ a template's one target-less effect goes down the same *deferred* arm a Look's d
 numbering is untouched, which the three deleted comments were all protecting: a template layer takes
 a rank whether it contributes rows or an effect.
 
+The two **gestures** are the value template's two, unchanged in meaning. ⌥click (and the busk pad)
+posts to `toggle`, which adds a programmer layer that *tracks* the template: the effect is spawned by
+the cook, carries the template as its `LayerSource`, and Record files it as a template layer. A plain
+click posts to `apply`, whose effect arm mints one detached programmer-band copy per target the click
+names — the effect twin of the value arm's literals. That copy deliberately carries **no**
+`LayerSource` and no `programmerLayerEffectKey`: without the key no recook can retract or retime it,
+so retuning the template afterwards cannot move it, and without the source both Record paths file it
+as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templateApply.kt` holds the
+four-point version of that reasoning.
+
+Fan-out is the same on both gestures: `CueComposer.effectsForLayer` spawns over a layer's targets *as
+authored*, and the click arm matches it, so a group selection stays one group-targeted effect with
+its distribution intact rather than becoming one instance per member. The click arm does have to test
+capability itself — `FxTargetFactory` never fails by design, so `"rgbColour"` resolves to a
+`ColourTarget` whether or not the head has colour — which is what `fixturesSupportProperty` is for,
+shared with the group FX route so a head and a group of one cannot disagree. It also checks the
+effect's output type against the target's, the `requireOutputTypeMatch` the FX add routes make a
+400: a spec naming `dimmer` for a colour effect resolves to a `SliderTarget` that discards every
+frame, and a click must report that rather than spawn it.
+
+The gestures do diverge in one place, and it is the capability check that causes it: the layer path
+has none at all, so on a group whose members disagree — hexes plus a hazer — a click skips the whole
+group and says so, while a ⌥click spawns one group-targeted effect that the capable heads follow.
+The strict all-members rule is the one the group FX route already applies, so relaxing it is a
+behaviour decision rather than a repair; `FU-TMPL-CLICK-GROUP-PARTIAL` holds the reasoning.
+
 `POST /looks/{id}/absorb-effects` remains the way a *running* effect joins a Look.
 
 A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
