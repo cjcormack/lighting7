@@ -1,9 +1,10 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: IN PROGRESS — sessions 1–3 done (`bba3efc`, `a35250e`, `2c5c82f` +
-> `900719e`).** The backend model, write boundary, cook, sync wiring and both apply gestures have
-> landed, as have the library and the editor; session 4 has not. §11 lists where the landed backend differs from §2–§5, for the sessions that
-> read it. The visual design is
+> **Document status: DONE — all four sessions landed (`bba3efc`, `a35250e`, `2c5c82f` +
+> `900719e`, `08badf5` — the last two in `lighting-react`).** The backend model, write boundary, cook, sync
+> wiring and both apply gestures landed first, then the library and the editor, then the busk pads,
+> the programmer surfaces and the copy everywhere else. §11 lists where the landed work differs from
+> §2–§5, session by session. The visual design is
 > settled and checked in beside this plan at [`fx-templates-design/`](fx-templates-design/INDEX.md)
 > — six static artboards: the model, the New template sheet, the Templates view, the busk view,
 > the programmer, and everywhere else a template appears. The live canvas at
@@ -264,7 +265,7 @@ Gate: `./gradlew test` green; `SyncCoverageTest` is what proves step 2 was not s
 5. Tests: `describeShape` for an effect; the editor's validity rules (name + exactly one of rows /
    effect; Effect disabled under Beam); the runs-on head count against a fixture list.
 
-### Session 4 — busk, programmer, and everywhere else (lighting-react)
+### ~~Session 4 — busk, programmer, and everywhere else (lighting-react)~~ — done, `08badf5` (lighting-react)
 
 1. `BuskPools.tsx`: `TemplateColumns` splits each family's pads at a hairline (D10); pad face gets
    the wave glyph and the effect detail line; `templateSwatch` unchanged (an effect has none).
@@ -394,3 +395,17 @@ Session 2 rows:
 | §5 s2.1 | One instance per selected **head** | One per **target ref**, groups preserved — `effectsForLayer`'s fan-out, so click and ⌥click agree on a group selection |
 | §3.3 | Returns the ids "alongside the existing `applied` / `skips` shape" | The fields are `written` / `skipped`; the new one is `effectIds`. `written` stays 0 for an effect template |
 | — | (unstated) | The arm needs its own capability check — `FxTargetFactory` never fails, so `"rgbColour"` resolves to a `ColourTarget` on a hazer. `groupSupportsProperty`'s dispatch moved to `fixturesSupportProperty` in `fixture/group/GroupCapabilities.kt` and is shared rather than copied |
+
+Session 4 rows (all `lighting-react`):
+
+| § | Says | Actually |
+| --- | --- | --- |
+| §5 s4.5 | The grid read is for an **effect** template layer | Widened to **both kinds**, because the plan's premise was false: `useScopedRowValues` bailed whenever `LookRowStore` did not engage, so a focused *template* layer's cells were live and **editable**, writing to Local while the band said "One layer" — the opposite of what `LayerRowNotices` and both CLAUDE.mds claimed. A value template's cells are now unset and read-only; an effect template's carry the live value. `FU-TMPL-GRID-FX-CELL` not recorded: the wave and the division ship, in `FixturesTable`'s bottom-right corner slot, with no cell editor touched |
+| §5 s4.5 | (unstated) | The answer comes from a new `FocusedTemplateLayer` context, `LookRowStore`'s sibling, mounted beside it in `ProgrammerPage`. It has to be a context: `useScopedRowValues` runs per row, so a `useTemplateListQuery` inside it would be a store subscription per visible row |
+| §5 s4.2 | `LookNameBadge` needs `kind` threaded through `describeStackSource` | Done as `StackSourceInfo.templateKind`, **optional** — a caller without the template library knows a layer names a template but not which kind. `CueDetailContent` was such a caller and now loads the list, so the `Elsewhere` artboard's wave appears there too; its `librariesLoaded` waits for *both* lists, as `ProgrammerLookStack` already did, or one fetch would paint every layer of the other kind as missing |
+| §5 s4.3 | The strip needs effect chips and the tooltip copy | The chips and the kind-aware tooltip landed in session 3; only the **hairline** was left. The tooltip was reworded to the artboard's "run **a copy**", which is the fact that distinguishes the two gestures |
+| §5 s4.4 | `CommandPalette` keywords gain `effect`, `chase` | On the **New Template action**, not on the nav entry: `NavItem` has no `keywords` field, and widening it for two words is not worth it. The palette keeps one New Template action because the kind is chosen inside the sheet |
+| §5 s4.4 | `ProgrammerFxList` home badge from the D7 source name | It already read the *layer* broadcast, which names a template layer correctly. What changed is the fallback: a layer the broadcast does not hold used to read the literal "in a look", which names the wrong entity for half of them; `effect.sourceName` answers first now |
+| §5 s4.5 | (unstated) | Making the grid a read took **three** guards, not one. `CellState.editable` reaches only the pointer; the cell trigger is tabbable, and `FanPopover` writes from the toolbar. Neither hole dropped its commit — `useCellWriters` has no template arm, so both fell through to a live write into Local. `PropertyCell.disabled` and the Fan trigger now read the same fact. `AddToTargetsButton` reads the new context too, or the `untargeted` tone the read introduced would name a state with no way out of it |
+| §5 s4.1 | `PadItem` gains the kind | As `isEffect`, because `PadItem.kind` already exists and means `'look' \| 'template'`. `detail` widened from `string` to `ReactNode` so an effect pad's line can name its live master |
+| — | (unstated) | Three docblocks claimed `useSpeedMasterForCategory` had no caller, which session 3 made false — `BuskSpeedRail`'s docblock and inline comment, and the hook's own. All three corrected, and the rail's caption is now the artboard's |
