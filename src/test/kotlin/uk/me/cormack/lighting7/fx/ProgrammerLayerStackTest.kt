@@ -8,6 +8,9 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -268,11 +271,11 @@ class ProgrammerLayerStackTest {
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
         val applied = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
-        assertEquals("applied", applied.first)
+        assertEquals("applied", applied.action)
         assertEquals(200, rig.valueOf("hex-1"))
 
         val removed = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
-        assertEquals("removed", removed.first)
+        assertEquals("removed", removed.action)
         assertNull(rig.valueOf("hex-1"))
     }
 
@@ -305,11 +308,11 @@ class ProgrammerLayerStackTest {
         val reordered = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1"))
 
         val applied = rig.stack.toggle(source, targets)
-        assertEquals("applied", applied.first)
+        assertEquals("applied", applied.action)
         assertEquals(1, rig.store.layers.size)
 
         val removed = rig.stack.toggle(source, reordered)
-        assertEquals("removed", removed.first)
+        assertEquals("removed", removed.action)
         assertTrue(rig.store.layers.isEmpty())
     }
 
@@ -334,7 +337,7 @@ class ProgrammerLayerStackTest {
         // The same record, renamed — same id and uuid, new name.
         val renamed = rig.stack.toggle(LayerSource.look(1, uuid, "Warm Wash"), targets)
 
-        assertEquals("removed", renamed.first, "a rename must not make the pad stack a second layer")
+        assertEquals("removed", renamed.action, "a rename must not make the pad stack a second layer")
         assertTrue(rig.store.layers.isEmpty())
         assertNull(rig.valueOf("hex-1"))
     }
@@ -359,5 +362,99 @@ class ProgrammerLayerStackTest {
 
         assertEquals(2, rig.store.layers.size, "sharing an int PK must not collapse two pads into one")
         assertEquals(200, rig.valueOf("hex-1"), "the Look's pad is still on")
+    }
+
+    // ─── Template groups: exclusivity ───────────────────────────────────
+
+    /**
+     * Two "templates" that are really Looks under the hood: the rig has no template registry, and
+     * exclusivity is keyed on `source.uuid` alone, so a Look-backed source with a template's shape
+     * exercises exactly the same path while letting [valueOf] prove which layer won.
+     */
+    private fun Rig.groupedSource(name: String, dimmer: Int): LayerSource =
+        LayerSource.look(name.hashCode(), look(name, dimmer), name)
+
+    @Test
+    fun `toggling with siblings releases a sibling on the same targets in one mutation`() {
+        val rig = newRig()
+        val amber = rig.groupedSource("Amber", 200)
+        val blue = rig.groupedSource("Blue", 100)
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+
+        rig.stack.toggle(amber, targets, releaseSiblings = setOf(blue.uuid))
+        assertEquals(1, rig.store.layers.size)
+
+        // Every `layerState` frame the press produces. `Unconfined` so `tryEmit` delivers to the
+        // collector synchronously, on the toggling thread — the flow replays one, which is the
+        // Amber stack, so the count is taken after subscription has drained it.
+        val frames = mutableListOf<List<ProgrammerLayer>>()
+        val collector = CoroutineScope(Dispatchers.Unconfined).launch {
+            rig.store.layersFlow.collect { frames += it }
+        }
+        frames.clear()
+
+        val outcome = rig.stack.toggle(blue, targets, releaseSiblings = setOf(amber.uuid))
+        collector.cancel()
+
+        assertEquals("applied", outcome.action)
+        assertEquals(1, outcome.released, "Amber's layer on the same targets is released")
+        assertEquals(1, rig.store.layers.size, "release and add are one stack, not two")
+        assertEquals(blue.uuid, rig.store.layers.single().source.uuid)
+        assertEquals(100, rig.valueOf("hex-1"), "the new sibling's value wins outright")
+        assertEquals(1, frames.size, "release and add must be one store mutation, so one layerState frame")
+        assertEquals(listOf(blue.uuid), frames.single().map { it.source.uuid })
+    }
+
+    @Test
+    fun `a sibling on a different target set survives`() {
+        // Same-target-set only: Amber on hex-1 and Blue on hex-2 are two pads on two rigs.
+        val rig = newRig()
+        val amber = rig.groupedSource("Amber", 200)
+        val blue = rig.groupedSource("Blue", 100)
+
+        rig.stack.toggle(amber, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(blue.uuid))
+        val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-2")), releaseSiblings = setOf(amber.uuid))
+
+        assertEquals(0, outcome.released)
+        assertEquals(2, rig.store.layers.size)
+        assertEquals(200, rig.valueOf("hex-1"), "Amber on hex-1 is untouched")
+        assertEquals(100, rig.valueOf("hex-2"))
+    }
+
+    @Test
+    fun `turning a grouped pad off leaves its siblings alone`() {
+        val rig = newRig()
+        val amber = rig.groupedSource("Amber", 200)
+        val blue = rig.groupedSource("Blue", 100)
+        val hex1 = listOf(CueTargetDto("fixture", "hex-1"))
+        val hex2 = listOf(CueTargetDto("fixture", "hex-2"))
+
+        rig.stack.toggle(amber, hex2, releaseSiblings = setOf(blue.uuid))
+        rig.stack.toggle(blue, hex1, releaseSiblings = setOf(amber.uuid))
+        assertEquals(2, rig.store.layers.size)
+
+        // Press Blue again on hex-1: off. Amber on hex-2 is a sibling, but a remove never releases.
+        val outcome = rig.stack.toggle(blue, hex1, releaseSiblings = setOf(amber.uuid))
+
+        assertEquals("removed", outcome.action)
+        assertEquals(0, outcome.released)
+        assertEquals(1, rig.store.layers.size)
+        assertEquals(200, rig.valueOf("hex-2"), "the sibling is still on")
+    }
+
+    @Test
+    fun `siblings never release a layer whose uuid is not named`() {
+        // The match is on uuid, the same identity the pad itself uses — so a Look sharing a
+        // template's int PK, or an unrelated template on the same targets, is never collateral.
+        val rig = newRig()
+        val amber = rig.groupedSource("Amber", 200)
+        val stranger = rig.groupedSource("Stranger", 50)
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+
+        rig.stack.toggle(stranger, targets)
+        val outcome = rig.stack.toggle(amber, targets, releaseSiblings = setOf(UUID.nameUUIDFromBytes("blue".toByteArray())))
+
+        assertEquals(0, outcome.released)
+        assertEquals(2, rig.store.layers.size, "an unnamed layer on the same targets is left alone")
     }
 }

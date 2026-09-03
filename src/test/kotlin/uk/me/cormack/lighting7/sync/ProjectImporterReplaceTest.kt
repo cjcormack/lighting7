@@ -167,9 +167,19 @@ class ProjectImporterReplaceTest {
         importer.replaceFromWorkingTree(projectId, exportDir)
 
         transaction(state.database) {
-            val names = DaoProject.findById(projectId)!!.templates.map { it.name }
+            val project = DaoProject.findById(projectId)!!
+            val names = project.templates.map { it.name }
             assertEquals(origNames, names.toSet(), "template set should be unchanged after replace")
             assertEquals(names.size, names.toSet().size, "no duplicate template names after replace")
+
+            // The v9 group has the same `uniqueIndex(project, name)` and the same failure mode: a
+            // teardown loop that forgets it re-inserts the JSON group onto the survivor.
+            val groupNames = project.templateGroups.map { it.name }
+            assertEquals(listOf("warm-keys"), groupNames, "one group, not a duplicate and not an orphan")
+            assertEquals(
+                "warm-keys", project.templates.single { it.name == "amber-breathe" }.group?.name,
+                "membership must point at the re-imported group",
+            )
         }
     }
 

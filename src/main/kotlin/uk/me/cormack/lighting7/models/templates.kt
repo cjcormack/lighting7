@@ -10,6 +10,59 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
 import org.jetbrains.exposed.v1.json.json
 
 /**
+ * A **Template group**: an ordered cluster of templates whose busk pads are mutually exclusive.
+ *
+ * Two facts, and nothing else:
+ *
+ * - **Order.** A group holds a place in the project's top-level sequence — the one ungrouped
+ *   templates also occupy ([DaoTemplates.sortOrder]) — and its members hold places within it. The
+ *   busk view renders a group as one bordered cluster inside its family column; `/templates` renders
+ *   it as a container the operator drags templates into and out of.
+ * - **Exclusivity.** Pressing a member's busk pad on a target set releases every *sibling's* layer
+ *   on that **same target set** first, in the same stack mutation (`ProgrammerLayerStack.toggle`'s
+ *   `releaseSiblings`). Same targets only, deliberately: Amber on the front wash and Blue on the back
+ *   wash are two pads on two rigs, not a conflict — the same reading of "already on" the toggle has
+ *   always used. Pressing a lit pad *off* touches no sibling.
+ *
+ * What a group deliberately does **not** have:
+ *
+ * - **No stored family.** Like a template's, it is derived — from the members — and enforced to be
+ *   exactly one at the write boundary (`TEMPLATE_GROUP_FAMILY`). A colour pad and a position pad
+ *   never fight over a channel, so making them exclusive would only ever surprise; and a group's
+ *   column on the busk view *is* its family, so a mixed group would have no home. An empty group has
+ *   no family and therefore no column.
+ * - **No say in composition.** A cue-authored template layer is a cue's business; a group changes
+ *   what a *press* does, never what a cue composes to. Nothing in the cook reads this table.
+ * - **No effect on the click gesture.** `/apply` writes literals into the programmer, and a literal
+ *   has no layer for a sibling to release.
+ */
+object DaoTemplateGroups : IntIdTable("template_groups") {
+    val project = reference("project_id", DaoProjects)
+    val name = varchar("name", 255)
+
+    /** Position in the project's top-level sequence, shared with ungrouped templates. */
+    val sortOrder = integer("sort_order").default(0)
+    val uuid = javaUUID("uuid").autoGenerate()
+
+    init {
+        // Same identity rule as a template: (project, name).
+        uniqueIndex(project, name)
+    }
+}
+
+class DaoTemplateGroup(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoTemplateGroup>(DaoTemplateGroups)
+
+    var project by DaoProject referencedOn DaoTemplateGroups.project
+    var name by DaoTemplateGroups.name
+    var sortOrder by DaoTemplateGroups.sortOrder
+    var uuid by DaoTemplateGroups.uuid
+
+    /** The templates in this group. Order is [DaoTemplates.sortOrder]; callers sort in memory. */
+    val members by DaoTemplate optionalReferrersOn DaoTemplates.group
+}
+
+/**
  * A **Template**: a named value for one attribute family, applied to a selection.
  *
  * The other half of the split [DaoLooks] used to serve alone. A Look *composes cues* — any
@@ -53,12 +106,35 @@ import org.jetbrains.exposed.v1.json.json
  *   Look's `families` are, or from its effect's library `category` — and validated to be
  *   **exactly one** at the write boundary. A declared column would be a second source of truth for
  *   something the contents already say.
+ *
+ * A template may sit in a [DaoTemplateGroups] group, which gives it two things: a place in an
+ * ordered cluster, and *siblings* — the templates a busk press on this one releases. See that
+ * table's docblock; the rule that makes a group coherent (one family) is derived from the members
+ * the same way a template's own family is derived from its rows.
  */
 object DaoTemplates : IntIdTable("templates") {
     val project = reference("project_id", DaoProjects)
     val name = varchar("name", 255)
     val notes = text("notes").nullable()
+
+    /**
+     * Position in the library: within [group] when grouped, otherwise in the project's top-level
+     * sequence, which ungrouped templates **share with the groups** ([DaoTemplateGroups.sortOrder]).
+     * The reorder route renumbers both sides in one pass; nothing else assigns a position except a
+     * create, which appends.
+     */
     val sortOrder = integer("sort_order").default(0)
+
+    /**
+     * The group this template belongs to, or null for a top-level template.
+     *
+     * No `ReferenceOption`: SQLite enforces no FK cascade without a per-connection pragma, and the
+     * group DELETE route ungroups its members itself before deleting the row. On a database that
+     * predates this column the FK clause never lands at all — `createMissingTablesAndColumns` can
+     * `ADD COLUMN` but SQLite cannot `ADD CONSTRAINT` (the `cue_layers` CHECK has the same story) —
+     * so every route validates group-in-project by hand rather than trusting the schema.
+     */
+    val group = reference("group_id", DaoTemplateGroups).nullable()
 
     /**
      * Fade for every row this template writes, in ms; null = the caller's default.
@@ -88,6 +164,9 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoTemplates.sortOrder
     var fadeDurationMs by DaoTemplates.fadeDurationMs
     var uuid by DaoTemplates.uuid
+
+    /** The group this template sits in, or null at top level. See [DaoTemplateGroups]. */
+    var group by DaoTemplateGroup optionalReferencedOn DaoTemplates.group
     val rows by DaoTemplateRow referrersOn DaoTemplateRows.template
 
     /**

@@ -330,7 +330,7 @@ refetches over REST.
 | Message | Payload | Meaning |
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
-| `templateListChanged` | — | A template was created, renamed or deleted |
+| `templateListChanged` | — | A template was created, renamed, deleted, reordered or moved between groups; a template group was created, renamed or deleted |
 | `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD |
 | `cueStackListChanged` | — | Cue-stack CRUD |

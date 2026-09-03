@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
+import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -106,6 +107,37 @@ class ProjectRoundTripTest {
         assertTrue(
             valueDocs.none { it.contains("\"effect\"") },
             "a value template must not carry the effect key at all",
+        )
+    }
+
+    /**
+     * The v9 twin of the test above: `groupUuid` is a reference, so an ungrouped template must
+     * carry no key at all rather than `"groupUuid": null`, and the grouped one must name the
+     * group document the `templateGroups/` folder actually holds.
+     */
+    @Test
+    fun `templates carry groupUuid only when grouped`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val groups = Files.list(exportDirA.resolve("templateGroups")).use { stream ->
+            stream.toList().map { canonicalDecode(TemplateGroupJson.serializer(), Files.readString(it)) }
+        }
+        val warmKeys = groups.single()
+        assertEquals("warm-keys", warmKeys.name)
+        assertEquals(3, warmKeys.sortOrder, "the off-default position must survive the export")
+
+        val docs = Files.list(exportDirA.resolve("templates")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val grouped = docs.filter { it.contains("\"groupUuid\"") }
+        assertEquals(1, grouped.size, "exactly one template is grouped")
+        val groupedTemplate = canonicalDecode(TemplateJson.serializer(), grouped.single())
+        assertEquals("amber-breathe", groupedTemplate.name)
+        assertEquals(warmKeys.uuid, groupedTemplate.groupUuid, "the reference names the exported group")
+        assertTrue(
+            docs.filterNot { it.contains("amber-breathe") }.none { it.contains("\"groupUuid\"") },
+            "an ungrouped template must not carry the groupUuid key at all",
         )
     }
 

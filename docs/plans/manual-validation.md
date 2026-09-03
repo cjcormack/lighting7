@@ -51,6 +51,7 @@ as a one-line row.
 | [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
+| [`FU-MANUAL-TEMPLATE-GROUPS`](#fu-manual-template-groups) | a template group orders the library on two surfaces and makes its pads exclusive on the same targets | Template groups, 2026-09-03 |
 
 ---
 
@@ -1252,6 +1253,45 @@ from "it ran and stayed attached to the right thing".
 8. Under Beam in the New template sheet, the Effect choice must be disabled with its reason visible.
 
 20 minutes.
+
+---
+
+## `FU-MANUAL-TEMPLATE-GROUPS`
+
+**Template groups, ordering, and the un-split busk column** · from the template-groups work, 2026-09-03
+
+Four sessions landed green (backend model + sync + exclusivity, the routes, the busk view, the
+`/templates` drag list) — 1889 backend tests and the full frontend check — but the two things that
+matter are ones jsdom cannot show: a **drag** on a real pointer (the nested sortable, the group
+body as a drop target, the refused ring) and a **press** on a real rig releasing a sibling's layer
+in one frame. The reducer behind the drag is pure and unit-tested; the wiring around it is not.
+
+**Test**: with the desk running, Front Wash and Back Wash groups patched, and three colour
+templates (Amber, Blue, Steel) plus one position template:
+
+1. On `/templates`, press *New group*, name it *Keys*. It appears at the end, empty, under **All**
+   only — switch to Colour and it is gone; back to All and it is there.
+2. Drag Amber into Keys' body, then Blue onto Amber (it should land above Amber), then drag the
+   group's header above Steel. Reload: the order and membership are exactly what was left. Switch
+   to Colour: the drag handles are gone and the footer says *show All to reorder*.
+3. Drag the position template onto Keys: the body rings red and the drop is refused; the list is
+   unchanged after release. Open the position template's editor: Keys is not offered in *Group*.
+4. On `/busk`, the Colour column shows a *Keys* cluster in the position the drag gave it, with no
+   *Effects* hairline anywhere in any column (an effect template sits wherever the library put it).
+5. Select Front Wash. Press Amber, then Blue: Blue lights, Amber goes dark, **one**
+   `programmer.layerState` frame in the WS log (not remove-then-add), and the four heads never
+   blink through the previous colour. Select Back Wash and press Amber: both stay lit — different
+   targets. Press Blue on Front Wash again: it releases and Amber on Back Wash is untouched.
+6. In the programmer, ⌥click Amber then Blue on a selection: the strip's press is the same route,
+   so the layer stack shows one template layer, not two.
+7. Rename Keys inline (Enter commits, Escape cancels), then *Ungroup* it: Amber and Blue remain,
+   inlined where the group sat, and their pads on `/busk` no longer release each other.
+8. Export → import, and clone: the group, its order and its membership survive both; a v8 desk
+   refuses the v9 repo rather than importing it ungrouped.
+
+**If it fails**: promote to a `FU-TMPL-…` item. The likeliest suspect for 2 is the nested
+`SortableContext` (there was no precedent in the app); for 5 it is the toggle route's sibling
+lookup, which reads the group in the same transaction as the source.
 
 ---
 

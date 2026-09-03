@@ -215,7 +215,11 @@ refused at the write boundary if a write would flip it. Its family is derived fr
 library `category` via `familyForEffectCategory`, so `controls`, `composite` and `beam` are refused
 by name. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
 template's one effect goes down the same *deferred* arm a Look's does. See
-`docs/lighting-composition-model.md` §"A template holds a value *or* an effect".
+`docs/lighting-composition-model.md` §"A template holds a value *or* an effect". A template may also
+sit in a **template group** (`template_groups`, one family per group, derived from the members): the
+group is a place in the library's operator-set order and a set of *siblings* whose layers a busk
+press releases on the same target set — `ProgrammerLayerStack.toggle`'s `releaseSiblings`, resolved
+by the toggle route, never read by the cook. See §"Template groups" in the same doc.
 
 Scripts name an effect rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user effects included:
@@ -334,6 +338,12 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 ### Cue Stack Run Endpoints
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
+
+### Template Endpoints
+- `GET/POST /api/rest/projects/{id}/templates` + `GET/PUT/DELETE .../{tid}` - Template CRUD; `TemplateDto.groupId` is membership, `TemplateInput.groupId` + `groupIdPresent` moves one (appends at the destination; a group of another family is 409 `TEMPLATE_GROUP_FAMILY`)
+- `POST /api/rest/projects/{id}/templates/reorder` - The **whole** layout (`entries: [{templateId} | {groupId, templateIds}]`, every template and group named once, else 400); the one renumbering, shared with group DELETE
+- `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click / busk pad → a tracking layer; releases a group's siblings on the same target set, reported as `released`)
+- `GET/POST /api/rest/projects/{id}/template-groups` + `PUT/DELETE .../{gid}` - Group CRUD; DELETE ungroups the members in the group's place and deletes no template
 
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups

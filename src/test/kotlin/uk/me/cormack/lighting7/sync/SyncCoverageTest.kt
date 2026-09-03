@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.models.DaoLookEffects
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoTemplateEffects
+import uk.me.cormack.lighting7.models.DaoTemplateGroups
 import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
@@ -108,6 +109,7 @@ class SyncCoverageTest {
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
         DaoLooks to Disposition.Portable("looks"),
         DaoLookRows to Disposition.Portable("looks", "rows"),
+        DaoTemplateGroups to Disposition.Portable("templateGroups"),
         DaoTemplates to Disposition.Portable("templates"),
         DaoTemplateRows to Disposition.Portable("templates", "rows"),
         DaoTemplateEffects to Disposition.Portable("templates", "effect"),

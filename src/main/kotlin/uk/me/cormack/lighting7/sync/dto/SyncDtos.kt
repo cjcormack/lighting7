@@ -26,6 +26,17 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v9: template groups. A new `templateGroups/` folder, and `TemplateJson.groupUuid` naming
+    // one. `minReader` stays at **5**: the folder is read as empty when missing and the field is
+    // optional with a null default, so every older archive still imports unchanged.
+    //
+    // The writer's version moves for v6's reason, not v8's. A v8 reader would import a v9 repo with
+    // every template ungrouped and never read the folder — and its next push is wipe-then-export,
+    // which writes no `templateGroups/` and no `groupUuid`, deleting every peer's groups. That is
+    // not the SpeedMaster "null is a valid state" case: a group changes what a busk press *does*
+    // (siblings release), so silently dropping one changes behaviour on stage. Bumping the writer
+    // makes a v8 install refuse the repo instead, which is the only outcome that loses nothing.
+    //
     // v8: a template may hold an **effect** instead of values. `template_effects` travels inline
     // as `TemplateJson.effect`. `minReader` stays at **5**: the field is optional with a null
     // default, so every older archive still imports unchanged.
@@ -67,7 +78,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 8,
+    val formatVersion: Int = 9,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -236,6 +247,10 @@ data class TemplateEffectJson(
  * rows, or from the effect's library `category` — and validated to be exactly one at the write
  * boundary; a template has no fixture type by design, since the values are intents resolved per
  * head at cook. Both would be second sources of truth for something the contents already say.
+ *
+ * [groupUuid] (v9) names a [TemplateGroupJson] by uuid — a reference, so `ExportUuidRemapper`
+ * re-points it on clone with no field-aware code. [sortOrder] is the position *within* that group
+ * when grouped, and in the project's top-level sequence (shared with the groups) otherwise.
  */
 @Serializable
 data class TemplateJson(
@@ -246,6 +261,22 @@ data class TemplateJson(
     val fadeDurationMs: Long? = null,
     val rows: List<TemplateRowJson> = emptyList(),
     val effect: TemplateEffectJson? = null,
+    val groupUuid: String? = null,
+)
+
+/**
+ * A template group — portable show content (v9). Ordering and busk-pad exclusivity for its
+ * members; see `DaoTemplateGroups`. Membership lives on the template ([TemplateJson.groupUuid]),
+ * not here, so a group document never changes when a template joins or leaves it.
+ *
+ * No family field, for the reason [TemplateJson] gives: it is derived from the members.
+ */
+@Serializable
+data class TemplateGroupJson(
+    val uuid: String,
+    val name: String,
+    /** Position in the project's top-level sequence, shared with ungrouped templates. */
+    val sortOrder: Int = 0,
 )
 
 /**

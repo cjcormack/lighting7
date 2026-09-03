@@ -46,8 +46,10 @@ import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateGroup
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
 import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
@@ -75,6 +77,10 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
+// v9 added `templateGroups/` and `TemplateJson.groupUuid`. SUPPORTED moves for v6's reason (a v8
+// reader would import every template ungrouped and write the groups away on its next push); MIN
+// stays at 5 because the folder reads as empty when missing and the field defaults to null.
+//
 // v6 gave templates their own entity: a `templates/` folder, and `CueLayerJson.lookUuid` optional
 // beside a new `templateUuid`. Only SUPPORTED moves — **MIN deliberately stays at 5**, because a v5
 // repo still imports unchanged (no `templates/` folder reads as empty, and every v5 cue layer names a
@@ -95,7 +101,7 @@ import kotlin.io.path.isDirectory
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 8
+internal const val SUPPORTED_FORMAT_VERSION = 9
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -244,6 +250,8 @@ class ProjectImporter(private val state: State) {
                 template.effects.forEach { it.delete() }
                 template.delete()
             }
+            // Groups after templates: `templates.group_id` points at one.
+            project.templateGroups.forEach { it.delete() }
             project.speedMasters.forEach { it.delete() }
             project.fixtureGroups.forEach { group ->
                 group.members.forEach { it.delete() }
@@ -317,7 +325,8 @@ class ProjectImporter(private val state: State) {
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
         val lookMap = importLooks(sourceDir, project)
-        val templateMap = importTemplates(sourceDir, project)
+        val templateGroupMap = importTemplateGroups(sourceDir, project)
+        val templateMap = importTemplates(sourceDir, project, templateGroupMap)
         importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
@@ -685,16 +694,47 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importTemplates(dir: Path, project: DaoProject): Map<UUID, DaoTemplate> =
+    /** Template groups (v9). Before templates, which reference one by uuid. */
+    private fun importTemplateGroups(dir: Path, project: DaoProject): Map<UUID, DaoTemplateGroup> =
+        readDir(dir.resolve("templateGroups")) { json ->
+            val g = canonicalDecode(TemplateGroupJson.serializer(), json)
+            val uuid = UUID.fromString(g.uuid)
+            val dao = DaoTemplateGroup.new {
+                this.project = project
+                name = g.name
+                sortOrder = g.sortOrder
+                this.uuid = uuid
+            }
+            uuid to dao
+        }
+
+    private fun importTemplates(
+        dir: Path,
+        project: DaoProject,
+        groupMap: Map<UUID, DaoTemplateGroup>,
+    ): Map<UUID, DaoTemplate> =
         readDir(dir.resolve("templates")) { json ->
             val t = canonicalDecode(TemplateJson.serializer(), json)
             val uuid = UUID.fromString(t.uuid)
+            // A dangling `groupUuid` ungroups rather than aborting the pull: a group is an
+            // enrichment of the template (its place and its siblings), not its content, so a
+            // template that has lost its group is still a whole template — the same lenience the
+            // effect below gets, and the opposite of a cue layer, which is nothing without its
+            // source. Warned, because it is still a repo inconsistency worth a line.
+            val group = t.groupUuid?.let { g ->
+                groupMap[UUID.fromString(g)].also { found ->
+                    if (found == null) {
+                        logger.warn("Template {} names group {} which the archive does not carry; importing ungrouped", t.name, g)
+                    }
+                }
+            }
             val dao = DaoTemplate.new {
                 this.project = project
                 name = t.name
                 notes = t.notes
                 sortOrder = t.sortOrder
                 fadeDurationMs = t.fadeDurationMs
+                this.group = group
                 this.uuid = uuid
             }
             t.rows.forEach { r ->

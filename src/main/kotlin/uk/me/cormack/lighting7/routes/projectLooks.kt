@@ -373,12 +373,12 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             }
 
             try {
-                val (action, effectCount) = state.show.programmerLayerStack.toggle(
+                val outcome = state.show.programmerLayerStack.toggle(
                     source = LayerSource.look(look.first, look.second, look.third),
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
                     beatDivisionOverride = request.beatDivision,
                 )
-                call.respond(ToggleLookResponse(action, effectCount))
+                call.respond(ToggleLookResponse(outcome.action, outcome.effectCount))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {

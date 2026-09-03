@@ -71,6 +71,20 @@ data class ProgrammerLayerOutcome(
 )
 
 /**
+ * What a pad press did — see [ProgrammerLayerStack.toggle].
+ *
+ * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [effectCount] is
+ * the effects that moved *for this layer* (spawned on apply, retracted on remove). [released] is
+ * how many **sibling** layers an apply took off first (template groups); always 0 on a remove, and
+ * for any press with no siblings to name.
+ */
+data class ToggleOutcome(
+    val action: String,
+    val effectCount: Int,
+    val released: Int = 0,
+)
+
+/**
  * The programmer's ordered Look-layer stack: the live, editable twin of a cue's layer list.
  *
  * ## Materialise, don't compose at read
@@ -164,6 +178,43 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
         fadeMs: Long = 0,
     ): Pair<ProgrammerLayer, ProgrammerLayerOutcome> {
+        val (layer, _, outcome) = addReleasing(
+            source = source,
+            targets = targets,
+            propertyMask = propertyMask,
+            blendMode = blendMode,
+            amount = amount,
+            speedMasterUuid = speedMasterUuid,
+            rateSpeedMasterUuid = rateSpeedMasterUuid,
+            sourceCueLayerId = sourceCueLayerId,
+            beatDivisionOverride = beatDivisionOverride,
+            fadeMs = fadeMs,
+        )
+        return layer to outcome
+    }
+
+    /**
+     * [add], but dropping every layer [releasing] matches **in the same store mutation** as the
+     * append — so a pad press that replaces its siblings is one `layerState` frame and one recook,
+     * with the released effects retracting in the same `syncEffects` pass the new one spawns in.
+     * Returns the layer, how many were released, and the recook outcome.
+     *
+     * Private because the only reason to release-and-add atomically is [toggle]'s exclusivity, and
+     * a caller with a predicate of its own would be a second exclusivity rule.
+     */
+    private fun addReleasing(
+        source: LayerSource,
+        targets: List<CueTargetDto> = emptyList(),
+        propertyMask: String? = null,
+        blendMode: String = "OVERRIDE",
+        amount: Double = 1.0,
+        speedMasterUuid: UUID? = null,
+        rateSpeedMasterUuid: UUID? = null,
+        sourceCueLayerId: Int? = null,
+        beatDivisionOverride: Double? = null,
+        fadeMs: Long = 0,
+        releasing: (ProgrammerLayer) -> Boolean = { false },
+    ): Triple<ProgrammerLayer, Int, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
             layerId = store.mintLayerId(),
             source = source,
@@ -177,10 +228,11 @@ class ProgrammerLayerStack(
             sourceCueLayerId = sourceCueLayerId,
             beatDivisionOverride = beatDivisionOverride,
         )
-        val (next, _) = store.mutateLayers { current ->
-            renumber(current + layer) to Unit
+        val (next, released) = store.mutateLayers { current ->
+            val kept = current.filterNot(releasing)
+            renumber(kept + layer) to (current.size - kept.size)
         }
-        return layer to recook(next, fadeMs, arrival = true)
+        return Triple(layer, released, recook(next, fadeMs, arrival = true))
     }
 
     /**
@@ -215,25 +267,42 @@ class ProgrammerLayerStack(
      * "already on" comparison: a pad that re-pressed with a different mask should still take its
      * layer off rather than stack a second one, and the mask a template layer wants is a function of
      * the template, not of the press. A Look passes null — a Look spans families by construction.
+     *
+     * [releaseSiblings] is a template group's exclusivity: the uuids of the *other* templates in
+     * the pressed one's group. On the **apply** arm, every layer whose source is one of them **and
+     * whose target set is [targets]** comes off in the same mutation the new layer goes on — one
+     * `layerState` frame, one recook. Same targets only, by the reading of "already on" above: the
+     * same template on two target sets is two pads, and so are two siblings on two target sets.
+     * The remove arm ignores it — turning a pad off never touches its siblings. Matched on uuid
+     * like the pad itself, so a Look's layer can never be released by a template press even where
+     * the two share an int PK. Empty (the default) is "no group", which is every Look and every
+     * ungrouped template; the route resolves the set, this class only applies it.
      */
     fun toggle(
         source: LayerSource,
         targets: List<CueTargetDto>,
         propertyMask: String? = null,
         beatDivisionOverride: Double? = null,
-    ): Pair<String, Int> {
+        releaseSiblings: Set<UUID> = emptySet(),
+    ): ToggleOutcome {
         val existing = store.layers.firstOrNull {
             it.source.uuid == source.uuid && sameTargets(it.targets, targets)
         }
         return if (existing != null) {
-            "removed" to remove(existing.layerId).effectsRetracted
+            ToggleOutcome("removed", remove(existing.layerId).effectsRetracted)
         } else {
-            "applied" to add(
+            val (_, released, outcome) = addReleasing(
                 source = source,
                 targets = targets,
                 propertyMask = propertyMask,
                 beatDivisionOverride = beatDivisionOverride,
-            ).second.effectsSpawned
+                releasing = { layer ->
+                    releaseSiblings.isNotEmpty() &&
+                        layer.source.uuid in releaseSiblings &&
+                        sameTargets(layer.targets, targets)
+                },
+            )
+            ToggleOutcome("applied", outcome.effectsSpawned, released)
         }
     }
 

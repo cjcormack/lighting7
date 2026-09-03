@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
+import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
 import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
@@ -64,7 +65,8 @@ import java.util.UUID
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /looks/{uuid}.json               -- rows and effects embedded inline
- * /templates/{uuid}.json           -- rows, or one effect, embedded inline
+ * /templates/{uuid}.json           -- rows, or one effect, embedded inline; optional groupUuid
+ * /templateGroups/{uuid}.json      -- v9+: name and top-level position only
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json
@@ -329,6 +331,14 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
+            count += writeAll(targetDir, "templateGroups", project.templateGroups.toList(), TemplateGroupJson.serializer(), { it.uuid }, liveKeys) { g ->
+                TemplateGroupJson(
+                    uuid = g.uuid.toString(),
+                    name = g.name,
+                    sortOrder = g.sortOrder,
+                )
+            }
+
             count += writeAll(targetDir, "templates", project.templates.toList(), TemplateJson.serializer(), { it.uuid }, liveKeys) { t ->
                 TemplateJson(
                     uuid = t.uuid.toString(),
@@ -336,6 +346,7 @@ class ProjectExporter(private val state: State) {
                     notes = t.notes,
                     sortOrder = t.sortOrder,
                     fadeDurationMs = t.fadeDurationMs,
+                    groupUuid = t.group?.uuid?.toString(),
                     rows = t.rows
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         .map { r ->

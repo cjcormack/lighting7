@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
+import uk.me.cormack.lighting7.models.DaoTemplateGroup
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
@@ -288,6 +289,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 0
     }
 
+    // A **template group** (v9): a top-level position it shares with the ungrouped templates, and
+    // membership that lives on the template as `groupUuid`. Seeded with a non-default sortOrder for
+    // the reason the effect template gives below, and given the effect template as its one member
+    // so both the folder and the reference are exercised by the round trip and the clone.
+    val warmKeys = DaoTemplateGroup.new {
+        this.project = project
+        name = "warm-keys"
+        sortOrder = 3
+    }
+
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
     // the half of the old deferred look that is not a look at all.
     val colourTemplate = DaoTemplate.new {
@@ -314,10 +325,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         name = "amber-breathe"
         notes = "slow warm breathe on the selection"
+        // Its position *within* `warmKeys`, not in the top-level sequence.
         sortOrder = 2
         // Deliberately null: an effect has no arrival, so an effect template has no fade. Left as
         // the one default here so a copier inventing a fade for it is caught.
         fadeDurationMs = null
+        group = warmKeys
     }
     DaoTemplateEffect.new {
         template = effectTemplate

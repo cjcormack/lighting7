@@ -68,7 +68,9 @@ riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
-templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
+templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+); optional
+                               # groupUuid naming a templateGroups/ record (v9+)
+templateGroups/{uuid}.json     # name + top-level sortOrder; membership lives on the template (v9+)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
                                # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
                                # (busk-view routing and follow — additive nullable fields, no
@@ -183,7 +185,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 8`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 9`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -218,6 +220,31 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 9 — template groups
+
+**v9 is a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
+top-level `sortOrder` only), plus one optional reference on the template, `TemplateJson.groupUuid`.
+Membership lives on the template rather than in a member list on the group, so a group document
+never changes when a template joins or leaves it — one record moves per drag, not two.
+
+`minReader` stays at **5**: a missing folder reads as empty and the field defaults to null, so every
+older archive imports untouched. Only the writer's number moves, and the reason is the one the v8
+note above frames as the real question — *would an older reader import this record wrong, and then
+write its mistake back?* A v8 reader would import every template ungrouped and never look at the
+folder; its next push is wipe-then-export, which writes no `templateGroups/` and no `groupUuid`,
+deleting every peer's groups. That is not the SpeedMaster "null is a valid state" case: a group
+changes what a busk press *does* (its siblings release), so silently dropping one changes behaviour
+on stage. Bumping the writer makes a v8 install refuse the repo, which is the only outcome that
+loses nothing.
+
+Two importer details, both deliberate: groups import **before** templates so the reference
+resolves in one pass, and a `groupUuid` naming a group the archive does not carry **warns and
+imports the template ungrouped** rather than aborting the pull — a group is an enrichment of the
+template (its place and its siblings), not its content, so a template that has lost its group is
+still a whole template. Contrast a cue layer, which is nothing without its source and does abort.
+`ExportUuidRemapper` needs no change for the same reason it needed none at v8: `groupUuid` is a
+uuid string, so a clone's templates point at the clone's groups by construction.
 
 ### Version 8 — a template may hold an effect
 

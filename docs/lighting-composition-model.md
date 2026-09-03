@@ -314,6 +314,34 @@ positional colour list either — and now nothing does, because that grammar is 
 parameter names a colour template rather than indexing a list, so a template *is* the named colour
 instead of being one more scope that holds several.
 
+### Template groups
+
+A template may sit in a **group**, and a group is exactly two facts about its members — neither of
+which the cook reads:
+
+- **A place.** Ungrouped templates and groups share one top-level order (`sort_order` on both
+  tables, one sequence), and a grouped template's `sort_order` is its position *within* the group.
+  The busk view draws a group as a bordered cluster inside its family column; `/templates` draws it
+  as a container the operator drags templates into and out of. One reorder route
+  (`POST /templates/reorder`) takes the whole layout and renumbers both tables in one pass, and is
+  the only thing besides a create that assigns a position.
+- **Siblings.** Pressing a member's busk pad releases every *other* member's layer on the **same
+  target set** before the new layer goes on — one store mutation, one `layerState` frame, one
+  recook (`ProgrammerLayerStack.toggle`'s `releaseSiblings`). Same targets only, by the reading of
+  "already on" the toggle has always used: the same template on two target sets is two pads, and so
+  are two siblings on two target sets. Pressing a lit pad *off* touches no sibling, and the click
+  gesture (`/apply`, literals) has no layer for a sibling to release.
+
+A group has **one family**, derived from its members the way a template's is derived from its rows
+and enforced at the write boundary (`TEMPLATE_GROUP_FAMILY`). A colour pad and a position pad never
+fight over a channel, so making them exclusive would only ever surprise — and the busk view's column
+*is* the family, so a mixed group would have no home. An empty group has no family, no column, and
+shows only under *All* on `/templates`.
+
+What a group is **not**: a composition concept. A cue-authored template layer is the cue's business,
+`CueComposer` never reads `template_groups`, and nothing about Layer 3/4 ordering, stomp or amount
+changes because two templates happen to share a cluster on a pad grid.
+
 ### A template holds a value *or* an effect
 
 D7 used to say a template holds **no** effects at all — "effects live in a Look or on a cue, never

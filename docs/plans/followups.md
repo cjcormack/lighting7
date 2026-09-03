@@ -57,6 +57,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
+| [`FU-TMPL-LAYOUT-SIGNAL`](#fu-tmpl-layout-signal) | Trigger | Tmpl | a reorder on `/templates` visibly refetches a large cue list |
+| [`FU-TMPL-GROUP-AI`](#fu-tmpl-group-ai) | Trigger | AI | a prompt asks the AI to group templates, or to create one into a group |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
@@ -162,6 +164,12 @@ lookup each, and the obvious alternative (hand the re-warm to a background dispa
 bump back ahead of the warm cache, which is the ordering bug the review caught in the first place.
 If it does bite, the shape that keeps the ordering is a cap plus a log of what was dropped — the
 dropped tail then misses on the tick, so the cap is a trade rather than a fix.
+
+Template groups (2026-09-03) widened the trigger's surface without changing its shape: every
+drop on `/templates` — a reorder, a move into or out of a group — and every group create, rename
+and ungroup fires `templateListChanged`, which is this re-warm. A drag-heavy tidy-up of a large
+library is now the likeliest way to make it visible. The reorder itself is metadata (no recook),
+so the cost is only ever the re-warm.
 
 The operator-visible symptom to watch for is in `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
@@ -840,6 +848,38 @@ Not obviously worth fixing: a colour template asks "be this colour", and answeri
 once is a mixing problem the fixture's own manual barely addresses.
 
 **Trigger**: an operator asks for the second wheel by name.
+
+### `FU-TMPL-LAYOUT-SIGNAL`
+
+**A reorder rides `templateListChanged`, which the client maps to a cue refetch** · Trigger: a
+drag on `/templates` visibly refetches a large cue list · template groups, 2026-09-03
+
+Order and group membership are metadata — nothing a cue composes to changes — but the server has
+one signal for "the template library changed shape", and the client's `startTemplatesBridge` maps
+it to `['TemplateList', 'Cue', 'CueList']` because that same signal is the only announcement of a
+*delete*, which does change composition. So every drop refetches the cue list and every expanded
+cue, to learn that nothing moved.
+
+Deliberately accepted (plan P12): one fact, one signal, and the reorder mutation is optimistic on
+both template caches so the drop itself never waits on the refetch. If it bites, the shape is a
+keyed `templateLayoutChanged` frame from the reorder route and the group routes, which the bridge
+maps to `TemplateList` alone — the same split `cuesRecomposed` already makes for a contents edit.
+
+---
+
+### `FU-TMPL-GROUP-AI`
+
+**The AI surface knows nothing about template groups** · Trigger: a prompt asks the AI to group
+templates, or `create_template` is asked to put one into a group · template groups, 2026-09-03
+
+`create_template` takes no `groupId` (`performTemplateCreate` treats absent as top level), and
+there is no tool for group CRUD or for the layout write. Nothing in the AI surface toggles a
+template either, so the exclusivity never reaches it. Left out on purpose: the busk view and
+`/templates` are the two surfaces the ask named, and a tool vocabulary for grouping is its own
+piece of work with its own schema test. When it lands, `TemplateCreateResult.Refused` already
+carries the `TEMPLATE_GROUP_FAMILY` code the tool would report.
+
+---
 
 ## Desk accounts
 

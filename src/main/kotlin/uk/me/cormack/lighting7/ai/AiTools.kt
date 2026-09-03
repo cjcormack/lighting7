@@ -150,7 +150,7 @@ class AiTools(private val state: State) {
                     key = obj["key"]!!.jsonPrimitive.content,
                 )
             }
-            val (_, effectCount) = state.show.programmerLayerStack.toggle(
+            val outcome = state.show.programmerLayerStack.toggle(
                 source = LayerSource.look(
                     lookId,
                     transaction(state.database) { look.uuid },
@@ -158,7 +158,7 @@ class AiTools(private val state: State) {
                 ),
                 targets = toggleTargets.map { CueTargetDto(it.type, it.key) },
             )
-            appliedCount = effectCount
+            appliedCount = outcome.effectCount
         }
 
         return ToolExecutionResult(
@@ -201,10 +201,10 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "${result.first} ${result.second} effects (look $lookId)",
+            description = "${result.action} ${result.effectCount} effects (look $lookId)",
             result = buildJsonObject {
-                put("action", result.first)
-                put("effectCount", result.second)
+                put("action", result.action)
+                put("effectCount", result.effectCount)
             }.toString()
         )
     }
@@ -1190,6 +1190,7 @@ class AiTools(private val state: State) {
         return when (result) {
             is TemplateCreateResult.Invalid -> errorResult(result.message)
             is TemplateCreateResult.Duplicate -> errorResult(result.message)
+            is TemplateCreateResult.Refused -> errorResult(result.message)
             is TemplateCreateResult.Ok -> ToolExecutionResult(
                 success = true,
                 description = "Created template '${result.template.name}' " +
