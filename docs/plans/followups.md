@@ -59,6 +59,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
 | [`FU-TMPL-LAYOUT-SIGNAL`](#fu-tmpl-layout-signal) | Trigger | Tmpl | a reorder on `/templates` visibly refetches a large cue list |
 | [`FU-TMPL-GROUP-AI`](#fu-tmpl-group-ai) | Trigger | AI | a prompt asks the AI to group templates, or to create one into a group |
+| [`FU-TMPL-LAYOUT-FAMILY-SCOPE`](#fu-tmpl-layout-family-scope) | Trigger | Tmpl | an imported mixed-family group 409s every reorder |
+| [`FU-TMPL-GROUP-MISSING-404`](#fu-tmpl-group-missing-404) | Trigger | Tmpl | a stale `groupId` on PUT reads as a malformed body |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
@@ -878,6 +880,57 @@ template either, so the exclusivity never reaches it. Left out on purpose: the b
 `/templates` are the two surfaces the ask named, and a tool vocabulary for grouping is its own
 piece of work with its own schema test. When it lands, `TemplateCreateResult.Refused` already
 carries the `TEMPLATE_GROUP_FAMILY` code the tool would report.
+
+---
+
+### `FU-TMPL-LAYOUT-FAMILY-SCOPE`
+
+**The layout write validates every group, so one bad group locks the whole reorder out** ·
+Trigger: an imported mixed-family group 409s reorders that touch nothing near it · code review of
+template groups, 2026-09-03
+
+`applyTemplateLayout` (`routes/templateLayout.kt`) checks the one-family rule over **every** group
+entry in the proposed layout, not just the ones whose membership the write changes. A project that
+already holds a mixed-family group therefore gets 409 `TEMPLATE_GROUP_FAMILY` on *every*
+`POST /templates/reorder` — including a drag at the other end of the library.
+
+Reachable without a hand-edited DB: `ProjectImporter.importTemplates` writes `groupUuid` verbatim
+and deliberately does not validate (contents import as-is so a newer build's data can land), so a
+pull from a peer can create one. The group DELETE route had the same over-broad check turn a delete
+into a 500; that one is fixed (it throws `LayoutRefused`, rolls back and answers 409), and this is
+the remainder.
+
+Not fixed on review because narrowing it is a real decision, not a bug fix: the layout write is one
+of the three places the one-family rule is enforced at all (with create-into-a-group and the
+`groupId` move on PUT — see `DaoTemplateGroups`' docblock and
+[`lighting-composition-model.md`](../lighting-composition-model.md) §"Template groups"), and the
+whole-layout check is what makes the route's "every template and group named once" contract
+self-validating. There is an escape hatch today — a reorder that itself splits the offending group
+passes, since the check is on the *proposed* layout — so an operator is never permanently stuck.
+
+If it bites, the shape is to diff proposed membership against stored membership and validate only
+the groups that changed, leaving a pre-existing violation alone until something touches it. Worth
+pairing with a decision on whether the importer should instead ungroup a mixed-family group on the
+way in, which would remove the reachable path entirely and keep the check broad.
+
+---
+
+### `FU-TMPL-GROUP-MISSING-404`
+
+**A `groupId` naming a deleted group answers 400, not 404** · Trigger: a client branches on the
+"someone else changed this, refresh" path and a stale `groupId` doesn't take it · code review of
+template groups, 2026-09-03
+
+`PUT /projects/{id}/templates/{tid}` maps "Template group not found" to
+`TemplateWriteOutcome.Invalid` → 400 (`routes/projectTemplates.kt`), while every other
+missing-record case in this route family — the route's own `TemplateWriteOutcome.NotFound`
+included — is a 404. Two operators on one desk: one deletes a group while the other's editor still
+offers it, and the second client's PUT reads as a malformed body rather than as stale state.
+
+Not fixed on review because it is a contract change, not a bug: the `/templates` frontend landed
+alongside this and may already branch on 400 for the group case. The fix is a
+`TemplateWriteOutcome.NotFound` for this one branch plus whatever the client does with it, decided
+together.
 
 ---
 
