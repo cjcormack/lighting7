@@ -77,7 +77,7 @@ is the *starting* tempo; live changes write through with a 750 ms trailing debou
 ### Usage routing and follow (time signature)
 
 Two nullable per-master settings, added for the busk view (see
-`docs/plans/busking-view-plan.md` §2, decisions D1–D7):
+`docs/plans/completed/busking-view-plan.md` §2, decisions D1–D7):
 
 - **`usage`** (`dimmer` / `colour` / `position` — the effect library's own `category`
   vocabulary, pinned by `SpeedMasterUsageVocabularyTest`) names the master an *apply-time

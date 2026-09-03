@@ -1,7 +1,10 @@
 # Effects on templates — a busking pad for a named effect
 
-> **Document status: DONE — all four sessions landed (`bba3efc`, `a35250e`, `2c5c82f` +
-> `900719e`, `08badf5` — the last two in `lighting-react`).** The backend model, write boundary, cook, sync
+> **Document status: RETIRED 2026-09-03 — all four sessions landed (`bba3efc`, `a35250e`,
+> `2c5c82f` + `900719e`, `08badf5` — the last two in `lighting-react`).** §8's follow-ups all
+> reached [`followups.md`](../followups.md); §9's desk checks — **none of which had been run** —
+> were promoted on retirement to [`manual-validation.md`](../manual-validation.md) as
+> `FU-MANUAL-FX-TEMPLATE-PADS`, so nothing here is outstanding. The backend model, write boundary, cook, sync
 > wiring and both apply gestures landed first, then the library and the editor, then the busk pads,
 > the programmer surfaces and the copy everywhere else. §11 lists where the landed work differs from
 > §2–§5, session by session. The visual design is

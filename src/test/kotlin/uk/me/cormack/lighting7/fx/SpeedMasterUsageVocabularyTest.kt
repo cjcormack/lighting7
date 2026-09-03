@@ -38,7 +38,7 @@ class SpeedMasterUsageVocabularyTest {
             "the built-in category vocabulary moved. If you added a category, decide whether it " +
                 "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +
                 "set) or lands on master 1 like composite/controls (add it to this set only) — " +
-                "see D7 in docs/plans/busking-view-plan.md",
+                "see D7 in docs/plans/completed/busking-view-plan.md",
         )
     }
 

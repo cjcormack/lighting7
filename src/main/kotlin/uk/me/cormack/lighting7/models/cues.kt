@@ -192,7 +192,7 @@ object DaoCues : IntIdTable("cues") {
      * A flag on the cue rather than a pin-list table: a separate table would buy ordering and
      * cross-project pins nobody has asked for, and would need its own export/import handling,
      * where a column rides along with the cue for free. See
-     * `docs/plans/busking-view-plan.md` D10.
+     * `docs/plans/completed/busking-view-plan.md` D10.
      */
     val pinnedToBusk = bool("pinned_to_busk").default(false)
     val uuid = javaUUID("uuid").autoGenerate()

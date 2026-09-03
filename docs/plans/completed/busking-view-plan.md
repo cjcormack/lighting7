@@ -1,9 +1,12 @@
 # The Busk view — a pad-first performance surface, and speed masters that route and follow
 
-> **Document status: CODE COMPLETE, UNVERIFIED ON A DESK.** All four sessions have landed —
-> session 1 as `6b1c391`, sessions 2 and 3 in [lighting-react](../../../lighting-react) as
-> `ca4bc20` and `2ba1d2e`, session 4 as `462d0ff` here and `6d6113f` there. What is *not* done is
-> §9: **no desk check has been run for any session**, so nothing below has been seen on a rig.
+> **Document status: RETIRED 2026-09-03 — all four sessions built and shipped.** Session 1 as
+> `6b1c391`, sessions 2 and 3 in [lighting-react](../../../../lighting-react) as `ca4bc20` and
+> `2ba1d2e`, session 4 as `462d0ff` here and `6d6113f` there. §8's follow-ups all reached
+> [`followups.md`](../followups.md); §9's desk checks — **none of which had been run** — were
+> promoted on retirement to [`manual-validation.md`](../manual-validation.md) as
+> `FU-MANUAL-BUSK-VIEW`, so nothing below is outstanding here. Read it for the reasoning behind a
+> change, not as a work queue.
 > The visual design is settled and checked
 > in beside this plan at [`busking-view-design/`](busking-view-design/INDEX.md) — a clickable mock
 > of the main view, the reworked speed-master sheet, and two low-fi layout alternates (A: left

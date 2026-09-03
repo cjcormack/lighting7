@@ -49,6 +49,8 @@ as a one-line row.
 | [`FU-MANUAL-CHANNEL-VALUE-HOOK`](#fu-manual-channel-value-hook) | raw channel sliders still track the rig and still write, with the per-channel RTK cache gone | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BEAT-PRUNE`](#fu-manual-beat-prune) | beat indicators and the stage's derived sources survive the shared keyed-subscription pool | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
+| [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
+| [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 
 ---
 
@@ -1179,6 +1181,77 @@ one deliberate behaviour change: a live card the operator collapsed used to spri
    and only the new live/next pair is open.
 
 15 minutes.
+
+---
+
+## `FU-MANUAL-BUSK-VIEW`
+
+**The Busk view on a rig, and speed masters that route and follow** · from the busking view plan,
+2026-09-01
+
+All four sessions of the busking-view plan landed on automated evidence alone — `./gradlew
+cleanTest test` and `npm run check` — and **not one of its desk checks was ever run**. The plan was
+retired to `completed/` with that gap intact, and this is where it went. Two of the six checks need
+two browsers, because the thing being proved is that two clients agree about a cursor.
+
+The riskiest claims are the ones no test can reach: that a follower's clock, now *driven* by its
+leader rather than free-running, retimes a live chase without restarting its phase; and that GO
+from a busk stack card and GO from `/show` move one cursor rather than two.
+
+**Test**: with the desk running, at least two speed masters, and a cue stack with several cues:
+
+1. Set M2 to follow M1 at ½ with a movement chase running on M2. TAP a new tempo on M1: the chase
+   rate must halve in step, with no visible phase restart. Both tabs' speed rails and ShowBar tiles
+   must show the follower move (two browsers).
+2. Busk a movement effect onto a selection with no explicit master. It must land on the
+   `position`-usage master; the configure sheet must show that master selected; retagging the
+   effect's master afterwards must work.
+3. TAP on a follower from a stale client → a structured refusal (`SPEED_MASTER_FOLLOWER`), tempo
+   unmoved.
+4. Interleave GO from a busk stack card and GO from `/show` → one cursor, both surfaces agreeing
+   after every press (two browsers).
+5. Pin a cue in Show → its pad appears on Busk. Press it → the playhead jumps and the pad ring goes
+   live; the Show view's cursor and its `OffPlayheadBanner` state must agree.
+6. Export → import a project holding a follower and a usage: the ratio, the usage and the M1
+   relationship must all survive the uuid remap.
+
+20 minutes, 30 with the two-browser items.
+
+---
+
+## `FU-MANUAL-FX-TEMPLATE-PADS`
+
+**A template that holds an effect, end to end** · from the FX templates plan, 2026-09-02
+
+All four sessions landed green, but an effect template touches the busk pads, the programmer strip,
+the cue editor, the delete guard and the sync round-trip, and the two apply gestures differ in a way
+only a rig shows: a **click** mints a detached programmer-band copy that never follows the template
+again, while **⌥click** adds a template layer that does. Nothing automated distinguishes "it ran"
+from "it ran and stayed attached to the right thing".
+
+**Test**: with the desk running and a Front Wash group of four heads:
+
+1. Create *Amber Breathe* (Colour, Effect, master by usage). It must appear in the Colour column of
+   the Busk view under the hairline, and in the Colour tab of Templates with the wave tile.
+2. Select Front Wash on Busk and press the pad → the effect runs on the four heads on M2's tempo.
+   Press again → it stops. The presence dot must follow the layer stack, not the effect list.
+3. Retune M2 → the running effect retimes. Then edit the template's beat division: the *live*
+   instance keeps its old division until the pad is re-pressed (`FU-TMPL-FX-EDIT-NO-RETIME`,
+   inherited from deferred Look effects), and a programmer-band copy minted by a strip click never
+   follows the template at all.
+4. In the programmer, ⌥click the chip with two heads selected, then Record → the cue holds a
+   template *layer*; GO on that cue runs the effect; the cue editor's layer panel shows tempo and
+   amount overrides that work.
+5. Click the chip → *FX running* shows a `programmer band` row; *Save as template…* on it creates a
+   second template with the same settings; Clear releases the copy.
+6. Delete a template that is both tracked by a cue and running on the programmer → the guard must
+   name both, and *Delete anyway* must stop it everywhere.
+7. Export → import a project holding an effect template with a `tmpl:` colour parameter and a
+   stamped master → the effect, the reference and the master survive the uuid remap. Clone the
+   project → the same.
+8. Under Beam in the New template sheet, the Effect choice must be disabled with its reason visible.
+
+20 minutes.
 
 ---
 
