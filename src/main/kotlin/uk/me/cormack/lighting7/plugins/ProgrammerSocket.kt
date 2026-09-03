@@ -17,6 +17,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProvenanceEntry
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -285,6 +286,36 @@ data class ProgrammerLayerDto(
 )
 
 /**
+ * One target a Look or template is applied to, and how much of it: `all` or `some`.
+ *
+ * `some` only ever describes a **group** — a fixture is covered or it is not — and means the record
+ * holds part of that group's heads.
+ */
+@Serializable
+data class ProgrammerAppliedTargetDto(
+    val type: String,
+    val key: String,
+    /** `all` or `some`. */
+    val state: String,
+)
+
+/**
+ * One Look or template and every target it is currently applied to — see
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.appliedState].
+ *
+ * The **resolved** view of [ProgrammerLayerStateOutMessage.layers]: groups are expanded to their
+ * heads and folded back up, so a client asking "is this pad on for what I have selected?" looks its
+ * selection up here rather than re-deriving coverage from layer targets it would also have to
+ * expand. The layer list stays alongside it because the Layers pane edits layers — this answers a
+ * different question about the same stack.
+ */
+@Serializable
+data class ProgrammerAppliedSourceDto(
+    val source: LayerSourceDto,
+    val targets: List<ProgrammerAppliedTargetDto>,
+)
+
+/**
  * The programmer's layer stack.
  *
  * **Broadcast, not unicast**, for the same reason `programmer.includeTarget` is: the programmer is
@@ -294,6 +325,14 @@ data class ProgrammerLayerDto(
 @SerialName("programmer.layerState")
 data class ProgrammerLayerStateOutMessage(
     val layers: List<ProgrammerLayerDto>,
+    /**
+     * The same stack resolved to per-target applied state. Additive and defaulted, and
+     * `@EncodeDefault(ALWAYS)` for the same reason the connect frame's twin carries it: an empty
+     * stack is a real state, and it must reach the client as "nothing is applied" rather than as
+     * a field an older server did not send.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val applied: List<ProgrammerAppliedSourceDto> = emptyList(),
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -309,6 +348,21 @@ data class ProgrammerStateOutMessage(
      * reach it through [entries], attributed to the `layers` owner.
      */
     val layers: List<ProgrammerLayerDto> = emptyList(),
+    /**
+     * The same stack resolved to per-target applied state, so a fresh connection can light its
+     * pads without a second round trip — the connect-frame twin of
+     * [ProgrammerLayerStateOutMessage.applied].
+     *
+     * `@EncodeDefault(ALWAYS)`, for the reason [ProvenanceStateOutMessage.programmerRevision]
+     * spells out: the WS `Json` has `encodeDefaults = false`, so an **empty** list would vanish
+     * from the wire and arrive as "field absent" — which a client can only read as an older
+     * server. Empty is a real and common state here (a desk that has just started holds no
+     * layers), and this frame is the *resync* path: a client that kept its last `applied`
+     * because the field was missing would leave every busk pad ringed against an empty
+     * programmer, and the press meant to clear one would add a layer instead.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val applied: List<ProgrammerAppliedSourceDto> = emptyList(),
 ) : ProgrammerOutMessage()
 
 /**
@@ -460,7 +514,12 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     // that moved no value (a layer whose targets don't match its bound Look's rows asserts nothing)
     // pushed no `provenanceState` either, and other tabs kept a stale layer list indefinitely.
     scope.subscribe(scope.state.show.programmerStore.layersFlow) { layers ->
-        scope.send(ProgrammerLayerStateOutMessage(layers.map { it.toDto() }))
+        // Resolved from the emitted list rather than from the store, so the frame's `applied`
+        // describes the very stack its `layers` carry even if another mutation has landed since.
+        scope.send(ProgrammerLayerStateOutMessage(
+            layers.map { it.toDto() },
+            scope.state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
+        ))
     }
     scope.subscribe(scope.state.show.fxEngine.provenance.flow) { update ->
         scope.send(buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision))
@@ -502,6 +561,13 @@ private fun ProgrammerLayer.toDto() = ProgrammerLayerDto(
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     sourceCueLayerId = sourceCueLayerId,
+)
+
+private fun AppliedSource.toDto() = ProgrammerAppliedSourceDto(
+    source = source.toDto(),
+    // Lower-cased: `all`/`some` is the vocabulary the pads already speak, and it matches the
+    // `fixture`/`group` discriminators sitting beside it in the same object.
+    targets = targets.map { ProgrammerAppliedTargetDto(it.target.type, it.target.key, it.extent.name.lowercase()) },
 )
 
 // ── Domain dispatcher ───────────────────────────────────────────────────────
@@ -711,9 +777,14 @@ object ProgrammerHandler {
         return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, propertyName)
     }
 
-    /** The layer stack as the desk sees it. */
-    fun layerState(state: State): ProgrammerLayerStateOutMessage =
-        ProgrammerLayerStateOutMessage(state.show.programmerStore.layers.map { it.toDto() })
+    /** The layer stack as the desk sees it, with the resolved applied state beside it. */
+    fun layerState(state: State): ProgrammerLayerStateOutMessage {
+        val layers = state.show.programmerStore.layers
+        return ProgrammerLayerStateOutMessage(
+            layers.map { it.toDto() },
+            state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
+        )
+    }
 
     /**
      * Add a layer for a stored Look or template.
@@ -771,9 +842,11 @@ object ProgrammerHandler {
                 touched = top.touched,
             )
         }.sortedWith(compareBy({ it.universe }, { it.channel }))
+        val layers = store.layers
         return ProgrammerStateOutMessage(
             store.blind, entries, channels, includedTargetDto(state, store.lastIncludedTarget),
-            layers = store.layers.map { it.toDto() },
+            layers = layers.map { it.toDto() },
+            applied = state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
         )
     }
 

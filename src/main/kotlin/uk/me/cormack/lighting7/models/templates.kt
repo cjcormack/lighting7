@@ -18,11 +18,15 @@ import org.jetbrains.exposed.v1.json.json
  *   templates also occupy ([DaoTemplates.sortOrder]) — and its members hold places within it. The
  *   busk view renders a group as one bordered cluster inside its family column; `/templates` renders
  *   it as a container the operator drags templates into and out of.
- * - **Exclusivity.** Pressing a member's busk pad on a target set releases every *sibling's* layer
- *   on that **same target set** first, in the same stack mutation (`ProgrammerLayerStack.toggle`'s
- *   `releaseSiblings`). Same targets only, deliberately: Amber on the front wash and Blue on the back
- *   wash are two pads on two rigs, not a conflict — the same reading of "already on" the toggle has
- *   always used. Pressing a lit pad *off* touches no sibling.
+ * - **Exclusivity.** Pressing a member's busk pad on a target set takes those targets off every
+ *   *sibling's* layer first, in the same stack mutation (`ProgrammerLayerStack.toggle`'s
+ *   `releaseSiblings`). Per **target**, not per target set: a sibling holding exactly them comes
+ *   off, one that merely overlaps is narrowed to the targets the press did not name, and a disjoint
+ *   one is untouched — Amber on the front wash and Blue on the back wash are two pads on two rigs,
+ *   not a conflict. That is the same reading of coverage the pads' own lit ring uses, which is what
+ *   the whole-set rule this started with got wrong: it left Amber's layer under Blue's on a shared
+ *   fixture, lighting Amber's pad for a fixture Blue owned and popping Amber back when Blue came
+ *   off. Pressing a lit pad *off* touches no sibling.
  *
  * What a group deliberately does **not** have:
  *

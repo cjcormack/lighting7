@@ -325,12 +325,44 @@ which the cook reads:
   as a container the operator drags templates into and out of. One reorder route
   (`POST /templates/reorder`) takes the whole layout and renumbers both tables in one pass, and is
   the only thing besides a create that assigns a position.
-- **Siblings.** Pressing a member's busk pad releases every *other* member's layer on the **same
-  target set** before the new layer goes on — one store mutation, one `layerState` frame, one
-  recook (`ProgrammerLayerStack.toggle`'s `releaseSiblings`). Same targets only, by the reading of
-  "already on" the toggle has always used: the same template on two target sets is two pads, and so
-  are two siblings on two target sets. Pressing a lit pad *off* touches no sibling, and the click
-  gesture (`/apply`, literals) has no layer for a sibling to release.
+- **Siblings.** Pressing a member's busk pad takes the pressed targets off every *other* member's
+  layer before the new layer goes on — one store mutation, one `layerState` frame, one recook
+  (`ProgrammerLayerStack.toggle`'s `releaseSiblings`). A sibling holding exactly the pressed
+  targets comes off, one that overlaps is narrowed to the targets the press did not name, and a
+  disjoint one is untouched — the same template on two disjoint target sets is still two pads, and
+  so are two siblings. Pressing a lit pad *off* touches no sibling, and the click gesture
+  (`/apply`, literals) has no layer for a sibling to release.
+
+**A press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press
+means *these targets are now this record's, or they are now nobody's*: "already on" is the record
+covering **every** pressed target, counted over all of its layers, which is precisely what lights a
+full ring (§"Applied state is resolved by the desk"). An off press therefore takes the pressed
+targets off every layer of that record — dropping one that held exactly them, narrowing one that
+held more — and an on press runs the same subtraction over the record's own layers before the new
+one goes on, so **at most one layer of a record ever covers a given head**.
+
+Whole-set equality was the first rule on both arms, and it broke the pad in the ordinary busking
+case. Red on hex-1; add hex-2 to the selection and press: the press stacked a *second* Red layer
+over hex-1 instead of extending the first, so the next press removed only that one and the pad fell
+back to partial on a gesture that says off. The same shape appeared between siblings — Amber on
+hex-1, Blue on hex-1 and hex-2 kept both, Blue merely winning on stage, so Amber's pad stayed lit
+and releasing Blue popped Amber back onto hex-1.
+
+**A group is its fixtures**, throughout. `{group: wash}` and the `{fixture: …}` list of its members
+are one selection written two ways, so every side of every coverage question is expanded first
+(`ProgrammerLayerStack.coverage`): a pad put on the wash is the pad a press with one of its heads
+selected turns off *for that head*. A target the press only *partly* covers is rewritten as the
+members it did not name, which costs that layer the group spelling (and an effect on it the group's
+distribution strategy) — the same thing the operator would have got by picking those fixtures by
+hand, which is the point. A group the press does not touch keeps its own spelling, so the ordinary
+case never splits, and a group that no longer resolves stands for itself rather than covering
+everything or nothing.
+
+One thing stays outside the subtraction: a layer with **empty** targets applies its source's own
+bound rows, whose fixtures are not in the target list at all, so nothing here can expand it. The
+cook answers that question; a coverage comparison must not guess at it. The exception is a press
+that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
+and takes a sibling's off outright, there being nothing to narrow it to.
 
 A group has **one family**, derived from its members the way a template's is derived from its rows
 and enforced at the write boundary (`TEMPLATE_GROUP_FAMILY`). A colour pad and a position pad never
@@ -342,6 +374,34 @@ the bank it was created in is where it gets filled.
 What a group is **not**: a composition concept. A cue-authored template layer is the cue's business,
 `CueComposer` never reads `template_groups`, and nothing about Layer 3/4 ordering, stomp or amount
 changes because two templates happen to share a cluster on a pad grid.
+
+### Applied state is resolved by the desk
+
+A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk
+answers it. `ProgrammerLayerStack.appliedState` folds the layer stack into one entry per Look or
+template listing **every target it covers**: each covered fixture, and each group marked `all` or
+`some` by how many of its heads the record holds. It rides on the `programmer.layerState` frame and
+the connect snapshot as `applied`, beside the layer list rather than instead of it — the Layers pane
+edits layers, the pads read coverage, and those are two questions about one stack.
+
+The client does no expansion and no matching. For one selected target a pad is a lookup; for a
+multi-selection it is *every selected target says `all`* → full ring, *none of them appears* → dark,
+anything else → the partial ring. Both directions of the group rule fall out of the server expanding
+once: a layer on `{group: wash}` reports the wash *and* each of its heads, and a layer on one head
+reports that head plus the wash as `some`.
+
+The ring and the press are two readings of one rule, and that is load-bearing rather than tidy: a
+pad whose ring says "full" must be a pad whose next press clears the selection, or "off" means
+something the operator cannot see. Because the expansion is against **live** group membership, a
+patch or group edit changes what the standing layers cover without changing a layer — so
+`fixturesChanged` re-sends the frame (`BroadcastSocket`), and the rings follow the rig.
+
+This is deliberately not a client-side rule reading group membership over the wire. The desk already
+owns target expansion, coverage and precedence; a second copy in the browser is a copy that drifts
+and that no test on the rig can reach. The blind spot the desk keeps for itself is a layer with
+**empty** targets — its source's own bound rows decide where it lands, which is the cook's answer,
+so such a layer contributes no applied state. Enabled-ness is ignored: a disabled layer is still on
+the stack and a press still takes it off, so its ring stays lit.
 
 ### A template holds a value *or* an effect
 

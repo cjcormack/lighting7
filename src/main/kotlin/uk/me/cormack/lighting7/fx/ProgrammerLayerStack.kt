@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.sameTargets
@@ -75,14 +76,32 @@ data class ProgrammerLayerOutcome(
  *
  * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [effectCount] is
  * the effects that moved *for this layer* (spawned on apply, retracted on remove). [released] is
- * how many **sibling** layers an apply took off first (template groups); always 0 on a remove, and
- * for any press with no siblings to name.
+ * how many **sibling** layers an apply took the pressed targets off (template groups) — counting a
+ * layer narrowed to the targets the press did not name as well as one dropped outright, since from
+ * the pressed targets' point of view both are gone. Always 0 on a remove, and for any press with no
+ * siblings to name. A press rewriting one of its **own** record's layers is not a release: that is
+ * the same pad extending or clearing itself, and no other pad changed.
  */
 data class ToggleOutcome(
     val action: String,
     val effectCount: Int,
     val released: Int = 0,
 )
+
+/** How much of one target a library record is applied to — see [ProgrammerLayerStack.appliedState]. */
+enum class AppliedExtent {
+    /** Every head the target names is covered. A fixture is only ever this or absent. */
+    ALL,
+
+    /** Some of a group's heads are covered and some are not. */
+    SOME,
+}
+
+/** One target a record is applied to, and how much of it. */
+data class AppliedTarget(val target: CueTargetDto, val extent: AppliedExtent)
+
+/** One Look or template, and every target it is currently applied to. */
+data class AppliedSource(val source: LayerSource, val targets: List<AppliedTarget>)
 
 /**
  * The programmer's ordered Look-layer stack: the live, editable twin of a cue's layer list.
@@ -117,7 +136,11 @@ data class ToggleOutcome(
  *    that does).
  * 2. **Lock order is `layersLock` → the publish lock.** Nothing in `CascadePublisher` or
  *    `FxEngine` calls back into this class, so the reverse never arises today; it is stated so
- *    it stays that way.
+ *    it stays that way. [coverage] adds one more inner lock — `Fixtures`' register read lock,
+ *    taken inside [ProgrammerStore.mutateLayers] when a press expands a sibling's groups — and it
+ *    is safe for the same reason: a group lookup is a map read that cannot call back here, and the
+ *    one path holding the register's *write* lock (`Fixtures.register`) fires its listeners after
+ *    releasing it.
  * 3. **One recook per mutation.** [ProgrammerStore.mutateLayers] serialises the list edit, then the
  *    cook happens outside it — two mutations racing therefore both cook, and the later publish
  *    wins. That is correct rather than merely tolerable: both cooked from a list that really
@@ -194,13 +217,19 @@ class ProgrammerLayerStack(
     }
 
     /**
-     * [add], but dropping every layer [releasing] matches **in the same store mutation** as the
-     * append — so a pad press that replaces its siblings is one `layerState` frame and one recook,
-     * with the released effects retracting in the same `syncEffects` pass the new one spawns in.
-     * Returns the layer, how many were released, and the recook outcome.
+     * [add], but rewriting the existing layers through [release] **in the same store mutation** as
+     * the append — so a pad press that replaces its siblings is one `layerState` frame and one
+     * recook, with the released effects retracting in the same `syncEffects` pass the new one
+     * spawns in. [release] returns its argument to leave a layer alone, a copy to narrow it, or
+     * null to drop it; either kind of rewrite counts towards the returned release count.
+     *
+     * A mapper rather than the drop-predicate this took first, because exclusivity is per
+     * **target**, not per layer: a press on `{hex-1, hex-2}` has to take hex-1 off a sibling that
+     * also holds hex-3, rather than either dropping hex-3 with it or leaving hex-1 lit underneath.
+     * See [toggle] and [withoutTargets].
      *
      * Private because the only reason to release-and-add atomically is [toggle]'s exclusivity, and
-     * a caller with a predicate of its own would be a second exclusivity rule.
+     * a caller with a mapper of its own would be a second exclusivity rule.
      */
     private fun addReleasing(
         source: LayerSource,
@@ -213,7 +242,7 @@ class ProgrammerLayerStack(
         sourceCueLayerId: Int? = null,
         beatDivisionOverride: Double? = null,
         fadeMs: Long = 0,
-        releasing: (ProgrammerLayer) -> Boolean = { false },
+        release: (ProgrammerLayer) -> ProgrammerLayer? = { it },
     ): Triple<ProgrammerLayer, Int, ProgrammerLayerOutcome> {
         val layer = ProgrammerLayer(
             layerId = store.mintLayerId(),
@@ -229,8 +258,18 @@ class ProgrammerLayerStack(
             beatDivisionOverride = beatDivisionOverride,
         )
         val (next, released) = store.mutateLayers { current ->
-            val kept = current.filterNot(releasing)
-            renumber(kept + layer) to (current.size - kept.size)
+            var releasedCount = 0
+            val kept = buildList {
+                for (existing in current) {
+                    val rewritten = release(existing)
+                    // A rewrite of the arriving record's *own* layer is the press tidying up after
+                    // itself — the same pad, so nothing was released. Only another record going
+                    // dark counts, which is what the route reports.
+                    if (rewritten !== existing && existing.source.uuid != source.uuid) releasedCount++
+                    if (rewritten != null) add(rewritten)
+                }
+            }
+            renumber(kept + layer) to releasedCount
         }
         return Triple(layer, released, recook(next, fadeMs, arrival = true))
     }
@@ -252,9 +291,16 @@ class ProgrammerLayerStack(
      * across both tables and never changes, which is exactly the identity "already on" means —
      * the same reason [recookIfReferences] matches on it alone.
      *
-     * The target comparison is order-insensitive ([sameTargets]): a pad re-sending its own target
-     * list in a different order — the client re-derived it from a `Set`, say — must still toggle the
-     * existing layer off rather than stacking a second, functionally-identical one on top.
+     * The comparison is of **coverage**, not of target lists ([coverage]), and it is the union of
+     * every layer this record already has: "already on" means the record covers *each* pressed
+     * target. That makes the press the exact inverse of the pad's own lit ring
+     * ([appliedState]) — a full ring turns off, a partial or dark one fills in — which is the rule
+     * a whole-set comparison could not express. Order-insensitivity comes free with it (a pad
+     * re-deriving its target list from a `Set` still turns its layer off), and so does the group
+     * blindness: `{group: wash}` and the `{fixture: …}` list of its members are the same press. A
+     * press naming **no** targets has no coverage to compare, so it falls back to a literal
+     * [sameTargets] twin — the one gesture where "the source's own bound rows" is the whole of what
+     * a layer says.
      * Returns `"applied"`/`"removed"` and how many effects moved, which is the contract
      * `togglePresetOnTargets` had and the pads still read.
      *
@@ -268,15 +314,33 @@ class ProgrammerLayerStack(
      * layer off rather than stack a second one, and the mask a template layer wants is a function of
      * the template, not of the press. A Look passes null — a Look spans families by construction.
      *
+     * **Both arms are per target** ([withoutTargets]), and this is the whole of what a press
+     * means: *these targets are now this record's, or they are now nobody's.* On the off arm the
+     * pressed targets come off **every** layer of this record — one holding exactly them is
+     * dropped, one that also holds others is narrowed to those. On the on arm the same subtraction
+     * runs over the record's own layers before the new one goes on, which is what keeps the
+     * invariant that **at most one layer of a record covers any given head**.
+     *
+     * Whole-set equality was the first rule, on both arms, and it broke the pad in the ordinary
+     * busking case: Red on hex-1, then hex-2 added to the selection and the pad pressed — the press
+     * stacked a second Red layer over hex-1 rather than extending the first, so the *next* press
+     * removed only that one and left the pad partially lit with Red still on hex-1. Turning a pad
+     * off has to clear the record from everything the press names, or "off" means something the
+     * ring cannot show.
+     *
      * [releaseSiblings] is a template group's exclusivity: the uuids of the *other* templates in
-     * the pressed one's group. On the **apply** arm, every layer whose source is one of them **and
-     * whose target set is [targets]** comes off in the same mutation the new layer goes on — one
-     * `layerState` frame, one recook. Same targets only, by the reading of "already on" above: the
-     * same template on two target sets is two pads, and so are two siblings on two target sets.
-     * The remove arm ignores it — turning a pad off never touches its siblings. Matched on uuid
-     * like the pad itself, so a Look's layer can never be released by a template press even where
-     * the two share an int PK. Empty (the default) is "no group", which is every Look and every
-     * ungrouped template; the route resolves the set, this class only applies it.
+     * the pressed one's group, which give up the pressed targets in the same mutation the new layer
+     * goes on — one `layerState` frame, one recook. A sibling that only *overlaps* is narrowed
+     * rather than dropped, so Amber on the front wash and Blue on the back wash are still two pads
+     * on two rigs. The off arm ignores it entirely: turning a pad off never lights a sibling.
+     * Matched on uuid like the pad itself, so a Look's layer can never be released by a template
+     * press even where the two share an int PK. Empty (the default) is "no group", which is every
+     * Look and every ungrouped template; the route resolves the set, this class only applies it.
+     *
+     * A layer with **empty** targets is the one thing no subtraction reaches — see
+     * [withoutTargets]. The exception is a press that itself names no targets: that is the same
+     * gesture as the layer, so it toggles its own such layer off, and takes a sibling's off
+     * outright since there is nothing to narrow it to.
      */
     fun toggle(
         source: LayerSource,
@@ -285,24 +349,170 @@ class ProgrammerLayerStack(
         beatDivisionOverride: Double? = null,
         releaseSiblings: Set<UUID> = emptySet(),
     ): ToggleOutcome {
-        val existing = store.layers.firstOrNull {
-            it.source.uuid == source.uuid && sameTargets(it.targets, targets)
-        }
-        return if (existing != null) {
-            ToggleOutcome("removed", remove(existing.layerId).effectsRetracted)
+        val pressed = coverage(targets).toSet()
+        val own = store.layers.filter { it.source.uuid == source.uuid }
+        // The union of what this record already covers — one layer answering for the whole record
+        // is the point: two presses that each covered half the selection add up to a lit pad, so
+        // the press that follows them has to read as "off".
+        val covered = own.flatMapTo(HashSet()) { coverage(it.targets) }
+        // A press naming no targets has no coverage to compare; its own such layer is the answer.
+        val twin = if (pressed.isEmpty()) own.firstOrNull { sameTargets(it.targets, targets) } else null
+
+        return if (twin != null || (pressed.isNotEmpty() && covered.containsAll(pressed))) {
+            if (twin != null) {
+                ToggleOutcome("removed", remove(twin.layerId).effectsRetracted)
+            } else {
+                // One mutation for however many layers the press clears, exactly as the apply arm
+                // does it: one `layerState` frame, one recook, one `syncEffects` pass.
+                val (next, _) = store.mutateLayers { current ->
+                    renumber(
+                        current.mapNotNull { layer ->
+                            if (layer.source.uuid == source.uuid) withoutTargets(layer, pressed) else layer
+                        },
+                    ) to Unit
+                }
+                ToggleOutcome("removed", recook(next).effectsRetracted)
+            }
         } else {
             val (_, released, outcome) = addReleasing(
                 source = source,
                 targets = targets,
                 propertyMask = propertyMask,
                 beatDivisionOverride = beatDivisionOverride,
-                releasing = { layer ->
-                    releaseSiblings.isNotEmpty() &&
-                        layer.source.uuid in releaseSiblings &&
-                        sameTargets(layer.targets, targets)
+                release = { layer ->
+                    val mine = layer.source.uuid == source.uuid
+                    when {
+                        !mine && layer.source.uuid !in releaseSiblings -> layer
+                        // Nothing to subtract from a layer that names no targets — but a press
+                        // that names none either is the same gesture, so it replaces it.
+                        layer.targets.isEmpty() -> if (targets.isEmpty()) null else layer
+                        else -> withoutTargets(layer, pressed)
+                    }
                 },
             )
             ToggleOutcome("applied", outcome.effectsSpawned, released)
+        }
+    }
+
+    /**
+     * [layer] with [pressed] taken off it: itself when the press names none of its heads, a copy
+     * narrowed to the rest when it names some, and null when it names all of them.
+     *
+     * The unit is the **head**, not the target: a press on `{hex-1}` has to take hex-1 off a layer
+     * holding `{hex-1, hex-3}` rather than either dropping hex-3 with it or leaving hex-1 asserted
+     * underneath. Returning the argument *by identity* for an untouched layer is load-bearing —
+     * [addReleasing] counts a release by identity, so an untouched sibling is not reported as one.
+     *
+     * A group the press only *partly* covers is rewritten as the members it did not name, which
+     * costs that layer the group spelling (and an effect on it the group's distribution strategy).
+     * That is the same thing the operator would have had by picking those fixtures by hand, which
+     * is the point of it; a group the press does not touch keeps its own spelling, so the ordinary
+     * case never splits. A group that no longer resolves stands for itself ([coverage]), so a press
+     * naming it still clears it and a press on a real fixture leaves it alone.
+     *
+     * A layer with **empty** targets is returned untouched. Empty means "the source's own bound
+     * rows", whose fixtures are not in the target list at all — there is nothing here to expand,
+     * and guessing at where the rows land is the cook's job rather than this one's.
+     */
+    private fun withoutTargets(layer: ProgrammerLayer, pressed: Set<CueTargetDto>): ProgrammerLayer? {
+        if (layer.targets.isEmpty() || pressed.isEmpty()) return layer
+        val remaining = layer.targets.flatMap { held ->
+            val expanded = coverage(listOf(held))
+            val kept = expanded.filterNot { it in pressed }
+            // Untouched targets keep their own spelling — only a group the press partly covers is
+            // replaced by the members it left behind.
+            if (kept.size == expanded.size) listOf(held) else kept
+        }
+        return when {
+            remaining == layer.targets -> layer
+            remaining.isEmpty() -> null
+            else -> layer.copy(targets = remaining.distinct())
+        }
+    }
+
+    /**
+     * [targets] with every group replaced by its member fixtures — how this class answers "do these
+     * two selections mean the same heads?".
+     *
+     * A group and the list of its members are two spellings of one selection, so every coverage
+     * question [toggle] asks (is this pad already on, and what does a sibling press take away) is
+     * asked of the expansion rather than of the written target. The same expansion `CueComposer`
+     * does for a cook, minus the logging: a cook has a cue to name in a warning and a value to drop,
+     * where a selection comparison has neither.
+     *
+     * A group that cannot be resolved, or that holds no `Fixture` members, expands to **itself**.
+     * That keeps a stale target comparable — two layers naming a since-deleted group still match,
+     * and neither matches a fixture — rather than collapsing to the empty set, which would make
+     * every such layer look like every other.
+     */
+    private fun coverage(targets: List<CueTargetDto>): List<CueTargetDto> =
+        targets.flatMap { target ->
+            // `ofOrNull`, not `of`: a target type this build does not know stands for itself like
+            // an unresolvable group, rather than throwing out of a pad press. `CueTargetDto.target`
+            // is the strict reading, and the cook is where it belongs.
+            when (TargetRef.ofOrNull(target.type, target.key)) {
+                is TargetRef.Group -> {
+                    val members = runCatching { fixtures().untypedGroup(target.key) }.getOrNull()
+                        ?.fixtures.orEmpty()
+                        .filterIsInstance<Fixture>()
+                        .map { CueTargetDto("fixture", it.key) }
+                    members.ifEmpty { listOf(target) }
+                }
+                else -> listOf(target)
+            }
+        }
+
+    /**
+     * Which library records are applied where — the answer a busk pad's ring is asking for,
+     * resolved here rather than in the client.
+     *
+     * One entry per Look or template with a layer on the stack, listing **every target it covers**:
+     * each covered fixture, and each group whose members it covers, marked [AppliedExtent.ALL] or
+     * [AppliedExtent.SOME] according to how many of that group's heads it holds. A pad then reads
+     * its own state straight off this — for one selected target it is a lookup, and for a
+     * multi-selection it is "all of them say ALL" / "none of them appear" / anything else is
+     * partial. Nothing about groups, layer targets or coverage has to be re-derived over the wire,
+     * which is the point: the desk knows the layers, the groups and the fixtures, and two copies of
+     * that rule would drift.
+     *
+     * Both directions of the group rule fall out of expanding once through [coverage]: a layer on
+     * `{group: wash}` reports the wash *and* each of its heads, and a layer on one head reports
+     * that head and the wash as partial. Layers are folded by source, so two layers of one
+     * template on two selections answer as one record applied to both.
+     *
+     * A layer with **empty** targets contributes nothing, the same blind spot [toggle] documents:
+     * its source's own bound rows decide where it lands, and that is the cook's answer to give.
+     * Enabled-ness is ignored on purpose — a disabled layer is still *on the stack*, and a pad's
+     * next press still takes it off, so its ring stays lit.
+     *
+     * Takes the layer list so the `layerState` broadcast can describe the frame it is sending
+     * rather than whatever the store holds by the time it renders.
+     */
+    fun appliedState(layers: List<ProgrammerLayer> = store.layers): List<AppliedSource> {
+        val heads = LinkedHashMap<UUID, Pair<LayerSource, MutableSet<CueTargetDto>>>()
+        for (layer in layers) {
+            if (layer.targets.isEmpty()) continue
+            heads.getOrPut(layer.source.uuid) { layer.source to LinkedHashSet() }
+                .second += coverage(layer.targets)
+        }
+        if (heads.isEmpty()) return emptyList()
+
+        // Group membership in the same terms `coverage` produces, so the two can be compared
+        // directly. Empty groups are dropped: "every one of no heads" is a claim nothing means.
+        val groups = fixtures().groups.map { group ->
+            group.name to group.fixtures.filterIsInstance<Fixture>().map { CueTargetDto("fixture", it.key) }
+        }.filter { (_, members) -> members.isNotEmpty() }
+
+        return heads.values.map { (source, covered) ->
+            val groupTargets = groups.mapNotNull { (name, members) ->
+                val hits = members.count { it in covered }
+                when (hits) {
+                    0 -> null
+                    members.size -> AppliedTarget(CueTargetDto("group", name), AppliedExtent.ALL)
+                    else -> AppliedTarget(CueTargetDto("group", name), AppliedExtent.SOME)
+                }
+            }
+            AppliedSource(source, covered.map { AppliedTarget(it, AppliedExtent.ALL) } + groupTargets)
         }
     }
 

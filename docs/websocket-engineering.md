@@ -459,15 +459,26 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 
 | Message | Payload | Cast |
 |---|---|---|
-| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]` | Connect snapshot + reply |
+| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | Connect snapshot + reply |
 | `programmer.entryChanged` | `targetType`, `targetKey`, `propertyName`, `value` | Unicast reply |
 | `programmer.entryCleared` | `targetType`, `targetKey`, `propertyName` | Unicast reply |
 | `programmer.cleared` | `cleared: Int`, `effectsCleared: Int` | Unicast reply |
 | `programmer.blindState` | `blind: Boolean` | Unicast reply |
-| `programmer.layerState` | `layers: [ProgrammerLayerDto]` | **Broadcast** — every tab, on `layersFlow` |
+| `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | **Broadcast** — every tab, on `layersFlow` |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String` | Unicast reply |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
+
+`applied` is the same stack resolved: one entry per Look or template with every target it covers,
+each group marked `all` or `some` by how many of its heads the record holds
+(`ProgrammerLayerStack.appliedState`). It rides beside `layers` rather than replacing it — the
+Layers pane edits layers, a busk pad's ring reads coverage, and the desk answers the coverage
+question so the client never expands a group or matches a target itself. Because that resolution
+reads **live** group membership, this frame is re-sent on `fixturesChanged` too: a patch or group
+edit changes what the standing layers cover without changing a layer, and nothing else would tell
+the pads. See
+[`lighting-composition-model.md`](lighting-composition-model.md) §"Applied state is resolved by the
+desk".
 
 The three broadcast frames are broadcast for the same reason: the programmer is shared, so a
 second tab reordering the stack or pressing Include must not leave the first showing a stale view.

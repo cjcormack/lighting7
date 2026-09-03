@@ -31,6 +31,12 @@ data class CueTargetDto(
  * (programmer or cue) is matched by its targets: [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.toggle],
  * and the Record REMOVE/MERGE layer matching in `programmerRecord.kt`.
  *
+ * This is a comparison of what the two lists *say*, not of the heads they cover: a group and its
+ * members are two different target sets by this rule even though they light the same fixtures.
+ * That is the right answer for Record, which is matching a layer against the one it was recorded
+ * from, and it is why `toggle` asks this question first and then asks
+ * `ProgrammerLayerStack.coverage` a second, group-blind one — the pads are about heads.
+ *
  * Sorts rather than converting to a `Set`: a plain `toSet()` comparison would call `[A, A, B]` and
  * `[A, B, B]` equal, since both collapse to `{A, B}`. Targets aren't expected to repeat, but a
  * sorted-list comparison costs nothing extra and stays correct if one ever does.

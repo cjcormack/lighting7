@@ -185,6 +185,12 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun fixturesChanged() {
             fire(FixturesChangedOutMessage)
             fire(buildChannelMappingMessage(state))
+            // And the layer frame, for its **resolved** half: `applied` expands groups against
+            // live membership, so adding a head to the front wash changes what every layer
+            // already on the stack covers without changing a single layer. Nothing else would
+            // re-send it — the layer list is untouched — and the pads would keep drawing rings
+            // computed against the old rig until an unrelated press.
+            fire(ProgrammerHandler.layerState(state))
         }
 
         override fun lookListChanged() = fire(LookListChangedOutMessage)

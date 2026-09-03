@@ -363,8 +363,69 @@ class TemplateGroupRoutesTest : RouteIntegrationTest() {
         client.toggle(amber.id, "hex-2")
         val press = client.toggle(blue.id, "hex-1")
 
-        assertEquals(1, press.released, "only the hex-1 layer matches the press's targets")
+        assertEquals(1, press.released, "only the hex-1 layer holds a target the press names")
         assertEquals(setOf("amber@hex-2", "blue@hex-1"), liveTemplateNames().toSet())
+    }
+
+    @Test
+    fun `a grouped press releases a sibling on every target it names`() = testApplication {
+        // Select hex-1, press amber; add hex-2 to the selection, press blue. Amber must leave
+        // hex-1 with it — a wider selection is still the same pad grid.
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+
+        val keys = client.createGroup("Keys")
+        val amber = client.createTemplate("amber", colourRow("#FF9D4A"), groupId = keys.id)
+        val blue = client.createTemplate("blue", colourRow("#0000FF"), groupId = keys.id)
+
+        client.toggle(amber.id, "hex-1")
+        val press = client.toggle(blue.id, "hex-1", "hex-2")
+
+        assertEquals(1, press.released)
+        assertEquals(listOf("blue@hex-1+hex-2"), liveTemplateNames())
+    }
+
+    @Test
+    fun `a grouped press narrows a sibling it only overlaps`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+
+        val keys = client.createGroup("Keys")
+        val amber = client.createTemplate("amber", colourRow("#FF9D4A"), groupId = keys.id)
+        val blue = client.createTemplate("blue", colourRow("#0000FF"), groupId = keys.id)
+
+        client.toggle(amber.id, "hex-1", "hex-2")
+        val press = client.toggle(blue.id, "hex-1")
+
+        assertEquals(1, press.released, "a narrowed sibling is reported like a dropped one")
+        assertEquals(setOf("amber@hex-2", "blue@hex-1"), liveTemplateNames().toSet())
+    }
+
+    @Test
+    fun `widening the selection and pressing twice leaves the pad off`() = testApplication {
+        // The operator's sequence, end to end: red on hex-1, hex-2 added to the selection, press
+        // (now fully on), press again. The second press must clear red from *both* heads — it used
+        // to remove only the layer whose target set matched and leave the pad reading partial.
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+
+        // Ungrouped on purpose: this is the plain pad, with no sibling exclusivity in play.
+        val red = client.createTemplate("red", colourRow("#FF0000"))
+
+        client.toggle(red.id, "hex-1")
+        val wider = client.toggle(red.id, "hex-1", "hex-2")
+        assertEquals("applied", wider.action)
+        assertEquals(listOf("red@hex-1+hex-2"), liveTemplateNames(), "extended, not stacked")
+
+        val off = client.toggle(red.id, "hex-1", "hex-2")
+        assertEquals("removed", off.action)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "off means off, on every pressed head")
     }
 
     @Test

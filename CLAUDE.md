@@ -217,9 +217,13 @@ by name. `CueComposer` gained no new path — `effectsForLayer` takes `LayerCont
 template's one effect goes down the same *deferred* arm a Look's does. See
 `docs/lighting-composition-model.md` §"A template holds a value *or* an effect". A template may also
 sit in a **template group** (`template_groups`, one family per group, derived from the members): the
-group is a place in the library's operator-set order and a set of *siblings* whose layers a busk
-press releases on the same target set — `ProgrammerLayerStack.toggle`'s `releaseSiblings`, resolved
-by the toggle route, never read by the cook. See §"Template groups" in the same doc.
+group is a place in the library's operator-set order and a set of *siblings* a busk press takes its
+own targets away from — per target, not per target set, so a sibling that only overlaps the press is
+narrowed rather than left lit underneath (`ProgrammerLayerStack.toggle`'s `releaseSiblings`,
+resolved by the toggle route, never read by the cook). A press is per target on **both** arms and is
+the exact inverse of the pad's lit ring: "already on" is the record covering every pressed target,
+and an off press clears them from every layer of that record. See §"Template groups" in the same
+doc.
 
 Scripts name an effect rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user effects included:
@@ -342,7 +346,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 ### Template Endpoints
 - `GET/POST /api/rest/projects/{id}/templates` + `GET/PUT/DELETE .../{tid}` - Template CRUD; `TemplateDto.groupId` is membership, `TemplateInput.groupId` + `groupIdPresent` moves one (appends at the destination; a group of another family is 409 `TEMPLATE_GROUP_FAMILY`)
 - `POST /api/rest/projects/{id}/templates/reorder` - The **whole** layout (`entries: [{templateId} | {groupId, templateIds}]`, every template and group named once, else 400); the one renumbering, shared with group DELETE
-- `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click / busk pad → a tracking layer; releases a group's siblings on the same target set, reported as `released`)
+- `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click / busk pad → a tracking layer, per target on both arms: an off press clears the pressed targets from every layer of that template, and an on press takes them off a group's siblings — narrowing one that only overlaps rather than dropping it, reported as `released`)
 - `GET/POST /api/rest/projects/{id}/template-groups` + `PUT/DELETE .../{gid}` - Group CRUD; DELETE ungroups the members in the group's place and deletes no template
 
 ### Group REST Endpoints
