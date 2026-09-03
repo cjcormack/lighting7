@@ -207,7 +207,8 @@ internal data class TemplateGroupDto(
     val sortOrder: Int,
     /**
      * The one family this group is in, **derived** from its members and never stored — null for
-     * an empty group, which has no busk column and shows only under *All* on `/templates`.
+     * an empty group, which therefore has no busk column — but is shown in every bank on
+     * `/templates`, because that is where it gets filled.
      */
     val family: String? = null,
 )

@@ -335,8 +335,9 @@ which the cook reads:
 A group has **one family**, derived from its members the way a template's is derived from its rows
 and enforced at the write boundary (`TEMPLATE_GROUP_FAMILY`). A colour pad and a position pad never
 fight over a channel, so making them exclusive would only ever surprise — and the busk view's column
-*is* the family, so a mixed group would have no home. An empty group has no family, no column, and
-shows only under *All* on `/templates`.
+*is* the family, so a mixed group would have no home. An empty group has no family and no column,
+and on `/templates` it shows in every bank — a group with no family accepts a template of any, and
+the bank it was created in is where it gets filled.
 
 What a group is **not**: a composition concept. A cue-authored template layer is the cue's business,
 `CueComposer` never reads `template_groups`, and nothing about Layer 3/4 ordering, stomp or amount

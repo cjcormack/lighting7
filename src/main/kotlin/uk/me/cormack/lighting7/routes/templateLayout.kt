@@ -40,9 +40,9 @@ internal data class TemplateLayoutEntry(
  * Whole rather than "the ids you moved", unlike the cue-stack reorder it is otherwise modelled on,
  * because a partial list cannot express a move *out* of a group: an unnamed template keeps its
  * `group_id`, so the only way to say "top level now" is to name it there. The client always holds
- * the unfiltered list (drag is disabled under a family filter for exactly this reason), so
- * completeness costs it nothing and buys the server one invariant: after this write, every
- * position in both tables is dense and unique.
+ * the unfiltered list — its drag reduces over every entry even when it is *drawing* one family's
+ * bank — so completeness costs it nothing and buys the server one invariant: after this write,
+ * every position in both tables is dense and unique.
  */
 @Serializable
 internal data class ReorderTemplatesRequest(val entries: List<TemplateLayoutEntry>)
