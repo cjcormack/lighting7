@@ -1,8 +1,9 @@
 # Busk layout — pages of rows, columns and banks the operator builds
 
-> **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04; sessions
-> 2–4 have not.** Where session 1 refined a decision, the text below says "session 1 amendment"
-> beside it. The visual design is settled
+> **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04 as
+> `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; sessions 3–4
+> have not.** Where a session refined a decision, the text below says "session 1 amendment" or
+> "session 2 amendment" beside it. The visual design is settled
 > and checked in beside this plan at [`look-groups-design/`](look-groups-design/INDEX.md) —
 > eleven static artboards on two canvas pages: the busk view in play and edit mode, the build
 > flow, the rows/columns/banks structure, the model and delta, the FX cue slots overlay fed from
@@ -269,20 +270,57 @@ tests (§9) and the round-trip and coverage suites that already fail on a missed
 - Docs: `docs/lighting-composition-model.md` gains §"The busk layout" beside §"Applied state is
   resolved by the desk"; `docs/websocket-engineering.md` row; `docs/sync-engineering.md` v10.
 
-### Session 2 — the busk view (lighting-react) — Opus 5, xhigh
+### Session 2 — the busk view (lighting-react) — Opus 5, xhigh — **landed**, `89649d6`
 
-- `store/busk.ts` (RTK Query: `GET /busk`, page CRUD, layout PUT with optimistic apply and undo,
-  press), `api/buskWsApi.ts` for `busk.layoutChanged`.
-- `BuskingView.tsx` renders pages → rows → columns → banks → pads from the document; `BuskPools`,
-  `BuskCueStacks` and `lookPresence`'s column logic retire (their tests with them); `LookPadButton`
-  and the cue pad survive as the two pad faces; `BuskLabel`, `TargetBand`, `BuskSpeedRail` untouched.
-- Edit mode: `BuskEditProvider` (dnd-kit context covering the page and the palette), bank header
-  controls, drop zones for banks (D8), pad drag within/between banks, `LibraryPalette.tsx` (D9).
-  Every gesture calls the layout PUT with the whole page.
-- First-open state (D11) and *Start from your library* generator, client-side from the three list
-  queries.
-- Tests: the render from a fixture document; edit-mode drops produce the expected next document;
-  press dispatch by kind; the palette's *on page* marks.
+- `store/busk.ts` (RTK Query: page CRUD, reorder, the layout PUT and the press), `api/buskWsApi.ts`
+  for `busk.layoutChanged`, `lib/buskLayout.ts` for the document and every gesture over it.
+- `BuskingView.tsx` renders pages → rows → columns → banks → pads from the document; `BuskPools` and
+  `BuskCueStacks` retire (their tests with them); `LookPadButton` and the cue pad survive as the two
+  faces of one `BuskPadButton`; `BuskLabel`, `TargetBand`, `BuskSpeedRail`, `TargetList` untouched.
+- Edit mode: `BuskEditProvider`, bank header controls, the three bank drop zones (D8), pad drag
+  within and between banks, `LibraryPalette.tsx` (D9). Every gesture PUTs the whole page.
+- First-open state (D11) and *Start from your library*, client-side from the two list queries.
+
+**Session 2 amendments**, where the plan and the code diverged:
+
+- **§10's dnd-kit worry was wrong on the facts.** `Layout.tsx` already wrapped the cue-slot overlay
+  *and* the routed page in one `DndContext`; they were never under different providers. The real
+  constraint is **nesting** — a context inside the routed page wins for its subtree and would hide
+  the busk page from the overlay's droppables, which is the drop session 3 needs. So the busk page
+  joins the existing context through `useDndMonitor`, and `CueSlotDndProvider` became
+  `components/dnd/DeskDndProvider.tsx`: it is the app's one drag context, not the cue slots'.
+- **No `SortableContext`, and the preview is a ghosted source plus one dashed slot.** The primary
+  gesture is a *palette* drop, and a palette row is in no sortable list, so the placeholder is
+  hand-drawn either way; the three bank zones are not list indices. `applyDrop` runs once, on drop.
+- **`lookPresence.ts` survives.** §5's wording above reads as retiring it; there is no column logic
+  in that file (it was in `BuskPools`), and both functions are still exactly what a pad's ring asks.
+- **Edit mode is a Redux slice, not a React context** — session 3's overlay is a *sibling* of the
+  routed page in `Layout.tsx` and could never read a context provided inside the busk view.
+- **The empty-selection dim is gone, and must not come back.** A per-fixture template names its own
+  heads, a Look with no deferred effect names its own fixtures, and a cue has no targets — all three
+  press with nothing selected. The two that cannot are refused by name (`TEMPLATE_NEEDS_SELECTION`,
+  `LOOK_NEEDS_SELECTION`), which is a better answer than a grey page; and a bank mixes kinds, so the
+  old per-section dim has nothing left to be per.
+- **A cue pad reads `useActiveCueIds`, and the view holds no transport.** GO and BACK stay on the
+  ShowBar. `GoToStackRequest.cueId` therefore already has no caller — session 3 deletes it.
+- **The page showing lives in `?page=`**, deep-linkable beside `?cue=`. The wrong-project redirect
+  in `routes/Busk.tsx` deliberately **drops** it: a page id is project-scoped, so carrying it would
+  name nothing.
+
+**§11 settled by this session**: save **per gesture**, with *Done* only leaving the mode; and the
+first-open generator builds §11's drafted content — a stacking bank per family, the Looks with
+deferred effects, an empty Cues bank, **nothing solo**, reading neither template groups nor pins, so
+session 3's removals leave it untouched.
+
+**Review** (`/code-review-lite` on Sonnet, `high`): seven findings fixed, three declined. The one
+worth carrying forward: **a pad drop target is an insertion point, not an `arrayMove` destination**
+— it names the gap the dashed slot is drawn in, counted with the source still in place. Reading it
+as a destination made every *downward* drag within a bank overshoot by exactly one place, and it
+survived because each half of the pipeline was self-consistent and only their composition was
+wrong; two tests agreed with the bug. `buskDnd.test.ts` now composes `resolveDropTarget` with
+`applyDrop` and asserts the slot and the landing place agree.
+
+**Not done**: the desk checks in §9. They are a human job and none has been run.
 
 ### Session 3 — the removals (both repos) — Opus 5, high
 
