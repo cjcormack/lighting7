@@ -1,0 +1,209 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .colh { font-size:10px; font-weight:600; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .tpad { display:flex; align-items:center; gap:8px; height:52px; padding:0 14px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); }
+    .tpad svg { color:var(--mfg); }
+    .tpad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tpad.on svg { color:var(--pri); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { margin-top:2px; font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .wave { color:var(--mfg); }
+    .pad.all .wave, .pad.some .wave { color:var(--pri); }
+    .grp { display:flex; flex-direction:column; gap:6px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033 / 0.8); background:oklch(0.274 0.006 286.033 / 0.2); padding:6px; }
+    .grph { padding:0 2px; font-size:10px; font-weight:500; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+    .stack { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .gobtn { width:64px; height:44px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .ghost { height:44px; padding:0 10px; border-radius:8px; font-size:11px; font-weight:500; color:var(--mfg); display:grid; place-items:center; }
+    .cuepad { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:52px; padding:8px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .cuepad.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .master { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .tap { height:44px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+    .usage { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; background:var(--muted); font-size:9px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); text-transform:uppercase; }
+    .beat { width:6px; height:6px; border-radius:50%; background:#4ade80; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* library list */
+    .list { border-radius:10px; border:1px solid var(--bd); overflow:hidden; }
+    .row { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:44px; border-top:1px solid var(--bd); }
+    .list > .row:first-child, .list > .grow:first-child { border-top:none; }
+    .rname { font-size:14px; font-weight:500; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rsub { margin-top:2px; font-size:11px; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:500; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); color:var(--fg); }
+    .badge.sec { background:var(--muted); color:var(--fg); }
+    .grip { color:var(--mfg); display:flex; }
+    .grow { border-top:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.1); }
+    .growh { display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:40px; }
+    .growh .gname { flex:1; min-width:0; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .growh .gcount { font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .gbody { margin-left:24px; border-left:1px solid var(--bd); }
+    .gbody .row:first-child { border-top:1px solid var(--bd); }
+    .sw16 { width:16px; height:16px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:8px; font-size:14px; font-weight:500; white-space:nowrap; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .h1 { font-size:18px; font-weight:600; }
+    .sub { font-size:14px; color:var(--mfg); }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:10px; padding:2px; }
+    .seg span { padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .tag { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .tag.new { background:oklch(0.623 0.214 259.815 / 0.18); color:oklch(0.8 0.12 255); border:1px solid oklch(0.623 0.214 259.815 / 0.5); }
+    .tag.same { background:var(--muted); color:var(--mfg); }
+    .tag.gone { background:oklch(0.704 0.191 22.216 / 0.15); color:oklch(0.8 0.12 22); border:1px solid oklch(0.704 0.191 22.216 / 0.5); }
+    /* busk layout (alternative C) */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:20px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .seg.big span { padding:7px 16px; font-size:13px; }
+    .cue { align-items:flex-start; text-align:left; gap:2px; }
+    .cue .cn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue .cstack { font-size:9px; color:oklch(0.705 0.015 286.067 / 0.7); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .padx { position:absolute; top:-7px; left:-7px; width:18px; height:18px; border-radius:50%; background:var(--muted); border:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .ghosttile { display:flex; align-items:center; justify-content:center; gap:6px; min-height:56px; border-radius:10px; border:1px dashed var(--bd); color:var(--mfg); font-size:12px; font-weight:500; }
+    .ghostbank { display:flex; align-items:center; justify-content:center; gap:6px; min-height:120px; border-radius:10px; border:1px dashed var(--bd); color:var(--mfg); font-size:13px; font-weight:500; }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .switch.on { background:var(--pri); } .switch.on::after { left:14px; background:oklch(0.21 0.006 285.885); }
+    .input { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:13px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .chk { width:16px; height:16px; border-radius:4px; border:1px solid var(--mfg); flex:0 0 auto; display:grid; place-items:center; }
+    .chk.on { background:var(--pri); border-color:var(--pri); }
+    .drow { display:flex; align-items:center; gap:10px; padding:8px 10px; min-height:40px; border-top:1px solid var(--bd); font-size:13px; }
+    .drow .dsub { font-size:11px; color:var(--mfg); }
+    .dim { opacity:0.55; }
+    .frame { border:1px solid var(--bd); border-radius:10px; background:var(--bg); padding:12px; display:flex; flex-direction:column; gap:10px; min-width:0; overflow:hidden; }
+    .step { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; }
+    .step .n { width:20px; height:20px; border-radius:50%; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:11px; font-weight:700; display:grid; place-items:center; flex:0 0 auto; }
+    .mini { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:6px; }
+    .mini .pad { min-height:40px; padding:6px; }
+    .mini .padname { font-size:11px; }
+    .kbd { display:inline-block; padding:0 5px; border-radius:4px; border:1px solid var(--bd); background:var(--muted); font-size:10px; font-family:ui-monospace, Menlo, monospace; color:var(--fg); }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:900px; padding:22px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div style="font-size:22px; font-weight:700; letter-spacing:-0.01em;">Building a page, as the operator</div>
+    <p class="cap" style="margin-top:4px;">Six moments. No separate editor: the busk view has an edit mode, the library comes to it in a drawer, and every gesture saves.</p>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); grid-template-rows:1fr 1fr; gap:14px; flex:1; min-height:0;">
+
+    <div class="frame">
+      <div class="step"><span class="n">1</span>First open</div>
+      <div class="seg big" style="align-self:flex-start;"><span class="on">Page 1</span></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <div class="bank" style="padding:6px; gap:4px;"><div class="bankh" style="min-height:14px;"><span class="bankname">Colour</span></div><div class="mini"><div class="pad"><span class="padrow"><span class="sw" style="background:#ff9d4a;"></span><span class="padname">Amber Key</span></span></div><div class="pad"><span class="padrow"><span class="sw" style="background:#5aa2ff;"></span><span class="padname">Steel Blue</span></span></div></div></div>
+        <div class="bank" style="padding:6px; gap:4px;"><div class="bankh" style="min-height:14px;"><span class="bankname" style="flex:1;">Positions</span><span class="solotag">solo</span></div><div class="mini"><div class="pad"><span class="padname">Downstage Centre</span></div><div class="pad"><span class="padname">Band</span></div></div></div>
+        <div class="bank" style="padding:6px; gap:4px;"><div class="bankh" style="min-height:14px;"><span class="bankname">Looks</span></div><div class="mini"><div class="pad"><span class="padname">Storm Wash</span></div><div class="pad"><span class="padname">Disco</span></div></div></div>
+        <div class="bank" style="padding:6px; gap:4px;"><div class="bankh" style="min-height:14px;"><span class="bankname">Cues</span></div><div class="mini"><div class="pad cue live" style="min-height:40px;"><span class="cn">12</span><span class="cname">Verse 2</span></div><div class="pad cue" style="min-height:40px;"><span class="cn">20</span><span class="cname">Blackout</span></div></div></div>
+      </div>
+      <p class="cap" style="margin-top:auto;">Page 1 is built from what is already there: a stacking bank per family, a solo bank per template group, the Looks that can be busked, the pinned cues. Nothing to learn before the first press. <i>Start empty</i> is the other button.</p>
+    </div>
+
+    <div class="frame">
+      <div class="step"><span class="n">2</span>Edit layout</div>
+      <div style="display:flex; align-items:center; gap:8px;"><div class="seg big"><span class="on">Ballads</span><span>Dance</span><span>Encore</span><span style="border:1px dashed var(--bd); color:var(--mfg);">+ Page</span></div><span style="flex:1;"></span><span style="font-size:11px; color:var(--mfg);">Saved</span><span class="btn pri" style="height:28px; font-size:12px;">Done</span></div>
+      <div class="bank"><div class="bankh"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="input" style="flex:1;">Movement</span><span style="font-size:10px; color:var(--mfg);">Solo</span><span class="switch on"></span><span style="color:var(--mfg); display:flex;"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span></div>
+        <div class="mini"><div class="pad" style="min-height:44px;"><span class="padx"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span><span class="padname">Ballyhoo</span></div><div class="pad" style="min-height:44px;"><span class="padx"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span><span class="padname">Circle Chase</span></div><div style="border-radius:10px; border:2px dashed var(--bd); min-height:44px;"></div></div></div>
+      <div style="font-size:11px; color:var(--mfg); display:flex; gap:10px; flex-wrap:wrap;"><span>&#8943; menu:</span><span class="kbd">Rename</span><span class="kbd">Width &frac14; &frac13; &frac12; &frac23; &frac34; Full</span><span class="kbd">Flow: Wrap &middot; Column</span><span class="kbd">Duplicate</span><span class="kbd">Delete</span></div>
+      <p class="cap" style="margin-top:auto;">One button turns the page editable in place. Bank names become fields, Solo becomes a switch, pads grow a cross, an empty slot at the end of every bank waits for a drop, and the page ends in <i>+ Bank</i>. Each gesture saves; <i>Done</i> only leaves the mode.</p>
+    </div>
+
+    <div class="frame">
+      <div class="step"><span class="n">3</span>Drag from the library</div>
+      <div style="display:grid; grid-template-columns:1fr 1.1fr; gap:8px; position:relative;">
+        <div class="bank" style="box-shadow:inset 0 0 0 1px oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.05);"><div class="bankh"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="input" style="flex:1;">Movement</span></div>
+          <div class="mini"><div class="pad" style="min-height:44px;"><span class="padname">Ballyhoo</span></div><div class="pad" style="min-height:44px;"><span class="padname">Circle Chase</span></div><div style="border-radius:10px; border:2px dashed var(--pri); min-height:44px;"></div></div></div>
+        <div style="border:1px solid var(--bd); border-radius:10px; overflow:hidden;">
+          <div style="padding:6px 8px; display:flex; flex-direction:column; gap:5px; border-bottom:1px solid var(--bd);">
+            <div style="display:flex; align-items:center; gap:6px;"><span class="lbl">Library</span><span style="flex:1;"></span><span style="font-size:10px; color:var(--mfg);">drag onto a bank</span></div>
+            <div class="seg" style="display:flex;"><span class="on" style="flex:1; text-align:center; padding:2px;">All</span><span style="flex:1; text-align:center; padding:2px;">Templates</span><span style="flex:1; text-align:center; padding:2px;">Looks</span><span style="flex:1; text-align:center; padding:2px;">Cues</span></div>
+          </div>
+          <div class="drow" style="border-top:none; min-height:32px; padding:5px 8px; font-size:12px;"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><div style="flex:1;">Tilt Wave</div><span class="badge out">Position</span></div>
+          <div class="drow" style="min-height:32px; padding:5px 8px; font-size:12px; opacity:0.35;"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><div style="flex:1;">Ballyhoo Wide</div><span class="badge out">Look</span></div>
+          <div class="drow" style="min-height:32px; padding:5px 8px; font-size:12px;"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="mono num" style="font-size:11px; font-weight:700;">20</span><div style="flex:1;">Blackout</div><span class="badge sec">on page</span></div>
+          <div class="drow" style="min-height:32px; padding:5px 8px; font-size:12px;"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><div style="flex:1;">Storm Wash</div><span class="badge sec">on page</span></div>
+        </div>
+        <div class="pad" style="position:absolute; left:118px; top:68px; width:104px; min-height:40px; padding:6px; opacity:0.92; transform:rotate(-2deg); box-shadow:0 10px 15px -3px rgba(0,0,0,0.55), 0 4px 6px -4px rgba(0,0,0,0.55); border-color:var(--pri);"><span class="padname" style="font-size:11px;">Ballyhoo Wide</span></div>
+      </div>
+      <p class="cap" style="margin-top:auto;">The library sits where the speed rail was: templates, Looks and cues under one search and a kind filter, every row a pad. Drag a row onto a bank and the slot opens where it lands; drop, and it is placed. A record already on the page says <i>on page</i> and may be placed again.</p>
+    </div>
+
+    <div class="frame">
+      <div class="step"><span class="n">4</span>Arrange</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <div class="bank"><div class="bankh"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="input" style="flex:1;">Key colours</span></div>
+          <div class="mini"><div class="pad" style="min-height:44px;"><span class="padname">Amber Key</span></div><div class="pad" style="min-height:44px; opacity:0.35;"><span class="padname">Steel Blue</span></div><div class="pad" style="min-height:44px;"><span class="padname">Warm White</span></div></div></div>
+        <div class="bank" style="box-shadow:inset 0 0 0 1px oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.05);"><div class="bankh"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="input" style="flex:1;">Texture</span></div>
+          <div class="mini"><div class="pad" style="min-height:44px;"><span class="padname">Storm Wash</span></div><div style="border-radius:10px; border:2px dashed var(--pri); min-height:44px;"></div><div class="pad" style="min-height:44px;"><span class="padname">Disco</span></div></div></div>
+      </div>
+      <div style="position:relative; height:0;"><div class="pad" style="position:absolute; left:150px; top:-64px; width:120px; min-height:44px; opacity:0.9; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -4px rgba(0,0,0,0.5); transform:rotate(-2deg);"><span class="padname">Steel Blue</span></div></div>
+      <p class="cap" style="margin-top:auto;">Drag a pad within a bank or into another; the drop slot is a dashed gap, the source stays ghosted. On touch, long-press lifts &mdash; the same hook that opens the editor outside edit mode. A bank drags by its grip: beside a column makes a new column, under another bank stacks it, below the page starts a row. Pages drag by their tab. dnd-kit is already in the app.</p>
+    </div>
+
+    <div class="frame">
+      <div class="step"><span class="n">5</span>Solo</div>
+      <div class="bank"><div class="bankh"><span class="grip"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg></span><span class="input" style="flex:1;">Movement</span><span style="font-size:10px; color:var(--mfg);">Solo</span><span class="switch on"></span><span style="color:var(--mfg); display:flex;"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></span></div>
+        <div class="mini"><div class="pad all" style="min-height:44px;"><span class="padname">Ballyhoo</span></div><div class="pad" style="min-height:44px;"><span class="padname">Downstage Centre</span></div><div class="pad cue" style="min-height:44px;"><span class="cn">20</span><span class="cname">Blackout</span></div></div></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px; line-height:1.45; color:var(--mfg);">
+        <div class="note" style="padding:8px 10px;"><b style="color:var(--fg);">Solo on.</b> Press Downstage: Ballyhoo goes off on the pressed heads. Press Blackout: it comes on and Ballyhoo and Downstage go off everywhere. Press it again and it stops.</div>
+        <div class="note" style="padding:8px 10px;"><b style="color:var(--fg);">Solo off.</b> Pads stack. Pressing one never touches another &mdash; the ungrouped behaviour of today, now a choice per bank rather than a consequence of the library.</div>
+      </div>
+      <p class="cap" style="margin-top:auto;">The switch is the whole of exclusivity. In play mode it shows as a small <i>solo</i> tag in the bank header, so the operator can tell a radio bank from a stacking one before pressing.</p>
+    </div>
+
+    <div class="frame">
+      <div class="step"><span class="n">6</span>From elsewhere</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div class="note" style="padding:8px 10px; display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); flex:1;">Show view &middot; cue 20 properties</span><span class="input" style="height:24px; font-size:11px;">Add to busk page &#9662;</span></div>
+        <div class="note" style="padding:8px 10px; display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); flex:1;">Template editor &middot; footer</span><span class="input" style="height:24px; font-size:11px;">Add to busk page &#9662;</span></div>
+        <div class="note" style="padding:8px 10px; display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); flex:1;">Save as template &middot; sheet</span><span class="chk on"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="oklch(0.21 0.006 285.885)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span style="font-size:11px;">Also add to <b>Movement</b></span></div>
+      </div>
+      <p class="cap" style="margin-top:auto;">The pin toggle on a cue becomes <i>Add to busk page</i>, a picker of page &rarr; bank that appends. The same control sits in the template and Look editors, and <i>Save as template</i> from the programmer offers a bank in the same breath, so a thing made mid-show lands on the page without a trip to edit mode.</p>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

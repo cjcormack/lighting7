@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .colh { font-size:10px; font-weight:600; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .tpad { display:flex; align-items:center; gap:8px; height:52px; padding:0 14px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); }
+    .tpad svg { color:var(--mfg); }
+    .tpad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tpad.on svg { color:var(--pri); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { margin-top:2px; font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .fxdiv { display:flex; align-items:center; gap:6px; margin:4px 0 0; }
+    .fxdiv::before, .fxdiv::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .fxdiv span { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.82 0.11 305); }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .wave { color:var(--mfg); }
+    .pad.all .wave, .pad.some .wave { color:var(--pri); }
+    .grp { display:flex; flex-direction:column; gap:6px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033 / 0.8); background:oklch(0.274 0.006 286.033 / 0.2); padding:6px; }
+    .grph { padding:0 2px; font-size:10px; font-weight:500; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+    .stack { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .gobtn { width:64px; height:44px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .ghost { height:44px; padding:0 10px; border-radius:8px; font-size:11px; font-weight:500; color:var(--mfg); display:grid; place-items:center; }
+    .cuepad { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:52px; padding:8px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .cuepad.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .master { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .tap { height:44px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+    .usage { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; background:var(--muted); font-size:9px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); text-transform:uppercase; }
+    .beat { width:6px; height:6px; border-radius:50%; background:#4ade80; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* library list */
+    .list { border-radius:10px; border:1px solid var(--bd); overflow:hidden; }
+    .row { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:44px; border-top:1px solid var(--bd); }
+    .list > .row:first-child, .list > .grow:first-child { border-top:none; }
+    .rname { font-size:14px; font-weight:500; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rsub { margin-top:2px; font-size:11px; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:500; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); color:var(--fg); }
+    .badge.sec { background:var(--muted); color:var(--fg); }
+    .grip { color:var(--mfg); display:flex; }
+    .grow { border-top:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.1); }
+    .growh { display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:40px; }
+    .growh .gname { flex:1; min-width:0; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .growh .gcount { font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .gbody { margin-left:24px; border-left:1px solid var(--bd); }
+    .gbody .row:first-child { border-top:1px solid var(--bd); }
+    .sw16 { width:16px; height:16px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:8px; font-size:14px; font-weight:500; white-space:nowrap; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .h1 { font-size:18px; font-weight:600; }
+    .sub { font-size:14px; color:var(--mfg); }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:10px; padding:2px; }
+    .seg span { padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .tag { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .tag.new { background:oklch(0.623 0.214 259.815 / 0.18); color:oklch(0.8 0.12 255); border:1px solid oklch(0.623 0.214 259.815 / 0.5); }
+    .tag.same { background:var(--muted); color:var(--mfg); }
+    .tag.gone { background:oklch(0.704 0.191 22.216 / 0.15); color:oklch(0.8 0.12 22); border:1px solid oklch(0.704 0.191 22.216 / 0.5); }
+  </style>
+</helmet>
+<div class="app" style="width:960px; min-height:1180px; padding:24px 28px; display:flex; flex-direction:column; gap:16px;">
+  <div>
+    <div style="font-size:22px; font-weight:700; letter-spacing:-0.01em;">How other desks say "one of these at a time"</div>
+    <p class="cap" style="margin-top:4px;">Two camps: exclusivity as a property of the <b style="color:var(--fg);">container</b> the pads sit in, or as a <b style="color:var(--fg);">playback rule</b> on the record itself. The kinds of content that can share a container is the question the brief asks.</p>
+  </div>
+
+  <div style="border:1px solid var(--bd); border-radius:10px; overflow:hidden; font-size:12px; line-height:1.45;">
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:8px 14px; background:oklch(0.274 0.006 286.033 / 0.3); border-bottom:1px solid var(--bd);">
+      <span class="lbl">Desk</span><span class="lbl">Lives on</span><span class="lbl">How it works &middot; what may share a group</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">QLC+</span><span class="badge sec" style="height:18px; align-self:start;">container</span><span>The Virtual Console's <b>Solo Frame</b>: only one child function runs at a time; a press releases the rest; separate solo frames don't affect each other. <b>Any widget</b> &mdash; scene, chaser, sequence, script &mdash; sits in one. Layout and function list are separate things.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">ChamSys MagicQ</span><span class="badge sec" style="height:18px; align-self:start;">container</span><span>The Execute window's <b>Solo</b> ("radio") buttons: one of the group active at a time, the group being every button in the <b>Region</b>, or the adjacent buttons when there is none. Cues and cue stacks share a region. The execute grid is its own layout, paged, apart from the cue-stack list.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">Daslight 4</span><span class="badge sec" style="height:18px; align-self:start;">both</span><span>A scene's <b>Release</b> mode &mdash; Off / General / Group / All except group &mdash; with the <b>bank</b> as the default group, so one scene per bank plays. <b>Switches</b> are a different kind that stacks. The kind decides the rule, which is the split the brief is trying not to make.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">Lightkey</span><span class="badge sec" style="height:18px; align-self:start;">library group</span><span>A <b>preset group</b> has a "treat presets as mutually exclusive" option (4.2): adding one preset removes the group's others. Grouped <b>cue buttons</b> have their own grouping with an "always active" option. Closest to lighting7 today &mdash; and it keeps the two kinds apart, one grouping each.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">grandMA3</span><span class="badge sec" style="height:18px; align-self:start;">playback rule</span><span>No group object. <b>Kill</b> on an executor turns it on and every other one off; <b>Kill Protect</b> opts a sequence out. <b>Off when overridden</b> switches a sequence off once another has taken every attribute it drove &mdash; contention inferred from channels, which is lighting7's per-target narrowing done automatically and for everyone.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">Hog 4</span><span class="badge sec" style="height:18px; align-self:start;">playback rule</span><span>Per list or scene: <b>Release on other Go</b>, <b>Persist on override</b>, priority. Scenes (one-cue looks) and cue lists carry the same options; palettes carry none &mdash; they are data recalled into the programmer, not playbacks.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px; border-bottom:1px solid var(--bd);">
+      <span style="font-weight:600;">ETC Eos</span><span class="badge sec" style="height:18px; align-self:start;">none</span><span>LTP and priority only. But its vocabulary is the point: <b>palettes</b> hold one category (intensity, focus, colour, beam) and <b>presets</b> hold all four with references to palettes &mdash; lighting7's template and Look &mdash; and direct selects put both on the same busk surface with no family wall between them.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:150px 108px 1fr; gap:0 14px; padding:10px 14px;">
+      <span style="font-weight:600;">Ableton / Resolume</span><span class="badge sec" style="height:18px; align-self:start;">container</span><span>Not lighting, but the mental model busking operators arrive with: a <b>track</b> (or layer) is an exclusive lane, launching a clip stops the lane's other clip, and what a clip contains is the clip's business.</span>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+    <div class="note"><p><b>Container camp</b> (QLC+, MagicQ, lanes): the layout is a separate object from the library, exclusivity is a flag on it, and content kinds mix freely. Price: the same record can sit in two containers with two behaviours, and the layout needs its own editing, paging and sync.</p></div>
+    <div class="note"><p><b>Rule camp</b> (MA, Hog): no group at all; release follows from priority, override or a Kill press. Price: it cannot say "these two are alternatives" unless they overlap on channels, and it releases things the operator meant to stack &mdash; the Amber-under-Blue behaviour, but everywhere.</p></div>
+  </div>
+
+  <div class="note key">
+    <p><b>Where lighting7 sits.</b> By the busking-view decision, the busk view is the library rendered as pads: there is one layout, and it is the library's order. So the two camps coincide here &mdash; a library group <i>is</i> the container. The pattern is not wrong; it is only typed too narrowly. Lightkey shows the library-group shape working; QLC+ and MagicQ show that nothing about a container needs to care what kind of thing a pad presses. What lighting7 has that none of them do is the per-target narrowing, and that is worth keeping across kinds.</p>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

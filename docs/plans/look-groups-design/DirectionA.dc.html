@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .colh { font-size:10px; font-weight:600; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .tpad { display:flex; align-items:center; gap:8px; height:52px; padding:0 14px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); }
+    .tpad svg { color:var(--mfg); }
+    .tpad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tpad.on svg { color:var(--pri); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { margin-top:2px; font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .fxdiv { display:flex; align-items:center; gap:6px; margin:4px 0 0; }
+    .fxdiv::before, .fxdiv::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .fxdiv span { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.82 0.11 305); }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .wave { color:var(--mfg); }
+    .pad.all .wave, .pad.some .wave { color:var(--pri); }
+    .grp { display:flex; flex-direction:column; gap:6px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033 / 0.8); background:oklch(0.274 0.006 286.033 / 0.2); padding:6px; }
+    .grph { padding:0 2px; font-size:10px; font-weight:500; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+    .stack { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .gobtn { width:64px; height:44px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .ghost { height:44px; padding:0 10px; border-radius:8px; font-size:11px; font-weight:500; color:var(--mfg); display:grid; place-items:center; }
+    .cuepad { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:52px; padding:8px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .cuepad.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .master { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .tap { height:44px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+    .usage { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; background:var(--muted); font-size:9px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); text-transform:uppercase; }
+    .beat { width:6px; height:6px; border-radius:50%; background:#4ade80; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* library list */
+    .list { border-radius:10px; border:1px solid var(--bd); overflow:hidden; }
+    .row { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:44px; border-top:1px solid var(--bd); }
+    .list > .row:first-child, .list > .grow:first-child { border-top:none; }
+    .rname { font-size:14px; font-weight:500; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rsub { margin-top:2px; font-size:11px; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:500; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); color:var(--fg); }
+    .badge.sec { background:var(--muted); color:var(--fg); }
+    .grip { color:var(--mfg); display:flex; }
+    .grow { border-top:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.1); }
+    .growh { display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:40px; }
+    .growh .gname { flex:1; min-width:0; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .growh .gcount { font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .gbody { margin-left:24px; border-left:1px solid var(--bd); }
+    .gbody .row:first-child { border-top:1px solid var(--bd); }
+    .sw16 { width:16px; height:16px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:8px; font-size:14px; font-weight:500; white-space:nowrap; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .h1 { font-size:18px; font-weight:600; }
+    .sub { font-size:14px; color:var(--mfg); }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:10px; padding:2px; }
+    .seg span { padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .tag { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .tag.new { background:oklch(0.623 0.214 259.815 / 0.18); color:oklch(0.8 0.12 255); border:1px solid oklch(0.623 0.214 259.815 / 0.5); }
+    .tag.same { background:var(--muted); color:var(--mfg); }
+    .tag.gone { background:oklch(0.704 0.191 22.216 / 0.15); color:oklch(0.8 0.12 22); border:1px solid oklch(0.704 0.191 22.216 / 0.5); }
+  </style>
+</helmet>
+<div class="app" style="width:1180px; height:680px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div style="font-size:18px; font-weight:700;">Alternative A &middot; Look groups mirror template groups</div>
+    <p class="cap" style="margin-top:3px;">A second table, a second reorder route, a second cluster kind. Nothing existing moves; the two group kinds never meet.</p>
+  </div>
+  <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:20px; flex:1; min-height:0;">
+    <div style="border:1px solid var(--bd); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:14px;">
+      <div>
+        <div class="lbl" style="margin-bottom:8px;">Templates</div>
+        <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px;">
+          <div class="col">
+            <span class="colh">Colour</span>
+            <div class="grp"><span class="grph">Key colours</span>
+              <div class="pad"><span class="padrow"><span class="sw" style="background:#ff9d4a;"></span><span class="padname">Amber Key</span></span></div>
+              <div class="pad all"><span class="padrow"><span class="sw" style="background:#5aa2ff;"></span><span class="padname">Steel Blue</span></span></div>
+            </div>
+          </div>
+          <div class="col">
+            <span class="colh">Position</span>
+            <div class="grp"><span class="grph">Positions</span>
+              <div class="pad all"><span class="padname">Downstage Centre</span><span class="paddetail">8 heads</span></div>
+              <div class="pad"><span class="padname">Band</span><span class="paddetail">6 heads</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="lbl" style="margin-bottom:8px;">Looks</div>
+        <div class="grp"><span class="grph">Move patterns</span>
+          <div style="display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:6px;">
+            <div class="pad all"><span class="padrow"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Ballyhoo</span></span><span class="paddetail">2 effects &middot; 6 heads</span></div>
+            <div class="pad"><span class="padrow"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Circle Chase</span></span><span class="paddetail">1 effect &middot; 2 values</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="note" style="border-color:oklch(0.704 0.191 22.216 / 0.5); background:oklch(0.704 0.191 22.216 / 0.08);">
+        <p><b>Both lit at once.</b> Ballyhoo and Downstage Centre are fighting over the same six pan/tilt channels, and neither group can say so: a template group only knows templates, a Look group only knows Looks. This is exactly the case in the brief.</p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div class="note"><p><b>For.</b> The smallest change. No rule to reverse, nothing leaves its column, the Looks pool gains clusters and a server-owned order, and the template side is untouched.</p></div>
+      <div class="note"><p><b>Against.</b> Two of everything: <span class="mono">look_groups</span>, a second whole-layout route, a second <span class="mono">templateLayout.ts</span>, a second family question &mdash; and the answer there is "no family rule for Look groups", so the two group kinds would carry different rules under one name.</p></div>
+      <div class="note"><p><b>Against, decisively.</b> It cannot express "one movement at a time" once the movements are a palette and a pattern. The brief's example stays impossible, and the fix later is this canvas's recommendation anyway &mdash; with a migration on top.</p></div>
+      <div class="note" style="margin-top:auto;"><p><b>Where it fits.</b> Nowhere on its own. Its one real idea &mdash; clusters in the Looks pool with a dense order &mdash; is contained in the recommendation.</p></div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

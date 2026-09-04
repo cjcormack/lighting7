@@ -1,0 +1,364 @@
+# Busk layout — pages of rows, columns and banks the operator builds
+
+> **Document status: PROPOSED 2026-09-04 — nothing has landed.** The visual design is settled
+> and checked in beside this plan at [`look-groups-design/`](look-groups-design/INDEX.md) —
+> eleven static artboards on two canvas pages: the busk view in play and edit mode, the build
+> flow, the rows/columns/banks structure, the model and delta, the FX cue slots overlay fed from
+> the busk library, a survey of other desks, and the three directions considered (A: Look groups
+> mirroring template groups; B: one library group for both kinds; C: this plan). The live canvas
+> at <https://claude.ai/code/artifact/4eb72004-4860-4297-b6e3-27b3f1f39dd9> is a convenience
+> copy, private to Chris; the checked-in files are the authority. This document is the engineering
+> half: the model, the decisions and their reasons, and the session split. Where wording here and
+> the artboards disagree, this plan wins on behaviour and the artboards win on layout and copy.
+
+## 1. Context
+
+The brief began as "template groups and ordering, but for Looks", so that a set of complex move
+patterns could be mutually exclusive on the busk view. Working it through showed the group pattern
+was not wrong but typed too narrowly: a template group is two facts the cook never reads — a
+*place* in the library's order and a set of *siblings* a press releases — plus a one-family rule
+that is template-shaped. A Look spans families by construction, and the operator's example (a
+position palette and a movement pattern that must not run together) needs a group that holds both
+kinds. Direction B on the canvas generalised the library group to do that. Chris chose Direction C
+instead: **the busk page becomes a layout the operator builds**, referencing library records,
+owning order and exclusivity itself, and the library goes back to being a flat list.
+
+What that replaces, all of it on the dev desk only and none of it shipped anywhere else:
+
+- **Template groups and ordering** — `template_groups`, `templates.group_id`, the shared
+  `sort_order` across both tables, `POST /templates/reorder`, the `/template-groups` CRUD, the
+  one-family rule enforced at three write boundaries (`templateLayout.kt`, `projectTemplates.kt`),
+  `siblingUuids()` on the template toggle, and the `TemplateLayoutList` / `TemplateGroupRow`
+  drag-and-drop on `/templates` with `lib/templateLayout.ts` mirroring the server's tie-break.
+- **Looks' raw `sort_order`** — written by the client on `PUT`, never renumbered, no reorder route.
+- **Pinned cues** — `cues.pinned_to_busk`, the Pin toggle in `CuePropsPane`, and the busk view's
+  cue column (`BuskCueStacks.tsx`: one card per runnable stack plus the pinned pads, firing
+  `POST /show/go-to` with `cueId` — the additive field on `GoToStackRequest` whose docblock says
+  it exists for exactly this).
+- **The busk view's automatic layout** — `BuskPools.tsx`'s four family columns, `columnRuns`
+  coalescing a group's members into a cluster, and the Looks pool of every Look with a deferred
+  effect.
+- **The FX cue slots overlay's own editing** — `CueSlotEditAssignPanel`, the long-press wiggle
+  mode, and the slot's ability to hold a cue *stack*. The overlay itself stays (D7).
+
+The busking-view plan's decision that "a busk pad presses a named thing from the library onto the
+selection" stands. Every pad is still a template, a Look or a cue. What changes hands is who says
+where a pad sits and what else goes off when it is pressed: the operator, in the layout, instead
+of the library's family and group.
+
+## 2. Decisions taken
+
+- **D1 — the page is the operator's, the library is flat.** Order and grouping mean something
+  only on a busk page. `/templates` and `/looks` list by name, keep their family filters, and lose
+  drag-and-drop and *New group*. A row may later carry an "on *n* pages" hint (§11).
+- **D2 — rows, columns, banks, pads; no coordinates.** A page is rows. A row is columns, each with
+  a width share (¼, ⅓, ½, ⅔, ¾, full). A column stacks banks top to bottom. A bank has a name,
+  `solo`, and a `flow` — pads wrap to the bank's width, or run one per line. Solo never decides a
+  bank's shape. Nothing is positioned by hand, nothing overlaps, and columns stack on a narrow
+  screen. This is MagicQ's fixed execute grid, not QLC+'s free canvas: free positioning is fiddly
+  on a touch surface and never survives a narrower screen.
+- **D3 — a pad is a reference, never a copy.** `{kind: TEMPLATE | LOOK | CUE, uuid}`, ordered
+  within its bank. One record may sit on several pads. Deleting the record deletes its pads — a pad
+  is an enrichment, not a guard, so the template and Look delete guards do not learn about pads.
+- **D4 — a press goes through the pad, and the bank decides the siblings.**
+  `POST /busk/pads/{padId}/press` reads the pad, its record and — when the bank is solo — the
+  records on its sibling pads, in one transaction, exactly as the template toggle reads its group
+  today (`projectTemplates.kt` ~400: "the siblings are read beside the source so a concurrent
+  regroup cannot release the wrong set"). It then calls the existing `ProgrammerLayerStack.toggle`
+  with `releaseSiblings`, which is already uuid-keyed and kind-blind. **The engine does not
+  change.** `/templates/{id}/toggle` and `/looks/{id}/toggle` remain for the programmer's ⌥click
+  strip and the AI, always siblingless.
+- **D5 — every pad is a toggle, and a cue pad presses the way a cue slot does.** A cue pad is
+  apply/stop through `CueStackManager` (`POST /cues/{id}/apply` and `/stop`), lit from its stack's
+  `activeCueId`, live without being the playhead — the FS-BUG-CUESLOT-LIVENESS decision. The
+  pinned pad's move-the-playhead press (`GoToStackRequest.cueId`) loses its only caller and goes.
+  GO and BACK for the playhead stay on the ShowBar.
+- **D6 — solo has one meaning for every kind: pressing one turns its siblings off.** A layer
+  sibling (template or Look) is narrowed on the pressed heads through the existing `withoutTargets`
+  rule. A cue sibling that is live is stopped. A cue press turns its layer siblings off wholesale,
+  because a cue has no targets. Solo off means the bank stacks — the behaviour ungrouped pads have
+  today, now a choice per bank.
+- **D7 — the FX cue slots overlay stays as coded, and is fed from the busk library.** It has no
+  selection, so it can hold only what needs none: cues, and Looks with no deferred effect (rows are
+  always bound, so that is the whole test). `cue_slots.cue_stack_id` becomes `look_id`. A Look slot
+  presses `POST /looks/{id}/toggle` with no targets, and the route derives them from the Look's own
+  fixtures when it has no deferred effect (today it 400s on an empty target list; that stays for a
+  busk-only Look). The paged grid of eight, tap-to-toggle, paging and swap-by-drag stay. The wiggle
+  mode and `CueSlotEditAssignPanel` go: the tiles grow their crosses and become drop targets exactly
+  while the busk view is in edit mode, taking rows from the same library palette the banks take.
+  A "busk strip" that mirrored a page on every route was drawn and rejected as too complex for the
+  overlay's use.
+- **D8 — editing happens in place, and every gesture saves.** *Edit layout* on the busk view turns
+  the page editable: bank names become fields, Solo a switch, pads grow a cross, a lifted bank sees
+  three drop zones (beside a column → new column; under a bank → stack in that column; below the
+  page → new row), and the page ends in *+ Row*. Each gesture writes the whole page (D10). *Done*
+  only leaves the mode. Pads do not press while editing and the target band dims to say so.
+- **D9 — the library is a palette, not a picker.** While editing, the speed rail's place is taken
+  by a drawer listing templates, Looks and cues under one search, a kind filter and a family filter,
+  every row draggable onto a bank or a slot. A record already on the page says so and may be placed
+  again. Long-press lifts on touch — the same `useLongPress` the pads use to open their editor
+  outside edit mode. No ticking, no confirm.
+- **D10 — one write for a page, the whole page.** `PUT /busk/pages/{pid}/layout` takes rows of
+  columns of banks of pads, every bank named once, pads without an id created, and renumbers
+  densely — the `applyTemplateLayout` shape ("a partial list cannot express a move out"), which this
+  plan retires along with the route that carried it. Reasons of the same kind apply: a partial
+  document cannot say "this column is now empty".
+- **D11 — no migration.** Template groups, templates' and Looks' order, pinned cues and cue-stack
+  slots exist only on the dev desk. Their tables and columns go outright and nothing is backfilled.
+  The one starting state to build is the **empty-project default**: on first open with no pages, the
+  desk offers *Start from your library* (a stacking bank per family, the buskable Looks, and a Cues
+  bank of nothing — there are no pinned cues to carry) or *Start empty*.
+- **D12 — sync `formatVersion` 10, writer bump, `minReader` stays 5.** The v9 argument verbatim:
+  a layout changes what a press does on stage, so a v9 install must refuse the repo rather than
+  silently drop it.
+
+## 3. The model
+
+### 3.1 Schema
+
+Four new tables, all portable show content (CLAUDE.md's decision tree, branch 2):
+
+| Table | Columns | Notes |
+| --- | --- | --- |
+| `busk_pages` | `project_id`, `name`, `sort_order`, `uuid` | `uniqueIndex(project, name)`, the template/Look identity rule |
+| `busk_columns` | `page_id`, `row`, `sort_order`, `width`, `uuid` | `width` is a share in twelfths (3, 4, 6, 8, 9, 12); `row` is a dense integer the layout route renumbers |
+| `busk_banks` | `column_id`, `sort_order`, `name`, `solo`, `flow`, `uuid` | `flow` ∈ `WRAP`, `COLUMN`; `name` may repeat across banks |
+| `busk_pads` | `bank_id`, `sort_order`, `template_id?`, `look_id?`, `cue_id?`, `uuid` | exactly one FK set, validated in the route — the `DaoCueLayers` pattern, and for the same reason: SQLite enforces no cascade without a pragma, so the routes validate by hand |
+
+Deleting a template, Look or cue deletes its pads inside the same transaction the delete already
+runs (the counterpart of `templates.group_id` having no `ReferenceOption`). A page delete removes
+its columns, banks and pads.
+
+`cue_slots` loses `cue_stack_id` and gains `look_id` (nullable, exactly one of the two set).
+
+**Removed:** `template_groups`; `templates.group_id`; `templates.sort_order`; `looks.sort_order`;
+`cues.pinned_to_busk`. Every disposition row in `SyncCoverageTest.dispositions` follows.
+
+### 3.2 The write boundary
+
+- `POST /projects/{id}/busk/pages` (name → appends), `PUT .../{pid}` (rename),
+  `DELETE .../{pid}`, `POST .../pages/reorder` (every page id once).
+- `PUT /projects/{id}/busk/pages/{pid}/layout` — the whole page:
+  `rows: [{columns: [{columnId?, width, banks: [{bankId?, name, solo, flow, pads: [{padId?, ref}]}]}]}]`.
+  Validates shape, then identity (every named column/bank/pad id belongs to this page, none twice),
+  then every `ref` resolves in this project, then writes densely from zero. Returns before touching
+  a row on any refusal. An empty column or row is refused (the client removes them as it edits).
+  Widths in a row need not sum to twelve; the client renders them as `fr` shares.
+- `POST /projects/{id}/busk/pads/{padId}/press` `{targets}` → by kind: template →
+  `toggle(source, targets, familyMask, siblings)`; Look → `toggle(source, targets, null, siblings)`;
+  cue → apply when its stack's `activeCueId` is not this cue, else stop; siblings resolved as D4/D6.
+  Response `{kind, action, effectCount, released}`.
+- `POST /projects/{id}/looks/{id}/toggle` with empty `targets` succeeds for a Look with no deferred
+  effect by taking the Look's own fixtures as the targets (D7). Unchanged otherwise.
+- `POST /projects/{id}/cue-slots` accepts `lookId` in place of `cueStackId`, and refuses a Look with
+  a deferred effect (409, `CUE_SLOT_LOOK_NEEDS_SELECTION`).
+- All of the above are `withCurrentProject`-gated like the cue-slot writes.
+
+### 3.3 The read side
+
+- `GET /projects/{id}/busk` — every page, nested, one document. A `BuskPadDto` carries what the
+  pad needs to draw without a second fetch: `kind`, `uuid`, `name`, `swatch?`, `family?`,
+  `isEffect`, `detail` (the pad's second line), and for a cue its `stackId` and `cueNumber`.
+- Lit state is unchanged: templates and Looks from `programmer.layerState.applied` (per record
+  uuid, so a record on two pads lights on both and either pad turns it off); cues from the cue
+  stack list's `activeCueId`. The FX cue slots overlay gains the `applied` feed for its Look tiles.
+- WebSocket: one keyed frame, `buskLayoutChanged {pageIds}`, for every layout write, page CRUD and
+  reorder. `templateListChanged` and `lookListChanged` shed their "reordered or moved between
+  groups" meaning. `cueSlotListChanged` is unchanged.
+
+### 3.4 Sync
+
+`buskPages/{uuid}.json` — one canonical document per page with rows, columns, banks and pads
+nested; pads reference records by uuid; a dangling reference drops the pad with a warning (a pad
+is an enrichment, D3). `cueSlots/{uuid}.json`: `cueStackUuid` → `lookUuid`. `templateGroups/`
+goes; `TemplateJson.groupUuid`, `TemplateJson.sortOrder`, `LookJson.sortOrder` and
+`CueJson.pinnedToBusk` go. Import order: pages after templates, Looks and cues. `formatVersion`
+10 per D12; `docs/sync-engineering.md` gains a "Version 10" section beside "Version 9".
+`RichProjectFixture` gets a page with two rows, a stacked column, a solo bank holding all three
+kinds, a `COLUMN`-flow bank, and a slot holding a Look — every field non-default, because
+canonical JSON omits defaults.
+
+## 4. UX — what the design draws
+
+Grep-able summary; the artboards are the authority on layout and copy.
+
+- **Busk view, play** (`Main.dc.html`): ShowBar; target band; a page strip (`seg big`) with *Edit
+  layout* at its right; rows of columns of banks; a bank is a `rounded-md` cluster with a 11px/600
+  name and a small *solo* tag when solo; pads are the shipped `LookPadButton` (56px, presence
+  ladder) and a cue pad is the shipped pinned-cue pad (mono number, name, stack, green when live);
+  the speed rail is unchanged. No family columns, no Looks pool, no stack cards, no pinned grid.
+- **Busk view, edit** (`Edit.dc.html`): the strip gains *+ Page*, *Saved* and a primary *Done*;
+  bank headers become grip + name field + *Solo* switch + ⋯ (Rename, Width ¼…Full, Flow Wrap/Column,
+  Duplicate, Delete); pads grow a top-left cross; a *+ Bank* column slot ends each row and a
+  *+ Row* strip ends the page; the target band dims; the library palette replaces the speed rail
+  (360px): search, kind filter, family filter, draggable rows with an *on page* badge; one row is
+  mid-drag with its drop slot open in a bank.
+- **Rows, columns, banks** (`Layout.dc.html`): the structure as nested boxes; the three drop
+  zones; width shares and flow.
+- **Building a page** (`Flows.dc.html`): first open (*Start from your library* / *Start empty*);
+  edit layout; drag from the library; arrange (pads and banks); solo on/off with the cue case;
+  *Add to busk page* from a cue's properties and the template/Look editors, and *Also add to
+  <bank>* on *Save as template*.
+- **FX cue slots** (`Slots.dc.html`): the shipped overlay above the busk view in edit mode; tiles
+  with crosses; an empty tile showing *+* under a dragged bound Look; busk-only Looks and templates
+  dimmed in the palette with *needs a selection*.
+
+## 5. Implementation — four sessions
+
+Backend first with the new API beside the old, then the busk view, then the removals, then the
+edges. Each session ends green (`./gradlew test`; `npm test` in `lighting-react`).
+
+### Models
+
+Which Claude Code model runs each session, and at what effort. The judgement is where silent
+failures live, not where the most code is.
+
+| Session | Model | Effort | Why |
+| --- | --- | --- | --- |
+| 1 — the model and the routes | Fable 5.1 | high | The invariant-dense one: four tables through the sync decision tree, a format bump, whole-page validation, the one-transaction sibling read, target derivation on the Look toggle. Its failures are silent (a fixture field left at its default, a disposition row missed, a dangling reference that 500s). |
+| 2 — the busk view | Opus 5 | xhigh | A lot of UI code, moderate reasoning, the canvas to match. The one subtle piece is dnd-kit's context spanning the page, the palette and the header overlay. Fast mode is available on Opus 5 for the visual iteration. |
+| 3 — the removals | Opus 5 | high | Well specified but wide across two repos, docs and tests; the risk is stragglers, not reasoning. Sonnet 5 at high is an acceptable saving. |
+| 4 — the edges | Sonnet 5 | high | Small, well-scoped additions. The desk checks are a human job. |
+
+**Reviews run on `/code-review-lite`** (the built-in review with its subagents one tier down) or a
+plain Opus 5 review after every session, session 1 included. Not on Fable: a review there burns
+quota far faster than the implementation does, and the session-1 risks are covered instead by its
+tests (§9) and the round-trip and coverage suites that already fail on a missed rule.
+
+`max` effort nowhere: on these models a lower effort matches the previous generation's best, and
+`xhigh` is the coding sweet spot on Opus 5.
+
+### Session 1 — the model and the routes (lighting7) — Fable 5.1, high
+
+- `models/buskLayout.kt`: the four tables (§3.1) with a docblock in the `templates.kt` style
+  recording D2–D4 and the no-cascade rule. Register in `Schema.ALL_TABLES`; disposition rows in
+  `SyncCoverageTest`.
+- `routes/projectBusk.kt`: pages CRUD + reorder, `PUT .../layout`, `GET /busk`. `routes/buskPress.kt`:
+  the press route. `Fixtures.buskLayoutChanged()` and `BuskLayoutChangedOutMessage`.
+- `projectLooks.kt` toggle: derive targets for a Look with no deferred effect (D7).
+- `projectCueSlots.kt` / `models/cueSlots.kt`: `look_id`, the eligibility refusal, `CueSlotDetails.itemType`
+  gains `"look"`.
+- Sync: exporter, importer, DTOs, `formatVersion` 10, `RichProjectFixture`, `ProjectRoundTripTest`.
+- Tests: `BuskLayoutRoutesTest` (whole-page validation: shape, identity, dangling ref, empty column
+  refused, dense renumbering, deletes cascade by hand), `BuskPressRouteTest` (each kind; solo
+  narrows a layer sibling and stops a cue sibling; a cue press turns layer siblings off; a stacking
+  bank releases nothing; a record on two pads lights on both and either turns it off),
+  `CueSlotLivenessRouteTest` extended for a Look slot, `LookRoutesTest` for target derivation.
+- Docs: `docs/lighting-composition-model.md` gains §"The busk layout" beside §"Applied state is
+  resolved by the desk"; `docs/websocket-engineering.md` row; `docs/sync-engineering.md` v10.
+
+### Session 2 — the busk view (lighting-react) — Opus 5, xhigh
+
+- `store/busk.ts` (RTK Query: `GET /busk`, page CRUD, layout PUT with optimistic apply and undo,
+  press), `api/buskWsApi.ts` for `buskLayoutChanged`.
+- `BuskingView.tsx` renders pages → rows → columns → banks → pads from the document; `BuskPools`,
+  `BuskCueStacks` and `lookPresence`'s column logic retire (their tests with them); `LookPadButton`
+  and the cue pad survive as the two pad faces; `BuskLabel`, `TargetBand`, `BuskSpeedRail` untouched.
+- Edit mode: `BuskEditProvider` (dnd-kit context covering the page and the palette), bank header
+  controls, drop zones for banks (D8), pad drag within/between banks, `LibraryPalette.tsx` (D9).
+  Every gesture calls the layout PUT with the whole page.
+- First-open state (D11) and *Start from your library* generator, client-side from the three list
+  queries.
+- Tests: the render from a fixture document; edit-mode drops produce the expected next document;
+  press dispatch by kind; the palette's *on page* marks.
+
+### Session 3 — the removals (both repos) — Opus 5, high
+
+- lighting7: drop `template_groups`, `templates.group_id`, both `sort_order`s, `pinned_to_busk`,
+  `cue_stack_id`; delete `projectTemplateGroups.kt`, `templateLayout.kt`, the reorder route,
+  `groupFamilyClash` and `TEMPLATE_GROUP_FAMILY`, `siblingUuids()`, `TemplateInput.groupId/groupIdPresent`,
+  `TemplateDto.groupId/sortOrder`, `LookDto.sortOrder`, `GoToStackRequest.cueId`,
+  `TemplateGroupRoutesTest`, the layout tests; `GET /looks` and `/templates` order by name.
+- lighting-react: delete `TemplateLayoutList`, `TemplateGroupRow`, `lib/templateLayout.ts`, the
+  *New group* / *Ungroup* dialogs in `Templates.tsx`, Looks' raw sort order, the Pin toggle in
+  `CuePropsPane`, `CueSlotEditAssignPanel`, the wiggle mode in `CueSlotOverviewPanel`; the overlay's
+  tiles become droppable and crossable only while `useBuskEditMode()` is true, and read `applied`
+  for Look tiles.
+- CLAUDE.md: the template-group paragraph, the Template Endpoints list, the WebSocket list, and the
+  FX section's "template group" sentence. `followups.md`: close `FU-TMPL-LAYOUT-FAMILY-SCOPE`,
+  `FU-TMPL-LAYOUT-SIGNAL`, `FU-TMPL-GROUP-MISSING-404`, `FU-TMPL-GROUP-AI` as one-line Completed
+  rows; reword `FU-BUSK-MOMENTARY`'s "every pad left is a layer toggle" (cue pads are toggles too).
+  `manual-validation.md`: the cue-slot drag-vs-collapse check (its edit mode is now the busk
+  view's) and `FU-MANUAL-BUSK-VIEW` / `FU-MANUAL-FX-TEMPLATE-PADS`, which describe family columns.
+
+### Session 4 — the edges (both repos) — Sonnet 5, high
+
+- *Add to busk page* (page → bank picker that appends) in `CuePropsPane`, `TemplateEditor` and
+  `LookDetailSheet`; *Also add to <bank>* on the programmer's *Save as template* sheet.
+- The `?family=` filter on `/looks` and `/templates` kept; an "on *n* pages" hint per row if §11
+  settles for it.
+- AI: `AiToolSchemas` gains nothing this round (§7); the "groups" vocabulary at line 208 refers to
+  fixture groups and is untouched.
+- Desk checks (§9) run and recorded.
+
+## 6. Migration
+
+None (D11). The only versioning is the sync format bump (D12).
+
+## 7. Explicitly out of scope
+
+- Pages on a MIDI surface (page up/down as `BindingTarget`s) and pad-to-control bindings — hardware
+  keeps naming cues and stacks directly.
+- AI tools for the layout (`add_busk_pad`, `create_busk_bank`).
+- A pad size or a bank height beyond width and flow; free positioning.
+- Momentary (flash) pads — `FU-BUSK-MOMENTARY` stands.
+- Any busk strip or mirroring of a page outside the busk view (rejected, D7).
+- Cue-stack pads. A slot could hold a stack; nothing else could, and nobody asked for it on a page.
+
+## 8. Follow-ups to record
+
+- `FU-BUSK-PAGE-MIDI` — Trigger: an operator wants to change busk page from hardware.
+- `FU-BUSK-AI-LAYOUT` — Trigger: the AI is asked to put something on the busk page.
+- `FU-BUSK-PAD-SIZE` — Trigger: a page needs more density than width and flow give.
+- `FU-BUSK-EDIT-CONCURRENCY` — Trigger: two desks edit one page at once. Per-gesture saves mean a
+  half-built page is live for a second operator; the alternative (hold until *Done*, with Discard)
+  is recorded in §11.
+- `FU-SLOT-LOOK-ELIGIBILITY` — Trigger: a rows-only Look on a slot that asserts nothing on the
+  fixtures it names. Sits beside `FU-LOOK-COMPAT-ROW-COVERAGE`, which is the same question asked of
+  busk pads.
+- `FU-BUSK-ON-PAGES-HINT` — Trigger: an operator deletes a template and is surprised pads went with it.
+
+## 9. Verification
+
+Backend: the tests in §5 S1, plus the existing `ProgrammerLayerStackTest` unchanged (the engine
+does not move — if it has to, the plan is wrong). Frontend: §5 S2. Desk checks, to be added to
+`manual-validation.md` as `FU-MANUAL-BUSK-LAYOUT` when they are run, not before:
+
+1. Build a page from empty: two rows, a stacked column, a `COLUMN` bank; reload; it is the same page.
+2. Solo bank of a position template and a movement Look: press each on the movers; the other goes
+   dark on those heads and nothing else moves. Press the Look on two heads only; the template stays
+   lit on the rest.
+3. A cue pad beside them in the same solo bank: pressing it turns both off and lights the cue;
+   pressing it again stops the cue and lights nothing. GO on the ShowBar is unaffected throughout.
+4. The same template on two pads on two pages: lit on both; either turns it off.
+5. Drag a bound Look from the palette into a slot; tap it on the Show view with no selection; it
+   comes on on its own fixtures and lights the tile. A busk-only Look will not drop.
+6. Delete a template that is on three pads: the pads go, the pages render, no 500.
+7. A narrow window: columns stack, nothing overlaps, nothing is unreachable.
+
+## 10. Scope honesty
+
+This is a large change — four tables, a new routing family, and the removal of two recently landed
+features (template groups, FX templates' busk placement) plus pinned cues and the cue-slot assign
+flow. What keeps it bounded: the release engine, `appliedState`, the pad faces, the target band,
+the speed rail and the cue stack manager are untouched, and the layout route reuses the
+whole-document validation shape the reorder route already proved. The riskiest lines are the press
+route's one-transaction sibling read (copy the template toggle's), the Look toggle's target
+derivation (a Look with rows on a fixture that is no longer patched must resolve to nothing, not
+500 — `TemplateResolver`'s unresolvable-target rule applies), and dnd-kit's context having to cover
+both the busk page and the header overlay, which today live under different providers in
+`Layout.tsx`.
+
+## 11. Open questions
+
+Carried from the canvas's sticky notes; each has a drafted answer the sessions build unless
+overturned:
+
+- **The library pages afterwards.** Drafted: flat lists by name, family filter kept, no groups, no
+  drag; optionally an "on *n* pages" hint per row.
+- **Save per gesture vs on Done.** Drafted: per gesture, like every other editor on the desk, with
+  *Done* only leaving the mode. Alternative: hold edits until *Done*, with Discard.
+- **Which Looks a slot may hold.** Drafted: no deferred effect. A busk-only Look is refused at assign,
+  not at press.
+- **The first-open generator's content.** Drafted: a stacking bank per family holding that family's
+  templates, a Looks bank of every Look with a deferred effect, an empty Cues bank; nothing solo.

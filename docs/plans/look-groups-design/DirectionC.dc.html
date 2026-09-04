@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .colh { font-size:10px; font-weight:600; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .tpad { display:flex; align-items:center; gap:8px; height:52px; padding:0 14px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); }
+    .tpad svg { color:var(--mfg); }
+    .tpad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tpad.on svg { color:var(--pri); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { margin-top:2px; font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .fxdiv { display:flex; align-items:center; gap:6px; margin:4px 0 0; }
+    .fxdiv::before, .fxdiv::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .fxdiv span { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.82 0.11 305); }
+    .col { display:flex; flex-direction:column; gap:8px; }
+    .wave { color:var(--mfg); }
+    .pad.all .wave, .pad.some .wave { color:var(--pri); }
+    .grp { display:flex; flex-direction:column; gap:6px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033 / 0.8); background:oklch(0.274 0.006 286.033 / 0.2); padding:6px; }
+    .grph { padding:0 2px; font-size:10px; font-weight:500; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; }
+    .stack { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .gobtn { width:64px; height:44px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .ghost { height:44px; padding:0 10px; border-radius:8px; font-size:11px; font-weight:500; color:var(--mfg); display:grid; place-items:center; }
+    .cuepad { display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:52px; padding:8px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .cuepad.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .master { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+    .tap { height:44px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:8px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; }
+    .usage { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; background:var(--muted); font-size:9px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); text-transform:uppercase; }
+    .beat { width:6px; height:6px; border-radius:50%; background:#4ade80; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* library list */
+    .list { border-radius:10px; border:1px solid var(--bd); overflow:hidden; }
+    .row { display:flex; align-items:center; gap:8px; padding:10px 12px; min-height:44px; border-top:1px solid var(--bd); }
+    .list > .row:first-child, .list > .grow:first-child { border-top:none; }
+    .rname { font-size:14px; font-weight:500; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .rsub { margin-top:2px; font-size:11px; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .badge { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:500; white-space:nowrap; }
+    .badge.out { border:1px solid var(--bd); color:var(--fg); }
+    .badge.sec { background:var(--muted); color:var(--fg); }
+    .grip { color:var(--mfg); display:flex; }
+    .grow { border-top:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.1); }
+    .growh { display:flex; align-items:center; gap:8px; padding:8px 12px; min-height:40px; }
+    .growh .gname { flex:1; min-width:0; font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .growh .gcount { font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .gbody { margin-left:24px; border-left:1px solid var(--bd); }
+    .gbody .row:first-child { border-top:1px solid var(--bd); }
+    .sw16 { width:16px; height:16px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:8px; font-size:14px; font-weight:500; white-space:nowrap; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .h1 { font-size:18px; font-weight:600; }
+    .sub { font-size:14px; color:var(--mfg); }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:10px; padding:2px; }
+    .seg span { padding:4px 10px; border-radius:8px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .tag { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .tag.new { background:oklch(0.623 0.214 259.815 / 0.18); color:oklch(0.8 0.12 255); border:1px solid oklch(0.623 0.214 259.815 / 0.5); }
+    .tag.same { background:var(--muted); color:var(--mfg); }
+    .tag.gone { background:oklch(0.704 0.191 22.216 / 0.15); color:oklch(0.8 0.12 22); border:1px solid oklch(0.704 0.191 22.216 / 0.5); }
+  </style>
+</helmet>
+<div class="app" style="width:1180px; height:820px; padding:20px 24px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div style="font-size:18px; font-weight:700;">Alternative C &middot; A busk layout of its own</div>
+    <p class="cap" style="margin-top:3px;">The QLC+ solo-frame / MagicQ execute-window shape: pages of banks, a bank holds pads of any kind and carries the exclusivity flag, and the library keeps its own order underneath.</p>
+  </div>
+  <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:20px; flex:1; min-height:0;">
+    <div style="border:1px solid var(--bd); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div class="seg"><span class="on">Ballads</span><span>Dance</span><span>Encore</span></div>
+        <span style="flex:1;"></span>
+        <span class="btn out" style="height:28px; font-size:12px;">Edit layout</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;">
+        <div class="grp">
+          <span class="grph">Movement <span class="tag new" style="margin-left:auto; height:16px; font-size:9px;">solo</span></span>
+          <div class="pad all"><span class="padrow"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Ballyhoo</span></span></div>
+          <div class="pad"><span class="padname">Downstage Centre</span></div>
+          <div class="pad"><span class="padrow"><svg class="ico12 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg><span class="padname">Circle Chase</span></span></div>
+        </div>
+        <div class="grp">
+          <span class="grph">Key colours <span class="tag new" style="margin-left:auto; height:16px; font-size:9px;">solo</span></span>
+          <div class="pad"><span class="padrow"><span class="sw" style="background:#ff9d4a;"></span><span class="padname">Amber Key</span></span></div>
+          <div class="pad all"><span class="padrow"><span class="sw" style="background:#5aa2ff;"></span><span class="padname">Steel Blue</span></span></div>
+          <div class="pad"><span class="padrow"><span class="sw" style="background:#fff3d6;"></span><span class="padname">Warm White</span></span></div>
+        </div>
+        <div class="grp">
+          <span class="grph">Extras <span class="tag same" style="margin-left:auto; height:16px; font-size:9px;">stack</span></span>
+          <div class="pad"><span class="padrow"><span class="sw" style="background:#ff9d4a;"></span><span class="padname">Amber Key</span></span><span class="paddetail">also in Key colours</span></div>
+          <div class="pad"><span class="padname">Storm Wash</span></div>
+          <div class="pad"><span class="padname">Strobe Hit</span></div>
+        </div>
+      </div>
+      <div class="note" style="border-color:oklch(0.704 0.191 22.216 / 0.5); background:oklch(0.704 0.191 22.216 / 0.08);">
+        <p><b>One pad, two meanings.</b> Amber Key sits in a solo bank and a stacking bank. Its ring is per record, so it lights in both; but a press in <i>Key colours</i> releases Steel Blue and a press in <i>Extras</i> does not. The toggle route would need to know which pad was pressed, and the ring could no longer promise "press me and I invert".</p>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="note"><p><b>Library pages</b> keep a flat, separate order. Template groups either vanish from <span class="mono">/templates</span> or become a second grouping with a different meaning.</p></div>
+        <div class="note"><p><b>Migration.</b> Every existing template group becomes a solo bank on page 1; the family columns become a default page layout the operator can break.</p></div>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div class="note"><p><b>For.</b> It is what the busking desks do, and it buys three things the recommendation does not: pages, the same pad in two places, and a layout per show that is not the library's order.</p></div>
+      <div class="note"><p><b>Against.</b> Two orderings to keep straight. A new table with its own sync story. A pad identity in the toggle API. And it undoes the busking-view decision that a busk pad <i>is</i> a library record rendered as a pad &mdash; the reason the effect-pad grid was cut in §4a.</p></div>
+      <div class="note"><p><b>The tell.</b> None of its three gains is in the brief. The brief asks for exclusivity across kinds, which the recommendation gives with one column and one rule reversal.</p></div>
+      <div class="note key" style="margin-top:auto;"><p><b>Where it fits.</b> Later, if pages are ever wanted. A bank would then <i>reference</i> library groups the way a cue layer references a Look, so nothing done now is thrown away.</p></div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

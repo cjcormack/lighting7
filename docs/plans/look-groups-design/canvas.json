@@ -1,0 +1,168 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Busk layout"
+    },
+    {
+      "id": "page-2",
+      "name": "Earlier directions"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Busk view · play",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 860,
+      "page": "page-1"
+    },
+    {
+      "file": "Edit.dc.html",
+      "title": "Busk view · edit layout",
+      "x": 0,
+      "y": 1000,
+      "w": 1440,
+      "h": 980,
+      "page": "page-1"
+    },
+    {
+      "file": "Flows.dc.html",
+      "title": "Building a page",
+      "x": 1560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "page": "page-1"
+    },
+    {
+      "file": "Layout.dc.html",
+      "title": "Rows, columns, banks",
+      "x": 1560,
+      "y": 2100,
+      "w": 1440,
+      "h": 760,
+      "page": "page-1"
+    },
+    {
+      "file": "Model.dc.html",
+      "title": "The layout, the press, the delta",
+      "x": 1560,
+      "y": 1040,
+      "w": 1400,
+      "h": 940,
+      "page": "page-1"
+    },
+    {
+      "file": "Slots.dc.html",
+      "title": "FX cue slots · fed from the busk library",
+      "x": 3120,
+      "y": 1320,
+      "w": 1440,
+      "h": 900,
+      "page": "page-1"
+    },
+    {
+      "file": "Survey.dc.html",
+      "title": "How other desks do it",
+      "x": 3120,
+      "y": 0,
+      "w": 960,
+      "h": 1200,
+      "print": "flow",
+      "page": "page-1"
+    },
+    {
+      "file": "DirectionA.dc.html",
+      "title": "Alternative A · Look groups mirror template groups",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 680,
+      "page": "page-2"
+    },
+    {
+      "file": "DirectionB.dc.html",
+      "title": "Alternative B · Library groups for both kinds (busk view)",
+      "x": 1300,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "page": "page-2"
+    },
+    {
+      "file": "Library.dc.html",
+      "title": "Alternative B · Library pages",
+      "x": 1300,
+      "y": 1100,
+      "w": 1440,
+      "h": 800,
+      "page": "page-2"
+    },
+    {
+      "file": "DirectionC.dc.html",
+      "title": "Alternative C · first sketch",
+      "x": 0,
+      "y": 820,
+      "w": 1180,
+      "h": 820,
+      "page": "page-2"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "q-cue-solo",
+      "x": 0,
+      "y": -190,
+      "w": 340,
+      "page": "page-1",
+      "text": "Settled by taking the cue slot's press: a cue pad is apply/stop — a toggle, lit from the stack's live cue, live without being the playhead — so solo has one meaning for every kind: pressing one turns its siblings off. The pinned pad's move-the-playhead press goes."
+    },
+    {
+      "id": "q-width",
+      "x": 380,
+      "y": -190,
+      "w": 320,
+      "page": "page-1",
+      "text": "Settled for now: rows of columns of banks, widths as shares, a bank's pads wrapping or in one column. Still MagicQ's fixed grid rather than QLC+'s free canvas — nothing positioned by hand, nothing overlapping. If a page ever needs more, a pad size is the next lever, not coordinates."
+    },
+    {
+      "id": "q-libraries",
+      "x": 740,
+      "y": -190,
+      "w": 320,
+      "page": "page-1",
+      "text": "Open: the library pages after this.\n\nDrafted: flat lists by name, no groups, no drag order — the busk page is the only place order and grouping mean anything. Keep the family filter. Each row could show 'on 2 pages' as a hint."
+    },
+    {
+      "id": "q-save",
+      "x": 1100,
+      "y": -190,
+      "w": 300,
+      "page": "page-1",
+      "text": "Open: save per gesture vs on Done.\n\nDrafted: per gesture, matching every other editor on the desk, with Done only leaving the mode. Cost: a mid-edit page is live for a second operator. Alternative: hold edits until Done, with a Discard."
+    },
+    {
+      "id": "n-superseded",
+      "x": 0,
+      "y": -150,
+      "w": 360,
+      "page": "page-2",
+      "text": "Kept for the record. Alternative C was chosen on 2026-09-04; A and B are here so the reasoning is not lost. The first C sketch is below; the built-out version is on the other page."
+    },
+    {
+      "id": "q-slot-look",
+      "x": 4640,
+      "y": 1320,
+      "w": 340,
+      "page": "page-1",
+      "text": "Open: which Looks a slot may hold.\n\nDrafted: a Look with no deferred effect — rows are always bound, so that is the whole test. Its press toggles it onto its own fixtures; the toggle route derives the targets. A busk-only Look is refused at assign, not at press."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}
