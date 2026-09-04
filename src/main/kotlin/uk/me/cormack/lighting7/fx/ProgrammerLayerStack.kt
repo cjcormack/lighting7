@@ -524,6 +524,30 @@ class ProgrammerLayerStack(
         return recook(next, fadeMs)
     }
 
+    /**
+     * Take every layer of [sourceUuids] off the stack, in one mutation, without pressing anything.
+     *
+     * The busk press route's sibling sweep for a **cue** press in a solo bank: a cue has no targets,
+     * so its layer siblings come off wholesale rather than being narrowed the way [toggle]'s
+     * `releaseSiblings` narrows them under a layer press. It is the only way to release without a
+     * press. The template delete route reaches the same end with one [remove] per layer, which is
+     * one recook and one `layerState` frame each — fine for a delete, wrong for a pad press over a
+     * bank of lit pads, which is why this does it as one `mutateLayers` and one recook.
+     *
+     * Returns how many layers came off. Nothing is recooked — and no `layerState` frame is emitted —
+     * when nothing did: the transform hands `current` back by identity, which is what the store's
+     * emit guard reads, rather than a renumbered copy of an unchanged list.
+     */
+    fun release(sourceUuids: Set<UUID>): Int {
+        if (sourceUuids.isEmpty()) return 0
+        val (next, dropped) = store.mutateLayers { current ->
+            val kept = current.filterNot { it.source.uuid in sourceUuids }
+            if (kept.size == current.size) current to 0 else renumber(kept) to (current.size - kept.size)
+        }
+        if (dropped > 0) recook(next)
+        return dropped
+    }
+
     /** Move a layer to [toIndex], renumbering the whole list. */
     fun move(layerId: Int, toIndex: Int): ProgrammerLayerOutcome {
         val (next, _) = store.mutateLayers { current ->

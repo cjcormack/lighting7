@@ -349,6 +349,13 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click / busk pad → a tracking layer, per target on both arms: an off press clears the pressed targets from every layer of that template, and an on press takes them off a group's siblings — narrowing one that only overlaps rather than dropping it, reported as `released`)
 - `GET/POST /api/rest/projects/{id}/template-groups` + `PUT/DELETE .../{gid}` - Group CRUD; DELETE ungroups the members in the group's place and deletes no template
 
+### Busk Endpoints
+- `GET /api/rest/projects/{id}/busk/pages` + `GET .../{pid}` - The busk layout, every page nested to the pad; a pad embeds its record's own summary DTO (`template` / `look` / `cue`) so the view needs no second fetch
+- `POST /api/rest/projects/{id}/busk/pages` (appends; a duplicate name is 409 `BUSK_PAGE_NAME_TAKEN`), `PUT/DELETE .../{pid}`, `POST .../pages/reorder` (every page once, else 400)
+- `PUT .../pages/{pid}/layout` - The **whole** page (`rows: [{columns: [{columnId?, width, banks: [{bankId?, name, solo, flow, pads: [{padId?, templateId|lookId|cueId}]}]}]}]`): pads without an id created, pads absent deleted, everything renumbered densely; refused as a whole with `BUSK_LAYOUT_INVALID` / `_IDENTITY` / `_REF` before touching a row; answers the page with the ids it minted
+- `POST .../busk/pads/{padId}/press` `{targets}` - The busk view's press: a template or Look → `ProgrammerLayerStack.toggle` with the bank's siblings when the bank is solo; a cue → apply/stop through `CueStackManager`, lit from `activeCueId`. A generic template pad pressed with no selection is 400 `TEMPLATE_NEEDS_SELECTION` (a per-fixture one lands on its own heads). Solo means pressing one turns its siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue press taking layer siblings off wholesale (`release`). An off press releases nothing. See `docs/lighting-composition-model.md` §"The busk layout"
+- `POST .../looks/{id}/toggle` with empty `targets` presses a Look with no deferred effect onto its own patched fixtures (400 `LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS` otherwise); `POST .../cue-slots` takes `lookId` beside `cueId` / `cueStackId` and refuses a deferred-effect Look with 409 `CUE_SLOT_LOOK_NEEDS_SELECTION`
+
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups
 - `GET /api/rest/groups/{name}` - Get group details with members
@@ -371,6 +378,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `clearGroupFx` - Clear all effects for a group
 - `groupFxCleared` - Confirmation of group effect removal
 - `cuesRecomposed` - A Look/template *contents* edit changed what the named `cueIds` compose to. The keyed counterpart to `lookListChanged` / `templateListChanged`, which deliberately don't fire for a contents edit; carries every cue layering the edited record, not just the live ones re-transmitted
+- `busk.layoutChanged` - Keyed `{pageIds}`: page CRUD or reorder, a whole-page layout write, or a template / Look / cue / cue-stack delete that took pads off those pages. The busk view re-reads exactly those pages
 - `cueRunStateChanged` - A cue stack's live cue, armed next, and fade timing. One frame per transition from `CueStackManager` (so REST, the MIDI surface and auto-advance all report), plus a snapshot on connect; clients animate the fade locally from `fadeElapsedMs`
 
 ## Database

@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
@@ -19,6 +20,10 @@ import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
 import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.BuskBankJson
+import uk.me.cormack.lighting7.sync.dto.BuskColumnJson
+import uk.me.cormack.lighting7.sync.dto.BuskPadJson
+import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
@@ -69,7 +74,8 @@ import java.util.UUID
  * /templateGroups/{uuid}.json      -- v9+: name and top-level position only
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
- * /cueSlots/{uuid}.json
+ * /cueSlots/{uuid}.json           -- a cue, a stack, or (v10+) a Look
+ * /buskPages/{uuid}.json           -- v10+: columns, banks and pads embedded inline
  * /parkedChannels/{uuid}.json
  * /controlSurfaceBindings/{uuid}.json
  * /scripts/{uuid}.kts              -- raw script body for git-friendly diffs
@@ -428,6 +434,53 @@ class ProjectExporter(private val state: State) {
                     slotIndex = s.slotIndex,
                     cueUuid = s.cue?.uuid?.toString(),
                     cueStackUuid = s.cueStack?.uuid?.toString(),
+                    lookUuid = s.look?.uuid?.toString(),
+                )
+            }
+
+            count += writeAll(targetDir, "buskPages", project.buskPages.toList(), BuskPageJson.serializer(), { it.uuid }, liveKeys) { page ->
+                BuskPageJson(
+                    uuid = page.uuid.toString(),
+                    name = page.name,
+                    sortOrder = page.sortOrder,
+                    columns = page.columns
+                        .sortedWith(compareBy({ it.row }, { it.sortOrder }, { it.uuid }))
+                        .map { column ->
+                            BuskColumnJson(
+                                uuid = column.uuid.toString(),
+                                row = column.row,
+                                sortOrder = column.sortOrder,
+                                width = column.width,
+                                banks = column.banks
+                                    .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
+                                    .map { bank ->
+                                        BuskBankJson(
+                                            uuid = bank.uuid.toString(),
+                                            sortOrder = bank.sortOrder,
+                                            name = bank.name,
+                                            solo = bank.solo,
+                                            flow = bank.flow,
+                                            pads = bank.pads
+                                                .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
+                                                // A malformed pad is absent everywhere else it is read;
+                                                // exporting it would only hand the next importer the
+                                                // same row to drop.
+                                                .filter { pad ->
+                                                    pad.kind != null || run { warnMalformedBuskPad { pad.uuid.toString() }; false }
+                                                }
+                                                .map { pad ->
+                                                    BuskPadJson(
+                                                        uuid = pad.uuid.toString(),
+                                                        sortOrder = pad.sortOrder,
+                                                        templateUuid = pad.template?.uuid?.toString(),
+                                                        lookUuid = pad.look?.uuid?.toString(),
+                                                        cueUuid = pad.cue?.uuid?.toString(),
+                                                    )
+                                                },
+                                        )
+                                    },
+                            )
+                        },
                 )
             }
 

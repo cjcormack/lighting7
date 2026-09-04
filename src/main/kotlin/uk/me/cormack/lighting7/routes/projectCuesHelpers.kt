@@ -622,6 +622,22 @@ internal fun deleteCueChildren(cue: DaoCue) {
 internal fun deletePromptBookAnchorsForCue(cue: DaoCue): Int =
     DaoPromptBookAnchors.deleteWhere { DaoPromptBookAnchors.cue eq cue.id }
 
+/**
+ * Delete everything that *points at* [cue] from outside it — its busk pads and its cue slots —
+ * and return the ids of the busk pages that lost a pad, for `buskLayoutChanged`.
+ *
+ * Kept out of [deleteCueChildren] for the same reason the anchors are: that helper also runs on a
+ * cue **edit** to replace the children, and a pad or a slot must survive an edit and die only with
+ * the cue. Both are hand-rolled cascades — `cue_slots.cue_id` declares `CASCADE`, but SQLite does
+ * not enforce it without a per-connection pragma, and a slot whose cue is gone used to 500 the
+ * slot list. Must be called inside a transaction.
+ */
+internal fun deleteCueReferences(cue: DaoCue): Set<Int> {
+    val pageIds = deleteBuskPadsReferencing(cueId = cue.id.value)
+    DaoCueSlots.deleteWhere { DaoCueSlots.cue eq cue.id }
+    return pageIds
+}
+
 // ─── Apply logic ────────────────────────────────────────────────────────
 
 /**

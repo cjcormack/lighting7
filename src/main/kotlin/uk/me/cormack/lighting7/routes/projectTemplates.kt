@@ -307,9 +307,12 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 }
                 template.rows.forEach { it.delete() }
                 template.effects.forEach { it.delete() }
+                // Its busk pads go with it, unconditionally — a pad is an enrichment, not a use
+                // the guard above counts (busk-layout plan D3).
+                val pageIds = deleteBuskPadsReferencing(templateId = template.id.value)
                 val uuid = template.uuid
                 template.delete()
-                TemplateDeleteOutcome.Deleted(uuid)
+                TemplateDeleteOutcome.Deleted(uuid, pageIds)
             }
             when (outcome) {
                 is TemplateDeleteOutcome.NotFound ->
@@ -339,6 +342,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                         .filter { it.source.isTemplate && it.source.uuid == outcome.uuid }
                         .forEach { state.show.programmerLayerStack.remove(it.layerId) }
                     state.show.fixtures.templateListChanged()
+                    if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
                     call.respond(HttpStatusCode.NoContent)
                 }
             }
@@ -724,8 +728,11 @@ private sealed interface TemplateDeleteOutcome {
         val runningCount: Int,
     ) : TemplateDeleteOutcome
 
-    /** Carries the uuid so the handler can release the programmer layers naming it. */
-    data class Deleted(val uuid: java.util.UUID) : TemplateDeleteOutcome
+    /**
+     * Carries the uuid so the handler can release the programmer layers naming it, and the busk
+     * pages that lost a pad so it can say so.
+     */
+    data class Deleted(val uuid: java.util.UUID, val pageIds: Set<Int>) : TemplateDeleteOutcome
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────

@@ -313,6 +313,33 @@ class ProjectCloneTest {
     }
 
     @Test
+    fun `clone rewires busk pads to the clone's own records`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-busk", description = null)
+
+        transaction(state.database) {
+            val clone = DaoProject.findById(result.projectId)!!
+            val source = DaoProject.findById(sourceId)!!
+
+            val page = clone.buskPages.single()
+            assertEquals("act-one", page.name)
+            assertEquals(2, page.sortOrder, "the off-default position must survive the clone")
+            assertNotEquals(source.buskPages.single().uuid, page.uuid, "clone must mint a fresh page identity")
+
+            val pads = page.columns.flatMap { it.banks }.flatMap { it.pads }
+            assertEquals(7, pads.size)
+            assertTrue(
+                pads.all { pad ->
+                    (pad.template?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
+                },
+                "every pad points at a record of the clone, never of the source",
+            )
+            assertEquals(2, pads.count { it.template?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
+            assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
+        }
+    }
+
+    @Test
     fun `clone carries machine-local controller addresses`() {
         // Addresses are excluded from the export by design (per-rig), but a clone lands on the
         // same machine, so it should be able to output DMX without re-entering every IP.

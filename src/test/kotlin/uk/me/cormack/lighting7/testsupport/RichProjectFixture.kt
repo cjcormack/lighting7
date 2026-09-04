@@ -7,6 +7,11 @@ import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
+import uk.me.cormack.lighting7.models.BuskFlow
+import uk.me.cormack.lighting7.models.DaoBuskBank
+import uk.me.cormack.lighting7.models.DaoBuskColumn
+import uk.me.cormack.lighting7.models.DaoBuskPad
+import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -476,6 +481,47 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueSlot.new {
         this.project = project; page = 1; slotIndex = 2; cueStack = stack2
     }
+    // A Look slot (v10): the bound Look, pressed onto its own fixtures.
+    DaoCueSlot.new {
+        this.project = project; page = 1; slotIndex = 3; look = boundLook
+    }
+
+    // A **busk page** (v10): two rows, a stacked column, a solo bank holding all three kinds, a
+    // COLUMN-flow bank, an empty bank, and a record on two pads. Every structural field is
+    // off-default (a non-zero page position, a solo bank, a non-WRAP flow, a width other than
+    // full) so a copier that drops one is caught rather than passing vacuously.
+    val actOne = DaoBuskPage.new {
+        this.project = project; name = "act-one"; sortOrder = 2
+    }
+    val keysColumn = DaoBuskColumn.new {
+        page = actOne; row = 0; sortOrder = 0; width = 8
+    }
+    val keysBank = DaoBuskBank.new {
+        column = keysColumn; sortOrder = 0; name = "keys"; solo = true; flow = BuskFlow.WRAP.name
+    }
+    DaoBuskPad.new { bank = keysBank; sortOrder = 0; template = colourTemplate }
+    DaoBuskPad.new { bank = keysBank; sortOrder = 1; look = boundLook }
+    DaoBuskPad.new { bank = keysBank; sortOrder = 2; cue = cue1 }
+    val sideColumn = DaoBuskColumn.new {
+        page = actOne; row = 0; sortOrder = 1; width = 4
+    }
+    val movesBank = DaoBuskBank.new {
+        column = sideColumn; sortOrder = 0; name = "moves"; solo = false; flow = BuskFlow.COLUMN.name
+    }
+    DaoBuskPad.new { bank = movesBank; sortOrder = 0; template = positionTemplate }
+    DaoBuskBank.new {
+        column = sideColumn; sortOrder = 1; name = "cues"; solo = false; flow = BuskFlow.WRAP.name
+    }
+    val fxColumn = DaoBuskColumn.new {
+        page = actOne; row = 1; sortOrder = 0; width = 12
+    }
+    val fxBank = DaoBuskBank.new {
+        column = fxColumn; sortOrder = 0; name = "fx"; solo = true; flow = BuskFlow.WRAP.name
+    }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 0; template = effectTemplate }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 1; look = effectsLook }
+    // The same template on a second pad — one record, two places.
+    DaoBuskPad.new { bank = fxBank; sortOrder = 2; template = colourTemplate }
 
     // prompt book with an anchor (FK-by-UUID to a cue) and two annotation kinds
     val promptBook = DaoPromptBook.new {

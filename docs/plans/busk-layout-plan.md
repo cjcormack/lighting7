@@ -1,6 +1,8 @@
 # Busk layout — pages of rows, columns and banks the operator builds
 
-> **Document status: PROPOSED 2026-09-04 — nothing has landed.** The visual design is settled
+> **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04; sessions
+> 2–4 have not.** Where session 1 refined a decision, the text below says "session 1 amendment"
+> beside it. The visual design is settled
 > and checked in beside this plan at [`look-groups-design/`](look-groups-design/INDEX.md) —
 > eleven static artboards on two canvas pages: the busk view in play and edit mode, the build
 > flow, the rows/columns/banks structure, the model and delta, the FX cue slots overlay fed from
@@ -65,9 +67,11 @@ of the library's family and group.
   records on its sibling pads, in one transaction, exactly as the template toggle reads its group
   today (`projectTemplates.kt` ~400: "the siblings are read beside the source so a concurrent
   regroup cannot release the wrong set"). It then calls the existing `ProgrammerLayerStack.toggle`
-  with `releaseSiblings`, which is already uuid-keyed and kind-blind. **The engine does not
-  change.** `/templates/{id}/toggle` and `/looks/{id}/toggle` remain for the programmer's ⌥click
-  strip and the AI, always siblingless.
+  with `releaseSiblings`, which is already uuid-keyed and kind-blind. **`toggle` does not change;
+  the engine gains one additive method**, `release(sourceUuids)` — one mutation, one recook — for
+  the cue press's wholesale sweep (D6), which no existing operation could do in one frame (session
+  1 amendment; `ProgrammerLayerStackTest` is untouched). `/templates/{id}/toggle` and
+  `/looks/{id}/toggle` remain for the programmer's ⌥click strip and the AI, always siblingless.
 - **D5 — every pad is a toggle, and a cue pad presses the way a cue slot does.** A cue pad is
   apply/stop through `CueStackManager` (`POST /cues/{id}/apply` and `/stop`), lit from its stack's
   `activeCueId`, live without being the playhead — the FS-BUG-CUESLOT-LIVENESS decision. The
@@ -139,38 +143,52 @@ its columns, banks and pads.
 - `POST /projects/{id}/busk/pages` (name → appends), `PUT .../{pid}` (rename),
   `DELETE .../{pid}`, `POST .../pages/reorder` (every page id once).
 - `PUT /projects/{id}/busk/pages/{pid}/layout` — the whole page:
-  `rows: [{columns: [{columnId?, width, banks: [{bankId?, name, solo, flow, pads: [{padId?, ref}]}]}]}]`.
-  Validates shape, then identity (every named column/bank/pad id belongs to this page, none twice),
-  then every `ref` resolves in this project, then writes densely from zero. Returns before touching
-  a row on any refusal. An empty column or row is refused (the client removes them as it edits).
-  Widths in a row need not sum to twelve; the client renders them as `fr` shares.
+  `rows: [{columns: [{columnId?, width, banks: [{bankId?, name, solo, flow, pads: [{padId?, templateId|lookId|cueId}]}]}]}]`
+  (int ids, like every REST body; uuids are sync's — session 1 amendment). Validates shape (400
+  `BUSK_LAYOUT_INVALID`), then identity (every named column/bank/pad id belongs to this page, none
+  twice — 400 `BUSK_LAYOUT_IDENTITY`), then every record resolves in this project (400
+  `BUSK_LAYOUT_REF`), then writes densely from zero. Returns before touching a row on any refusal.
+  An empty column or row is refused (the client removes them as it edits); an empty bank and an
+  empty page are legal. Widths in a row need not sum to twelve; the client renders them as `fr`
+  shares. **Answers the page as written**, because the client's next whole-page write must carry
+  the ids this one minted.
 - `POST /projects/{id}/busk/pads/{padId}/press` `{targets}` → by kind: template →
-  `toggle(source, targets, familyMask, siblings)`; Look → `toggle(source, targets, null, siblings)`;
-  cue → apply when its stack's `activeCueId` is not this cue, else stop; siblings resolved as D4/D6.
-  Response `{kind, action, effectCount, released}`.
+  `toggle(source, targets, familyMask, siblings)`; Look → `toggle(source, targets, null, siblings)`,
+  with the Look toggle's empty-targets rule (`LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS`); cue →
+  apply when its stack's `activeCueId` is not this cue, else stop; siblings resolved as D4/D6.
+  Response `{kind, action, effectCount, released}`, `released` counting layer siblings narrowed or
+  dropped plus cue siblings stopped.
 - `POST /projects/{id}/looks/{id}/toggle` with empty `targets` succeeds for a Look with no deferred
-  effect by taking the Look's own fixtures as the targets (D7). Unchanged otherwise.
+  effect by taking the Look's own *patched* fixtures as the targets (D7); a Look with a deferred
+  effect answers 400 `LOOK_NEEDS_SELECTION`, one with no patched fixture 400 `LOOK_NO_TARGETS`.
+  Unchanged otherwise.
 - `POST /projects/{id}/cue-slots` accepts `lookId` in place of `cueStackId`, and refuses a Look with
   a deferred effect (409, `CUE_SLOT_LOOK_NEEDS_SELECTION`).
 - All of the above are `withCurrentProject`-gated like the cue-slot writes.
 
 ### 3.3 The read side
 
-- `GET /projects/{id}/busk` — every page, nested, one document. A `BuskPadDto` carries what the
-  pad needs to draw without a second fetch: `kind`, `uuid`, `name`, `swatch?`, `family?`,
-  `isEffect`, `detail` (the pad's second line), and for a cue its `stackId` and `cueNumber`.
+- `GET /projects/{id}/busk/pages` (+ `GET .../{pid}`) — every page, nested (session 1 amendment:
+  the collection GET on the plural collection, per `docs/api-conventions.md`). A `BuskPadDto`
+  carries `kind`, `uuid` and **the record's own summary DTO** — `template: TemplateDto?`,
+  `look: LookDto?`, `cue: BuskCueDto?` (`id, uuid, name, cueNumber?, cueStackId, cueStackName`) —
+  rather than a flattened name / swatch / detail line: the client already derives a pad's face from
+  the summary it holds for the library row, and an effect template's detail line reads a *live*
+  speed-master label a server string would freeze. One record's DTO is built once per response.
 - Lit state is unchanged: templates and Looks from `programmer.layerState.applied` (per record
   uuid, so a record on two pads lights on both and either pad turns it off); cues from the cue
   stack list's `activeCueId`. The FX cue slots overlay gains the `applied` feed for its Look tiles.
-- WebSocket: one keyed frame, `buskLayoutChanged {pageIds}`, for every layout write, page CRUD and
-  reorder. `templateListChanged` and `lookListChanged` shed their "reordered or moved between
+- WebSocket: one keyed frame, `busk.layoutChanged {pageIds}` (dotted, per the naming rule in
+  `docs/websocket-engineering.md`), for every layout write, page CRUD and reorder, and for a record
+  delete that took pads off a page. `templateListChanged` and `lookListChanged` shed their "reordered or moved between
   groups" meaning. `cueSlotListChanged` is unchanged.
 
 ### 3.4 Sync
 
 `buskPages/{uuid}.json` — one canonical document per page with rows, columns, banks and pads
-nested; pads reference records by uuid; a dangling reference drops the pad with a warning (a pad
-is an enrichment, D3). `cueSlots/{uuid}.json`: `cueStackUuid` → `lookUuid`. `templateGroups/`
+nested; pads reference records by uuid; a dangling reference — or a pad naming none or two — drops
+the pad with a warning (a pad is an enrichment, D3). The structural fields have no defaults in
+their DTOs, so a zero position is written rather than omitted. `cueSlots/{uuid}.json`: `cueStackUuid` → `lookUuid`. `templateGroups/`
 goes; `TemplateJson.groupUuid`, `TemplateJson.sortOrder`, `LookJson.sortOrder` and
 `CueJson.pinnedToBusk` go. Import order: pages after templates, Looks and cues. `formatVersion`
 10 per D12; `docs/sync-engineering.md` gains a "Version 10" section beside "Version 9".
@@ -234,10 +252,14 @@ tests (§9) and the round-trip and coverage suites that already fail on a missed
   recording D2–D4 and the no-cascade rule. Register in `Schema.ALL_TABLES`; disposition rows in
   `SyncCoverageTest`.
 - `routes/projectBusk.kt`: pages CRUD + reorder, `PUT .../layout`, `GET /busk`. `routes/buskPress.kt`:
-  the press route. `Fixtures.buskLayoutChanged()` and `BuskLayoutChangedOutMessage`.
+  the press route. `Fixtures.buskLayoutChanged(pageIds)` and `BuskLayoutChangedOutMessage` (`busk.layoutChanged`).
 - `projectLooks.kt` toggle: derive targets for a Look with no deferred effect (D7).
 - `projectCueSlots.kt` / `models/cueSlots.kt`: `look_id`, the eligibility refusal, `CueSlotDetails.itemType`
-  gains `"look"`.
+  gains `"look"`. The stack arm stays until session 3, so the assign is three-way for now.
+- Deletes: a template, Look or cue delete sweeps its pads inside its own transaction and fires
+  `busk.layoutChanged`; so does the **cue-stack** delete through its cues (a path §5 first missed).
+  Found in passing and fixed: `cue_slots.cue_id`'s declared `CASCADE` is not enforced by SQLite, so
+  a cue delete left a slot whose read `error()`ed; the cue, stack and Look deletes now sweep slots too.
 - Sync: exporter, importer, DTOs, `formatVersion` 10, `RichProjectFixture`, `ProjectRoundTripTest`.
 - Tests: `BuskLayoutRoutesTest` (whole-page validation: shape, identity, dangling ref, empty column
   refused, dense renumbering, deletes cascade by hand), `BuskPressRouteTest` (each kind; solo
@@ -250,7 +272,7 @@ tests (§9) and the round-trip and coverage suites that already fail on a missed
 ### Session 2 — the busk view (lighting-react) — Opus 5, xhigh
 
 - `store/busk.ts` (RTK Query: `GET /busk`, page CRUD, layout PUT with optimistic apply and undo,
-  press), `api/buskWsApi.ts` for `buskLayoutChanged`.
+  press), `api/buskWsApi.ts` for `busk.layoutChanged`.
 - `BuskingView.tsx` renders pages → rows → columns → banks → pads from the document; `BuskPools`,
   `BuskCueStacks` and `lookPresence`'s column logic retire (their tests with them); `LookPadButton`
   and the cue pad survive as the two pad faces; `BuskLabel`, `TargetBand`, `BuskSpeedRail` untouched.

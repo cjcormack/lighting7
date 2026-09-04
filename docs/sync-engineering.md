@@ -82,7 +82,9 @@ speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default.
                                # with a ratio set means master 1, which is what every export
                                # written before follow targets says
 fxDefinitions/{uuid}.json
-cueSlots/{uuid}.json
+cueSlots/{uuid}.json           # exactly one of cueUuid / cueStackUuid / lookUuid (lookUuid v10+)
+buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
+                               # a pad names a template, Look or cue by uuid
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
@@ -185,7 +187,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 9`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 10`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -220,6 +222,43 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 10 — busk pages and Look slots
+
+**v10 adds one folder and one field.** `buskPages/{uuid}.json` is the busk layout
+(`docs/plans/busk-layout-plan.md`): one document per page with its columns, banks and pads
+embedded inline the way a Look carries its rows, so a drag changes one file. A pad names its
+template, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
+`CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` is a third arm beside `cueUuid` /
+`cueStackUuid`: a Look with no deferred effect, pressed onto its own fixtures.
+
+`minReader` stays at **5**: a missing folder reads as empty and the field defaults to null, so
+every older archive imports untouched. The writer's number moves for v9's reason, verbatim: a
+layout changes what a busk press *does* on stage (a solo bank releases its siblings), so a v9
+reader — which would import no pages, never read the folder, and on its next wipe-then-export push
+write none back, deleting every peer's pages — must refuse the repo instead.
+
+Three importer details. Pages import **after** templates, Looks and cues so every pad resolves in
+one pass. A pad whose record the archive does not carry, or which names none or two, **warns and is
+dropped** while the page imports without it — the template-group posture, because a pad is an
+enrichment of its record (a place on a page), not content; the stored sort orders are kept as
+written, and the gap a dropped pad leaves is harmless because every reader sorts rather than
+indexes. A cue **slot** naming none or two of its three arms, or a Look the archive lacks, still
+**aborts**, like its other two arms always have: a slot is not nested in anything that would
+survive it. `ExportUuidRemapper` needs no change: every reference is a `{table}Uuid` string and
+every identity a `uuid`, so a clone's pads point at the clone's records by construction.
+
+The structural fields of a page (`row`, `sortOrder`, `width`, `name`, `solo`, `flow`) have **no
+defaults** in their DTOs, so canonical JSON always writes them — a layout is positions, and a
+position omitted for being zero would read as a document with holes. Only the three pad references
+default.
+
+**Session 3 of the same plan removes under this same number**: `templateGroups/`,
+`TemplateJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
+`CueSlotJson.cueStackUuid`. No v11, because nothing but the dev desk writes v10 between the two
+sessions, so no peer can hold a repo the later reader would import wrong and push back. When that
+lands, a v10 archive written before it may still carry `cueStackUuid`; the later reader must
+warn-and-drop that slot rather than fail the pull, and this section should say so.
 
 ### Version 9 — template groups
 

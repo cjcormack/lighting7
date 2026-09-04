@@ -40,6 +40,14 @@ where a reader cannot tell which convention applies. Both were fixed:
 
 New messages take the dotted form.
 
+**Adding a frame needs no registration** — `OutMessage` is a sealed hierarchy and kotlinx
+enumerates its subclasses at compile time — but that is also its one trap: Kotlin's incremental
+compiler does not recompile `SocketMessages.kt` when a new subclass appears in *another* file, so
+the first test run after adding one can fail with `Serializer for subclass '…' is not found in the
+polymorphic scope of 'OutMessage'` and a socket the server closed. That is a stale class file, not
+a missing module entry: `./gradlew :compileKotlin --rerun-tasks` (or touching `SocketMessages.kt`)
+clears it.
+
 ### Snapshot rule
 
 **Every stateful family pushes its snapshot on connect.** A client should be able to render the
@@ -310,7 +318,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (58)
+## Server → Client (59)
 
 ### Boot — `BootSocket.kt`
 
@@ -324,8 +332,8 @@ Outbound-only, and the only frame a client sees before the show-scoped families 
 ### Broadcast — `BroadcastSocket.kt`
 
 Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged`,
-`cueRunStateChanged` and `cuesRecomposed` is a **payload-free cache invalidation**: the client
-refetches over REST.
+`cueRunStateChanged`, `cuesRecomposed` and `busk.layoutChanged` is a **payload-free cache
+invalidation**: the client refetches over REST.
 
 | Message | Payload | Meaning |
 |---|---|---|
@@ -334,7 +342,8 @@ refetches over REST.
 | `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD |
 | `cueStackListChanged` | — | Cue-stack CRUD |
-| `cueSlotListChanged` | — | Cue-slot CRUD |
+| `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue, cue-stack or Look delete swept its slots |
+| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, or a template / Look / cue / cue-stack delete that took pads off them |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
 | `stageRegionListChanged` | — | Stage-region CRUD |

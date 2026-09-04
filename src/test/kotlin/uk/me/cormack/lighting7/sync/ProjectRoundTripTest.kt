@@ -7,6 +7,8 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.sync.dto.BuskPageJson
+import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
@@ -139,6 +141,73 @@ class ProjectRoundTripTest {
             docs.filterNot { it.contains("amber-breathe") }.none { it.contains("\"groupUuid\"") },
             "an ungrouped template must not carry the groupUuid key at all",
         )
+    }
+
+    /**
+     * v10: a busk page travels as one document with columns, banks and pads nested, and every
+     * structural field written even at zero. The byte-for-byte test proves the importer keeps what
+     * the exporter writes; this pins what the exporter writes.
+     */
+    @Test
+    fun `busk pages export nested with every position written`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("buskPages")).use { stream -> stream.toList().map { Files.readString(it) } }
+        val doc = docs.single()
+        val page = canonicalDecode(BuskPageJson.serializer(), doc)
+        assertEquals("act-one", page.name)
+        assertEquals(2, page.sortOrder, "the off-default position must survive the export")
+        assertEquals(listOf(0 to 0, 0 to 1, 1 to 0), page.columns.map { it.row to it.sortOrder })
+        assertTrue(doc.contains("\"row\": 0"), "a zero position is written, not omitted")
+        assertTrue(doc.contains("\"solo\": false"), "a false solo is written, not omitted")
+        val banks = page.columns.flatMap { it.banks }
+        assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
+        assertEquals(listOf("WRAP", "COLUMN", "WRAP", "WRAP"), banks.map { it.flow })
+        assertEquals(7, banks.sumOf { it.pads.size })
+        val keys = banks.first()
+        assertTrue(keys.solo)
+        assertEquals(listOf("templateUuid", "lookUuid", "cueUuid"), keys.pads.map { pad ->
+            listOfNotNull(pad.templateUuid?.let { "templateUuid" }, pad.lookUuid?.let { "lookUuid" }, pad.cueUuid?.let { "cueUuid" }).single()
+        })
+
+        val slots = Files.list(exportDirA.resolve("cueSlots")).use { stream ->
+            stream.toList().map { canonicalDecode(CueSlotJson.serializer(), Files.readString(it)) }
+        }
+        assertEquals(1, slots.count { it.lookUuid != null }, "the Look slot travels")
+    }
+
+    /**
+     * A pad naming a record the archive does not carry is an enrichment that has lost its record,
+     * so the pull continues without it — the v9 template-group posture, and the opposite of the cue
+     * stack case below.
+     */
+    @Test
+    fun `a busk pad naming a record the archive lacks is dropped and the page survives`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val pageFile = Files.list(exportDirA.resolve("buskPages")).use { it.findFirst().get() }
+        val original = Files.readString(pageFile)
+        val corrupt = original.replaceFirst(
+            Regex("\"lookUuid\": \"[0-9a-f-]+\""),
+            "\"lookUuid\": \"00000000-0000-0000-0000-000000000000\"",
+        )
+        assertTrue(corrupt != original, "test sanity: a Look pad was rewritten")
+        Files.writeString(pageFile, corrupt)
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+
+        val page = Files.list(exportDirB.resolve("buskPages")).use { stream ->
+            canonicalDecode(BuskPageJson.serializer(), Files.readString(stream.findFirst().get()))
+        }
+        val banks = page.columns.flatMap { it.banks }
+        assertEquals(6, banks.sumOf { it.pads.size }, "one pad fewer, nothing else lost")
+        assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
+        assertEquals(0, banks.first { it.name == "keys" }.pads.count { it.lookUuid != null }, "the dropped pad was the keys bank's Look")
+        assertEquals(2, banks.first { it.name == "keys" }.pads.size)
     }
 
     @Test

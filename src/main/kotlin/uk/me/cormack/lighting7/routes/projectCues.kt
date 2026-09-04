@@ -300,13 +300,15 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 val stack = cue.cueStack
                 deleteCueChildren(cue)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)
+                val pageIds = deleteCueReferences(cue)
                 cue.delete()
                 // The cues that followed have shifted up the derived sequence.
                 renumberAutoCues(stack)
-                removedAnchors
+                removedAnchors to pageIds
             }
 
             if (result != null) {
+                val (removedAnchors, pageIds) = result
                 // A deleted cue can't be Updated into. Update re-validates its target anyway,
                 // but dropping it here keeps the programmer indicator from offering a cue that
                 // no longer exists.
@@ -324,7 +326,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 state.show.fxEngine.cueLayer.removeAssignments(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
-                if (result > 0) state.show.fixtures.promptBookChanged()
+                if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
+                // Its pads went with it; the busk view re-reads those pages, and the overlay its slots.
+                if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
+                state.show.fixtures.cueSlotListChanged()
                 call.respond(HttpStatusCode.NoContent)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))

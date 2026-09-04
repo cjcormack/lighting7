@@ -12,6 +12,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.CueStackManager
@@ -157,9 +158,11 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
 
                 // Every cue belongs to a stack, so deleting a stack cascades its cues + children.
                 var removedAnchors = 0
+                val pageIds = mutableSetOf<Int>()
                 stack.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     removedAnchors += deletePromptBookAnchorsForCue(cue)
+                    pageIds += deleteCueReferences(cue)
                     // Same reason the single-cue delete does this: a deleted cue can't be
                     // Updated into, and a surviving target leaves every client's programmer
                     // indicator offering a cue that no longer exists.
@@ -167,14 +170,19 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     cue.delete()
                 }
 
+                // Slots naming the stack itself: the same unenforced `CASCADE` as a cue's slots.
+                DaoCueSlots.deleteWhere { DaoCueSlots.cueStack eq stack.id }
                 stack.delete()
-                removedAnchors
+                removedAnchors to pageIds
             }
 
             if (result != null) {
+                val (removedAnchors, pageIds) = result
                 state.show.fixtures.cueStackListChanged()
                 state.show.fixtures.cueListChanged()
-                if (result > 0) state.show.fixtures.promptBookChanged()
+                if (removedAnchors > 0) state.show.fixtures.promptBookChanged()
+                if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
+                state.show.fixtures.cueSlotListChanged()
                 call.respond(HttpStatusCode.NoContent)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))

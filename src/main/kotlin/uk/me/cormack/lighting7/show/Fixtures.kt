@@ -62,6 +62,13 @@ interface FixturesChangeListener {
     fun cueListChanged() {}
     fun cueStackListChanged() {}
     fun cueSlotListChanged() {}
+
+    /**
+     * The busk layout of [pageIds] changed: a page was created, renamed, deleted or reordered, its
+     * layout written, or a record delete took pads off it. Keyed like [cuesRecomposed] rather than
+     * a bare signal because a gesture in edit mode saves the whole page it touched and nothing else.
+     */
+    fun buskLayoutChanged(pageIds: List<Int>) {}
     fun patchListChanged() {}
     fun riggingListChanged() {}
     fun stageRegionListChanged() {}
@@ -383,6 +390,12 @@ class Fixtures {
     fun cueSlotListChanged() {
         changeListeners.forEach {
             it.cueSlotListChanged()
+        }
+    }
+
+    fun buskLayoutChanged(pageIds: List<Int>) {
+        changeListeners.forEach {
+            it.buskLayoutChanged(pageIds)
         }
     }
 

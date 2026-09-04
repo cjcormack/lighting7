@@ -5,6 +5,12 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.models.DaoBuskBank
+import uk.me.cormack.lighting7.models.DaoBuskColumn
+import uk.me.cormack.lighting7.models.DaoBuskPad
+import uk.me.cormack.lighting7.models.DaoBuskPage
+import uk.me.cormack.lighting7.models.BuskFlow
+import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
@@ -39,6 +45,7 @@ import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
+import uk.me.cormack.lighting7.routes.deleteBuskPage
 import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
@@ -53,6 +60,7 @@ import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
@@ -101,7 +109,7 @@ import kotlin.io.path.isDirectory
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 9
+internal const val SUPPORTED_FORMAT_VERSION = 10
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -229,6 +237,9 @@ class ProjectImporter(private val state: State) {
                 DaoPromptBookAnnotations.deleteWhere { DaoPromptBookAnnotations.promptBook eq book.id }
                 book.delete()
             }
+            // Busk pages before the records their pads point at — a pad is a plain FK with no
+            // cascade (`DaoBuskPads`), so it has to go first, and by hand: pads → banks → columns → page.
+            project.buskPages.forEach { deleteBuskPage(it) }
             project.cues.forEach { cue ->
                 deleteCueChildren(cue)
                 cue.delete()
@@ -343,7 +354,9 @@ class ProjectImporter(private val state: State) {
         val promptBook = importPromptBook(sourceDir, project)
         importPromptBookAnchors(sourceDir, promptBook, cueMap)
         importPromptBookAnnotations(sourceDir, promptBook)
-        importCueSlots(sourceDir, project, cueMap, cueStackMap)
+        importCueSlots(sourceDir, project, cueMap, cueStackMap, lookMap)
+        // Pages after every record a pad can name.
+        importBuskPages(sourceDir, project, templateMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
     }
@@ -937,10 +950,17 @@ class ProjectImporter(private val state: State) {
         project: DaoProject,
         cueMap: Map<UUID, DaoCue>,
         cueStackMap: Map<UUID, DaoCueStack>,
+        lookMap: Map<UUID, DaoLook>,
     ) {
         readDir(dir.resolve("cueSlots")) { json ->
             val s = canonicalDecode(CueSlotJson.serializer(), json)
             val uuid = UUID.fromString(s.uuid)
+            // Exactly one arm. Archive JSON is untrusted input with a diagnostic channel of its
+            // own, so a slot naming none or two aborts like any other malformed record here — the
+            // busk *pad* below is the lenient one, and the docblocks on both say why they differ.
+            if (listOfNotNull(s.cueUuid, s.cueStackUuid, s.lookUuid).size != 1) {
+                throw ImportError.invalidArchive("Cue slot ${s.uuid} must name exactly one of cueUuid, cueStackUuid or lookUuid")
+            }
             val cue = s.cueUuid?.let {
                 val cueUuid = UUID.fromString(it)
                 cueMap[cueUuid]
@@ -951,13 +971,93 @@ class ProjectImporter(private val state: State) {
                 cueStackMap[stackUuid]
                     ?: throw ImportError.invalidArchive("Cue slot ${s.uuid} references unknown cue stack $stackUuid")
             }
+            val look = s.lookUuid?.let {
+                val lookUuid = UUID.fromString(it)
+                lookMap[lookUuid]
+                    ?: throw ImportError.invalidArchive("Cue slot ${s.uuid} references unknown look $lookUuid")
+            }
             DaoCueSlot.new {
                 this.project = project
                 page = s.page
                 slotIndex = s.slotIndex
                 this.cue = cue
                 this.cueStack = stack
+                this.look = look
                 this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * `buskPages/` (v10): one document per page, columns, banks and pads nested.
+     *
+     * A pad whose record the archive does not carry — or which names none or two — is **dropped
+     * with a warning** rather than aborting the pull, the template-group posture: a pad is an
+     * enrichment of its record (a place on a page), not content, so a page that has lost a pad is
+     * still a whole page. Stored sort orders are kept as written; a gap left by a dropped pad is
+     * harmless (readers sort, they do not index) and the next layout write renumbers densely.
+     * Structural fields are validated only as far as the enum goes: a width or flow the desk does
+     * not know is not a reason to lose the page, and the layout route refuses it on the next write.
+     */
+    private fun importBuskPages(
+        dir: Path,
+        project: DaoProject,
+        templateMap: Map<UUID, DaoTemplate>,
+        lookMap: Map<UUID, DaoLook>,
+        cueMap: Map<UUID, DaoCue>,
+    ) {
+        readDir(dir.resolve("buskPages")) { json ->
+            val p = canonicalDecode(BuskPageJson.serializer(), json)
+            val uuid = UUID.fromString(p.uuid)
+            val page = DaoBuskPage.new {
+                this.project = project
+                name = p.name
+                sortOrder = p.sortOrder
+                this.uuid = uuid
+            }
+            p.columns.forEach { c ->
+                val column = DaoBuskColumn.new {
+                    this.page = page
+                    row = c.row
+                    sortOrder = c.sortOrder
+                    width = c.width
+                    this.uuid = UUID.fromString(c.uuid)
+                }
+                c.banks.forEach { b ->
+                    val bank = DaoBuskBank.new {
+                        this.column = column
+                        sortOrder = b.sortOrder
+                        name = b.name
+                        solo = b.solo
+                        flow = BuskFlow.entries.firstOrNull { it.name == b.flow }?.name ?: BuskFlow.WRAP.name
+                        this.uuid = UUID.fromString(b.uuid)
+                    }
+                    b.pads.forEach { d ->
+                        if (buskPadKind(d.templateUuid, d.lookUuid, d.cueUuid) == null) {
+                            logger.warn("Busk pad {} on page {} names no record or more than one; dropping the pad", d.uuid, p.name)
+                            return@forEach
+                        }
+                        val template = d.templateUuid?.let { templateMap[UUID.fromString(it)] }
+                        val look = d.lookUuid?.let { lookMap[UUID.fromString(it)] }
+                        val cue = d.cueUuid?.let { cueMap[UUID.fromString(it)] }
+                        if (template == null && look == null && cue == null) {
+                            logger.warn(
+                                "Busk pad {} on page {} names record {} which the archive does not carry; dropping the pad",
+                                d.uuid, p.name, d.templateUuid ?: d.lookUuid ?: d.cueUuid,
+                            )
+                            return@forEach
+                        }
+                        DaoBuskPad.new {
+                            this.bank = bank
+                            sortOrder = d.sortOrder
+                            this.template = template
+                            this.look = look
+                            this.cue = cue
+                            this.uuid = UUID.fromString(d.uuid)
+                        }
+                    }
+                }
             }
             uuid to Unit
         }

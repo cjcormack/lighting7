@@ -214,7 +214,9 @@ internal fun Route.routeApiRestProjects(state: State) {
                     book.delete()
                 }
 
-                // Delete associated records in FK-safe order
+                // Delete associated records in FK-safe order. Busk pages first: a pad is a plain
+                // FK onto a template, Look or cue with no cascade (`DaoBuskPads`), swept by hand.
+                project.buskPages.forEach { deleteBuskPage(it) }
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     cue.delete()
@@ -341,6 +343,8 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestCueCooked(state)
         routeApiRestProjectCueStacks(state)
         routeApiRestProjectCueSlots(state)
+        routeApiRestProjectBusk(state)
+        routeApiRestBuskPress(state)
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)

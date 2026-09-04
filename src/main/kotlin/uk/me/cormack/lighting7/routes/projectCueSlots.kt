@@ -15,6 +15,9 @@ import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
+/** 409 code: a Look with a deferred effect was offered to a slot, which has no selection to give it. */
+internal const val CUE_SLOT_LOOK_NEEDS_SELECTION = "CUE_SLOT_LOOK_NEEDS_SELECTION"
+
 internal fun Route.routeApiRestProjectCueSlots(state: State) {
     // GET /{projectId}/cue-slots - List all slot assignments for a project
     get<ProjectCueSlotsResource> { resource ->
@@ -37,8 +40,8 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
             val input = call.receive<AssignCueSlotRequest>()
 
             // Validate exactly one reference is provided
-            if ((input.cueId == null) == (input.cueStackId == null)) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId or cueStackId must be provided"))
+            if (listOfNotNull(input.cueId, input.cueStackId, input.lookId).size != 1) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId, cueStackId or lookId must be provided"))
                 return@withCurrentProject
             }
 
@@ -56,6 +59,20 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
                         return@transaction null to "Cue stack not found in this project"
                     }
                 }
+                if (input.lookId != null) {
+                    val look = DaoLook.findById(input.lookId)
+                    if (look == null || look.project.id != project.id) {
+                        return@transaction null to "Look not found in this project"
+                    }
+                    // The overlay has no selection, so a slot can hold only a Look that needs none:
+                    // one with no deferred effect, which presses onto its own fixtures. Refused at
+                    // assign rather than at press so the tile never sits there dead
+                    // (busk-layout plan D7). A named 409 rather than the plain 400s above because
+                    // the palette branches on it to dim the row.
+                    if (look.effects.any { it.isDeferred }) {
+                        return@transaction null to CUE_SLOT_LOOK_NEEDS_SELECTION
+                    }
+                }
 
                 // Upsert: find existing slot at this position or create new
                 val existing = DaoCueSlot.find {
@@ -67,6 +84,7 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
                 val slot = if (existing != null) {
                     existing.cue = input.cueId?.let { DaoCue.findById(it) }
                     existing.cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
+                    existing.look = input.lookId?.let { DaoLook.findById(it) }
                     existing
                 } else {
                     DaoCueSlot.new {
@@ -75,6 +93,7 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
                         slotIndex = input.slotIndex
                         cue = input.cueId?.let { DaoCue.findById(it) }
                         cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
+                        look = input.lookId?.let { DaoLook.findById(it) }
                     }
                 }
 
@@ -82,7 +101,12 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
             }
 
             val (result, error) = details
-            if (error != null) {
+            if (error == CUE_SLOT_LOOK_NEEDS_SELECTION) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("This Look has a deferred effect and needs a selection, which a slot cannot supply", code = CUE_SLOT_LOOK_NEEDS_SELECTION),
+                )
+            } else if (error != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
                 state.show.fixtures.cueSlotListChanged()
@@ -177,12 +201,14 @@ data class CueSlotDetails(
     val itemName: String,
 )
 
+/** Exactly one of [cueId] / [cueStackId] / [lookId]. See `DaoCueSlots`. */
 @Serializable
 data class AssignCueSlotRequest(
     val page: Int,
     val slotIndex: Int,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
+    val lookId: Int? = null,
 )
 
 @Serializable
@@ -198,8 +224,17 @@ data class SwapCueSlotsRequest(
 private fun DaoCueSlot.toDetails(): CueSlotDetails {
     val resolvedCue = cue
     val resolvedStack = cueStack
+    val resolvedLook = look
 
     return when {
+        resolvedLook != null -> CueSlotDetails(
+            id = id.value,
+            page = page,
+            slotIndex = slotIndex,
+            itemType = "look",
+            itemId = resolvedLook.id.value,
+            itemName = resolvedLook.name,
+        )
         resolvedCue != null -> CueSlotDetails(
             id = id.value,
             page = page,
@@ -216,6 +251,6 @@ private fun DaoCueSlot.toDetails(): CueSlotDetails {
             itemId = resolvedStack.id.value,
             itemName = resolvedStack.name,
         )
-        else -> error("CueSlot ${id.value} has neither cue nor cueStack set")
+        else -> error("CueSlot ${id.value} has no cue, cue stack or look set")
     }
 }

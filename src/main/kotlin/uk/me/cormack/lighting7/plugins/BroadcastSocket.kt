@@ -65,6 +65,16 @@ data object CueStackListChangedOutMessage : BroadcastOutMessage()
 @SerialName("cueSlotListChanged")
 data object CueSlotListChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * The busk layout of [pageIds] changed — page CRUD or reorder, a whole-page layout write, or a
+ * record delete that took pads off them. Keyed for [CuesRecomposedOutMessage]'s reason: an edit-mode
+ * gesture saves one page, and the client can re-read exactly that one. Dotted, per the naming rule
+ * in `docs/websocket-engineering.md`.
+ */
+@Serializable
+@SerialName("busk.layoutChanged")
+data class BuskLayoutChangedOutMessage(val pageIds: List<Int>) : BroadcastOutMessage()
+
 @Serializable
 @SerialName("patchListChanged")
 data object PatchListChangedOutMessage : BroadcastOutMessage()
@@ -199,6 +209,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)
         override fun cueSlotListChanged() = fire(CueSlotListChangedOutMessage)
+        override fun buskLayoutChanged(pageIds: List<Int>) = fire(BuskLayoutChangedOutMessage(pageIds))
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)

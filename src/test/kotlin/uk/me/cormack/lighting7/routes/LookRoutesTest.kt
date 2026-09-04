@@ -403,28 +403,99 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `toggling refuses an empty target set and an unknown look`() = testApplication {
+    fun `toggling refuses an empty target set on a Look with a deferred effect, and an unknown look`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Pulse"))
+            setBody(
+                CreateLookRequest(
+                    name = "Pulse",
+                    effects = listOf(
+                        LookEffectDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        ),
+                    ),
+                ),
+            )
         }.body<LookDetails>().id
 
-        // No targets is a 400 rather than a silent no-op: a toggle that applied nothing and
-        // reported success would read as a dead pad.
+        // A deferred effect fans over the layer's targets, so with none it asserts nothing — a 400
+        // rather than a silent no-op, because a toggle that applied nothing and reported success
+        // would read as a dead pad. A Look with *no* deferred effect is pressed onto its own
+        // fixtures instead (the tests below).
         val empty = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest(targets = emptyList()))
         }
         assertEquals(HttpStatusCode.BadRequest, empty.status)
+        assertEquals(CODE_LOOK_NEEDS_SELECTION, empty.body<ErrorResponse>().code)
 
         val missing = client.post("${base()}/999999/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1"))))
         }
         assertEquals(HttpStatusCode.NotFound, missing.status)
+    }
+
+    private suspend fun io.ktor.client.HttpClient.createBoundLook(name: String, vararg fixtureKeys: String): Int =
+        post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(CreateLookRequest(name = name, rows = fixtureKeys.map { LookRowDto("fixture", it, "dimmer", "200") }))
+        }.body<LookDetails>().id
+
+    private suspend fun io.ktor.client.HttpClient.toggleBare(lookId: Int) =
+        post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest())
+        }
+
+    @Test
+    fun `toggling with no targets applies a bound Look on its own fixtures`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+        val warm = client.createBoundLook("warm", "hex-1", "hex-2", "hex-1")
+
+        val on = client.toggleBare(warm)
+        assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
+        assertEquals("applied", on.body<ToggleLookResponse>().action)
+        assertEquals(
+            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+            state.show.programmerStore.layers.single().targets,
+            "the layer names each of the Look's fixtures once, in row order",
+        )
+        assertEquals("removed", client.toggleBare(warm).body<ToggleLookResponse>().action)
+    }
+
+    @Test
+    fun `toggling with no targets skips rows on fixtures no longer in the patch`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
+        val client = jsonClient()
+        val warm = client.createBoundLook("warm", "hex-9", "hex-1")
+
+        val on = client.toggleBare(warm)
+        assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
+        assertEquals(listOf(CueTargetDto("fixture", "hex-1")), state.show.programmerStore.layers.single().targets)
+    }
+
+    @Test
+    fun `toggling with no targets refuses a Look none of whose fixtures are patched`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val gone = client.createBoundLook("gone", "hex-9")
+
+        val resp = client.toggleBare(gone)
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        assertEquals(CODE_LOOK_NO_TARGETS, resp.body<ErrorResponse>().code)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
     }
 
     // ── Include ─────────────────────────────────────────────────────────────

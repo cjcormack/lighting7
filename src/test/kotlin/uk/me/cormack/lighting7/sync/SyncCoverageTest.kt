@@ -6,6 +6,10 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoAiConversations
+import uk.me.cormack.lighting7.models.DaoBuskBanks
+import uk.me.cormack.lighting7.models.DaoBuskColumns
+import uk.me.cormack.lighting7.models.DaoBuskPads
+import uk.me.cormack.lighting7.models.DaoBuskPages
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
 import uk.me.cormack.lighting7.models.DaoCueLayers
@@ -139,6 +143,10 @@ class SyncCoverageTest {
         DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),
         DaoCueTriggers to Disposition.Portable("cueTriggers"),
         DaoCueSlots to Disposition.Portable("cueSlots"),
+        DaoBuskPages to Disposition.Portable("buskPages"),
+        DaoBuskColumns to Disposition.Portable("buskPages", "columns"),
+        DaoBuskBanks to Disposition.Portable("buskPages", "banks"),
+        DaoBuskPads to Disposition.Portable("buskPages", "pads"),
         DaoParkedChannels to Disposition.Portable("parkedChannels"),
         DaoPromptBooks to Disposition.Portable("promptBooks"),
         DaoPromptBookAnchors to Disposition.Portable("promptBookAnchors"),

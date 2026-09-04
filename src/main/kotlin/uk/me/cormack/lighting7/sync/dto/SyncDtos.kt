@@ -26,6 +26,21 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v10: the busk layout, and a Look on a cue slot. A new `buskPages/` folder — one document per
+    // page with its columns, banks and pads nested, pads naming templates, Looks and cues by uuid
+    // — and `CueSlotJson.lookUuid` as a third arm beside `cueUuid` / `cueStackUuid`. `minReader`
+    // stays at **5**: the folder reads as empty when missing and the field is optional with a null
+    // default, so every older archive still imports unchanged.
+    //
+    // The writer's version moves for v9's reason, verbatim: a layout changes what a busk press
+    // *does* on stage (a solo bank releases its siblings), so a v9 reader — which would import no
+    // pages, never read the folder, and on its next wipe-then-export push write none back — must
+    // refuse the repo rather than silently delete every peer's pages. Session 3 of the same plan
+    // removes `templateGroups/`, `TemplateJson.groupUuid` / `sortOrder`, `LookJson.sortOrder`,
+    // `CueJson.pinnedToBusk` and `CueSlotJson.cueStackUuid` under this same number: nothing but
+    // the dev desk writes v10 between the two sessions, so no peer can hold a repo the later
+    // reader would import wrong and push back.
+    //
     // v9: template groups. A new `templateGroups/` folder, and `TemplateJson.groupUuid` naming
     // one. `minReader` stays at **5**: the folder is read as empty when missing and the field is
     // optional with a null default, so every older archive still imports unchanged.
@@ -78,7 +93,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 9,
+    val formatVersion: Int = 10,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -521,6 +536,12 @@ data class ShowEntryJson(
     val label: String? = null,
 )
 
+/**
+ * One tile of the FX cue slots overlay. **Exactly one of [cueUuid] / [cueStackUuid] / [lookUuid]**
+ * is set, enforced by the importer (a slot naming none or two is malformed input, not a state).
+ * [lookUuid] is v10: a Look with no deferred effect, pressed onto its own fixtures. [cueStackUuid]
+ * leaves in session 3 of the busk-layout plan.
+ */
 @Serializable
 data class CueSlotJson(
     val uuid: String,
@@ -528,6 +549,64 @@ data class CueSlotJson(
     val slotIndex: Int,
     val cueUuid: String? = null,
     val cueStackUuid: String? = null,
+    val lookUuid: String? = null,
+)
+
+/**
+ * A busk page (v10) — portable show content, its columns, banks and pads embedded inline, the way
+ * a Look carries its rows. One document per page: a drag changes one file.
+ *
+ * Nothing here is patch-shaped; a pad names a library record by uuid ([BuskPadJson]), so
+ * `ExportUuidRemapper` re-points every reference on clone with no field-aware code, and a page
+ * survives a repatch untouched.
+ *
+ * The structural fields (`row`, `sortOrder`, `width`, `name`, `solo`, `flow`) have **no defaults**
+ * so canonical JSON always writes them: a layout is positions, and a position omitted because it
+ * happened to be zero would read as a document with holes.
+ */
+@Serializable
+data class BuskPageJson(
+    val uuid: String,
+    val name: String,
+    val sortOrder: Int,
+    val columns: List<BuskColumnJson> = emptyList(),
+)
+
+/** A column of a busk page: which row it is in, its place in that row, and its width share in twelfths. */
+@Serializable
+data class BuskColumnJson(
+    val uuid: String,
+    val row: Int,
+    val sortOrder: Int,
+    val width: Int,
+    val banks: List<BuskBankJson> = emptyList(),
+)
+
+/** A bank in a column: `solo` releases siblings on a press; `flow` is `WRAP` or `COLUMN`. */
+@Serializable
+data class BuskBankJson(
+    val uuid: String,
+    val sortOrder: Int,
+    val name: String,
+    val solo: Boolean,
+    val flow: String,
+    val pads: List<BuskPadJson> = emptyList(),
+)
+
+/**
+ * A pad: an ordered reference to **exactly one** of a template, a Look or a cue, by uuid — the
+ * [CueLayerJson] pattern, three-armed. A pad whose record the archive does not carry, or which
+ * names none or two, is **dropped with a warning** on import rather than aborting the pull: a pad
+ * is an enrichment of its record (a place on a page), not content, so a page that has lost a pad
+ * is still a whole page. Contrast a cue layer, which is nothing without its source and does abort.
+ */
+@Serializable
+data class BuskPadJson(
+    val uuid: String,
+    val sortOrder: Int,
+    val templateUuid: String? = null,
+    val lookUuid: String? = null,
+    val cueUuid: String? = null,
 )
 
 /**

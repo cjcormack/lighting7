@@ -375,6 +375,49 @@ What a group is **not**: a composition concept. A cue-authored template layer is
 `CueComposer` never reads `template_groups`, and nothing about Layer 3/4 ordering, stomp or amount
 changes because two templates happen to share a cluster on a pad grid.
 
+### The busk layout
+
+The busk page is a thing the operator **builds**, not a view the library lays out
+(`docs/plans/busk-layout-plan.md`, D1–D2): a page is rows, a row is columns each with a width share
+in twelfths, a column stacks banks top to bottom, and a bank holds ordered **pads** — each a
+reference to exactly one template, Look or cue (`busk_pages` → `busk_columns` → `busk_banks` →
+`busk_pads`, `models/buskLayout.kt`). One record may sit on several pads. Nothing is positioned by
+hand, so nothing overlaps.
+
+**A pad is an enrichment, never content and never a guard.** Deleting a template, Look or cue
+deletes its pads inside the same transaction — the record's route sweeps them by hand, since SQLite
+enforces no cascade — and the template and Look delete guards do not count pads as a use. Sync
+reads a pad whose record the archive lacks as absent, with a warning, for the same reason.
+
+**A press goes through the pad, and the bank decides the siblings** (D4, `routes/buskPress.kt`).
+`POST /busk/pads/{id}/press` reads the pad, its record and — when the bank is **solo** — the
+records on its sibling pads in one transaction, then calls the same `ProgrammerLayerStack.toggle`
+the `/templates/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
+`releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, always
+siblingless. A **cue** pad is apply / stop through `CueStackManager`, exactly as a cue slot
+presses: a toggle, lit from its stack's `activeCueId`, live without being the playhead.
+
+**Solo has one meaning for every kind** (D6): pressing one pad *on* turns its siblings off. A layer
+sibling under a layer press is narrowed on the pressed heads by `toggle`'s own rule — the per-target
+reading the ring uses, so a sibling holding exactly the pressed heads comes off, one that overlaps
+is narrowed, a disjoint one is untouched. A cue sibling that is live is stopped. A **cue press**
+takes its layer siblings off *wholesale* through `ProgrammerLayerStack.release` — the one
+additive method the layout gave the engine, one mutation and one recook — because a cue has no
+targets to narrow by. An **off** press releases nothing, whatever the kind; a stacking bank (solo
+off) has no siblings at all. Nothing in the cook reads the layout: a bank changes what a press
+does, never what a cue composes to.
+
+**A Look with no deferred effect can be pressed with no selection.** Its rows are always bound, so
+`/looks/{id}/toggle` with empty targets derives them from the Look's own rows and bound effects,
+keeping only fixtures still in the patch (`DaoLook.ownTargets`) — that is how a cue-slot tile,
+which has no selection, presses a Look (D7). A Look with a deferred effect and no targets asserts
+nothing and is refused (`LOOK_NEEDS_SELECTION`), as is a Look none of whose fixtures are patched
+(`LOOK_NO_TARGETS`): a toggle that applied nothing and reported success would read as a dead pad.
+The derived targets are passed to the layer explicitly, so the applied state below lights the tile.
+The busk press applies the same reading to a **generic** template — its rows take their targets
+from the press, so with none it is refused (`TEMPLATE_NEEDS_SELECTION`) — while a per-fixture
+template names its own heads and lands on them.
+
 ### Applied state is resolved by the desk
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk

@@ -21,6 +21,7 @@ val ALL_TABLES: List<Table> = listOf(
     DaoCueLayers,
     DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
     DaoAiConversations, DaoCueSlots,
+    DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
     DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
     DaoParkedChannels, DaoFxDefinitions,

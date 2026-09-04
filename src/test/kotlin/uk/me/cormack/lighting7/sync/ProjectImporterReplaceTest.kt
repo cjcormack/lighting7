@@ -180,6 +180,13 @@ class ProjectImporterReplaceTest {
                 "warm-keys", project.templates.single { it.name == "amber-breathe" }.group?.name,
                 "membership must point at the re-imported group",
             )
+
+            // v10: the busk page has the same index and the same failure mode, and its pads must
+            // point at the re-imported records rather than the swept ones.
+            assertEquals(listOf("act-one"), project.buskPages.map { it.name }, "one page, not a duplicate and not an orphan")
+            val pads = project.buskPages.single().columns.flatMap { it.banks }.flatMap { it.pads }
+            assertEquals(7, pads.size)
+            assertTrue(pads.all { it.kind != null }, "every pad still names a live record")
         }
     }
 

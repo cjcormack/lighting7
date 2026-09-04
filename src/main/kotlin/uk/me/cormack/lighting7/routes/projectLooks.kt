@@ -17,6 +17,7 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
@@ -29,6 +30,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.DaoCueSlots
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookEffects
@@ -38,6 +40,7 @@ import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -227,8 +230,12 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 if (resource.force) look.let { l -> DaoCueLayer.find { DaoCueLayers.look eq l.id }.forEach { it.delete() } }
                 look.rows.forEach { it.delete() }
                 look.effects.forEach { it.delete() }
+                // Its busk pads and cue slots go with it, unconditionally — a place on a page or
+                // a tile is an enrichment, not a use the guard above counts (busk-layout plan D3).
+                val pageIds = deleteBuskPadsReferencing(lookId = look.id.value)
+                val slots = DaoCueSlots.deleteWhere { DaoCueSlots.look eq look.id }
                 look.delete()
-                LookDeleteOutcome.Deleted(uuid)
+                LookDeleteOutcome.Deleted(uuid, pageIds, slots > 0)
             }
             when (outcome) {
                 is LookDeleteOutcome.NotFound ->
@@ -244,10 +251,17 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     ),
                 )
                 is LookDeleteOutcome.Deleted -> {
+                    // Release the programmer layers naming it, as the template delete does. The
+                    // guard above counts cue layers only, so a Look lit from a busk pad or a slot
+                    // deletes without `force` — and its layer would otherwise sit on the stack under
+                    // a record that no longer exists, asserting nothing, with no pad left to press.
+                    state.show.programmerLayerStack.release(setOf(outcome.uuid))
                     // Keep the operator's include indicator honest — the same reason
                     // `clearIncludeTargetForCue` is called on a cue delete.
                     state.show.programmerStore.clearIncludeTargetForLook(resource.lookId)
                     state.show.fixtures.lookListChanged()
+                    if (outcome.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(outcome.pageIds.toList())
+                    if (outcome.slotsRemoved) state.show.fixtures.cueSlotListChanged()
                     call.respond(HttpStatusCode.NoContent)
                 }
             }
@@ -336,20 +350,19 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
     // POST /projects/{id}/looks/{lookId}/toggle
     //
-    // The busking-pad path: put this Look on these targets, or take it off again. Addresses a Look
-    // as a *bundle* rather than through a layer, which is what a pad wants — and only its
-    // **deferred** rows and effects are offered, because the pad supplies the targets and a bound
-    // row would land on the wrong fixtures. A bound Look is recalled through a cue layer instead.
+    // The ⌥click / cue-slot path: put this Look on these targets, or take it off again, as a
+    // **programmer layer** — the pad adds one, or removes the one it added. Always siblingless: the
+    // busk page's press goes through `POST /busk/pads/{id}/press`, which resolves the bank's
+    // siblings and calls the same `toggle` with them (busk-layout plan D4).
     //
-    // Now a **programmer layer**: the pad adds one, or removes the one it added. The request and
-    // response shapes are unchanged so the desk keeps working across this rewrite, but two things
-    // behind them are different and both are improvements.
-    //
-    // A layer carries the whole Look, so a **bound** row now lands on the fixture it names instead
-    // of being filtered out — the old path could only offer deferred rows, because it had nowhere
-    // to put a target set. And the instance is tagged `lookId` + `programmerLayerId` rather than
-    // having the Look id smuggled through a preset-id field, which is what used to make
-    // `captureCurrentState` reconstruct a preset application naming an unrelated `DaoFxPreset`.
+    // A layer carries the whole Look, so a **bound** row lands on the fixture it names and a
+    // *deferred* effect fans over the targets the press supplies. That is what decides the
+    // empty-targets rule: a Look with a deferred effect and no targets asserts nothing, so it is
+    // refused (`LOOK_NEEDS_SELECTION`); a Look with none — rows are always bound — is pressed onto
+    // **its own fixtures**, derived here, which is how a cue-slot tile presses a Look with no
+    // selection to give it (D7). The derivation drops a fixture no longer in the patch rather than
+    // failing the press, and refuses when nothing is left (`LOOK_NO_TARGETS`) — a toggle that
+    // applied nothing and reported success would read as a dead pad.
     post<ToggleLookResource> { resource ->
         withCurrentProject(
             state,
@@ -357,25 +370,28 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             { p -> "Cannot toggle looks in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<ToggleLookRequest>()
-            if (request.targets.isEmpty()) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("At least one target is required"))
-                return@withCurrentProject
-            }
 
             val look = transaction(state.database) {
                 DaoLook.findById(resource.lookId)
                     ?.takeIf { it.project.id == project.id }
-                    ?.let { Triple(it.id.value, it.uuid, it.name) }
+                    ?.toggleSource(state.show.fixtures)
             }
             if (look == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
                 return@withCurrentProject
             }
+            val targets = when (val resolved = resolveLookToggleTargets(request.targets, look)) {
+                is LookTargetResolution.Refused -> {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
+                    return@withCurrentProject
+                }
+                is LookTargetResolution.Targets -> resolved.targets
+            }
 
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
-                    source = LayerSource.look(look.first, look.second, look.third),
-                    targets = request.targets.map { CueTargetDto(it.type, it.key) },
+                    source = look.source,
+                    targets = targets,
                     beatDivisionOverride = request.beatDivision,
                 )
                 call.respond(ToggleLookResponse(outcome.action, outcome.effectCount))
@@ -401,12 +417,80 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 // [CueTargetDto], down to the `TargetRef` constructor and accessor, so it collapsed into it rather
 // than being renamed. One target DTO, not two.
 
-/** Body of `POST /looks/{id}/toggle` — apply the Look as a programmer layer, or remove it. */
+/**
+ * Body of `POST /looks/{id}/toggle` — apply the Look as a programmer layer, or remove it. An empty
+ * [targets] means the Look's own fixtures, and is refused for a Look with a deferred effect.
+ */
 @Serializable
 internal data class ToggleLookRequest(
-    val targets: List<CueTargetDto>,
+    val targets: List<CueTargetDto> = emptyList(),
     val beatDivision: Double? = null,
 )
+
+/** 400 code: the Look has a deferred effect, so a press with no targets would assert nothing. */
+internal const val CODE_LOOK_NEEDS_SELECTION = "LOOK_NEEDS_SELECTION"
+
+/** 400 code: a press with no targets, on a Look none of whose own fixtures are patched. */
+internal const val CODE_LOOK_NO_TARGETS = "LOOK_NO_TARGETS"
+
+/**
+ * What a toggle has to know about a Look, read in one transaction beside the source so the press
+ * and the busk press route see one consistent record.
+ */
+internal data class LookToggleSource(
+    val source: LayerSource,
+    /** Any effect that fans over the layer's targets — the Look that cannot be pressed target-less. */
+    val hasDeferredEffect: Boolean,
+    /** The Look's own fixtures and groups, patched ones only — see [ownTargets]. */
+    val ownTargets: List<CueTargetDto>,
+)
+
+/** Must be called inside a transaction. */
+internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookToggleSource(
+    source = LayerSource.look(id.value, uuid, name),
+    hasDeferredEffect = effects.any { it.isDeferred },
+    ownTargets = ownTargets(fixtures),
+)
+
+/**
+ * The targets this Look names itself — every row's and every *bound* effect's, distinct, in row
+ * order — keeping only those that resolve in the live patch. A row on a fixture that is no longer
+ * patched contributes nothing rather than failing the press, the `TemplateResolver` rule
+ * (an unsupported head contributes nothing, never a default). Must be called inside a transaction.
+ */
+internal fun DaoLook.ownTargets(fixtures: Fixtures): List<CueTargetDto> {
+    val named = LinkedHashSet<CueTargetDto>()
+    rows.forEach { row -> if (row.target != null) named.add(CueTargetDto(row.targetType, row.targetKey)) }
+    effects.forEach { effect -> if (effect.target != null) named.add(CueTargetDto(effect.targetType, effect.targetKey)) }
+    return named.filter { target ->
+        when (TargetRef.ofOrNull(target.type, target.key)) {
+            is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.isSuccess
+            is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.isSuccess
+            else -> false
+        }
+    }
+}
+
+internal sealed interface LookTargetResolution {
+    data class Targets(val targets: List<CueTargetDto>) : LookTargetResolution
+    data class Refused(val message: String, val code: String) : LookTargetResolution
+}
+
+/**
+ * The empty-targets rule, decided in one place for `/looks/{id}/toggle` and the busk press route:
+ * named targets are taken as given; none means the Look's own fixtures, unless it has a deferred
+ * effect or has no patched fixture left.
+ */
+internal fun resolveLookToggleTargets(requested: List<CueTargetDto>, look: LookToggleSource): LookTargetResolution = when {
+    requested.isNotEmpty() -> LookTargetResolution.Targets(requested.map { CueTargetDto(it.type, it.key) })
+    look.hasDeferredEffect -> LookTargetResolution.Refused(
+        "This Look has a deferred effect, so it needs a selection to press onto", CODE_LOOK_NEEDS_SELECTION,
+    )
+    look.ownTargets.isEmpty() -> LookTargetResolution.Refused(
+        "None of this Look's own fixtures are patched, so there is nothing to press it onto", CODE_LOOK_NO_TARGETS,
+    )
+    else -> LookTargetResolution.Targets(look.ownTargets)
+}
 
 @Serializable
 internal data class ToggleLookResponse(
@@ -525,7 +609,8 @@ private sealed interface LookWriteOutcome {
 private sealed interface LookDeleteOutcome {
     data object NotFound : LookDeleteOutcome
     data class InUse(val usage: LookUsage) : LookDeleteOutcome
-    data class Deleted(val uuid: UUID) : LookDeleteOutcome
+    /** The busk pages that lost a pad and whether any slot went, so the handler can say so. */
+    data class Deleted(val uuid: UUID, val pageIds: Set<Int>, val slotsRemoved: Boolean) : LookDeleteOutcome
 }
 
 private sealed interface CopyLookOutcome {
@@ -757,7 +842,7 @@ internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = whe
 }
 
 /** Must be called inside a transaction. */
-private fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
+internal fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
     val rowList = rows.toList()
     val effectList = effects.toList()
     val resolvedUsage = usage ?: lookUsage(id.value)
