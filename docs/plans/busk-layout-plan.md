@@ -2,7 +2,7 @@
 
 > **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04 as
 > `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; session 3
-> (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `SESSION3_SHA`;
+> (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `fed63a8`;
 > session 4 has not.** Where a session refined a
 > decision, the text below says "session 1 amendment", "session 2 amendment" or "session 3
 > amendment" beside it. The visual design is settled
@@ -324,7 +324,7 @@ wrong; two tests agreed with the bug. `buskDnd.test.ts` now composes `resolveDro
 
 **Not done**: the desk checks in §9. They are a human job and none has been run.
 
-### Session 3 — the removals (both repos) — Opus 5, high — **landed**, lighting7 `SESSION3_SHA`, lighting-react `f024713`
+### Session 3 — the removals (both repos) — Opus 5, high — **landed**, lighting7 `fed63a8`, lighting-react `f024713`
 
 - lighting7: drop `template_groups`, `templates.group_id`, both `sort_order`s, `pinned_to_busk`,
   `cue_stack_id`; delete `projectTemplateGroups.kt`, `templateLayout.kt`, the reorder route,
