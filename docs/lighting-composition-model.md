@@ -314,24 +314,7 @@ positional colour list either — and now nothing does, because that grammar is 
 parameter names a colour template rather than indexing a list, so a template *is* the named colour
 instead of being one more scope that holds several.
 
-### Template groups
-
-A template may sit in a **group**, and a group is exactly two facts about its members — neither of
-which the cook reads:
-
-- **A place.** Ungrouped templates and groups share one top-level order (`sort_order` on both
-  tables, one sequence), and a grouped template's `sort_order` is its position *within* the group.
-  The busk view draws a group as a bordered cluster inside its family column; `/templates` draws it
-  as a container the operator drags templates into and out of. One reorder route
-  (`POST /templates/reorder`) takes the whole layout and renumbers both tables in one pass, and is
-  the only thing besides a create that assigns a position.
-- **Siblings.** Pressing a member's busk pad takes the pressed targets off every *other* member's
-  layer before the new layer goes on — one store mutation, one `layerState` frame, one recook
-  (`ProgrammerLayerStack.toggle`'s `releaseSiblings`). A sibling holding exactly the pressed
-  targets comes off, one that overlaps is narrowed to the targets the press did not name, and a
-  disjoint one is untouched — the same template on two disjoint target sets is still two pads, and
-  so are two siblings. Pressing a lit pad *off* touches no sibling, and the click gesture
-  (`/apply`, literals) has no layer for a sibling to release.
+### A press is per target
 
 **A press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press
 means *these targets are now this record's, or they are now nobody's*: "already on" is the record
@@ -339,7 +322,8 @@ covering **every** pressed target, counted over all of its layers, which is prec
 full ring (§"Applied state is resolved by the desk"). An off press therefore takes the pressed
 targets off every layer of that record — dropping one that held exactly them, narrowing one that
 held more — and an on press runs the same subtraction over the record's own layers before the new
-one goes on, so **at most one layer of a record ever covers a given head**.
+one goes on, so **at most one layer of a record ever covers a given head**. The same reading governs
+what a press *releases* from a solo bank's siblings (§"The busk layout").
 
 Whole-set equality was the first rule on both arms, and it broke the pad in the ordinary busking
 case. Red on hex-1; add hex-2 to the selection and press: the press stacked a *second* Red layer
@@ -364,16 +348,13 @@ cook answers that question; a coverage comparison must not guess at it. The exce
 that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
 and takes a sibling's off outright, there being nothing to narrow it to.
 
-A group has **one family**, derived from its members the way a template's is derived from its rows
-and enforced at the write boundary (`TEMPLATE_GROUP_FAMILY`). A colour pad and a position pad never
-fight over a channel, so making them exclusive would only ever surprise — and the busk view's column
-*is* the family, so a mixed group would have no home. An empty group has no family and no column,
-and on `/templates` it shows in every bank — a group with no family accepts a template of any, and
-the bank it was created in is where it gets filled.
-
-What a group is **not**: a composition concept. A cue-authored template layer is the cue's business,
-`CueComposer` never reads `template_groups`, and nothing about Layer 3/4 ordering, stomp or amount
-changes because two templates happen to share a cluster on a pad grid.
+> **The library has no order and no groups.** Templates and Looks list by name, and nothing but a
+> create assigns a position, because there is no position to assign. `template_groups`,
+> `templates.sort_order`, `looks.sort_order` and `POST /templates/reorder` all existed to give the
+> library an operator-set order and to make a cluster of pads mutually exclusive; the busk page took
+> both jobs when the operator took ownership of the layout, and they went with it. Order is a pad's
+> place in a bank, exclusivity is a solo bank's, and neither was ever a composition concept —
+> `CueComposer` read none of it then and reads none of it now.
 
 ### The busk layout
 

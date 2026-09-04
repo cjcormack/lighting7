@@ -129,7 +129,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.activeCueId(stackId: Int): Int? =
         get("/api/rest/projects/$projectId/cue-stacks/$stackId").body<CueStackDetails>().activeCueId
 
-    /** `name@key+key` per live programmer layer, the `TemplateGroupRoutesTest` idiom. */
+    /** `name@key+key` per live programmer layer — the idiom the template-group tests left behind. */
     private fun live(): Set<String> = state.show.programmerStore.layers
         .map { layer -> "${layer.source.name}@${layer.targets.map { it.key }.sorted().joinToString("+")}" }
         .toSet()

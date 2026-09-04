@@ -39,7 +39,6 @@ class ProjectDeleteTemplatesTest : RouteIntegrationTest() {
             val template = DaoTemplate.new {
                 this.project = project
                 name = "amber-key"
-                sortOrder = 0
             }
             DaoTemplateRow.new {
                 this.template = template

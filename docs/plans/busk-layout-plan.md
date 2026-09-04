@@ -1,9 +1,11 @@
 # Busk layout — pages of rows, columns and banks the operator builds
 
 > **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04 as
-> `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; sessions 3–4
-> have not.** Where a session refined a decision, the text below says "session 1 amendment" or
-> "session 2 amendment" beside it. The visual design is settled
+> `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; session 3
+> (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `SESSION3_SHA`;
+> session 4 has not.** Where a session refined a
+> decision, the text below says "session 1 amendment", "session 2 amendment" or "session 3
+> amendment" beside it. The visual design is settled
 > and checked in beside this plan at [`look-groups-design/`](look-groups-design/INDEX.md) —
 > eleven static artboards on two canvas pages: the busk view in play and edit mode, the build
 > flow, the rows/columns/banks structure, the model and delta, the FX cue slots overlay fed from
@@ -322,7 +324,7 @@ wrong; two tests agreed with the bug. `buskDnd.test.ts` now composes `resolveDro
 
 **Not done**: the desk checks in §9. They are a human job and none has been run.
 
-### Session 3 — the removals (both repos) — Opus 5, high
+### Session 3 — the removals (both repos) — Opus 5, high — **landed**, lighting7 `SESSION3_SHA`, lighting-react `f024713`
 
 - lighting7: drop `template_groups`, `templates.group_id`, both `sort_order`s, `pinned_to_busk`,
   `cue_stack_id`; delete `projectTemplateGroups.kt`, `templateLayout.kt`, the reorder route,
@@ -340,6 +342,49 @@ wrong; two tests agreed with the bug. `buskDnd.test.ts` now composes `resolveDro
   rows; reword `FU-BUSK-MOMENTARY`'s "every pad left is a layer toggle" (cue pads are toggles too).
   `manual-validation.md`: the cue-slot drag-vs-collapse check (its edit mode is now the busk
   view's) and `FU-MANUAL-BUSK-VIEW` / `FU-MANUAL-FX-TEMPLATE-PADS`, which describe family columns.
+
+**Session 3 amendments**, where the plan and the code diverged:
+
+- **`formatVersion` stays 10, and there is no bump.** `SyncDtos.kt:38-42` had already pre-declared
+  these removals under that number; nothing but the dev desk wrote v10 between the two sessions. The
+  one new rule that needed writing is its consequence: a v10 archive written *before* this session
+  carries `cueStackUuid` on a slot, which `ignoreUnknownKeys` drops, so the slot arrives naming
+  nothing. The importer's arity check therefore **splits** — two arms still aborts, none warns and
+  drops the slot, the busk pad's posture applied to a slot. `ProjectRoundTripTest` guards it.
+- **`useBuskEditMode()` did not exist.** Session 2 landed it as the `buskEdit` Redux slice
+  (`selectBuskEdit`); this session added the hook over it, selecting the **boolean** rather than the
+  state object so a page change does not re-render eight tiles.
+- **"Looks' raw sort order" was DTO-only on the frontend** — no ordering UI, no writer, three type
+  fields and four fixtures.
+- **`TemplateStrip.tsx` was a fifth consumer of `buildTemplateLayout`** the plan's §5 list missed;
+  it now renders the name-ordered list directly.
+- **The palette→slot drop resolves in `DeskDndProvider`, not in a cue-slot monitor.** The panel body
+  is behind `CollapsiblePanel` and unmounts when the overlay hides — the one place a slot mutation
+  must not live. The provider already owns the slot droppables, `projectId` and both mutations, and
+  already accepted a foreign source onto its own target. Its docblock's "mutual ignorance" paragraph
+  was rewritten: the ignorance is of **ids and foreign targets**, never of sources. The mapping
+  itself is pure in `components/dnd/slotDrop.ts`, imported type-only, so the shell's runtime import
+  graph still never reaches the busk feature.
+- **A lit Look tile does not look like a lit cue tile.** A live cue keeps its solid fill (this cue is
+  its stack's live cue); a Look on the rig gets `BuskPad`'s presence vocabulary — border, faint tint,
+  ring, corner pip. Two different claims, and the busk view already draws them differently.
+- **`lookPresence.ts` needed a third function**, not a relaxed guard. `appliedPresence` answers
+  `'none'` for an empty target list *by design*; a slot has no selection, so `lookIsApplied` asks the
+  selection-independent question instead.
+- **Two things went that the plan did not list**: `useActiveCueStackIds` (the panel was its only
+  production caller) and the panel's *Edit slots* context-menu item, whose only job was entering the
+  deleted wiggle mode. *View* and *Clear slot* stay, and the cross grew an `aria-label`.
+- **One rescue and one addition to the tests.** `TemplateGroupRoutesTest`'s
+  `widening the selection and pressing twice leaves the pad off` never had a group in it — it is the
+  plain pad's sequence — and moved into `TemplateRoutesTest`, beside a new
+  `the toggle route releases nothing` that pins D4's siblingless rule now that nothing else does.
+- **New follow-up raised**: `FU-SLOT-DROP-OVERLAY-HIDDEN` — the slot droppables live inside
+  `CollapsiblePanel`, so with the overlay shut a palette row dropped at the header lands on nothing,
+  silently.
+
+**Not done**: `slotDrop.ts` ships without its own unit test (Chris's call: one focused panel test
+rather than two suites), so the eligibility mapping is covered only through
+`CueSlotOverviewPanel.test.tsx` and the palette's own refusal test.
 
 ### Session 4 — the edges (both repos) — Sonnet 5, high
 

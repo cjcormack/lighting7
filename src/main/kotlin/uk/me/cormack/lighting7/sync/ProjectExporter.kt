@@ -14,7 +14,6 @@ import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
-import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
 import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
@@ -70,11 +69,10 @@ import java.util.UUID
  * /stageRegions/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /looks/{uuid}.json               -- rows and effects embedded inline
- * /templates/{uuid}.json           -- rows, or one effect, embedded inline; optional groupUuid
- * /templateGroups/{uuid}.json      -- v9+: name and top-level position only
+ * /templates/{uuid}.json           -- rows, or one effect, embedded inline
  * /speedMasters/{uuid}.json
  * /fxDefinitions/{uuid}.json
- * /cueSlots/{uuid}.json           -- a cue, a stack, or (v10+) a Look
+ * /cueSlots/{uuid}.json           -- a cue, or (v10+) a Look
  * /buskPages/{uuid}.json           -- v10+: columns, banks and pads embedded inline
  * /parkedChannels/{uuid}.json
  * /controlSurfaceBindings/{uuid}.json
@@ -171,7 +169,6 @@ class ProjectExporter(private val state: State) {
                     notes = c.notes,
                     cueType = c.cueType,
                     stomp = c.stomp,
-                    pinnedToBusk = c.pinnedToBusk,
                 )
             }
 
@@ -331,17 +328,8 @@ class ProjectExporter(private val state: State) {
                     uuid = l.uuid.toString(),
                     name = l.name,
                     notes = l.notes,
-                    sortOrder = l.sortOrder,
                     rows = rows,
                     effects = effects,
-                )
-            }
-
-            count += writeAll(targetDir, "templateGroups", project.templateGroups.toList(), TemplateGroupJson.serializer(), { it.uuid }, liveKeys) { g ->
-                TemplateGroupJson(
-                    uuid = g.uuid.toString(),
-                    name = g.name,
-                    sortOrder = g.sortOrder,
                 )
             }
 
@@ -350,9 +338,7 @@ class ProjectExporter(private val state: State) {
                     uuid = t.uuid.toString(),
                     name = t.name,
                     notes = t.notes,
-                    sortOrder = t.sortOrder,
                     fadeDurationMs = t.fadeDurationMs,
-                    groupUuid = t.group?.uuid?.toString(),
                     rows = t.rows
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         .map { r ->
@@ -433,7 +419,6 @@ class ProjectExporter(private val state: State) {
                     page = s.page,
                     slotIndex = s.slotIndex,
                     cueUuid = s.cue?.uuid?.toString(),
-                    cueStackUuid = s.cueStack?.uuid?.toString(),
                     lookUuid = s.look?.uuid?.toString(),
                 )
             }

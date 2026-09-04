@@ -20,7 +20,6 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateGroup
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
@@ -252,7 +251,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         name = "Warm Amber"
         notes = "act one wash"
-        sortOrder = 3
     }
     DaoLookRow.new {
         look = boundLook; targetType = "fixture"; targetKey = "hex-1"
@@ -276,7 +274,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         name = "warm-pulse"
         notes = "warm pulse"
-        sortOrder = 1
     }
     DaoLookEffect.new {
         look = effectsLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
@@ -294,23 +291,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 0
     }
 
-    // A **template group** (v9): a top-level position it shares with the ungrouped templates, and
-    // membership that lives on the template as `groupUuid`. Seeded with a non-default sortOrder for
-    // the reason the effect template gives below, and given the effect template as its one member
-    // so both the folder and the reference are exercised by the round trip and the clone.
-    val warmKeys = DaoTemplateGroup.new {
-        this.project = project
-        name = "warm-keys"
-        sortOrder = 3
-    }
-
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
     // the half of the old deferred look that is not a look at all.
     val colourTemplate = DaoTemplate.new {
         this.project = project
         name = "amber-key"
         notes = "warm key light"
-        sortOrder = 0
         fadeDurationMs = 1_500L
     }
     DaoTemplateRow.new {
@@ -330,12 +316,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         name = "amber-breathe"
         notes = "slow warm breathe on the selection"
-        // Its position *within* `warmKeys`, not in the top-level sequence.
-        sortOrder = 2
         // Deliberately null: an effect has no arrival, so an effect template has no fade. Left as
         // the one default here so a copier inventing a fade for it is caught.
         fadeDurationMs = null
-        group = warmKeys
     }
     DaoTemplateEffect.new {
         template = effectTemplate
@@ -356,7 +339,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val positionTemplate = DaoTemplate.new {
         this.project = project
         name = "downstage-centre"
-        sortOrder = 1
     }
     DaoTemplateRow.new {
         template = positionTemplate; targetType = "fixture"; targetKey = "hex-1"
@@ -477,9 +459,6 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // cue slot
     DaoCueSlot.new {
         this.project = project; page = 1; slotIndex = 1; cue = cue1
-    }
-    DaoCueSlot.new {
-        this.project = project; page = 1; slotIndex = 2; cueStack = stack2
     }
     // A Look slot (v10): the bound Look, pressed onto its own fixtures.
     DaoCueSlot.new {

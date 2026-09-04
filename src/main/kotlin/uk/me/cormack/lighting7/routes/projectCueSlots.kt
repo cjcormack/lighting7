@@ -30,7 +30,7 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
         }
     }
 
-    // POST /{projectId}/cue-slots - Assign a cue or cue stack to a slot (upsert)
+    // POST /{projectId}/cue-slots - Assign a cue or a Look to a slot (upsert)
     post<ProjectCueSlotsResource> { resource ->
         withCurrentProject(
             state,
@@ -40,8 +40,8 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
             val input = call.receive<AssignCueSlotRequest>()
 
             // Validate exactly one reference is provided
-            if (listOfNotNull(input.cueId, input.cueStackId, input.lookId).size != 1) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId, cueStackId or lookId must be provided"))
+            if (listOfNotNull(input.cueId, input.lookId).size != 1) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Exactly one of cueId or lookId must be provided"))
                 return@withCurrentProject
             }
 
@@ -51,12 +51,6 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
                     val cue = DaoCue.findById(input.cueId)
                     if (cue == null || cue.project.id != project.id) {
                         return@transaction null to "Cue not found in this project"
-                    }
-                }
-                if (input.cueStackId != null) {
-                    val stack = DaoCueStack.findById(input.cueStackId)
-                    if (stack == null || stack.project.id != project.id) {
-                        return@transaction null to "Cue stack not found in this project"
                     }
                 }
                 if (input.lookId != null) {
@@ -83,7 +77,6 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
 
                 val slot = if (existing != null) {
                     existing.cue = input.cueId?.let { DaoCue.findById(it) }
-                    existing.cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
                     existing.look = input.lookId?.let { DaoLook.findById(it) }
                     existing
                 } else {
@@ -92,7 +85,6 @@ internal fun Route.routeApiRestProjectCueSlots(state: State) {
                         page = input.page
                         slotIndex = input.slotIndex
                         cue = input.cueId?.let { DaoCue.findById(it) }
-                        cueStack = input.cueStackId?.let { DaoCueStack.findById(it) }
                         look = input.lookId?.let { DaoLook.findById(it) }
                     }
                 }
@@ -196,18 +188,18 @@ data class CueSlotDetails(
     val id: Int,
     val page: Int,
     val slotIndex: Int,
+    /** `"cue"` or `"look"` — which arm of the slot is set. See `DaoCueSlots`. */
     val itemType: String,
     val itemId: Int,
     val itemName: String,
 )
 
-/** Exactly one of [cueId] / [cueStackId] / [lookId]. See `DaoCueSlots`. */
+/** Exactly one of [cueId] / [lookId]. See `DaoCueSlots`. */
 @Serializable
 data class AssignCueSlotRequest(
     val page: Int,
     val slotIndex: Int,
     val cueId: Int? = null,
-    val cueStackId: Int? = null,
     val lookId: Int? = null,
 )
 
@@ -223,7 +215,6 @@ data class SwapCueSlotsRequest(
 
 private fun DaoCueSlot.toDetails(): CueSlotDetails {
     val resolvedCue = cue
-    val resolvedStack = cueStack
     val resolvedLook = look
 
     return when {
@@ -243,14 +234,6 @@ private fun DaoCueSlot.toDetails(): CueSlotDetails {
             itemId = resolvedCue.id.value,
             itemName = resolvedCue.name,
         )
-        resolvedStack != null -> CueSlotDetails(
-            id = id.value,
-            page = page,
-            slotIndex = slotIndex,
-            itemType = "cue_stack",
-            itemId = resolvedStack.id.value,
-            itemName = resolvedStack.name,
-        )
-        else -> error("CueSlot ${id.value} has no cue, cue stack or look set")
+        else -> error("CueSlot ${id.value} has no cue or look set")
     }
 }

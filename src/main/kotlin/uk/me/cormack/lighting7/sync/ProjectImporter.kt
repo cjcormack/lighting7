@@ -53,10 +53,8 @@ import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateGroup
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
 import uk.me.cormack.lighting7.models.DaoTemplateRow
-import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
@@ -85,9 +83,10 @@ import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
 
-// v9 added `templateGroups/` and `TemplateJson.groupUuid`. SUPPORTED moves for v6's reason (a v8
-// reader would import every template ungrouped and write the groups away on its next push); MIN
-// stays at 5 because the folder reads as empty when missing and the field defaults to null.
+// v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
+// page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
+// import every template ungrouped and write the groups away on its next push); MIN stays at 5
+// because both folders read as empty when missing and every field defaults.
 //
 // v6 gave templates their own entity: a `templates/` folder, and `CueLayerJson.lookUuid` optional
 // beside a new `templateUuid`. Only SUPPORTED moves — **MIN deliberately stays at 5**, because a v5
@@ -261,8 +260,6 @@ class ProjectImporter(private val state: State) {
                 template.effects.forEach { it.delete() }
                 template.delete()
             }
-            // Groups after templates: `templates.group_id` points at one.
-            project.templateGroups.forEach { it.delete() }
             project.speedMasters.forEach { it.delete() }
             project.fixtureGroups.forEach { group ->
                 group.members.forEach { it.delete() }
@@ -336,8 +333,7 @@ class ProjectImporter(private val state: State) {
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
         val lookMap = importLooks(sourceDir, project)
-        val templateGroupMap = importTemplateGroups(sourceDir, project)
-        val templateMap = importTemplates(sourceDir, project, templateGroupMap)
+        val templateMap = importTemplates(sourceDir, project)
         importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
@@ -354,7 +350,7 @@ class ProjectImporter(private val state: State) {
         val promptBook = importPromptBook(sourceDir, project)
         importPromptBookAnchors(sourceDir, promptBook, cueMap)
         importPromptBookAnnotations(sourceDir, promptBook)
-        importCueSlots(sourceDir, project, cueMap, cueStackMap, lookMap)
+        importCueSlots(sourceDir, project, cueMap, lookMap)
         // Pages after every record a pad can name.
         importBuskPages(sourceDir, project, templateMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
@@ -420,7 +416,6 @@ class ProjectImporter(private val state: State) {
                 this.project = project
                 name = l.name
                 notes = l.notes
-                sortOrder = l.sortOrder
                 this.uuid = uuid
             }
             l.rows.forEach { r ->
@@ -678,7 +673,6 @@ class ProjectImporter(private val state: State) {
             notes = c.notes
             cueType = c.cueType
             stomp = c.stomp
-            pinnedToBusk = c.pinnedToBusk
             this.uuid = uuid
         }
         uuid to dao
@@ -707,47 +701,18 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    /** Template groups (v9). Before templates, which reference one by uuid. */
-    private fun importTemplateGroups(dir: Path, project: DaoProject): Map<UUID, DaoTemplateGroup> =
-        readDir(dir.resolve("templateGroups")) { json ->
-            val g = canonicalDecode(TemplateGroupJson.serializer(), json)
-            val uuid = UUID.fromString(g.uuid)
-            val dao = DaoTemplateGroup.new {
-                this.project = project
-                name = g.name
-                sortOrder = g.sortOrder
-                this.uuid = uuid
-            }
-            uuid to dao
-        }
-
     private fun importTemplates(
         dir: Path,
         project: DaoProject,
-        groupMap: Map<UUID, DaoTemplateGroup>,
     ): Map<UUID, DaoTemplate> =
         readDir(dir.resolve("templates")) { json ->
             val t = canonicalDecode(TemplateJson.serializer(), json)
             val uuid = UUID.fromString(t.uuid)
-            // A dangling `groupUuid` ungroups rather than aborting the pull: a group is an
-            // enrichment of the template (its place and its siblings), not its content, so a
-            // template that has lost its group is still a whole template — the same lenience the
-            // effect below gets, and the opposite of a cue layer, which is nothing without its
-            // source. Warned, because it is still a repo inconsistency worth a line.
-            val group = t.groupUuid?.let { g ->
-                groupMap[UUID.fromString(g)].also { found ->
-                    if (found == null) {
-                        logger.warn("Template {} names group {} which the archive does not carry; importing ungrouped", t.name, g)
-                    }
-                }
-            }
             val dao = DaoTemplate.new {
                 this.project = project
                 name = t.name
                 notes = t.notes
-                sortOrder = t.sortOrder
                 fadeDurationMs = t.fadeDurationMs
-                this.group = group
                 this.uuid = uuid
             }
             t.rows.forEach { r ->
@@ -949,27 +914,34 @@ class ProjectImporter(private val state: State) {
         dir: Path,
         project: DaoProject,
         cueMap: Map<UUID, DaoCue>,
-        cueStackMap: Map<UUID, DaoCueStack>,
         lookMap: Map<UUID, DaoLook>,
     ) {
         readDir(dir.resolve("cueSlots")) { json ->
             val s = canonicalDecode(CueSlotJson.serializer(), json)
             val uuid = UUID.fromString(s.uuid)
-            // Exactly one arm. Archive JSON is untrusted input with a diagnostic channel of its
-            // own, so a slot naming none or two aborts like any other malformed record here — the
-            // busk *pad* below is the lenient one, and the docblocks on both say why they differ.
-            if (listOfNotNull(s.cueUuid, s.cueStackUuid, s.lookUuid).size != 1) {
-                throw ImportError.invalidArchive("Cue slot ${s.uuid} must name exactly one of cueUuid, cueStackUuid or lookUuid")
+            val named = listOfNotNull(s.cueUuid, s.lookUuid)
+            // Two arms aborts: archive JSON is untrusted input with a diagnostic channel of its own,
+            // and a slot claiming to be two things is malformed, not a state.
+            //
+            // **None** is the one lenient case, and it exists for exactly one archive: a v10 repo
+            // written before the cue-*stack* arm was removed, whose stack slots decode to nothing
+            // (`ignoreUnknownKeys` drops the field). Dropping that slot with a warning rather than
+            // failing the pull is the busk pad's posture — a slot, like a pad, is an enrichment of
+            // the record it names, so a repo that has lost one is still a whole project.
+            if (named.size > 1) {
+                throw ImportError.invalidArchive("Cue slot ${s.uuid} must name exactly one of cueUuid or lookUuid")
+            }
+            if (named.isEmpty()) {
+                logger.warn(
+                    "Cue slot {} names neither a cue nor a Look (a pre-v10 stack slot?); dropping it",
+                    s.uuid,
+                )
+                return@readDir uuid to Unit
             }
             val cue = s.cueUuid?.let {
                 val cueUuid = UUID.fromString(it)
                 cueMap[cueUuid]
                     ?: throw ImportError.invalidArchive("Cue slot ${s.uuid} references unknown cue $cueUuid")
-            }
-            val stack = s.cueStackUuid?.let {
-                val stackUuid = UUID.fromString(it)
-                cueStackMap[stackUuid]
-                    ?: throw ImportError.invalidArchive("Cue slot ${s.uuid} references unknown cue stack $stackUuid")
             }
             val look = s.lookUuid?.let {
                 val lookUuid = UUID.fromString(it)
@@ -981,7 +953,6 @@ class ProjectImporter(private val state: State) {
                 page = s.page
                 slotIndex = s.slotIndex
                 this.cue = cue
-                this.cueStack = stack
                 this.look = look
                 this.uuid = uuid
             }

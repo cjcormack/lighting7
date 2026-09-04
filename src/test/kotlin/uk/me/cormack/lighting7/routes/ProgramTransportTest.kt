@@ -83,53 +83,31 @@ class ProgramTransportTest : RouteIntegrationTest() {
     }
 
     /**
-     * `/show/go-to` with a `cueId` — the busk view's pinned-cue pad.
+     * `/show/go-to` names a stack and lands on its first cue — there is no `cueId` any more.
      *
-     * The rejection halves are the point rather than the happy path: every one of them has to be
-     * refused **before** the playhead moves, because the route deactivates the outgoing stack the
-     * moment the transaction commits. A 400 raised after that is a dark rig plus a playhead sitting
-     * on a stack with nothing on stage — strictly worse than a rejected press.
+     * It existed for the busk view's pinned-cue pads; a busk pad now applies a cue through
+     * `CueStackManager` without moving the playhead at all (busk-layout plan D5), so the parameter
+     * lost its only caller and went. Jumping within a stack is `/cue-stacks/{id}/go-to-cue`'s job.
      */
     @Test
-    fun `go-to with a cueId fires that cue, and a bad cue leaves the playhead alone`() = testApplication {
+    fun `go-to activates a stack at its first cue`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
 
         val stackA = createStack(client, "Act 1")
         val stackB = createStack(client, "Act 2")
         createCue(client, "a1", stackA)
-        createCue(client, "b1", stackB)
-        val b2 = createCue(client, "b2", stackB)
-        val marker = createCue(client, "interval", stackB, cueType = "MARKER")
+        val b1 = createCue(client, "b1", stackB)
+        createCue(client, "b2", stackB)
 
         client.post("/api/rest/projects/$projectId/show/activate").body<ShowActivateResponse>()
 
-        // The whole reason the parameter exists: land on b2 without firing b1 on the way past.
         val goTo = client.post("/api/rest/projects/$projectId/show/go-to") {
             contentType(ContentType.Application.Json)
-            setBody(GoToStackRequest(stackId = stackB, cueId = b2))
+            setBody(GoToStackRequest(stackId = stackB))
         }
         assertEquals(HttpStatusCode.OK, goTo.status, goTo.bodyAsText())
         assertEquals(stackB, goTo.body<ShowActivateResponse>().activeStackId)
-        assertEquals(b2, stack(client, stackB).activeCueId, "go-to must land on the named cue, not the first")
-
-        // A MARKER and a cue that no longer exists are both refused with the show exactly where it
-        // was — same stack, same live cue.
-        for ((label, badCueId) in listOf("a marker" to marker, "a deleted cue" to 1_000_000)) {
-            val rejected = client.post("/api/rest/projects/$projectId/show/go-to") {
-                contentType(ContentType.Application.Json)
-                setBody(GoToStackRequest(stackId = stackB, cueId = badCueId))
-            }
-            assertEquals(HttpStatusCode.BadRequest, rejected.status, "go-to $label must be rejected")
-            assertEquals(stackB, client.get("/api/rest/projects/$projectId/show").body<ShowDetails>().activeStackId)
-            assertEquals(b2, stack(client, stackB).activeCueId, "a rejected go-to ($label) must not move the playhead")
-        }
-
-        val wrongStack = client.post("/api/rest/projects/$projectId/show/go-to") {
-            contentType(ContentType.Application.Json)
-            setBody(GoToStackRequest(stackId = stackA, cueId = b2))
-        }
-        assertEquals(HttpStatusCode.BadRequest, wrongStack.status, "a cue from another stack must be rejected")
-        assertEquals(stackB, client.get("/api/rest/projects/$projectId/show").body<ShowDetails>().activeStackId)
+        assertEquals(b1, stack(client, stackB).activeCueId, "go-to lands on the stack's first cue")
     }
 }

@@ -216,9 +216,6 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
                 this.project = project
                 this.name = name
                 this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-                this.sortOrder = (
-                    DaoTemplate.find { DaoTemplates.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1
-                    ) + 1
                 this.fadeDurationMs = request.fadeDurationMs
             }
             for (row in rows) {

@@ -215,15 +215,13 @@ refused at the write boundary if a write would flip it. Its family is derived fr
 library `category` via `familyForEffectCategory`, so `controls`, `composite` and `beam` are refused
 by name. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
 template's one effect goes down the same *deferred* arm a Look's does. See
-`docs/lighting-composition-model.md` §"A template holds a value *or* an effect". A template may also
-sit in a **template group** (`template_groups`, one family per group, derived from the members): the
-group is a place in the library's operator-set order and a set of *siblings* a busk press takes its
-own targets away from — per target, not per target set, so a sibling that only overlaps the press is
-narrowed rather than left lit underneath (`ProgrammerLayerStack.toggle`'s `releaseSiblings`,
-resolved by the toggle route, never read by the cook). A press is per target on **both** arms and is
-the exact inverse of the pad's lit ring: "already on" is the record covering every pressed target,
-and an off press clears them from every layer of that record. See §"Template groups" in the same
-doc.
+`docs/lighting-composition-model.md` §"A template holds a value *or* an effect". A press is per
+target on **both** arms and is the exact inverse of the pad's lit ring: "already on" is the record
+covering every pressed target, and an off press clears them from every layer of that record. A
+press *releases* something only through a solo bank on a busk page — per target, not per target set,
+so a sibling that only overlaps the press is narrowed rather than left lit underneath
+(`ProgrammerLayerStack.toggle`'s `releaseSiblings`, resolved by the press route, never read by the
+cook). The library itself is a flat list ordered by name. See §"The busk layout" in the same doc.
 
 Scripts name an effect rather than constructing one — `effect(id, params)` resolves it through the
 registry, so a script reaches the same vocabulary as the UI and cues, user effects included:
@@ -344,17 +342,15 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
 
 ### Template Endpoints
-- `GET/POST /api/rest/projects/{id}/templates` + `GET/PUT/DELETE .../{tid}` - Template CRUD; `TemplateDto.groupId` is membership, `TemplateInput.groupId` + `groupIdPresent` moves one (appends at the destination; a group of another family is 409 `TEMPLATE_GROUP_FAMILY`)
-- `POST /api/rest/projects/{id}/templates/reorder` - The **whole** layout (`entries: [{templateId} | {groupId, templateIds}]`, every template and group named once, else 400); the one renumbering, shared with group DELETE
-- `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click / busk pad → a tracking layer, per target on both arms: an off press clears the pressed targets from every layer of that template, and an on press takes them off a group's siblings — narrowing one that only overlaps rather than dropping it, reported as `released`)
-- `GET/POST /api/rest/projects/{id}/template-groups` + `PUT/DELETE .../{gid}` - Group CRUD; DELETE ungroups the members in the group's place and deletes no template
+- `GET/POST /api/rest/projects/{id}/templates` + `GET/PUT/DELETE .../{tid}` - Template CRUD. The list is ordered by name: a template holds no position and no group, because a pad's place on a busk page is the only order there is
+- `POST .../templates/{tid}/apply` (click → literals) and `.../toggle` (⌥click → a tracking layer, per target on both arms: an off press clears the pressed targets from every layer of that template). Always **siblingless** — exclusivity belongs to a solo bank, so `released` is always zero here
 
 ### Busk Endpoints
 - `GET /api/rest/projects/{id}/busk/pages` + `GET .../{pid}` - The busk layout, every page nested to the pad; a pad embeds its record's own summary DTO (`template` / `look` / `cue`) so the view needs no second fetch
 - `POST /api/rest/projects/{id}/busk/pages` (appends; a duplicate name is 409 `BUSK_PAGE_NAME_TAKEN`), `PUT/DELETE .../{pid}`, `POST .../pages/reorder` (every page once, else 400)
 - `PUT .../pages/{pid}/layout` - The **whole** page (`rows: [{columns: [{columnId?, width, banks: [{bankId?, name, solo, flow, pads: [{padId?, templateId|lookId|cueId}]}]}]}]`): pads without an id created, pads absent deleted, everything renumbered densely; refused as a whole with `BUSK_LAYOUT_INVALID` / `_IDENTITY` / `_REF` before touching a row; answers the page with the ids it minted
 - `POST .../busk/pads/{padId}/press` `{targets}` - The busk view's press: a template or Look → `ProgrammerLayerStack.toggle` with the bank's siblings when the bank is solo; a cue → apply/stop through `CueStackManager`, lit from `activeCueId`. A generic template pad pressed with no selection is 400 `TEMPLATE_NEEDS_SELECTION` (a per-fixture one lands on its own heads). Solo means pressing one turns its siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue press taking layer siblings off wholesale (`release`). An off press releases nothing. See `docs/lighting-composition-model.md` §"The busk layout"
-- `POST .../looks/{id}/toggle` with empty `targets` presses a Look with no deferred effect onto its own patched fixtures (400 `LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS` otherwise); `POST .../cue-slots` takes `lookId` beside `cueId` / `cueStackId` and refuses a deferred-effect Look with 409 `CUE_SLOT_LOOK_NEEDS_SELECTION`
+- `POST .../looks/{id}/toggle` with empty `targets` presses a Look with no deferred effect onto its own patched fixtures (400 `LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS` otherwise); `POST .../cue-slots` takes exactly one of `lookId` / `cueId` and refuses a deferred-effect Look with 409 `CUE_SLOT_LOOK_NEEDS_SELECTION`
 
 ### Group REST Endpoints
 - `GET /api/rest/groups` - List all fixture groups

@@ -10,7 +10,6 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
-import uk.me.cormack.lighting7.sync.dto.TemplateGroupJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -113,37 +112,6 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * The v9 twin of the test above: `groupUuid` is a reference, so an ungrouped template must
-     * carry no key at all rather than `"groupUuid": null`, and the grouped one must name the
-     * group document the `templateGroups/` folder actually holds.
-     */
-    @Test
-    fun `templates carry groupUuid only when grouped`() {
-        val projectId = seedRichProject(state)
-        ProjectExporter(state).export(projectId, exportDirA)
-
-        val groups = Files.list(exportDirA.resolve("templateGroups")).use { stream ->
-            stream.toList().map { canonicalDecode(TemplateGroupJson.serializer(), Files.readString(it)) }
-        }
-        val warmKeys = groups.single()
-        assertEquals("warm-keys", warmKeys.name)
-        assertEquals(3, warmKeys.sortOrder, "the off-default position must survive the export")
-
-        val docs = Files.list(exportDirA.resolve("templates")).use { stream ->
-            stream.toList().map { Files.readString(it) }
-        }
-        val grouped = docs.filter { it.contains("\"groupUuid\"") }
-        assertEquals(1, grouped.size, "exactly one template is grouped")
-        val groupedTemplate = canonicalDecode(TemplateJson.serializer(), grouped.single())
-        assertEquals("amber-breathe", groupedTemplate.name)
-        assertEquals(warmKeys.uuid, groupedTemplate.groupUuid, "the reference names the exported group")
-        assertTrue(
-            docs.filterNot { it.contains("amber-breathe") }.none { it.contains("\"groupUuid\"") },
-            "an ungrouped template must not carry the groupUuid key at all",
-        )
-    }
-
-    /**
      * v10: a busk page travels as one document with columns, banks and pads nested, and every
      * structural field written even at zero. The byte-for-byte test proves the importer keeps what
      * the exporter writes; this pins what the exporter writes.
@@ -208,6 +176,40 @@ class ProjectRoundTripTest {
         assertEquals(listOf("keys", "moves", "cues", "fx"), banks.map { it.name })
         assertEquals(0, banks.first { it.name == "keys" }.pads.count { it.lookUuid != null }, "the dropped pad was the keys bank's Look")
         assertEquals(2, banks.first { it.name == "keys" }.pads.size)
+    }
+
+    /**
+     * A v10 archive written *before* the cue-stack arm was removed carries slots whose only
+     * reference is `cueStackUuid` — an unknown key now, so the slot decodes naming nothing. That
+     * one case warns and drops rather than failing the pull: a slot, like a busk pad, is an
+     * enrichment of the record it names. Two arms still aborts, which the assign route's own test
+     * pins on the write side.
+     */
+    @Test
+    fun `a cue slot naming nothing is dropped and the rest of the archive imports`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        // Stand in for the old shape: strip the one arm this slot has and put the retired key back.
+        val slotFiles = Files.list(exportDirA.resolve("cueSlots")).use { it.toList() }
+        val lookSlot = slotFiles.single { Files.readString(it).contains("lookUuid") }
+        val rewritten = Files.readString(lookSlot).replaceFirst(
+            Regex("\"lookUuid\": \"[0-9a-f-]+\""),
+            "\"cueStackUuid\": \"00000000-0000-0000-0000-000000000000\"",
+        )
+        assertTrue(rewritten.contains("cueStackUuid"), "test sanity: the slot was rewritten")
+        Files.writeString(lookSlot, rewritten)
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+
+        val slots = Files.list(exportDirB.resolve("cueSlots")).use { stream ->
+            stream.toList().map { canonicalDecode(CueSlotJson.serializer(), Files.readString(it)) }
+        }
+        assertEquals(slotFiles.size - 1, slots.size, "one slot fewer, nothing else lost")
+        assertEquals(0, slots.count { it.lookUuid != null }, "the dropped slot was the Look's")
+        assertTrue(slots.all { it.cueUuid != null }, "every surviving slot still names a cue")
     }
 
     @Test

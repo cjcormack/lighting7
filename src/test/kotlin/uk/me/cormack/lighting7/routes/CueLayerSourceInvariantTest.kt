@@ -57,7 +57,6 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         val template = DaoTemplate.new {
             this.project = DaoProject.findById(projectId)!!
             this.name = name
-            sortOrder = 0
         }
         DaoTemplateRow.new {
             this.template = template

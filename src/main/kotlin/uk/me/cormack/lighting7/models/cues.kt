@@ -192,15 +192,6 @@ object DaoCues : IntIdTable("cues") {
      * See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)
-    /**
-     * True when this cue has a pad of its own on the busk view (`/projects/:id/busk`).
-     *
-     * A flag on the cue rather than a pin-list table: a separate table would buy ordering and
-     * cross-project pins nobody has asked for, and would need its own export/import handling,
-     * where a column rides along with the cue for free. See
-     * `docs/plans/completed/busking-view-plan.md` D10.
-     */
-    val pinnedToBusk = bool("pinned_to_busk").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 
     // Cue names are deliberately *not* unique. The old uniqueIndex(project, name) predates cue
@@ -226,7 +217,6 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var notes by DaoCues.notes
     var cueType by DaoCues.cueType
     var stomp by DaoCues.stomp
-    var pinnedToBusk by DaoCues.pinnedToBusk
     var uuid by DaoCues.uuid
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue

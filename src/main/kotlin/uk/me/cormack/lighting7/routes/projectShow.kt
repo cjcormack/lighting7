@@ -179,28 +179,6 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     if (stack.type == CueStackType.SEPARATOR.name) {
                         throw IllegalArgumentException("Cannot go-to a separator")
                     }
-                    // Checked *before* the playhead moves, unlike the errors `goToCue` raises for
-                    // itself below: these are all reachable from client-supplied data (a pad naming
-                    // a cue that has since been deleted, moved stacks, or arrived as a MARKER from
-                    // a sync import), and failing after the assignment would leave the show pointed
-                    // at a stack whose cue never fired — with the *previous* stack already
-                    // deactivated below, which is a dark rig rather than a rejected request.
-                    //
-                    // The MARKER arm duplicates `goToCue`'s own rejection deliberately: that one
-                    // fires after this transaction has committed, so it is on the wrong side of the
-                    // playhead move. `goToCue` stays the authority for every other caller — the
-                    // busk pad's filter is presentation, and a MIDI surface, a script or a stale
-                    // tab can name a marker here.
-                    if (request.cueId != null) {
-                        val cue = DaoCue.findById(request.cueId)
-                            ?: throw IllegalArgumentException("Cue not found")
-                        if (cue.cueStack.id.value != stack.id.value) {
-                            throw IllegalArgumentException("Cue ${request.cueId} does not belong to stack ${stack.id.value}")
-                        }
-                        if (cue.cueType == CueType.MARKER.name) {
-                            throw IllegalArgumentException("Cannot go-to a MARKER cue")
-                        }
-                    }
 
                     val previousCueStackId = project.activeStackId
                     project.activeStackId = stack.id.value
@@ -217,11 +195,7 @@ internal fun Route.routeApiRestProjectShow(state: State) {
                     state.show.cueStackManager.deactivateStack(result.previousCueStackId, state)
                 }
 
-                if (request.cueId != null) {
-                    state.show.cueStackManager.goToCue(state, result.cueStackId, request.cueId)
-                } else {
-                    state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
-                }
+                state.show.cueStackManager.activateAtFirstCue(state, result.cueStackId)
                 state.show.fixtures.showChanged(result.projectId, result.cueStackId, result.cueStackName)
                 call.respond(ShowActivateResponse(
                     projectId = result.projectId,
@@ -267,24 +241,17 @@ data class AdvanceShowRequest(
     val deactivatePrevious: Boolean? = true,
 )
 
+/**
+ * Make a stack live, landing on its first cue.
+ *
+ * There is deliberately no `cueId`: it existed only for the busk view's pinned-cue pads, and a busk
+ * pad now applies a cue through `CueStackManager` without moving the playhead at all
+ * (`docs/plans/busk-layout-plan.md` D5). Jumping within a stack is
+ * `POST /cue-stacks/{id}/go-to-cue`'s job, and it stays the authority.
+ */
 @Serializable
 data class GoToStackRequest(
     val stackId: Int,
-    /**
-     * Land on this cue rather than the stack's first.
-     *
-     * Additive and optional, so `/show` keeps sending a bare stack id and keeps its
-     * activate-at-first-cue meaning. It exists for the busk view's pinned-cue pads: a pad naming a
-     * cue in a stack that is not live has to move the playhead *and* fire that cue, and doing it as
-     * go-to-then-activate would fire the stack's first cue on the way past — a visible blip on a
-     * live rig, in the one gesture the plan calls out as naming exactly what it fires (D9).
-     *
-     * A MARKER is refused — the same rejection an arbitrary jump within a stack already makes,
-     * but re-stated *inside* the route's own transaction rather than left to
-     * [uk.me.cormack.lighting7.fx.CueStackManager.goToCue], which raises it too late to stop the
-     * playhead having already moved and the previous stack having been deactivated.
-     */
-    val cueId: Int? = null,
 )
 
 @Serializable

@@ -338,11 +338,11 @@ invalidation**: the client refetches over REST.
 | Message | Payload | Meaning |
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
-| `templateListChanged` | — | A template was created, renamed, deleted, reordered or moved between groups; a template group was created, renamed or deleted |
+| `templateListChanged` | — | A template was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
 | `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD |
 | `cueStackListChanged` | — | Cue-stack CRUD |
-| `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue, cue-stack or Look delete swept its slots |
+| `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
 | `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, or a template / Look / cue / cue-stack delete that took pads off them |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |

@@ -580,6 +580,77 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     /**
+     * Rescued from `TemplateGroupRoutesTest` when template groups went. It never had a group in it:
+     * it is the plain pad's sequence — on one head, widen the selection, press, press again — and
+     * the second press must clear the template from *both* heads. It used to remove only the layer
+     * whose target set matched exactly, leaving the pad reading partial.
+     */
+    @Test
+    fun `widening the selection and pressing twice leaves the pad off`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+
+        val red = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "red", rows = listOf(colourRow("#FF0000"))))
+        }.body<TemplateDto>()
+
+        suspend fun press(vararg keys: String): ToggleTemplateResponse =
+            client.post("${base()}/${red.id}/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = keys.map { TemplateTargetDto("fixture", it) }))
+            }.body()
+
+        press("hex-1")
+        val wider = press("hex-1", "hex-2")
+        assertEquals("applied", wider.action)
+        assertEquals(1, state.show.programmerStore.layers.size, "extended, not stacked")
+        assertEquals(
+            listOf("hex-1", "hex-2"),
+            state.show.programmerStore.layers.single().targets.map { it.key }.sorted(),
+        )
+
+        val off = press("hex-1", "hex-2")
+        assertEquals("removed", off.action)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "off means off, on every pressed head")
+    }
+
+    /**
+     * The toggle route is **siblingless**, and stays that way. Exclusivity moved to the busk page:
+     * a press releases something only when it goes through a solo bank's pad
+     * (`BuskPressRouteTest`). This route serves the programmer's ⌥click strip and the AI, where two
+     * templates on one head are a stack, not a conflict — so `released` is always zero and the
+     * earlier layer survives.
+     */
+    @Test
+    fun `the toggle route releases nothing`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        suspend fun create(name: String, colour: String) = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = name, rows = listOf(colourRow(colour))))
+        }.body<TemplateDto>()
+
+        val amber = create("amber", "#FF9D4A")
+        val blue = create("blue", "#0000FF")
+
+        suspend fun press(id: Int): ToggleTemplateResponse =
+            client.post("${base()}/$id/toggle") {
+                contentType(ContentType.Application.Json)
+                setBody(ToggleTemplateRequest(targets = listOf(TemplateTargetDto("fixture", "hex-1"))))
+            }.body()
+
+        press(amber.id)
+        val loose = press(blue.id)
+        assertEquals(0, loose.released)
+        assertEquals(2, state.show.programmerStore.layers.size, "both layers stand")
+    }
+
+    /**
      * The mask is the server's answer, not the caller's. Pinned because the layer this asserts on is
      * exactly what `programmer.layerState` emits — an unmasked template layer reads as "this could
      * touch anything", and until the mask was derived here every ⌥click and pad press produced one.

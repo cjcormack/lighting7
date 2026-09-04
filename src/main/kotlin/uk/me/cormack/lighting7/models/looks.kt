@@ -127,7 +127,6 @@ object DaoLooks : IntIdTable("looks") {
     val project = reference("project_id", DaoProjects)
     val name = varchar("name", 255)
     val notes = text("notes").nullable()
-    val sortOrder = integer("sort_order").default(0)
 
     val uuid = javaUUID("uuid").autoGenerate()
 
@@ -146,7 +145,6 @@ class DaoLook(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoLooks.project
     var name by DaoLooks.name
     var notes by DaoLooks.notes
-    var sortOrder by DaoLooks.sortOrder
     var uuid by DaoLooks.uuid
     val rows by DaoLookRow referrersOn DaoLookRows.look
     val effects by DaoLookEffect referrersOn DaoLookEffects.look

@@ -68,9 +68,7 @@ riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
-templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+); optional
-                               # groupUuid naming a templateGroups/ record (v9+)
-templateGroups/{uuid}.json     # name + top-level sortOrder; membership lives on the template (v9+)
+templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
                                # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
                                # (busk-view routing and follow — additive nullable fields, no
@@ -82,7 +80,7 @@ speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default.
                                # with a ratio set means master 1, which is what every export
                                # written before follow targets says
 fxDefinitions/{uuid}.json
-cueSlots/{uuid}.json           # exactly one of cueUuid / cueStackUuid / lookUuid (lookUuid v10+)
+cueSlots/{uuid}.json           # exactly one of cueUuid / lookUuid (lookUuid v10+)
 buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
                                # a pad names a template, Look or cue by uuid
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
@@ -177,7 +175,7 @@ New tables default to **not synced** until explicitly added to
 
 ## Ordinal contract (forward-looking)
 
-Phase 1 keeps `sortOrder: Int` on the ten ordered tables. Phase 5 replaces
+Phase 1 keeps `sortOrder: Int` on every ordered table. Phase 5 replaces
 this with `ordinal: Double` so concurrent multi-master inserts can pick
 midpoints without cascading renumbers; tiebreak by UUID for determinism.
 That's a `formatVersion` bump and a migration. Today, exports already sort
@@ -229,8 +227,8 @@ install refuse a v7 repo rather than silently write those fields back on its nex
 (`docs/plans/busk-layout-plan.md`): one document per page with its columns, banks and pads
 embedded inline the way a Look carries its rows, so a drag changes one file. A pad names its
 template, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
-`CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` is a third arm beside `cueUuid` /
-`cueStackUuid`: a Look with no deferred effect, pressed onto its own fixtures.
+`CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` joins `cueUuid` on a cue slot: a
+Look with no deferred effect, pressed onto its own fixtures.
 
 `minReader` stays at **5**: a missing folder reads as empty and the field defaults to null, so
 every older archive imports untouched. The writer's number moves for v9's reason, verbatim: a
@@ -240,29 +238,39 @@ write none back, deleting every peer's pages — must refuse the repo instead.
 
 Three importer details. Pages import **after** templates, Looks and cues so every pad resolves in
 one pass. A pad whose record the archive does not carry, or which names none or two, **warns and is
-dropped** while the page imports without it — the template-group posture, because a pad is an
-enrichment of its record (a place on a page), not content; the stored sort orders are kept as
-written, and the gap a dropped pad leaves is harmless because every reader sorts rather than
-indexes. A cue **slot** naming none or two of its three arms, or a Look the archive lacks, still
-**aborts**, like its other two arms always have: a slot is not nested in anything that would
-survive it. `ExportUuidRemapper` needs no change: every reference is a `{table}Uuid` string and
-every identity a `uuid`, so a clone's pads point at the clone's records by construction.
+dropped** while the page imports without it, because a pad is an enrichment of its record (a place
+on a page), not content; the stored sort orders are kept as written, and the gap a dropped pad
+leaves is harmless because every reader sorts rather than indexes. A cue **slot** naming *two* arms,
+or a Look the archive lacks, still **aborts** — a slot claiming to be two things is malformed input,
+not a state. A slot naming **neither** is the one lenient case, and it is the removal below:
+`ignoreUnknownKeys` turns a pre-removal stack slot into a slot with no arm, so that one warns and
+drops with the pad's reasoning (a slot, like a pad, is an enrichment of the record it names).
+`ExportUuidRemapper` needs no change: every reference is a `{table}Uuid` string and every identity a
+`uuid`, so a clone's pads point at the clone's records by construction.
 
 The structural fields of a page (`row`, `sortOrder`, `width`, `name`, `solo`, `flow`) have **no
 defaults** in their DTOs, so canonical JSON always writes them — a layout is positions, and a
 position omitted for being zero would read as a document with holes. Only the three pad references
 default.
 
-**Session 3 of the same plan removes under this same number**: `templateGroups/`,
+**Session 3 of the same plan removed, under this same number**: `templateGroups/`,
 `TemplateJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
-`CueSlotJson.cueStackUuid`. No v11, because nothing but the dev desk writes v10 between the two
-sessions, so no peer can hold a repo the later reader would import wrong and push back. When that
-lands, a v10 archive written before it may still carry `cueStackUuid`; the later reader must
-warn-and-drop that slot rather than fail the pull, and this section should say so.
+`CueSlotJson.cueStackUuid`. No v11, because nothing but the dev desk wrote v10 between the two
+sessions, so no peer could hold a repo the later reader would import wrong and push back.
 
-### Version 9 — template groups
+A v10 archive written *before* that session may still carry `cueStackUuid` on a slot. The key is
+unknown now, `ignoreUnknownKeys` drops it, and the slot arrives naming nothing — so the importer
+**warns and drops that slot** rather than failing the pull. That is the pad's rule applied to a
+slot, and it is why the arity check splits: two arms aborts, none warns.
 
-**v9 is a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
+### Version 9 — template groups *(removed at v10)*
+
+> Template groups no longer exist: v10's session 3 deleted the folder, the field and the feature
+> when the busk page took over ordering and exclusivity. Kept as the record, the way §"Version 7"
+> keeps the retired `palette` story — a reader meeting a v9 archive still imports it, ignoring the
+> folder and the key.
+
+**v9 was a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
 top-level `sortOrder` only), plus one optional reference on the template, `TemplateJson.groupUuid`.
 Membership lives on the template rather than in a member list on the group, so a group document
 never changes when a template joins or leaves it — one record moves per drag, not two.

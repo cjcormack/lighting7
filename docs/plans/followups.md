@@ -38,6 +38,12 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
+| [`FU-BUSK-PAGE-MIDI`](#fu-busk-page-midi) | Trigger | Busk | an operator wants to change busk page from hardware |
+| [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
+| [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
+| [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
+| [`FU-BUSK-ON-PAGES-HINT`](#fu-busk-on-pages-hint) | Trigger | Busk | an operator deletes a record and is surprised pads went with it |
+| [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
 | [`FU-PROG-STAGED-CLEAR`](#fu-prog-staged-clear) | Trigger | Prog | the simple Clear bites |
@@ -49,6 +55,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
+| [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
 | [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | Looks made of exactly two deferred effects of one family, no rows |
 | [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
@@ -57,10 +64,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
-| [`FU-TMPL-LAYOUT-SIGNAL`](#fu-tmpl-layout-signal) | Trigger | Tmpl | a reorder on `/templates` visibly refetches a large cue list |
-| [`FU-TMPL-GROUP-AI`](#fu-tmpl-group-ai) | Trigger | AI | a prompt asks the AI to group templates, or to create one into a group |
-| [`FU-TMPL-LAYOUT-FAMILY-SCOPE`](#fu-tmpl-layout-family-scope) | Trigger | Tmpl | an imported mixed-family group 409s every reorder |
-| [`FU-TMPL-GROUP-MISSING-404`](#fu-tmpl-group-missing-404) | Trigger | Tmpl | a stale `groupId` on PUT reads as a malformed body |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
@@ -415,24 +418,132 @@ express it as separate instances.
 
 ### `FU-BUSK-MOMENTARY`
 
-**Every busk pad is a toggle; there is no flash or solo gesture** · Trigger · Busking-view plan
+**Every busk pad is a toggle; there is no flash gesture** · Trigger · Busking-view plan
 session 3 (2026-09-01), §7
 
-A press latches: a template pad applies or releases, a Look pad adds or removes a layer, a target
-pad selects or deselects. Real desks also have *momentary* pads — the value holds while the button
+A press latches: a template pad applies or releases, a Look pad adds or removes a layer, a cue pad
+applies or stops its cue, a target pad selects or deselects. Real desks also have *momentary* pads — the value holds while the button
 is held and drops on release — which is how a busking operator punches a blinder on a downbeat
 without a second press to find. Doing it means a press/release pair rather than a click.
 
 Smaller than it was written. The effect and property pads it also named were removed when the busk
 view was cut back to the library pads its design draws (see the busking-view plan's §4 note), so
 "what does release mean for an effect *instance* as opposed to a programmer value" is no longer part
-of the question — every pad left is a layer toggle. And the three duplicated long-press
+of the question — every pad left is a toggle of *something*, a layer for a template or Look and the
+cue itself, through `CueStackManager`, for a cue. And the three duplicated long-press
 implementations it wanted unifying first are now one shared hook,
 `lighting-react/src/hooks/useLongPress.ts`, which is where a `onPressStart`/`onPressEnd` pair would
 be added.
 
 **Trigger**: an operator asks to flash a pad rather than latch it, or a second surface wants the
 same gesture and the press-handling can be shared.
+
+---
+
+### `FU-BUSK-PAGE-MIDI`
+
+**Busk pages are unreachable from hardware** · Trigger · Busk-layout plan (2026-09-04), §7
+
+A control surface can name a cue, a stack or a speed master, but not a busk page: there is no
+`BindingTarget` for "next page" / "previous page" / "page *n*", and no target for a pad either.
+Deliberate for the first cut — the layout landed as a screen surface, and a pad binding raises the
+question of what a *hardware* press means for a pad whose record needs a selection the surface has
+no way to make.
+
+Page up/down is the small half and would go in first: two targets, resolved against the page list
+the busk view already reads, with the showing page kept where `?page=` keeps it today.
+
+**Trigger**: an operator wants to change busk page from hardware.
+
+---
+
+### `FU-BUSK-AI-LAYOUT`
+
+**The AI surface knows nothing about the busk layout** · Trigger · Busk-layout plan (2026-09-04), §7
+
+There is no `add_busk_pad`, no `create_busk_bank`, and nothing that reads a page. `AiToolSchemas`
+gained nothing when the layout landed: the layout is the operator's own arrangement, and the
+whole-page write (`PUT /busk/pages/{id}/layout`) is a poor shape for a tool — a model that has to
+resend every row to move one pad will lose a bank.
+
+If it lands, the shape is probably additive tools over the page (append a pad to a named bank,
+create a bank in a named column) implemented on top of the whole-page write server-side, so the
+route keeps its one renumbering.
+
+**Trigger**: a prompt asks the AI to put something on a busk page.
+
+---
+
+### `FU-BUSK-PAD-SIZE`
+
+**A pad is one size, and a bank's height is whatever its pads make it** · Trigger · Busk-layout
+plan (2026-09-04), §7
+
+A column carries a width share in twelfths and a bank carries a flow (wrap or one-per-line); there
+is nothing else. No pad size, no bank height, no per-pad emphasis. That is deliberate — the design
+took MagicQ's fixed grid over QLC+'s free canvas precisely because free positioning is fiddly on a
+touch surface and never survives a narrower screen, and every extra dimension is one more thing that
+does not survive it either.
+
+If a page genuinely needs more density, the cheap move is a per-bank pad scale (one enum, applied to
+the bank's grid) rather than a per-pad size, because a bank is already the unit that owns layout.
+
+**Trigger**: a page needs more density than width and flow give.
+
+---
+
+### `FU-BUSK-EDIT-CONCURRENCY`
+
+**Every edit gesture writes the whole page immediately, so a half-built page is live for a second
+operator** · Trigger · Busk-layout plan (2026-09-04), §8
+
+Editing saves per gesture (D8), with *Done* only leaving the mode — the same posture as every other
+editor on the desk, and the reason there is no Save button to forget. The cost is that a second desk
+watching `busk.layoutChanged` sees each intermediate state: a bank dragged out of one column and not
+yet dropped in another is a page with a missing bank, briefly, on someone else's screen.
+
+Accepted because the alternative is worse for one operator: holding edits until *Done* means a
+Discard button, an unsaved-changes prompt, and a client-side document that can diverge from the
+server's. Nothing here corrupts — the whole-page write is last-writer-wins on a page, and the route
+refuses an inconsistent document outright — so the failure mode is confusion, not loss.
+
+**Trigger**: two desks edit one busk page at once.
+
+---
+
+### `FU-BUSK-ON-PAGES-HINT`
+
+**A library row does not say how many pads it has** · Trigger · Busk-layout plan (2026-09-04), §11
+
+Deleting a template, Look or cue deletes its pads, silently: a pad is an enrichment, not a guard, so
+the delete guards do not count pads and the confirm dialog does not mention them. An operator who
+has built three pages around one template gets no warning that the delete takes six pads with it.
+
+Drafted answer: an "on *n* pages" hint per row on `/templates` and `/looks`, and a line in the
+delete confirm. Not built because it needs a count on the list DTOs — cheap per record, but a second
+query per list — and nobody has been surprised by it yet.
+
+**Trigger**: an operator deletes a record and is surprised pads went with it.
+
+---
+
+### `FU-SLOT-DROP-OVERLAY-HIDDEN`
+
+**A palette row dropped at a collapsed cue-slot overlay lands on nothing** · Trigger · Busk-layout
+plan session 3 (2026-09-04)
+
+The slot droppables live inside `CollapsiblePanel`, which unmounts its body when the FX cue-slots
+overlay is hidden. Since session 3 the slots are filled by dragging a row from the busk view's
+library palette while busk edit mode is on — but if the overlay is shut, there is nothing to drop
+onto and the drag simply ends with no feedback at all.
+
+Not fixed because the two obvious answers both have a cost: opening the overlay on entering busk
+edit mode takes header space from an operator who was not editing slots, and a hint on *Edit layout*
+is a sentence that only matters occasionally. The third option — keeping the droppables mounted with
+the body hidden — reintroduces exactly the zero-height-rect problem `FU-MANUAL-COLLAPSED-PANELS`
+already has an open question about.
+
+**Trigger**: an operator tries to fill a slot with the overlay shut.
 
 ---
 
@@ -683,6 +794,27 @@ closed, which is why nothing is blocked on this; it is only still true.
 **Trigger**: an operator presses a Look pad the picker offered and nothing on the selected head
 moves.
 
+---
+
+### `FU-SLOT-LOOK-ELIGIBILITY`
+
+**A cue slot takes any Look with no deferred effect, including one that asserts nothing on the
+fixtures it names** · Trigger · Busk-layout plan (2026-09-04), §8
+
+A slot may hold a Look with no deferred effect, and that is the whole eligibility test (D7): the
+rows of such a Look are always bound, so pressing it with no selection derives the targets from the
+Look's own rows. `POST /cue-slots` refuses a deferred-effect Look by name
+(`CUE_SLOT_LOOK_NEEDS_SELECTION`) and the palette dims it; nothing checks that the Look's fixtures
+are still patched, or that its rows assert anything on them.
+
+The press itself is honest — `LOOK_NO_TARGETS` when none of its fixtures is patched — so the failure
+is a tile that looks fine and refuses when tapped, rather than a silent no-op. That is the same
+question `FU-LOOK-COMPAT-ROW-COVERAGE` asks of a busk pad, one surface along, and it should get the
+same answer when it gets one: row coverage is per fixture, and a rule for one surface that is not
+the rule for the other would be worse than the hole.
+
+**Trigger**: a rows-only Look sits on a slot and asserts nothing on the fixtures it names.
+
 ### `FU-TMPL-VIRTUAL-DIMMER`
 
 **An intensity template on a head with no dimmer** · Ready · desk-simplification §Session 3, 2026-08-23
@@ -850,87 +982,6 @@ Not obviously worth fixing: a colour template asks "be this colour", and answeri
 once is a mixing problem the fixture's own manual barely addresses.
 
 **Trigger**: an operator asks for the second wheel by name.
-
-### `FU-TMPL-LAYOUT-SIGNAL`
-
-**A reorder rides `templateListChanged`, which the client maps to a cue refetch** · Trigger: a
-drag on `/templates` visibly refetches a large cue list · template groups, 2026-09-03
-
-Order and group membership are metadata — nothing a cue composes to changes — but the server has
-one signal for "the template library changed shape", and the client's `startTemplatesBridge` maps
-it to `['TemplateList', 'Cue', 'CueList']` because that same signal is the only announcement of a
-*delete*, which does change composition. So every drop refetches the cue list and every expanded
-cue, to learn that nothing moved.
-
-Deliberately accepted (plan P12): one fact, one signal, and the reorder mutation is optimistic on
-both template caches so the drop itself never waits on the refetch. If it bites, the shape is a
-keyed `templateLayoutChanged` frame from the reorder route and the group routes, which the bridge
-maps to `TemplateList` alone — the same split `cuesRecomposed` already makes for a contents edit.
-
----
-
-### `FU-TMPL-GROUP-AI`
-
-**The AI surface knows nothing about template groups** · Trigger: a prompt asks the AI to group
-templates, or `create_template` is asked to put one into a group · template groups, 2026-09-03
-
-`create_template` takes no `groupId` (`performTemplateCreate` treats absent as top level), and
-there is no tool for group CRUD or for the layout write. Nothing in the AI surface toggles a
-template either, so the exclusivity never reaches it. Left out on purpose: the busk view and
-`/templates` are the two surfaces the ask named, and a tool vocabulary for grouping is its own
-piece of work with its own schema test. When it lands, `TemplateCreateResult.Refused` already
-carries the `TEMPLATE_GROUP_FAMILY` code the tool would report.
-
----
-
-### `FU-TMPL-LAYOUT-FAMILY-SCOPE`
-
-**The layout write validates every group, so one bad group locks the whole reorder out** ·
-Trigger: an imported mixed-family group 409s reorders that touch nothing near it · code review of
-template groups, 2026-09-03
-
-`applyTemplateLayout` (`routes/templateLayout.kt`) checks the one-family rule over **every** group
-entry in the proposed layout, not just the ones whose membership the write changes. A project that
-already holds a mixed-family group therefore gets 409 `TEMPLATE_GROUP_FAMILY` on *every*
-`POST /templates/reorder` — including a drag at the other end of the library.
-
-Reachable without a hand-edited DB: `ProjectImporter.importTemplates` writes `groupUuid` verbatim
-and deliberately does not validate (contents import as-is so a newer build's data can land), so a
-pull from a peer can create one. The group DELETE route had the same over-broad check turn a delete
-into a 500; that one is fixed (it throws `LayoutRefused`, rolls back and answers 409), and this is
-the remainder.
-
-Not fixed on review because narrowing it is a real decision, not a bug fix: the layout write is one
-of the three places the one-family rule is enforced at all (with create-into-a-group and the
-`groupId` move on PUT — see `DaoTemplateGroups`' docblock and
-[`lighting-composition-model.md`](../lighting-composition-model.md) §"Template groups"), and the
-whole-layout check is what makes the route's "every template and group named once" contract
-self-validating. There is an escape hatch today — a reorder that itself splits the offending group
-passes, since the check is on the *proposed* layout — so an operator is never permanently stuck.
-
-If it bites, the shape is to diff proposed membership against stored membership and validate only
-the groups that changed, leaving a pre-existing violation alone until something touches it. Worth
-pairing with a decision on whether the importer should instead ungroup a mixed-family group on the
-way in, which would remove the reachable path entirely and keep the check broad.
-
----
-
-### `FU-TMPL-GROUP-MISSING-404`
-
-**A `groupId` naming a deleted group answers 400, not 404** · Trigger: a client branches on the
-"someone else changed this, refresh" path and a stale `groupId` doesn't take it · code review of
-template groups, 2026-09-03
-
-`PUT /projects/{id}/templates/{tid}` maps "Template group not found" to
-`TemplateWriteOutcome.Invalid` → 400 (`routes/projectTemplates.kt`), while every other
-missing-record case in this route family — the route's own `TemplateWriteOutcome.NotFound`
-included — is a 404. Two operators on one desk: one deletes a group while the other's editor still
-offers it, and the second client's PUT reads as a malformed body rather than as stale state.
-
-Not fixed on review because it is a contract change, not a bug: the `/templates` frontend landed
-alongside this and may already branch on 400 for the group case. The fix is a
-`TemplateWriteOutcome.NotFound` for this one branch plus whatever the client does with it, decided
-together.
 
 ---
 
@@ -1643,6 +1694,18 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-TMPL-LAYOUT-SIGNAL` — retired by deletion: `POST /templates/reorder` is gone, so no reorder
+  rides `templateListChanged` and there is nothing left to key a `templateLayoutChanged` frame off.
+  The busk page owns order now, and its own `busk.layoutChanged` is already keyed — busk-layout
+  plan session 3
+- `FU-TMPL-GROUP-AI` — retired by deletion: template groups are gone, so there is no group CRUD for
+  the AI surface to learn and no `TEMPLATE_GROUP_FAMILY` for a tool to report. `create_template`
+  takes no position either, because a template no longer has one — busk-layout plan session 3
+- `FU-TMPL-LAYOUT-FAMILY-SCOPE` — retired by deletion: `applyTemplateLayout` and the whole
+  `routes/templateLayout.kt` went with template groups, taking the over-broad one-family check and
+  the importer path that could reach it — busk-layout plan session 3
+- `FU-TMPL-GROUP-MISSING-404` — retired by deletion: `TemplateInput` carries no `groupId`, so there
+  is no stale group reference for a PUT to answer 400 to — busk-layout plan session 3
 - `FU-SPEED-PHASE-LOCK` — a follower no longer runs a timer of its own: its leader's tick maps
   onto its counter (`1 + floor((leaderTick - 1) × num / den)`), so its beats land on the
   leader's rather than free-running inside them. Shipped together with follow *targets* — a

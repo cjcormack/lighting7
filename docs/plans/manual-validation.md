@@ -51,7 +51,6 @@ as a one-line row.
 | [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
-| [`FU-MANUAL-TEMPLATE-GROUPS`](#fu-manual-template-groups) | a template group orders the library on two surfaces and makes its pads exclusive on the same targets | Template groups, 2026-09-03 |
 
 ---
 
@@ -764,9 +763,11 @@ spinner and no "No fixtures placed yet": the mini-stage should show live marker 
 the effects panel a BPM and a beating dot rather than a dash. Then leave a panel closed for two
 minutes and reopen it — past RTK Query's cache retention this one *may* show a brief spinner, which
 is correct; what must not happen is an empty state where data exists. Navigate to `/users` with all
-four closed and confirm the desk is quiet. Finally, with the cue-slot panel open and in edit mode,
-start dragging a cue toward a slot and — without releasing — have a second person click the cue-slot
-toggle in the toolbar; the drop must still land, not vanish (lighting-react `6365894`). That last
+four closed and confirm the desk is quiet. Finally, with the cue-slot panel open and the Busk
+view in *Edit layout*, start dragging a library row toward a slot and — without releasing — have a
+second person click the cue-slot toggle in the toolbar; the drop must still land, not vanish
+(lighting-react `6365894`). The panel's own long-press edit mode is gone: a slot's cross and its
+drop targets now follow busk edit mode, so this is the gesture that reaches them. That last
 step is the one genuinely open question in the cluster: the body is held mounted through the drag,
 but the wrapper still collapses to zero height, and if dnd-kit re-measures droppable rects rather
 than using the ones cached at drag start, the drop resolves to nothing anyway. If it does vanish,
@@ -1211,8 +1212,10 @@ from a busk stack card and GO from `/show` move one cursor rather than two.
    unmoved.
 4. Interleave GO from a busk stack card and GO from `/show` → one cursor, both surfaces agreeing
    after every press (two browsers).
-5. Pin a cue in Show → its pad appears on Busk. Press it → the playhead jumps and the pad ring goes
-   live; the Show view's cursor and its `OffPlayheadBanner` state must agree.
+5. Put a cue on a busk page (edit the layout, drag it from the library into a bank). Press its pad
+   → the cue fires and the pad ring goes live **without** the playhead moving; the Show view's
+   cursor and its `OffPlayheadBanner` state must agree throughout, and GO on the ShowBar must be
+   unaffected.
 6. Export → import a project holding a follower and a usage: the ratio, the usage and the M1
    relationship must all survive the uuid remap.
 
@@ -1232,9 +1235,10 @@ from "it ran and stayed attached to the right thing".
 
 **Test**: with the desk running and a Front Wash group of four heads:
 
-1. Create *Amber Breathe* (Colour, Effect, master by usage). It must appear in the Colour column of
-   the Busk view under the hairline, and in the Colour tab of Templates with the wave tile.
-2. Select Front Wash on Busk and press the pad → the effect runs on the four heads on M2's tempo.
+1. Create *Amber Breathe* (Colour, Effect, master by usage). It must appear in the Colour tab of
+   Templates with the wave tile, and in the busk view's edit-mode library palette — the busk view
+   no longer lays templates out by family, so put its pad on a page by hand.
+2. Select Front Wash on Busk and press that pad → the effect runs on the four heads on M2's tempo.
    Press again → it stops. The presence dot must follow the layer stack, not the effect list.
 3. Retune M2 → the running effect retimes. Then edit the template's beat division: the *live*
    instance keeps its old division until the pad is re-pressed (`FU-TMPL-FX-EDIT-NO-RETIME`,
@@ -1256,45 +1260,6 @@ from "it ran and stayed attached to the right thing".
 
 ---
 
-## `FU-MANUAL-TEMPLATE-GROUPS`
-
-**Template groups, ordering, and the un-split busk column** · from the template-groups work, 2026-09-03
-
-Four sessions landed green (backend model + sync + exclusivity, the routes, the busk view, the
-`/templates` drag list) — 1889 backend tests and the full frontend check — but the two things that
-matter are ones jsdom cannot show: a **drag** on a real pointer (the nested sortable, the group
-body as a drop target, the refused ring) and a **press** on a real rig releasing a sibling's layer
-in one frame. The reducer behind the drag is pure and unit-tested; the wiring around it is not.
-
-**Test**: with the desk running, Front Wash and Back Wash groups patched, and three colour
-templates (Amber, Blue, Steel) plus one position template:
-
-1. On `/templates`, press *New group*, name it *Keys*. It appears at the end, empty, under **All**
-   only — switch to Colour and it is gone; back to All and it is there.
-2. Drag Amber into Keys' body, then Blue onto Amber (it should land above Amber), then drag the
-   group's header above Steel. Reload: the order and membership are exactly what was left. Switch
-   to Colour: the drag handles are gone and the footer says *show All to reorder*.
-3. Drag the position template onto Keys: the body rings red and the drop is refused; the list is
-   unchanged after release. Open the position template's editor: Keys is not offered in *Group*.
-4. On `/busk`, the Colour column shows a *Keys* cluster in the position the drag gave it, with no
-   *Effects* hairline anywhere in any column (an effect template sits wherever the library put it).
-5. Select Front Wash. Press Amber, then Blue: Blue lights, Amber goes dark, **one**
-   `programmer.layerState` frame in the WS log (not remove-then-add), and the four heads never
-   blink through the previous colour. Select Back Wash and press Amber: both stay lit — different
-   targets. Press Blue on Front Wash again: it releases and Amber on Back Wash is untouched.
-6. In the programmer, ⌥click Amber then Blue on a selection: the strip's press is the same route,
-   so the layer stack shows one template layer, not two.
-7. Rename Keys inline (Enter commits, Escape cancels), then *Ungroup* it: Amber and Blue remain,
-   inlined where the group sat, and their pads on `/busk` no longer release each other.
-8. Export → import, and clone: the group, its order and its membership survive both; a v8 desk
-   refuses the v9 repo rather than importing it ungrouped.
-
-**If it fails**: promote to a `FU-TMPL-…` item. The likeliest suspect for 2 is the nested
-`SortableContext` (there was no precedent in the app); for 5 it is the toggle route's sibling
-lookup, which reads the group in the same transaction as the source.
-
----
-
 ## Validated
 
 Passed on the rig, or retired unrun because the feature went away; the procedures are in this
@@ -1305,3 +1270,4 @@ file's git history if one is ever needed again.
 | `FU-MANUAL-DIST-INSTALL` | 2026-08-19 | clean install on Mac + Windows; all four native payloads and editor completion good |
 | `FU-MANUAL-AUTH-QR-SCAN` | 2026-08-19 | both QR flows resolved and completed from a real phone |
 | `FU-MANUAL-CUEEDIT-HARDWARE` | — | retired unrun 2026-08-24: sweep item D1 removed `cueEdit.*`, so there is no cue to open for edit from a fader |
+| `FU-MANUAL-TEMPLATE-GROUPS` | — | retired unrun 2026-09-04: busk-layout session 3 removed template groups, the library's operator-set order and the busk view's family columns, so every step tests something that no longer exists |

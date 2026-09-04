@@ -283,35 +283,6 @@ class ProjectCloneTest {
         }
     }
 
-    /**
-     * A template's group is a reference like its effect's master: the clone must hold its own
-     * `template_groups` row, and the cloned template must point at *that* row, not the source's.
-     */
-    @Test
-    fun `clone rewires a template's group to the clone's own group`() {
-        val sourceId = seedRichProject(state)
-        val result = ProjectCloner(state).clone(sourceId, "cloned-tmpl-group", description = null)
-
-        transaction(state.database) {
-            val clone = DaoProject.findById(result.projectId)!!
-            val source = DaoProject.findById(sourceId)!!
-
-            val cloneGroup = clone.templateGroups.single()
-            val sourceGroup = source.templateGroups.single()
-            assertEquals("warm-keys", cloneGroup.name)
-            assertEquals(3, cloneGroup.sortOrder, "the off-default position must survive the clone")
-            assertNotEquals(sourceGroup.uuid, cloneGroup.uuid, "clone must mint a fresh group identity")
-
-            val grouped = clone.templates.single { it.name == "amber-breathe" }
-            assertEquals(cloneGroup.id, grouped.group?.id, "the cloned template must sit in the clone's group")
-            assertEquals(2, grouped.sortOrder, "its position within the group is kept")
-            assertTrue(
-                clone.templates.filter { it.name != "amber-breathe" }.all { it.group == null },
-                "the ungrouped templates stay ungrouped",
-            )
-        }
-    }
-
     @Test
     fun `clone rewires busk pads to the clone's own records`() {
         val sourceId = seedRichProject(state)

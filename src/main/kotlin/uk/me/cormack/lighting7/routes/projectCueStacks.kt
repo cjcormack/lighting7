@@ -170,8 +170,6 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     cue.delete()
                 }
 
-                // Slots naming the stack itself: the same unenforced `CASCADE` as a cue's slots.
-                DaoCueSlots.deleteWhere { DaoCueSlots.cueStack eq stack.id }
                 stack.delete()
                 removedAnchors to pageIds
             }
@@ -578,14 +576,6 @@ data class CueStackCueEntry(
     val cueNumberAuto: Boolean = false,
     val notes: String? = null,
     val cueType: String = "STANDARD",
-    /**
-     * True when this cue has a pad of its own on the busk view.
-     *
-     * Carried on the *stack* entry, not left to the busk view to fetch from `/cues`, so a pad and
-     * the stack card above it read their live/next state out of one cache. Two caches would be two
-     * answers to "is this cue on stage" that could disagree mid-fade.
-     */
-    val pinnedToBusk: Boolean = false,
 )
 
 @Serializable
@@ -685,7 +675,6 @@ private fun DaoCueStack.toCueStackDetails(
             cueNumberAuto = cue.cueNumberAuto,
             notes = cue.notes,
             cueType = cue.cueType,
-            pinnedToBusk = cue.pinnedToBusk,
         )
     }
     val standardCueIds = orderedCues.filter { it.cueType == CueType.STANDARD.name }.map { it.id }

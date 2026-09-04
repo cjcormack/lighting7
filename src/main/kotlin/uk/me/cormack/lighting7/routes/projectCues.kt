@@ -87,7 +87,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     notes = newCue.notes
                     cueType = validatedCueType
                     stomp = newCue.stomp
-                    pinnedToBusk = newCue.pinnedToBusk
                     cueStack = stack
                     // max+1, not count: sort orders may have gaps, so counting can hand out a
                     // value an existing cue already holds.
@@ -157,7 +156,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.fadeCurve = updatedData.fadeCurve
                 cue.notes = updatedData.notes
                 cue.stomp = updatedData.stomp
-                cue.pinnedToBusk = updatedData.pinnedToBusk
 
                 // A number that differs from what's stored is an operator edit, so it becomes
                 // explicit; clearing it hands the cue back to the auto scheme. An *unchanged*
@@ -255,7 +253,6 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("autoAdvance" in body) cue.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
                 if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelayMs = body["autoAdvanceDelayMs"].nullableLong()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
-                if ("pinnedToBusk" in body) cue.pinnedToBusk = body["pinnedToBusk"]!!.jsonPrimitive.boolean
 
                 if (hasLayers || hasEffects || hasAssignments || hasTriggers) {
                     // Delete only the children being replaced
@@ -590,7 +587,6 @@ data class NewCue(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
-    val pinnedToBusk: Boolean = false,
 )
 
 @Serializable
@@ -615,8 +611,6 @@ data class CueDetails(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
-    /** True when this cue has a pad of its own on the busk view. */
-    val pinnedToBusk: Boolean = false,
     val canEdit: Boolean,
     val canDelete: Boolean,
 )

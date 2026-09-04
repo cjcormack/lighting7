@@ -242,8 +242,6 @@ internal fun Route.routeApiRestProjects(state: State) {
                     template.effects.forEach { it.delete() }
                     template.delete()
                 }
-                // Groups after templates: `templates.group_id` points at one.
-                project.templateGroups.forEach { it.delete() }
                 project.fixtureGroups.forEach { group ->
                     group.members.forEach { it.delete() }
                     group.delete()
@@ -336,7 +334,6 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectLooks(state)
         routeApiRestLookAbsorbEffects(state)
         routeApiRestProjectTemplates(state)
-        routeApiRestProjectTemplateGroups(state)
         routeApiRestTemplateRecord(state)
         routeApiRestProjectSpeedMasters(state)
         routeApiRestProjectCues(state)

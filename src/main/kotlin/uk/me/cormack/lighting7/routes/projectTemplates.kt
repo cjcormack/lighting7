@@ -35,7 +35,6 @@ import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateGroup
 import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
@@ -89,7 +88,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
             }
             val templates = transaction(state.database) {
                 val all = DaoTemplate.find { DaoTemplates.project eq project.id }
-                    .orderBy(DaoTemplates.sortOrder to SortOrder.ASC, DaoTemplates.name to SortOrder.ASC)
+                    .orderBy(DaoTemplates.name to SortOrder.ASC)
                     .toList()
                 val usage = templateUsageFor(all.map { it.id.value })
                 all.map { it.toDto(state.show.fxRegistry, usage[it.id.value]) }
@@ -127,8 +126,6 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
                 is TemplateCreateResult.Duplicate ->
                     call.respond(HttpStatusCode.Conflict, ErrorResponse(result.message))
-                is TemplateCreateResult.Refused ->
-                    call.respond(HttpStatusCode.Conflict, ErrorResponse(result.message, code = result.code))
                 is TemplateCreateResult.Ok ->
                     call.respond(HttpStatusCode.Created, result.template)
             }
@@ -197,19 +194,6 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 val resultingFamily =
                     if (contentsSent) contentsFamily(request.rows ?: emptyList(), request.effect)
                     else template.familyOf()
-                val destinationGroup: DaoTemplateGroup? = if (request.groupIdPresent) {
-                    request.groupId?.let { id ->
-                        DaoTemplateGroup.findById(id)?.takeIf { it.project.id == project.id }
-                            ?: return@transaction TemplateWriteOutcome.Invalid("Template group not found")
-                    }
-                } else {
-                    template.group
-                }
-                if (destinationGroup != null) {
-                    groupFamilyClash(destinationGroup, resultingFamily, excluding = template)?.let {
-                        return@transaction TemplateWriteOutcome.Refused(CODE_TEMPLATE_GROUP_FAMILY, it)
-                    }
-                }
 
                 request.name?.trim()?.takeIf { it.isNotEmpty() }?.let { newName ->
                     if (newName != template.name) {
@@ -221,16 +205,6 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     }
                 }
                 if (request.notesPresent) template.notes = request.notes
-                // A move appends at the destination — the group's end, or the top level's — and an
-                // explicit `sortOrder` in the same body still wins, so a client that knows the
-                // slot it wants can say so. Where the group is unchanged nothing moves.
-                if (request.groupIdPresent && destinationGroup?.id != template.group?.id) {
-                    template.sortOrder =
-                        if (destinationGroup != null) nextSortOrderIn(destinationGroup)
-                        else nextTopLevelSortOrder(project)
-                    template.group = destinationGroup
-                }
-                request.sortOrder?.let { template.sortOrder = it }
                 if (request.fadeDurationMsPresent) template.fadeDurationMs = request.fadeDurationMs
 
                 val rows = request.rows
@@ -261,8 +235,6 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 )
                 is TemplateWriteOutcome.Invalid ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message))
-                is TemplateWriteOutcome.Refused ->
-                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, code = outcome.code))
                 is TemplateWriteOutcome.Written -> {
                     if (outcome.contentsChanged) {
                         // A contents change republishes the live consumers directly — one retune
@@ -402,32 +374,27 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
             // template has no rows, so the inline copy would have answered null and added an
             // *unmasked* layer — which asserts across every family instead of the effect's own.
             //
-            // The siblings come out of the same transaction too: a group's exclusivity is a fact
-            // about the library at the moment of the press, and reading it beside the source is
-            // what keeps a template moved between groups by another client from releasing the
-            // wrong set.
+            // Siblingless, always. Exclusivity is the busk page's: a press releases something only
+            // when it goes through a solo bank's pad (`routes/buskPress.kt`). This route serves the
+            // programmer's ⌥click strip and the AI, where two templates on one head are a stack.
             val found = transaction(state.database) {
                 DaoTemplate.findById(resource.templateId)
                     ?.takeIf { it.project.id == project.id }
                     ?.let { template ->
-                        Triple(
-                            LayerSource.template(template.id.value, template.uuid, template.name),
-                            template.familyOf()?.name,
-                            template.siblingUuids(),
-                        )
+                        LayerSource.template(template.id.value, template.uuid, template.name) to
+                            template.familyOf()?.name
                     }
             }
             if (found == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
                 return@withCurrentProject
             }
-            val (source, derivedMask, siblings) = found
+            val (source, derivedMask) = found
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
                     source = source,
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
                     propertyMask = derivedMask,
-                    releaseSiblings = siblings,
                 )
                 call.respond(
                     ToggleTemplateResponse(outcome.action, outcome.effectCount, derivedMask, outcome.released),
@@ -438,28 +405,6 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
-    // POST /projects/{id}/templates/reorder — the whole layout, templates and groups together
-    //
-    // Modelled on `POST /cue-stacks/reorder` with one difference that matters: the body is the
-    // *complete* layout, not the ids that moved (see `ReorderTemplatesRequest`). Position and
-    // membership are metadata — nothing a cue composes to changes — so this takes the
-    // `templateListChanged` branch a rename takes, never a republish.
-    post<TemplatesReorderResource> { resource ->
-        withCurrentProject(state, resource.parent.projectId) { project ->
-            val request = call.receive<ReorderTemplatesRequest>()
-            val outcome = transaction(state.database) { applyTemplateLayout(project, request.entries) }
-            when (outcome) {
-                is TemplateLayoutOutcome.Invalid ->
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message))
-                is TemplateLayoutOutcome.MixedFamily ->
-                    call.respond(HttpStatusCode.Conflict, ErrorResponse(outcome.message, code = CODE_TEMPLATE_GROUP_FAMILY))
-                is TemplateLayoutOutcome.Ok -> {
-                    state.show.fixtures.templateListChanged()
-                    call.respond(HttpStatusCode.OK)
-                }
-            }
-        }
-    }
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -480,10 +425,6 @@ internal data class ProjectTemplateResource(
  */
 @Resource("/resolve")
 internal data class TemplateResolveResource(val parent: ProjectTemplatesResource)
-
-/** Unambiguous beside [ProjectTemplateResource] for the reason [TemplateResolveResource] gives. */
-@Resource("/reorder")
-internal data class TemplatesReorderResource(val parent: ProjectTemplatesResource)
 
 @Resource("/{templateId}/apply")
 internal data class ApplyTemplateResource(val parent: ProjectTemplatesResource, val templateId: Int)
@@ -508,14 +449,7 @@ internal data class TemplateDto(
     val uuid: String,
     val name: String,
     val notes: String? = null,
-    /**
-     * Position within [groupId]'s group when grouped, otherwise in the project's top-level
-     * sequence — which ungrouped templates share with the groups (`TemplateGroupDto.sortOrder`).
-     */
-    val sortOrder: Int,
     val fadeDurationMs: Long? = null,
-    /** The group this template sits in, or null at top level. Membership lives here, not on the group. */
-    val groupId: Int? = null,
     /**
      * The one family this template is in, **derived** — from its rows, or from its effect's library
      * category (D4) — never stored. Null only for a template whose contents have all been deleted,
@@ -567,17 +501,8 @@ internal data class TemplateInput(
     val name: String? = null,
     val notes: String? = null,
     val notesPresent: Boolean = false,
-    val sortOrder: Int? = null,
     val fadeDurationMs: Long? = null,
     val fadeDurationMsPresent: Boolean = false,
-    /**
-     * The group to sit in; null with [groupIdPresent] means "top level". The same absent-versus-
-     * null distinction as `notes`, because a null here is a real instruction (leave the group).
-     * On create, null and absent both mean top level. A move appends at the destination's end;
-     * `POST /templates/reorder` is the way to say *where*.
-     */
-    val groupId: Int? = null,
-    val groupIdPresent: Boolean = false,
     val rows: List<TemplateRowDto>? = null,
     /** The effect an effect template holds (D1/D2). Never set beside a non-empty [rows]. */
     val effect: TemplateEffectDto? = null,
@@ -714,8 +639,6 @@ private sealed interface TemplateWriteOutcome {
      */
     data class Invalid(val message: String) : TemplateWriteOutcome
 
-    /** Refused by a rule about the project's *other* records, with a code the client keys on — a 409. */
-    data class Refused(val code: String, val message: String) : TemplateWriteOutcome
     data class Written(val dto: TemplateDto, val uuid: java.util.UUID, val contentsChanged: Boolean) :
         TemplateWriteOutcome
 }
@@ -761,9 +684,6 @@ internal sealed interface TemplateCreateResult {
     data class Ok(val template: TemplateDto) : TemplateCreateResult
     data class Invalid(val message: String) : TemplateCreateResult
     data class Duplicate(val message: String) : TemplateCreateResult
-
-    /** A 409 with a code the client keys on — today only [CODE_TEMPLATE_GROUP_FAMILY]. */
-    data class Refused(val code: String, val message: String) : TemplateCreateResult
 }
 
 /**
@@ -799,24 +719,10 @@ internal fun performTemplateCreate(
                 "A template named '$name' already exists in this project",
             )
         }
-        // Into a group, or at the end of the top-level sequence the groups share. The family rule
-        // is judged on the contents being created, before anything is written.
-        val group = input.groupId?.let { id ->
-            DaoTemplateGroup.findById(id)?.takeIf { it.project.id == project.id }
-                ?: return@transaction TemplateCreateResult.Invalid("Template group not found")
-        }
-        if (group != null) {
-            groupFamilyClash(group, contentsFamily(rows, effect))?.let {
-                return@transaction TemplateCreateResult.Refused(CODE_TEMPLATE_GROUP_FAMILY, it)
-            }
-        }
         val template = DaoTemplate.new {
             this.project = project
             this.name = name
             this.notes = input.notes
-            this.group = group
-            this.sortOrder = input.sortOrder
-                ?: if (group != null) nextSortOrderIn(group) else nextTopLevelSortOrder(project)
             this.fadeDurationMs = input.fadeDurationMs
         }
         createTemplateRows(template, rows)
@@ -1157,33 +1063,6 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
         .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
         ?: effect?.let { familyForEffectCategory(it.category) }
 
-/**
- * The one family a group is in, derived from its members the way [DaoTemplate.familyOf] derives a
- * template's from its rows. Null for an empty group.
- *
- * The write boundary keeps the members single-family (`TEMPLATE_GROUP_FAMILY`), so this is the
- * first member's family by construction; on a hand-edited database holding a mix it is *still* the
- * first member's, because a read is not the place to throw over data the write boundary already
- * forbids — the stance [DaoTemplate.effect] takes with `firstOrNull`.
- *
- * Must be called inside a transaction.
- */
-internal fun DaoTemplateGroup.familyOf(): PropertyMaskGroup? =
-    members.sortedBy { it.sortOrder }.firstNotNullOfOrNull { it.familyOf() }
-
-/**
- * The uuids of the *other* templates in this template's group — what a busk press on this one
- * releases (`ProgrammerLayerStack.toggle`'s `releaseSiblings`). Empty for an ungrouped template.
- *
- * Must be called inside a transaction.
- */
-internal fun DaoTemplate.siblingUuids(): Set<UUID> {
-    val groupId = group?.id ?: return emptySet()
-    return DaoTemplate.find { (DaoTemplates.group eq groupId) and (DaoTemplates.id neq id) }
-        .map { it.uuid }
-        .toSet()
-}
-
 /** Must be called inside a transaction. */
 internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = null): TemplateDto {
     // `sortedBy`, not Exposed's `orderBy`, for the reason [familyOf] gives: the PUT route reads
@@ -1197,9 +1076,7 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         uuid = uuid.toString(),
         name = name,
         notes = notes,
-        sortOrder = sortOrder,
         fadeDurationMs = fadeDurationMs,
-        groupId = group?.id?.value,
         family = familyOf()?.name,
         // An effect template is generic by construction (D3) — it names no target at all, so the
         // "every row is deferred" test has nothing to run over and would answer false.

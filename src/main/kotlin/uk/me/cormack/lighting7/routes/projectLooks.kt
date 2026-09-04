@@ -72,7 +72,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             }
             val looks = transaction(state.database) {
                 val all = DaoLook.find { DaoLooks.project eq project.id }
-                    .orderBy(DaoLooks.sortOrder to SortOrder.ASC, DaoLooks.name to SortOrder.ASC)
+                    .orderBy(DaoLooks.name to SortOrder.ASC)
                     .toList()
                 val usage = lookUsageFor(all.map { it.id.value })
                 all.map { it.toSummaryDto(state, usage[it.id.value]) }
@@ -127,9 +127,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.project = project
                     this.name = name
                     this.notes = request.notes
-                    this.sortOrder = request.sortOrder
-                        ?: ((DaoLook.find { DaoLooks.project eq project.id }
-                            .maxOfOrNull { it.sortOrder } ?: -1) + 1)
                 }
                 createLookChildren(look, request.rows, request.effects)
                 look.toDetailsDto(state)
@@ -167,7 +164,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     }
                 }
                 if ("notes" in body) look.notes = body["notes"].nullableString()
-                body["sortOrder"].nullableInt()?.let { look.sortOrder = it }
                 val hasRows = "rows" in body
                 val hasEffects = "effects" in body
                 val rows = if (hasRows) {
@@ -286,8 +282,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     this.project = target
                     this.name = newName
                     this.notes = source.notes
-                    this.sortOrder = (DaoLook.find { DaoLooks.project eq target.id }
-                        .maxOfOrNull { it.sortOrder } ?: -1) + 1
                 }
                 // Fresh uuids on every child: a copy is a new entity, and reusing the source's
                 // uuid would make sync treat the two as one record.
@@ -525,7 +519,6 @@ internal data class LookDto(
     val uuid: String,
     val name: String,
     val notes: String? = null,
-    val sortOrder: Int,
     /**
      * Attribute families this Look touches, **derived** from its rows rather than stored. A Look
      * spanning colour and position reports both — which is the point of not having a type column.
@@ -556,7 +549,6 @@ internal data class LookDetails(
     val uuid: String,
     val name: String,
     val notes: String? = null,
-    val sortOrder: Int,
     val families: List<String>,
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
@@ -569,7 +561,6 @@ internal data class LookDetails(
 internal data class CreateLookRequest(
     val name: String,
     val notes: String? = null,
-    val sortOrder: Int? = null,
     val rows: List<LookRowDto> = emptyList(),
     val effects: List<LookEffectDto> = emptyList(),
 )
@@ -851,7 +842,6 @@ internal fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
         uuid = uuid.toString(),
         name = name,
         notes = notes,
-        sortOrder = sortOrder,
         families = derivedFamilies(state),
         rowCount = rowList.size,
         effectCount = effectList.size,
@@ -875,7 +865,6 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         uuid = uuid.toString(),
         name = name,
         notes = notes,
-        sortOrder = sortOrder,
         families = derivedFamilies(state),
         // Sorted in memory, not via `orderBy`: `derivedFamilies` above already iterates the
         // referrer collection, and Exposed refuses to order a SizedIterable once it is loaded.

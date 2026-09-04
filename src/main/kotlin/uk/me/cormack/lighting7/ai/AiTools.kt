@@ -105,8 +105,6 @@ class AiTools(private val state: State) {
                 this.name = name
                 this.notes = notes
                 this.project = project
-                this.sortOrder = (DaoLook.find { DaoLooks.project eq project.id }
-                    .maxOfOrNull { it.sortOrder } ?: -1) + 1
             }
             // Authored through the AI surface, so every effect is deferred: the tool describes the
             // effects, and the targets come from whatever applies the look. (The tool authors no
@@ -1190,7 +1188,6 @@ class AiTools(private val state: State) {
         return when (result) {
             is TemplateCreateResult.Invalid -> errorResult(result.message)
             is TemplateCreateResult.Duplicate -> errorResult(result.message)
-            is TemplateCreateResult.Refused -> errorResult(result.message)
             is TemplateCreateResult.Ok -> ToolExecutionResult(
                 success = true,
                 description = "Created template '${result.template.name}' " +

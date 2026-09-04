@@ -76,7 +76,7 @@ data class ProgrammerLayerOutcome(
  *
  * [action] is `"applied"` or `"removed"`, the two words the pads have always read. [effectCount] is
  * the effects that moved *for this layer* (spawned on apply, retracted on remove). [released] is
- * how many **sibling** layers an apply took the pressed targets off (template groups) — counting a
+ * how many **sibling** layers an apply took the pressed targets off (a solo bank's) — counting a
  * layer narrowed to the targets the press did not name as well as one dropped outright, since from
  * the pressed targets' point of view both are gone. Always 0 on a remove, and for any press with no
  * siblings to name. A press rewriting one of its **own** record's layers is not a release: that is
@@ -328,14 +328,20 @@ class ProgrammerLayerStack(
      * off has to clear the record from everything the press names, or "off" means something the
      * ring cannot show.
      *
-     * [releaseSiblings] is a template group's exclusivity: the uuids of the *other* templates in
-     * the pressed one's group, which give up the pressed targets in the same mutation the new layer
-     * goes on — one `layerState` frame, one recook. A sibling that only *overlaps* is narrowed
-     * rather than dropped, so Amber on the front wash and Blue on the back wash are still two pads
-     * on two rigs. The off arm ignores it entirely: turning a pad off never lights a sibling.
-     * Matched on uuid like the pad itself, so a Look's layer can never be released by a template
-     * press even where the two share an int PK. Empty (the default) is "no group", which is every
-     * Look and every ungrouped template; the route resolves the set, this class only applies it.
+     * [releaseSiblings] is a **solo bank's** exclusivity: the uuids of the records on the pressed
+     * pad's sibling pads, which give up the pressed targets in the same mutation the new layer goes
+     * on — one `layerState` frame, one recook. A sibling that only *overlaps* is narrowed rather
+     * than dropped, so Amber on the front wash and Blue on the back wash are still two pads on two
+     * rigs. The off arm ignores it entirely: turning a pad off never lights a sibling. Matched on
+     * uuid like the pad itself, so a Look's layer can never be released by a template press even
+     * where the two share an int PK — and a bank mixes kinds, so the set may hold both. Empty (the
+     * default) is a stacking bank, and is what the `/templates/{id}/toggle` and `/looks/{id}/toggle`
+     * routes always pass; `routes/buskPress.kt` resolves the set, this class only applies it.
+     *
+     * This used to be a **template group's** exclusivity — the other templates in the pressed one's
+     * group. The busk layout retired groups and moved both order and exclusivity onto the page, so
+     * the parameter's meaning widened (any kind, resolved per bank) while its rule did not change
+     * at all: that is why the engine did not move.
      *
      * A layer with **empty** targets is the one thing no subtraction reaches — see
      * [withoutTargets]. The exception is a press that itself names no targets: that is the same

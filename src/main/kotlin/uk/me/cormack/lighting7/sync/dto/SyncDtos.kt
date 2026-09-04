@@ -28,18 +28,22 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 data class FormatVersionJson(
     // v10: the busk layout, and a Look on a cue slot. A new `buskPages/` folder — one document per
     // page with its columns, banks and pads nested, pads naming templates, Looks and cues by uuid
-    // — and `CueSlotJson.lookUuid` as a third arm beside `cueUuid` / `cueStackUuid`. `minReader`
-    // stays at **5**: the folder reads as empty when missing and the field is optional with a null
-    // default, so every older archive still imports unchanged.
+    // — and `CueSlotJson.lookUuid` beside `cueUuid`. `minReader` stays at **5**: the folder reads
+    // as empty when missing and the field is optional with a null default, so every older archive
+    // still imports unchanged.
     //
     // The writer's version moves for v9's reason, verbatim: a layout changes what a busk press
     // *does* on stage (a solo bank releases its siblings), so a v9 reader — which would import no
     // pages, never read the folder, and on its next wipe-then-export push write none back — must
-    // refuse the repo rather than silently delete every peer's pages. Session 3 of the same plan
-    // removes `templateGroups/`, `TemplateJson.groupUuid` / `sortOrder`, `LookJson.sortOrder`,
-    // `CueJson.pinnedToBusk` and `CueSlotJson.cueStackUuid` under this same number: nothing but
-    // the dev desk writes v10 between the two sessions, so no peer can hold a repo the later
-    // reader would import wrong and push back.
+    // refuse the repo rather than silently delete every peer's pages.
+    //
+    // Session 3 of the same plan **removed** `templateGroups/`, `TemplateJson.groupUuid` and
+    // `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and `CueSlotJson.cueStackUuid`
+    // under this same number, rather than bumping again: nothing but the dev desk wrote v10
+    // between the two sessions, so no peer can hold a repo the later reader would import wrong and
+    // push back. A v10 archive written *before* that session may still carry `cueStackUuid`; the
+    // reader drops that slot with a warning rather than failing the pull, which is the same posture
+    // a pad naming a missing record takes (a slot, like a pad, is an enrichment).
     //
     // v9: template groups. A new `templateGroups/` folder, and `TemplateJson.groupUuid` naming
     // one. `minReader` stays at **5**: the folder is read as empty when missing and the field is
@@ -196,7 +200,6 @@ data class LookJson(
     val uuid: String,
     val name: String,
     val notes: String? = null,
-    val sortOrder: Int = 0,
     val rows: List<LookRowJson> = emptyList(),
     val effects: List<LookEffectJson> = emptyList(),
 )
@@ -263,35 +266,18 @@ data class TemplateEffectJson(
  * boundary; a template has no fixture type by design, since the values are intents resolved per
  * head at cook. Both would be second sources of truth for something the contents already say.
  *
- * [groupUuid] (v9) names a [TemplateGroupJson] by uuid — a reference, so `ExportUuidRemapper`
- * re-points it on clone with no field-aware code. [sortOrder] is the position *within* that group
- * when grouped, and in the project's top-level sequence (shared with the groups) otherwise.
+ * A template carries no position and no group. Both were template *groups*, removed at v10 when the
+ * busk page took ownership of the layout: order is a pad's place in a bank, and exclusivity is a
+ * solo bank's. `GET /templates` lists by name.
  */
 @Serializable
 data class TemplateJson(
     val uuid: String,
     val name: String,
     val notes: String? = null,
-    val sortOrder: Int = 0,
     val fadeDurationMs: Long? = null,
     val rows: List<TemplateRowJson> = emptyList(),
     val effect: TemplateEffectJson? = null,
-    val groupUuid: String? = null,
-)
-
-/**
- * A template group — portable show content (v9). Ordering and busk-pad exclusivity for its
- * members; see `DaoTemplateGroups`. Membership lives on the template ([TemplateJson.groupUuid]),
- * not here, so a group document never changes when a template joins or leaves it.
- *
- * No family field, for the reason [TemplateJson] gives: it is derived from the members.
- */
-@Serializable
-data class TemplateGroupJson(
-    val uuid: String,
-    val name: String,
-    /** Position in the project's top-level sequence, shared with ungrouped templates. */
-    val sortOrder: Int = 0,
 )
 
 /**
@@ -524,7 +510,6 @@ data class CueJson(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
-    val pinnedToBusk: Boolean = false,
 )
 
 @Serializable
@@ -537,10 +522,13 @@ data class ShowEntryJson(
 )
 
 /**
- * One tile of the FX cue slots overlay. **Exactly one of [cueUuid] / [cueStackUuid] / [lookUuid]**
- * is set, enforced by the importer (a slot naming none or two is malformed input, not a state).
- * [lookUuid] is v10: a Look with no deferred effect, pressed onto its own fixtures. [cueStackUuid]
- * leaves in session 3 of the busk-layout plan.
+ * One tile of the FX cue slots overlay. **Exactly one of [cueUuid] / [lookUuid]** is set, enforced
+ * by the importer (a slot naming none or two is malformed input, not a state). [lookUuid] is v10: a
+ * Look with no deferred effect, pressed onto its own fixtures.
+ *
+ * A cue *stack* used to be a third arm. It went with the overlay's own assign flow, under the same
+ * v10 (see [FormatVersionJson]); a pre-session-3 v10 archive may still carry `cueStackUuid`, and
+ * the importer drops such a slot with a warning rather than failing the pull.
  */
 @Serializable
 data class CueSlotJson(
@@ -548,7 +536,6 @@ data class CueSlotJson(
     val page: Int,
     val slotIndex: Int,
     val cueUuid: String? = null,
-    val cueStackUuid: String? = null,
     val lookUuid: String? = null,
 )
 

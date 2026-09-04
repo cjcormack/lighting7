@@ -317,9 +317,6 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 this.project = project
                 this.name = request.name!!.trim()
                 this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-                this.sortOrder = (
-                    DaoLook.find { DaoLooks.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1
-                    ) + 1
             }
             val written = writeRecordingIntoLook(look, collapsed, mode, inRemit)
             writeLookEffects(look, bandEffects, mode)
