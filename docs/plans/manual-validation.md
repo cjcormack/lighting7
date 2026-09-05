@@ -51,6 +51,7 @@ as a one-line row.
 | [`FU-MANUAL-PROMPTBOOK-RELOCK`](#fu-manual-promptbook-relock) | the prompt book's idle re-lock still catches every edit, and the rail still opens the right cards | Frontend sweep, 2026-08-31 |
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
+| [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 
 ---
 
@@ -1271,3 +1272,49 @@ file's git history if one is ever needed again.
 | `FU-MANUAL-AUTH-QR-SCAN` | 2026-08-19 | both QR flows resolved and completed from a real phone |
 | `FU-MANUAL-CUEEDIT-HARDWARE` | — | retired unrun 2026-08-24: sweep item D1 removed `cueEdit.*`, so there is no cue to open for edit from a fader |
 | `FU-MANUAL-TEMPLATE-GROUPS` | — | retired unrun 2026-09-04: busk-layout session 3 removed template groups, the library's operator-set order and the busk view's family columns, so every step tests something that no longer exists |
+
+---
+
+## `FU-MANUAL-BUSK-LAYOUT`
+
+**The page the operator built, on a rig** · from the busk-layout plan §9, 2026-09-05
+
+All four sessions landed on automated evidence alone — `./gradlew test` and `npm run check` — and
+**none of these has been run**. They are staged here rather than left in the plan because that is
+what happened to the busking-view plan's checks, which sat unrun in a retired document until they
+were moved to this file; a check nobody can find is not a check.
+
+The claims no test can reach are the ones about *one press changing what a second press means*:
+solo has a single meaning across three kinds of pad, and a cue pad releases layer siblings
+wholesale because it has no targets to narrow by. Everything automated proves the route resolves
+the right siblings; only a rig proves the light goes where the operator expected.
+
+**Test**: with the desk running, a Front Wash group, two movers, and a cue stack with several cues:
+
+1. **Build a page from empty.** Two rows, a column with one bank stacked under another, and one
+   bank set to `COLUMN` flow. Reload the browser: the same page, the same shape, the same order.
+2. **Solo across kinds.** One solo bank holding a position template and a movement Look. Press each
+   on the movers → the other goes dark *on those heads* and nothing else on stage moves. Now press
+   the Look on two heads only → the template stays lit on the rest, and both pads show a partial
+   ring rather than a full one.
+3. **A cue in the same solo bank.** Pressing it turns both of the above off and lights the cue;
+   pressing it again stops the cue and lights nothing. GO on the ShowBar must be unaffected
+   throughout, and the Show view's cursor must not move — a cue pad is live without being the
+   playhead.
+4. **One record, two pads, two pages.** The same template on a pad on each page: lit on both, and
+   either one turns it off.
+5. **A bound Look on a cue slot.** Drag it from the busk view's edit-mode palette into a slot; tap
+   it on the Show view with *nothing selected* → it comes on on its own fixtures and lights the
+   tile. A busk-only Look (one with a deferred effect) must refuse the drop.
+6. **A delete takes its pads.** Put one template on three pads, check the library row says *on n
+   pages* and the delete confirm names them, then delete it: the pads go, the pages still render,
+   no 500.
+7. **A narrow window.** Columns stack, nothing overlaps, nothing is unreachable.
+8. **Placing a pad from elsewhere** (session 4). From the Show view's cue properties, *Add to busk
+   page* → a bank; the pad is at the **end** of that bank when you next open the page, without
+   having entered edit mode. Repeat from the template editor and the Look sheet. Then *Save as
+   template* on a running effect with *Also add to* left as offered: the template is created **and**
+   the pad appears. Delete the offered bank first and repeat → the template is still created and
+   the failure is reported, not swallowed.
+
+30 minutes, 40 with two browsers for the solo items.

@@ -12,7 +12,6 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.BUSK_WIDTHS
 import uk.me.cormack.lighting7.models.BuskFlow
@@ -50,6 +49,8 @@ internal const val CODE_BUSK_REORDER_INCOMPLETE = "BUSK_REORDER_INCOMPLETE"
 
 private const val PAGE_NOT_FOUND = "Busk page not found"
 
+private const val BANK_NOT_FOUND = "Busk bank not found"
+
 /**
  * The busk layout's REST surface: pages, and the whole-page layout write.
  *
@@ -65,6 +66,14 @@ private const val PAGE_NOT_FOUND = "Busk page not found"
  * load-bearing rather than polite: the client's next gesture must carry the ids this one minted, or
  * every gesture would recreate every pad.
  *
+ * **One exception, and it is additive only**: `POST /busk/banks/{bankId}/pads` appends a single pad
+ * to a single bank. D10's argument is about *editing* a layout — a partial document cannot say
+ * "this column is now empty" — and an append can never empty anything, so it does not apply. It
+ * exists because the four surfaces that place a pad from outside the busk view (the cue properties
+ * pane, the template editor, the Look sheet, the programmer's create sheets) would otherwise each
+ * have to hold a whole page document and re-`PUT` it, clobbering a concurrent edit with a stale
+ * copy. It answers the whole page for the same reason the layout write does.
+ *
  * Every write here is gated on the current project, like the cue-slot writes, and every one fires
  * `buskLayoutChanged` for the pages it touched.
  */
@@ -73,8 +82,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
     get<BuskPagesResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val pages = transaction(state.database) {
-                val records = BuskRecordCache(state)
-                pagesOf(project).map { it.toDto(records) }
+                BuskRecordCache(state).pageDtos(pagesOf(project))
             }
             call.respond(pages)
         }
@@ -84,7 +92,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
     get<BuskPageResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val page = transaction(state.database) {
-                pageIn(project, resource.pageId)?.toDto(BuskRecordCache(state))
+                pageIn(project, resource.pageId)?.let { BuskRecordCache(state).pageDto(it) }
             }
             if (page == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(PAGE_NOT_FOUND))
@@ -105,11 +113,12 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
             val created = transaction(state.database) {
                 if (nameTaken(project, name, excluding = null)) return@transaction null
                 val next = (pagesOf(project).maxOfOrNull { it.sortOrder } ?: -1) + 1
-                DaoBuskPage.new {
+                val page = DaoBuskPage.new {
                     this.project = project
                     this.name = name
                     sortOrder = next
-                }.toDto(BuskRecordCache(state))
+                }
+                BuskRecordCache(state).pageDto(page)
             }
             if (created == null) {
                 call.respond(
@@ -135,7 +144,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
                 val page = pageIn(project, resource.pageId) ?: return@transaction PageWriteOutcome.NotFound
                 if (nameTaken(project, name, excluding = page.id.value)) return@transaction PageWriteOutcome.NameTaken
                 page.name = name
-                PageWriteOutcome.Written(page.toDto(BuskRecordCache(state)))
+                PageWriteOutcome.Written(BuskRecordCache(state).pageDto(page))
             }
             when (outcome) {
                 PageWriteOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(PAGE_NOT_FOUND))
@@ -217,6 +226,73 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
             }
         }
     }
+
+    // POST /projects/{id}/busk/banks/{bankId}/pads — append one pad to one bank
+    post<BuskBankPadsResource> { resource ->
+        withCurrentProject(state, resource.projectId) { project ->
+            val request = call.receive<AddBuskPadRequest>()
+            val outcome = transaction(state.database) {
+                val bank = bankIn(project, resource.bankId) ?: return@transaction AddPadOutcome.NotFound
+                val kind = buskPadKind(request.templateId, request.lookId, request.cueId)
+                    ?: return@transaction AddPadOutcome.Invalid(
+                        "A pad must name exactly one of templateId, lookId or cueId",
+                    )
+                val records = BuskRecordCache(state)
+                // Resolve the record **before** minting the pad, and set its arm inside the
+                // constructor. This is the layout write's "returns before touching a row" rule, and
+                // here the database enforces it: a pad row with no arm violates the
+                // `busk_pad_exactly_one_ref` check as soon as the transaction flushes, so a refusal
+                // that had already created one would commit a 500 in place of a 400.
+                var newTemplate: DaoTemplate? = null
+                var newLook: DaoLook? = null
+                var newCue: DaoCue? = null
+                when (kind) {
+                    BuskPadKind.TEMPLATE -> {
+                        val id = request.templateId!!
+                        newTemplate = records.template(project, id)
+                            ?: return@transaction AddPadOutcome.Ref("template", id)
+                    }
+                    BuskPadKind.LOOK -> {
+                        val id = request.lookId!!
+                        newLook = records.look(project, id)
+                            ?: return@transaction AddPadOutcome.Ref("look", id)
+                    }
+                    BuskPadKind.CUE -> {
+                        val id = request.cueId!!
+                        newCue = records.cue(project, id)
+                            ?: return@transaction AddPadOutcome.Ref("cue", id)
+                    }
+                }
+                // Dense from zero like every other position here, but read as max + 1 rather than
+                // as a count, so a bank that somehow holds a gap still appends *after* everything.
+                val next = (bank.pads.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                DaoBuskPad.new {
+                    this.bank = bank
+                    sortOrder = next
+                    template = newTemplate
+                    look = newLook
+                    cue = newCue
+                }
+                AddPadOutcome.Added(records.pageDto(bank.column.page))
+            }
+            when (outcome) {
+                AddPadOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(BANK_NOT_FOUND))
+                is AddPadOutcome.Invalid ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = CODE_BUSK_LAYOUT_INVALID))
+                is AddPadOutcome.Ref -> call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(
+                        "Pad names a ${outcome.what} (${outcome.id}) that is not in this project",
+                        code = CODE_BUSK_LAYOUT_REF,
+                    ),
+                )
+                is AddPadOutcome.Added -> {
+                    state.show.fixtures.buskLayoutChanged(listOf(outcome.page.id))
+                    call.respond(HttpStatusCode.Created, outcome.page)
+                }
+            }
+        }
+    }
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -233,6 +309,14 @@ internal data class BuskPageResource(val parent: BuskPagesResource, val pageId: 
 
 @Resource("/layout")
 internal data class BuskPageLayoutResource(val parent: BuskPageResource)
+
+/**
+ * A bank's pads. Flat rather than nested under [BuskPagesResource] because a bank id is unique on
+ * its own — the same shape `/busk/pads/{padId}/press` uses, and for the same reason: the caller
+ * placing a pad knows the bank it picked, not the page that bank happens to sit on.
+ */
+@Resource("/{projectId}/busk/banks/{bankId}/pads")
+internal data class BuskBankPadsResource(val projectId: String, val bankId: Int)
 
 // ─── Read DTOs ──────────────────────────────────────────────────────────
 
@@ -341,6 +425,17 @@ internal data class BuskLayoutBank(
     val pads: List<BuskLayoutPad> = emptyList(),
 )
 
+/**
+ * One pad appended to a bank. Exactly one of [templateId] / [lookId] / [cueId], the same rule
+ * [BuskLayoutPad] carries — there is no `padId`, because an append never names an existing pad.
+ */
+@Serializable
+internal data class AddBuskPadRequest(
+    val templateId: Int? = null,
+    val lookId: Int? = null,
+    val cueId: Int? = null,
+)
+
 /** Exactly one of [templateId] / [lookId] / [cueId]. Int ids, like every REST body; uuids are sync's. */
 @Serializable
 internal data class BuskLayoutPad(
@@ -356,6 +451,13 @@ private sealed interface PageWriteOutcome {
     data object NotFound : PageWriteOutcome
     data object NameTaken : PageWriteOutcome
     data class Written(val dto: BuskPageDto) : PageWriteOutcome
+}
+
+private sealed interface AddPadOutcome {
+    data object NotFound : AddPadOutcome
+    data class Invalid(val message: String) : AddPadOutcome
+    data class Ref(val what: String, val id: Int) : AddPadOutcome
+    data class Added(val page: BuskPageDto) : AddPadOutcome
 }
 
 internal sealed interface BuskLayoutOutcome {
@@ -412,11 +514,10 @@ internal fun applyBuskLayout(
         }
     }
 
-    // Identity: every named id is on this page, none twice. Read through `find`, not the entity's
-    // referrers, so the write below can re-read the page without a stale referrer cache.
-    val columns = DaoBuskColumn.find { DaoBuskColumns.page eq page.id }.associateBy { it.id.value }
-    val banks = DaoBuskBank.find { DaoBuskBanks.column inList columns.keys.toList() }.associateBy { it.id.value }
-    val pads = DaoBuskPad.find { DaoBuskPads.bank inList banks.keys.toList() }.associateBy { it.id.value }
+    // Identity: every named id is on this page, none twice. `buskPageContents` reads through `find`
+    // rather than the entity's referrers, so the write below can re-read the page without a stale
+    // referrer cache — see its docblock.
+    val (columns, banks, pads) = buskPageContents(listOf(page.id.value))
     val allColumns = request.rows.flatMap { it.columns }
     val allBanks = allColumns.flatMap { it.banks }
     val allPads = allBanks.flatMap { it.pads }
@@ -488,7 +589,7 @@ internal fun applyBuskLayout(
     banks.values.filter { it.id.value !in keptBanks }.forEach { it.delete() }
     columns.values.filter { it.id.value !in keptColumns }.forEach { it.delete() }
 
-    return BuskLayoutOutcome.Ok(page.toDto(records))
+    return BuskLayoutOutcome.Ok(records.pageDto(page))
 }
 
 private fun identityProblem(what: String, named: List<Int>, onPage: Set<Int>): BuskLayoutOutcome.Identity? {
@@ -509,6 +610,9 @@ internal fun pagesOf(project: DaoProject): List<DaoBuskPage> =
 private fun pageIn(project: DaoProject, pageId: Int): DaoBuskPage? =
     DaoBuskPage.findById(pageId)?.takeIf { it.project.id == project.id }
 
+private fun bankIn(project: DaoProject, bankId: Int): DaoBuskBank? =
+    DaoBuskBank.findById(bankId)?.takeIf { it.column.page.project.id == project.id }
+
 private fun nameTaken(project: DaoProject, name: String, excluding: Int?): Boolean =
     DaoBuskPage.find { (DaoBuskPages.project eq project.id) and (DaoBuskPages.name eq name) }
         .any { it.id.value != excluding }
@@ -524,6 +628,25 @@ internal class BuskRecordCache(private val state: State) {
     private val templateDtos = HashMap<Int, TemplateDto>()
     private val lookDtos = HashMap<Int, LookDto>()
     private val cueDtos = HashMap<Int, BuskCueDto>()
+    private var templateUsages: Map<Int, TemplateUsage>? = null
+    private var lookUsages: Map<Int, LookUsage>? = null
+
+    /**
+     * Read the usage every record on [pages] needs, one batched call per kind, before any DTO is
+     * built.
+     *
+     * Unprimed, each distinct record resolves its own usage — `toDto`'s
+     * `usage ?: templateUsage(id.value)` — which is a query per record on the busk view's hot read.
+     * That was already true; it matters more now that `TemplateUsage` also carries the busk page
+     * count, which is itself four queries. Safe to skip: an unprimed cache just falls back per
+     * record, so a caller with one freshly-created page need not bother.
+     */
+    fun prime(contents: BuskPageContents) {
+        val pads = contents.pads.values
+        if (pads.isEmpty()) return
+        templateUsages = templateUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.template]?.value }.distinct())
+        lookUsages = lookUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct())
+    }
 
     fun template(project: DaoProject, id: Int): DaoTemplate? =
         templates.getOrPut(id) { DaoTemplate.findById(id)?.takeIf { it.project.id == project.id } }
@@ -535,10 +658,12 @@ internal class BuskRecordCache(private val state: State) {
         cues.getOrPut(id) { DaoCue.findById(id)?.takeIf { it.project.id == project.id } }
 
     fun dto(template: DaoTemplate): TemplateDto =
-        templateDtos.getOrPut(template.id.value) { template.toDto(state.show.fxRegistry) }
+        templateDtos.getOrPut(template.id.value) {
+            template.toDto(state.show.fxRegistry, templateUsages?.get(template.id.value))
+        }
 
     fun dto(look: DaoLook): LookDto =
-        lookDtos.getOrPut(look.id.value) { look.toSummaryDto(state, null) }
+        lookDtos.getOrPut(look.id.value) { look.toSummaryDto(state, lookUsages?.get(look.id.value)) }
 
     fun dto(cue: DaoCue): BuskCueDto = cueDtos.getOrPut(cue.id.value) {
         val stack = cue.cueStack
@@ -553,10 +678,40 @@ internal class BuskRecordCache(private val state: State) {
     }
 }
 
-/** Must be called inside a transaction. Reads through `find` so a just-written page reads back fresh. */
-internal fun DaoBuskPage.toDto(records: BuskRecordCache): BuskPageDto {
-    val columns = DaoBuskColumn.find { DaoBuskColumns.page eq id }
+/**
+ * Read [pages] whole: **three queries for the lot**, whatever the number of pages, columns or banks.
+ *
+ * The one descent feeds both halves of the response. Mapping a page used to walk it a level at a
+ * time — the columns in one query, then a query per column for its banks and one per bank for its
+ * pads — and priming the usage caches then read the same three levels again to find the records
+ * involved. Both are the same descent, so it happens once and both read it.
+ */
+internal fun BuskRecordCache.pageDtos(pages: List<DaoBuskPage>): List<BuskPageDto> {
+    val contents = buskPageContents(pages.map { it.id.value })
+    prime(contents)
+    return pages.map { it.toDto(this, contents) }
+}
+
+/** One page, read the same way. */
+internal fun BuskRecordCache.pageDto(page: DaoBuskPage): BuskPageDto = pageDtos(listOf(page)).single()
+
+/**
+ * Must be called inside a transaction. Reads through `find` so a just-written page reads back fresh.
+ *
+ * **Private on purpose**: reachable only through [pageDtos] / [pageDto], which prime [records]
+ * first. Called directly — the way every call site did before priming existed — it silently falls
+ * back to one usage query per distinct record on the page, which is the N+1 the priming removed and
+ * which nothing would fail to warn about.
+ */
+private fun DaoBuskPage.toDto(records: BuskRecordCache, contents: BuskPageContents): BuskPageDto {
+    // `contents` may span several pages, so each level is narrowed here rather than queried. The
+    // sorts are unchanged and still explicit: `sortOrder` then `uuid`, so a page written in one
+    // transaction reads back in a stable order even before the client has renumbered anything.
+    val columns = contents.columns.values
+        .filter { it.readValues[DaoBuskColumns.page].value == id.value }
         .sortedWith(compareBy({ it.row }, { it.sortOrder }, { it.uuid }))
+    val banksByColumn = contents.banks.values.groupBy { it.readValues[DaoBuskBanks.column].value }
+    val padsByBank = contents.pads.values.groupBy { it.readValues[DaoBuskPads.bank].value }
     val rows = columns.groupBy { it.row }.toSortedMap().values.map { rowColumns ->
         BuskRowDto(
             columns = rowColumns.map { column ->
@@ -564,7 +719,7 @@ internal fun DaoBuskPage.toDto(records: BuskRecordCache): BuskPageDto {
                     id = column.id.value,
                     uuid = column.uuid.toString(),
                     width = column.width,
-                    banks = DaoBuskBank.find { DaoBuskBanks.column eq column.id }
+                    banks = banksByColumn[column.id.value].orEmpty()
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         .map { bank ->
                             BuskBankDto(
@@ -573,7 +728,7 @@ internal fun DaoBuskPage.toDto(records: BuskRecordCache): BuskPageDto {
                                 name = bank.name,
                                 solo = bank.solo,
                                 flow = bank.flow,
-                                pads = DaoBuskPad.find { DaoBuskPads.bank eq bank.id }
+                                pads = padsByBank[bank.id.value].orEmpty()
                                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                                     .mapNotNull { pad -> pad.toDto(records) },
                             )

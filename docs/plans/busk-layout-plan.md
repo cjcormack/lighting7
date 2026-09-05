@@ -1,11 +1,13 @@
 # Busk layout — pages of rows, columns and banks the operator builds
 
-> **Document status: IN PROGRESS — session 1 (the model and the routes) landed 2026-09-04 as
+> **Document status: COMPLETE — session 1 (the model and the routes) landed 2026-09-04 as
 > `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; session 3
 > (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `fed63a8`;
-> session 4 has not.** Where a session refined a
-> decision, the text below says "session 1 amendment", "session 2 amendment" or "session 3
-> amendment" beside it. The visual design is settled
+> session 4 (the edges) landed 2026-09-05.** The seven desk checks of §9 are **staged, not run** —
+> they are `FU-MANUAL-BUSK-LAYOUT` in [`manual-validation.md`](manual-validation.md). Where a
+> session refined a
+> decision, the text below says "session 1 amendment" … "session 4 amendment"
+> beside it. The visual design is settled
 > and checked in beside this plan at [`look-groups-design/`](look-groups-design/INDEX.md) —
 > eleven static artboards on two canvas pages: the busk view in play and edit mode, the build
 > flow, the rows/columns/banks structure, the model and delta, the FX cue slots overlay fed from
@@ -155,6 +157,12 @@ its columns, banks and pads.
   empty page are legal. Widths in a row need not sum to twelve; the client renders them as `fr`
   shares. **Answers the page as written**, because the client's next whole-page write must carry
   the ids this one minted.
+- `POST /projects/{id}/busk/banks/{bankId}/pads` `{templateId|lookId|cueId}` — appends **one** pad
+  to one bank and answers the whole `BuskPageDto` (session 4 amendment; the additive exception to
+  D10, for the surfaces that place a pad without opening the busk view). Same validation order and
+  the same `BUSK_LAYOUT_INVALID` / `_REF` codes; an unknown bank, or one on another project's page,
+  is 404. The record is resolved **before** the pad is minted — a pad row with no arm trips
+  `busk_pad_exactly_one_ref` at flush and would turn a refusal into a 500.
 - `POST /projects/{id}/busk/pads/{padId}/press` `{targets}` → by kind: template →
   `toggle(source, targets, familyMask, siblings)`; Look → `toggle(source, targets, null, siblings)`,
   with the Look toggle's empty-targets rule (`LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS`); cue →
@@ -396,6 +404,72 @@ rather than two suites), so the eligibility mapping is covered only through
   fixture groups and is untouched.
 - Desk checks (§9) run and recorded.
 
+**Session 4 amendments**, where the plan and the code diverged:
+
+- **The append is a route, not a client-side splice.** `POST /busk/banks/{bankId}/pads` appends one
+  pad and answers the whole page. The client could have done it with what it had — `applyDrop`'s
+  `{kind:'pad', at:{…, pad: pads.length}}` target *is* the append case, and `useBuskLayoutCommit`
+  already replays ops against the last confirmed document — but that makes four surfaces which never
+  *show* the page each hold a whole page document and re-`PUT` it, turning
+  `FU-BUSK-EDIT-CONCURRENCY`'s stale-document race from the exception into the normal path. D10 is
+  untouched: its argument is about editing ("a partial document cannot say *this column is now
+  empty*"), and an append can never empty anything. The bank is addressed by **id**, which is also
+  the address that survives a page being reshuffled underneath the menu.
+- **Two bugs the route's own tests found, both about ordering.** The append created the pad before
+  resolving its record, so a refused reference committed a pad with no arm and the
+  `busk_pad_exactly_one_ref` check turned a 400 into a 500 — the file's "returns before touching a
+  row" rule, here enforced by the database rather than by discipline. And `buskPageCount` on an
+  *embedded* pad summary made "this page is exactly as it was" false the moment a **different** page
+  gained a pad; the existing identity test had snapshotted its page before writing the second one.
+  The coupling is real but not new — `layerCount` on the same embedded summary has always moved when
+  an unrelated cue changed — so the test re-reads its baseline instead.
+- **`buskPageCount` carries no default.** The REST `Json` is `routes/router.kt`'s bare `json()`, so
+  `encodeDefaults = false`: a defaulted zero would simply not be on the wire and the client would
+  read `undefined` where its type says `number`. `layerCount` beside it has no default either, for
+  exactly this reason.
+- **The count is refreshed on the client, and by who caused the change.** A layout write moves it
+  but fires no `templateListChanged`; firing one would refetch the whole library on every edit-mode
+  gesture, and review found that cost is real — `LibraryPalette` is mounted and subscribed to both
+  lists for the whole of busk edit mode, which a first version of this claimed was not the case. So
+  an *own* write invalidates the two lists only when `recordsOnPage` actually moved (an append
+  always; a drag, reorder or resize never), and only a *foreign* frame invalidates them wholesale.
+- **`?family=` on `/looks` was already gone, and stays gone.** §5 S4's "kept" reads as "don't remove
+  these while you are in here". `routes/Looks.tsx` carries the argument against re-adding one — a
+  Look's families are derived and one may span several, so a filter would hide most of the library
+  from most filters — which is a Looks-page decision this plan never revisited. The REST `?family=`
+  param stays on both list GETs; only the `/looks` page UI stays absent.
+- **One picker everywhere, not a checkbox.** The artboard draws *Also add to \<bank\>* as a
+  pre-checked checkbox on *Save as template*; it shipped as the same page → bank menu the other
+  surfaces use, pre-filled from the last bank used, with *Don't add a pad* in it. One control means a
+  bank chosen in the template editor and one chosen mid-show teach each other through one remembered
+  target. It went on **both** programmer create sheets (*Save as template* and *New from selection*),
+  which both mint a template mid-show and both want the pad.
+- **Placement from a create sheet is deferred and fails soft.** The pad names an id the template does
+  not have until its POST answers, so the choice is held and the append runs after. If the append
+  fails the template still stands, the failure is reported by the error-toast middleware, and the
+  success line does not claim a pad it did not get.
+- **`savingPages` became a refcount.** Two independent writers for one page — the commit queue and an
+  append — would have raced a `Set`: whichever settled first would clear the flag while the other was
+  still writing. Unreachable in the shipped UI (the picker's surfaces and the busk view are different
+  routes), but the queue's own docblock already warns about exactly this race, and a count removes
+  the class of it rather than arguing the two cannot overlap.
+- **Review found the create-sheet control was dead, and it shipped green.** `useAddToBuskPage`
+  returned no targets whenever it had no `record` — which is exactly the create case, where the
+  template does not exist until the POST answers. So *Also add to \<bank\>* rendered nothing on both
+  sheets and the placement branch added to their submit handlers was unreachable, with `tsc`, lint
+  and every suite passing. The record is only needed for the "already here" tick; the pages and banks
+  never depended on it. `AlsoAddToBuskRow.test.tsx` now pins it, and it is the reason that file
+  exists.
+- **A failed write must not open the echo window.** `endBuskPageWrite` stamped `settledAt` from a
+  `finally`, so a *rejected* append suppressed genuine `busk.layoutChanged` frames for 500 ms — for
+  an echo that was never broadcast, because the write did not land. It takes a `landed` flag now.
+- **`onQueryStarted` has to catch.** RTK Query attaches no handler to the promise it returns, so a
+  rejected append escaped as an unhandled rejection. `reorderBuskPages` in the same file already
+  caught for this reason.
+- **The picker takes no router.** An "open the busk view" item would have made every sheet and
+  property pane that renders this control a navigation source; the empty state names the view
+  instead.
+
 ## 6. Migration
 
 None (D11). The only versioning is the sync format bump (D12).
@@ -459,8 +533,10 @@ both the busk page and the header overlay, which today live under different prov
 Carried from the canvas's sticky notes; each has a drafted answer the sessions build unless
 overturned:
 
-- **The library pages afterwards.** Drafted: flat lists by name, family filter kept, no groups, no
-  drag; optionally an "on *n* pages" hint per row.
+- **The library pages afterwards.** *Settled by session 4*: flat lists by name, no groups, no drag,
+  the family filter kept on `/templates` and deliberately still absent from `/looks`, and the
+  "on *n* pages" hint **built** — `buskPageCount` on both list DTOs, plus a line in the delete
+  confirm. `FU-BUSK-ON-PAGES-HINT` closed.
 - **Save per gesture vs on Done.** Drafted: per gesture, like every other editor on the desk, with
   *Done* only leaving the mode. Alternative: hold edits until *Done*, with Discard.
 - **Which Looks a slot may hold.** Drafted: no deferred effect. A busk-only Look is refused at assign,

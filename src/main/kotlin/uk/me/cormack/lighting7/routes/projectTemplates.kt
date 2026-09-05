@@ -29,6 +29,7 @@ import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLookEffect
@@ -483,6 +484,18 @@ internal data class TemplateDto(
      * store and this mapping has only the row.
      */
     val layerCount: Int,
+    /**
+     * How many busk pages hold a pad for this template — the library row's "on *n* pages" hint,
+     * and the line the delete confirm shows before taking those pads with it.
+     *
+     * A hint, not a use: it does **not** gate delete, and [layerCount] alone still does
+     * (busk-layout plan D3, "a pad is an enrichment, never content and never a guard").
+     *
+     * **No default**, like [layerCount] beside it: the REST `Json` is the bare `json()` of
+     * `routes/router.kt`, so `encodeDefaults = false` — a defaulted zero would simply not be on the
+     * wire, and the client would read `undefined` where it declares a number.
+     */
+    val buskPageCount: Int,
 )
 
 /**
@@ -916,6 +929,15 @@ internal data class TemplateUsage(
     val layerCount: Int,
     val cueIds: List<Int>,
     val cueNames: List<String>,
+    /**
+     * How many busk pages hold a pad for this template — a **hint**, not a use.
+     *
+     * It rides here because it is wanted by exactly the callers [templateUsageFor] already serves,
+     * and batching it beside them keeps the library read at a fixed number of queries. It is
+     * deliberately absent from [describe]: that string is the *delete guard's* message, and a pad
+     * does not block a delete (busk-layout plan D3) — the record's delete sweeps its pads.
+     */
+    val buskPageCount: Int = 0,
 ) {
     fun describe(): String = when {
         layerCount == 0 -> "nothing"
@@ -976,7 +998,7 @@ private fun describeTemplateUse(
 /** Must be called inside a transaction. */
 internal fun templateUsage(templateId: Int): TemplateUsage =
     templateUsageFor(listOf(templateId))[templateId]
-        ?: TemplateUsage(0, emptyList(), emptyList())
+        ?: TemplateUsage(0, emptyList(), emptyList(), 0)
 
 /**
  * Batched form for a list response — one query instead of one per template, the same shape
@@ -992,6 +1014,7 @@ internal fun templateUsageFor(templateIds: Collection<Int>): Map<Int, TemplateUs
     // `template` is nullable (a layer may name a Look instead) but this query filtered on it, so
     // every row here has one.
     val byTemplate = layers.groupBy { it.template!!.id.value }
+    val buskPages = buskPageCountsFor(BuskPadKind.TEMPLATE, ids)
     return ids.associateWith { templateId ->
         val mine = byTemplate[templateId].orEmpty()
         val cues = mine.map { it.cue }.distinctBy { it.id.value }
@@ -999,6 +1022,7 @@ internal fun templateUsageFor(templateIds: Collection<Int>): Map<Int, TemplateUs
             layerCount = mine.size,
             cueIds = cues.map { it.id.value },
             cueNames = cues.map { it.name },
+            buskPageCount = buskPages[templateId] ?: 0,
         )
     }
 }
@@ -1085,6 +1109,7 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         rows = rowList.map { it.toDto() },
         effect = storedEffect?.toDto(registry),
         layerCount = resolvedUsage.layerCount,
+        buskPageCount = resolvedUsage.buskPageCount,
     )
 }
 

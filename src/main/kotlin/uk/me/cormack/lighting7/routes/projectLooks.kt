@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCueSlots
@@ -541,6 +542,15 @@ internal data class LookDto(
     val preview: List<String>,
     /** How many cue layers reference this Look. Gates delete. */
     val layerCount: Int,
+    /**
+     * How many busk pages hold a pad for this Look — the library row's "on *n* pages" hint, and the
+     * line the delete confirm shows before taking those pads with it. A hint, not a use: it does
+     * not gate delete, [layerCount] alone still does.
+     *
+     * **No default**, for [TemplateDto.buskPageCount]'s reason: `encodeDefaults = false` would keep
+     * a zero off the wire entirely.
+     */
+    val buskPageCount: Int,
 )
 
 @Serializable
@@ -627,6 +637,12 @@ internal data class LookUsage(
     val layerCount: Int,
     val cueIds: List<Int>,
     val cueNames: List<String>,
+    /**
+     * How many busk pages hold a pad for this Look — a **hint**, not a use. Batched here beside the
+     * layer count for the reason [TemplateUsage.buskPageCount] gives, and kept out of [describe]
+     * for the same one: a pad does not gate a delete (busk-layout plan D3).
+     */
+    val buskPageCount: Int = 0,
 ) {
     val total: Int get() = layerCount
 
@@ -639,7 +655,7 @@ internal data class LookUsage(
 
 /** Must be called inside a transaction. */
 internal fun lookUsage(lookId: Int): LookUsage =
-    lookUsageFor(listOf(lookId))[lookId] ?: LookUsage(0, emptyList(), emptyList())
+    lookUsageFor(listOf(lookId))[lookId] ?: LookUsage(0, emptyList(), emptyList(), 0)
 
 /** Batched form for a list response — one query instead of one per Look. */
 internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
@@ -651,6 +667,7 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
         // filtered on it, so every row here has one. `mapNotNull`-style defensiveness would only
         // hide a contradiction between the filter and the grouping.
         .groupBy { it.look!!.id.value }
+    val buskPages = buskPageCountsFor(BuskPadKind.LOOK, ids)
 
     return ids.associateWith { lookId ->
         val layers = layersByLook[lookId].orEmpty()
@@ -659,6 +676,7 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
             layerCount = layers.size,
             cueIds = cues.map { it.id.value }.sorted(),
             cueNames = cues.map { it.name }.sorted(),
+            buskPageCount = buskPages[lookId] ?: 0,
         )
     }
 }
@@ -854,6 +872,7 @@ internal fun DaoLook.toSummaryDto(state: State, usage: LookUsage?): LookDto {
             .take(LOOK_PREVIEW_SIZE)
             .map { it.key },
         layerCount = resolvedUsage.layerCount,
+        buskPageCount = resolvedUsage.buskPageCount,
     )
 }
 

@@ -370,6 +370,22 @@ deletes its pads inside the same transaction — the record's route sweeps them 
 enforces no cascade — and the template and Look delete guards do not count pads as a use. Sync
 reads a pad whose record the archive lacks as absent, with a warning, for the same reason.
 
+That is why the **"on *n* pages" count** on `TemplateDto` and `LookDto` is a *hint* and nothing
+more. It rides in the batched `TemplateUsage` / `LookUsage` the library list already reads, is
+deliberately absent from their `describe()` — that string is the delete guard's message — and
+produces no 409 and no `?force=true`. It counts **pages**, not pads: two pads for one record in one
+bank is still one place to go and look. The library row shows it and the delete confirm mentions it,
+because the pads go silently otherwise; neither stands between a record and its delete.
+
+**A pad can be placed without opening the busk view.** `POST /busk/banks/{bankId}/pads` appends one
+pad to one bank and answers the whole page — the additive exception to the whole-page write below.
+D10's argument is about *editing* a layout ("a partial document cannot say *this column is now
+empty*"), and an append can never empty anything. It exists because the surfaces that place a pad
+from elsewhere — a cue's properties, the template editor, the Look sheet, the programmer's create
+sheets — hold no page document to splice and re-`PUT`, and re-`PUT`ing a stale one would clobber a
+concurrent edit. The bank is addressed by **id** rather than by a position, so the address survives
+any reshuffle of the page that keeps the bank alive.
+
 **A press goes through the pad, and the bank decides the siblings** (D4, `routes/buskPress.kt`).
 `POST /busk/pads/{id}/press` reads the pad, its record and — when the bank is **solo** — the
 records on its sibling pads in one transaction, then calls the same `ProgrammerLayerStack.toggle`

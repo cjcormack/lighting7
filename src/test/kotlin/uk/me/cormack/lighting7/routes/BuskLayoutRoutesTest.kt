@@ -127,6 +127,22 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
     private fun look(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, lookId = id)
     private fun cue(id: Int, padId: Int? = null) = BuskLayoutPad(padId = padId, cueId = id)
 
+    private fun banks() = "/api/rest/projects/$projectId/busk/banks"
+
+    private suspend fun HttpClient.addPad(bankId: Int, pad: AddBuskPadRequest): HttpResponse =
+        post("${banks()}/$bankId/pads") {
+            contentType(ContentType.Application.Json)
+            setBody(pad)
+        }
+
+    private suspend fun HttpClient.appendPad(bankId: Int, pad: AddBuskPadRequest): BuskPageDto {
+        val resp = addPad(bankId, pad)
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        return resp.body()
+    }
+
+    private val BuskPageDto.firstBank: BuskBankDto get() = rows.first().columns.first().banks.first()
+
     private fun padCount(): Long = transaction(state.database) { DaoBuskPad.all().count() }
     private fun bankCount(): Long = transaction(state.database) { DaoBuskBank.all().count() }
     private fun columnCount(): Long = transaction(state.database) { DaoBuskColumn.all().count() }
@@ -268,6 +284,11 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         val foreign = client.writeLayout(other.id, layout(row(column(12, bank("keys", tpl(amber))))))
         val padId = written.pads.single().id
         val foreignPadId = foreign.pads.single().id
+        // Re-read *after* both writes rather than trusting `written`: a pad embeds its record's
+        // live library summary, so writing the second page moved this pad's `buskPageCount` — the
+        // same way adding a cue layer would move its `layerCount`. What this test is about is that
+        // a refusal touches no row on *this* page, so the baseline must be the world as it now is.
+        val baseline = client.page(page.id)
 
         suspend fun refused(request: BuskLayoutRequest, because: String) {
             val resp = client.putLayout(page.id, request)
@@ -279,7 +300,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
         refused(layout(row(column(12, bank("keys", tpl(amber, foreignPadId))))), "another page's pad")
         refused(layout(row(column(12, bank("keys", tpl(amber, padId), tpl(amber, padId))))), "a pad named twice")
 
-        assertEquals(written, client.page(page.id), "the page is exactly as it was")
+        assertEquals(baseline, client.page(page.id), "the page is exactly as it was")
     }
 
     @Test
@@ -538,5 +559,151 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.NoContent, client.delete("${pages()}/${page.id}").status)
             assertEquals(listOf(page.id, second.id), awaitOfType<BuskLayoutChangedOutMessage>().pageIds)
         }
+    }
+
+    // ─── The append ─────────────────────────────────────────────────────
+
+    @Test
+    fun `appending a pad lands it last in its bank and answers the whole page`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val warm = client.createLook("warm")
+        val stackId = client.createStack("Main")
+        val opening = client.createCue("opening", stackId)
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
+        val bankId = assertNotNull(client.page(page.id).firstBank.id)
+
+        val afterLook = client.appendPad(bankId, AddBuskPadRequest(lookId = warm))
+        assertEquals(listOf("TEMPLATE", "LOOK"), afterLook.pads.map { it.kind })
+        val afterCue = client.appendPad(bankId, AddBuskPadRequest(cueId = opening))
+        assertEquals(listOf("TEMPLATE", "LOOK", "CUE"), afterCue.pads.map { it.kind })
+
+        // The response is the page, minted ids and embedded summaries and all — the same contract
+        // the layout write has, because the caller's next gesture must be able to name these pads.
+        assertEquals("warm", afterCue.pads[1].look?.name)
+        assertEquals("opening", afterCue.pads[2].cue?.name)
+        assertTrue(afterCue.pads.all { it.id > 0 }, "every pad in the answer carries its id")
+        assertEquals(afterCue, client.page(page.id), "the answer is what a re-read gives")
+    }
+
+    @Test
+    fun `appending the same record twice gives it two pads`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
+        val bankId = assertNotNull(client.page(page.id).firstBank.id)
+
+        client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
+        val twice = client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
+        // D3: one record, several pads. A pad is a reference, never a copy, so nothing dedupes.
+        assertEquals(3, twice.pads.size)
+        assertTrue(twice.pads.all { it.template?.id == amber })
+        assertEquals(3, twice.pads.map { it.id }.distinct().size)
+    }
+
+    @Test
+    fun `appending refuses an unknown bank, a bad arity and a record from another project`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
+        val bankId = assertNotNull(client.page(page.id).firstBank.id)
+
+        assertEquals(HttpStatusCode.NotFound, client.addPad(999_999, AddBuskPadRequest(templateId = amber)).status)
+
+        for ((pad, because) in listOf(
+            AddBuskPadRequest() to "names no record",
+            AddBuskPadRequest(templateId = amber, cueId = 1) to "names two",
+        )) {
+            val resp = client.addPad(bankId, pad)
+            assertEquals(HttpStatusCode.BadRequest, resp.status, because)
+            assertEquals(CODE_BUSK_LAYOUT_INVALID, resp.body<ErrorResponse>().code, because)
+        }
+
+        val ref = client.addPad(bankId, AddBuskPadRequest(templateId = 999_999))
+        assertEquals(HttpStatusCode.BadRequest, ref.status)
+        assertEquals(CODE_BUSK_LAYOUT_REF, ref.body<ErrorResponse>().code)
+
+        assertEquals(1, padCount(), "a refused append writes no pad")
+    }
+
+    @Test
+    fun `appending is gated on the current project and broadcasts busk layoutChanged`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+        val amber = client.createTemplate("amber")
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
+        val bankId = assertNotNull(client.page(page.id).firstBank.id)
+
+        client.webSocket("/api") {
+            awaitOfType<ChannelMappingStateOutMessage>()
+            client.appendPad(bankId, AddBuskPadRequest(templateId = amber))
+            assertEquals(listOf(page.id), awaitOfType<BuskLayoutChangedOutMessage>().pageIds)
+        }
+
+        val otherId = transaction(state.database) { DaoProject.new { name = "other"; isCurrent = false }.id.value }
+        val gated = client.post("/api/rest/projects/$otherId/busk/banks/$bankId/pads") {
+            contentType(ContentType.Application.Json)
+            setBody(AddBuskPadRequest(templateId = amber))
+        }
+        assertEquals(HttpStatusCode.Conflict, gated.status)
+    }
+
+    // ─── The "on n pages" hint ──────────────────────────────────────────
+
+    @Test
+    fun `a record reports how many pages hold a pad for it, counting pages and not pads`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val warm = client.createLook("warm")
+        val one = client.createPage("One")
+        val two = client.createPage("Two")
+
+        suspend fun templateCount() = client.get("/api/rest/projects/$projectId/templates")
+            .body<List<TemplateDto>>().single { it.id == amber }.buskPageCount
+        suspend fun lookCount() = client.get("/api/rest/projects/$projectId/looks")
+            .body<List<LookDto>>().single { it.id == warm }.buskPageCount
+
+        assertEquals(0, templateCount(), "a record on no page is on no page")
+        assertEquals(0, lookCount())
+
+        // Two pads for one record on one page is *one* page — the hint counts places to look.
+        client.writeLayout(one.id, layout(row(column(12, bank("keys", tpl(amber), tpl(amber), look(warm))))))
+        assertEquals(1, templateCount())
+        assertEquals(1, lookCount())
+
+        client.writeLayout(two.id, layout(row(column(12, bank("more", tpl(amber))))))
+        assertEquals(2, templateCount())
+        assertEquals(1, lookCount(), "the Look is still only on the first page")
+
+        // Deleting the page takes its pads, so the count falls back.
+        assertEquals(HttpStatusCode.NoContent, client.delete("${pages()}/${two.id}").status)
+        assertEquals(1, templateCount())
+    }
+
+    @Test
+    fun `the page count rides on an embedded pad summary too, and never gates a delete`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber))))))
+
+        assertEquals(1, client.page(page.id).pads.single().template?.buskPageCount)
+
+        // D3: a pad is an enrichment, never a guard. Three pads do not stand between a template and
+        // its delete — they go with it, and the count is only ever something to *say* beforehand.
+        client.writeLayout(page.id, layout(row(column(12, bank("keys", tpl(amber), tpl(amber), tpl(amber))))))
+        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/templates/$amber").status)
+        assertEquals(0, padCount())
     }
 }

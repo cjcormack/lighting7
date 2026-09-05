@@ -343,7 +343,7 @@ invalidation**: the client refetches over REST.
 | `cueListChanged` | — | Cue CRUD |
 | `cueStackListChanged` | — | Cue-stack CRUD |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
-| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, or a template / Look / cue / cue-stack delete that took pads off them |
+| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a template / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
 | `stageRegionListChanged` | — | Stage-region CRUD |
@@ -354,6 +354,22 @@ invalidation**: the client refetches over REST.
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
 | `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally |
+
+**`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
+happens is not obvious. The backend deliberately does **not** fire `templateListChanged` /
+`lookListChanged` alongside it: those are payload-free, so firing them would refetch the whole
+library on every edit-mode gesture — and that cost is real rather than theoretical, because
+`LibraryPalette` is mounted and subscribed to both lists for the whole of busk edit mode.
+
+So the client splits it by who caused the change:
+
+- **Its own writes** refresh the counts directly, and only when they can have moved one. An append
+  always adds a pad, so it invalidates on success. A layout write compares `recordsOnPage` before and
+  after the burst and invalidates only if that set moved — which means a drag, a reorder, a resize,
+  or a second pad for a record already on the page all refresh nothing, and those are most gestures.
+- **A foreign frame** — one the echo suppression did not swallow — invalidates both lists wholesale.
+  A frame carries page ids and no records, so there is nothing finer to go on; it is rare, because it
+  means another desk is editing, and the alternative is a count that is simply wrong.
 
 `cuesRecomposed` is the one broadcast that is keyed rather than payload-free, and the reason is the
 rule its two neighbours state: `lookListChanged` / `templateListChanged` are deliberately **not**

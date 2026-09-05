@@ -42,7 +42,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
 | [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
-| [`FU-BUSK-ON-PAGES-HINT`](#fu-busk-on-pages-hint) | Trigger | Busk | an operator deletes a record and is surprised pads went with it |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
@@ -507,23 +506,13 @@ Discard button, an unsaved-changes prompt, and a client-side document that can d
 server's. Nothing here corrupts — the whole-page write is last-writer-wins on a page, and the route
 refuses an inconsistent document outright — so the failure mode is confusion, not loss.
 
+**Placement from outside the busk view does not widen this** (session 4): *Add to busk page* goes
+through `POST /busk/banks/{bankId}/pads`, which appends server-side against a bank id, rather than
+re-`PUT`ing a whole page document a cue properties pane was holding. That was the deciding argument
+for the route — a read-modify-write from four surfaces that never show the page would have made a
+stale document the *normal* case rather than the racing one.
+
 **Trigger**: two desks edit one busk page at once.
-
----
-
-### `FU-BUSK-ON-PAGES-HINT`
-
-**A library row does not say how many pads it has** · Trigger · Busk-layout plan (2026-09-04), §11
-
-Deleting a template, Look or cue deletes its pads, silently: a pad is an enrichment, not a guard, so
-the delete guards do not count pads and the confirm dialog does not mention them. An operator who
-has built three pages around one template gets no warning that the delete takes six pads with it.
-
-Drafted answer: an "on *n* pages" hint per row on `/templates` and `/looks`, and a line in the
-delete confirm. Not built because it needs a count on the list DTOs — cheap per record, but a second
-query per list — and nobody has been surprised by it yet.
-
-**Trigger**: an operator deletes a record and is surprised pads went with it.
 
 ---
 
@@ -1694,6 +1683,11 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-BUSK-ON-PAGES-HINT` — `TemplateDto` and `LookDto` carry `buskPageCount`, batched into the
+  `TemplateUsage` / `LookUsage` the library list already reads, so the "second query per list" the
+  item was parked on costs one query rather than one per record. The row shows *on n pages* and the
+  delete confirm says the pads go with it. Still a hint: absent from `describe()`, no 409, no
+  `?force=true` — busk-layout plan session 4.
 - `FU-TMPL-LAYOUT-SIGNAL` — retired by deletion: `POST /templates/reorder` is gone, so no reorder
   rides `templateListChanged` and there is nothing left to key a `templateLayoutChanged` frame off.
   The busk page owns order now, and its own `busk.layoutChanged` is already keyed — busk-layout
