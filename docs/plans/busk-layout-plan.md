@@ -3,7 +3,7 @@
 > **Document status: COMPLETE — session 1 (the model and the routes) landed 2026-09-04 as
 > `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; session 3
 > (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `fed63a8`;
-> session 4 (the edges) landed 2026-09-05.** The seven desk checks of §9 are **staged, not run** —
+> session 4 (the edges) landed 2026-09-05 as lighting7 `444956f` and lighting-react `3fa49e5`.** The seven desk checks of §9 are **staged, not run** —
 > they are `FU-MANUAL-BUSK-LAYOUT` in [`manual-validation.md`](manual-validation.md). Where a
 > session refined a
 > decision, the text below says "session 1 amendment" … "session 4 amendment"
@@ -394,7 +394,7 @@ wrong; two tests agreed with the bug. `buskDnd.test.ts` now composes `resolveDro
 rather than two suites), so the eligibility mapping is covered only through
 `CueSlotOverviewPanel.test.tsx` and the palette's own refusal test.
 
-### Session 4 — the edges (both repos) — Sonnet 5, high
+### Session 4 — the edges (both repos) — Sonnet 5, high — **landed**, lighting7 `444956f`, lighting-react `3fa49e5`
 
 - *Add to busk page* (page → bank picker that appends) in `CuePropsPane`, `TemplateEditor` and
   `LookDetailSheet`; *Also add to <bank>* on the programmer's *Save as template* sheet.
@@ -405,6 +405,11 @@ rather than two suites), so the eligibility mapping is covered only through
 - Desk checks (§9) run and recorded.
 
 **Session 4 amendments**, where the plan and the code diverged:
+
+- **It ran on Opus 5, not the Sonnet 5 the table above planned for.** Fairly, in hindsight: "small,
+  well-scoped additions" turned out to include a new route with a database-enforced ordering rule, a
+  count threaded through two DTOs and an embedded one, and a client cache-invalidation policy. The
+  review still ran on `/code-review-lite`, and earned its keep.
 
 - **The append is a route, not a client-side splice.** `POST /busk/banks/{bankId}/pads` appends one
   pad and answers the whole page. The client could have done it with what it had — `applyDrop`'s
