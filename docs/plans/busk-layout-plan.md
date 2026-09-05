@@ -475,6 +475,38 @@ rather than two suites), so the eligibility mapping is covered only through
   property pane that renders this control a navigation source; the empty state names the view
   instead.
 
+### Session 5 — the first desk use (lighting-react) — Fable 5.1
+
+The §9 desk checks had not been run when session 4 landed. The first one on a real desk found
+three things, all client-side:
+
+- **Neither `+ Bank` nor `+ Row` had ever succeeded.** `newBank()` defaulted the name to `''`, and
+  `applyBuskLayout` refuses a blank name before touching a row — so the optimistic patch drew the
+  bank, the PUT 400'd with "A bank at row 1, column 5 has a blank name", the queue rolled back and
+  toasted. ("Column 5" is the column `+ Bank` appends, 1-based; the button making a column is D8
+  working.) `newBank` takes a required name now and `nextBankName` mints `Bank N` for the smallest
+  free N; the test named "mints documents the server would accept" asserts the name it never did.
+- **A bank drag resolved to a pad target.** The resolver picked the deepest collision whatever was
+  lifted, and the pad and body droppables were only disabled outside edit mode, so a bank over a
+  pad opened a dashed slot inside the bank and then dropped nowhere — `dropBank` refuses a pad
+  target, and the monitor returned before committing. Session 2's review carry-forward ("a pad drop
+  target is an insertion point") had composed the resolver and the mutator for pads only; the bank
+  half was the same class of defect. Legal targets now follow the source on both halves (a filter
+  in `resolveDropTarget`, and `disabled` per source on the droppables), and `buskDnd.test.ts`
+  composes the bank drag with `applyDrop` for all three zones.
+- **Three more reasons the slot did not track the pointer**, each a dnd-kit fact the code had
+  assumed the opposite of: `onDragOver` fires only when the over-id *changes* (the hover is fed
+  from `onDragMove` as well now); `MeasuringStrategy.Always` is not a timer, so rects went stale
+  the moment the slot opened and shifted everything below it (the provider re-measures on each
+  target change, and the slot is kept sticky within its bank so fresh rects cannot throw it to the
+  end); and the `closestCenter` fallback answered with *every* droppable, so the deepest-wins
+  reader could name a pad three banks from the strip `over` had lit (it is cut to one).
+- **Columns stack below 600px of the page body**, by container query — D2's promise, never
+  implemented. Editing at narrow widths is out of scope by decision: below `md` the palette is not
+  shown and *Edit layout* is hidden with it.
+
+`FU-MANUAL-BUSK-LAYOUT` is still to be recorded once the remaining §9 checks are run.
+
 ## 6. Migration
 
 None (D11). The only versioning is the sync format bump (D12).
