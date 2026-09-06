@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Surfaces · run mode", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Edit.dc.html", "title": "Surfaces · edit bindings", "x": 1540, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Legend.dc.html", "title": "Control status vocabulary", "x": 0, "y": 1060, "w": 1180, "h": 900 }
+  ],
+  "annotations": [
+    { "id": "note-run", "x": 0, "y": -170, "w": 440, "text": "Run mode, strip model: each X-Touch strip is bound to one group. Fader = dimmer, select button = the desk's selection (LED lit while selected), encoder = the lit Encoder bank's property, flash button derived. Right block: selection encoders drive whatever is selected (colour reads mixed). Row 3 mixes stack transport, tap, template presses (Red lit: covers the selection), a position template and a bound Look. Blackout / GM toolbar gone." },
+    { "id": "note-edit", "x": 1540, "y": -170, "w": 440, "text": "Edit bindings: the library takes the inspector's place. A group or fixture ROW dropped on a strip binds the whole strip (here 'Side wash' mid-drag over strip 7). A CHIP binds one control: properties, Selection-relative properties, Encoder bank pages, template Press, Look Apply, busk pads and pages, desk actions. Fixed and strip bindings coexist." },
+    { "id": "note-legend", "x": 1240, "y": 1060, "w": 380, "text": "Backend implied: a desk-side selection shared by the busk view and the surface; strip / selectionProperty / encoderBank / select / applyLook / pressTemplate / pressPad / buskPage binding targets; and one keyed surfaceControls.state stream for fader position, touch, LED and ring state. Plan document to follow." }
+  ],
+  "launch": { "view": "canvas" }
+}
