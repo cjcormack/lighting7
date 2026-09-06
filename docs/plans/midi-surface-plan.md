@@ -1,7 +1,7 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a` and session 2 (strips and the encoder bank) as `TBC` (fill in on commit); sessions 3–5 are
+> `758ee9a` and session 2 (strips and the encoder bank) as `09b877c`; sessions 3–5 are
 > proposed.** Session 2 amendments: §11's second question was answered **toggle *and* long press to
 > replace** — a `SelectTarget(TOGGLE)` toggles on press and, if still held at
 > `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), also fires a `REPLACE`, so the LED stays immediate
