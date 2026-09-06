@@ -43,6 +43,13 @@ class ControlSurfaceBindingService(
      * back to [AssignmentHealth.Ok] in that case.
      */
     private val healthContextProvider: ((projectId: Int) -> BindingHealthEvaluator.Context?)? = null,
+    /**
+     * The channel strips a device profile declares, for the strip arm of [resolve]. Defaults to
+     * the live registry; injectable so tests can resolve against a synthetic profile.
+     */
+    private val stripsFor: (deviceTypeKey: String) -> List<StripDescriptor> = { typeKey ->
+        ControlSurfaceRegistry.typeFor(typeKey)?.strips.orEmpty()
+    },
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(ControlSurfaceBindingService::class.java)
@@ -93,6 +100,21 @@ class ControlSurfaceBindingService(
     private data class ControlKey(val deviceTypeKey: String, val controlId: String)
 
     private val cache = ConcurrentHashMap<Int, ProjectCache>()
+
+    /**
+     * Per device type: which strip claims each control, and the strip ids themselves. Profiles are
+     * immutable for the life of the process, so this is computed once per device type rather than
+     * re-scanned on every event — [resolve] is on the MIDI hot path.
+     */
+    private class StripIndex(val byControl: Map<String, StripControl>, val stripIds: Set<String>)
+
+    private val stripIndexes = ConcurrentHashMap<String, StripIndex>()
+
+    private fun stripIndexFor(deviceTypeKey: String): StripIndex =
+        stripIndexes.computeIfAbsent(deviceTypeKey) { typeKey ->
+            val strips = stripsFor(typeKey)
+            StripIndex(stripControlsByControlId(strips), strips.mapTo(HashSet()) { it.id })
+        }
 
     // Projects whose cache has been loaded at least once. Guards against repeat DB hits
     // on every resolve() for well-known "no bindings" projects.
@@ -152,18 +174,57 @@ class ControlSurfaceBindingService(
     }
 
     /**
-     * Resolve an inbound event from `(deviceTypeKey, controlId)` on the given [activeBank].
-     * Exact-bank match wins over a bank-agnostic (bank = null) binding.
+     * Resolve an inbound event from `(deviceTypeKey, controlId)` on the given [activeBank] and
+     * [encoderBankProperty]. This is the one resolution entry point — the input router, the
+     * feedback index and the takeover-policy lookup all come through here — so the strip arm
+     * below needs no second implementation anywhere.
+     *
+     * The order is **the control's own binding across both bank levels, then its strip's across
+     * both**:
+     *
+     *   1. the control's row for the exact bank,
+     *   2. the control's bank-agnostic row,
+     *   3. the row on the strip containing the control, for the exact bank,
+     *   4. that strip's bank-agnostic row.
+     *
+     * Direct before strip at *both* levels is the load-bearing part: a bank-agnostic strip must
+     * lose to an exact-bank binding on one of its controls, which is what makes "any control can
+     * still be bound on its own" true regardless of banks.
+     *
+     * A strip hit is answered as the strip's row with the control's id and the target that
+     * control behaves as ([deriveStripTarget]), so the four derived bindings share the strip
+     * row's id, takeover policy and health. Health is deliberately not re-evaluated per derived
+     * target: an encoder whose bank property no selected head declares reads unbound and drops
+     * its turn, which is a property of the selection rather than a dead binding.
      */
     fun resolve(
         projectId: Int,
         deviceTypeKey: String,
         controlId: String,
         activeBank: String?,
+        encoderBankProperty: String,
     ): ResolvedBinding? {
         ensureLoaded(projectId)
-        val byBank = cache[projectId]?.byControl?.get(ControlKey(deviceTypeKey, controlId)) ?: return null
-        return byBank[activeBank] ?: byBank[null]
+        val byControl = cache[projectId]?.byControl ?: return null
+
+        byControl[ControlKey(deviceTypeKey, controlId)]?.let { byBank ->
+            byBank[activeBank]?.let { return it }
+            byBank[null]?.let { return it }
+        }
+
+        val onStrip = stripIndexFor(deviceTypeKey).byControl[controlId] ?: return null
+        val stripByBank = byControl[ControlKey(deviceTypeKey, onStrip.strip.id)] ?: return null
+        val stripBinding = stripByBank[activeBank] ?: stripByBank[null] ?: return null
+
+        // Always the id of the control the event arrived on, even on the fallback below, so a
+        // dead-binding warning names the fader the operator is pushing rather than its strip.
+        val stripTarget = stripBinding.target as? BindingTarget.Strip
+            ?: return stripBinding.copy(controlId = controlId)
+
+        return stripBinding.copy(
+            controlId = controlId,
+            target = deriveStripTarget(onStrip.role, stripTarget.target, encoderBankProperty),
+        )
     }
 
     private fun ProjectCache.install(binding: ResolvedBinding) {
@@ -194,6 +255,7 @@ class ControlSurfaceBindingService(
         sortOrder: Int = 0,
     ): ResolvedBinding {
         refuseUnknown(target)
+        refuseWrongSlot(deviceTypeKey, controlId, target)
         ensureLoaded(projectId)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
@@ -246,6 +308,7 @@ class ControlSurfaceBindingService(
             val existing = pc.byId[bindingId] ?: return null
             val newDeviceTypeKey = deviceTypeKey ?: existing.deviceTypeKey
             val newControlId = controlId ?: existing.controlId
+            refuseWrongSlot(newDeviceTypeKey, newControlId, target ?: existing.target)
             val newBank = when (bankUpdate) {
                 is FieldUpdate.NoChange -> existing.bank
                 is FieldUpdate.Set -> bankUpdate.value
@@ -298,6 +361,91 @@ class ControlSurfaceBindingService(
         }
         if (removed) _changes.tryEmit(BindingChange.Removed(projectId, bindingId))
         return removed
+    }
+
+    /** One row a [replace] call should create. */
+    data class NewBinding(
+        val deviceTypeKey: String,
+        val controlId: String,
+        val bank: String?,
+        val target: BindingTarget,
+        val takeoverPolicy: BindingTakeoverPolicy? = null,
+        val sortOrder: Int = 0,
+    )
+
+    /**
+     * Delete some rows and create others as one unit — what *Fader only…* does when it turns a
+     * strip binding into the four single bindings it was deriving.
+     *
+     * Every new slot is checked free (allowing for the rows being deleted in the same call)
+     * **before** the first delete, because the uniqueness check reads the cache: a failure part
+     * way through would otherwise leave the cache and the DB disagreeing. One transaction, one
+     * [BindingChange.Reloaded], so the feedback publisher rebuilds its index once rather than
+     * once per row.
+     *
+     * Returns the created bindings in the order given. Throws [IllegalStateException] on a slot
+     * clash and [IllegalArgumentException] for an id that is not this project's.
+     */
+    fun replace(projectId: Int, deleteIds: List<Int>, creates: List<NewBinding>): List<ResolvedBinding> {
+        creates.forEach {
+            refuseUnknown(it.target)
+            refuseWrongSlot(it.deviceTypeKey, it.controlId, it.target)
+        }
+        ensureLoaded(projectId)
+        val created = synchronized(lockFor(projectId)) {
+            val pc = cache.getOrPut(projectId) { ProjectCache() }
+
+            val doomed = deleteIds.map { id ->
+                pc.byId[id] ?: throw IllegalArgumentException("Binding $id not found in project $projectId")
+            }
+            val freed = doomed.mapTo(mutableSetOf()) { ControlKey(it.deviceTypeKey, it.controlId) to it.bank }
+
+            val claimed = mutableSetOf<Pair<ControlKey, String?>>()
+            for (create in creates) {
+                val slot = ControlKey(create.deviceTypeKey, create.controlId) to create.bank
+                check(claimed.add(slot)) {
+                    "Two new bindings claim ${create.deviceTypeKey}.${create.controlId} (bank=${create.bank})"
+                }
+                if (slot in freed) continue
+                val clash = pc.byControl[slot.first]?.get(slot.second)
+                check(clash == null) {
+                    "Binding already exists for ${create.deviceTypeKey}.${create.controlId} " +
+                        "(bank=${create.bank}) in project $projectId"
+                }
+            }
+
+            val raw = transaction(database) {
+                for (id in deleteIds) {
+                    val row = DaoControlSurfaceBinding.findById(id)
+                        ?: throw IllegalArgumentException("Binding $id not found")
+                    if (row.project.id.value != projectId) {
+                        throw IllegalArgumentException("Binding $id is not in project $projectId")
+                    }
+                    row.delete()
+                }
+                val project = DaoProject.findById(projectId)
+                    ?: throw IllegalArgumentException("Project $projectId not found")
+                creates.map { create ->
+                    val stored = create.target.withUuids(projectId)
+                    DaoControlSurfaceBinding.new {
+                        this.project = project
+                        this.deviceTypeKey = create.deviceTypeKey
+                        this.controlId = create.controlId
+                        this.bank = create.bank
+                        this.targetType = stored.discriminator()
+                        this.targetPayload = stored.encodePayload()
+                        this.takeoverPolicy = create.takeoverPolicy?.name
+                        this.sortOrder = create.sortOrder
+                    }.toResolved()
+                }
+            }
+
+            val context = resolveHealthContext(projectId)
+            doomed.forEach { pc.uninstall(it) }
+            raw.map { it.withHealth(context) }.onEach { pc.install(it) }
+        }
+        _changes.tryEmit(BindingChange.Reloaded(projectId))
+        return created
     }
 
     /** Drop the cache entry for a project and force reload on next access. */
@@ -384,6 +532,33 @@ class ControlSurfaceBindingService(
         if (target is BindingTarget.Unknown) {
             throw IllegalArgumentException(
                 "A binding target of type '${target.targetType}' cannot be created from a request",
+            )
+        }
+    }
+
+    /**
+     * A strip id and a control id share the `control_id` column but are not interchangeable: a
+     * strip binding covers four controls by derivation, so it is only meaningful on a strip, and a
+     * strip slot is only meaningful holding one. Enforced **here** rather than only in the REST
+     * routes because this service is the one door every write goes through — the routes, and MIDI
+     * Learn's commit, which has no route validation of its own. The rest of the strip code takes
+     * the invariant as given: a raw `Strip` reaching dispatch is a control that silently does
+     * nothing, and health cannot see it because a `Strip`'s health only judges its group.
+     *
+     * The routes still run their own version first, to answer a coded 400 the frontend can branch
+     * on; this is the backstop that makes the invariant true rather than merely usual.
+     */
+    private fun refuseWrongSlot(deviceTypeKey: String, controlId: String, target: BindingTarget) {
+        val isStripSlot = controlId in stripIndexFor(deviceTypeKey).stripIds
+        if (target is BindingTarget.Strip && !isStripSlot) {
+            throw IllegalArgumentException(
+                "'$controlId' on $deviceTypeKey is a control, not a strip — a strip binding covers a whole strip",
+            )
+        }
+        if (target !is BindingTarget.Strip && isStripSlot) {
+            throw IllegalArgumentException(
+                "'$controlId' on $deviceTypeKey is a strip and takes a strip target; " +
+                    "bind its controls individually instead",
             )
         }
     }

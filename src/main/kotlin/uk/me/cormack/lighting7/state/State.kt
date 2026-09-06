@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
+import uk.me.cormack.lighting7.midi.EncoderBankState
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
@@ -527,6 +528,14 @@ class State(val config: ApplicationConfig) {
     val activeBankState: ActiveBankState by lazy { ActiveBankState() }
 
     /**
+     * Which attribute each device's strip encoders drive. Session state like [activeBankState],
+     * but **reset on project switch**: the property names it holds come from the patch, so
+     * carrying one across projects would point the encoders at an attribute the new rig may not
+     * have (`docs/plans/midi-surface-plan.md` D5).
+     */
+    val encoderBankState: EncoderBankState by lazy { EncoderBankState() }
+
+    /**
      * The desk's one shared selection — what a selection-relative surface control and a busk
      * press act on. State-scoped like [activeBankState] so it outlives a `Show`, cleared on
      * project switch and pruned on fixture reload; never persisted. See
@@ -615,6 +624,7 @@ class State(val config: ApplicationConfig) {
             controllerLookup = midiRegistry::controllerFor,
             bindingService = controlSurfaceBindingService,
             bankState = activeBankState,
+            encoderBankState = encoderBankState,
             flashTracker = flashStateTracker,
             projectIdProvider = { projectManager.currentProject.id.value },
             fixturesProvider = { show.fixtures },
@@ -638,6 +648,7 @@ class State(val config: ApplicationConfig) {
             controllerLookup = midiRegistry::controllerFor,
             bindingService = controlSurfaceBindingService,
             bankState = activeBankState,
+            encoderBankState = encoderBankState,
             flashTracker = flashStateTracker,
             projectIdProvider = { projectManager.currentProject.id.value },
             actions = DefaultSurfaceActions(this),
@@ -671,8 +682,10 @@ class State(val config: ApplicationConfig) {
         projectChangedJob = GlobalScope.launch {
             projectManager.projectChangedFlow.collect {
                 // Before the publisher rebuilds: a selection naming the old project's heads must
-                // not survive into the new show's index.
+                // not survive into the new show's index, and an encoder bank pointing at an
+                // attribute the new rig has no fixture for would leave every strip encoder dark.
                 deskSelection.clear()
+                encoderBankState.clearAll()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
                 // Patch / cue / stack row identities flip on project switch; re-evaluate

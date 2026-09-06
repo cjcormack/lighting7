@@ -111,6 +111,33 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
+    fun `a strip is judged by its target alone, not by the properties it derives`() {
+        val ctx = context()
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("group", "front-wash")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingGroup("side-wash"),
+            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("group", "side-wash")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingFixture("hex-9"),
+            BindingHealthEvaluator.evaluate(BindingTarget.Strip(CueTargetDto("fixture", "hex-9")), ctx),
+        )
+    }
+
+    @Test
+    fun `EncoderBankSet needs a property some patched fixture can take`() {
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("dimmer"), ctx))
+        assertEquals(
+            AssignmentHealth.UnknownProperty("tilt"),
+            BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("tilt"), ctx),
+        )
+    }
+
+    @Test
     fun `ClearSelection and LocateSelection are always Ok and Unknown is always dead`() {
         val ctx = context()
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ClearSelection, ctx))

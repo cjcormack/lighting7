@@ -56,6 +56,17 @@ data class SurfaceBankSetInMessage(
 data object SurfaceBankStateInMessage : SurfaceInMessage()
 
 @Serializable
+@SerialName("surfaceEncoderBank.set")
+data class SurfaceEncoderBankSetInMessage(
+    val deviceTypeKey: String,
+    val propertyName: String,
+) : SurfaceInMessage()
+
+@Serializable
+@SerialName("surfaceEncoderBank.state")
+data object SurfaceEncoderBankStateInMessage : SurfaceInMessage()
+
+@Serializable
 @SerialName("surfaceScaler.state")
 data object SurfaceScalerStateInMessage : SurfaceInMessage()
 
@@ -137,6 +148,18 @@ data class SurfaceBindingsChangedOutMessage(
 data class SurfaceBankStateOutMessage(
     /** `deviceTypeKey` → active bank id (null values elided). */
     val activeBanks: Map<String, String>,
+) : SurfaceOutMessage()
+
+/**
+ * Which attribute each device's strip encoders drive. One frame type: it is a StateFlow, so the
+ * subscription is both the connect snapshot and the broadcast, and a delta frame would carry
+ * nothing the whole map doesn't.
+ */
+@Serializable
+@SerialName("surfaceEncoderBank.state")
+data class SurfaceEncoderBankStateOutMessage(
+    /** `deviceTypeKey` → property name. A device absent from the map is on the default. */
+    val properties: Map<String, String>,
 ) : SurfaceOutMessage()
 
 @Serializable
@@ -248,6 +271,10 @@ suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
         is SurfaceBankSetInMessage -> state.activeBankState.setBank(message.deviceTypeKey, message.bank)
         is SurfaceBankStateInMessage ->
             scope.send(SurfaceBankStateOutMessage(state.activeBankState.active.value))
+        is SurfaceEncoderBankSetInMessage ->
+            state.encoderBankState.setProperty(message.deviceTypeKey, message.propertyName)
+        is SurfaceEncoderBankStateInMessage ->
+            scope.send(SurfaceEncoderBankStateOutMessage(state.encoderBankState.properties.value))
         is SurfaceDevicesStateInMessage ->
             scope.send(buildSurfaceDevicesStateMessage(
                 state.midiRegistry.devices.value,
@@ -277,6 +304,10 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
     // would be lost in both, and nothing pushes full bank state again to correct it.
     // `surfaceScaler.state` and `surfaceDevices.state` get theirs the same way, below.
     scope.subscribe(state.activeBankState.active) { scope.send(SurfaceBankStateOutMessage(it)) }
+
+    // Same rule, one frame: the encoder bank has no "changed" delta, so the StateFlow
+    // subscription is snapshot and broadcast both.
+    scope.subscribe(state.encoderBankState.properties) { scope.send(SurfaceEncoderBankStateOutMessage(it)) }
 
     // Learn-event broadcasts are filtered to sessions this connection started, so two
     // `/surfaces` tabs don't see phantom captures from each other's sessions.

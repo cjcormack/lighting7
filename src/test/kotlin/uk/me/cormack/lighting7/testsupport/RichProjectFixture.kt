@@ -590,6 +590,22 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         targetPayload = """{"type":"fireCue","cueId":${cue1.id.value},"cueUuid":"${cue1.uuid}"}"""
         sortOrder = 6
     }
+    // A whole strip on one row, and an encoder-bank button (midi-surface plan, session 2).
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "strip-1"; bank = "bank-a"
+        targetType = "strip"
+        targetPayload = """{"type":"strip","target":{"type":"group","key":"front-wash"}}"""
+        takeoverPolicy = "PICKUP"
+        sortOrder = 7
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-6"
+        targetType = "encoderBankSet"
+        targetPayload = """{"type":"encoderBankSet","propertyName":"pan"}"""
+        sortOrder = 8
+    }
 
     // Wire up the show playhead to the first stack.
     project.activeStackId = stack1.id.value

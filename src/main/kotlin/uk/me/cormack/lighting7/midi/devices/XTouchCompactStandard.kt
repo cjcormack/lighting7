@@ -83,5 +83,50 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
         }
         bank(id = "layer-a", name = "A", inputProgramChange = 0)
         bank(id = "layer-b", name = "B", inputProgramChange = 1)
+
+        // The device physically *is* eight channel strips plus a master, which is how MagicQ
+        // and Eos users map it. Encoder above, flash button on the upper top row, fader, select
+        // button beneath. The master strip has no encoder of its own.
+        repeat(8) { i ->
+            strip(
+                id = "strip-${i + 1}",
+                fader = "fader-${i + 1}",
+                select = "btn-${25 + i}",
+                encoder = "enc-${i + 1}",
+                flash = "btn-${i + 1}",
+            )
+        }
+        strip(id = "strip-master", fader = "fader-9", select = "btn-33")
+
+        layout {
+            // Eight strip columns, top to bottom exactly as the panel reads.
+            region("strips", columns = 8) {
+                repeat(8) { i ->
+                    column(i) {
+                        cell("enc-${i + 1}")
+                        cell("btn-${i + 1}")
+                        cell("btn-${9 + i}")
+                        cell("btn-${17 + i}")
+                        cell("fader-${i + 1}")
+                        cell("btn-${25 + i}")
+                    }
+                }
+            }
+            // The right-hand block: encoders 9–16 fill a 2x4 grid row by row (rows 0..3), the
+            // six function buttons the three rows beneath them (rows 4..6).
+            region("right", columns = 2) {
+                repeat(8) { i -> cell("enc-${9 + i}", col = i % 2, row = i / 2) }
+                repeat(6) { i -> cell("btn-${34 + i}", col = i % 2, row = 4 + i / 2) }
+            }
+            // The master column: the A/B layer button pair, the master fader, its select button.
+            region("master", columns = 1) {
+                column(0) {
+                    cell("bank-layer-a")
+                    cell("bank-layer-b")
+                    cell("fader-9")
+                    cell("btn-33")
+                }
+            }
+        }
     }
 }

@@ -215,7 +215,9 @@ class XTouchCompactStandard : ControlSurfaceDevice() {
 }
 ```
 
-The `ControlSurfaceRegistry` is strictly stricter than `FixtureTypeRegistry` — it fails fast on duplicate `typeKey` *and* on duplicate `controlId` within a class. Rationale: `controlId` is a stable contract persisted in binding rows, so a duplicate would silently break persisted bindings.
+The `ControlSurfaceRegistry` is strictly stricter than `FixtureTypeRegistry` — it fails fast on duplicate `typeKey` *and* on duplicate `controlId` within a class, plus the strip and layout rules below. Rationale: `controlId` is a stable contract persisted in binding rows, so a duplicate would silently break persisted bindings.
+
+A profile may also declare **strips** (see [Strips](#strips)) and a **layout**: named regions (`strips`, `right`, `master` on the X-Touch) with a `(region, col, row)` cell per control, so the Surfaces view draws any profile that has one from data rather than needing a React component per device. A profile without a layout renders as the grouped table. When a layout *is* declared the registry requires it to be complete — every declared control gets exactly one cell — because a control with no cell would simply vanish from the picture with nothing else reporting it. Both reach the frontend on `GET /api/rest/control-surface-types`.
 
 ### DeviceMatcher
 
@@ -226,6 +228,56 @@ The `ControlSurfaceRegistry` is strictly stricter than `FixtureTypeRegistry` —
 - `UnmatchedDeviceConnected(handle)` — device with no matching profile; MIDI Learn can still bind it via its generic CC / note scheme
 
 Every inbound `Connected` event yields exactly one `SurfaceEvent` — the matcher is the single arbiter of "is this device one we know about?".
+
+## Strips
+
+Fixed per-control bindings run out fast: nine faders and sixteen encoders is not many, and every console the composition model measures itself against solves that the same way — a **channel strip**. The profile declares which controls form one column, and a *single* binding row addressed by the strip id then covers all of them.
+
+```kotlin
+repeat(8) { i ->
+    strip(id = "strip-${i + 1}", fader = "fader-${i + 1}", select = "btn-${25 + i}",
+          encoder = "enc-${i + 1}", flash = "btn-${i + 1}")
+}
+strip(id = "strip-master", fader = "fader-9", select = "btn-33")   // no encoder
+```
+
+A strip id lives in the **same `control_id` column** as a control id — no new table, no new column — so the two share one slot namespace and the registry refuses a collision. `buildFromClasses` also fails fast on a duplicate strip id, a strip naming an undeclared control, a role naming a control of the wrong kind (fader→`FaderDescriptor`, select/flash→`ButtonDescriptor`, encoder→`EncoderDescriptor`), and a control claimed by two strips. Same reasoning as the duplicate-`controlId` check: these ids are a persisted contract.
+
+**Derivation** is the pure function `deriveStripTarget(role, target, encoderBankProperty)` in `midi/StripDerivation.kt`:
+
+| Role | Behaves as |
+|---|---|
+| fader | `GroupProperty(key, "dimmer")` / `FixtureProperty(key, "dimmer")` |
+| select | `SelectTarget(target, TOGGLE)` |
+| encoder | the same property target on the device's current [encoder bank](#encoder-bank) |
+| flash | `Flash(<the dimmer target>, 255)` |
+
+One function, because the input router, the feedback index and the frontend inspector all have to agree about what a strip control does.
+
+**Resolution order** — `ControlSurfaceBindingService.resolve` answers the control's own binding *across both bank levels* before it looks at the strip, then the strip across both:
+
+1. the control's row for the exact bank
+2. the control's bank-agnostic row
+3. the strip's row for the exact bank
+4. the strip's bank-agnostic row
+
+Direct before strip at **both** levels is the load-bearing part: a bank-agnostic single binding beats an exact-bank strip, which is what makes "any control can still be bound on its own" true regardless of banks. `resolve` is the only resolution entry point — router, feedback index and takeover-policy lookup all come through it — so the strip arm needs no second implementation.
+
+A strip hit is answered as the strip's row with the control's id and the derived target, so the four derived bindings share the strip row's `id`, `takeoverPolicy` and `health`. Health is deliberately **not** re-evaluated per derived target: an encoder whose bank property no selected head declares reads unbound and drops its turn, which is a property of the selection rather than a dead binding.
+
+`BindingTarget.Strip` is stored but never dispatched, and the rest of the strip code takes that as given — a raw `Strip` reaching dispatch is a control that silently does nothing, and health cannot catch it because a `Strip`'s health only judges its group. So the slot rule is enforced **in `ControlSurfaceBindingService`**, beside `refuseUnknown`, on `create` / `update` / `replace`: that is the one door every write goes through, including MIDI Learn's commit, which has no route validation of its own. `POST` / `PATCH /surface-bindings` run their own copy first only so the frontend gets a coded 400 to branch on — `BINDING_STRIP_NEEDS_STRIP` for a `Strip` on a control id, `BINDING_CONTROL_NOT_STRIP` for anything else on a strip id.
+
+`POST .../{bindingId}/expand` turns a strip row into the four single rows it was deriving (the inspector's *Fader only…*) in one transaction via `ControlSurfaceBindingService.replace`.
+
+## Encoder bank
+
+Which attribute a device's strip encoders drive is per-device session state: `EncoderBankState`, shaped exactly like `ActiveBankState` with a property name where that has a bank id — one map-valued `StateFlow` for the snapshot, a lock-free `propertyFor()` for the hot path, a `changes` `SharedFlow` for the publisher. Default `dimmer`.
+
+It moves two ways: a button bound to `EncoderBankSet(propertyName)`, which applies to **the device the button is on** (the payload names no device, so a bank button can never be stranded pointing at a surface that is not attached), or the frontend's `surfaceEncoderBank.set`.
+
+It survives a device unplug and is **reset on project switch** — unlike the active bank, which does not. The vocabulary it draws from is the patch's (`BindingHealthEvaluator.selectionPropertiesOf`, the same set `SelectionProperty` validates against), so carrying a property across projects could point every encoder at an attribute the new rig has no fixture for.
+
+A change rebuilds the feedback index — every strip encoder now stands on different channels — and re-arms takeover on that type's devices through the same path a bank change uses, because the meaning of the control moved under the operator's hand without them touching it.
 
 ## Binding model
 
@@ -258,9 +310,11 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
 | `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
 | `SelectionProperty(propertyName)` | Continuous (press = full) | Programmer write (owner `surface`) on **every head in the desk selection** via `SelectionWrites`; an empty selection drops the write with a debug log, never widened to "everything". Health `unknownProperty` when no patched fixture can take the property on a fader |
-| `SelectTarget(target, mode)` | Button | `DeskSelection.toggle` (head-by-head, a group by its members) or `set(listOf(target))` for `REPLACE`; LED lit while the target's heads are all selected |
+| `SelectTarget(target, mode)` | Button | `DeskSelection.toggle` (head-by-head, a group by its members) or `set(listOf(target))` for `REPLACE`; LED lit while the target's heads are all selected. A `TOGGLE` binding toggles on press **and**, if the button is still held at `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), fires a `REPLACE` as well — the fader-wing gesture, so the LED is immediate and a hold narrows the selection to that one target. A release always cancels the pending replacement, even if the binding changed or went dead meanwhile. A `REPLACE` binding acts on press and arms no hold |
 | `ClearSelection` | Button | `DeskSelection.clear()` |
 | `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
+| `Strip(target)` | — (a strip slot) | Never dispatched: `resolve` derives it to the target of the control the event arrived on. See [Strips](#strips) |
+| `EncoderBankSet(propertyName)` | Button | `EncoderBankState.setProperty` for the device the button is on; LED lit while that property is the device's encoder bank. Health `unknownProperty` when no patched fixture can take it |
 | `Unknown(targetType, rawPayload)` | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant row decode for a `type` this build does not know; re-encoded verbatim; refused by the create / PATCH routes |
 
 The cue and stack variants carry a **uuid beside the int** (`FireCue(cueId, cueUuid?)`,
@@ -514,6 +568,8 @@ From `State.kt`:
 | `surfaceDevices.state` | *(request current device list)* |
 | `surfaceBank.set` | `{ deviceTypeKey, bank }` |
 | `surfaceBank.state` | *(request active banks)* |
+| `surfaceEncoderBank.set` | `{ deviceTypeKey, propertyName }` |
+| `surfaceEncoderBank.state` | *(request encoder banks)* |
 | `surfaceScaler.setBlackout` | `{ enabled }` |
 | `surfaceScaler.setGrandMaster` | `{ enabled }` |
 | `surfaceScaler.state` | *(request scaler state)* |
@@ -529,6 +585,7 @@ From `State.kt`:
 | `surfaceDevices.state` | Aggregate of `midiRegistry.devices ∪ deviceMatcher.attached ∪ activeBankState.active` |
 | `surfaceBank.state` | `{ banks: Map<deviceTypeKey, bank> }` |
 | `surfaceBank.changed` | Single delta event |
+| `surfaceEncoderBank.state` | `{ properties: Map<deviceTypeKey, propertyName> }` — one frame type: it is a StateFlow, so the subscription is snapshot and broadcast both, and there is no delta frame |
 | `surfaceScaler.state` | `{ blackout, grandMaster }` |
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
@@ -543,8 +600,9 @@ From `State.kt`:
 | `GET /api/rest/control-surface-types` | Device profile metadata for the frontend |
 | `GET /api/rest/projects/{projectId}/surface-bindings` | List bindings |
 | `POST /api/rest/projects/{projectId}/surface-bindings` | Create binding |
-| `PATCH /api/rest/projects/{projectId}/surface-bindings/{id}` | Update (uses `FieldUpdate<T>` sentinel for nullable fields) |
+| `PATCH /api/rest/projects/{projectId}/surface-bindings/{id}` | Update (uses `FieldUpdate<T>` sentinel for nullable fields). Shape-validated against the row it *becomes*, the same check `POST` runs |
 | `DELETE /api/rest/projects/{projectId}/surface-bindings/{id}` | Delete |
+| `POST /api/rest/projects/{projectId}/surface-bindings/{id}/expand` | Replace a strip binding with the individual bindings it was deriving (*Fader only…*), in one transaction |
 
 ## Known limitations
 
@@ -554,7 +612,7 @@ From `State.kt`:
 
 3. **Soft-takeover only applies to faders.** Encoders always use `IMMEDIATE` policy. If an encoder's logical value drifts (e.g. a cue changed it), the next encoder turn snaps the hardware to the new value. This matches industry practice but is worth knowing.
 
-4. **Enum / setting properties are button-only.** `PropertyChannelResolver` returns empty for `DmxFixtureSetting`. Continuous-to-enum mappings are disallowed at bind time (Open Question 7).
+4. **Enum / setting properties are button-only.** `PropertyChannelResolver` returns empty for `DmxFixtureSetting`. Continuous-to-enum mappings are disallowed at bind time (Open Question 7). Bind-time refusals about strips carry a machine-readable `code` (`BINDING_STRIP_NEEDS_STRIP`, `BINDING_CONTROL_NOT_STRIP`); the older shape errors on this route still answer 400 with a message alone.
 
 5. **No cross-session ownership for continuous controls.** Two `/surfaces` tabs can create conflicting bindings; the last-write-wins mutation happens under a per-project mutex, so atomicity is preserved, but there's no "this surface belongs to this operator" concept.
 

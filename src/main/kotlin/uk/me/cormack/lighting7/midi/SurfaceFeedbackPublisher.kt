@@ -103,6 +103,7 @@ class SurfaceFeedbackPublisher(
     private val controllerLookup: (String) -> MidiController?,
     private val bindingService: ControlSurfaceBindingService,
     private val bankState: ActiveBankState,
+    private val encoderBankState: EncoderBankState,
     private val flashTracker: FlashStateTracker,
     private val projectIdProvider: () -> Int,
     private val fixturesProvider: () -> Fixtures,
@@ -204,6 +205,8 @@ class SurfaceFeedbackPublisher(
         val selectLeds: List<LedEntry>,
         /** `LocateSelection` buttons: lit while every selected target is located. */
         val locateLeds: List<LedEntry>,
+        /** `EncoderBankSet` buttons: lit while that property is the device's encoder bank. */
+        val encoderBankLeds: List<LedEntry>,
         /**
          * Tempo-bound continuous controls. A flat list rather than a map: there is at most
          * one per physical encoder on an attached surface, so a scan per tempo change is
@@ -215,7 +218,7 @@ class SurfaceFeedbackPublisher(
         companion object {
             val EMPTY = Index(
                 emptyMap(), emptyMap(), emptyMap(), emptyMap(),
-                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
             )
         }
     }
@@ -256,6 +259,9 @@ class SurfaceFeedbackPublisher(
         }
         jobs += scope.launch(CoroutineName("FeedbackPublisher-banks")) {
             bankState.changes.collect { onBankChanged(it) }
+        }
+        jobs += scope.launch(CoroutineName("FeedbackPublisher-encoder-banks")) {
+            encoderBankState.changes.collect { onEncoderBankChanged(it) }
         }
         jobs += scope.launch(CoroutineName("FeedbackPublisher-flash")) {
             flashTracker.changes.collect { onFlashChanged(it) }
@@ -441,7 +447,9 @@ class SurfaceFeedbackPublisher(
             return classDefault
         }
         val bank = bankState.bankFor(deviceTypeKey)
-        val binding = bindingService.resolve(projectId, deviceTypeKey, controlId, bank)
+        val binding = bindingService.resolve(
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.propertyFor(deviceTypeKey),
+        )
         return binding?.takeoverPolicy ?: classDefault
     }
 
@@ -465,8 +473,25 @@ class SurfaceFeedbackPublisher(
 
     private fun onBankChanged(change: ActiveBankState.BankChange) {
         rebuildIndex()
+        resyncDevicesOfType(change.deviceTypeKey)
+    }
+
+    /**
+     * The encoder bank moved: every strip encoder on that device now stands on a different
+     * property's channels, so the index is stale and pickup is re-armed — the meaning of the
+     * control changed under the operator's hand, which is exactly the case
+     * [SoftTakeoverStateMachine.forcePickup] exists for. Handled device-wide like a bank change
+     * rather than per control: it is the same staleness, and reusing the path keeps one
+     * definition of "this device's feedback is now wrong".
+     */
+    private fun onEncoderBankChanged(change: EncoderBankState.EncoderBankChange) {
+        rebuildIndex()
+        resyncDevicesOfType(change.deviceTypeKey)
+    }
+
+    private fun resyncDevicesOfType(deviceTypeKey: String) {
         for ((displayKey, attached) in deviceMatcher.attached.value) {
-            if (attached.typeKey != change.deviceTypeKey) continue
+            if (attached.typeKey != deviceTypeKey) continue
             sendFullResync(displayKey, rearmPickup = true)
         }
     }
@@ -552,6 +577,7 @@ class SurfaceFeedbackPublisher(
         val grandMasterLeds = mutableListOf<LedEntry>()
         val selectLeds = mutableListOf<LedEntry>()
         val locateLeds = mutableListOf<LedEntry>()
+        val encoderBankLeds = mutableListOf<LedEntry>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
         // Expanded once per rebuild, not once per bound control.
         val selectedHeads = deskSelection?.coverage().orEmpty()
@@ -559,8 +585,11 @@ class SurfaceFeedbackPublisher(
         for ((displayKey, a) in attached) {
             val profile = profilesByKey[a.typeKey] ?: continue
             val bank = bankState.bankFor(a.typeKey)
+            // Read once per device: it decides what every strip encoder on it resolves to.
+            val encoderBankProperty = encoderBankState.propertyFor(a.typeKey)
             for (control in profile.controls) {
-                val binding = bindingService.resolve(projectId, a.typeKey, control.controlId, bank) ?: continue
+                val binding = bindingService
+                    .resolve(projectId, a.typeKey, control.controlId, bank, encoderBankProperty) ?: continue
                 if (control is FaderDescriptor || control is EncoderDescriptor) {
                     val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
                         BindingTakeoverPolicy.PICKUP
@@ -603,6 +632,7 @@ class SurfaceFeedbackPublisher(
                         is BindingTarget.GrandMasterToggle -> { grandMasterLeds += entry; true }
                         is BindingTarget.SelectTarget -> { selectLeds += entry; true }
                         is BindingTarget.LocateSelection -> { locateLeds += entry; true }
+                        is BindingTarget.EncoderBankSet -> { encoderBankLeds += entry; true }
                         else -> false
                     }
                     if (listed) ledsByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
@@ -620,6 +650,7 @@ class SurfaceFeedbackPublisher(
                 grandMasterLeds = grandMasterLeds,
                 selectLeds = selectLeds,
                 locateLeds = locateLeds,
+                encoderBankLeds = encoderBankLeds,
                 speedMasterEntries = speedMasterEntries,
             )
         )
@@ -661,6 +692,8 @@ class SurfaceFeedbackPublisher(
             } catch (_: Exception) { null }
             fixture?.let { PropertyChannelResolver.describeFixtureProperty(it, target.propertyName).firstOrNull() }
         }
+        // Never seen here: resolve() derives a strip to one of the property targets above.
+        is BindingTarget.Strip -> null
         else -> null
     }
 
@@ -717,6 +750,10 @@ class SurfaceFeedbackPublisher(
         is BindingTarget.LocateSelection -> selectionLocated(
             runCatching { locateManagerProvider?.invoke()?.activeTargets?.value }.getOrNull().orEmpty(),
         )
+        is BindingTarget.EncoderBankSet ->
+            encoderBankState.propertyFor(entry.binding.deviceTypeKey) == target.propertyName
+        // Never indexed: resolve() derives a strip to the target of the control it stands on.
+        is BindingTarget.Strip -> null
         else -> null
     }
 

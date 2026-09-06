@@ -117,3 +117,61 @@ data class BankButtonDescriptor(
  * separately as a [BankButtonDescriptor] with the same [id].
  */
 data class BankDefinition(val id: String, val name: String)
+
+/**
+ * The role a control plays within a [StripDescriptor]. [Strip derivation][deriveStripTarget]
+ * turns a role plus the strip's target into the [BindingTarget] the control behaves as.
+ */
+enum class StripRole { FADER, SELECT, ENCODER, FLASH }
+
+/**
+ * A channel strip: the profile's declaration that these controls belong together as one
+ * fader-wing column. A *single* binding row addressed by [id] then covers all of them —
+ * the fader drives the target's dimmer, the select button selects it, the encoder drives
+ * whatever attribute the device's encoder bank names, and the flash button flashes it.
+ *
+ * [id] shares the `control_id` column with every [ControlDescriptor.controlId], so the
+ * registry refuses a strip id that collides with a control id — the binding table's
+ * unique slot index cannot tell the two apart.
+ *
+ * [encoder] and [flash] are optional: a master strip is a fader and a select button.
+ */
+data class StripDescriptor(
+    val id: String,
+    val fader: String,
+    val select: String,
+    val encoder: String? = null,
+    val flash: String? = null,
+) {
+    /** The control playing [role] on this strip, or null when the strip has no such control. */
+    fun controlFor(role: StripRole): String? = when (role) {
+        StripRole.FADER -> fader
+        StripRole.SELECT -> select
+        StripRole.ENCODER -> encoder
+        StripRole.FLASH -> flash
+    }
+
+    /** The role [controlId] plays on this strip, or null when it is not part of it. */
+    fun roleOf(controlId: String): StripRole? =
+        StripRole.entries.firstOrNull { controlFor(it) == controlId }
+
+    /** Every control this strip claims, in role order. */
+    val controlIds: List<String> get() = listOfNotNull(fader, select, encoder, flash)
+}
+
+/**
+ * Where a control sits when the surface is drawn as a picture rather than a table. Purely
+ * presentational data owned by the profile (rather than a React component per device), so
+ * a second device is still one `.kt` file.
+ */
+data class LayoutCell(val controlId: String, val col: Int, val row: Int)
+
+/** A named block of the panel — `strips`, `right`, `master` on the X-Touch Compact. */
+data class LayoutRegion(val name: String, val columns: Int, val cells: List<LayoutCell>)
+
+/**
+ * The whole panel. When a profile declares one the registry requires it to be complete:
+ * every declared control gets exactly one cell, so a control can never go missing from
+ * the picture unnoticed.
+ */
+data class SurfaceLayout(val regions: List<LayoutRegion>)

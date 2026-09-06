@@ -179,7 +179,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.invalidateHealth(projectId)
 
-        val resolved = service.resolve(projectId, "x-touch-compact-standard", "fader-1", activeBank = null)
+        val resolved = service.resolve(projectId, "x-touch-compact-standard", "fader-1", activeBank = null, encoderBankProperty = "dimmer")
         assertNotNull(resolved)
         // Dead but still reachable — SurfaceInputRouter is the one that drops the event.
         assertIs<AssignmentHealth.MissingFixture>(resolved.health)

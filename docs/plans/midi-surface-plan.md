@@ -1,7 +1,23 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a`; sessions 2–5 are proposed.** Session 1 amendments, beside the decisions they touch: §11's first
+> `758ee9a` and session 2 (strips and the encoder bank) as `TBC` (fill in on commit); sessions 3–5 are
+> proposed.** Session 2 amendments: §11's second question was answered **toggle *and* long press to
+> replace** — a `SelectTarget(TOGGLE)` toggles on press and, if still held at
+> `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), also fires a `REPLACE`, so the LED stays immediate
+> and the hold narrows; `EncoderBankState` copies `ActiveBankState`'s actual shape (one map-valued
+> `StateFlow`, no `ConcurrentHashMap` fast path and no per-device flow) rather than §3.4's letter;
+> `EncoderBankSet` carries no `deviceTypeKey` and applies to the device its button is on;
+> bind-time validation was added to **`PATCH` as well as `POST`**, which it had never had — a drag
+> onto an already-bound control saves as a PATCH, so leaving it unchecked would admit the same bad
+> row through the other door, and review then found a third door (MIDI Learn's commit), so the
+> slot rule ended up on `ControlSurfaceBindingService` beside `refuseUnknown` with the routes
+> keeping their coded 400s; the *Fader only…* expansion ships as
+> `POST .../surface-bindings/{id}/expand` over a new `ControlSurfaceBindingService.replace`, in
+> session 2 rather than session 3, which stays a pure `lighting-react` session; and **no
+> `formatVersion` bump** was needed, the two new discriminators being additive inside the opaque
+> `targetPayload` that D11 already made tolerant (v11 was paid for the cue-uuid *field*).
+> Session 1 amendments, beside the decisions they touch: §11's first
 > question was answered **yes** (the uuid move folded into v11); the mixed-value arm of D10 covers
 > fixed `GroupProperty` bindings too, not only selection entries; `selection.toggle` narrows a
 > partly covered group head-by-head through a shared `fx/TargetCoverage` rather than removing an
@@ -517,9 +533,11 @@ Each has a drafted answer the sessions build unless overturned:
   writer bump is being paid, `FireCue` / `CueStack*` gain a `uuid` field beside the int (the int
   kept for one version so the tolerant decode never sees a row it cannot read), and the importer
   resolves by uuid first. Alternative: leave it, and accept a second bump later.
-- **Does a strip's select button toggle or replace?** Drafted: toggle, with a long press to
-  replace, because a fader wing's select is additive on every console surveyed and *Clear* is one
-  button away. Alternative: replace, with shift-style modifier from a bound button.
+- ~~**Does a strip's select button toggle or replace?**~~ **Answered (session 2): toggle, with a
+  long press to replace.** The toggle lands on press so the LED is immediate; holding past
+  `SELECT_HOLD_MS` additionally replaces, and a release always cancels the pending replacement.
+  Stated on the resolved `SelectTarget`, not on strips, so a hand-bound select button behaves the
+  same as a derived one.
 - **What does the encoder bank hold when the selected fixture lacks the property?** Drafted: the
   encoder reads unbound for that strip (label `—`, ring dark), the turn is dropped; health does not
   flag it, because it is a property of the selection, not of the binding.

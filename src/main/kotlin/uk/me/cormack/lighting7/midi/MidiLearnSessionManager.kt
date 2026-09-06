@@ -251,7 +251,7 @@ class MidiLearnSessionManager(
      */
     private fun extractCapturableControlId(deviceTypeKey: String, event: MidiInputEvent): String? {
         val profile = try {
-            ControlSurfaceRegistry.allTypes.firstOrNull { it.typeKey == deviceTypeKey }
+            ControlSurfaceRegistry.typeFor(deviceTypeKey)
         } catch (e: Exception) {
             logger.warn("Failed to resolve profile $deviceTypeKey: ${e.message}")
             null

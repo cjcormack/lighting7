@@ -157,6 +157,21 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `strip and encoder-bank variants round trip with their discriminators`() {
+        val cases = mapOf<String, BindingTarget>(
+            "strip" to BindingTarget.Strip(uk.me.cormack.lighting7.models.CueTargetDto("group", "front-wash")),
+            "encoderBankSet" to BindingTarget.EncoderBankSet("colour"),
+        )
+        for ((type, target) in cases) {
+            val encoded = BindingTargetJson.encodeToString(target)
+            val tree = BindingTargetJson.parseToJsonElement(encoded) as JsonObject
+            assertEquals(type, tree["type"]?.jsonPrimitive?.content)
+            assertEquals(type, target.discriminator())
+            assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        }
+    }
+
+    @Test
     fun `selection variants round trip with their discriminators`() {
         val cases = mapOf(
             "selectionProperty" to BindingTarget.SelectionProperty("dimmer"),

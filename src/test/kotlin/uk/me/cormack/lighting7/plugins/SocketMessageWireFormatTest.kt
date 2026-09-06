@@ -275,6 +275,25 @@ class SocketMessageWireFormatTest {
     }
 
     @Test
+    fun `surface domain — surfaceEncoderBank set and state cross the wire`() {
+        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","propertyName":"colour"}"""
+        val decoded = json.decodeFromString<InMessage>(raw)
+        assertIs<SurfaceInMessage>(decoded)
+        val leaf = assertIs<SurfaceEncoderBankSetInMessage>(decoded)
+        assertEquals("akai-mini", leaf.deviceTypeKey)
+        assertEquals("colour", leaf.propertyName)
+
+        assertIs<SurfaceEncoderBankStateInMessage>(
+            json.decodeFromString<InMessage>("""{"type":"surfaceEncoderBank.state"}"""),
+        )
+
+        val out: OutMessage = SurfaceEncoderBankStateOutMessage(mapOf("akai-mini" to "colour"))
+        val encoded = json.encodeToString(out)
+        assertTrue(encoded.contains(""""type":"surfaceEncoderBank.state""""), encoded)
+        assertTrue(encoded.contains(""""akai-mini":"colour""""), encoded)
+    }
+
+    @Test
     fun `surface domain — SurfaceLearnCommitInMessage decodes nested BindingTarget`() {
         val raw = """{
             "type":"surfaceLearn.commit",

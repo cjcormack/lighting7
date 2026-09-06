@@ -63,6 +63,7 @@ class SurfaceFeedbackPublisherTest {
         val controller = MockDmxController(Universe(0, 0))
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
         val bankState = ActiveBankState()
+        val encoderBankState = EncoderBankState()
         val flashTracker = FlashStateTracker()
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
@@ -98,6 +99,7 @@ class SurfaceFeedbackPublisherTest {
                 controllerLookup = { key -> if (key == "x-touch-compact") recordingController else null },
                 bindingService = bindingService,
                 bankState = bankState,
+                encoderBankState = encoderBankState,
                 flashTracker = flashTracker,
                 projectIdProvider = { projectId },
                 fixturesProvider = { fixtures },
@@ -355,6 +357,7 @@ class SurfaceFeedbackPublisherTest {
                 controllerLookup = { key -> if (key == "x-touch-compact") h.recordingController else null },
                 bindingService = h.bindingService,
                 bankState = h.bankState,
+                encoderBankState = h.encoderBankState,
                 flashTracker = h.flashTracker,
                 projectIdProvider = { projectId },
                 actions = scalerActions,
@@ -709,6 +712,126 @@ class SurfaceFeedbackPublisherTest {
             h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(13 to 200u.toUByte()))
             yield()
             assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u), h.recordingController.feedback.ccOn(1).last().value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `an encoder-bank change moves a strip encoder onto the new property's channels`() = runBlocking {
+        val h = Harness(listOf(binding(1, "strip-1", BindingTarget.Strip(wash))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+
+            // enc-1 is strip-1's encoder; on the default bank it stands on the group's dimmer,
+            // which is channel 1 for hex-1. Its ring RX is CC 10.
+            fun ringWrites() = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+                .filter { it.cc == 10 }
+
+            // Both members move together: a group entry reads null unless its channels agree.
+            h.recordingController.feedback.clear()
+            h.controller.setValue(1, 200u, 0)
+            h.controller.setValue(13, 200u, 0)
+            h.publisher.simulateChannelsChangedForTest(
+                Universe(0, 0), mapOf(1 to 200u.toUByte(), 13 to 200u.toUByte()),
+            )
+            yield()
+            assertTrue(ringWrites().isNotEmpty(), "on the dimmer bank the encoder follows the dimmer channels")
+
+            // Point the device's encoders at UV — channel 7 on hex-1, 19 on hex-2.
+            h.encoderBankState.setProperty(deviceTypeKey, "uv")
+            yield()
+
+            h.recordingController.feedback.clear()
+            h.controller.setValue(1, 100u, 0)
+            h.controller.setValue(13, 100u, 0)
+            h.publisher.simulateChannelsChangedForTest(
+                Universe(0, 0), mapOf(1 to 100u.toUByte(), 13 to 100u.toUByte()),
+            )
+            yield()
+            assertTrue(ringWrites().isEmpty(), "the dimmer channels no longer reach the encoder")
+
+            h.controller.setValue(7, 90u, 0)
+            h.controller.setValue(19, 90u, 0)
+            h.publisher.simulateChannelsChangedForTest(
+                Universe(0, 0), mapOf(7 to 90u.toUByte(), 19 to 90u.toUByte()),
+            )
+            yield()
+            val moved = ringWrites()
+            assertTrue(moved.isNotEmpty(), "the encoder now follows the UV channels")
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(90u), moved.last().value)
+
+            // The strip's fader is unmoved by the bank: it is always the dimmer.
+            val faderWrites = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>()
+                .filter { it.cc == 1 }
+            assertTrue(faderWrites.isNotEmpty(), "fader-1 still tracked the dimmer change")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `an encoder-bank change re-arms pickup on the device`() = runBlocking {
+        // A non-motor control on PICKUP: the bank change re-arms it, because the meaning of the
+        // control moved under the operator's hand even though they did not touch it.
+        val h = Harness(listOf(
+            binding(1, "strip-1", BindingTarget.Strip(wash), policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            h.controller.setValue(1, 200u, 0)
+            h.controller.setValue(13, 200u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(1 to 200u.toUByte()))
+            yield()
+
+            // Physically at the logical value, so a move is accepted.
+            val at = PropertyChannelResolver.scaleDmxTo7Bit(200u)
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", at))
+
+            h.encoderBankState.setProperty(deviceTypeKey, "uv")
+            yield()
+
+            // UV is at 0, so the fader's physical position no longer matches and pickup holds.
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", at),
+                "a re-armed PICKUP control waits for the operator to cross the new value",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `an encoder-bank button lights while its property is the active bank`() = runBlocking {
+        val h = Harness(listOf(binding(1, "btn-1", BindingTarget.EncoderBankSet("uv"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun lastLed() = h.recordingController.feedback.last {
+                it is MidiFeedbackMessage.NoteOnFeedback || it is MidiFeedbackMessage.NoteOffFeedback
+            }
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOffFeedback, "the device is on dimmer, so UV is dark")
+
+            h.encoderBankState.setProperty(deviceTypeKey, "uv")
+            yield()
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOnFeedback, "UV is the active bank: lit")
+            assertEquals(LedState.ON, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("btn-1").led)
+
+            h.encoderBankState.setProperty(deviceTypeKey, "dimmer")
+            yield()
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOffFeedback, "another bank is active: dark again")
         } finally {
             h.publisher.stop()
             scope.cancel()

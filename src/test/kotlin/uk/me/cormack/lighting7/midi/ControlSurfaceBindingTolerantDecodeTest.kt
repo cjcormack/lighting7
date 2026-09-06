@@ -58,7 +58,7 @@ class ControlSurfaceBindingTolerantDecodeTest : RouteIntegrationTest() {
 
         // The row is resolvable (so the router reaches the health gate and drops it there) and
         // an unrelated edit leaves its bytes alone.
-        assertNotNull(service.resolve(projectId, deviceTypeKey, "btn-2", activeBank = null))
+        assertNotNull(service.resolve(projectId, deviceTypeKey, "btn-2", activeBank = null, encoderBankProperty = "dimmer"))
         service.update(projectId, future, sortOrder = 9)
         val stored = transaction(state.database) { DaoControlSurfaceBinding.findById(future)!!.targetPayload }
         assertEquals("""{"type":"fromTheFuture","padUuid":"x"}""", stored)

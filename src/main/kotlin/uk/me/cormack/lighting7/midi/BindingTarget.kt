@@ -203,6 +203,26 @@ sealed class BindingTarget {
     data object LocateSelection : BindingTarget()
 
     /**
+     * One group or fixture on a whole **channel strip**. The row is addressed by the strip id
+     * rather than a control id, and never dispatched: [ControlSurfaceBindingService.resolve]
+     * derives it to the target each of the strip's controls actually behaves as — see
+     * [deriveStripTarget]. A strip binding is refused on a control id at bind time, and a
+     * control binding on a strip id.
+     */
+    @Serializable
+    @SerialName("strip")
+    data class Strip(val target: CueTargetDto) : BindingTarget()
+
+    /**
+     * Point the device's strip encoders at [propertyName] on press — the attribute-select
+     * buttons every console has. Applies to the device the button is on, so the payload names
+     * no device; the LED is lit while this is the device's current encoder bank.
+     */
+    @Serializable
+    @SerialName("encoderBankSet")
+    data class EncoderBankSet(val propertyName: String) : BindingTarget()
+
+    /**
      * A persisted payload whose `type` this build does not know. Never constructed by a client
      * (the binding routes refuse it); produced only by the tolerant row decode, and re-encoded
      * as [rawPayload] verbatim so a round trip through an older desk loses nothing. Field names

@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.midi.ControlDescriptor
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
 import uk.me.cormack.lighting7.midi.EncoderDescriptor
 import uk.me.cormack.lighting7.midi.FaderDescriptor
+import uk.me.cormack.lighting7.midi.StripDescriptor
+import uk.me.cormack.lighting7.midi.SurfaceLayout
 import uk.me.cormack.lighting7.state.State
 
 @Serializable
@@ -77,6 +79,27 @@ sealed class ControlDescriptorDto {
     ) : ControlDescriptorDto()
 }
 
+/** A channel strip: the controls one binding row covers. */
+@Serializable
+data class StripDto(
+    val id: String,
+    val fader: String,
+    val select: String,
+    val encoder: String? = null,
+    val flash: String? = null,
+)
+
+/** One control's place in the panel picture. */
+@Serializable
+data class LayoutCellDto(val controlId: String, val col: Int, val row: Int)
+
+@Serializable
+data class LayoutRegionDto(val name: String, val columns: Int, val cells: List<LayoutCellDto>)
+
+/** The panel picture. Absent when the profile declares none — the client falls back to a table. */
+@Serializable
+data class SurfaceLayoutDto(val regions: List<LayoutRegionDto>)
+
 @Serializable
 data class ControlSurfaceTypeDto(
     val typeKey: String,
@@ -86,6 +109,8 @@ data class ControlSurfaceTypeDto(
     val className: String,
     val controls: List<ControlDescriptorDto>,
     val banks: List<BankDto>,
+    val strips: List<StripDto> = emptyList(),
+    val layout: SurfaceLayoutDto? = null,
 )
 
 private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
@@ -129,6 +154,19 @@ private fun ControlDescriptor.toDto(): ControlDescriptorDto = when (this) {
 
 private fun BankDefinition.toDto(): BankDto = BankDto(id = id, name = name)
 
+private fun StripDescriptor.toDto(): StripDto =
+    StripDto(id = id, fader = fader, select = select, encoder = encoder, flash = flash)
+
+private fun SurfaceLayout.toDto(): SurfaceLayoutDto = SurfaceLayoutDto(
+    regions = regions.map { region ->
+        LayoutRegionDto(
+            name = region.name,
+            columns = region.columns,
+            cells = region.cells.map { LayoutCellDto(it.controlId, it.col, it.row) },
+        )
+    },
+)
+
 /**
  * `GET /api/rest/control-surface-types` — list all registered control-surface device
  * profiles with their controls and banks. Mirrors `/api/rest/fixture-types`.
@@ -145,6 +183,8 @@ internal fun Route.routeApiRestControlSurfaceTypes(state: State) {
                 className = info.className,
                 controls = info.controls.map { it.toDto() },
                 banks = info.banks.map { it.toDto() },
+                strips = info.strips.map { it.toDto() },
+                layout = info.layout?.toDto(),
             )
         })
     }

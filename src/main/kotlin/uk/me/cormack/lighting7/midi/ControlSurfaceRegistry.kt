@@ -40,7 +40,19 @@ object ControlSurfaceRegistry {
         val className: String,
         val controls: List<ControlDescriptor>,
         val banks: List<BankDefinition>,
+        /** Channel strips, if the profile declares any. A strip id is addressable as a binding slot. */
+        val strips: List<StripDescriptor> = emptyList(),
+        /** Where the controls sit when drawn as a picture; null means "render the grouped table". */
+        val layout: SurfaceLayout? = null,
     ) {
+        private val stripControls: Map<String, StripControl> by lazy { stripControlsByControlId(strips) }
+
+        /** The strip [controlId] belongs to, or null when it is not part of one. */
+        fun stripFor(controlId: String): StripDescriptor? = stripControls[controlId]?.strip
+
+        /** True when [controlId] is a strip id rather than a control id — the two share one slot namespace. */
+        fun isStripId(controlId: String): Boolean = strips.any { it.id == controlId }
+
         internal val compiledPortPattern: Regex? = if (portPattern.isEmpty()) null else Regex(portPattern)
     }
 
@@ -74,6 +86,9 @@ object ControlSurfaceRegistry {
      * Returns the first match, or null if nothing matches.
      */
     fun matchFor(handle: MidiDeviceHandle): DeviceTypeInfo? = allTypes.firstOrNull { it.matches(handle) }
+
+    /** The registered profile for [typeKey], or null. The one spelling of a lookup four callers had. */
+    fun typeFor(typeKey: String): DeviceTypeInfo? = allTypes.firstOrNull { it.typeKey == typeKey }
 
     private fun DeviceTypeInfo.matches(handle: MidiDeviceHandle): Boolean {
         compiledPortPattern?.let { return it.containsMatchIn(handle.displayName) }
@@ -122,6 +137,10 @@ object ControlSurfaceRegistry {
                 }
             }
 
+            val controlsById = controls.associateBy { it.controlId }
+            validateStrips(instance.strips, controlsById, className)
+            instance.layout?.let { validateLayout(it, controls, className) }
+
             result += DeviceTypeInfo(
                 typeKey = typeKey,
                 vendor = annotation.vendor,
@@ -130,10 +149,90 @@ object ControlSurfaceRegistry {
                 className = className,
                 controls = controls.toList(),
                 banks = instance.banks.toList(),
+                strips = instance.strips.toList(),
+                layout = instance.layout,
             )
         }
 
         return result
+    }
+
+    /**
+     * Strip declarations are as load-bearing as [ControlDescriptor.controlId]s: a strip id is
+     * persisted in a binding row and every control it claims resolves through it, so a typo has
+     * to fail the build rather than silently unbind a fader mid-show.
+     */
+    private fun validateStrips(
+        strips: List<StripDescriptor>,
+        controlsById: Map<String, ControlDescriptor>,
+        className: String,
+    ) {
+        val seenStripIds = mutableSetOf<String>()
+        val claimedBy = mutableMapOf<String, String>()
+
+        for (strip in strips) {
+            check(seenStripIds.add(strip.id)) { "Duplicate strip id '${strip.id}' on $className" }
+            check(strip.id !in controlsById) {
+                "Strip id '${strip.id}' on $className collides with a controlId — " +
+                    "strips and controls share one binding slot namespace"
+            }
+
+            for (role in StripRole.entries) {
+                val controlId = strip.controlFor(role) ?: continue
+                val control = controlsById[controlId]
+                checkNotNull(control) {
+                    "Strip '${strip.id}' on $className names undeclared control '$controlId' as its " +
+                        "${role.name.lowercase()}"
+                }
+                val expected = expectedDescriptor(role)
+                check(expected.isInstance(control)) {
+                    "Strip '${strip.id}' on $className names '$controlId' as its " +
+                        "${role.name.lowercase()}, but that control is a ${control::class.simpleName}"
+                }
+                val previousStrip = claimedBy.put(controlId, strip.id)
+                check(previousStrip == null) {
+                    "Control '$controlId' on $className is claimed by two strips — " +
+                        "'$previousStrip' and '${strip.id}'"
+                }
+            }
+        }
+    }
+
+    private fun expectedDescriptor(role: StripRole): KClass<out ControlDescriptor> = when (role) {
+        StripRole.FADER -> FaderDescriptor::class
+        StripRole.ENCODER -> EncoderDescriptor::class
+        StripRole.SELECT, StripRole.FLASH -> ButtonDescriptor::class
+    }
+
+    /**
+     * A declared layout must be complete. A control with no cell would simply vanish from the
+     * picture, which is exactly the kind of omission nothing else would ever report.
+     */
+    private fun validateLayout(
+        layout: SurfaceLayout,
+        controls: List<ControlDescriptor>,
+        className: String,
+    ) {
+        val declaredIds = controls.mapTo(mutableSetOf()) { it.controlId }
+        val placed = mutableMapOf<String, String>()
+
+        for (region in layout.regions) {
+            for (cell in region.cells) {
+                check(cell.controlId in declaredIds) {
+                    "Layout region '${region.name}' on $className places undeclared control '${cell.controlId}'"
+                }
+                val previousRegion = placed.put(cell.controlId, region.name)
+                check(previousRegion == null) {
+                    "Control '${cell.controlId}' on $className has two layout cells — " +
+                        "in regions '$previousRegion' and '${region.name}'"
+                }
+            }
+        }
+
+        val unplaced = declaredIds - placed.keys
+        check(unplaced.isEmpty()) {
+            "$className declares a layout but places no cell for ${unplaced.sorted().joinToString(", ") { "'$it'" }}"
+        }
     }
 
     private fun requireAnnotation(klass: KClass<out ControlSurfaceDevice>): ControlSurfaceType {

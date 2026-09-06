@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -43,6 +44,7 @@ class SurfaceInputRouter(
     private val controllerLookup: (String) -> MidiController?,
     private val bindingService: ControlSurfaceBindingService,
     private val bankState: ActiveBankState,
+    private val encoderBankState: EncoderBankState,
     private val flashTracker: FlashStateTracker,
     private val projectIdProvider: () -> Int,
     private val actions: SurfaceActions,
@@ -51,6 +53,8 @@ class SurfaceInputRouter(
     private val feedbackHooks: SurfaceFeedbackHooks? = null,
     /** Records per-stage wall-clock duration of `dispatchContinuous` / `dispatchButton*`. */
     private val latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
+    /** How long a select button must be held before it replaces the selection. See [SELECT_HOLD_MS]. */
+    private val selectHoldMs: Long = SELECT_HOLD_MS,
 ) {
     companion object {
         private val logger = LoggerFactory.getLogger(SurfaceInputRouter::class.java)
@@ -66,9 +70,24 @@ class SurfaceInputRouter(
 
         /** Capped to prevent unbounded growth in a long-running process with many churned bindings. */
         private const val DEAD_WARN_STATE_MAX = 1024
+
+        /**
+         * How long a `SelectTarget(TOGGLE)` button must be held before it *also* replaces the
+         * selection. Toggling still happens on press, so the LED is immediate; keeping the
+         * button down then narrows the selection to that one target, which is how every fader
+         * wing surveyed in `docs/plans/midi-surface-plan.md` §1 behaves.
+         */
+        const val SELECT_HOLD_MS = 500L
     }
 
     private val inputJobs = ConcurrentHashMap<String /* displayKey */, Job>()
+
+    /**
+     * Pending long-press replacements, keyed by `(displayKey, controlId)` — the physical button,
+     * not the binding, so a release always finds its own job even if the binding changed or went
+     * dead while the operator was holding it down.
+     */
+    private val holdJobs = ConcurrentHashMap<Pair<String, String>, Job>()
     private var matcherJob: Job? = null
     private var scope: CoroutineScope? = null
 
@@ -101,6 +120,8 @@ class SurfaceInputRouter(
         matcherJob = null
         inputJobs.values.forEach { it.cancel() }
         inputJobs.clear()
+        holdJobs.values.forEach { it.cancel() }
+        holdJobs.clear()
     }
 
     private fun handleMatcherEvent(event: DeviceMatcher.SurfaceEvent) {
@@ -108,6 +129,9 @@ class SurfaceInputRouter(
             is DeviceMatcher.SurfaceEvent.DeviceAttached -> attachCollector(event.handle.displayKey, event.typeKey)
             is DeviceMatcher.SurfaceEvent.DeviceDetached -> {
                 inputJobs.remove(event.handle.displayKey)?.cancel()
+                // Unplugging mid-hold must not replace the selection half a second later.
+                holdJobs.keys.filter { it.first == event.handle.displayKey }
+                    .forEach { holdJobs.remove(it)?.cancel() }
             }
             is DeviceMatcher.SurfaceEvent.UnmatchedDeviceConnected -> Unit
         }
@@ -163,8 +187,12 @@ class SurfaceInputRouter(
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
                     dispatchButtonPress(deviceTypeKey, binding)
                 }
+                armSelectHold(displayKey, match.controlId, binding)
             }
             is ResolvedInput.ButtonRelease -> {
+                // Unconditionally, and before anything that can return early: a release must
+                // always cancel its own pending replacement.
+                cancelSelectHold(displayKey, match.controlId)
                 val binding = resolveBinding(deviceTypeKey, match.controlId) ?: return
                 if (isDeadBinding(binding)) return
                 latencyTracker.measure(MidiLatencyStage.INGRESS_BUTTON) {
@@ -186,7 +214,9 @@ class SurfaceInputRouter(
             return null
         }
         val bank = bankState.bankFor(deviceTypeKey)
-        return bindingService.resolve(projectId, deviceTypeKey, controlId, bank)
+        return bindingService.resolve(
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.propertyFor(deviceTypeKey),
+        )
     }
 
     /**
@@ -228,6 +258,10 @@ class SurfaceInputRouter(
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             is BindingTarget.SelectionProperty ->
                 actions.writeSelectionProperty(target.propertyName, value7Bit)
+            is BindingTarget.Strip -> logger.warn(
+                "Strip binding {} reached continuous dispatch — resolve should have derived it",
+                binding.id,
+            )
             else -> logger.debug(
                 "Ignoring continuous input on binding {} → {} (discrete target)",
                 binding.id, target::class.simpleName,
@@ -254,6 +288,15 @@ class SurfaceInputRouter(
             is BindingTarget.Blackout -> actions.toggleBlackout()
             is BindingTarget.GrandMasterToggle -> actions.toggleGrandMaster()
             is BindingTarget.SetBank -> bankState.setBank(target.deviceTypeKey, target.bank)
+            // Applies to the device the button is on, so the payload names no device and a
+            // button can never be stranded pointing at a surface that isn't attached.
+            is BindingTarget.EncoderBankSet ->
+                encoderBankState.setProperty(deviceTypeKey, target.propertyName)
+            // Never dispatched: resolve() derives a strip to the target of the control the event
+            // arrived on. Reaching here means the strip arm failed to fire.
+            is BindingTarget.Strip -> logger.warn(
+                "Strip binding {} reached button dispatch — resolve should have derived it", binding.id,
+            )
             is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
             is BindingTarget.SpeedMasterBpm -> logger.debug(
                 "Ignoring button press on binding {} → speed-master BPM (continuous target)",
@@ -295,6 +338,32 @@ class SurfaceInputRouter(
                 }
             }
         }
+    }
+
+    /**
+     * A `SelectTarget(TOGGLE)` press has already toggled; if the operator keeps holding it,
+     * replace the selection with that one target. A `SelectTarget(REPLACE)` binding has already
+     * done exactly that on press, so it arms nothing.
+     */
+    private fun armSelectHold(
+        displayKey: String,
+        controlId: String,
+        binding: ControlSurfaceBindingService.ResolvedBinding,
+    ) {
+        val target = binding.target
+        if (target !is BindingTarget.SelectTarget || target.mode != BindingTarget.SelectMode.TOGGLE) return
+        val scope = this.scope ?: return
+        val key = displayKey to controlId
+        val job = scope.launch {
+            delay(selectHoldMs)
+            holdJobs.remove(key)
+            actions.selectTarget(target.target, BindingTarget.SelectMode.REPLACE)
+        }
+        holdJobs.put(key, job)?.cancel()
+    }
+
+    private fun cancelSelectHold(displayKey: String, controlId: String) {
+        holdJobs.remove(displayKey to controlId)?.cancel()
     }
 
     private fun dispatchButtonRelease(binding: ControlSurfaceBindingService.ResolvedBinding) {

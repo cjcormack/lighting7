@@ -113,6 +113,22 @@ convention.)
 A refusal that is about *state* rather than references does not get a `force`: `409` for "that
 project isn't current" is not overridable, and neither is 409 `SPEED_MASTER_PROTECTED` on master 1.
 
+## Error codes
+
+`ErrorResponse` carries an optional `code` beside its human-readable `error`. Populate it when a
+client is expected to *branch* on the refusal — offer the override, name the conflicting record,
+re-render a different form — and leave it null when the message is the whole story.
+
+The convention is an `internal const val CODE_X = "X"` at the top of the owning route file (or in
+`models/` where the domain owns the rule), imported by the tests rather than repeated as a literal,
+so a rename cannot silently pass. Codes are `SCREAMING_SNAKE_CASE`, prefixed by their domain:
+`BUSK_*`, `LOOK_*`, `SPEED_MASTER_*`, `BINDING_*`.
+
+It is not only for 409s. The 409 guard overrides below are the largest family, but a 400 that a
+client must distinguish from a generic bad request carries one too — `BINDING_STRIP_NEEDS_STRIP`
+and `BINDING_CONTROL_NOT_STRIP` tell the Surfaces view that a drop landed on the wrong kind of
+slot, which it renders differently from "that control does not exist".
+
 ## Unbounded lists are fine
 
 Collection GETs return everything, unpaginated, and that is deliberate rather than unfinished. The

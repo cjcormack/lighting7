@@ -83,6 +83,13 @@ object BindingHealthEvaluator {
             if (target.propertyName in context.selectionProperties) AssignmentHealth.Ok
             else AssignmentHealth.UnknownProperty(target.propertyName)
         is BindingTarget.SelectTarget -> checkTarget(target.target, context)
+        // A strip is judged by its group or fixture alone. The properties its controls derive
+        // are the encoder bank's business, and an attribute no selected head declares makes the
+        // encoder read unbound — not the strip dead.
+        is BindingTarget.Strip -> checkTarget(target.target, context)
+        is BindingTarget.EncoderBankSet ->
+            if (target.propertyName in context.selectionProperties) AssignmentHealth.Ok
+            else AssignmentHealth.UnknownProperty(target.propertyName)
         BindingTarget.ClearSelection -> AssignmentHealth.Ok
         BindingTarget.LocateSelection -> AssignmentHealth.Ok
         is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)

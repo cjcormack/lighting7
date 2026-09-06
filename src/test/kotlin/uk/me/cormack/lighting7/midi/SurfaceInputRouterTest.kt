@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.midi
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runTest
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -25,8 +28,11 @@ class SurfaceInputRouterTest {
         actions: RecordingActions,
         bindings: List<ControlSurfaceBindingService.ResolvedBinding>,
         bankState: ActiveBankState = ActiveBankState(),
+        encoderBankState: EncoderBankState = EncoderBankState(),
         flashTracker: FlashStateTracker = FlashStateTracker(),
         latencyTracker: MidiLatencyTracker = MidiLatencyTracker(),
+        scope: CoroutineScope? = null,
+        selectHoldMs: Long = SurfaceInputRouter.SELECT_HOLD_MS,
     ): SurfaceInputRouter {
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
         bindingService.seedCacheForTest(projectId, bindings)
@@ -39,11 +45,13 @@ class SurfaceInputRouterTest {
             controllerLookup = { null },
             bindingService = bindingService,
             bankState = bankState,
+            encoderBankState = encoderBankState,
             flashTracker = flashTracker,
             projectIdProvider = { projectId },
             actions = actions,
             latencyTracker = latencyTracker,
-        )
+            selectHoldMs = selectHoldMs,
+        ).also { router -> scope?.let { router.start(it) } }
     }
 
     private fun binding(
@@ -274,6 +282,7 @@ class SurfaceInputRouterTest {
                 it.seedCacheForTest(projectId, emptyList())
             },
             bankState = ActiveBankState(),
+            encoderBankState = EncoderBankState(),
             flashTracker = FlashStateTracker(),
             projectIdProvider = { projectId },
             actions = actions,
@@ -305,6 +314,7 @@ class SurfaceInputRouterTest {
                 it.seedCacheForTest(projectId, listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
             },
             bankState = ActiveBankState(),
+            encoderBankState = EncoderBankState(),
             flashTracker = FlashStateTracker(),
             projectIdProvider = { projectId },
             actions = actions,
@@ -438,6 +448,197 @@ class SurfaceInputRouterTest {
             ),
             actions.calls.toList(),
         )
+    }
+
+    // ─── Strips, the encoder bank, and the select long press ───────────────
+
+    @Test
+    fun `a strip binding drives the fader, select and flash of its own controls`() {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(actions, listOf(binding(1, "strip-1", BindingTarget.Strip(wash))))
+
+        // fader-1 is CC 1; btn-25 (select) is note 40; btn-1 (flash) is note 16.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 40, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+
+        assertEquals(
+            listOf(
+                RecordedCall.WriteGroup("front-wash", "dimmer", 100u),
+                RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE),
+                RecordedCall.FlashGroupPress("front-wash", "dimmer", 255u),
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `a strip encoder writes whatever the device's encoder bank names`() {
+        val actions = RecordingActions()
+        val encoderBank = EncoderBankState()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "strip-1", BindingTarget.Strip(wash))),
+            encoderBankState = encoderBank,
+        )
+
+        // enc-1 is CC 10.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
+        encoderBank.setProperty(deviceTypeKey, "colour")
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
+
+        assertEquals(
+            listOf(
+                RecordedCall.WriteGroup("front-wash", "dimmer", 64u),
+                RecordedCall.WriteGroup("front-wash", "colour", 64u),
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `an EncoderBankSet press moves the bank of the device the button is on`() {
+        val actions = RecordingActions()
+        val encoderBank = EncoderBankState()
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "btn-1", BindingTarget.EncoderBankSet("colour"))),
+            encoderBankState = encoderBank,
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+
+        assertEquals("colour", encoderBank.propertyFor(deviceTypeKey))
+        // It is desk state, not a show action — nothing reaches SurfaceActions.
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
+    fun `a raw strip target never reaches dispatch`() {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        // btn-2 belongs to no strip, so the Strip target sits on it undertived.
+        val router = buildRouter(actions, listOf(binding(1, "btn-2", BindingTarget.Strip(wash))))
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 50u))
+
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
+    fun `a short select press toggles and never replaces`() = runTest {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE))),
+            scope = this,
+            selectHoldMs = 500L,
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        advanceTimeBy(100L)
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
+        advanceTimeBy(5_000L)
+
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE)),
+            actions.calls.toList(),
+        )
+        router.stop()
+    }
+
+    @Test
+    fun `holding a select button past the threshold also replaces the selection`() = runTest {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE))),
+            scope = this,
+            selectHoldMs = 500L,
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        advanceTimeBy(600L)
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
+        advanceTimeBy(5_000L)
+
+        assertEquals(
+            listOf(
+                RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE),
+                RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.REPLACE),
+            ),
+            actions.calls.toList(),
+        )
+        router.stop()
+    }
+
+    @Test
+    fun `a REPLACE select binding acts on press and arms no hold`() = runTest {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.REPLACE))),
+            scope = this,
+            selectHoldMs = 500L,
+        )
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        advanceTimeBy(5_000L)
+
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.REPLACE)),
+            actions.calls.toList(),
+        )
+        router.stop()
+    }
+
+    @Test
+    fun `a release cancels the pending replace even when the binding went dead meanwhile`() = runTest {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
+        bindingService.seedCacheForTest(
+            projectId,
+            listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE))),
+        )
+        val router = SurfaceInputRouter(
+            deviceMatcher = DeviceMatcher(MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)),
+            controllerLookup = { null },
+            bindingService = bindingService,
+            bankState = ActiveBankState(),
+            encoderBankState = EncoderBankState(),
+            flashTracker = FlashStateTracker(),
+            projectIdProvider = { projectId },
+            actions = actions,
+            selectHoldMs = 500L,
+        )
+        router.start(this)
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        // The binding goes dead under the operator's finger.
+        bindingService.seedCacheForTest(
+            projectId,
+            listOf(
+                binding(
+                    1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE),
+                    health = AssignmentHealth.MissingGroup("front-wash"),
+                ),
+            ),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
+        advanceTimeBy(5_000L)
+
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.TOGGLE)),
+            actions.calls.toList(),
+        )
+        router.stop()
     }
 
     @Test

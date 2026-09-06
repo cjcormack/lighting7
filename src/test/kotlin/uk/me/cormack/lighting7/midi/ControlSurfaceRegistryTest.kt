@@ -158,6 +158,115 @@ class ControlSurfaceRegistryTest {
     }
 
     @Test
+    fun `x-touch declares eight strips plus a master, mapped to real controls`() {
+        val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
+        assertEquals(9, info.strips.size)
+
+        val strip1 = info.strips.single { it.id == "strip-1" }
+        assertEquals("fader-1", strip1.fader)
+        assertEquals("btn-25", strip1.select)
+        assertEquals("enc-1", strip1.encoder)
+        assertEquals("btn-1", strip1.flash)
+
+        val master = info.strips.single { it.id == "strip-master" }
+        assertEquals("fader-9", master.fader)
+        assertEquals("btn-33", master.select)
+        assertNull(master.encoder)
+
+        assertEquals(strip1, info.stripFor("enc-1"))
+        assertNull(info.stripFor("enc-9"))
+    }
+
+    @Test
+    fun `x-touch layout places every declared control exactly once`() {
+        val info = ControlSurfaceRegistry.allTypes.single { it.typeKey == "x-touch-compact-standard" }
+        val layout = assertNotNull(info.layout)
+        assertEquals(listOf("strips", "right", "master"), layout.regions.map { it.name })
+
+        val placed = layout.regions.flatMap { it.cells }.map { it.controlId }
+        assertEquals(info.controls.size, placed.size)
+        assertEquals(info.controls.map { it.controlId }.toSet(), placed.toSet())
+
+        // The strip column reads top to bottom exactly as the panel does.
+        val strips = layout.regions.single { it.name == "strips" }
+        assertEquals(
+            listOf("enc-1", "btn-1", "btn-9", "btn-17", "fader-1", "btn-25"),
+            strips.cells.filter { it.col == 0 }.sortedBy { it.row }.map { it.controlId },
+        )
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a strip naming an undeclared control`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(StripMissingControlDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'strip-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("'enc-9'"), exc.message!!)
+        assertTrue(exc.message!!.contains("StripMissingControlDevice"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a strip role of the wrong control kind`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(StripWrongKindDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'btn-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("fader"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a control claimed by two strips`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(SharedControlStripDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'fader-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("'strip-2'"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a strip id colliding with a control id`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(StripIdCollisionDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'btn-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("collides"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a duplicate strip id`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(DuplicateStripIdDevice::class))
+        }
+        assertTrue(exc.message!!.contains("Duplicate strip id 'strip-1'"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a layout that leaves a control unplaced`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(IncompleteLayoutDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'btn-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("IncompleteLayoutDevice"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a layout cell naming an undeclared control`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(UnknownLayoutCellDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'btn-99'"), exc.message!!)
+    }
+
+    @Test
+    fun `buildFromClasses fails fast on a control placed in two layout cells`() {
+        val exc = assertFailsWith<IllegalStateException> {
+            ControlSurfaceRegistry.buildFromClasses(listOf(DoublePlacedLayoutDevice::class))
+        }
+        assertTrue(exc.message!!.contains("'fader-1'"), exc.message!!)
+        assertTrue(exc.message!!.contains("two layout cells"), exc.message!!)
+    }
+
+    @Test
     fun `buildFromClasses returns a single entry for a valid class`() {
         val built = ControlSurfaceRegistry.buildFromClasses(listOf(DeviceA::class))
         assertEquals(1, built.size)
@@ -194,5 +303,83 @@ class DuplicateControlIdDevice : ControlSurfaceDevice() {
 class UnannotatedDevice : ControlSurfaceDevice() {
     init {
         fader(id = "fader-1", cc = 10)
+    }
+}
+
+@ControlSurfaceType(typeKey = "strip-missing", vendor = "Test", product = "StripMissing")
+class StripMissingControlDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        button(id = "btn-1", note = 20)
+        strip(id = "strip-1", fader = "fader-1", select = "btn-1", encoder = "enc-9")
+    }
+}
+
+@ControlSurfaceType(typeKey = "strip-wrong-kind", vendor = "Test", product = "StripWrongKind")
+class StripWrongKindDevice : ControlSurfaceDevice() {
+    init {
+        button(id = "btn-1", note = 20)
+        button(id = "btn-2", note = 21)
+        strip(id = "strip-1", fader = "btn-1", select = "btn-2")
+    }
+}
+
+@ControlSurfaceType(typeKey = "strip-shared", vendor = "Test", product = "StripShared")
+class SharedControlStripDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        button(id = "btn-1", note = 20)
+        button(id = "btn-2", note = 21)
+        strip(id = "strip-1", fader = "fader-1", select = "btn-1")
+        strip(id = "strip-2", fader = "fader-1", select = "btn-2")
+    }
+}
+
+@ControlSurfaceType(typeKey = "strip-collision", vendor = "Test", product = "StripCollision")
+class StripIdCollisionDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        button(id = "btn-1", note = 20)
+        strip(id = "btn-1", fader = "fader-1", select = "btn-1")
+    }
+}
+
+@ControlSurfaceType(typeKey = "strip-dup", vendor = "Test", product = "StripDup")
+class DuplicateStripIdDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        fader(id = "fader-2", cc = 2)
+        button(id = "btn-1", note = 20)
+        button(id = "btn-2", note = 21)
+        strip(id = "strip-1", fader = "fader-1", select = "btn-1")
+        strip(id = "strip-1", fader = "fader-2", select = "btn-2")
+    }
+}
+
+@ControlSurfaceType(typeKey = "layout-incomplete", vendor = "Test", product = "LayoutIncomplete")
+class IncompleteLayoutDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        button(id = "btn-1", note = 20)
+        layout { region("main", columns = 1) { column(0) { cell("fader-1") } } }
+    }
+}
+
+@ControlSurfaceType(typeKey = "layout-unknown-cell", vendor = "Test", product = "LayoutUnknownCell")
+class UnknownLayoutCellDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        layout { region("main", columns = 1) { column(0) { cell("fader-1"); cell("btn-99") } } }
+    }
+}
+
+@ControlSurfaceType(typeKey = "layout-double", vendor = "Test", product = "LayoutDouble")
+class DoublePlacedLayoutDevice : ControlSurfaceDevice() {
+    init {
+        fader(id = "fader-1", cc = 1)
+        layout {
+            region("main", columns = 1) { column(0) { cell("fader-1") } }
+            region("other", columns = 1) { column(0) { cell("fader-1") } }
+        }
     }
 }
