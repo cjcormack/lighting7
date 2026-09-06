@@ -1,7 +1,7 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
-> **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06;
-> sessions 2–5 are proposed.** Session 1 amendments, beside the decisions they touch: §11's first
+> **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
+> `758ee9a`; sessions 2–5 are proposed.** Session 1 amendments, beside the decisions they touch: §11's first
 > question was answered **yes** (the uuid move folded into v11); the mixed-value arm of D10 covers
 > fixed `GroupProperty` bindings too, not only selection entries; `selection.toggle` narrows a
 > partly covered group head-by-head through a shared `fx/TargetCoverage` rather than removing an
