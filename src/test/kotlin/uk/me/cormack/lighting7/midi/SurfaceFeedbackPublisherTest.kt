@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.MockDmxController
@@ -12,13 +13,16 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.SpeedMasterSnapshot
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.state.DeskSelection
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -62,6 +66,7 @@ class SurfaceFeedbackPublisherTest {
         val flashTracker = FlashStateTracker()
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
+        val selection = DeskSelection { fixtures }
         val matcher: DeviceMatcher
         val recordingController = RecordingController(
             MidiDeviceHandle(
@@ -76,7 +81,9 @@ class SurfaceFeedbackPublisherTest {
         init {
             fixtures.register {
                 addController(controller)
-                addFixture(HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1))
+                val hex1 = addFixture(HexFixture(Universe(0, 0), "hex-1", "Hex 1", firstChannel = 1))
+                val hex2 = addFixture(HexFixture(Universe(0, 0), "hex-2", "Hex 2", firstChannel = 13))
+                createGroup<HexFixture>("front-wash") { addSpread(listOf(hex1, hex2)) }
             }
             scaler = GlobalScalerState(fixtures)
             scaler.attach()
@@ -96,6 +103,7 @@ class SurfaceFeedbackPublisherTest {
                 fixturesProvider = { fixtures },
                 globalScalerStateProvider = { scaler },
                 speedMasterBankProvider = { speedMasters },
+                deskSelection = selection,
             )
         }
 
@@ -324,10 +332,14 @@ class SurfaceFeedbackPublisherTest {
                 override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {}
                 override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {}
                 override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {}
-                override fun cueStackGo(stackId: Int) {}
-                override fun cueStackBack(stackId: Int) {}
-                override fun cueStackPause(stackId: Int) {}
-                override fun fireCue(cueId: Int) {}
+                override fun cueStackGo(stackId: Int, stackUuid: String?) {}
+                override fun cueStackBack(stackId: Int, stackUuid: String?) {}
+                override fun cueStackPause(stackId: Int, stackUuid: String?) {}
+                override fun fireCue(cueId: Int, cueUuid: String?) {}
+                override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {}
+                override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {}
+                override fun clearSelection() {}
+                override fun locateSelection() {}
                 override fun toggleBlackout(): Boolean = h.scaler.toggleBlackout()
                 override fun toggleGrandMaster(): Boolean = h.scaler.toggleGrandMaster()
                 override fun writeSpeedMasterBpm(
@@ -569,6 +581,241 @@ class SurfaceFeedbackPublisherTest {
             assertFalse(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 80u))
             // Crossing the target = engage.
             assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 127u))
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    // ─── Selection entries, the mixed arm and the control-state stream ─────────
+
+    private val hex1 = CueTargetDto("fixture", "hex-1")
+    private val hex2 = CueTargetDto("fixture", "hex-2")
+    private val wash = CueTargetDto("group", "front-wash")
+
+    private fun List<MidiFeedbackMessage>.ccOn(cc: Int) =
+        filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == cc }
+
+    @Test
+    fun `a uniform selection feeds the common value and a mixed one darkens the ring`() = runBlocking {
+        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionProperty("dimmer"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.setValue(1, 200u, 0)
+            h.controller.setValue(13, 200u, 0)
+            h.selection.set(listOf(hex1, hex2))
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            val onAttach = h.recordingController.feedback.ccOn(10)
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u), onAttach.last().value, "uniform: the ring shows the value")
+            assertEquals(100, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1").value)
+            assertEquals(RingState.ON, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1").ring)
+
+            h.recordingController.feedback.clear()
+            h.controller.setValue(13, 100u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(13 to 100u.toUByte()))
+            yield()
+            val mixed = h.recordingController.feedback.ccOn(10)
+            assertEquals(1, mixed.size, "mixed: exactly one ring write, the off byte")
+            assertEquals(0u.toUByte(), mixed.single().value)
+            h.publisher.controlStates.flushForTest()
+            val state = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1")
+            assertNull(state.value)
+            assertEquals(RingState.OFF, state.ring)
+
+            // A turn writes every head (the actions' job); once they agree the next tick is uniform.
+            h.recordingController.feedback.clear()
+            h.controller.setValue(1, 100u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(1 to 100u.toUByte()))
+            yield()
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(100u), h.recordingController.feedback.ccOn(10).last().value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a mixed selection disarms pickup and a uniform one arms it`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.SelectionProperty("dimmer"), policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.setValue(1, 200u, 0)
+            h.controller.setValue(13, 200u, 0)
+            h.selection.set(listOf(wash))
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 5u),
+                "uniform: PICKUP is armed against the common value",
+            )
+            h.controller.setValue(13, 50u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(13 to 50u.toUByte()))
+            yield()
+            assertTrue(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 6u),
+                "mixed: there is nothing to cross, so the move writes through",
+            )
+            assertTrue(h.recordingController.feedback.ccOn(1).none { it.value == 0u.toUByte() && false })
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `an empty selection reads as no value and a selection change re-feeds the control`() = runBlocking {
+        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionProperty("dimmer"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.setValue(1, 200u, 0)
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            val controls = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls
+            assertNull(controls.getValue("enc-1").value)
+            assertEquals(RingState.OFF, controls.getValue("enc-1").ring)
+            assertEquals(0u.toUByte(), h.recordingController.feedback.ccOn(10).last().value, "ring off on attach")
+
+            h.recordingController.feedback.clear()
+            h.selection.set(listOf(hex1))
+            yield()
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u), h.recordingController.feedback.ccOn(10).last().value)
+            assertEquals(100, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1").value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a divergent fixed group binding reads mixed and drives no motor`() = runBlocking {
+        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.GroupProperty("front-wash", "dimmer"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.setValue(1, 200u, 0)
+            h.controller.setValue(13, 100u, 0)
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            assertTrue(h.recordingController.feedback.ccOn(1).isEmpty(), "no motor write on a divergent group")
+            assertNull(h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("fader-1").value)
+
+            h.controller.setValue(13, 200u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(13 to 200u.toUByte()))
+            yield()
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u), h.recordingController.feedback.ccOn(1).last().value)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a select button's LED follows selection membership, a group by its members`() = runBlocking {
+        val h = Harness(listOf(binding(1, "btn-1", BindingTarget.SelectTarget(wash))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun lastLed() = h.recordingController.feedback.last { it is MidiFeedbackMessage.NoteOnFeedback || it is MidiFeedbackMessage.NoteOffFeedback }
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOffFeedback, "nothing selected: off")
+            assertEquals(LedState.OFF, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("btn-1").led)
+
+            h.selection.set(listOf(hex1, hex2))
+            yield()
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOnFeedback, "both members selected: the group's LED lights")
+            assertEquals(LedState.ON, h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("btn-1").led)
+
+            h.selection.set(listOf(hex1))
+            yield()
+            assertTrue(lastLed() is MidiFeedbackMessage.NoteOffFeedback, "one member is not the group")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `attach seeds a snapshot of every control and touch is recorded without a motor write`() = runBlocking {
+        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        val snapshots = mutableListOf<ControlStateTracker.Snapshot>()
+        val deltas = mutableListOf<ControlStateTracker.Delta>()
+        scope.launch { h.publisher.controlStates.snapshots.collect { snapshots += it } }
+        scope.launch { h.publisher.controlStates.deltas.collect { deltas += it } }
+        try {
+            h.controller.setValue(1, 200u, 0)
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            val attach = snapshots.single()
+            assertEquals("x-touch-compact", attach.displayKey)
+            assertTrue(attach.controls.size >= 64, "every profile control is seeded, got ${attach.controls.size}")
+            assertEquals(100, attach.controls.getValue("fader-1").value)
+            assertEquals(ControlState.UNBOUND, attach.controls.getValue("fader-9"))
+
+            h.recordingController.feedback.clear()
+            h.publisher.onTouch("x-touch-compact", "fader-1", down = true)
+            h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 90u)
+            h.controller.setValue(1, 100u, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(1 to 100u.toUByte()))
+            h.publisher.controlStates.flushForTest()
+            yield()
+            assertTrue(h.recordingController.feedback.ccOn(1).isEmpty(), "touched: the motor is spared")
+            val row = deltas.single().controls.getValue("fader-1")
+            assertTrue(row.touched)
+            assertEquals(90, row.physical)
+            assertEquals(50, row.value, "the value the motor would have been told is still recorded")
+
+            h.matcher.handle(MidiDeviceRegistry.DeviceEvent.Disconnected(xTouchHandle))
+            yield()
+            assertTrue(snapshots.last().controls.isEmpty(), "detach: an empty snapshot")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * A tempo-bound encoder is not a `ContinuousEntry` (no channel behind it), so a full resync's
+     * tracker reset used to wipe its row and never re-feed it: the stream reported a lit ring as
+     * unbound after every attach, bank change and select press. Pins the re-feed.
+     */
+    @Test
+    fun `a tempo-bound encoder keeps its value in the snapshot across a resync`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "enc-1", BindingTarget.SpeedMasterBpm(masterUuid = null, minBpm = 60.0, maxBpm = 180.0)),
+            binding(2, "btn-1", BindingTarget.SelectTarget(hex1)),
+        ))
+        h.speedMasters.load(
+            listOf(
+                SpeedMasterSnapshot(
+                    java.util.UUID.randomUUID(), 1, "Master 1", 120.0,
+                    uk.me.cormack.lighting7.models.SpeedMasterSource.MANUAL,
+                ),
+            )
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            // 120 BPM is half-way through 60..180: 64 of 127.
+            fun encoder() = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1")
+            assertEquals(64, encoder().value, "attach: the tempo encoder is in the snapshot")
+            assertEquals(RingState.ON, encoder().ring)
+
+            // A select press rebuilds and resyncs every device — the encoder must survive it.
+            h.selection.set(listOf(hex1))
+            yield()
+            assertEquals(64, encoder().value, "after a resync: still fed")
+            assertEquals(RingState.ON, encoder().ring)
         } finally {
             h.publisher.stop()
             scope.cancel()

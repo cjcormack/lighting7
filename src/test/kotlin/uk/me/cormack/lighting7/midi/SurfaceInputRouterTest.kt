@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.perf.MidiLatencyStage
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import kotlin.test.Test
@@ -396,6 +397,76 @@ class SurfaceInputRouterTest {
         assertEquals(0, tracker.bucket(MidiLatencyStage.INGRESS_CONTINUOUS).count)
         assertEquals(0, tracker.bucket(MidiLatencyStage.INGRESS_BUTTON).count)
     }
+
+    // ─── Selection-relative arms (midi-surface plan, session 1) ────────────
+
+    @Test
+    fun `a SelectionProperty fader dispatches the property and the value`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(binding(1, "fader-1", BindingTarget.SelectionProperty("dimmer"))))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertEquals(listOf<RecordedCall>(RecordedCall.WriteSelection("dimmer", 100u)), actions.calls.toList())
+    }
+
+    @Test
+    fun `a SelectionProperty on a button writes full and a release does nothing`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(binding(1, "btn-1", BindingTarget.SelectionProperty("dimmer"))))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = 16, velocity = 0u))
+        assertEquals(listOf<RecordedCall>(RecordedCall.WriteSelection("dimmer", 127u)), actions.calls.toList())
+    }
+
+    @Test
+    fun `select clear and locate buttons dispatch on press only`() {
+        val actions = RecordingActions()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.SelectTarget(wash, BindingTarget.SelectMode.REPLACE)),
+            binding(2, "btn-2", BindingTarget.ClearSelection),
+            binding(3, "btn-3", BindingTarget.LocateSelection),
+        ))
+        for (note in 16..18) {
+            router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = note, velocity = 127u))
+            router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOff(0, note = note, velocity = 0u))
+        }
+        assertEquals(
+            listOf(
+                RecordedCall.SelectTarget(wash, BindingTarget.SelectMode.REPLACE),
+                RecordedCall.ClearSelection,
+                RecordedCall.LocateSelection,
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `cue and stack presses carry the binding's uuid through to the actions`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.FireCue(5, cueUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2")),
+            binding(2, "btn-2", BindingTarget.CueStackGo(7, stackUuid = "11111111-2222-3333-4444-555555555555")),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        assertEquals(
+            listOf(
+                RecordedCall.FireCue(5, "7d444840-9dc0-11d1-b245-5ffdce74fad2"),
+                RecordedCall.CueStackGo(7, "11111111-2222-3333-4444-555555555555"),
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `an Unknown target is dead and never reaches the actions`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.Unknown("fromTheFuture", "{}"), health = AssignmentHealth.UnknownTarget("fromTheFuture")),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        assertTrue(actions.calls.isEmpty())
+    }
 }
 
 /** Recording fake of [SurfaceActions] for tests. Every call appends to [calls]. */
@@ -419,10 +490,18 @@ private class RecordingActions : SurfaceActions {
     override fun flashGroupPropertyRelease(groupName: String, propertyName: String) {
         calls += RecordedCall.FlashGroupRelease(groupName, propertyName)
     }
-    override fun cueStackGo(stackId: Int) { calls += RecordedCall.CueStackGo(stackId) }
-    override fun cueStackBack(stackId: Int) { calls += RecordedCall.CueStackBack(stackId) }
-    override fun cueStackPause(stackId: Int) { calls += RecordedCall.CueStackPause(stackId) }
-    override fun fireCue(cueId: Int) { calls += RecordedCall.FireCue(cueId) }
+    override fun cueStackGo(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackGo(stackId, stackUuid) }
+    override fun cueStackBack(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackBack(stackId, stackUuid) }
+    override fun cueStackPause(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackPause(stackId, stackUuid) }
+    override fun fireCue(cueId: Int, cueUuid: String?) { calls += RecordedCall.FireCue(cueId, cueUuid) }
+    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {
+        calls += RecordedCall.WriteSelection(propertyName, midiValue7Bit)
+    }
+    override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
+        calls += RecordedCall.SelectTarget(target, mode)
+    }
+    override fun clearSelection() { calls += RecordedCall.ClearSelection }
+    override fun locateSelection() { calls += RecordedCall.LocateSelection }
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
     override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
@@ -464,10 +543,14 @@ private sealed class RecordedCall {
     data class FlashGroupPress(val groupName: String, val prop: String, val max: UByte) : RecordedCall()
     data class FlashFixtureRelease(val fixtureKey: String, val prop: String) : RecordedCall()
     data class FlashGroupRelease(val groupName: String, val prop: String) : RecordedCall()
-    data class CueStackGo(val stackId: Int) : RecordedCall()
-    data class CueStackBack(val stackId: Int) : RecordedCall()
-    data class CueStackPause(val stackId: Int) : RecordedCall()
-    data class FireCue(val cueId: Int) : RecordedCall()
+    data class CueStackGo(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
+    data class CueStackBack(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
+    data class CueStackPause(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
+    data class FireCue(val cueId: Int, val cueUuid: String? = null) : RecordedCall()
+    data class WriteSelection(val prop: String, val value: UByte) : RecordedCall()
+    data class SelectTarget(val target: CueTargetDto, val mode: BindingTarget.SelectMode) : RecordedCall()
+    data object ClearSelection : RecordedCall()
+    data object LocateSelection : RecordedCall()
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
     data class WriteSpeedMasterBpm(

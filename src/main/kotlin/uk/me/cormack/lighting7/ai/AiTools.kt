@@ -342,7 +342,7 @@ class AiTools(private val state: State) {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             ?: setOf(
                 "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
-                "templates", "cues", "cue_stacks", "cue_run", "programmer",
+                "templates", "cues", "cue_stacks", "cue_run", "programmer", "selection",
             )
 
         val result = buildJsonObject {
@@ -590,6 +590,31 @@ class AiTools(private val state: State) {
                             target.cueStackId?.let { put("cueStackId", it) }
                         })
                     }
+                })
+            }
+            if ("selection" in include) {
+                // The desk's one shared selection (state.DeskSelection): what the busk view and a
+                // selection-relative surface control act on. Read-only here — every tool on this
+                // surface passes explicit targets, so the model reads it for context, not to act
+                // through it.
+                val selection = state.deskSelection
+                put("selection", buildJsonObject {
+                    put("targets", buildJsonArray {
+                        for (target in selection.targets.value) {
+                            addJsonObject {
+                                put("type", target.type)
+                                put("key", target.key)
+                            }
+                        }
+                    })
+                    put("coverage", buildJsonArray {
+                        for (target in selection.coverage()) {
+                            addJsonObject {
+                                put("type", target.type)
+                                put("key", target.key)
+                            }
+                        }
+                    })
                 })
             }
         }

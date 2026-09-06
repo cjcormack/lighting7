@@ -77,6 +77,25 @@ sealed class AssignmentHealth {
     @Serializable
     @SerialName("missingSpeedMaster")
     data class MissingSpeedMaster(val masterUuid: String) : AssignmentHealth()
+
+    /**
+     * A `selectionProperty` binding names a property no fixture in the patch declares as a
+     * continuous (slider / colour) property, so no selection could ever give it something to
+     * write. Control-surface-only. A property *some* fixtures lack is not this: the write
+     * simply skips those heads.
+     */
+    @Serializable
+    @SerialName("unknownProperty")
+    data class UnknownProperty(val propertyName: String) : AssignmentHealth()
+
+    /**
+     * The binding's persisted payload carries a `type` discriminator this build does not know
+     * — an archive written by a newer desk. The row is kept, dead and rebindable, rather than
+     * refusing the project. Control-surface-only.
+     */
+    @Serializable
+    @SerialName("unknownTarget")
+    data class UnknownTarget(val targetType: String) : AssignmentHealth()
 }
 
 /**
@@ -95,4 +114,6 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
+    is AssignmentHealth.UnknownProperty -> "no patched fixture has property '${health.propertyName}'"
+    is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
 }

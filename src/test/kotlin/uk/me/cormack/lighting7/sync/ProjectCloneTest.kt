@@ -5,6 +5,13 @@ import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.BindingTargetJson
+import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
+import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
+import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
@@ -21,6 +28,7 @@ import java.nio.file.Path
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -308,6 +316,32 @@ class ProjectCloneTest {
             assertEquals(2, pads.count { it.template?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
             assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
         }
+    }
+
+    @Test
+    fun `clone rewires a cue binding's uuid to the clone's own cue`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-binding", description = null)
+
+        val (sourceCueUuid, cloneCueUuid, clonePayload) = transaction(state.database) {
+            val sourceCue = DaoCue.find { DaoCues.project eq sourceId }.single { it.name == "open" }
+            val cloneCue = DaoCue.find { DaoCues.project eq result.projectId }.single { it.name == "open" }
+            val binding = DaoControlSurfaceBinding
+                .find { DaoControlSurfaceBindings.project eq result.projectId }
+                .single { it.targetType == "fireCue" }
+            Triple(sourceCue.uuid.toString(), cloneCue.uuid.toString(), binding.targetPayload)
+        }
+        assertNotEquals(sourceCueUuid, cloneCueUuid)
+        val target = BindingTargetJson.decodeFromString<BindingTarget>(clonePayload)
+        val fireCue = assertIs<BindingTarget.FireCue>(target)
+        assertEquals(cloneCueUuid, fireCue.cueUuid, "the payload's uuid must be the clone's cue, not the source's")
+        // The int is the source project's row and nothing can translate it — which is why the
+        // runtime resolves by uuid first (`FU-SYNC-BINDING-PAYLOAD-UUIDS`).
+        assertEquals(
+            AssignmentHealth.Ok,
+            state.controlSurfaceBindingService.list(result.projectId).single { it.target is BindingTarget.FireCue }.health,
+            "a cloned cue binding resolves healthy through its uuid",
+        )
     }
 
     @Test

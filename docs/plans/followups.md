@@ -83,7 +83,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-FIELD-LEVEL-MERGE`](#fu-sync-field-level-merge) | Trigger | Sync | frequent conflicts on disjoint fields |
 | [`FU-SYNC-MANUAL-MULTIFILE`](#fu-sync-manual-multifile) | Trigger | Sync | an operator wants to hand-merge a script conflict |
 | [`FU-SYNC-PUSHRETRY-TEST-SEAM`](#fu-sync-pushretry-test-seam) | Trigger | Sync | `FU-SYNC-MERGE-ATOMICITY` is picked up |
-| [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | dead MIDI bindings after a clone, or `BindingTarget` work |
+| [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | second half only — `CueStackManager` lookups are still project-blind |
 | [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -1112,6 +1112,10 @@ so the work is a per-message role check at the dispatch site plus a decision abo
 unauthorised message *answers* (an error frame, not a close: the socket is shared by every
 subscription).
 
+Checked and not fired by `midi-surface-plan.md` session 1 (D12): `selection.set` / `.toggle` /
+`.clear` are operator gestures of the same tier as `surfaceBank.set`, and binding writes stayed on
+REST behind the gate they have today.
+
 **Trigger**: an admin-only operation gains a socket command, or `FU-AUTH-OPERATOR-LOCKDOWN` lands
 and a locked-down control is also reachable over WS — otherwise the two are the same change made
 twice.
@@ -1515,40 +1519,28 @@ counter-level assertions on the retry budget and a real test for the reset-befor
 
 ### `FU-SYNC-BINDING-PAYLOAD-UUIDS`
 
-**Control-surface binding targets address rows by integer id** · Trigger (correctness, latent) ·
-Code review of the project-clone rewrite, 2026-07-27
+**Cue-stack lookups are project-blind** · Trigger (correctness, latent) · Code review of the
+project-clone rewrite, 2026-07-27; **first half landed** in session 1 of
+[`midi-surface-plan.md`](midi-surface-plan.md) (sync `formatVersion` 11)
 
-`control_surface_bindings.targetPayload` serialises `midi.BindingTarget` verbatim, and the
-cue-facing variants carry **integer row ids** — `FireCue(cueId: Int)`,
-`CueStackGo/Back/Pause(stackId: Int)`. The exporter writes the payload as an opaque string, so
-those ids cross project and install boundaries unchanged. Nothing can translate them:
-`ExportUuidRemapper` only substitutes UUID-shaped strings and by design knows no field schemas.
+What landed: `FireCue` / `CueStackGo` / `Back` / `Pause` carry a `cueUuid` / `stackUuid` beside
+the int, `ControlSurfaceBindingService` fills it on every create and update, `BindingHealthEvaluator`
+and `DefaultSurfaceActions` resolve by the uuid alone when one is present (a uuid that resolves to
+nothing **drops** the press rather than falling back to the int), and `ExportUuidRemapper`'s blind
+substitution rewrites it on a clone. A clone or a cross-install import therefore keeps its cue
+bindings; only a row written before v11 still carries a bare int and must be rebound or re-saved.
+See `docs/sync-engineering.md` §"Version 11".
 
-Consequences, increasing in severity:
+What remains — the second half, worth doing on its own merits: `CueStackManager.fireCue` does
+`DaoCue.findById(id)` with **no project check**, and its stack equivalents likewise. The surface
+no longer reaches them with a foreign int (the uuid gate is in front), but the REST callers still
+can, and in the pre-init window (`buildBindingHealthContext` returns null, health defaults to
+`Ok`) a pre-v11 row's press still dispatches a bare int. Project-scope the lookups so a stale id
+can never reach another project's row.
 
-* **Clone** (`sync/ProjectCloner.kt`): a cloned project's cue/stack bindings point at the *source*
-  project's rows. `State.buildBindingHealthContext` resolves them against the clone's own ids, so
-  each evaluates to `MissingCue` / `MissingStack` and `SurfaceInputRouter` drops the press. The
-  clone's MIDI surface is dead until rebound — loud rather than silent, but wrong.
-* **Import on another install**: same failure, except the stale id may coincidentally *exist* and
-  name an unrelated cue, so a button fires the wrong look instead of nothing.
-* **Pre-init window**: `buildBindingHealthContext` returns null before the show is initialised and
-  health defaults to `Ok`. A press in that window dispatches `CueStackManager.fireCue`, which does
-  `DaoCue.findById(id)` with **no project check** — firing another project's cue.
-
-**Shape** — two independent pieces:
-
-1. Make `BindingTarget`'s cue/stack variants carry UUIDs (or have `ControlSurfaceBindingJson`
-   translate id ↔ uuid at the export/import boundary, leaving the runtime type alone). Either way
-   it's a `formatVersion` bump plus a payload migration, and it fixes clone and cross-install
-   import together.
-2. Independently, project-scope the lookups in `CueStackManager.fireCue` and its stack equivalents
-   so a stale id can never reach another project's row. Worth doing on its own merits.
-
-**Trigger** (any): an operator reports dead or wrong-cue MIDI bindings after a clone or import; any
-work touching `BindingTarget`, `ControlSurfaceBindingJson` or the binding-health context (fold it
-in rather than adding another id-addressed variant); or a `formatVersion` bump lands for another
-reason.
+**Trigger** (any): an operator reports a wrong cue firing after a clone or import; any work in
+`CueStackManager`'s lookup paths; or the int is dropped from the payload at a later
+`formatVersion`, which makes the runtime uuid-only and this the last int-addressed path.
 
 ---
 

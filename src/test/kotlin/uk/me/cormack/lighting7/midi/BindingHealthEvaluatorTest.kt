@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.midi
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import kotlin.test.Test
@@ -33,6 +34,9 @@ class BindingHealthEvaluatorTest {
 
     private val liveMaster: UUID = UUID.fromString("7d444840-9dc0-11d1-b245-5ffdce74fad2")
 
+    private val liveCue: UUID = UUID.fromString("11111111-2222-3333-4444-555555555555")
+    private val liveStack: UUID = UUID.fromString("66666666-7777-8888-9999-000000000000")
+
     private fun context(
         fixtures: Fixtures = fixturesWithHex(),
         validStackIds: Set<Int> = setOf(1, 2),
@@ -44,7 +48,78 @@ class BindingHealthEvaluatorTest {
         validCueIds = validCueIds,
         deviceTypes = ControlSurfaceRegistry.allTypes,
         validSpeedMasterUuids = validSpeedMasterUuids,
+        validStackUuids = setOf(liveStack),
+        validCueUuids = setOf(liveCue),
+        selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
     )
+
+    @Test
+    fun `a cue binding with a uuid is judged by the uuid alone`() {
+        val ctx = context()
+        // Live uuid, stale int: healthy — the int is what a clone leaves behind.
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 999, cueUuid = liveCue.toString()), ctx),
+        )
+        // Live int, unknown uuid: dead — the uuid names a cue that no longer exists.
+        assertIs<AssignmentHealth.MissingCue>(
+            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10, cueUuid = UUID.randomUUID().toString()), ctx),
+        )
+        // Malformed uuid: dead rather than parsed leniently.
+        assertIs<AssignmentHealth.MissingCue>(
+            BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10, cueUuid = "not-a-uuid"), ctx),
+        )
+        // No uuid (a pre-v11 row): the int decides, as before.
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.FireCue(cueId = 10), ctx))
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.CueStackGo(stackId = 999, stackUuid = liveStack.toString()), ctx),
+        )
+        assertIs<AssignmentHealth.MissingStack>(
+            BindingHealthEvaluator.evaluate(BindingTarget.CueStackPause(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
+        )
+    }
+
+    @Test
+    fun `SelectionProperty is healthy for a property some patched fixture can take on a fader`() {
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("dimmer"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("rgbColour"), ctx))
+        val dead = BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("tilt"), ctx)
+        assertEquals(AssignmentHealth.UnknownProperty("tilt"), dead)
+    }
+
+    @Test
+    fun `SelectTarget needs its group or fixture to exist and nothing else`() {
+        val ctx = context()
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("group", "front-wash")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("fixture", "hex-2")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingGroup("side-wash"),
+            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("group", "side-wash")), ctx),
+        )
+        assertEquals(
+            AssignmentHealth.MissingFixture("hex-9"),
+            BindingHealthEvaluator.evaluate(BindingTarget.SelectTarget(CueTargetDto("fixture", "hex-9")), ctx),
+        )
+    }
+
+    @Test
+    fun `ClearSelection and LocateSelection are always Ok and Unknown is always dead`() {
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ClearSelection, ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.LocateSelection, ctx))
+        assertEquals(
+            AssignmentHealth.UnknownTarget("fromTheFuture"),
+            BindingHealthEvaluator.evaluate(BindingTarget.Unknown("fromTheFuture", "{}"), ctx),
+        )
+    }
 
     @Test
     fun `Blackout and GrandMasterToggle always resolve to Ok`() {

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.MidiDeviceHandle
@@ -186,6 +187,30 @@ data class SurfaceDevicesStateOutMessage(
     val devices: List<SurfaceDeviceInfo>,
 ) : SurfaceOutMessage()
 
+/**
+ * One attached device's whole control state: the connect snapshot, and the frame after every
+ * full resync (attach, bank change, project change, a binding / fixture / selection change).
+ * `controls` is keyed by `controlId`; an empty map means the device detached. The view draws
+ * exactly this — never a recomputation from DMX (`docs/plans/midi-surface-plan.md` D7).
+ */
+@Serializable
+@SerialName("surfaceControls.state")
+data class SurfaceControlsStateOutMessage(
+    val displayKey: String,
+    val controls: Map<String, ControlState>,
+) : SurfaceOutMessage()
+
+/**
+ * The controls of one device that changed since the last flush, each at its current state —
+ * conflated to at most ~20 Hz per device by [uk.me.cormack.lighting7.midi.ControlStateTracker].
+ */
+@Serializable
+@SerialName("surfaceControls.changed")
+data class SurfaceControlsChangedOutMessage(
+    val displayKey: String,
+    val controls: Map<String, ControlState>,
+) : SurfaceOutMessage()
+
 // ─── Handler ────────────────────────────────────────────────────────────
 
 suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
@@ -328,6 +353,22 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
             state = change.state,
             target = change.target?.toInt(),
         ))
+    }
+
+    // `surfaceControls.*`: the deltas are a replay-0 stream and the snapshots fire only on a
+    // resync, so the connect frame is an explicit `sendSnapshot` — one `.state` per attached
+    // device, from the tracker's own store.
+    val controlStates = state.surfaceFeedbackPublisher.controlStates
+    scope.sendSnapshot {
+        for (snapshot in controlStates.snapshots()) {
+            send(SurfaceControlsStateOutMessage(snapshot.displayKey, snapshot.controls))
+        }
+    }
+    scope.subscribe(controlStates.snapshots) { snapshot ->
+        scope.send(SurfaceControlsStateOutMessage(snapshot.displayKey, snapshot.controls))
+    }
+    scope.subscribe(controlStates.deltas) { delta ->
+        scope.send(SurfaceControlsChangedOutMessage(delta.displayKey, delta.controls))
     }
 
     // Push the full device list on connect (all three sources are StateFlows, so the combine

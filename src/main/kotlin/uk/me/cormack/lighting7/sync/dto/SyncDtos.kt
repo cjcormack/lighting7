@@ -26,6 +26,17 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v11: control-surface binding payloads. No folder or field changes — `targetPayload` stays
+    // an opaque string — but what it may *contain* grows in two ways. New `type` discriminators
+    // (`selectionProperty`, `selectTarget`, `clearSelection`, `locateSelection`; more in later
+    // sessions of `docs/plans/midi-surface-plan.md`), and a `cueUuid` / `stackUuid` beside the
+    // int on `fireCue` / `cueStack*`, which is what finally lets a clone or a cross-install import
+    // keep its cue bindings (`FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half). `minReader` stays at
+    // **5**: the reader decodes each binding row on its own and keeps an undecodable one as a
+    // dead, rebindable `unknown` target rather than refusing the project, and a uuid it does not
+    // read is a field it ignores. The writer's number moves because a v10 reader had neither
+    // tolerance — one new discriminator failed its whole binding load — so it must refuse the repo.
+    //
     // v10: the busk layout, and a Look on a cue slot. A new `buskPages/` folder — one document per
     // page with its columns, banks and pads nested, pads naming templates, Looks and cues by uuid
     // — and `CueSlotJson.lookUuid` beside `cueUuid`. `minReader` stays at **5**: the folder reads
@@ -97,7 +108,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 10,
+    val formatVersion: Int = 11,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )

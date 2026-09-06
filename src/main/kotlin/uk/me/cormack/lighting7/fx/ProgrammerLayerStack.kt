@@ -160,6 +160,8 @@ class ProgrammerLayerStack(
      */
     private val state: () -> State?,
 ) {
+    private val targetCoverage = TargetCoverage { fixtures() }
+
     /**
      * Guards the classify-spawn-retract sequence in [syncEffects].
      *
@@ -422,51 +424,22 @@ class ProgrammerLayerStack(
      */
     private fun withoutTargets(layer: ProgrammerLayer, pressed: Set<CueTargetDto>): ProgrammerLayer? {
         if (layer.targets.isEmpty() || pressed.isEmpty()) return layer
-        val remaining = layer.targets.flatMap { held ->
-            val expanded = coverage(listOf(held))
-            val kept = expanded.filterNot { it in pressed }
-            // Untouched targets keep their own spelling — only a group the press partly covers is
-            // replaced by the members it left behind.
-            if (kept.size == expanded.size) listOf(held) else kept
-        }
+        val remaining = targetCoverage.narrow(layer.targets, pressed)
         return when {
-            remaining == layer.targets -> layer
+            remaining === layer.targets -> layer
             remaining.isEmpty() -> null
-            else -> layer.copy(targets = remaining.distinct())
+            else -> layer.copy(targets = remaining)
         }
     }
 
     /**
      * [targets] with every group replaced by its member fixtures — how this class answers "do these
-     * two selections mean the same heads?".
-     *
-     * A group and the list of its members are two spellings of one selection, so every coverage
-     * question [toggle] asks (is this pad already on, and what does a sibling press take away) is
-     * asked of the expansion rather than of the written target. The same expansion `CueComposer`
-     * does for a cook, minus the logging: a cook has a cue to name in a warning and a value to drop,
-     * where a selection comparison has neither.
-     *
-     * A group that cannot be resolved, or that holds no `Fixture` members, expands to **itself**.
-     * That keeps a stale target comparable — two layers naming a since-deleted group still match,
-     * and neither matches a fixture — rather than collapsing to the empty set, which would make
-     * every such layer look like every other.
+     * two selections mean the same heads?". The rule itself lives in [TargetCoverage], shared with
+     * the desk selection so a select button and a pad press expand a group the same way; every
+     * coverage question [toggle] asks (is this pad already on, and what does a sibling press take
+     * away) is asked of the expansion rather than of the written target.
      */
-    private fun coverage(targets: List<CueTargetDto>): List<CueTargetDto> =
-        targets.flatMap { target ->
-            // `ofOrNull`, not `of`: a target type this build does not know stands for itself like
-            // an unresolvable group, rather than throwing out of a pad press. `CueTargetDto.target`
-            // is the strict reading, and the cook is where it belongs.
-            when (TargetRef.ofOrNull(target.type, target.key)) {
-                is TargetRef.Group -> {
-                    val members = runCatching { fixtures().untypedGroup(target.key) }.getOrNull()
-                        ?.fixtures.orEmpty()
-                        .filterIsInstance<Fixture>()
-                        .map { CueTargetDto("fixture", it.key) }
-                    members.ifEmpty { listOf(target) }
-                }
-                else -> listOf(target)
-            }
-        }
+    private fun coverage(targets: List<CueTargetDto>): List<CueTargetDto> = targetCoverage.expand(targets)
 
     /**
      * Which library records are applied where — the answer a busk pad's ring is asking for,

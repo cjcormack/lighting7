@@ -195,7 +195,9 @@ internal val getCurrentStateTool = AnthropicToolDef(
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
             "`cue_run` says what each running stack's next GO will fire; " +
-            "`programmer` is the manual overlay this surface itself writes through apply_look.",
+            "`programmer` is the manual overlay this surface itself writes through apply_look; " +
+            "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
+            "reported for context — the tools on this surface take explicit targets.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -206,7 +208,7 @@ internal val getCurrentStateTool = AnthropicToolDef(
                     put("enum", buildJsonArray {
                         add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
                         add("groups"); add("looks"); add("templates"); add("cues")
-                        add("cue_stacks"); add("cue_run"); add("programmer")
+                        add("cue_stacks"); add("cue_run"); add("programmer"); add("selection")
                     })
                 })
                 put("description", "What to include. Defaults to all.")

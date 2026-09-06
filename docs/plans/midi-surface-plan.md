@@ -1,6 +1,16 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
-> **Document status: PROPOSED — nothing has landed.** The visual design is settled and checked in
+> **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06;
+> sessions 2–5 are proposed.** Session 1 amendments, beside the decisions they touch: §11's first
+> question was answered **yes** (the uuid move folded into v11); the mixed-value arm of D10 covers
+> fixed `GroupProperty` bindings too, not only selection entries; `selection.toggle` narrows a
+> partly covered group head-by-head through a shared `fx/TargetCoverage` rather than removing an
+> entry wholesale (D2); a mixed value **disarms** takeover rather than arming it against nothing
+> (D10); `UnknownTarget` is a `BindingTarget.Unknown` variant re-encoded verbatim, not a nullable
+> target (D11); uuid resolution lives in `DefaultSurfaceActions` and the health evaluator while
+> `CueStackManager` stays int-keyed (the follow-up's second half); and a binding, fixture or
+> selection change now re-feeds every attached device, which a binding change did not do before.
+> The visual design is settled and checked in
 > beside this plan at [`midi-surface-design/`](midi-surface-design/INDEX.md) — three static
 > artboards: the Surfaces tab in run mode and in edit-bindings mode, and the control status
 > vocabulary. The live canvas at

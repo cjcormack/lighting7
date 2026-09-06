@@ -4,6 +4,10 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.ControlState
+import uk.me.cormack.lighting7.midi.LedState
+import uk.me.cormack.lighting7.midi.RingState
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -296,6 +300,45 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"surfacePickup.changed""""))
         assertEquals(out, assertIs<SurfacePickupChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+    }
+
+    @Test
+    fun `surface domain — SurfaceControlsStateOutMessage and ChangedOutMessage round-trip`() {
+        val controls = mapOf(
+            "fader-1" to ControlState(value = 64, physical = 60, touched = true, led = LedState.NONE, ring = RingState.NONE),
+            "enc-1" to ControlState(value = null, ring = RingState.OFF),
+            "btn-1" to ControlState(led = LedState.ON),
+        )
+        val state = SurfaceControlsStateOutMessage("x-touch-compact", controls)
+        val encodedState = json.encodeToString<OutMessage>(state)
+        assertTrue(encodedState.contains(""""type":"surfaceControls.state""""))
+        assertTrue(encodedState.contains(""""ring":"off""""))
+        assertEquals(state, assertIs<SurfaceControlsStateOutMessage>(json.decodeFromString<OutMessage>(encodedState)))
+
+        val changed = SurfaceControlsChangedOutMessage("x-touch-compact", controls.filterKeys { it == "fader-1" })
+        val encodedChanged = json.encodeToString<OutMessage>(changed)
+        assertTrue(encodedChanged.contains(""""type":"surfaceControls.changed""""))
+        assertEquals(changed, assertIs<SurfaceControlsChangedOutMessage>(json.decodeFromString<OutMessage>(encodedChanged)))
+    }
+
+    // ─── Selection domain ───────────────────────────────────────────────────
+
+    @Test
+    fun `selection domain — inbound messages route via SelectionInMessage`() {
+        val set = json.decodeFromString<InMessage>("""{"type":"selection.set","targets":[{"type":"group","key":"front-wash"}]}""")
+        assertIs<SelectionInMessage>(set)
+        assertEquals(listOf(CueTargetDto("group", "front-wash")), assertIs<SelectionSetInMessage>(set).targets)
+        val toggle = json.decodeFromString<InMessage>("""{"type":"selection.toggle","target":{"type":"fixture","key":"hex-1"}}""")
+        assertEquals(CueTargetDto("fixture", "hex-1"), assertIs<SelectionToggleInMessage>(toggle).target)
+        assertIs<SelectionClearInMessage>(json.decodeFromString<InMessage>("""{"type":"selection.clear"}"""))
+    }
+
+    @Test
+    fun `selection domain — SelectionStateOutMessage round-trips with discriminator`() {
+        val out = SelectionStateOutMessage(listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("group", "front-wash")))
+        val encoded = json.encodeToString<OutMessage>(out)
+        assertTrue(encoded.contains(""""type":"selection.state""""))
+        assertEquals(out, assertIs<SelectionStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
     // ─── Project domain ─────────────────────────────────────────────────────

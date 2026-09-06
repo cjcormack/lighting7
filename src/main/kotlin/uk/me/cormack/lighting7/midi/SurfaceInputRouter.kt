@@ -226,6 +226,8 @@ class SurfaceInputRouter(
                 actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit)
             is BindingTarget.SpeedMasterBpm ->
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
+            is BindingTarget.SelectionProperty ->
+                actions.writeSelectionProperty(target.propertyName, value7Bit)
             else -> logger.debug(
                 "Ignoring continuous input on binding {} → {} (discrete target)",
                 binding.id, target::class.simpleName,
@@ -238,10 +240,17 @@ class SurfaceInputRouter(
         binding: ControlSurfaceBindingService.ResolvedBinding,
     ) {
         when (val target = binding.target) {
-            is BindingTarget.CueStackGo -> actions.cueStackGo(target.stackId)
-            is BindingTarget.CueStackBack -> actions.cueStackBack(target.stackId)
-            is BindingTarget.CueStackPause -> actions.cueStackPause(target.stackId)
-            is BindingTarget.FireCue -> actions.fireCue(target.cueId)
+            is BindingTarget.CueStackGo -> actions.cueStackGo(target.stackId, target.stackUuid)
+            is BindingTarget.CueStackBack -> actions.cueStackBack(target.stackId, target.stackUuid)
+            is BindingTarget.CueStackPause -> actions.cueStackPause(target.stackId, target.stackUuid)
+            is BindingTarget.FireCue -> actions.fireCue(target.cueId, target.cueUuid)
+            is BindingTarget.SelectTarget -> actions.selectTarget(target.target, target.mode)
+            is BindingTarget.ClearSelection -> actions.clearSelection()
+            is BindingTarget.LocateSelection -> actions.locateSelection()
+            // Health already marks it dead, so the gate above drops it before this arm runs.
+            is BindingTarget.Unknown -> logger.debug(
+                "Ignoring button press on binding {} → unknown target type '{}'", binding.id, target.targetType,
+            )
             is BindingTarget.Blackout -> actions.toggleBlackout()
             is BindingTarget.GrandMasterToggle -> actions.toggleGrandMaster()
             is BindingTarget.SetBank -> bankState.setBank(target.deviceTypeKey, target.bank)
@@ -269,15 +278,20 @@ class SurfaceInputRouter(
             }
             is BindingTarget.FixtureProperty,
             is BindingTarget.GroupProperty,
+            is BindingTarget.SelectionProperty,
                 -> {
                 // A button press on a continuous target = write full value (max "1" in 7-bit).
                 // Behaves like a momentary full-on without release handling. v1 design choice:
                 // these targets on buttons are equivalent to Flash with max=255 but without the
                 // release step — operator should use Flash if they want that semantics.
-                if (target is BindingTarget.FixtureProperty) {
-                    actions.writeFixtureProperty(target.fixtureKey, target.propertyName, 127u)
-                } else if (target is BindingTarget.GroupProperty) {
-                    actions.writeGroupProperty(target.groupName, target.propertyName, 127u)
+                when (target) {
+                    is BindingTarget.FixtureProperty ->
+                        actions.writeFixtureProperty(target.fixtureKey, target.propertyName, 127u)
+                    is BindingTarget.GroupProperty ->
+                        actions.writeGroupProperty(target.groupName, target.propertyName, 127u)
+                    is BindingTarget.SelectionProperty ->
+                        actions.writeSelectionProperty(target.propertyName, 127u)
+                    else -> Unit
                 }
             }
         }

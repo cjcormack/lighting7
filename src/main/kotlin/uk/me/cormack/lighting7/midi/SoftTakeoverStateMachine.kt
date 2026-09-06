@@ -159,6 +159,24 @@ class SoftTakeoverStateMachine {
         }
     }
 
+    /**
+     * Drop the control's pickup target: [State.ENGAGED] with no target, so the next move writes
+     * straight through. The publisher calls this when a selection-relative or group control has
+     * **no uniform value to arm against** — a mixed selection, or an empty one — because a move
+     * there is meant to write every head and make them agree, not to wait for a crossing that
+     * has nothing to cross. Emits a [PickupStateChange] so the pickup indicator shows no target.
+     */
+    fun disarm(displayKey: String, controlId: String) {
+        val k = key(displayKey, controlId)
+        val current = entries[k] ?: DEFAULT
+        val next = Entry(State.ENGAGED, current.lastPhysical, null)
+        if (current == next) return
+        entries[k] = next
+        if (current.state != next.state || current.target != null) {
+            _changes.tryEmit(PickupStateChange(displayKey, controlId, State.ENGAGED, null))
+        }
+    }
+
     fun clearDevice(displayKey: String) {
         val prefix = "$displayKey|"
         val removed = entries.keys.filter { it.startsWith(prefix) }

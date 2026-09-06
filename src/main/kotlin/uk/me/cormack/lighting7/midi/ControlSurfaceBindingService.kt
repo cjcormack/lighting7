@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -16,6 +17,8 @@ import uk.me.cormack.lighting7.models.describeAssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
+import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -190,6 +193,7 @@ class ControlSurfaceBindingService(
         takeoverPolicy: BindingTakeoverPolicy? = null,
         sortOrder: Int = 0,
     ): ResolvedBinding {
+        refuseUnknown(target)
         ensureLoaded(projectId)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
@@ -199,14 +203,15 @@ class ControlSurfaceBindingService(
                 "Binding already exists for $deviceTypeKey.$controlId (bank=$bank) in project $projectId"
             }
             val raw = transaction(database) {
+                val stored = target.withUuids(projectId)
                 DaoControlSurfaceBinding.new {
                     this.project = DaoProject.findById(projectId)
                         ?: throw IllegalArgumentException("Project $projectId not found")
                     this.deviceTypeKey = deviceTypeKey
                     this.controlId = controlId
                     this.bank = bank
-                    this.targetType = target.discriminator()
-                    this.targetPayload = BindingTargetJson.encodeToString(target)
+                    this.targetType = stored.discriminator()
+                    this.targetPayload = stored.encodePayload()
                     this.takeoverPolicy = takeoverPolicy?.name
                     this.sortOrder = sortOrder
                 }.toResolved()
@@ -234,6 +239,7 @@ class ControlSurfaceBindingService(
         bankUpdate: FieldUpdate<String?> = FieldUpdate.NoChange,
         takeoverPolicyUpdate: FieldUpdate<BindingTakeoverPolicy?> = FieldUpdate.NoChange,
     ): ResolvedBinding? {
+        target?.let(::refuseUnknown)
         ensureLoaded(projectId)
         val resolved = synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return null
@@ -255,8 +261,9 @@ class ControlSurfaceBindingService(
                 if (controlId != null) row.controlId = controlId
                 if (bankUpdate is FieldUpdate.Set) row.bank = bankUpdate.value
                 if (target != null) {
-                    row.targetType = target.discriminator()
-                    row.targetPayload = BindingTargetJson.encodeToString(target)
+                    val stored = target.withUuids(projectId)
+                    row.targetType = stored.discriminator()
+                    row.targetPayload = stored.encodePayload()
                 }
                 if (takeoverPolicyUpdate is FieldUpdate.Set) {
                     row.takeoverPolicy = takeoverPolicyUpdate.value?.name
@@ -368,8 +375,60 @@ class ControlSurfaceBindingService(
         }
     }
 
+    /**
+     * A client never writes [BindingTarget.Unknown]: it exists only as the decode fallback, and
+     * accepting one from a request would let a `type` this build cannot dispatch be persisted
+     * on purpose. [IllegalArgumentException] is what the routes already map to a 400.
+     */
+    private fun refuseUnknown(target: BindingTarget) {
+        if (target is BindingTarget.Unknown) {
+            throw IllegalArgumentException(
+                "A binding target of type '${target.targetType}' cannot be created from a request",
+            )
+        }
+    }
+
+    /**
+     * Fill the uuid beside the int on a cue / stack target when the client sent only the int —
+     * the REST picker and MIDI Learn both address rows by id — so every row written from here on
+     * carries the form that survives a clone. Must run inside the caller's transaction. An int
+     * that resolves to nothing (or to another project's row) is stored as sent, and the health
+     * evaluator marks it dead exactly as before.
+     */
+    private fun BindingTarget.withUuids(projectId: Int): BindingTarget = when (this) {
+        is BindingTarget.FireCue -> if (cueUuid != null) this else {
+            val cue = DaoCue.findById(cueId)?.takeIf { it.project.id.value == projectId }
+            if (cue == null) this else copy(cueUuid = cue.uuid.toString())
+        }
+        is BindingTarget.CueStackGo -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
+        is BindingTarget.CueStackBack -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
+        is BindingTarget.CueStackPause -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
+        else -> this
+    }
+
+    private fun stackUuidFor(stackId: Int, projectId: Int): String? =
+        DaoCueStack.findById(stackId)?.takeIf { it.project.id.value == projectId }?.uuid?.toString()
+
+    /**
+     * Decode one row's payload, and keep the row when the payload cannot be read. An archive
+     * written by a newer desk carries `type` discriminators this build does not know; failing
+     * the whole project load for one of them left every *other* binding dead too — and, because
+     * [ensureLoaded] never marked the project loaded, retried the DB read on every MIDI event.
+     * The row comes back as a [BindingTarget.Unknown] with its bytes intact, which health reports
+     * as `unknownTarget`: dead, visible in the list, rebindable, and re-written verbatim.
+     */
     private fun DaoControlSurfaceBinding.toResolved(): ResolvedBinding {
-        val target = BindingTargetJson.decodeFromString<BindingTarget>(targetPayload)
+        val target = try {
+            BindingTargetJson.decodeFromString<BindingTarget>(targetPayload)
+        } catch (e: SerializationException) {
+            logger.warn("Binding id={} has an undecodable target (type='{}'): {}", id.value, targetType, e.message)
+            BindingTarget.Unknown(targetType, targetPayload)
+        } catch (e: IllegalArgumentException) {
+            // A variant's own `init` guard (Flash's inner target, a BPM window) rejecting a payload
+            // written under a rule this build no longer accepts.
+            logger.warn("Binding id={} has an invalid target (type='{}'): {}", id.value, targetType, e.message)
+            BindingTarget.Unknown(targetType, targetPayload)
+        }
         val policy = takeoverPolicy?.let {
             try {
                 BindingTakeoverPolicy.valueOf(it)
@@ -396,8 +455,15 @@ class ControlSurfaceBindingService(
  * renaming a `@SerialName` only requires touching the subclass declaration.
  */
 internal fun BindingTarget.discriminator(): String {
+    // An unknown target keeps naming the type it was written with, so the DB column, the list
+    // DTO's `targetType` and the matrix filter all say what the row *is* rather than "unknown".
+    if (this is BindingTarget.Unknown) return targetType
     val klass = this::class
     val annotated = klass.annotations.filterIsInstance<SerialName>().firstOrNull()?.value
     return annotated ?: klass.simpleName
         ?: error("BindingTarget subclass ${klass.java.name} has no @SerialName")
 }
+
+/** The payload column: an unknown target is written back byte-for-byte. */
+internal fun BindingTarget.encodePayload(): String =
+    if (this is BindingTarget.Unknown) rawPayload else BindingTargetJson.encodeToString(this)

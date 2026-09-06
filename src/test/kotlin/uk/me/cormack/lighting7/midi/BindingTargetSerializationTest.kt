@@ -143,4 +143,56 @@ class BindingTargetSerializationTest {
             BindingTarget.SpeedMasterBpm(minBpm = 10.0, maxBpm = 400.0)
         }
     }
+
+    @Test
+    fun `FireCue carries its uuid beside the int and omits it when null`() {
+        val bare: BindingTarget = BindingTarget.FireCue(cueId = 42)
+        assertEquals("""{"type":"fireCue","cueId":42}""", BindingTargetJson.encodeToString(bare))
+        val withUuid: BindingTarget = BindingTarget.FireCue(cueId = 42, cueUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2")
+        val encoded = BindingTargetJson.encodeToString(withUuid)
+        assertTrue(encoded.contains(""""cueUuid":"7d444840-9dc0-11d1-b245-5ffdce74fad2""""))
+        assertEquals(withUuid, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        val go: BindingTarget = BindingTarget.CueStackGo(stackId = 3, stackUuid = "7d444840-9dc0-11d1-b245-5ffdce74fad2")
+        assertEquals(go, BindingTargetJson.decodeFromString<BindingTarget>(BindingTargetJson.encodeToString(go)))
+    }
+
+    @Test
+    fun `selection variants round trip with their discriminators`() {
+        val cases = mapOf(
+            "selectionProperty" to BindingTarget.SelectionProperty("dimmer"),
+            "selectTarget" to BindingTarget.SelectTarget(
+                uk.me.cormack.lighting7.models.CueTargetDto("group", "front-wash"),
+                BindingTarget.SelectMode.REPLACE,
+            ),
+            "clearSelection" to BindingTarget.ClearSelection,
+            "locateSelection" to BindingTarget.LocateSelection,
+        )
+        for ((type, target) in cases) {
+            val encoded = BindingTargetJson.encodeToString<BindingTarget>(target)
+            val tree = BindingTargetJson.parseToJsonElement(encoded) as JsonObject
+            assertEquals(type, tree["type"]?.jsonPrimitive?.content)
+            assertEquals(type, target.discriminator())
+            assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        }
+        // SelectTarget's default mode is omitted on the wire and restored on read.
+        val toggle = BindingTargetJson.encodeToString<BindingTarget>(
+            BindingTarget.SelectTarget(uk.me.cormack.lighting7.models.CueTargetDto("fixture", "hex-1")),
+        )
+        assertTrue(!toggle.contains("mode"), toggle)
+        assertEquals(
+            BindingTarget.SelectMode.TOGGLE,
+            (BindingTargetJson.decodeFromString<BindingTarget>(toggle) as BindingTarget.SelectTarget).mode,
+        )
+    }
+
+    @Test
+    fun `Unknown names the type it was written with and re-encodes its bytes verbatim`() {
+        val unknown = BindingTarget.Unknown(targetType = "fromTheFuture", rawPayload = """{"type":"fromTheFuture","x":1}""")
+        assertEquals("fromTheFuture", unknown.discriminator())
+        assertEquals("""{"type":"fromTheFuture","x":1}""", unknown.encodePayload())
+        // The codec itself still refuses the discriminator: tolerance lives in the row decode.
+        assertFailsWith<kotlinx.serialization.SerializationException> {
+            BindingTargetJson.decodeFromString<BindingTarget>("""{"type":"fromTheFuture","x":1}""")
+        }
+    }
 }

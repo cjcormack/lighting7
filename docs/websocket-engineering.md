@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **96 message types**
-(37 inbound, 59 outbound) across eleven domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **102 message types**
+(40 inbound, 62 outbound) across twelve domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -193,8 +193,9 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
+| Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
 | Speed masters | `SpeedMasterSocket.kt` | 4 | 3 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
-| Surfaces | `SurfaceSocket.kt` | 9 | 11 | `handleSurface` | `setupSurfaceSubscriptions` |
+| Surfaces | `SurfaceSocket.kt` | 9 | 13 | `handleSurface` | `setupSurfaceSubscriptions` |
 
 Four families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
 Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages are declared in
@@ -202,7 +203,7 @@ Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages ar
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (37)
+## Client → Server (40)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -248,6 +249,20 @@ Adding and updating effects is REST (`POST /api/rest/fx/add`), not WS.
 | `projectState` | — | Resync: replies `projectState` |
 
 Switching project is REST; the socket only reports it (`projectChanged`).
+
+### Selection — `SelectionSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `selection.set` | `targets: [{type, key}]` | none — `selection.state` broadcast |
+| `selection.toggle` | `target: {type, key}` | none — `selection.state` broadcast |
+| `selection.clear` | — | none — `selection.state` broadcast |
+
+The desk's one shared selection (`state/DeskSelection.kt`, `docs/lighting-composition-model.md`
+§"Layer 2"). `toggle` is head-by-head: a group all of whose members are selected is "in", and
+toggling it off narrows the entries that covered it (`fx/TargetCoverage.kt`, the rule a busk press
+applies to a sibling layer). A write that changes nothing sends no frame. No resync request: the
+family is `StateFlow`-backed, so a subscription is the snapshot.
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -318,7 +333,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (59)
+## Server → Client (62)
 
 ### Boot — `BootSocket.kt`
 
@@ -423,6 +438,12 @@ bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `Effect
 |---|---|---|
 | `projectState` | `projectId`, `projectName`, `description?` | Connect snapshot, and the reply to a `projectState` request |
 | `projectChanged` | `previousProjectId?`, `newProjectId`, `newProjectName` | Purely an event — fires on switches only |
+
+### Selection — `SelectionSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `selection.state` | `targets: [{type, key}]` | Connect snapshot + broadcast |
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -548,6 +569,8 @@ refetch.
 | `surfaceScaler.state` | `blackoutEnabled`, `grandMasterEnabled` | Connect snapshot + broadcast |
 | `surfacePickup.changed` | `displayKey`, `controlId`, `state`, `target?` | Broadcast — soft-takeover pickup indicator |
 | `surfaceDevices.state` | `devices: [{displayKey, displayName, typeKey?, isMatched, hasInputPort, hasOutputPort, activeBank?}]` | Connect snapshot + broadcast |
+| `surfaceControls.state` | `displayKey`, `controls: {controlId: {value?, physical?, touched, led: on\|off\|none, ring: on\|off\|none}}` | Connect snapshot (one per attached device, explicit `sendSnapshot`) + broadcast after every full resync; an empty `controls` map is a detach |
+| `surfaceControls.changed` | `displayKey`, `controls: {controlId: …}` (only the controls that changed, at their current state) | Broadcast delta, conflated to at most one frame per device per 50 ms |
 
 `surfaceBank.changed` carries previous→new only, so a client that never saw a switch has nothing to
 render from — hence `surfaceBank.state` as its own frame, taken as a subscription to the `active`
@@ -557,6 +580,14 @@ isn't lost by both.
 `surfaceScaler.state` re-subscribes through `flatMapLatest` off `projectChangedFlow`, because
 `state.show.globalScalerState` is re-created on project switch and a plain `combine` at connect
 time would observe the previous project's facade forever.
+
+`surfaceControls.*` is the control-state stream of `docs/plans/midi-surface-plan.md` D7: what
+`SurfaceFeedbackPublisher` *told the hardware* — the fed-back value (null for mixed, unbound or no
+selection), the last inbound physical position of a fader, touch, LED and ring — written at the
+publisher's send sites before any early return and stored in `midi/ControlStateTracker.kt`. The
+deltas are a replay-0 stream and the snapshots fire only on a resync, so the connect frame is an
+explicit `sendSnapshot` from the tracker's store. The view never recomputes a control from DMX: if
+the picture and the desk disagree, the publisher is wrong, which is the bug worth finding.
 
 ## Connection lifecycle
 
@@ -704,8 +735,9 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |
+| `plugins/SelectionSocket.kt` | The desk selection: snapshot + broadcast, and the three writes |
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
-| `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup |
+| `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
 | `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
 | `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |

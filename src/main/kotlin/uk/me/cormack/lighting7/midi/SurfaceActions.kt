@@ -3,6 +3,9 @@ package uk.me.cormack.lighting7.midi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.CueStackManager
@@ -12,8 +15,16 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCueStack
+import uk.me.cormack.lighting7.models.DaoCueStacks
+import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.SpeedMasterSource
+import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.show.Fixtures
+import java.util.UUID
 
 /**
  * Port between [SurfaceInputRouter] and the rest of the application. Production wires this
@@ -44,10 +55,16 @@ interface SurfaceActions {
     fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String)
     fun flashGroupPropertyRelease(groupName: String, propertyName: String)
 
-    fun cueStackGo(stackId: Int)
-    fun cueStackBack(stackId: Int)
-    fun cueStackPause(stackId: Int)
-    fun fireCue(cueId: Int)
+    /**
+     * Cue and stack actions take the binding's uuid beside its int. A uuid, when present, is the
+     * only thing consulted — it is what survives a clone — and a uuid that resolves to nothing in
+     * the current project **drops** the press rather than falling back to an int that may name
+     * another project's row. Only a pre-v11 row with no uuid is dispatched by int.
+     */
+    fun cueStackGo(stackId: Int, stackUuid: String? = null)
+    fun cueStackBack(stackId: Int, stackUuid: String? = null)
+    fun cueStackPause(stackId: Int, stackUuid: String? = null)
+    fun fireCue(cueId: Int, cueUuid: String? = null)
 
     fun toggleBlackout(): Boolean
     fun toggleGrandMaster(): Boolean
@@ -60,6 +77,24 @@ interface SurfaceActions {
 
     /** Tap a speed master's tempo ([masterUuid] null → master 1). */
     fun tapSpeedMaster(masterUuid: String?)
+
+    /**
+     * Write a continuous value to [propertyName] on every target in the desk selection
+     * ([uk.me.cormack.lighting7.state.DeskSelection]) — a group fanned to its members. An empty
+     * selection drops the write with a debug log; it is never widened to "everything".
+     */
+    fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte)
+
+    /** Toggle [target] in, or replace the selection with it, per [mode]. */
+    fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode)
+
+    fun clearSelection()
+
+    /**
+     * Locate every selected target, or release them all when every one is already located —
+     * the same toggle `POST /locate/toggle` makes, once per target.
+     */
+    fun locateSelection()
 }
 
 /**
@@ -151,7 +186,8 @@ class DefaultSurfaceActions(
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun cueStackGo(stackId: Int) {
+    override fun cueStackGo(stackId: Int, stackUuid: String?) {
+        val stackId = resolveStackId(stackId, stackUuid) ?: return
         try {
             val result = cueStackManager.go(state, stackId, GlobalScope)
             if (result != null) state.show.fixtures.cueStackListChanged()
@@ -161,7 +197,8 @@ class DefaultSurfaceActions(
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun cueStackBack(stackId: Int) {
+    override fun cueStackBack(stackId: Int, stackUuid: String?) {
+        val stackId = resolveStackId(stackId, stackUuid) ?: return
         try {
             val result = cueStackManager.advanceStack(state, stackId, CueStackManager.AdvanceDirection.BACKWARD, GlobalScope)
             if (result != null) state.show.fixtures.cueStackListChanged()
@@ -170,7 +207,8 @@ class DefaultSurfaceActions(
         }
     }
 
-    override fun cueStackPause(stackId: Int) {
+    override fun cueStackPause(stackId: Int, stackUuid: String?) {
+        val stackId = resolveStackId(stackId, stackUuid) ?: return
         try {
             cueStackManager.pauseAutoAdvance(state, stackId)
         } catch (e: Exception) {
@@ -179,7 +217,8 @@ class DefaultSurfaceActions(
     }
 
     @OptIn(DelicateCoroutinesApi::class)
-    override fun fireCue(cueId: Int) {
+    override fun fireCue(cueId: Int, cueUuid: String?) {
+        val cueId = resolveCueId(cueId, cueUuid) ?: return
         try {
             cueStackManager.fireCue(state, cueId, GlobalScope)
             state.show.fixtures.cueStackListChanged()
@@ -190,6 +229,87 @@ class DefaultSurfaceActions(
 
     override fun toggleBlackout(): Boolean = globalScalerState.toggleBlackout()
     override fun toggleGrandMaster(): Boolean = globalScalerState.toggleGrandMaster()
+
+    /**
+     * Uuid first, and never the int when a uuid is present: a binding cloned from another project
+     * carries that project's int, and the health evaluator already marks a uuid that resolves to
+     * nothing as dead. The lookup is one indexed read per press — button rate, not fader rate.
+     */
+    private fun resolveCueId(cueId: Int, cueUuid: String?): Int? {
+        if (cueUuid == null) return cueId
+        val uuid = uuidOrNull(cueUuid) ?: run {
+            logger.warn("Surface FIRE CUE dropped: binding cue uuid '$cueUuid' is not a uuid")
+            return null
+        }
+        val projectId = currentProjectId() ?: return null
+        val resolved = transaction(state.database) {
+            DaoCue.find { (DaoCues.uuid eq uuid) and (DaoCues.project eq projectId) }.firstOrNull()?.id?.value
+        }
+        if (resolved == null) logger.warn("Surface FIRE CUE dropped: no cue $cueUuid in project $projectId")
+        return resolved
+    }
+
+    private fun resolveStackId(stackId: Int, stackUuid: String?): Int? {
+        if (stackUuid == null) return stackId
+        val uuid = uuidOrNull(stackUuid) ?: run {
+            logger.warn("Surface stack action dropped: binding stack uuid '$stackUuid' is not a uuid")
+            return null
+        }
+        val projectId = currentProjectId() ?: return null
+        val resolved = transaction(state.database) {
+            DaoCueStack.find { (DaoCueStacks.uuid eq uuid) and (DaoCueStacks.project eq projectId) }
+                .firstOrNull()?.id?.value
+        }
+        if (resolved == null) logger.warn("Surface stack action dropped: no stack $stackUuid in project $projectId")
+        return resolved
+    }
+
+    private fun currentProjectId(): Int? = try {
+        state.projectManager.currentProject.id.value
+    } catch (e: Exception) {
+        logger.debug("Surface cue action dropped: no current project ({})", e.message)
+        null
+    }
+
+    private fun uuidOrNull(raw: String): UUID? = try {
+        UUID.fromString(raw)
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {
+        val targets = state.deskSelection.targets.value
+        if (targets.isEmpty()) {
+            logger.debug("Surface selection write of '{}' dropped: nothing selected", propertyName)
+            return
+        }
+        val writes = SelectionWrites.forTargets(fixtures, targets, propertyName, midiValue7Bit)
+        if (writes.isEmpty()) return
+        fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
+    }
+
+    override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
+        when (mode) {
+            BindingTarget.SelectMode.TOGGLE -> state.deskSelection.toggle(target)
+            BindingTarget.SelectMode.REPLACE -> state.deskSelection.set(listOf(target))
+        }
+    }
+
+    override fun clearSelection() = state.deskSelection.clear()
+
+    override fun locateSelection() {
+        val targets = state.deskSelection.targets.value.mapNotNull { TargetRef.ofOrNull(it.type, it.key) }
+        if (targets.isEmpty()) {
+            logger.debug("Surface locate dropped: nothing selected")
+            return
+        }
+        val located = state.show.locateManager.activeTargets.value
+        val allLocated = targets.all { it in located }
+        for (target in targets) {
+            // All on → all off; otherwise bring the unlocated ones up and leave the rest lit.
+            if (allLocated || target !in located) toggleLocate(state, target)
+        }
+    }
 
     override fun writeSpeedMasterBpm(
         masterUuid: String?,

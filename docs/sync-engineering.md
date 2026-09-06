@@ -185,7 +185,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 10`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 11`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -220,6 +220,36 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 11 — tolerant binding payloads, and uuids beside the ints
+
+**v11 changes no folder and no field.** `controlSurfaceBindings/{uuid}.json` still carries
+`targetPayload` as the opaque string it always was; what moves is what that string may *contain*,
+in two ways.
+
+New `type` discriminators. Session 1 of `docs/plans/midi-surface-plan.md` adds the
+selection-relative targets (`selectionProperty`, `selectTarget`, `clearSelection`,
+`locateSelection`), and later sessions add more (strips, the encoder bank, records on buttons).
+Rather than bump the writer for each, the **reader** changed: `ControlSurfaceBindingService`
+decodes each row on its own and keeps an undecodable one as a `BindingTarget.Unknown` — health
+`unknownTarget`, dead in the list, rebindable, and re-written byte-for-byte — instead of failing
+the whole project load on the first discriminator it does not know. That is what lets `minReader`
+stay at **5**: a v11 archive read by a v11 desk from before a later session loads with those rows
+dead and everything else live.
+
+Uuids beside the ints. `fireCue` carries `cueUuid` beside `cueId`, and `cueStackGo` / `Back` /
+`Pause` carry `stackUuid` beside `stackId`. The service fills the uuid on every create and update
+(the REST picker and MIDI Learn still address rows by int), dispatch and health resolve by the uuid
+alone when one is present, and `ExportUuidRemapper`'s blind substitution rewrites it on a clone —
+so a cloned or cross-install-imported project keeps its cue bindings, which is the first half of
+`FU-SYNC-BINDING-PAYLOAD-UUIDS`. A pre-v11 row with no uuid is dispatched by its int exactly as
+before. The int is kept for one version so the tolerant decode never sees a row it cannot read;
+dropping it is a later `formatVersion`.
+
+The writer's number moves because a v10 reader had neither tolerance: one new discriminator failed
+its whole binding load (and, because `ensureLoaded` never marked the project loaded, retried the DB
+read on every MIDI event), so it must refuse the repo rather than import a project whose surface
+is dead.
 
 ### Version 10 — busk pages and Look slots
 
@@ -573,13 +603,13 @@ A clone is a **distinct sync identity**: new project UUID, new record UUIDs, no
 `sync_configs` / `sync_state` / linked repo / session history. It is not
 `isCurrent` and doesn't inherit `activeStackId`.
 
-**Known limitation.** A clone carries everything the export carries, but one
-exported payload isn't project-portable: `control_surface_bindings.targetPayload`
-addresses cues and stacks by *integer row id*, which nothing can translate. A
-clone's cue/stack MIDI bindings therefore resolve to `MissingCue` /
-`MissingStack` and must be rebound. This affects cross-install import equally —
-it's a property of the export format, not of cloning — and the fix is a
-`formatVersion` change tracked as `FU-SYNC-BINDING-PAYLOAD-UUIDS` in
+**Known limitation, narrowed at v11.** `control_surface_bindings.targetPayload` addresses
+cues and stacks by *integer row id* as well as by uuid. A row written **before v11** carries only
+the int, which nothing can translate: a clone's or a cross-install import's pre-v11 cue/stack
+bindings resolve to `MissingCue` / `MissingStack` and must be rebound (or re-saved, which fills the
+uuid). Every row written at v11 or later carries the uuid and clones correctly. The second half of
+`FU-SYNC-BINDING-PAYLOAD-UUIDS` — project-scoping `CueStackManager`'s lookups so a stale int can
+never reach another project's row — is still open in
 [`docs/plans/followups.md`](plans/followups.md).
 
 One deliberate exception to "the export is the whole story": clones **do**

@@ -536,7 +536,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; universe = 1; channel = 7; value = 255
     }
 
-    // control surface bindings — one bank-scoped, one global (null bank)
+    // control surface bindings — one bank-scoped, one global (null bank), then one of each
+    // selection-relative variant (midi-surface plan, session 1) and a cue binding carrying the
+    // uuid beside the int (v11). Non-default fields throughout: canonical JSON omits defaults, so
+    // a field left at its default is invisible to the round-trip and clone tests.
     DaoControlSurfaceBinding.new {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "fader-1"; bank = "bank-a"
@@ -548,9 +551,44 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoControlSurfaceBinding.new {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "button-1"
-        targetType = "grandMaster"
-        targetPayload = """{"type":"grandMaster"}"""
+        targetType = "grandMasterToggle"
+        targetPayload = """{"type":"grandMasterToggle"}"""
         sortOrder = 1
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "enc-1"
+        targetType = "selectionProperty"
+        targetPayload = """{"type":"selectionProperty","propertyName":"pan"}"""
+        sortOrder = 2
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-2"
+        targetType = "selectTarget"
+        targetPayload = """{"type":"selectTarget","target":{"type":"group","key":"front-wash"},"mode":"replace"}"""
+        sortOrder = 3
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-3"
+        targetType = "clearSelection"
+        targetPayload = """{"type":"clearSelection"}"""
+        sortOrder = 4
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-4"
+        targetType = "locateSelection"
+        targetPayload = """{"type":"locateSelection"}"""
+        sortOrder = 5
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-5"
+        targetType = "fireCue"
+        targetPayload = """{"type":"fireCue","cueId":${cue1.id.value},"cueUuid":"${cue1.uuid}"}"""
+        sortOrder = 6
     }
 
     // Wire up the show playhead to the first stack.

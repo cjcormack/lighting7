@@ -111,5 +111,38 @@ class SoftTakeoverStateMachineTest {
         // dev-b still has its state.
         assertEquals(50.toUByte(), m.stateFor("dev-b", ctl).lastPhysical)
     }
-}
 
+    @Test
+    fun `disarm drops the pickup target so the next move writes through`() {
+        val m = SoftTakeoverStateMachine()
+        m.acceptInboundFader("d", "fader-1", 10u, BindingTakeoverPolicy.PICKUP)
+        m.setLogical("d", "fader-1", 100u, BindingTakeoverPolicy.PICKUP)
+        assertFalse(m.acceptInboundFader("d", "fader-1", 20u, BindingTakeoverPolicy.PICKUP))
+
+        m.disarm("d", "fader-1")
+        val entry = m.stateFor("d", "fader-1")
+        assertEquals(SoftTakeoverStateMachine.State.ENGAGED, entry.state)
+        assertNull(entry.target)
+        assertEquals(20u.toUByte(), entry.lastPhysical, "the physical position is kept")
+        assertTrue(m.acceptInboundFader("d", "fader-1", 30u, BindingTakeoverPolicy.PICKUP))
+    }
+
+    @Test
+    fun `disarm emits one change and is silent when already disarmed`() = runBlocking {
+        val m = SoftTakeoverStateMachine()
+        val seen = mutableListOf<SoftTakeoverStateMachine.PickupStateChange>()
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { m.changes.collect { seen += it } }
+        m.setLogical("d", "fader-1", 100u, BindingTakeoverPolicy.PICKUP)
+        yield()
+        assertEquals(1, seen.size)
+        m.disarm("d", "fader-1")
+        yield()
+        assertEquals(2, seen.size)
+        assertEquals(SoftTakeoverStateMachine.State.ENGAGED, seen.last().state)
+        assertNull(seen.last().target)
+        m.disarm("d", "fader-1")
+        yield()
+        assertEquals(2, seen.size, "a second disarm changes nothing and emits nothing")
+        job.cancel()
+    }
+}

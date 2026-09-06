@@ -60,31 +60,45 @@ internal fun Route.routeApiRestLocate(state: State) {
                 )
             }
 
-            var parkMasked = false
-            val outcome = state.show.locateManager.toggle(
-                target,
-                assert = { t ->
-                    val result = applyLocate(state, t)
-                    if (t == target) {
-                        parkMasked = result.parkMasked
-                    }
-                    if (result.stale) null else result.writes
-                },
-                clear = { writes -> clearLocateWrites(state, writes) },
-            )
-            // Stale-record backstop: a locate whose fixture was rekeyed mid-toggle skips its
-            // per-channel clear in [clearLocateWrites], stranding LOCATE entries that would
-            // later resurface as ghost values. Once nothing is located at all, no LOCATE
-            // entry is legitimate, so sweep the owner. (Single-operator toggles are serial;
-            // a concurrent toggle-on racing this sweep would merely need re-toggling.)
-            if (!outcome.active && state.show.locateManager.activeTargets.value.isEmpty()) {
-                state.show.programmerStore.clearOwner(ProgrammerOwner.LOCATE)
-            }
+            val (outcome, parkMasked) = toggleLocate(state, target)
             call.respond(
                 ToggleLocateResponse(outcome.active, outcome.writeCount, parkMasked)
             )
         }
     }
+}
+
+/** What one locate toggle did — the route's response and the surface's LED both read it. */
+internal data class LocateToggleResult(val outcome: LocateManager.ToggleOutcome, val parkMasked: Boolean)
+
+/**
+ * Toggle [target]'s locate state through [LocateManager.toggle] with the route's apply / clear
+ * callbacks. Shared by `POST /locate/toggle` and the surface's `LocateSelection` button so a
+ * press from hardware is the same toggle a click makes. Existence is the caller's check: a
+ * target that no longer resolves reports itself stale here and asserts nothing.
+ */
+internal fun toggleLocate(state: State, target: TargetRef): LocateToggleResult {
+    var parkMasked = false
+    val outcome = state.show.locateManager.toggle(
+        target,
+        assert = { t ->
+            val result = applyLocate(state, t)
+            if (t == target) {
+                parkMasked = result.parkMasked
+            }
+            if (result.stale) null else result.writes
+        },
+        clear = { writes -> clearLocateWrites(state, writes) },
+    )
+    // Stale-record backstop: a locate whose fixture was rekeyed mid-toggle skips its
+    // per-channel clear in [clearLocateWrites], stranding LOCATE entries that would
+    // later resurface as ghost values. Once nothing is located at all, no LOCATE
+    // entry is legitimate, so sweep the owner. (Single-operator toggles are serial;
+    // a concurrent toggle-on racing this sweep would merely need re-toggling.)
+    if (!outcome.active && state.show.locateManager.activeTargets.value.isEmpty()) {
+        state.show.programmerStore.clearOwner(ProgrammerOwner.LOCATE)
+    }
+    return LocateToggleResult(outcome, parkMasked)
 }
 
 private data class LocateApplyResult(

@@ -6,6 +6,9 @@ LEDs and motorised faders.
 
 Related:
 - Strategic plan (phases, decisions, open questions): [control-surface-plan.md](plans/completed/control-surface-plan.md).
+- The selection-relative layer, strips and the surface view: [midi-surface-plan.md](plans/midi-surface-plan.md)
+  (session 1 — the selection, the four selection targets, the mixed arm and the control-state
+  stream — has landed; the rest is proposed).
 - Composition layers surfaces write into: [lighting-composition-model.md](lighting-composition-model.md).
 - Transport layer surfaces write through: [dmx-engineering.md](dmx-engineering.md).
 
@@ -55,7 +58,11 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    │                                                                     │
   │    └─ SurfaceActions dispatch by BindingTarget variant:                  │
   │         ├─ FixtureProperty / GroupProperty → ProgrammerStore (L2)        │
+  │         ├─ SelectionProperty → ProgrammerStore, every selected head      │
+  │         ├─ SelectTarget / ClearSelection → State.deskSelection           │
+  │         ├─ LocateSelection → LocateManager.toggle, per selected target   │
   │         ├─ CueStackGo / Back / Pause / FireCue → CueStackManager         │
+  │         │    (uuid first; a bare int only for a pre-v11 row)             │
   │         ├─ Flash → L4 write on press, clear on release                   │
   │         ├─ Blackout / GrandMasterToggle → GlobalScalerState              │
   │         └─ SetBank → ActiveBankState.setBank                             │
@@ -73,16 +80,21 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    ▼                                                                     │
   │  SurfaceFeedbackPublisher                                                │
   │    ├─ byChannel index lookup: (universe, channel) → List<ContinuousEntry>│
-  │    ├─ computeValue7Bit(entry): read live DMX → scale to 0..127           │
+  │    ├─ computeValue7Bit(entry): read live DMX on every channel of the     │
+  │    │    entry → one common 0..127, or null when they disagree            │
   │    ├─ TouchStateTracker.isTouched(displayKey, controlId) → skip motor    │
-  │    ├─ SoftTakeoverStateMachine.setLogical(…) → update pickup target      │
-  │    └─ sendContinuousFeedback → MidiFeedbackMessage                       │
+  │    ├─ SoftTakeoverStateMachine.setLogical(…) / disarm(…) on null         │
+  │    ├─ ControlStateTracker ← every send site (the surfaceControls stream) │
+  │    └─ sendContinuousFeedback → MidiFeedbackMessage (ring off on null)    │
   │                                                                          │
   │  Parallel subscribers feed other LEDs:                                   │
   │    FlashStateTracker.changes → flash LEDs                                │
   │    GlobalScalerState.blackoutEnabled + grandMasterEnabled → toggle LEDs  │
+  │    DeskSelection.targets → rebuild + resync (select LEDs, selection      │
+  │      entries' channel sets)                                              │
+  │    LocateManager.activeTargets → locate LEDs                             │
   │    ActiveBankState.changes → bank-button LEDs + full resync              │
-  │    ControlSurfaceBindingService.bindingChanges → rebuild feedback index  │
+  │    ControlSurfaceBindingService.bindingChanges → rebuild + resync        │
   │                                                                          │
   │    ▼                                                                     │
   │  KtMidiController.sendFeedback                                           │
@@ -125,8 +137,9 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty`, `CueStackGo` / `Back` / `Pause`, `FireCue`, `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
-| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
+| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty`, `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
+| `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `BindingTarget.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Fills `cueUuid` / `stackUuid` on create and update. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
+| `SelectionWrites.kt` | The pure fan-out behind `SelectionProperty`: one programmer write per selected head, a group's members tagged with `sourceGroup`, heads without the property skipped, an empty selection → no writes. |
 | `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
 
 ### Inbound routing
@@ -134,7 +147,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | File | Purpose |
 |---|---|
 | `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `matchEvent → soft-takeover gate → binding resolve → SurfaceActions dispatch`. |
-| `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly. Tests: `RecordingActions`. |
+| `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly, reads `state.deskSelection` for the selection arms, and resolves a cue / stack uuid to the current project's row before calling `CueStackManager`. Tests: `RecordingActions`. |
 | `PropertyChannelResolver.kt` | `object` for **MIDI surface input only**: takes a 7-bit MIDI value and produces `List<ChannelWrite>`. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). For property-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/PropertyChannelWriter` which accepts full-range `CueAssignmentResolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
@@ -145,8 +158,9 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `SurfaceFeedbackPublisher.kt` | Owns a reverse `packedChannelKey → List<ContinuousEntry>` index plus parallel `ledAll` / `flashLedIndex` / `blackoutLeds` / `grandMasterLeds` maps. Rebuilt atomically in an `AtomicReference` on any of: device attach/detach, binding change, bank change, fixture registration change, project change. Defines `SurfaceFeedbackHooks` (a small port the router calls before binding resolution — `acceptInboundFader`, `onTouch`). |
-| `SoftTakeoverStateMachine.kt` | Per-`(displayKey, controlId)` `Entry(state, lastPhysical, target)`. PICKUP state blocks inbound until the fader crosses the target value (supports both from-below and from-above crossing; ±1 jitter tolerance). IMMEDIATE state passes through. Broadcasts `PickupStateChange` transitions. |
+| `SurfaceFeedbackPublisher.kt` | Owns a reverse `packedChannelKey → List<ContinuousEntry>` index plus parallel LED lists (flash, blackout, grand master, select, locate). An entry may stand on several channels (a group's members, the selected heads) and reads null when they disagree — §"Continuous feedback". Rebuilt atomically in an `AtomicReference` on any of: device attach/detach, binding change, bank change, fixture registration change, project change, selection change. Defines `SurfaceFeedbackHooks` (a small port the router calls before binding resolution — `acceptInboundFader`, `onTouch`). Writes `ControlStateTracker` at every send site. |
+| `ControlStateTracker.kt` | The store behind `surfaceControls.state` / `.changed`: per `(displayKey, controlId)` `ControlState(value?, physical?, touched, led, ring)`, lock-free, conflated to one delta per device per 50 ms; a whole-device snapshot after every full resync. §"Control-state stream". |
+| `SoftTakeoverStateMachine.kt` | Per-`(displayKey, controlId)` `Entry(state, lastPhysical, target)`. PICKUP state blocks inbound until the fader crosses the target value (supports both from-below and from-above crossing; ±1 jitter tolerance). IMMEDIATE state passes through. `disarm` drops the target (ENGAGED, no target) for a control with no uniform value to arm against. Broadcasts `PickupStateChange` transitions. |
 | `TouchStateTracker.kt` | Per-`(displayKey, controlId)` touched flag. While `true`, `SurfaceFeedbackPublisher` suppresses motor writes to that control (don't fight the user's finger). |
 
 ## Transport (KtMidiController)
@@ -241,6 +255,22 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
+| `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
+| `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
+| `SelectionProperty(propertyName)` | Continuous (press = full) | Programmer write (owner `surface`) on **every head in the desk selection** via `SelectionWrites`; an empty selection drops the write with a debug log, never widened to "everything". Health `unknownProperty` when no patched fixture can take the property on a fader |
+| `SelectTarget(target, mode)` | Button | `DeskSelection.toggle` (head-by-head, a group by its members) or `set(listOf(target))` for `REPLACE`; LED lit while the target's heads are all selected |
+| `ClearSelection` | Button | `DeskSelection.clear()` |
+| `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
+| `Unknown(targetType, rawPayload)` | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant row decode for a `type` this build does not know; re-encoded verbatim; refused by the create / PATCH routes |
+
+The cue and stack variants carry a **uuid beside the int** (`FireCue(cueId, cueUuid?)`,
+`CueStackGo(stackId, stackUuid?)` …). The service fills it on every create and update — the REST
+picker and MIDI Learn still address rows by int — and both `BindingHealthEvaluator` and
+`DefaultSurfaceActions` judge a row **by the uuid alone when one is present**: a uuid that
+resolves to nothing in the current project is dead, and the press is dropped rather than falling
+back to an int that may name another project's row. Only a pre-v11 row with no uuid is dispatched
+by its int. This is what makes a cloned or imported project keep its cue bindings
+(`docs/sync-engineering.md` §"Version 11"; `FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half).
 
 **Related non-MIDI path.** Phase 7 of `docs/plans/completed/cue-authoring-unification-plan.md` adds a
 separate FX-layer resolver, `fx/PropertyChannelWriter`, for property-value → channel
@@ -324,23 +354,41 @@ The index is rebuilt on a swap in an `AtomicReference` on any of: device attach/
 
 ### Continuous feedback
 
+A `ContinuousEntry` stands on **one or more channels**: one for a fixture slider (the red axis for
+a colour, symmetric with the write path that fans one value to all three), one per member for a
+`GroupProperty`, one per selected head for a `SelectionProperty` — and none for a selection
+binding with nothing selected, which is an entry that exists so the control reads "no selection"
+rather than "unbound". The entry is indexed under every channel it stands on.
+
 On `channelsChanged(universe, changes)`:
 
 1. For each changed `(universe, channel)`, look up `byChannel[packChannelKey(universe.universe, channel)]`.
-2. For each `ContinuousEntry`:
-   - `computeValue7Bit(entry)` reads live DMX via `DmxController.getValue`, scales to 0..127 inverse of the binding's scale mapping.
-   - Feed the new logical value into `SoftTakeoverStateMachine.setLogical(displayKey, controlId, value7Bit)` so pickup policy has an up-to-date target.
-   - If the target is a motor fader and `TouchStateTracker.isTouched(displayKey, controlId) == true`, **skip the motor write** — the operator's finger is on it.
-   - Otherwise send `ControlChangeFeedback(channel, motorCc, value7Bit)` (fader) or `ControlChangeFeedback(channel, ringCc, value7Bit)` (encoder ring).
+2. For each `ContinuousEntry` (a multi-channel entry once per tick, however many of its channels moved):
+   - `computeValue7Bit(entry)` reads live DMX on every channel via `DmxController.getValue`, scales each
+     through its own `min..max` to 0..127, and returns the **common value — or null when they disagree**.
+   - Non-null: feed it into `SoftTakeoverStateMachine.setLogical(displayKey, controlId, value7Bit)` so
+     pickup policy has an up-to-date target; if the target is a motor fader and
+     `TouchStateTracker.isTouched(displayKey, controlId) == true`, **skip the motor write** — the
+     operator's finger is on it; otherwise send `ControlChangeFeedback(channel, motorCc, value7Bit)`
+     (fader) or `ControlChangeFeedback(channel, ringCc, value7Bit)` (encoder ring).
+   - **Null — the mixed arm** (`docs/plans/midi-surface-plan.md` D10): nothing to the motor, the
+     encoder ring driven to its off byte (`ringOffValue(style)`, `0` for every style until the rig
+     says otherwise — §9 check 3), `SoftTakeoverStateMachine.disarm` so the next move writes through
+     rather than waiting for a crossing that has nothing to cross, and the tracker reads
+     `value: null, ring: off`. A turn or move writes every head, and the next tick reads uniform.
 
 ### Full resync
 
-Triggered on: device attach, bank change, project change. Iterates every binding in scope:
+Two flavours. **With pickup re-armed** — device attach, bank change, project change, where the
+physical position is stale: `forcePickup` on every PICKUP-policy fader. **Without** — a binding,
+fixture, selection or master-list change (`rebuildAndResync`): the operator's fader has not moved,
+so takeover follows `setLogical`'s own divergence rule. Both iterate every binding in scope:
 
-- Continuous → compute and send current value (subject to touch gate)
+- Continuous → compute and send the current value (subject to touch gate), or the mixed arm
 - Flash buttons → `flashTracker.isActive(id)` → NoteOn(127) or NoteOff(0)
 - Blackout / GrandMaster → read `StateFlow.value` → LED reflects current state
-- Soft-takeover → `forcePickup` on every PICKUP-policy fader (physical position is now stale)
+- Select buttons → `deskSelection.covers(target)`; Locate → every selected target located
+- Then the device's whole `ControlStateTracker` snapshot is published (§"Control-state stream")
 
 The resync path reads *current state*, not edge events, so if a Flash is held at the moment a device attaches, the button LED lights up immediately — not only on the next press.
 
@@ -351,7 +399,10 @@ Parallel coroutines collect from:
 - `FlashStateTracker.changes` → flash LED on/off
 - `GlobalScalerState.blackoutEnabled.combine(grandMasterEnabled)` → scaler LEDs
 - `ActiveBankState.changes` → bank-button LEDs + trigger full resync for affected device
-- `ControlSurfaceBindingService.bindingChanges` → rebuild index
+- `ControlSurfaceBindingService.bindingChanges` → rebuild index + resync every device
+- `DeskSelection.targets` → rebuild index (selection entries' channel sets) + resync every device
+  (select LEDs, selection faders)
+- `LocateManager.activeTargets` (per show, re-armed on project switch like the scaler) → locate LEDs
 
 All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 
@@ -365,10 +416,64 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 | Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Only affects intensity categories |
 | Grand Master toggle | Same as Blackout | **post-composition mask** | Binary in v1; continuous fader deferred |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
-| Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI |
+| Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI; uuid resolved to the project's row first |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
+| Fader → SelectionProperty | `ProgrammerWriter.writeProperties` (owner `surface`) | **Layer 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
+| Select / Clear button | `State.deskSelection` | *(no layer — the desk's selection)* | What the next selection-relative move acts on |
+| Locate button | `LocateManager.toggle` (owner `locate`) | **Layer 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |
 
 **A fader always writes the programmer.** Phase 6 added a second destination — when a cue-edit session was open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` routed to `cueEdit.setProperty` (the cue layer) instead, and `SurfaceFeedbackPublisher` drove the motor from the cue's Layer 4 value rather than the stage. Backend sweep item D1 retired the `cueEdit.*` family, so both halves are gone: one write destination, and feedback that always means the live composed DMX value. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6 for what the session-routing design was.
+
+## Selection
+
+`state/DeskSelection.kt` is the desk's one selection — a `StateFlow<List<CueTargetDto>>` on
+`State`, beside `activeBankState`, so it outlives a `Show`. **One desk, one selection,
+server-owned**: the composition model's one-programmer argument applies verbatim
+(`docs/lighting-composition-model.md` §"Layer 2"), and every client — the busk view, the
+programmer page, an X-Touch's select buttons, the AI's `get_current_state` — reads and writes this
+one list through the `selection.*` socket family (`docs/websocket-engineering.md`). Transient:
+cleared on project switch (before the publisher rebuilds, so a stale head never enters the new
+index), pruned on `fixturesChanged` / `patchListChanged` of any target that no longer resolves
+(the rest stay, the rule a press applies), never persisted.
+
+**A group and its members are two spellings of one selection.** `fx/TargetCoverage.kt` is the one
+expansion rule, lifted out of `ProgrammerLayerStack` so a select button and a busk pad agree:
+`covers(target)` is true when every head the target expands to is selected, and `toggle` on a
+covered target takes those heads off head-by-head — an entry the press does not touch keeps its
+spelling, a group it only partly covers is respelt as the members left behind. An unresolvable
+group expands to itself, so a stale entry stays comparable rather than vanishing.
+
+The surface reaches it through three targets (`SelectionProperty`, `SelectTarget`,
+`ClearSelection`) plus `LocateSelection`; the router stays selection-blind — every arm calls a
+`SurfaceActions` method and `DefaultSurfaceActions` reads `state.deskSelection`, which is what
+keeps `RecordingActions` a complete test double.
+
+## Control-state stream
+
+`midi/ControlStateTracker.kt` holds, per `(displayKey, controlId)`, what the hardware has been
+told: `ControlState(value?, physical?, touched, led, ring)`. `value` is the fed-back 7-bit
+position and null for mixed, unbound or no selection; `physical` is the last inbound fader
+position (recorded in `acceptInboundFader` whether or not the move was accepted), which a
+non-motor fader's operator wants to see beside its pickup target because the hardware is never
+told it; `led` and `ring` are `ON | OFF | NONE`, `NONE` meaning the control has no LED- or
+ring-bearing binding.
+
+The rule that makes it trustworthy: **the publisher writes the tracker at its send sites, before
+any early return.** `sendControlFeedback` records the value first, then bails for a non-motor
+fader or a touched motor; `sendLed` records before it sends; `onTouch` records the flag. So the
+screen sees what a non-motor fader *would* have been told and what a touched motor was spared,
+and never recomputes a control from DMX — if the picture and the desk disagree, the publisher is
+wrong, which is the bug worth finding (`docs/plans/midi-surface-plan.md` D7).
+
+Writes come from the ArtNet transmit thread, the router coroutine and the publisher's subscribers,
+so the store is lock-free (`ConcurrentHashMap.compute`). Changes are conflated per device: a write
+marks the control dirty and wakes a flusher that waits 50 ms and emits one `Delta` per dirty device
+carrying each dirty control's *current* state. A `Snapshot` is the whole device — `sendFullResync`
+seeds every profile control at its unbound default (keeping `touched` and `physical`, which are
+facts about the hardware), drives the device, then publishes it — so attach, bank change, project
+change and every rebuild-and-resync each yield one `surfaceControls.state`. A detach publishes an
+empty snapshot. `SurfaceSocket` sends the connect burst from the tracker's store with an explicit
+`sendSnapshot` (the deltas are a replay-0 stream), then relays snapshots and deltas.
 
 ## Threading model
 
@@ -392,6 +497,7 @@ From `State.kt`:
 |---|---|
 | `State.midiRegistry` | Lazy; started in `State.initializeShow()` after `show.start()` |
 | `State.activeBankState` | Lazy; ephemeral, no persistence |
+| `State.deskSelection` | Lazy; ephemeral — cleared on project switch, pruned on fixture reload, no persistence |
 | `State.flashStateTracker` | Lazy; ephemeral |
 | `Show.globalScalerState` | Per-show; `.attach()` called in `Show.start()` after fixture load; `.detach()` in `Show.close()` |
 | `State.surfaceFeedbackPublisher` | Lazy; started in `initializeShow()` **before** `surfaceInputRouter` so hooks are ready when the first inbound event arrives |
@@ -413,7 +519,8 @@ From `State.kt`:
 | `surfaceScaler.state` | *(request scaler state)* |
 | `surfaceLearn.begin` | `{ sessionId, targetContext }` |
 | `surfaceLearn.cancel` | `{ sessionId }` |
-| `surfaceLearn.commit` | `{ sessionId, binding }` |
+| `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
+| `selection.set` / `.toggle` / `.clear` | `{ targets }` / `{ target }` / — (`SelectionSocket.kt`) |
 
 ### Outbound
 
@@ -426,6 +533,8 @@ From `State.kt`:
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
 | `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |
+| `surfaceControls.state` / `.changed` | `{ displayKey, controls: {controlId: ControlState} }` — whole device / conflated delta |
+| `selection.state` | `{ targets }` — connect snapshot + broadcast (`SelectionSocket.kt`) |
 
 ## REST surface
 
@@ -450,6 +559,8 @@ From `State.kt`:
 5. **No cross-session ownership for continuous controls.** Two `/surfaces` tabs can create conflicting bindings; the last-write-wins mutation happens under a per-project mutex, so atomicity is preserved, but there's no "this surface belongs to this operator" concept.
 
 6. **Backpressure: input events can drop.** The `MutableSharedFlow` buffer is 256 with `DROP_OLDEST`. For normal use this is several seconds of headroom; under pathological input the router may miss events silently. There is no counter / alarm.
+
+7. **The ring-off byte is an assumption.** `ringOffValue(style)` sends `0` for every `EncoderRingStyle`; if the X-Touch lights its first dot on `0` rather than darkening, that one constant changes (`docs/plans/midi-surface-plan.md` §9 check 3). The `surfaceControls` stream's `ring: off` is the truth the view reads either way.
 
 ## Testing
 

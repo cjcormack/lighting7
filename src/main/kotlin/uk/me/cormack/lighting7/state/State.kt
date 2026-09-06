@@ -488,21 +488,24 @@ class State(val config: ApplicationConfig) {
         // Speed masters are read from the DB for [projectId] rather than from the live
         // bank, for the same reason the stack / cue ids are: this context is built for an
         // arbitrary project, which may not be the one currently loaded.
-        val (stackIds, cueIds, speedMasterUuids) = transaction(database) {
+        val (stacks, cues, speedMasterUuids) = transaction(database) {
             val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
-                .map { it.id.value }.toSet()
+                .map { it.id.value to it.uuid }
             val cues = DaoCue.find { DaoCues.project eq projectId }
-                .map { it.id.value }.toSet()
+                .map { it.id.value to it.uuid }
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
                 .map { it.uuid }.toSet()
             Triple(stacks, cues, masters)
         }
         return BindingHealthEvaluator.Context(
             fixtures = fixtures,
-            validStackIds = stackIds,
-            validCueIds = cueIds,
+            validStackIds = stacks.mapTo(HashSet()) { it.first },
+            validCueIds = cues.mapTo(HashSet()) { it.first },
             deviceTypes = ControlSurfaceRegistry.allTypes,
             validSpeedMasterUuids = speedMasterUuids,
+            validStackUuids = stacks.mapTo(HashSet()) { it.second },
+            validCueUuids = cues.mapTo(HashSet()) { it.second },
+            selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
         )
     }
 
@@ -522,6 +525,16 @@ class State(val config: ApplicationConfig) {
      * on device-side bank buttons and by WS `surfaceBank.set`.
      */
     val activeBankState: ActiveBankState by lazy { ActiveBankState() }
+
+    /**
+     * The desk's one shared selection — what a selection-relative surface control and a busk
+     * press act on. State-scoped like [activeBankState] so it outlives a `Show`, cleared on
+     * project switch and pruned on fixture reload; never persisted. See
+     * [DeskSelection] and `docs/lighting-composition-model.md` §"Layer 2".
+     */
+    val deskSelection: DeskSelection by lazy {
+        DeskSelection { runCatching { show.fixtures }.getOrNull() }
+    }
 
     /**
      * Per-binding flash press tracker (Phase 3). Keyed by `bindingId`; a press that's
@@ -607,6 +620,8 @@ class State(val config: ApplicationConfig) {
             fixturesProvider = { show.fixtures },
             globalScalerStateProvider = { show.globalScalerState },
             speedMasterBankProvider = { show.speedMasterBank },
+            deskSelection = deskSelection,
+            locateManagerProvider = { show.locateManager },
             latencyTracker = midiLatencyTracker,
         )
     }
@@ -655,6 +670,9 @@ class State(val config: ApplicationConfig) {
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
             projectManager.projectChangedFlow.collect {
+                // Before the publisher rebuilds: a selection naming the old project's heads must
+                // not survive into the new show's index.
+                deskSelection.clear()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
@@ -714,10 +732,17 @@ class State(val config: ApplicationConfig) {
      */
     private var bindingHealthFixtures: Fixtures? = null
     private val bindingHealthListener = object : FixturesChangeListener {
-        override fun fixturesChanged() = refreshActiveProjectBindingHealth()
+        override fun fixturesChanged() {
+            // A dropped target leaves the selection; the rest stay — the rule a press applies.
+            deskSelection.prune()
+            refreshActiveProjectBindingHealth()
+        }
         override fun cueListChanged() = refreshActiveProjectBindingHealth()
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
-        override fun patchListChanged() = refreshActiveProjectBindingHealth()
+        override fun patchListChanged() {
+            deskSelection.prune()
+            refreshActiveProjectBindingHealth()
+        }
     }
 
     private fun attachBindingHealthListener() {
