@@ -1,8 +1,20 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a` and session 2 (strips and the encoder bank) as `09b877c`; sessions 3–5 are
-> proposed.** Session 2 amendments: §11's second question was answered **toggle *and* long press to
+> `758ee9a` and session 2 (strips and the encoder bank) as `09b877c`; sessions 3a–5 are
+> proposed.** Pre-session-3 amendments, from reading the session against the two shipped repos:
+> **session 3 is split into 3a (the picture) and 3b (editing it)** for the reason §5 gives, and two
+> things it assumed are corrected. The client's `BindingTarget` union, `ControlSurfaceType` and
+> `BindingHealth` in `api/surfacesApi.ts` are still the twelve-variant versions from before session
+> 1 — the `/control-surface-types` DTO has carried `strips` and `layout` since `09b877c` and the
+> client's types have not — so mirroring the grammar is 3a's first bullet rather than unlisted work
+> inside "rebuilt to the canvas". And §3.2's `selectionSlice` bridge must publish rows through
+> `rowLocateTarget`, **not** the `programmer` scope's `targetKeys`, which expands a group row to its
+> members and would have reached the desk as loose fixtures with the group's select LED dark.
+> Smaller: `FU-FE-USE-TARGET-PROPERTIES` names five call sites and three are gone, so the library's
+> chips are the fourth consumer rather than the sixth — the extraction still belongs in 3b, and the
+> follow-up's count is corrected as it is closed.
+> Session 2 amendments: §11's second question was answered **toggle *and* long press to
 > replace** — a `SelectTarget(TOGGLE)` toggles on press and, if still held at
 > `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), also fires a `REPLACE`, so the LED stays immediate
 > and the hold narrows; `EncoderBankState` copies `ActiveBankState`'s actual shape (one map-valued
@@ -224,13 +236,32 @@ runtime state under the sync decision tree's fourth branch, and the `SyncCoverag
 does not apply because it is not a table.
 
 The programmer page keeps `selectionSlice` for what only a list has — anchor, ranges, rows — and
-gains an effect that publishes the `programmer` scope's `targetKeys` as `selection.set` when they
-change, and one that marks rows selected from `selection.state`. A row selected from hardware
-therefore lights in the list, and a marquee in the list lights the strip's select LEDs. The busk
-view's `useBuskingSelection` becomes a thin hook over the `selection` RTK cache. The record and
-template routes keep taking explicit `targets`: the selection is what the *clients* pass them, so
-the routes do not learn about it and the AI, which already passes targets, is unchanged apart from
-reading it back.
+gains an effect that publishes the `programmer` scope's selection as `selection.set` when it
+changes, and one that marks rows selected from `selection.state`. A row selected from hardware
+therefore lights in the list, and a marquee in the list lights the strip's select LEDs.
+
+**It publishes rows through `rowLocateTarget`, never the scope's `targetKeys`.** `targetKeys` is
+the obvious source and the wrong one: `expandSelectionToTargets` returns `row.members` for a group
+row, so that list is flat fixture and element keys carrying no group entries and no discriminator.
+Publish it and a marquee over *Front wash* arrives at the desk as eight loose fixtures — the
+strip's group select LED stays dark, `SelectTarget` has nothing to toggle against, and the return
+effect cannot light the group row again. `rowLocateTarget` already answers all four row kinds in
+exactly `CueTargetDto`'s shape (a group by `row.name`, a fixture by key, an **element row as its
+own key under `fixture`**, which is right because `TargetRef.ofOrNull` knows only those two
+discriminators and resolves an element key itself), and it is already shared between the locate
+toolbar and the per-row button precisely so two callers cannot disagree. The bridge is its third
+caller, over the selected rows minus the element rows `coveredFixtureKeys` drops.
+
+The busk view's `useBuskingSelection` becomes a hook over the `selection` RTK cache — not a thin
+one. It holds rich `BuskingTarget`s (a whole `GroupSummary` or `Fixture`) where the cache holds
+`{type, key}`, so it rehydrates against the fixture and group lists, and a target that no longer
+resolves leaves its view because `DeskSelection` already dropped it, never by a second client-side
+rule. `lookLayerTarget`'s group-name-as-key convention and `CueTargetDto`'s must stay the same
+spelling, or a pad's ring and a select LED will disagree about one group.
+
+The record and template routes keep taking explicit `targets`: the selection is what the *clients*
+pass them, so the routes do not learn about it and the AI, which already passes targets, is
+unchanged apart from reading it back.
 
 ### 3.3 Strips and the profile layout
 
@@ -337,6 +368,9 @@ sessions build to.
   **stack** (*Go · Back · Pause*); a **cue** (*Fire*); a **busk page** (*Page*, *Next page*, *Prev
   page*, one chip per pad); **Desk** (*Blackout*, *Grand master*, *Bank A / B*, *Tap M1*, *BPM*).
   A row already on the surface says "strip *n*" or "on *n* controls".
+  This is the **finished** library. The template, Look, busk-page and pad rows arrive in session 4
+  beside the targets they bind, so **session 3b builds groups, fixtures, Selection, Encoder bank,
+  stacks, cues and Desk** — nothing that would drop a target the router cannot yet dispatch.
 - **Drag semantics**: a chip over a control it cannot land on dims the control (a cue chip over a
   fader; a property chip over a bank button that already has a strip role is allowed and becomes a
   direct binding). A row over a strip lights the whole column dashed. The ghost is the busk pad
@@ -344,12 +378,19 @@ sessions build to.
 - **Below `md`**: no picture and no edit mode — the current grouped table stays as the narrow
   rendering, exactly as the busk view keeps *Done* but hides its palette.
 
-## 5. Implementation — five sessions
+## 5. Implementation — five sessions, six passes
 
 Backend first, twice — the selection and the stream, then strips and the bank — because the view
 cannot be built against a stream that does not exist and a strip binding that cannot resolve. Then
 the view, then the records, then the desk. Each session ends green (`./gradlew test`; `npm run
 check` in `lighting-react`).
+
+**The view is two passes.** 3a draws the picture and 3b makes it editable, because the two halves
+fail differently and each is a session's worth on its own: 3a is a lot of UI against a settled
+contract, where being wrong is visible on the screen, and 3b is drag semantics plus a shared
+selection, where being wrong is silent — a bridge that loses groups still lights the list it was
+tested in. The split also means neither half ends with a desk that cannot be rewired: `BindingMatrix`
+and MIDI Learn stay the way bindings are made until the drag that replaces them exists.
 
 ### Models
 
@@ -357,7 +398,8 @@ check` in `lighting-react`).
 | --- | --- | --- | --- |
 | 1 — the selection and the stream | Fable 5.1 | high | The invariant-dense one: a new `StateFlow` family under the snapshot rule, the feedback publisher's index growing a mixed-value arm, a tracker written on the MIDI thread, the tolerant decode, a format bump. Its failures are silent (a frame that arrives only after the first change; a ring left lit on a mixed selection; a `SyncCoverageTest` row that still passes because the table is unchanged while the fixture is not). |
 | 2 — strips and the encoder bank | Opus 5 | xhigh | Well-shaped data with one subtle rule — direct-first resolution and its interaction with bank precedence — and a registry that must fail fast on every malformed profile. |
-| 3 — the surface view | Opus 5 | xhigh | A lot of UI code against the canvas, dnd-kit under the shared provider, and two views adopting the desk selection. Fast mode is available for the visual iteration. |
+| 3a — the picture | Opus 5 | xhigh | A lot of UI code against the canvas, and a legend of control states only the stream can produce, read through a binding grammar the client is two sessions behind on. Fast mode is available for the visual iteration. |
+| 3b — editing it | Opus 5 | xhigh | dnd-kit under the shared provider, whose two-surface coexistence rests on mutual ignorance of ids and foreign targets, and two views adopting the desk selection across a bridge whose obvious wiring is lossy (§3.2). |
 | 4 — records on buttons | Opus 5 | high | Four target families that each reuse an existing press path; the risk is a press that diverges from the route's, not reasoning. |
 | 5 — the first desk use | Sonnet 5 | high | Fixes from the rig. The checks are a human job. |
 
@@ -407,23 +449,44 @@ included — not on Fable.
   publisher tests (a bank change moves every strip encoder's primary channel; PICKUP re-arms).
 - Docs: engineering doc §"Strips" and §"Encoder bank"; `api-conventions.md` if a code is added.
 
-### Session 3 — the surface view (lighting-react) — Opus 5, xhigh
+### Session 3a — the picture (lighting-react) — Opus 5, xhigh
 
-- `store/surfaces.ts`: `surfaceControls`, `surfaceEncoderBank` caches folded like `surfacePickups`;
-  `store/selection.ts` (the desk selection cache + writes); `useBuskingSelection` over it;
-  `selectionSlice` bridge (§3.2).
-- `routes/Surfaces.tsx` rebuilt to the canvas: header row (D1: `ScalerToolbar` deleted),
+- **`api/surfacesApi.ts` first**: mirror the grammar sessions 1 and 2 shipped — `Strip`,
+  `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection` and `EncoderBankSet` on
+  the `BindingTarget` union; `strips` and `layout` on `ControlSurfaceType`; the new
+  `AssignmentHealth` arms (`unknownProperty`, `unknownTarget`) on `BindingHealth`. Everything below
+  reads through these types, and the client is on the twelve-variant version from before session 1.
+- `store/surfaces.ts`: `surfaceControls` and `surfaceEncoderBank` caches folded like
+  `surfacePickups`; `store/selection.ts` — the desk-selection cache, **read-only in this pass**.
+- `routes/Surfaces.tsx` rebuilt to the canvas's run mode: header row (D1: `ScalerToolbar` deleted),
   `SurfacePanel` from `layout` (D8; fallback to `BindingMatrix` below `md` or without a layout),
-  `SurfaceInspector`, `SurfaceLibrary` under `DeskDndProvider` (D9), the busk ghosts through
-  `registerDragOverlay`. Drop → create / replace binding; row → `Strip`; the eligibility dims.
-- The `FU-FE-USE-TARGET-PROPERTIES` gate **fires here** — the library's property chips are the
-  sixth consumer of fixture / group property lookup — so this session extracts
-  `useTargetProperties` into `src/hooks/` and the five existing call sites move onto it.
+  `SurfaceInspector` — including *Fader only…* over `POST .../surface-bindings/{id}/expand`, which
+  session 2 shipped — and the panel header's Selection chip with *Clear*.
 - Tests: `Surfaces.test.tsx` (no scaler buttons; a matched device draws the panel; an unmatched one
   the card; dead badge count), `SurfacePanel.test.tsx` (each legend state from a `surfaceControls`
-  frame), `SurfaceLibrary.test.tsx` (rows and chips from the store; slot-style dimming), a
+  frame, the mixed and no-selection encoder states included).
+- Ends with a desk that can be watched and inspected but not rewired by drag: `BindingMatrix` and
+  MIDI Learn are still how a binding is made, and both survive the session anyway (D9).
+
+### Session 3b — editing it (lighting-react) — Opus 5, xhigh
+
+- `SurfaceLibrary` under `DeskDndProvider` (D9) — joined with `useDndMonitor`, never a nested
+  context, for the busk page's reason — and the busk ghosts through `registerDragOverlay`. Drop →
+  create binding, or `PATCH` when the control already holds one; row → `Strip`; the eligibility
+  dims. **The library is groups, fixtures, Selection, Encoder bank, stacks, cues and Desk**; §4's
+  template, Look, busk-page and pad rows are session 4's, with the targets they bind.
+- The selection **writes**: `useBuskingSelection` over the cache, and the `selectionSlice` bridge
+  exactly as §3.2 states it — rows through `rowLocateTarget`, never the scope's `targetKeys`.
+- The `FU-FE-USE-TARGET-PROPERTIES` gate **fires here** — the library's property chips are the next
+  consumer of fixture / group property lookup — so this pass extracts `useTargetProperties` into
+  `src/hooks/` and moves the existing call sites onto it. The follow-up says five and means three:
+  `PropertyAssignmentsList`, `PresetEditor` and `PresetLivePreview` are gone with the presets and
+  the busking target panel went with the busk sidebar, leaving `FixtureContent.tsx`,
+  `GroupCard.tsx` and `GroupDetailModal.tsx`. Correct its count as it is closed.
+- Tests: `SurfaceLibrary.test.tsx` (rows and chips from the store; slot-style dimming), a
   `slotDrop`-style pure mapping test for drop → binding request, `useBuskingSelection.test.tsx`
-  against the WS cache, `selectionSlice` bridge test.
+  against the WS cache, and a `selectionSlice` bridge test whose load-bearing case is that a
+  selected **group row** publishes one `group` entry rather than its members.
 - Docs: `lighting-react/docs` gains a short engineering note for the view; `CLAUDE.md` route list.
 
 ### Session 4 — records on buttons (both repos) — Opus 5, high
@@ -486,7 +549,7 @@ written.
 ## 9. Verification
 
 Backend: the tests in §5 S1, S2 and S4; `ProgrammerLayerStackTest` unchanged (the engine does not
-move — a press from hardware is the same `toggle` a pad makes). Frontend: §5 S3. Desk checks, to
+move — a press from hardware is the same `toggle` a pad makes). Frontend: §5 S3a and S3b. Desk checks, to
 be added to `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when they are run:
 
 1. Cold open with the X-Touch attached: the picture matches the panel, every LED and fader on the
