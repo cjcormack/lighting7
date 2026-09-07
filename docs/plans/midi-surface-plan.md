@@ -1,8 +1,17 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a` and session 2 (strips and the encoder bank) as `09b877c`; sessions 3a–5 are
-> proposed.** Pre-session-3 amendments, from reading the session against the two shipped repos:
+> `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, and session 3a (the picture) as
+> lighting-react `45c3d3e`; sessions 3b–5 are proposed.**
+> Session 3a amendments, from building it: **`strips` and `layout` are optional on the client**,
+> because a desk running a pre-strip build serves neither and this client talks to whatever desk it
+> is pointed at — declared required, two dereferences would have thrown against exactly that
+> server. Two things §4 draws are **deferred with reasons**: the inspector's live card has no stage
+> value, which needs the fixture/group property lookup 3b extracts; and the Selection chip has no
+> **fixture count**, because summing each group's `memberCount` says eight where the desk writes
+> six as soon as two groups share a head, and `GroupSummary` carries no member keys — an exact
+> count is `DeskSelection.coverage()` reaching the wire, which is a backend addition and not 3a's.
+> Pre-session-3 amendments, from reading the session against the two shipped repos:
 > **session 3 is split into 3a (the picture) and 3b (editing it)** for the reason §5 gives, and two
 > things it assumed are corrected. The client's `BindingTarget` union, `ControlSurfaceType` and
 > `BindingHealth` in `api/surfacesApi.ts` are still the twelve-variant versions from before session
@@ -14,6 +23,25 @@
 > Smaller: `FU-FE-USE-TARGET-PROPERTIES` names five call sites and three are gone, so the library's
 > chips are the fourth consumer rather than the sixth — the extraction still belongs in 3b, and the
 > follow-up's count is corrected as it is closed.
+> Pre-session-3a amendments, from checking 3a's own bullets against the client as it stands: four
+> things it asks for are wider than they read and two were missing outright, so §5's 3a list is
+> rewritten rather than annotated. The grammar mirror also carries `BindingTarget.Unknown` — a real
+> wire variant, and drawing it *is* D11's rebindable dead row — plus `SelectMode` and the
+> `stackUuid` / `cueUuid` fields §11's first question added once it was answered yes. The panel
+> labels every control, so it must **resolve** every control:
+> `ControlSurfaceBindingService.resolve`'s four-step precedence and `deriveStripTarget` become a
+> client mirror, which `StripDerivation.kt`'s docblock already assumed ("the frontend inspector
+> explains a strip binding by asking the same question") with nowhere to ask — the one piece of 3a
+> whose failure is silent, so it lands as a pure module tested against the Kotlin cases. Widening
+> the union also breaks two shipped components in ways `tsc` cannot catch: `matchesBindingTarget`
+> matches on `groupProperty` and so goes blank for a group on a **strip**, and `controlLabel`
+> resolves `strip-1` against `profile.controls` and finds nothing. `api/selectionApi.ts` and three
+> additions to `SurfacesWsApi` were unlisted — a `store/` cache with no `api/` layer has nothing to
+> seed from. `surfaceControls` is not folded quite like `surfacePickups` either: it has both a
+> whole-device snapshot and partial deltas, so `.state` replaces and `.changed` **merges**, which is
+> also what keeps an unchanged control's identity stable at 20 Hz. And "read-only in this pass"
+> meant *no bridge*: the Selection chip keeps its *Clear*, one gesture with none of the lossiness
+> 3b's `selectionSlice` publish carries.
 > Session 2 amendments: §11's second question was answered **toggle *and* long press to
 > replace** — a `SelectTarget(TOGGLE)` toggles on press and, if still held at
 > `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), also fires a `REPLACE`, so the LED stays immediate
@@ -452,19 +480,49 @@ included — not on Fable.
 ### Session 3a — the picture (lighting-react) — Opus 5, xhigh
 
 - **`api/surfacesApi.ts` first**: mirror the grammar sessions 1 and 2 shipped — `Strip`,
-  `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection` and `EncoderBankSet` on
-  the `BindingTarget` union; `strips` and `layout` on `ControlSurfaceType`; the new
-  `AssignmentHealth` arms (`unknownProperty`, `unknownTarget`) on `BindingHealth`. Everything below
-  reads through these types, and the client is on the twelve-variant version from before session 1.
-- `store/surfaces.ts`: `surfaceControls` and `surfaceEncoderBank` caches folded like
-  `surfacePickups`; `store/selection.ts` — the desk-selection cache, **read-only in this pass**.
+  `SelectionProperty`, `SelectTarget` (with `SelectMode`), `ClearSelection`, `LocateSelection`,
+  `EncoderBankSet` and **`Unknown`** on the `BindingTarget` union; the `stackUuid` / `cueUuid`
+  fields session 1 added to `CueStack*` / `FireCue` once §11's first question was answered yes;
+  `strips` and `layout` on `ControlSurfaceType`; the new `AssignmentHealth` arms
+  (`unknownProperty`, `unknownTarget`) on `BindingHealth`. Everything below reads through these
+  types, and the client is on the twelve-variant version from before session 1. `Unknown` is not
+  optional tidiness: a row the desk could not decode is the thing D11 keeps alive to be rebound,
+  so the panel must be able to draw it.
+- **`lib/surfaceResolve.ts` — the client mirror of `resolve` and `deriveStripTarget`.** The panel
+  labels every control, so it resolves every control: the four-step precedence (direct exact-bank,
+  direct global, strip exact-bank, strip global — §3.3) and then the role derivation, so one strip
+  row draws `Front wash · dimmer` under its fader, `Flash Front wash` under its flash button and
+  `Sel · pan` under its encoder. Pure, no React, because it is the half of this session whose
+  failure is silent — a precedence read the wrong way round paints a plausible label for a control
+  the desk drives differently, and the browser copy is the one no rig check reaches. Tested
+  against `StripDeriveTest`'s and `ControlSurfaceBindingResolverTest`'s cases, the way
+  `maskPicker.test.ts` pins the family lists.
+- `api/selectionApi.ts` (the `selection.*` subscribable and its three gestures, with a `getState()`
+  snapshot so a cache entry can seed) and `subscribeControls` / `getControls` /
+  `subscribeEncoderBanks` / `getEncoderBanks` on `SurfacesWsApi`.
+- `store/surfaces.ts`: `surfaceControls` and `surfaceEncoderBank` cache entries in the
+  `surfacePickups` shape — but `surfaceControls` folds **two** frames, `.state` replacing a
+  device's map wholesale and `.changed` merging into it, which is both the contract and what keeps
+  an untouched control's object identity stable across a 20 Hz delta so a memoized control can skip
+  the render. `store/selection.ts` — the desk-selection cache, **no bridge in this pass**: the
+  Selection chip's *Clear* is a write and stays, `useBuskingSelection` and the `selectionSlice`
+  publish are 3b's.
 - `routes/Surfaces.tsx` rebuilt to the canvas's run mode: header row (D1: `ScalerToolbar` deleted),
   `SurfacePanel` from `layout` (D8; fallback to `BindingMatrix` below `md` or without a layout),
   `SurfaceInspector` — including *Fader only…* over `POST .../surface-bindings/{id}/expand`, which
-  session 2 shipped — and the panel header's Selection chip with *Clear*.
+  session 2 shipped — and the panel header's Selection chip with *Clear*. `?binding=<id>` keeps
+  working: it is minted from `GroupCard` and `FixtureContent`, so it still picks the device and
+  forces the bank, and now also opens the inspector on that control.
+- **Two shipped components the wider union breaks silently.** `matchesBindingTarget` answers on
+  `groupProperty`, so `BoundControlBadge` goes blank for a group bound on a **strip** — the shape
+  the design draws most; and `controlLabel` looks `strip-1` up in `profile.controls` and misses, so
+  the badge reads its raw id. Both learn about strips here, or the fixtures and groups pages
+  quietly stop reporting the bindings they were built to report.
 - Tests: `Surfaces.test.tsx` (no scaler buttons; a matched device draws the panel; an unmatched one
-  the card; dead badge count), `SurfacePanel.test.tsx` (each legend state from a `surfaceControls`
-  frame, the mixed and no-selection encoder states included).
+  the card; dead badge count; `?binding=` still selects), `SurfacePanel.test.tsx` (each legend state
+  from a `surfaceControls` frame, the mixed and no-selection encoder states included),
+  `surfaceResolve.test.ts` (the precedence ladder at both bank levels and every derived role), and
+  a `targetUtils` case for a strip-bound group.
 - Ends with a desk that can be watched and inspected but not rewired by drag: `BindingMatrix` and
   MIDI Learn are still how a binding is made, and both survive the session anyway (D9).
 
