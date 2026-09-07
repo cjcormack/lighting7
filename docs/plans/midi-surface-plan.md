@@ -937,6 +937,9 @@ Each has a drafted answer the sessions build unless overturned:
 - **Should `SelectionProperty` write through `ProgrammerOwner.SURFACE` or a new owner?** Drafted:
   `SURFACE` — it is a fader, and releasing a flash must reveal it exactly as it reveals a fixed
   fader's value.
-- **Is the desk's current busk page worth a `StateFlow`, or should `BuskPageNext` stay
-  client-local?** Drafted: desk-side, because a button on the X-Touch cannot address one of two
-  tablets; the URL keeps mirroring it so a bookmark still means something.
+- ~~**Is the desk's current busk page worth a `StateFlow`, or should `BuskPageNext` stay
+  client-local?**~~ **Answered (session 4): desk-side**, as drafted — a button on the X-Touch cannot
+  address one of two tablets. The URL still mirrors it. One thing the draft did not foresee: the
+  busk view needs a **local override that beats the desk while the socket is down**, because routing
+  the tab click through the desk routes it through `sendGesture`, which drops the frame — so an
+  offline click would otherwise do nothing at all.
