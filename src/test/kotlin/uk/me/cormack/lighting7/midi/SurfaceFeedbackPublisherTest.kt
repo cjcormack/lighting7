@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.midi
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -18,6 +20,7 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.DeskSelection
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -45,11 +48,13 @@ class SurfaceFeedbackPublisherTest {
     private class RecordingController(override val handle: MidiDeviceHandle) : MidiController {
         val feedback = CopyOnWriteArrayList<MidiFeedbackMessage>()
         val invalidations = CopyOnWriteArrayList<MidiControlKey>()
+        val allInvalidations = AtomicInteger()
         override val input = kotlinx.coroutines.flow.MutableSharedFlow<MidiInputEvent>()
         override val inboundCcRate = uk.me.cormack.lighting7.dmx.PacketRateCounter()
         override val outboundCcRate = uk.me.cormack.lighting7.dmx.PacketRateCounter()
         override fun sendFeedback(message: MidiFeedbackMessage) { feedback += message }
         override fun invalidateFeedbackCache(key: MidiControlKey) { invalidations += key }
+        override fun invalidateAllFeedback() { allInvalidations.incrementAndGet() }
         override fun close() {}
     }
 
@@ -58,7 +63,13 @@ class SurfaceFeedbackPublisherTest {
      * binding service with seeded bindings, active-bank state, flash tracker, global scaler,
      * and a recording MidiController. Returns everything the test needs to drive scenarios.
      */
-    private inner class Harness(bindings: List<ControlSurfaceBindingService.ResolvedBinding>) {
+    private inner class Harness(
+        bindings: List<ControlSurfaceBindingService.ResolvedBinding>,
+        // Wire the publisher to a real transport instead of the recording double, for the one
+        // test whose subject is the composition of the two — delta suppression lives in
+        // KtMidiController, so a fake that only records messages cannot show it being bypassed.
+        midiControllerOverride: MidiController? = null,
+    ) {
         val fixtures = Fixtures()
         val controller = MockDmxController(Universe(0, 0))
         val bindingService = ControlSurfaceBindingService(FakeDatabase.instance)
@@ -96,7 +107,9 @@ class SurfaceFeedbackPublisherTest {
 
             publisher = SurfaceFeedbackPublisher(
                 deviceMatcher = matcher,
-                controllerLookup = { key -> if (key == "x-touch-compact") recordingController else null },
+                controllerLookup = { key ->
+                    if (key == "x-touch-compact") midiControllerOverride ?: recordingController else null
+                },
                 bindingService = bindingService,
                 bankState = bankState,
                 encoderBankState = encoderBankState,
@@ -520,6 +533,94 @@ class SurfaceFeedbackPublisherTest {
             val on = h.recordingController.feedback.filterIsInstance<MidiFeedbackMessage.NoteOnFeedback>()
             assertNotNull(on.firstOrNull())
             assertEquals(16, on.first().note)  // btn-1 = note 16
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * `FU-MIDI-RESYNC-DELTA-SUPPRESSED`. The transport suppresses a send whose bytes match the
+     * last ones it sent for that control — a cache of what *we sent*, read as though it were
+     * what *the hardware holds*. A re-arming resync exists for exactly the case where those
+     * two have diverged (a power cycle, a device reset, a replug the registry missed), so it
+     * is the one write that must not be deduplicated: on the rig, one resync drove the faders
+     * whose values had moved and left a fader at 74% sitting at the bottom.
+     *
+     * Composed against a real [KtMidiController] on purpose. The suppression lives in the
+     * transport, so the recording double cannot show it being bypassed — which is why this
+     * went unnoticed.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    @Test
+    fun `a re-arming resync re-sends a control whose value has not changed`() = runBlocking {
+        val target = RecordingSendTarget()
+        val midi = KtMidiController(
+            handle = xTouchHandle,
+            sendTarget = target,
+            inputSource = null,
+            // Far past the test's lifetime; drains are driven explicitly by flushForTest().
+            transmitIntervalMs = 3_600_000L,
+            parentScope = GlobalScope,
+        )
+        val h = Harness(
+            listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+            midiControllerOverride = midi,
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.controller.setValue(1, 200u, 0)
+            h.bankState.setBank(deviceTypeKey, "layer-a")
+            h.attachXTouch()
+            yield()
+            midi.flushForTest()
+
+            // Nothing on the rig moves; the bank change resyncs the device with the same value.
+            h.bankState.setBank(deviceTypeKey, "layer-b")
+            yield()
+            midi.flushForTest()
+
+            val motorWrite = MidiFeedbackMessage.ControlChangeFeedback(
+                0, 1, PropertyChannelResolver.scaleDmxTo7Bit(200u),
+            ).encode()
+            assertEquals(
+                2, target.sent.count { it.contentEquals(motorWrite) },
+                "each re-arming resync must drive fader-1, unchanged value or not",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+            midi.close()
+        }
+    }
+
+    /**
+     * The other half of the rule: a resync that does *not* re-arm pickup leaves the cache
+     * alone. Delta suppression is load-bearing on the DMX-driven path, where a bound channel
+     * can move at frame rate, and there the hardware really does still hold what we sent it.
+     */
+    @Test
+    fun `only a re-arming resync drops the whole delta cache`() = runBlocking {
+        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.bankState.setBank(deviceTypeKey, "layer-a")
+            h.attachXTouch()
+            yield()
+            assertEquals(1, h.recordingController.allInvalidations.get(), "attach: the physical position is stale")
+
+            h.bankState.setBank(deviceTypeKey, "layer-b")
+            yield()
+            assertEquals(2, h.recordingController.allInvalidations.get(), "bank change: the control's meaning moved")
+
+            h.selection.set(listOf(hex1))
+            yield()
+            assertEquals(
+                2, h.recordingController.allInvalidations.get(),
+                "a selection change re-feeds without re-arming, so the delta cache still holds",
+            )
         } finally {
             h.publisher.stop()
             scope.cancel()

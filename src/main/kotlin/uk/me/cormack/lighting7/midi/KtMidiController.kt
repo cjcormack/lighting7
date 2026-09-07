@@ -88,6 +88,10 @@ class KtMidiController internal constructor(
         lastSentBytes.remove(key)
     }
 
+    override fun invalidateAllFeedback() {
+        lastSentBytes.clear()
+    }
+
     override fun close() {
         if (closed) return
         closed = true

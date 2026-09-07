@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  *
  * [openInput] returns a no-op [MidiInputSource] and [openOutput] a no-op [MidiSendTarget],
  * which is sufficient for tests that observe registry / matcher state but don't drive byte
- * traffic — feedback-level tests should still use the existing per-test fakes.
+ * traffic — a test that wants the bytes builds its own controller over [RecordingSendTarget].
  */
 internal class FakeMidiAccess : MidiAccessSource {
     override val name = "Fake"
@@ -25,4 +25,15 @@ internal class FakeMidiAccess : MidiAccessSource {
     }
 
     override suspend fun openOutput(portId: String): MidiSendTarget = MidiSendTarget { }
+}
+
+/**
+ * Outbound byte sink that records what actually reached the wire. Shared, because the
+ * transport's delta suppression means "was a message queued" and "was a message sent" are
+ * different questions, and both `MidiFeedbackConflationTest` and the publisher's resync test
+ * ask the second one.
+ */
+internal class RecordingSendTarget : MidiSendTarget {
+    val sent = CopyOnWriteArrayList<ByteArray>()
+    override fun send(bytes: ByteArray) { sent.add(bytes.copyOf()) }
 }

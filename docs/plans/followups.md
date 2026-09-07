@@ -31,7 +31,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-MIDI-HOTPLUG-UNDETECTED`](#fu-midi-hotplug-undetected) | Ready | MIDI | — |
-| [`FU-MIDI-RESYNC-DELTA-SUPPRESSED`](#fu-midi-resync-delta-suppressed) | Ready | MIDI | — |
 | [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) | Ready | MIDI | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
@@ -521,52 +520,6 @@ and `touchState` / `takeover` are never cleared, since `clearDevice` is called o
 that is safe for libremidi's Arena, or diff against a cheap second source (CoreMIDI4J's own
 `getMidiDeviceInfo()` is already called in the debug path) and rescan when the two disagree. Log
 loudly when a notification-only build is running, because today the failure is completely silent.
-
----
-
-### `FU-MIDI-RESYNC-DELTA-SUPPRESSED`
-
-**A full resync is discarded for every control whose value happens to be unchanged** · Ready ·
-MIDI surface plan session 5 (2026-09-07), found on the rig
-
-`KtMidiController` suppresses redundant sends (`KtMidiController.kt:146`):
-
-```kotlin
-val previous = lastSentBytes[key]
-if (previous != null && previous.contentEquals(bytes)) continue
-```
-
-That cache records **what we last sent**, and is used as though it recorded **what the hardware
-holds**. The two diverge the moment the hardware's state is reset behind the desk's back — a power
-cycle, a replug the registry did not notice ([`FU-MIDI-HOTPLUG-UNDETECTED`](#fu-midi-hotplug-undetected)),
-a device reset button, or dropped messages.
-
-`sendFullResync(displayKey, rearmPickup = true)` exists precisely for the case where *the physical
-position is stale* — its three callers are attach, bank change and project change — and it is the
-one thing delta suppression must not be allowed to swallow. Today it does not invalidate the cache,
-so a resync is a no-op for every control whose recomputed value matches the last one sent.
-
-Demonstrated on the rig, with the surface replugged and the desk still holding the old controller:
-
-| Control | Desk's value before / after | Sent? |
-|---|---|---|
-| Fader 1 (`speedMasterBpm`) | 74% → 74% | **no** — stayed at the bottom |
-| Fader 5 (`single-channel-dimmer.dimmer`) | 0% → 50% | yes — drove to halfway |
-| Buttons 25/26 (`selectTarget`) | off → on | yes — lit |
-
-A real detach/attach hides this, because `doOpen` builds a fresh `KtMidiController` with an empty
-`lastSentBytes`; it only bites when the resync runs against a controller that survived. That is why
-it has never been seen, and why it will still bite after the hot-plug bug is fixed if the fix
-reuses the controller.
-
-The primitive to fix it already exists and is already used for exactly this reason on a single LED:
-`invalidateFeedbackCache(key)`, called by `SurfaceFeedbackPublisher.onButtonRelease` so a
-re-asserted LED is not deduplicated away.
-
-**Ready**: have `sendFullResync` invalidate the feedback cache for the controls it is about to
-write when `rearmPickup` is true — the flag already means "the hardware may not match us". A
-`MidiController.invalidateAllFeedback()` is the smaller change than per-key invalidation at each
-send site. Pin it with a test that resyncs twice with an unchanged value and asserts two sends.
 
 ---
 
@@ -1755,6 +1708,18 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-MIDI-RESYNC-DELTA-SUPPRESSED` — `MidiController.invalidateAllFeedback()`, called by
+  `SurfaceFeedbackPublisher.sendFullResync` whenever it re-arms pickup. That flag already means
+  "the physical position is stale", so it is exactly the condition under which `lastSentBytes` — a
+  record of what we *sent*, read as what the hardware *holds* — must not be trusted. The
+  device-wide form of the `invalidateFeedbackCache` that `onButtonRelease` already did for one LED;
+  someone having fixed it locally there rather than at the resync was the shape of the bug. Delta
+  suppression itself is untouched, since it is load-bearing on the DMX-driven path where a bound
+  channel moves at frame rate. Pinned at both levels, because the missing coverage was as much the
+  finding as the behaviour: the publisher test composes against a **real** `KtMidiController`
+  (the recording double has no suppression to bypass) and asserts two motor writes across two
+  resyncs at one value, plus that a non-re-arming resync leaves the cache alone — midi-surface plan
+  session 5
 - `FU-LOOK-MIDI-RECALL` — `BindingTarget.ApplyLook(lookUuid)`. The item asked which of three
   behaviours a button should have and answered its own question: the one that behaves identically
   every press. So it presses the Look onto **its own fixtures** — never the desk selection, and

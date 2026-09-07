@@ -2,19 +2,11 @@ package uk.me.cormack.lighting7.midi
 
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
-import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class MidiFeedbackConflationTest {
-
-    private class RecordingSendTarget : MidiSendTarget {
-        val sent = CopyOnWriteArrayList<ByteArray>()
-        override fun send(bytes: ByteArray) {
-            sent.add(bytes.copyOf())
-        }
-    }
 
     private fun makeHandle(): MidiDeviceHandle = MidiDeviceHandle(
         displayKey = "test-dev",
@@ -84,6 +76,36 @@ class MidiFeedbackConflationTest {
             controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 65u))
             controller.flushForTest()
             assertEquals(2, target.sent.size)
+        } finally {
+            controller.close()
+        }
+    }
+
+    /**
+     * The transport half of `FU-MIDI-RESYNC-DELTA-SUPPRESSED`: the device-wide counterpart of
+     * `invalidateFeedbackCache`, for a resync that must reach the hardware whether or not its
+     * values moved. Every key goes, not just the ones written since.
+     */
+    @Test
+    fun `invalidateAllFeedback makes every control transmit again at an unchanged value`() {
+        val target = RecordingSendTarget()
+        val controller = makeController(target)
+        try {
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 64u))
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 8, 20u))
+            controller.flushForTest()
+            assertEquals(2, target.sent.size)
+
+            controller.invalidateAllFeedback()
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 64u))
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 8, 20u))
+            controller.flushForTest()
+            assertEquals(4, target.sent.size, "both unchanged values re-send after the cache is dropped")
+
+            // The cache re-arms from the resend: suppression is dropped for one round, not off.
+            controller.sendFeedback(MidiFeedbackMessage.ControlChangeFeedback(0, 7, 64u))
+            controller.flushForTest()
+            assertEquals(4, target.sent.size)
         } finally {
             controller.close()
         }

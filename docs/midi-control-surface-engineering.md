@@ -172,6 +172,13 @@ Concurrency shape deliberately mirrors [ArtNetController](dmx-engineering.md):
 - **Conflated `pendingSignal`** acts as the "there's work" flag; idle ticks do no work.
 - **60 Hz transmit loop** (`DEFAULT_TRANSMIT_INTERVAL_MS = 17L`) — slightly faster than the ArtNet loop's 25 ms default to keep LED response crisp. Independent of it: the ArtNet interval is now per-universe and configurable, so this is a fixed choice for surface feel rather than a value derived from the DMX rate.
 - **Delta suppression** — `lastSentBytes[key]` compared byte-for-byte before `MidiSendTarget.send`.
+  That cache records what we last **sent**, not what the hardware **holds**, and the two diverge
+  whenever the surface's state is reset behind the desk's back. So it is bypassed where the desk
+  already distrusts the hardware: `invalidateFeedbackCache(key)` for one control (a Momentary LED
+  cleared by its own physical release) and `invalidateAllFeedback()` for the device, called by
+  `SurfaceFeedbackPublisher.sendFullResync` whenever it re-arms pickup — attach, bank change,
+  project change. Without that, a resync was a no-op for every control whose recomputed value
+  happened to match the last one sent.
 - **Consecutive-error backoff** matching ArtNet semantics: first error prints stack trace; > 20 consecutive errors breaks the loop.
 
 ### Input path

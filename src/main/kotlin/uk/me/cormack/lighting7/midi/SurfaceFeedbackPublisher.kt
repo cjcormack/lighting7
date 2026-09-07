@@ -918,8 +918,17 @@ class SurfaceFeedbackPublisher(
      * PICKUP fader is forced back into pickup (the physical position is stale: attach, bank
      * change, project change); without it takeover follows [SoftTakeoverStateMachine.setLogical]'s
      * divergence rule.
+     *
+     * [rearmPickup] also drops the transport's delta cache for the whole device. That cache
+     * records what we last *sent*, not what the hardware *holds*, and the two diverge exactly
+     * when this flag is set — so without the invalidation a resync is a no-op for every control
+     * whose recomputed value happens to match the last one sent, and a surface reset behind the
+     * desk's back keeps whatever it reset to. `MidiController.invalidateAllFeedback` is the
+     * device-wide form of the `invalidateFeedbackCache` that [onButtonRelease] already does for
+     * one LED, for the same reason.
      */
     private fun sendFullResync(displayKey: String, rearmPickup: Boolean) {
+        if (rearmPickup) controllerLookup(displayKey)?.invalidateAllFeedback()
         val profile = deviceMatcher.attached.value[displayKey]?.typeKey
             ?.let { typeKey -> types().firstOrNull { it.typeKey == typeKey } }
         // Seed every profile control at "unbound" first, so a control that lost its binding

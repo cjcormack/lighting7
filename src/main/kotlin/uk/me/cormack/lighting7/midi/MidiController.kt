@@ -45,6 +45,21 @@ interface MidiController {
      */
     fun invalidateFeedbackCache(key: MidiControlKey)
 
+    /**
+     * Forget the last-sent bytes for *every* key on this device, so the next round of
+     * [sendFeedback] transmits in full even where the recomputed value matches what we last
+     * sent. The device-wide counterpart of [invalidateFeedbackCache], for the case where the
+     * hardware's whole state may have been reset behind us — a power cycle, a device reset
+     * button, a replug the registry did not notice, or dropped messages.
+     *
+     * Called by `SurfaceFeedbackPublisher.sendFullResync` when it is re-arming pickup: that
+     * flag already means "the physical position is stale", and a resync that trusted the
+     * delta cache would leave every unchanged control where the hardware happens to have it.
+     * Delta suppression itself stays — it is load-bearing on the DMX-driven feedback path,
+     * where a bound channel can move at frame rate.
+     */
+    fun invalidateAllFeedback()
+
     fun close()
 }
 
