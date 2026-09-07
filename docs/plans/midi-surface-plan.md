@@ -3,7 +3,8 @@
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
 > `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, session 3a (the picture) as
 > lighting-react `45c3d3e`, session 3b (editing it) as lighting-react `e97096b`, and session 4
-> (records on buttons) across both repos; session 5 is proposed.**
+> (records on buttons) as `8ce7dc8` / lighting-react `e642c14`; session 5 is the rig, and is all
+> that remains.**
 > Session 4 amendments. The review's own findings first, then the pre-read's.
 > **A busk page click while offline did nothing at all.** Making the desk the source of the showing
 > page put the tab click through `sendGesture`, which drops the frame and toasts when the socket is
