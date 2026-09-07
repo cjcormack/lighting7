@@ -1669,7 +1669,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
-- `FU-MIDI-SELECTION-COLOUR-RED-ONLY` + `FU-MIDI-ENCODER-HUE` (uncommitted) — settled together, as
+- `FU-MIDI-SELECTION-COLOUR-RED-ONLY` + `FU-MIDI-ENCODER-HUE` (`4829fd9`) — settled together, as
   the two items said they must be: a colour on a continuous control is a **hue**.
   `PropertyChannelResolver` owns both directions — `toPropertyValue` writes the new hue at the
   head's current value and saturation, the saturation floored at a quarter so a turn on a white
