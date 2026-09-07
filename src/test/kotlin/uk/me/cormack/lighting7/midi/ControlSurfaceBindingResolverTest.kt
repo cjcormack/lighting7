@@ -51,7 +51,7 @@ class ControlSurfaceBindingResolverTest {
     fun `resolve returns null when nothing is cached`() {
         val svc = service()
         svc.seedCacheForTest(projectId = 1, bindings = emptyList())
-        assertNull(svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = null, encoderBankProperty = "dimmer"))
+        assertNull(svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
     }
 
     @Test
@@ -61,7 +61,7 @@ class ControlSurfaceBindingResolverTest {
         val bankA = resolved(id = 2, bank = "layer-a")
         svc.seedCacheForTest(projectId = 1, bindings = listOf(global, bankA))
 
-        val hit = svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-a", encoderBankProperty = "dimmer")
+        val hit = svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer"))
         assertNotNull(hit)
         assertEquals(2, hit.id)
     }
@@ -73,7 +73,7 @@ class ControlSurfaceBindingResolverTest {
         val bankB = resolved(id = 2, bank = "layer-b")
         svc.seedCacheForTest(projectId = 1, bindings = listOf(global, bankB))
 
-        val hit = svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-a", encoderBankProperty = "dimmer")
+        val hit = svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer"))
         assertNotNull(hit)
         assertEquals(1, hit.id)
     }
@@ -83,7 +83,7 @@ class ControlSurfaceBindingResolverTest {
         val svc = service()
         val bankA = resolved(id = 1, bank = "layer-a")
         svc.seedCacheForTest(projectId = 1, bindings = listOf(bankA))
-        assertNull(svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-b", encoderBankProperty = "dimmer"))
+        assertNull(svc.resolve(1, "x-touch-compact-standard", "fader-1", activeBank = "layer-b", encoderBank = EncoderBankSelection("dimmer")))
     }
 
     @Test
@@ -115,16 +115,16 @@ class ControlSurfaceBindingResolverTest {
             bindings = listOf(resolved(id = 9, controlId = "strip-1", target = BindingTarget.Strip(group))),
         )
 
-        val fader = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBankProperty = "dimmer"))
+        val fader = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertEquals(BindingTarget.GroupProperty("front-wash", "dimmer"), fader.target)
         // The strip row's identity, policy and health carry to every control it covers.
         assertEquals(9, fader.id)
         assertEquals("fader-1", fader.controlId)
 
-        val select = assertNotNull(svc.resolve(1, KEY, "btn-25", activeBank = null, encoderBankProperty = "dimmer"))
+        val select = assertNotNull(svc.resolve(1, KEY, "btn-25", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertEquals(BindingTarget.SelectTarget(group, BindingTarget.SelectMode.TOGGLE), select.target)
 
-        val flash = assertNotNull(svc.resolve(1, KEY, "btn-1", activeBank = null, encoderBankProperty = "dimmer"))
+        val flash = assertNotNull(svc.resolve(1, KEY, "btn-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertIs<BindingTarget.Flash>(flash.target)
     }
 
@@ -138,11 +138,11 @@ class ControlSurfaceBindingResolverTest {
 
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "dimmer"),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBankProperty = "dimmer")?.target,
+            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "colour"),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBankProperty = "colour")?.target,
+            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.target,
         )
     }
 
@@ -157,10 +157,10 @@ class ControlSurfaceBindingResolverTest {
             ),
         )
 
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBankProperty = "dimmer"))
+        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertEquals(10, hit.id)
         // Its siblings still come from the strip.
-        assertEquals(9, svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBankProperty = "dimmer")?.id)
+        assertEquals(9, svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.id)
     }
 
     @Test
@@ -176,7 +176,7 @@ class ControlSurfaceBindingResolverTest {
 
         // Direct-first is applied across *both* bank levels before the strip is consulted, so a
         // global single binding wins even against a strip bound to the active bank.
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBankProperty = "dimmer"))
+        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer")))
         assertEquals(10, hit.id)
     }
 
@@ -196,11 +196,11 @@ class ControlSurfaceBindingResolverTest {
 
         assertEquals(
             BindingTarget.GroupProperty("movers", "dimmer"),
-            svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBankProperty = "dimmer")?.target,
+            svc.resolve(1, KEY, "fader-1", activeBank = "layer-a", encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "dimmer"),
-            svc.resolve(1, KEY, "fader-1", activeBank = "layer-b", encoderBankProperty = "dimmer")?.target,
+            svc.resolve(1, KEY, "fader-1", activeBank = "layer-b", encoderBank = EncoderBankSelection("dimmer"))?.target,
         )
     }
 
@@ -218,7 +218,7 @@ class ControlSurfaceBindingResolverTest {
         )
         assertEquals(
             AssignmentHealth.MissingGroup("front-wash"),
-            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBankProperty = "dimmer")?.health,
+            svc.resolve(1, KEY, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer"))?.health,
         )
     }
 
@@ -229,9 +229,9 @@ class ControlSurfaceBindingResolverTest {
             projectId = 1,
             bindings = listOf(resolved(id = 9, controlId = "strip-master", target = BindingTarget.Strip(group))),
         )
-        assertNotNull(svc.resolve(1, KEY, "fader-9", activeBank = null, encoderBankProperty = "dimmer"))
+        assertNotNull(svc.resolve(1, KEY, "fader-9", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         // enc-9 belongs to no strip on this profile, so nothing derives it.
-        assertNull(svc.resolve(1, KEY, "enc-9", activeBank = null, encoderBankProperty = "dimmer"))
+        assertNull(svc.resolve(1, KEY, "enc-9", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
     }
 
     @Test
@@ -251,7 +251,7 @@ class ControlSurfaceBindingResolverTest {
             ),
         )
 
-        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBankProperty = "dimmer"))
+        val hit = assertNotNull(svc.resolve(1, KEY, "fader-1", activeBank = null, encoderBank = EncoderBankSelection("dimmer")))
         assertEquals("fader-1", hit.controlId)
         assertEquals(AssignmentHealth.UnknownTarget("fromTheFuture"), hit.health)
     }

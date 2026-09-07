@@ -86,4 +86,26 @@ class SelectionWritesTest {
         assertEquals(Color(200, 0, 0), hex1, "dim and saturated stays so, at the new hue")
         assertEquals(Color(255, 128, 128), hex2, "bright and pastel stays so, at the new hue")
     }
+
+    @Test
+    fun `a colour axis lands on each head's own current colour, and a slider under an axis takes nothing`() {
+        val controller = MockDmxController(universe)
+        val fixtures = fixtures(controller)
+        // hex-1 a dim blue, hex-2 a bright pastel cyan — saturation 0 leaves each a white at its own level.
+        controller.setValue(4, 200u, 0)
+        controller.setValue(14, 128u, 0)
+        controller.setValue(15, 255u, 0)
+        controller.setValue(16, 255u, 0)
+        val writes = SelectionWrites.forTargets(
+            fixtures, listOf(CueTargetDto("group", "front-wash")), "rgbColour", 0u, ColourAxis.SATURATION,
+        )
+        assertEquals(listOf("hex-1", "hex-2"), writes.map { it.fixture.targetKey })
+        assertEquals(Color(200, 200, 200), assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[0].value).value.color)
+        assertEquals(Color(255, 255, 255), assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[1].value).value.color)
+
+        assertTrue(
+            SelectionWrites.forTargets(fixtures, listOf(CueTargetDto("group", "front-wash")), "dimmer", 64u, ColourAxis.SATURATION).isEmpty(),
+            "a dimmer has no saturation: every head is skipped",
+        )
+    }
 }

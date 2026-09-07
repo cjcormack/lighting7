@@ -11,7 +11,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.midi.BindingRefused
 import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.ColourAxis
 import uk.me.cormack.lighting7.midi.ControlState
+import uk.me.cormack.lighting7.midi.EncoderBankSelection
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.MidiDeviceHandle
@@ -61,6 +63,8 @@ data object SurfaceBankStateInMessage : SurfaceInMessage()
 data class SurfaceEncoderBankSetInMessage(
     val deviceTypeKey: String,
     val propertyName: String,
+    /** Which axis of a colour property; null (and absent) is hue. See [ColourAxis]. */
+    val colourAxis: ColourAxis? = null,
 ) : SurfaceInMessage()
 
 @Serializable
@@ -164,8 +168,11 @@ data class SurfaceBankStateOutMessage(
 @Serializable
 @SerialName("surfaceEncoderBank.state")
 data class SurfaceEncoderBankStateOutMessage(
-    /** `deviceTypeKey` → property name. A device absent from the map is on the default. */
-    val properties: Map<String, String>,
+    /**
+     * `deviceTypeKey` → what its strip encoders drive: a property name and, for a colour, which
+     * axis (absent is hue). A device absent from the map is on the default, `dimmer`.
+     */
+    val properties: Map<String, EncoderBankSelection>,
 ) : SurfaceOutMessage()
 
 @Serializable
@@ -278,9 +285,11 @@ suspend fun handleSurface(scope: SocketScope, message: SurfaceInMessage) {
         is SurfaceBankStateInMessage ->
             scope.send(SurfaceBankStateOutMessage(state.activeBankState.active.value))
         is SurfaceEncoderBankSetInMessage ->
-            state.encoderBankState.setProperty(message.deviceTypeKey, message.propertyName)
+            state.encoderBankState.set(
+                message.deviceTypeKey, EncoderBankSelection(message.propertyName, message.colourAxis),
+            )
         is SurfaceEncoderBankStateInMessage ->
-            scope.send(SurfaceEncoderBankStateOutMessage(state.encoderBankState.properties.value))
+            scope.send(SurfaceEncoderBankStateOutMessage(state.encoderBankState.selections.value))
         is SurfaceDevicesStateInMessage ->
             scope.send(buildSurfaceDevicesStateMessage(
                 state.midiRegistry.devices.value,
@@ -313,7 +322,7 @@ fun setupSurfaceSubscriptions(scope: SocketScope) {
 
     // Same rule, one frame: the encoder bank has no "changed" delta, so the StateFlow
     // subscription is snapshot and broadcast both.
-    scope.subscribe(state.encoderBankState.properties) { scope.send(SurfaceEncoderBankStateOutMessage(it)) }
+    scope.subscribe(state.encoderBankState.selections) { scope.send(SurfaceEncoderBankStateOutMessage(it)) }
 
     // Learn-event broadcasts are filtered to sessions this connection started, so two
     // `/surfaces` tabs don't see phantom captures from each other's sessions.

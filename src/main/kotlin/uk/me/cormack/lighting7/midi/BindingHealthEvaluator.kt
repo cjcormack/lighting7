@@ -41,6 +41,11 @@ object BindingHealthEvaluator {
      * @param selectionProperties every property name some patched fixture declares that a
      *   continuous control can write (sliders and colour) — the vocabulary of
      *   [BindingTarget.SelectionProperty]; see [selectionPropertiesOf]
+     * @param colourProperties the subset of [selectionProperties] some patched fixture declares as
+     *   a **colour** — what a [ColourAxis] on a selection or encoder-bank target is judged against
+     *   at the write boundary (`refuseAxisOnNonColour`); see [colourPropertiesOf]. Health itself
+     *   does not read it: an axis is refused when it is bound, never reported afterwards, and a
+     *   head that stops being a colour under a re-patch simply drops the move.
      * @param validLookUuids Looks that exist in the project
      * @param looksNeedingSelection the subset of [validLookUuids] carrying a **deferred effect**, so
      *   an [BindingTarget.ApplyLook] on one has no own targets to press onto. A separate set rather
@@ -61,6 +66,7 @@ object BindingHealthEvaluator {
         val validStackUuids: Set<UUID> = emptySet(),
         val validCueUuids: Set<UUID> = emptySet(),
         val selectionProperties: Set<String> = emptySet(),
+        val colourProperties: Set<String> = emptySet(),
         val validLookUuids: Set<UUID> = emptySet(),
         val looksNeedingSelection: Set<UUID> = emptySet(),
         val validTemplateUuids: Set<UUID> = emptySet(),
@@ -77,6 +83,17 @@ object BindingHealthEvaluator {
         fixtures.fixtures.flatMapTo(HashSet()) { fixture ->
             fixture.fixtureProperties.map { it.name }
                 .filter { PropertyChannelResolver.describeFixtureProperty(fixture, it).isNotEmpty() }
+        }
+
+    /**
+     * The property names some patched fixture declares as a **colour** — the subset of
+     * [selectionPropertiesOf] a [ColourAxis] may be bound against on a target that names no head.
+     */
+    fun colourPropertiesOf(fixtures: Fixtures): Set<String> =
+        fixtures.fixtures.flatMapTo(HashSet()) { fixture ->
+            fixture.fixtureProperties.map { it.name }.filter {
+                PropertyChannelResolver.describePropertyRead(fixture, it) is PropertyChannelResolver.PropertyRead.Colour
+            }
         }
 
     fun evaluate(target: BindingTarget, context: Context): AssignmentHealth = when (target) {

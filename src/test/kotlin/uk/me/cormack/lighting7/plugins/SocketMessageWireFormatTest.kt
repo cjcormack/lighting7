@@ -4,6 +4,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.midi.BindingTarget
+import uk.me.cormack.lighting7.midi.ColourAxis
+import uk.me.cormack.lighting7.midi.EncoderBankSelection
 import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.LedState
 import uk.me.cormack.lighting7.midi.RingState
@@ -287,10 +289,26 @@ class SocketMessageWireFormatTest {
             json.decodeFromString<InMessage>("""{"type":"surfaceEncoderBank.state"}"""),
         )
 
-        val out: OutMessage = SurfaceEncoderBankStateOutMessage(mapOf("akai-mini" to "colour"))
+        val out: OutMessage = SurfaceEncoderBankStateOutMessage(
+            mapOf("akai-mini" to EncoderBankSelection("colour"), "x-touch" to EncoderBankSelection("rgbColour", ColourAxis.SATURATION)),
+        )
         val encoded = json.encodeToString(out)
         assertTrue(encoded.contains(""""type":"surfaceEncoderBank.state""""), encoded)
-        assertTrue(encoded.contains(""""akai-mini":"colour""""), encoded)
+        // A hue selection carries no axis on the wire; another axis is spelled by its serial name.
+        assertTrue(encoded.contains(""""akai-mini":{"propertyName":"colour"}"""), encoded)
+        assertTrue(encoded.contains(""""x-touch":{"propertyName":"rgbColour","colourAxis":"saturation"}"""), encoded)
+    }
+
+    @Test
+    fun `surface domain — surfaceEncoderBank set carries a colour axis, and defaults to none`() {
+        val withAxis = json.decodeFromString<InMessage>(
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour","colourAxis":"hueFine"}""",
+        )
+        assertEquals(ColourAxis.HUE_FINE, assertIs<SurfaceEncoderBankSetInMessage>(withAxis).colourAxis)
+        val without = json.decodeFromString<InMessage>(
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour"}""",
+        )
+        assertEquals(null, assertIs<SurfaceEncoderBankSetInMessage>(without).colourAxis)
     }
 
     @Test

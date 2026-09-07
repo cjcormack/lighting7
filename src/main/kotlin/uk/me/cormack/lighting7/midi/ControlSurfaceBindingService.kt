@@ -12,6 +12,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.describeAssignmentHealth
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
@@ -175,7 +176,7 @@ class ControlSurfaceBindingService(
 
     /**
      * Resolve an inbound event from `(deviceTypeKey, controlId)` on the given [activeBank] and
-     * [encoderBankProperty]. This is the one resolution entry point — the input router, the
+     * [encoderBank]. This is the one resolution entry point — the input router, the
      * feedback index and the takeover-policy lookup all come through here — so the strip arm
      * below needs no second implementation anywhere.
      *
@@ -202,7 +203,7 @@ class ControlSurfaceBindingService(
         deviceTypeKey: String,
         controlId: String,
         activeBank: String?,
-        encoderBankProperty: String,
+        encoderBank: EncoderBankSelection,
     ): ResolvedBinding? {
         ensureLoaded(projectId)
         val byControl = cache[projectId]?.byControl ?: return null
@@ -223,7 +224,7 @@ class ControlSurfaceBindingService(
 
         return stripBinding.copy(
             controlId = controlId,
-            target = deriveStripTarget(onStrip.role, stripTarget.target, encoderBankProperty),
+            target = deriveStripTarget(onStrip.role, stripTarget.target, encoderBank),
         )
     }
 
@@ -262,6 +263,7 @@ class ControlSurfaceBindingService(
         // than rebuilding the whole snapshot (stacks/cues/masters/looks/templates/pages) twice.
         val healthContext = resolveHealthContext(projectId)
         refuseUnpressableLook(healthContext, target)
+        refuseAxisOnNonColour(healthContext, target)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
                 ?.get(ControlKey(deviceTypeKey, controlId))
@@ -312,7 +314,10 @@ class ControlSurfaceBindingService(
         // tag below — matching create()/replace() rather than holding the per-project lock across
         // the multi-query DB read this triggers.
         val healthContext = resolveHealthContext(projectId)
-        target?.let { refuseUnpressableLook(healthContext, it) }
+        target?.let {
+            refuseUnpressableLook(healthContext, it)
+            refuseAxisOnNonColour(healthContext, it)
+        }
         val resolved = synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return null
             val existing = pc.byId[bindingId] ?: return null
@@ -407,7 +412,10 @@ class ControlSurfaceBindingService(
         // Resolved once for the whole batch — one refusal check per create still runs, but each
         // reuses this snapshot instead of rebuilding it from scratch per ApplyLook target.
         val healthContext = resolveHealthContext(projectId)
-        creates.forEach { refuseUnpressableLook(healthContext, it.target) }
+        creates.forEach {
+            refuseUnpressableLook(healthContext, it.target)
+            refuseAxisOnNonColour(healthContext, it.target)
+        }
         val created = synchronized(lockFor(projectId)) {
             val pc = cache.getOrPut(projectId) { ProjectCache() }
 
@@ -651,6 +659,71 @@ class ControlSurfaceBindingService(
             )
         }
     }
+
+    /**
+     * A [ColourAxis] on a property that is not a colour has nothing to drive.
+     *
+     * Judged with the **dispatch** lookup — [PropertyChannelResolver.describePropertyRead] answering
+     * [PropertyChannelResolver.PropertyRead.Colour] — so the refusal can never disagree with what a
+     * move will do. What it does *not* judge is left to health: a fixture or group that does not
+     * exist, or a property name no head declares, is not this rule's — an unknown name has an
+     * unknown type, and health already says `UnknownProperty` for it. A group is refused only when
+     * **no** member declares the property as a colour, since the write skips the members that do
+     * not and reaches the rest, exactly as [SelectionWrites] does; a selection or encoder-bank
+     * target, which names no head, is judged against the rig's colour vocabulary
+     * ([BindingHealthEvaluator.Context.colourProperties]) but only for a name the rig *has*
+     * ([isKnownNonColour]) — absent from both vocabularies is the unknown-name case, not a
+     * refusal. A [BindingTarget.Flash] is judged for the
+     * property it wraps, so a flash cannot smuggle in an axis a direct binding would be refused.
+     *
+     * Here rather than in the routes for [refuseWrongSlot]'s reason — one door, MIDI Learn's commit
+     * included. No context (tests, pre-show init) means no refusal, as for [refuseUnpressableLook].
+     */
+    private fun refuseAxisOnNonColour(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
+        if (context == null) return
+        val axis = target.colourAxisOrNull() ?: return
+        fun isColour(fixture: Fixture, propertyName: String): Boolean? {
+            fixture.fixtureProperty(propertyName) ?: return null
+            val read = PropertyChannelResolver.describePropertyRead(fixture, propertyName)
+            return read is PropertyChannelResolver.PropertyRead.Colour
+        }
+        fun refuse(what: String): Nothing = throw BindingRefused(
+            "$what is not a colour property, so it has no ${axis.name.lowercase().replace('_', ' ')} to drive",
+            CODE_BINDING_AXIS_NEEDS_COLOUR,
+        )
+        when (val inner = if (target is BindingTarget.Flash) target.target else target) {
+            is BindingTarget.FixtureProperty -> {
+                val fixture = runCatching { context.fixtures.untypedFixture(inner.fixtureKey) }.getOrNull() ?: return
+                if (isColour(fixture, inner.propertyName) == false) refuse("'${inner.propertyName}' on '${inner.fixtureKey}'")
+            }
+            is BindingTarget.GroupProperty -> {
+                val group = runCatching { context.fixtures.untypedGroup(inner.groupName) }.getOrNull() ?: return
+                val verdicts = group.fixtures.filterIsInstance<Fixture>().mapNotNull { isColour(it, inner.propertyName) }
+                if (verdicts.isNotEmpty() && verdicts.none { it }) refuse("'${inner.propertyName}' on '${inner.groupName}'")
+            }
+            // Both need the property to be **known and not a colour**, never merely absent — see
+            // the "left to health" rule above. `selectionProperties` is what "known" means, and
+            // is the same vocabulary health judges these two targets against.
+            is BindingTarget.SelectionProperty ->
+                if (isKnownNonColour(context, inner.propertyName)) refuse("'${inner.propertyName}' on the selection")
+            is BindingTarget.EncoderBankSet ->
+                if (isKnownNonColour(context, inner.propertyName)) refuse("'${inner.propertyName}' as an encoder bank")
+            else -> Unit
+        }
+    }
+
+    /**
+     * A property some patched fixture declares that a continuous control can write, and that no
+     * fixture declares as a colour — the only shape a target naming no head can be refused on.
+     *
+     * A name **absent from both** sets is left to health, exactly as an unknown property on a
+     * fixture target is. It has to be: [BindingHealthEvaluator.Context.fixtures] is the rig of the
+     * *currently loaded* show whatever project is being written (see `State.buildBindingHealthContext`),
+     * so refusing on absence would reject a perfectly good colour-axis binding authored for another
+     * project's rig and leave the operator no way to make it at all.
+     */
+    private fun isKnownNonColour(context: BindingHealthEvaluator.Context, propertyName: String): Boolean =
+        propertyName in context.selectionProperties && propertyName !in context.colourProperties
 
     /**
      * Fill the uuid beside the int on a cue / stack target when the client sent only the int —

@@ -8,8 +8,8 @@ const val STRIP_FADER_PROPERTY: String = "dimmer"
 
 /**
  * What a control on a [StripDescriptor] behaves as: one group or fixture on a strip becomes a
- * dimmer fader, a select button, an encoder on whichever attribute the device's encoder bank
- * names, and a flash button.
+ * dimmer fader, a select button, an encoder on whichever attribute — and, for a colour, whichever
+ * axis — the device's encoder bank names, and a flash button.
  *
  * A pure function, deliberately: [ControlSurfaceBindingService.resolve] derives on the input and
  * feedback paths, and the frontend inspector explains a strip binding by asking the same question,
@@ -20,11 +20,13 @@ const val STRIP_FADER_PROPERTY: String = "dimmer"
 fun deriveStripTarget(
     role: StripRole,
     target: CueTargetDto,
-    encoderBankProperty: String,
+    encoderBank: EncoderBankSelection,
 ): BindingTarget = when (role) {
     StripRole.FADER -> propertyTarget(target, STRIP_FADER_PROPERTY)
     StripRole.SELECT -> BindingTarget.SelectTarget(target, BindingTarget.SelectMode.TOGGLE)
-    StripRole.ENCODER -> propertyTarget(target, encoderBankProperty)
+    // The bank's axis rides along: it is the encoder, and only the encoder, that a colour axis
+    // reaches on a strip — the fader and flash are the dimmer whatever the bank says.
+    StripRole.ENCODER -> propertyTarget(target, encoderBank.propertyName, encoderBank.colourAxis)
     StripRole.FLASH -> BindingTarget.Flash(propertyTarget(target, STRIP_FADER_PROPERTY))
 }
 
@@ -56,11 +58,11 @@ fun stripControlsByControlId(strips: List<StripDescriptor>): Map<String, StripCo
 fun deriveStripTargets(
     strip: StripDescriptor,
     target: CueTargetDto,
-    encoderBankProperty: String,
+    encoderBank: EncoderBankSelection,
 ): Map<String, BindingTarget> = buildMap {
     for (role in StripRole.entries) {
         val controlId = strip.controlFor(role) ?: continue
-        put(controlId, deriveStripTarget(role, target, encoderBankProperty))
+        put(controlId, deriveStripTarget(role, target, encoderBank))
     }
 }
 
@@ -69,8 +71,12 @@ fun deriveStripTargets(
  * everything downstream — the write path, the feedback index, health — treats a derived binding
  * and a fixed one identically.
  */
-private fun propertyTarget(target: CueTargetDto, propertyName: String): BindingTarget =
+private fun propertyTarget(
+    target: CueTargetDto,
+    propertyName: String,
+    colourAxis: ColourAxis? = null,
+): BindingTarget =
     when (target.target) {
-        is TargetRef.Group -> BindingTarget.GroupProperty(target.key, propertyName)
-        is TargetRef.Fixture -> BindingTarget.FixtureProperty(target.key, propertyName)
+        is TargetRef.Group -> BindingTarget.GroupProperty(target.key, propertyName, colourAxis)
+        is TargetRef.Fixture -> BindingTarget.FixtureProperty(target.key, propertyName, colourAxis)
     }

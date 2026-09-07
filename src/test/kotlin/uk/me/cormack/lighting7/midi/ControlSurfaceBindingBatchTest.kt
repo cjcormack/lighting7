@@ -48,7 +48,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             creates = deriveStripTargets(
                 strip = StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"),
                 target = wash,
-                encoderBankProperty = "colour",
+                encoderBank = EncoderBankSelection("colour"),
             ).map { (controlId, target) ->
                 newBinding(controlId, target).copy(takeoverPolicy = strip.takeoverPolicy)
             },
@@ -63,7 +63,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         // The four rows resolve to exactly what the strip was deriving, and keep its policy.
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "colour"),
-            service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBankProperty = "colour")?.target,
+            service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.target,
         )
         assertEquals(BindingTakeoverPolicy.PICKUP, created.single { it.controlId == "fader-1" }.takeoverPolicy)
 

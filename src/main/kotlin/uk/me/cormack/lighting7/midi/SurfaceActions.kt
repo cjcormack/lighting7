@@ -51,12 +51,23 @@ interface SurfaceActions {
     /**
      * Write a continuous value (0..127 MIDI 7-bit) to a fixture property. The production
      * implementation writes a programmer entry — a cue is read-only from a surface, and is
-     * edited by Include / Update like every other authoring path.
+     * edited by Include / Update like every other authoring path. [colourAxis] is which axis of
+     * a colour property the value moves — null is hue — and means nothing on a slider.
      */
-    fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte)
+    fun writeFixtureProperty(
+        fixtureKey: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+        colourAxis: ColourAxis? = null,
+    )
 
     /** Group variant of [writeFixtureProperty], fanned out per member. */
-    fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte)
+    fun writeGroupProperty(
+        groupName: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+        colourAxis: ColourAxis? = null,
+    )
 
     /** Flash press: store at 0..255 [max] on the property's channels. */
     fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte)
@@ -93,8 +104,9 @@ interface SurfaceActions {
      * Write a continuous value to [propertyName] on every target in the desk selection
      * ([uk.me.cormack.lighting7.state.DeskSelection]) — a group fanned to its members. An empty
      * selection drops the write with a debug log; it is never widened to "everything".
+     * [colourAxis] as on [writeFixtureProperty].
      */
-    fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte)
+    fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
 
     /** Toggle [target] in, or replace the selection with it, per [mode]. */
     fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode)
@@ -154,7 +166,12 @@ class DefaultSurfaceActions(
     private val globalScalerState: GlobalScalerState get() = state.show.globalScalerState
     private val speedMasters: SpeedMasterBank get() = state.show.speedMasterBank
 
-    override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {
+    override fun writeFixtureProperty(
+        fixtureKey: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+        colourAxis: ColourAxis?,
+    ) {
         val fixture = try {
             fixtures.untypedFixture(fixtureKey)
         } catch (_: Exception) {
@@ -162,7 +179,7 @@ class DefaultSurfaceActions(
             return
         }
         val value = PropertyChannelResolver.toPropertyValue(
-            fixture, propertyName, midiValue7Bit, PropertyChannelResolver.channelReader(fixtures),
+            fixture, propertyName, midiValue7Bit, PropertyChannelResolver.channelReader(fixtures), colourAxis,
         ) ?: run {
             logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
             return
@@ -170,7 +187,12 @@ class DefaultSurfaceActions(
         fxEngine.programmer.writeProperty(ProgrammerOwner.SURFACE, fixture, propertyName, value)
     }
 
-    override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {
+    override fun writeGroupProperty(
+        groupName: String,
+        propertyName: String,
+        midiValue7Bit: UByte,
+        colourAxis: ColourAxis?,
+    ) {
         val group = try {
             fixtures.untypedGroup(groupName)
         } catch (_: Exception) {
@@ -178,10 +200,10 @@ class DefaultSurfaceActions(
             return
         }
         // Convert per member — sliders scale through each member's own min..max sub-range, and
-        // a hue lands on each member's own current colour.
+        // a colour axis lands on each member's own current colour.
         val read = PropertyChannelResolver.channelReader(fixtures)
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit, read)?.let {
+            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit, read, colourAxis)?.let {
                 ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
             }
         }
@@ -315,13 +337,13 @@ class DefaultSurfaceActions(
         null
     }
 
-    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {
+    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
         val targets = state.deskSelection.targets.value
         if (targets.isEmpty()) {
             logger.debug("Surface selection write of '{}' dropped: nothing selected", propertyName)
             return
         }
-        val writes = SelectionWrites.forTargets(fixtures, targets, propertyName, midiValue7Bit)
+        val writes = SelectionWrites.forTargets(fixtures, targets, propertyName, midiValue7Bit, colourAxis)
         if (writes.isEmpty()) return
         fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
     }

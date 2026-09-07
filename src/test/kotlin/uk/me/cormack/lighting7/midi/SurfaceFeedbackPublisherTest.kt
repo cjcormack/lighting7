@@ -341,8 +341,8 @@ class SurfaceFeedbackPublisherTest {
             h.recordingController.invalidations.clear()
 
             val scalerActions = object : SurfaceActions {
-                override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {}
-                override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {}
+                override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
+                override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
                 override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {}
                 override fun flashGroupPropertyPress(groupName: String, propertyName: String, max: UByte) {}
                 override fun flashFixturePropertyRelease(fixtureKey: String, propertyName: String) {}
@@ -351,7 +351,7 @@ class SurfaceFeedbackPublisherTest {
                 override fun cueStackBack(stackId: Int, stackUuid: String?) {}
                 override fun cueStackPause(stackId: Int, stackUuid: String?) {}
                 override fun fireCue(cueId: Int, cueUuid: String?) {}
-                override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {}
+                override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
                 override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {}
                 override fun clearSelection() {}
                 override fun locateSelection() {}
@@ -1134,6 +1134,110 @@ class SurfaceFeedbackPublisherTest {
                 h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 6u),
                 "a grey head: nothing to cross, so the move writes through",
             )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    // ─── Colour axes ────────────────────────────────────────────────────
+
+    @Test
+    fun `an encoder-bank button lights only when the property and the axis both match`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "btn-1", BindingTarget.EncoderBankSet("rgbColour", ColourAxis.SATURATION)),
+            binding(2, "btn-2", BindingTarget.EncoderBankSet("rgbColour")),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun led(id: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(id).led
+
+            h.encoderBankState.set(deviceTypeKey, EncoderBankSelection("rgbColour"))
+            yield()
+            assertEquals(LedState.OFF, led("btn-1"), "the hue bank is not the saturation bank")
+            assertEquals(LedState.ON, led("btn-2"))
+
+            h.encoderBankState.set(deviceTypeKey, EncoderBankSelection("rgbColour", ColourAxis.SATURATION))
+            yield()
+            assertEquals(LedState.ON, led("btn-1"))
+            assertEquals(LedState.OFF, led("btn-2"), "same property, other axis: dark")
+
+            h.encoderBankState.set(deviceTypeKey, EncoderBankSelection("rgbColour", ColourAxis.HUE))
+            yield()
+            assertEquals(LedState.ON, led("btn-2"), "an explicit hue is the bank the axis-less button names")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a saturation-bound encoder reads chroma and a brightness-bound one reads the level`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "enc-1", BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.SATURATION)),
+            binding(2, "enc-2", BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.paint(2, 60, 60, 200)
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun control(id: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(id)
+            assertEquals(PropertyChannelResolver.saturationRead(60u, 60u, 200u)!!.value7Bit.toInt(), control("enc-1").value)
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u).toInt(), control("enc-2").value)
+
+            // A grey has a saturation — 0 — and a level; neither ring goes dark.
+            h.controller.paint(2, 100, 100, 100)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(2 to 100u.toUByte(), 3 to 100u.toUByte(), 4 to 100u.toUByte()))
+            yield()
+            h.publisher.controlStates.flushForTest()
+            assertEquals(0, control("enc-1").value, "a grey reads saturation 0")
+            assertEquals(RingState.ON, control("enc-1").ring)
+            assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(100u).toInt(), control("enc-2").value)
+
+            // Black has a level of 0 and no saturation at all.
+            h.controller.paint(2, 0, 0, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(2 to 0u.toUByte(), 3 to 0u.toUByte(), 4 to 0u.toUByte()))
+            yield()
+            h.publisher.controlStates.flushForTest()
+            assertNull(control("enc-1").value, "black has no saturation")
+            assertEquals(RingState.OFF, control("enc-1").ring)
+            assertEquals(0, control("enc-2").value, "black is brightness 0, a value the ring shows")
+            assertEquals(RingState.ON, control("enc-2").ring)
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `an axis-only change of encoder bank rebuilds the index and re-arms pickup`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "strip-1", BindingTarget.Strip(wash), policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.paint(2, 0, 0, 200)
+            h.controller.paint(14, 0, 0, 200)
+            h.encoderBankState.set(deviceTypeKey, EncoderBankSelection("rgbColour", ColourAxis.SATURATION))
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            // Both heads fully saturated: the encoder reads 127, and a move there is accepted.
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 127u))
+
+            h.encoderBankState.set(deviceTypeKey, EncoderBankSelection("rgbColour", ColourAxis.BRIGHTNESS))
+            yield()
+            // Brightness is 200/255 ≈ 100: the physical position no longer matches and pickup holds.
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 127u),
+                "a re-armed PICKUP control waits for the operator to cross the new axis's value",
+            )
+            assertTrue(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", PropertyChannelResolver.scaleDmxTo7Bit(200u)))
         } finally {
             h.publisher.stop()
             scope.cancel()

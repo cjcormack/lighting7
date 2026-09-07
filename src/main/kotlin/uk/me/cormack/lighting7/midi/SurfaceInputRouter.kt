@@ -215,7 +215,7 @@ class SurfaceInputRouter(
         }
         val bank = bankState.bankFor(deviceTypeKey)
         return bindingService.resolve(
-            projectId, deviceTypeKey, controlId, bank, encoderBankState.propertyFor(deviceTypeKey),
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey),
         )
     }
 
@@ -251,13 +251,13 @@ class SurfaceInputRouter(
         )
         when (val target = binding.target) {
             is BindingTarget.FixtureProperty ->
-                actions.writeFixtureProperty(target.fixtureKey, target.propertyName, value7Bit)
+                actions.writeFixtureProperty(target.fixtureKey, target.propertyName, value7Bit, target.colourAxis)
             is BindingTarget.GroupProperty ->
-                actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit)
+                actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit, target.colourAxis)
             is BindingTarget.SpeedMasterBpm ->
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             is BindingTarget.SelectionProperty ->
-                actions.writeSelectionProperty(target.propertyName, value7Bit)
+                actions.writeSelectionProperty(target.propertyName, value7Bit, target.colourAxis)
             is BindingTarget.Strip -> logger.warn(
                 "Strip binding {} reached continuous dispatch — resolve should have derived it",
                 binding.id,
@@ -291,7 +291,7 @@ class SurfaceInputRouter(
             // Applies to the device the button is on, so the payload names no device and a
             // button can never be stranded pointing at a surface that isn't attached.
             is BindingTarget.EncoderBankSet ->
-                encoderBankState.setProperty(deviceTypeKey, target.propertyName)
+                encoderBankState.set(deviceTypeKey, EncoderBankSelection(target.propertyName, target.colourAxis))
             // Never dispatched: resolve() derives a strip to the target of the control the event
             // arrived on. Reaching here means the strip arm failed to fire.
             is BindingTarget.Strip -> logger.warn(
@@ -338,11 +338,11 @@ class SurfaceInputRouter(
                 // release step — operator should use Flash if they want that semantics.
                 when (target) {
                     is BindingTarget.FixtureProperty ->
-                        actions.writeFixtureProperty(target.fixtureKey, target.propertyName, 127u)
+                        actions.writeFixtureProperty(target.fixtureKey, target.propertyName, 127u, target.colourAxis)
                     is BindingTarget.GroupProperty ->
-                        actions.writeGroupProperty(target.groupName, target.propertyName, 127u)
+                        actions.writeGroupProperty(target.groupName, target.propertyName, 127u, target.colourAxis)
                     is BindingTarget.SelectionProperty ->
-                        actions.writeSelectionProperty(target.propertyName, 127u)
+                        actions.writeSelectionProperty(target.propertyName, 127u, target.colourAxis)
                     else -> Unit
                 }
             }

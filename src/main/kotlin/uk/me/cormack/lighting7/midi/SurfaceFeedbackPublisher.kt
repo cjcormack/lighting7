@@ -184,10 +184,11 @@ class SurfaceFeedbackPublisher(
      *
      * [heads] are what the 7-bit feedback position is read from — one per head the target names:
      * the fixture itself, each member of a group, each selected head of a selection binding. A
-     * head is a slider's one channel or a colour's three read together as a hue
+     * head is a slider's one channel or a colour's three read together on the binding's [axis]
      * ([PropertyChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
      * Empty for a selection binding with nothing selected: the entry exists so the control reads
      * "no selection" rather than "unbound". [channels] is the flat list the index is keyed on.
+     * [axis] is baked here at rebuild, like [policy], so the read path never re-derives it.
      */
     private data class ContinuousEntry(
         val displayKey: String,
@@ -196,6 +197,7 @@ class SurfaceFeedbackPublisher(
         val binding: ControlSurfaceBindingService.ResolvedBinding,
         val heads: List<PropertyChannelResolver.PropertyRead>,
         val policy: BindingTakeoverPolicy,
+        val axis: ColourAxis?,
     ) {
         val channels: List<PropertyChannelResolver.PropertyChannel> = heads.flatMap { it.channels }
     }
@@ -579,7 +581,7 @@ class SurfaceFeedbackPublisher(
         }
         val bank = bankState.bankFor(deviceTypeKey)
         val binding = bindingService.resolve(
-            projectId, deviceTypeKey, controlId, bank, encoderBankState.propertyFor(deviceTypeKey),
+            projectId, deviceTypeKey, controlId, bank, encoderBankState.selectionFor(deviceTypeKey),
         )
         return binding?.takeoverPolicy ?: classDefault
     }
@@ -608,8 +610,8 @@ class SurfaceFeedbackPublisher(
     }
 
     /**
-     * The encoder bank moved: every strip encoder on that device now stands on a different
-     * property's channels, so the index is stale and pickup is re-armed — the meaning of the
+     * The encoder bank moved — to another property, or to another axis of the same colour: every
+     * strip encoder on that device now reads differently, so the index is stale and pickup is re-armed — the meaning of the
      * control changed under the operator's hand, which is exactly the case
      * [SoftTakeoverStateMachine.forcePickup] exists for. Handled device-wide like a bank change
      * rather than per control: it is the same staleness, and reusing the path keeps one
@@ -768,10 +770,10 @@ class SurfaceFeedbackPublisher(
             val profile = profilesByKey[a.typeKey] ?: continue
             val bank = bankState.bankFor(a.typeKey)
             // Read once per device: it decides what every strip encoder on it resolves to.
-            val encoderBankProperty = encoderBankState.propertyFor(a.typeKey)
+            val encoderBank = encoderBankState.selectionFor(a.typeKey)
             for (control in profile.controls) {
                 val binding = bindingService
-                    .resolve(projectId, a.typeKey, control.controlId, bank, encoderBankProperty) ?: continue
+                    .resolve(projectId, a.typeKey, control.controlId, bank, encoderBank) ?: continue
                 if (control is FaderDescriptor || control is EncoderDescriptor) {
                     val classDefault = if (control is FaderDescriptor && !control.hasMotor) {
                         BindingTakeoverPolicy.PICKUP
@@ -788,7 +790,8 @@ class SurfaceFeedbackPublisher(
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
-                    val heads = fixtures?.let { findHeads(it, binding.target, selectedHeads) }
+                    val axis = binding.target.colourAxisOrNull()
+                    val heads = fixtures?.let { findHeads(it, binding.target, selectedHeads, axis) }
                     if (heads != null) {
                         val entry = ContinuousEntry(
                             displayKey = displayKey,
@@ -797,6 +800,7 @@ class SurfaceFeedbackPublisher(
                             binding = binding,
                             heads = heads,
                             policy = binding.takeoverPolicy ?: classDefault,
+                            axis = axis,
                         )
                         for (pc in entry.channels) {
                             byChannel.getOrPut(packChannelKey(pc.universe.universe, pc.channel)) { mutableListOf() }
@@ -878,37 +882,50 @@ class SurfaceFeedbackPublisher(
      * Every arm takes the **whole** [PropertyChannelResolver.PropertyRead]. Each used to take the
      * first channel of the flat description, so a colour binding stood on red alone and a
      * red-and-yellow selection read as uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`).
+     *
+     * With a colour [axis] named, only **colour** heads are kept. [computeValue7Bit] answers null
+     * for the whole entry when any head reads null, and a slider head reads null on an axis — so
+     * a selection mixing a colour head and a slider head under one property name would otherwise
+     * darken the ring for the heads the move does reach. The write skips those heads
+     * ([PropertyChannelResolver.toPropertyValue]); the read has to skip the same ones.
      */
     private fun findHeads(
         fixtures: Fixtures,
         target: BindingTarget,
         selectedHeads: List<CueTargetDto>,
-    ): List<PropertyChannelResolver.PropertyRead>? = when (target) {
-        is BindingTarget.FixtureProperty -> {
-            val fixture = try {
-                fixtures.untypedFixture(target.fixtureKey)
-            } catch (_: Exception) { null }
-            fixture?.let { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
-                ?.let { listOf(it) }
+        axis: ColourAxis?,
+    ): List<PropertyChannelResolver.PropertyRead>? {
+        fun describe(fixture: Fixture, propertyName: String): PropertyChannelResolver.PropertyRead? {
+            val read = PropertyChannelResolver.describePropertyRead(fixture, propertyName) ?: return null
+            if (axis != null && read !is PropertyChannelResolver.PropertyRead.Colour) return null
+            return read
         }
-        is BindingTarget.GroupProperty -> {
-            val group = try {
-                fixtures.untypedGroup(target.groupName)
-            } catch (_: Exception) { null }
-            group?.fixtures?.filterIsInstance<Fixture>()
-                ?.mapNotNull { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
-                ?.takeIf { it.isNotEmpty() }
+        return when (target) {
+            is BindingTarget.FixtureProperty -> {
+                val fixture = try {
+                    fixtures.untypedFixture(target.fixtureKey)
+                } catch (_: Exception) { null }
+                fixture?.let { describe(it, target.propertyName) }?.let { listOf(it) }
+            }
+            is BindingTarget.GroupProperty -> {
+                val group = try {
+                    fixtures.untypedGroup(target.groupName)
+                } catch (_: Exception) { null }
+                group?.fixtures?.filterIsInstance<Fixture>()
+                    ?.mapNotNull { describe(it, target.propertyName) }
+                    ?.takeIf { it.isNotEmpty() }
+            }
+            is BindingTarget.SelectionProperty -> selectedHeads.mapNotNull { head ->
+                if (head.type != TargetRef.Fixture.TYPE) return@mapNotNull null
+                val fixture = try {
+                    fixtures.untypedFixture(head.key)
+                } catch (_: Exception) { null }
+                fixture?.let { describe(it, target.propertyName) }
+            }
+            // Never seen here: resolve() derives a strip to one of the property targets above.
+            is BindingTarget.Strip -> null
+            else -> null
         }
-        is BindingTarget.SelectionProperty -> selectedHeads.mapNotNull { head ->
-            if (head.type != TargetRef.Fixture.TYPE) return@mapNotNull null
-            val fixture = try {
-                fixtures.untypedFixture(head.key)
-            } catch (_: Exception) { null }
-            fixture?.let { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
-        }
-        // Never seen here: resolve() derives a strip to one of the property targets above.
-        is BindingTarget.Strip -> null
-        else -> null
     }
 
     /** Resync one specific control — motor catch-up on touch-off. */
@@ -975,8 +992,11 @@ class SurfaceFeedbackPublisher(
         is BindingTarget.LocateSelection -> selectionLocated(
             runCatching { locateManagerProvider?.invoke()?.activeTargets?.value }.getOrNull().orEmpty(),
         )
-        is BindingTarget.EncoderBankSet ->
-            encoderBankState.propertyFor(entry.binding.deviceTypeKey) == target.propertyName
+        // Both halves, through the effective axis: a hue button and a saturation button on one
+        // colour property are two banks, and (rgbColour, null) is the same bank as (rgbColour, HUE).
+        is BindingTarget.EncoderBankSet -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
+            it.propertyName == target.propertyName && it.colourAxis.effective == target.colourAxis.effective
+        }
         // Never indexed: resolve() derives a strip to the target of the control it stands on.
         is BindingTarget.Strip -> null
         // Answered from the *index*, which carries each button's record already resolved: this
@@ -1050,10 +1070,10 @@ class SurfaceFeedbackPublisher(
      * feedback can mean.
      *
      * Null when the heads disagree (a divergent group, a mixed selection), when one of them has
-     * no position to report (a colour with no hue), or when there are none (nothing selected):
-     * the control has no one value to show. What "agree" means — exact for a slider, within a
-     * head's hue quantisation for a colour, and every pair rather than each against the first —
-     * is [PropertyChannelResolver.commonValue]'s.
+     * no position to report (a colour with no hue, a black with no saturation), or when there
+     * are none (nothing selected): the control has no one value to show. What "agree" means —
+     * exact for a slider, within a head's own quantisation on a colour axis, and every pair
+     * rather than each against the first — is [PropertyChannelResolver.commonValue]'s.
      */
     private fun computeValue7Bit(entry: ContinuousEntry): UByte? {
         val fixtures = currentFixtures ?: return null
@@ -1061,7 +1081,7 @@ class SurfaceFeedbackPublisher(
         val read = PropertyChannelResolver.channelReader(fixtures)
         val reads = ArrayList<PropertyChannelResolver.HeadValue>(entry.heads.size)
         for (head in entry.heads) {
-            reads += PropertyChannelResolver.readHead(head, read) ?: return null
+            reads += PropertyChannelResolver.readHead(head, read, entry.axis) ?: return null
         }
         return PropertyChannelResolver.commonValue(reads)
     }

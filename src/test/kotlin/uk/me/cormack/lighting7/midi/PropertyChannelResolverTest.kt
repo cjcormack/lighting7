@@ -12,6 +12,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.math.abs
 
 /**
  * Unit tests for [PropertyChannelResolver]. Uses a real [HexFixture] — the resolver only
@@ -226,7 +227,7 @@ class PropertyChannelResolverTest {
         val dimmer = assertIs<PropertyChannelResolver.PropertyRead.Slider>(
             PropertyChannelResolver.describePropertyRead(hex(maxDimmerLevel = 200u), "dimmer"),
         )
-        assertEquals(127u.toUByte(), PropertyChannelResolver.readHead(dimmer) { _, _ -> 200u }!!.value7Bit)
+        assertEquals(127u.toUByte(), PropertyChannelResolver.readHead(dimmer, { _, _ -> 200u })!!.value7Bit)
         val colour = assertIs<PropertyChannelResolver.PropertyRead.Colour>(
             PropertyChannelResolver.describePropertyRead(hex(), "rgbColour"),
         )
@@ -287,5 +288,199 @@ class PropertyChannelResolverTest {
         assertTrue(PropertyChannelResolver.describeFixtureProperty(hex(), "mode").isEmpty())
         assertTrue(PropertyChannelResolver.describeFixtureProperty(hex(), "nonesuch").isEmpty())
         assertNull(PropertyChannelResolver.describePropertyRead(hex(), "mode"))
+    }
+
+    // --- Colour axes ---
+
+    private fun write(axis: ColourAxis, v: Int, current: Color?): Color = colourValue(
+        PropertyChannelResolver.toPropertyValue(hex(), "rgbColour", v.toUByte(), current?.let(::showing) ?: unread, axis),
+    )
+
+    private fun hueSteps(c: Color): Float = Color.RGBtoHSB(c.red, c.green, c.blue, null)[0] * PropertyChannelResolver.HUE_STEPS
+
+    private val colourHead = PropertyChannelResolver.describePropertyRead(hex(), "rgbColour")!!
+
+    @Test
+    fun `an explicit hue axis is the same write and read as none`() {
+        val blue = Color(0, 0, 200)
+        assertEquals(
+            colourValue(PropertyChannelResolver.toPropertyValue(hex(), "rgbColour", 40u, showing(blue))),
+            write(ColourAxis.HUE, 40, blue),
+        )
+        assertEquals(
+            PropertyChannelResolver.readHead(colourHead, showing(blue)),
+            PropertyChannelResolver.readHead(colourHead, showing(blue), ColourAxis.HUE),
+        )
+        assertEquals(ColourAxis.HUE, null.effective)
+    }
+
+    @Test
+    fun `a fine trim at centre leaves the head on its coarse step and moves half a step at the ends`() {
+        val onStep = PropertyChannelResolver.colourAtHue(40u, Color(0, 0, 200))
+        assertEquals(onStep, write(ColourAxis.HUE_FINE, PropertyChannelResolver.HUE_FINE_CENTRE, onStep))
+        assertEquals(39.5f, hueSteps(write(ColourAxis.HUE_FINE, 0, onStep)), 0.1f, "the bottom of the trim is half a step down")
+        assertEquals(40 + 63 / 128f, hueSteps(write(ColourAxis.HUE_FINE, 127, onStep)), 0.1f, "the top is one fine position short of half a step up")
+        // A black or unread head starts from red at full saturation and value, and the trim wraps below red.
+        assertEquals(Color(255, 0, 0), write(ColourAxis.HUE_FINE, 64, null))
+        assertEquals(Color(255, 0, 0), write(ColourAxis.HUE_FINE, 64, Color.BLACK))
+        val belowRed = write(ColourAxis.HUE_FINE, 0, null)
+        assertEquals(255, belowRed.red)
+        assertEquals(0, belowRed.green)
+        assertTrue(belowRed.blue in 1..8, "half a step below red is a touch of magenta: $belowRed")
+        // A grey is lifted to the floor at its own value, as the hue write does.
+        assertEquals(Color(120, 90, 90), write(ColourAxis.HUE_FINE, 64, Color(120, 120, 120)))
+    }
+
+    @Test
+    fun `the fine read is the offset within the coarse step and round-trips within its tolerance`() {
+        val base = PropertyChannelResolver.colourAtHue(40u, Color(0, 0, 255))
+        // A coarse step written into 8-bit channels lands a hair off the step, so the rest reads as
+        // the centre *within the head's tolerance* (11 here), never as a different position.
+        val rest = PropertyChannelResolver.readHead(colourHead, showing(base), ColourAxis.HUE_FINE)!!
+        assertTrue(abs(rest.value7Bit.toInt() - 64) <= rest.tolerance, "rest reads ${rest.value7Bit} ± ${rest.tolerance}")
+        assertTrue(abs(rest.value7Bit.toInt() - 64) <= 1, "and at full chroma that is within one position")
+        for (v in listOf(8, 16, 32, 64, 96, 111, 120)) {
+            val written = write(ColourAxis.HUE_FINE, v, base)
+            val read = PropertyChannelResolver.readHead(colourHead, showing(written), ColourAxis.HUE_FINE)!!
+            assertTrue(abs(read.value7Bit.toInt() - v) <= read.tolerance, "fine $v read back as ${read.value7Bit} ± ${read.tolerance}")
+            assertTrue(read.circular, "the trim wraps: its ends are one position apart, not the whole travel")
+            val coarse = PropertyChannelResolver.readHead(colourHead, showing(written), ColourAxis.HUE)!!
+            assertEquals(40, coarse.value7Bit.toInt(), "the coarse read is unmoved by fine $v")
+        }
+        // Dim and pale heads hold the trim more coarsely, and still read back within what they hold.
+        for (head in listOf(Color(0, 0, 60), Color(179, 179, 255))) {
+            val written = write(ColourAxis.HUE_FINE, 32, PropertyChannelResolver.colourAtHue(40u, head))
+            val read = PropertyChannelResolver.readHead(colourHead, showing(written), ColourAxis.HUE_FINE)!!
+            assertTrue(abs(read.value7Bit.toInt() - 32) <= read.tolerance, "$head: ${read.value7Bit} ± ${read.tolerance}")
+        }
+        assertNull(PropertyChannelResolver.hueFineRead(120u, 120u, 120u), "a grey has no hue to trim")
+        assertNull(PropertyChannelResolver.hueFineRead(0u, 0u, 0u), "nor has black")
+        // The ends of the trim sit on the boundary between two coarse steps, and channel rounding
+        // decides which side a head lands on — so 0 can read back as 127 for the same colour. They
+        // are neighbours, and every coarse step must round-trip its ends through `agreesWith`
+        // rather than through the raw distance, or a group written at 0 darkens its own ring.
+        for (coarse in 0..127) {
+            val step = PropertyChannelResolver.colourAtHue(coarse.toUByte(), Color(0, 0, 255))
+            for (v in listOf(0, 127)) {
+                val written = write(ColourAxis.HUE_FINE, v, step)
+                val read = PropertyChannelResolver.readHead(colourHead, showing(written), ColourAxis.HUE_FINE)!!
+                assertTrue(
+                    read.agreesWith(PropertyChannelResolver.HeadValue(v.toUByte(), read.tolerance, circular = true)),
+                    "coarse $coarse, fine $v read back as ${read.value7Bit} ± ${read.tolerance}",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `saturation writes v over 127 at the head's hue and value`() {
+        val pastelBlue = Color(60, 60, 200)
+        assertEquals(Color(0, 0, 200), write(ColourAxis.SATURATION, 127, pastelBlue))
+        assertEquals(Color(200, 200, 200), write(ColourAxis.SATURATION, 0, pastelBlue), "0 is a white at the head's level")
+        val half = write(ColourAxis.SATURATION, 64, pastelBlue)
+        assertEquals(200, half.blue, "value kept")
+        assertEquals(half.red, half.green)
+        assertTrue(half.red in 98..100, "half saturation: $half")
+        // A black or unread head has no hue or value to keep: red at full value.
+        assertEquals(Color(255, 0, 0), write(ColourAxis.SATURATION, 127, null))
+        assertEquals(Color(255, 255, 255), write(ColourAxis.SATURATION, 0, Color.BLACK))
+    }
+
+    @Test
+    fun `saturation reads chroma over the largest channel, and nothing on black`() {
+        assertEquals(127, PropertyChannelResolver.saturationRead(0u, 0u, 200u)!!.value7Bit.toInt())
+        assertEquals(0, PropertyChannelResolver.saturationRead(200u, 200u, 200u)!!.value7Bit.toInt(), "a grey reads 0, not nothing")
+        assertNull(PropertyChannelResolver.saturationRead(0u, 0u, 0u))
+        assertEquals(1, PropertyChannelResolver.saturationRead(0u, 0u, 200u)!!.tolerance)
+        assertEquals(4, PropertyChannelResolver.saturationRead(0u, 0u, 40u)!!.tolerance, "ceil(127 / 40)")
+        for (v in 0..127) {
+            val bright = write(ColourAxis.SATURATION, v, Color(0, 0, 255))
+            assertEquals(v, PropertyChannelResolver.saturationRead(bright.red.toUByte(), bright.green.toUByte(), bright.blue.toUByte())!!.value7Bit.toInt(), "at full value $v reads back exactly")
+            val dim = write(ColourAxis.SATURATION, v, Color(0, 0, 40))
+            val read = PropertyChannelResolver.saturationRead(dim.red.toUByte(), dim.green.toUByte(), dim.blue.toUByte())!!
+            assertTrue(abs(read.value7Bit.toInt() - v) <= read.tolerance, "at value 40, $v reads back as ${read.value7Bit} ± ${read.tolerance}")
+        }
+        // Two heads at different values written at one saturation agree.
+        val a = write(ColourAxis.SATURATION, 90, Color(0, 0, 255))
+        val b = write(ColourAxis.SATURATION, 90, Color(0, 0, 40))
+        assertNotNull(PropertyChannelResolver.commonValue(listOf(
+            PropertyChannelResolver.saturationRead(a.red.toUByte(), a.green.toUByte(), a.blue.toUByte())!!,
+            PropertyChannelResolver.saturationRead(b.red.toUByte(), b.green.toUByte(), b.blue.toUByte())!!,
+        )))
+    }
+
+    @Test
+    fun `brightness writes v over 127 as the value at the head's hue and saturation`() {
+        assertEquals(Color(0, 0, 255), write(ColourAxis.BRIGHTNESS, 127, Color(0, 0, 60)))
+        assertEquals(Color.BLACK, write(ColourAxis.BRIGHTNESS, 0, Color(0, 0, 60)), "0 is black — hue and saturation go with it")
+        val half = write(ColourAxis.BRIGHTNESS, 64, Color(60, 60, 200))
+        assertTrue(half.blue in 128..129, "half value: $half")
+        assertEquals(half.red, half.green)
+        assertTrue(half.red in 38..40, "saturation kept: $half")
+        // A black or unread head has neither to keep: grey, a white level.
+        val grey = write(ColourAxis.BRIGHTNESS, 64, null)
+        assertEquals(grey.red, grey.green)
+        assertEquals(grey.red, grey.blue)
+        assertTrue(grey.red in 128..129, "$grey")
+        assertEquals(Color(255, 255, 255), write(ColourAxis.BRIGHTNESS, 127, Color.BLACK))
+    }
+
+    @Test
+    fun `brightness reads the largest channel and reads black as zero, not nothing`() {
+        assertEquals(PropertyChannelResolver.scaleDmxTo7Bit(200u), PropertyChannelResolver.brightnessRead(60u, 60u, 200u).value7Bit)
+        assertEquals(0, PropertyChannelResolver.brightnessRead(0u, 0u, 0u).value7Bit.toInt())
+        assertNotNull(PropertyChannelResolver.readHead(colourHead, showing(Color.BLACK), ColourAxis.BRIGHTNESS), "a black head has a brightness: none")
+        for (v in 0..127) {
+            val written = write(ColourAxis.BRIGHTNESS, v, Color(0, 0, 255))
+            val read = PropertyChannelResolver.brightnessRead(written.red.toUByte(), written.green.toUByte(), written.blue.toUByte())
+            assertTrue(abs(read.value7Bit.toInt() - v) <= read.tolerance, "$v reads back as ${read.value7Bit}")
+        }
+        // Two heads at different hues and saturations written at one brightness agree.
+        val a = write(ColourAxis.BRIGHTNESS, 90, Color(0, 0, 255))
+        val b = write(ColourAxis.BRIGHTNESS, 90, Color(255, 200, 200))
+        assertNotNull(PropertyChannelResolver.commonValue(listOf(
+            PropertyChannelResolver.brightnessRead(a.red.toUByte(), a.green.toUByte(), a.blue.toUByte()),
+            PropertyChannelResolver.brightnessRead(b.red.toUByte(), b.green.toUByte(), b.blue.toUByte()),
+        )))
+    }
+
+    @Test
+    fun `an axis on a slider writes and reads nothing`() {
+        assertNull(PropertyChannelResolver.toPropertyValue(hex(), "dimmer", 64u, unread, ColourAxis.HUE_FINE))
+        assertNull(PropertyChannelResolver.toPropertyValue(hex(), "dimmer", 64u, unread, ColourAxis.HUE), "an explicit hue is still an axis a slider has not got")
+        val dimmer = PropertyChannelResolver.describePropertyRead(hex(), "dimmer")!!
+        val at100: ChannelReader = { _, _ -> 100u }
+        assertNull(PropertyChannelResolver.readHead(dimmer, at100, ColourAxis.SATURATION))
+        assertNotNull(PropertyChannelResolver.readHead(dimmer, at100), "no axis: the slider reads as before")
+    }
+
+    @Test
+    fun `a colour-axis write carries the head's current white, amber and UV, and a flash does not`() {
+        // Hex channels: 2..4 colour, 5 amber, 6 white, 7 UV.
+        val lit: ChannelReader = { _, channel ->
+            when (channel) {
+                4 -> 200u
+                5 -> 10u
+                6 -> 200u
+                7 -> 30u
+                else -> 0u
+            }
+        }
+        for (axis in ColourAxis.entries) {
+            val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(
+                PropertyChannelResolver.toPropertyValue(hex(), "rgbColour", 40u, lit, axis),
+            ).value
+            assertEquals(200u.toUByte(), value.white, "$axis keeps the white")
+            assertEquals(10u.toUByte(), value.amber, "$axis keeps the amber")
+            assertEquals(30u.toUByte(), value.uv, "$axis keeps the UV")
+        }
+        val unreadValue = assertIs<CueAssignmentResolver.PropertyValue.Colour>(
+            PropertyChannelResolver.toPropertyValue(hex(), "rgbColour", 40u, unread),
+        ).value
+        assertEquals(0u.toUByte(), unreadValue.white, "an emitter that cannot be read is 0")
+        val flash = assertIs<CueAssignmentResolver.PropertyValue.Colour>(
+            PropertyChannelResolver.flashPropertyValue(hex(), "rgbColour", 200u),
+        ).value
+        assertEquals(0u.toUByte(), flash.white, "a flash is a level: W/A/UV 0")
     }
 }

@@ -47,23 +47,32 @@ sealed class BindingTarget {
     /**
      * Write a continuous property (e.g. dimmer, UV, rgbColour) on a single fixture.
      * The value coming off the fader / encoder is scaled to the property's native range.
+     *
+     * [colourAxis] says which axis of a **colour** property the control drives; null is hue (see
+     * [ColourAxis]). It is refused at bind time on a property that is not colour-typed where the
+     * type is known ([ControlSurfaceBindingService] `refuseAxisOnNonColour`,
+     * `BINDING_AXIS_NEEDS_COLOUR`) and skipped at dispatch otherwise; a [Flash] wrapping this
+     * ignores it, because a flash is a level.
      */
     @Serializable
     @SerialName("fixtureProperty")
     data class FixtureProperty(
         val fixtureKey: String,
         val propertyName: String,
+        val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
     /**
      * Write a continuous property on a fixture group. Writes fan out to members via the
-     * group's property-aggregator semantics.
+     * group's property-aggregator semantics. [colourAxis] as on [FixtureProperty]; a member on
+     * which the property is not colour-typed is skipped, the rest take the move.
      */
     @Serializable
     @SerialName("groupProperty")
     data class GroupProperty(
         val groupName: String,
         val propertyName: String,
+        val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
     /** Advance the named cue stack on button press. [stackUuid] wins over [stackId] when set. */
@@ -167,11 +176,15 @@ sealed class BindingTarget {
      * Write a continuous property on **every selected target** — a fixture in the selection
      * directly, a group fanned to its members exactly as [GroupProperty] fans. An empty selection
      * drops the write with a debug log (the legend's "no selection" state); it is never widened
-     * to "everything".
+     * to "everything". [colourAxis] as on [FixtureProperty]; refused at bind time unless some
+     * patched fixture declares [propertyName] as a colour, and skipped per head otherwise.
      */
     @Serializable
     @SerialName("selectionProperty")
-    data class SelectionProperty(val propertyName: String) : BindingTarget()
+    data class SelectionProperty(
+        val propertyName: String,
+        val colourAxis: ColourAxis? = null,
+    ) : BindingTarget()
 
     /** How a [SelectTarget] press changes the desk selection. */
     @Serializable
@@ -221,11 +234,16 @@ sealed class BindingTarget {
     /**
      * Point the device's strip encoders at [propertyName] on press — the attribute-select
      * buttons every console has. Applies to the device the button is on, so the payload names
-     * no device; the LED is lit while this is the device's current encoder bank.
+     * no device; the LED is lit while this is the device's current encoder bank — the property
+     * **and** the axis, compared through [effective], so a *hue* button and a *saturation* button
+     * on one colour property are two banks and light one at a time.
      */
     @Serializable
     @SerialName("encoderBankSet")
-    data class EncoderBankSet(val propertyName: String) : BindingTarget()
+    data class EncoderBankSet(
+        val propertyName: String,
+        val colourAxis: ColourAxis? = null,
+    ) : BindingTarget()
 
     /**
      * Press a **Look** onto its own fixtures on button press.
@@ -297,6 +315,19 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("unknown")
     data class Unknown(val targetType: String, val rawPayload: String) : BindingTarget()
+}
+
+/**
+ * The colour axis a target carries, or null for one that has none — a [BindingTarget.Flash] answers
+ * for the property it wraps. Null is also what a hue binding carries; compare through [effective].
+ */
+fun BindingTarget.colourAxisOrNull(): ColourAxis? = when (this) {
+    is BindingTarget.FixtureProperty -> colourAxis
+    is BindingTarget.GroupProperty -> colourAxis
+    is BindingTarget.SelectionProperty -> colourAxis
+    is BindingTarget.EncoderBankSet -> colourAxis
+    is BindingTarget.Flash -> target.colourAxisOrNull()
+    else -> null
 }
 
 /** JSON codec for [BindingTarget] payloads. Stable discriminator = `type`. */

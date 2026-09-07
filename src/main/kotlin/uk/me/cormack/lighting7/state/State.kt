@@ -554,6 +554,7 @@ class State(val config: ApplicationConfig) {
             validStackUuids = snapshot.stacks.mapTo(HashSet()) { it.second },
             validCueUuids = snapshot.cues.mapTo(HashSet()) { it.second },
             selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
+            colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
             validLookUuids = snapshot.lookUuids,
             looksNeedingSelection = snapshot.looksNeedingSelection,
             validTemplateUuids = snapshot.templateUuids,

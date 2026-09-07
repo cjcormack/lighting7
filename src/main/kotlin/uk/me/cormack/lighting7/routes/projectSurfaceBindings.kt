@@ -194,7 +194,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
             val derived = deriveStripTargets(
                 strip = strip,
                 target = target.target,
-                encoderBankProperty = state.encoderBankState.propertyFor(existing.deviceTypeKey),
+                encoderBank = state.encoderBankState.selectionFor(existing.deviceTypeKey),
             )
             try {
                 val created = service.replace(

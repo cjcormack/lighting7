@@ -18,11 +18,11 @@ class StripDeriveTest {
     fun `fader and flash always drive dimmer, whatever the encoder bank`() {
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "dimmer"),
-            deriveStripTarget(StripRole.FADER, group, encoderBankProperty = "pan"),
+            deriveStripTarget(StripRole.FADER, group, encoderBank = EncoderBankSelection("pan")),
         )
         assertEquals(
             BindingTarget.Flash(BindingTarget.GroupProperty("front-wash", "dimmer")),
-            deriveStripTarget(StripRole.FLASH, group, encoderBankProperty = "pan"),
+            deriveStripTarget(StripRole.FLASH, group, encoderBank = EncoderBankSelection("pan")),
         )
     }
 
@@ -30,7 +30,7 @@ class StripDeriveTest {
     fun `select toggles rather than replaces`() {
         assertEquals(
             BindingTarget.SelectTarget(group, BindingTarget.SelectMode.TOGGLE),
-            deriveStripTarget(StripRole.SELECT, group, encoderBankProperty = "dimmer"),
+            deriveStripTarget(StripRole.SELECT, group, encoderBank = EncoderBankSelection("dimmer")),
         )
     }
 
@@ -38,11 +38,11 @@ class StripDeriveTest {
     fun `the encoder follows the encoder bank`() {
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "dimmer"),
-            deriveStripTarget(StripRole.ENCODER, group, encoderBankProperty = "dimmer"),
+            deriveStripTarget(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("dimmer")),
         )
         assertEquals(
             BindingTarget.GroupProperty("front-wash", "colour"),
-            deriveStripTarget(StripRole.ENCODER, group, encoderBankProperty = "colour"),
+            deriveStripTarget(StripRole.ENCODER, group, encoderBank = EncoderBankSelection("colour")),
         )
     }
 
@@ -50,15 +50,15 @@ class StripDeriveTest {
     fun `a fixture target derives fixture targets`() {
         assertEquals(
             BindingTarget.FixtureProperty("hex-1", "dimmer"),
-            deriveStripTarget(StripRole.FADER, fixture, encoderBankProperty = "tilt"),
+            deriveStripTarget(StripRole.FADER, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
         assertEquals(
             BindingTarget.FixtureProperty("hex-1", "tilt"),
-            deriveStripTarget(StripRole.ENCODER, fixture, encoderBankProperty = "tilt"),
+            deriveStripTarget(StripRole.ENCODER, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
         assertEquals(
             BindingTarget.SelectTarget(fixture, BindingTarget.SelectMode.TOGGLE),
-            deriveStripTarget(StripRole.SELECT, fixture, encoderBankProperty = "tilt"),
+            deriveStripTarget(StripRole.SELECT, fixture, encoderBank = EncoderBankSelection("tilt")),
         )
     }
 
@@ -69,7 +69,7 @@ class StripDeriveTest {
         assertNull(master.controlFor(StripRole.FLASH))
         assertEquals(listOf("fader-9", "btn-33"), master.controlIds)
 
-        val derived = deriveStripTargets(master, group, encoderBankProperty = "colour")
+        val derived = deriveStripTargets(master, group, encoderBank = EncoderBankSelection("colour"))
         assertEquals(setOf("fader-9", "btn-33"), derived.keys)
         assertEquals(BindingTarget.GroupProperty("front-wash", "dimmer"), derived["fader-9"])
     }
@@ -83,7 +83,7 @@ class StripDeriveTest {
         assertEquals(StripRole.FLASH, strip.roleOf("btn-1"))
         assertNull(strip.roleOf("fader-2"))
 
-        val derived = deriveStripTargets(strip, group, encoderBankProperty = "colour")
+        val derived = deriveStripTargets(strip, group, encoderBank = EncoderBankSelection("colour"))
         assertEquals(
             mapOf(
                 "fader-1" to BindingTarget.GroupProperty("front-wash", "dimmer"),
@@ -92,6 +92,32 @@ class StripDeriveTest {
                 "btn-1" to BindingTarget.Flash(BindingTarget.GroupProperty("front-wash", "dimmer")),
             ),
             derived,
+        )
+    }
+
+    @Test
+    fun `the encoder carries the bank's colour axis, and the fader and flash never do`() {
+        val sat = EncoderBankSelection("rgbColour", ColourAxis.SATURATION)
+        assertEquals(
+            BindingTarget.GroupProperty("front-wash", "rgbColour", ColourAxis.SATURATION),
+            deriveStripTarget(StripRole.ENCODER, group, sat),
+        )
+        assertEquals(
+            BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.SATURATION),
+            deriveStripTarget(StripRole.ENCODER, fixture, sat),
+        )
+        assertEquals(BindingTarget.GroupProperty("front-wash", "dimmer"), deriveStripTarget(StripRole.FADER, group, sat))
+        assertEquals(
+            BindingTarget.Flash(BindingTarget.GroupProperty("front-wash", "dimmer")),
+            deriveStripTarget(StripRole.FLASH, group, sat),
+        )
+        val derived = deriveStripTargets(StripDescriptor("strip-1", "fader-1", "btn-25", "enc-1", "btn-1"), group, sat)
+        assertEquals(BindingTarget.GroupProperty("front-wash", "rgbColour", ColourAxis.SATURATION), derived["enc-1"])
+        assertEquals(BindingTarget.GroupProperty("front-wash", "dimmer"), derived["fader-1"])
+        // A bank on hue derives an encoder with no axis at all — the form every pre-axis row has.
+        assertEquals(
+            BindingTarget.GroupProperty("front-wash", "rgbColour"),
+            deriveStripTarget(StripRole.ENCODER, group, EncoderBankSelection("rgbColour")),
         )
     }
 }

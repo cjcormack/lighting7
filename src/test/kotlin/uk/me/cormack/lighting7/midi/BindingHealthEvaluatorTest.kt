@@ -58,6 +58,7 @@ class BindingHealthEvaluatorTest {
         validStackUuids = setOf(liveStack),
         validCueUuids = setOf(liveCue),
         selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
+        colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
         validLookUuids = setOf(liveLook, deferredLook),
         looksNeedingSelection = setOf(deferredLook),
         validTemplateUuids = setOf(liveTemplate),

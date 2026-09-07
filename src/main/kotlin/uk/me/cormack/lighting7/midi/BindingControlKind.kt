@@ -89,3 +89,6 @@ const val CODE_BINDING_WRONG_CONTROL_KIND = "BINDING_WRONG_CONTROL_KIND"
 
 /** An `applyLook` binding on a Look with a deferred effect, which has no own targets to press onto. */
 const val CODE_BINDING_LOOK_NEEDS_SELECTION = "BINDING_LOOK_NEEDS_SELECTION"
+
+/** A [ColourAxis] on a property that is not colour-typed, which has no such axis to drive. */
+const val CODE_BINDING_AXIS_NEEDS_COLOUR = "BINDING_AXIS_NEEDS_COLOUR"

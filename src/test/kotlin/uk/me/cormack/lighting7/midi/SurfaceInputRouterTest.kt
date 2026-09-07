@@ -510,9 +510,80 @@ class SurfaceInputRouterTest {
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
 
-        assertEquals("colour", encoderBank.propertyFor(deviceTypeKey))
+        assertEquals(EncoderBankSelection("colour"), encoderBank.selectionFor(deviceTypeKey))
         // It is desk state, not a show action — nothing reaches SurfaceActions.
         assertTrue(actions.calls.isEmpty())
+    }
+
+    // ─── Colour axes ────────────────────────────────────────────────────
+
+    @Test
+    fun `a continuous move carries the binding's colour axis to every property write`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(
+                binding(1, "fader-1", BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)),
+                binding(2, "fader-2", BindingTarget.GroupProperty("front-wash", "rgbColour", ColourAxis.SATURATION)),
+                binding(3, "fader-3", BindingTarget.SelectionProperty("rgbColour", ColourAxis.HUE_FINE)),
+            ),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 2, value = 64u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 3, value = 32u))
+        assertEquals(
+            listOf<RecordedCall>(
+                RecordedCall.WriteFixture("hex-1", "rgbColour", 100u, ColourAxis.BRIGHTNESS),
+                RecordedCall.WriteGroup("front-wash", "rgbColour", 64u, ColourAxis.SATURATION),
+                RecordedCall.WriteSelection("rgbColour", 32u, ColourAxis.HUE_FINE),
+            ),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `a button press on a continuous target carries the axis with its full value`() {
+        val actions = RecordingActions()
+        val router = buildRouter(
+            actions,
+            listOf(binding(1, "btn-1", BindingTarget.SelectionProperty("rgbColour", ColourAxis.SATURATION))),
+        )
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteSelection("rgbColour", 127u, ColourAxis.SATURATION)),
+            actions.calls.toList(),
+        )
+    }
+
+    @Test
+    fun `an EncoderBankSet press sets the property and the axis, and a strip encoder follows both`() {
+        val actions = RecordingActions()
+        val encoderBank = EncoderBankState()
+        val wash = CueTargetDto("group", "front-wash")
+        val router = buildRouter(
+            actions,
+            listOf(
+                binding(1, "strip-1", BindingTarget.Strip(wash)),
+                binding(2, "btn-2", BindingTarget.EncoderBankSet("rgbColour", ColourAxis.SATURATION)),
+            ),
+            encoderBankState = encoderBank,
+        )
+
+        // btn-2 is note 17; enc-1 is CC 10.
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        assertEquals(EncoderBankSelection("rgbColour", ColourAxis.SATURATION), encoderBank.selectionFor(deviceTypeKey))
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 40u))
+        assertEquals(
+            listOf<RecordedCall>(RecordedCall.WriteGroup("front-wash", "rgbColour", 40u, ColourAxis.SATURATION)),
+            actions.calls.toList(),
+            "the strip encoder writes the bank's axis",
+        )
+
+        // An axis-only change of bank is a change the encoder follows too.
+        encoderBank.set(deviceTypeKey, EncoderBankSelection("rgbColour", ColourAxis.HUE_FINE))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
+        assertEquals(RecordedCall.WriteGroup("front-wash", "rgbColour", 64u, ColourAxis.HUE_FINE), actions.calls.last())
     }
 
     @Test
@@ -747,11 +818,11 @@ class SurfaceInputRouterTest {
 /** Recording fake of [SurfaceActions] for tests. Every call appends to [calls]. */
 private class RecordingActions : SurfaceActions {
     val calls = mutableListOf<RecordedCall>()
-    override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteFixture(fixtureKey, propertyName, midiValue7Bit)
+    override fun writeFixtureProperty(fixtureKey: String, propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
+        calls += RecordedCall.WriteFixture(fixtureKey, propertyName, midiValue7Bit, colourAxis)
     }
-    override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteGroup(groupName, propertyName, midiValue7Bit)
+    override fun writeGroupProperty(groupName: String, propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
+        calls += RecordedCall.WriteGroup(groupName, propertyName, midiValue7Bit, colourAxis)
     }
     override fun flashFixturePropertyPress(fixtureKey: String, propertyName: String, max: UByte) {
         calls += RecordedCall.FlashFixturePress(fixtureKey, propertyName, max)
@@ -769,8 +840,8 @@ private class RecordingActions : SurfaceActions {
     override fun cueStackBack(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackBack(stackId, stackUuid) }
     override fun cueStackPause(stackId: Int, stackUuid: String?) { calls += RecordedCall.CueStackPause(stackId, stackUuid) }
     override fun fireCue(cueId: Int, cueUuid: String?) { calls += RecordedCall.FireCue(cueId, cueUuid) }
-    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteSelection(propertyName, midiValue7Bit)
+    override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
+        calls += RecordedCall.WriteSelection(propertyName, midiValue7Bit, colourAxis)
     }
     override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
         calls += RecordedCall.SelectTarget(target, mode)
@@ -817,8 +888,8 @@ private class RecordingFeedbackHooks : SurfaceFeedbackHooks {
 }
 
 private sealed class RecordedCall {
-    data class WriteFixture(val fixtureKey: String, val prop: String, val value: UByte) : RecordedCall()
-    data class WriteGroup(val groupName: String, val prop: String, val value: UByte) : RecordedCall()
+    data class WriteFixture(val fixtureKey: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
+    data class WriteGroup(val groupName: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
     data class FlashFixturePress(val fixtureKey: String, val prop: String, val max: UByte) : RecordedCall()
     data class FlashGroupPress(val groupName: String, val prop: String, val max: UByte) : RecordedCall()
     data class FlashFixtureRelease(val fixtureKey: String, val prop: String) : RecordedCall()
@@ -827,7 +898,7 @@ private sealed class RecordedCall {
     data class CueStackBack(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
     data class CueStackPause(val stackId: Int, val stackUuid: String? = null) : RecordedCall()
     data class FireCue(val cueId: Int, val cueUuid: String? = null) : RecordedCall()
-    data class WriteSelection(val prop: String, val value: UByte) : RecordedCall()
+    data class WriteSelection(val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
     data class SelectTarget(val target: CueTargetDto, val mode: BindingTarget.SelectMode) : RecordedCall()
     data object ClearSelection : RecordedCall()
     data object LocateSelection : RecordedCall()

@@ -210,4 +210,60 @@ class BindingTargetSerializationTest {
             BindingTargetJson.decodeFromString<BindingTarget>("""{"type":"fromTheFuture","x":1}""")
         }
     }
+
+    // ─── Colour axes ────────────────────────────────────────────────────
+
+    private fun encode(target: BindingTarget) = BindingTargetJson.encodeToString(target)
+    private fun decode(json: String) = BindingTargetJson.decodeFromString<BindingTarget>(json)
+
+    @Test
+    fun `a colour axis rides on the four property targets, and a hue binding carries none`() {
+        val fine: BindingTarget = BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.HUE_FINE)
+        assertEquals(
+            """{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour","colourAxis":"hueFine"}""",
+            encode(fine),
+        )
+        assertEquals(fine, decode(encode(fine)))
+        // No axis is no field: a new hue binding is byte-identical to one written before axes existed.
+        assertEquals(
+            """{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour"}""",
+            encode(BindingTarget.FixtureProperty("hex-1", "rgbColour")),
+        )
+        val legacy = decode("""{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"rgbColour"}""")
+        assertEquals(BindingTarget.FixtureProperty("hex-1", "rgbColour"), legacy)
+        assertNull((legacy as BindingTarget.FixtureProperty).colourAxis)
+        assertEquals(ColourAxis.HUE, legacy.colourAxis.effective)
+
+        val names = mapOf(
+            ColourAxis.HUE to "hue",
+            ColourAxis.HUE_FINE to "hueFine",
+            ColourAxis.SATURATION to "saturation",
+            ColourAxis.BRIGHTNESS to "brightness",
+        )
+        assertEquals(ColourAxis.entries.toSet(), names.keys, "every axis has a pinned serial name")
+        for ((axis, name) in names) {
+            val target: BindingTarget = BindingTarget.SelectionProperty("rgbColour", axis)
+            assertTrue(encode(target).contains(""""colourAxis":"$name""""), encode(target))
+            assertEquals(target, decode(encode(target)))
+        }
+        for (target in listOf<BindingTarget>(
+            BindingTarget.GroupProperty("front-wash", "rgbColour", ColourAxis.SATURATION),
+            BindingTarget.EncoderBankSet("rgbColour", ColourAxis.BRIGHTNESS),
+            BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.SATURATION)),
+        )) {
+            assertEquals(target, decode(encode(target)))
+        }
+    }
+
+    @Test
+    fun `colourAxisOrNull answers for the four carriers and through a flash`() {
+        assertEquals(ColourAxis.SATURATION, BindingTarget.GroupProperty("g", "rgbColour", ColourAxis.SATURATION).colourAxisOrNull())
+        assertEquals(ColourAxis.HUE_FINE, BindingTarget.EncoderBankSet("rgbColour", ColourAxis.HUE_FINE).colourAxisOrNull())
+        assertEquals(
+            ColourAxis.BRIGHTNESS,
+            BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "rgbColour", ColourAxis.BRIGHTNESS)).colourAxisOrNull(),
+        )
+        assertNull(BindingTarget.FixtureProperty("hex-1", "rgbColour").colourAxisOrNull())
+        assertNull(BindingTarget.Blackout.colourAxisOrNull())
+    }
 }
