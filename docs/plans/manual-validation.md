@@ -1350,10 +1350,9 @@ the session's most valuable result and neither was anything §9 thought to ask a
 written to ask whether *state* comes back, and the answer is that the desk never learns the surface
 went away at all.
 
-**`FU-MIDI-RESYNC-DELTA-SUPPRESSED` is fixed** — a re-arming `sendFullResync` now drops the
-device's whole delta cache, so a resync reaches the hardware whether or not its values moved.
-**Checks 8 and 1 still stand as written**: hot-plug detection is the half that is still open, and
-until an attach event fires at all neither the replug nor the cold-open snapshot can be re-run.
+**`FU-MIDI-RESYNC-DELTA-SUPPRESSED` is fixed** in `3a1d87d`. **Checks 8 and 1 still stand as
+written**: hot-plug detection is the half still open, and until an attach event fires at all
+neither the replug nor the cold-open snapshot can be re-run.
 
 | # | State | What was established |
 |---|---|---|

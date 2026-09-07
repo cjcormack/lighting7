@@ -1708,7 +1708,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
-- `FU-MIDI-RESYNC-DELTA-SUPPRESSED` — `MidiController.invalidateAllFeedback()`, called by
+- `FU-MIDI-RESYNC-DELTA-SUPPRESSED` (`3a1d87d`) — `MidiController.invalidateAllFeedback()`, called by
   `SurfaceFeedbackPublisher.sendFullResync` whenever it re-arms pickup. That flag already means
   "the physical position is stale", so it is exactly the condition under which `lastSentBytes` — a
   record of what we *sent*, read as what the hardware *holds* — must not be trusted. The
