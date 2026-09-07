@@ -1,8 +1,101 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, and session 3a (the picture) as
-> lighting-react `45c3d3e`; sessions 3b–5 are proposed.**
+> `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, session 3a (the picture) as
+> lighting-react `45c3d3e`, and session 3b (editing it) as lighting-react `e97096b`; sessions 4
+> and 5 are proposed.**
+> Session 3b amendments, from building it and reviewing it. Six bugs, three of them shipped in 3a
+> and two of them 3b's own; every one silent.
+> **`columnStrips` returned an empty map for the only profile that has strips**: it asked whether
+> *every* control in a column belonged to one strip, and a strip declares four roles while a
+> physical channel strip has more buttons than that — the X-Touch's column 0 is `enc-1`, `btn-1`,
+> `btn-9`, `btn-17`, `fader-1`, `btn-25`, two of six unclaimed. So the `data-strip` backdrop 3a left
+> for this session's drop target never rendered on real hardware. The rule is now **claimed by
+> exactly one strip**; two different strips in one column still answer null.
+> **A bank button can never carry a binding**, and `BankButtonCell` was drawing one: `route`
+> answers `ResolvedInput.BankButton` and switches the bank *before* resolving a binding — "bank
+> buttons short-circuit binding resolution", in the router's own words — so the cell was promising
+> a press the desk does not make. It now draws its own label whatever row sits on its id,
+> `controlKinds` returns `[]` for one so the library will not offer it, and the inspector says so
+> for a row an older build or a hand edit left behind. The sibling surprise in the same read is
+> worth knowing: an **encoder with a push note reaches both halves of the dispatch** on one control
+> id, so it legitimately takes a cue chip as well as a property one, and the X-Touch declares a push
+> on all sixteen.
+> **Two of a strip's four controls have no cross.** §4 draws the pad's remove cross on bound
+> controls, and a strip is one row covering four of them — a cross on its flash button would delete
+> three other things the operator was not pointing at. One cross per *row*: a control's own row on
+> the control, a strip's on the strip's column backdrop.
+> The review then found three more, two of them this session's own and both silent. The selection
+> bridge's mute **latched**: a click racing an incoming frame left the list's ids matching neither
+> the applied ones nor the pre-dispatch ones, and a guard that only lifted on an exact match stayed
+> armed for the rest of the mount, quietly disabling the list→desk direction. And a strip's remove
+> cross used the *write* lookup where the picture uses the *read* one, so a bank-agnostic strip row
+> drew on every bank with no way to unbind it — which is why the two are now named primitives beside
+> `resolveControl` rather than one expression inlined twice: **`exactBindingAt` has no fallback
+> because a drop must create an exact-bank row, `activeBindingAt` has one because a global row
+> really is in force on every bank**, and anything that says what a slot is *doing* has to see it.
+> The third was `describePlacements` ignoring the active bank, badging a row *strip 3* beside a
+> panel showing strip 3 empty. Two performance findings besides, both places where a docblock
+> claimed the opposite of what the code did: a `{type, key}` literal minted per render defeated
+> `useTargetProperties`' memo for every library row, and the control droppable re-ran per control
+> per 20 Hz frame — so the grid-cell wrapper is **two components rather than one with a `disabled`
+> flag**, and run mode, which has no drop target at all, renders no hook.
+> The rest landed as the list below states it, including the two the pre-read added: the picker now
+> authors the five variants the drag mints (and edits a `strip` row's group rather than showing an
+> empty body), and the inspector's live card has its stage-value line.
+> Pre-session-3b amendments, from checking 3b's own bullets against the client as it stands.
+> Six things are wider than they read, two are missing outright, and one turns out to be already
+> written under another name, so §5's 3b list is rewritten rather than annotated.
+> **The panel has no droppables, and where they go is load-bearing**: `ControlCell` is memoized so a
+> 20 Hz `surfaceControls` delta re-renders only the controls that moved, and `useDroppable`
+> re-renders its host whenever `isOver` flips — so the droppable sits on the grid-cell wrapper
+> `PanelRegion` already renders, never inside the cell, and the strip's is the `data-strip` backdrop
+> 3a left for it. **Legal targets follow the source, and dnd-kit is told twice**, the busk page's
+> lesson verbatim: a control sits geometrically inside its strip's backdrop, so `pointerWithin`
+> returns both and only *usually* innermost-first — rather than resolve that contest the surface
+> avoids it, disabling every control droppable while a **row** is lifted and every strip droppable
+> while a **chip** is, with a pure `canLand` beside it because `disabled` is the half no test can
+> reach. **"PATCH when the control already holds one" means its own row at the exact bank**, not the
+> resolved binding: `resolveControl` answers a strip row for a strip's control and a global row when
+> no exact-bank row exists, and PATCHing either would move a binding the operator was not pointing
+> at — a chip dropped on a strip's fader must *create* a direct row, which is the only way "direct
+> beats strip" is reachable from the UI at all. A created row takes the **active bank**, because that
+> is the bank the panel is drawing. **Eligibility is an affordance, not a refusal**: the backend
+> refuses only the strip-slot rule and `Unknown`, so nothing stops a `fireCue` on a fader, and the
+> dim is the only thing between the operator and a control that does nothing. Missing outright:
+> **the header's *Edit bindings* / *Done* pair and the controls' remove cross**, both in §4 and D9
+> and in neither 3b bullet; edit mode is **local state in `SurfacesContent`**, deliberately not the
+> busk view's Redux slice — that slice exists because the cue-slot overlay is a *sibling* of the
+> routed page, and here the library and the panel are both inside this route. It is hidden below
+> `md` with the picture, *Done* staying at every width, exactly the busk rule. And
+> **`BindingTargetPicker` is still the twelve-variant version** — 3a widened the union in
+> `api/surfacesApi.ts` and `targetUtils.ts` but not the picker's own `TargetKind` list, so
+> *Change target* on a selection or encoder-bank binding opens a sheet whose kind Select reads
+> *Fixture property* over an empty body. Harmless until now, because no client could make one; 3b
+> teaches the operator to make them by the handful, so it closes the hole it opens.
+> Already written: **§3.2's publish list is `FixturesListContainer`'s `locateTargets`** —
+> `rowLocateTarget` per selected row, element rows under a covered parent dropped, deduped by
+> `type:key` — so the bridge is that memo's third consumer rather than a new derivation, and it is
+> extracted rather than copied. Two things about it that the bullet does not say and that fail
+> silently: the publish is keyed on **the selection changing, not the target list**, because
+> `locateTargets` narrows when `rows` narrows and `rows` narrows on a filter keystroke while
+> `selectedIds` does not — an effect on the list would shrink the desk selection every time the
+> operator typed; and the return direction's echo guard holds **what the incoming frame resolved to
+> in this list**, not the frame's own list, so a desk selection naming a target this list cannot show
+> leaves the desk alone instead of narrowing it to what the list can see.
+> `FU-FE-USE-TARGET-PROPERTIES` is three call sites and **two** duplications, needing **two**
+> exports: `GroupDetailModal.tsx` renders `GroupPropertiesSection` imported from `GroupCard.tsx` and
+> duplicates only the fetch, while the copied categorisation is `categorizeGroupProperties`
+> (`FixtureContent`) and `groupPropertiesByCategory` (`GroupCard`), byte-identical, beside a third
+> differently-shaped inline filter set over *fixture* descriptors in `FixtureContent`. The descriptor
+> surfaces need the descriptors (`min` / `max`, channel refs) and the binding surfaces need names and
+> "is this bindable on a fader", so the extraction is a pure generic `categoriseProperties` *and* a
+> flat `useTargetProperties`, not the one hook the follow-up describes.
+> Finally, 3a's deferred **stage value** is picked up here as a *component* dispatched on the
+> resolved target's property type, not a string the live card builds: `useSliderValue` and
+> `useGroupSliderValues` are hooks over a descriptor and cannot be called conditionally
+> (`EffectPadDetail`'s precedent). Only slider and colour are drawn, which is exactly what
+> `PropertyChannelResolver` accepts on a continuous control.
 > Session 3a amendments, from building it: **`strips` and `layout` are optional on the client**,
 > because a desk running a pre-strip build serves neither and this client talks to whatever desk it
 > is pointed at — declared required, two dereferences would have thrown against exactly that
@@ -528,23 +621,57 @@ included — not on Fable.
 
 ### Session 3b — editing it (lighting-react) — Opus 5, xhigh
 
+- **Edit mode first**, because everything below hangs off it: *Edit bindings* / *Done* in the
+  header row (§4), the library palette in the inspector's slot, and the busk pad's remove cross on
+  every bound control. **Local state in `SurfacesContent`**, not a Redux slice — the busk view needs
+  one only because the cue-slot overlay is a sibling of the routed page, and both halves of this one
+  are inside this route. Hidden below `md` with the picture, *Done* at every width.
 - `SurfaceLibrary` under `DeskDndProvider` (D9) — joined with `useDndMonitor`, never a nested
-  context, for the busk page's reason — and the busk ghosts through `registerDragOverlay`. Drop →
-  create binding, or `PATCH` when the control already holds one; row → `Strip`; the eligibility
-  dims. **The library is groups, fixtures, Selection, Encoder bank, stacks, cues and Desk**; §4's
+  context, for the busk page's reason — and its ghosts through `registerDragOverlay` at module
+  scope. **The library is groups, fixtures, Selection, Encoder bank, stacks, cues and Desk**; §4's
   template, Look, busk-page and pad rows are session 4's, with the targets they bind.
+- **Droppables on the panel, and where they go.** A `useDroppable` per control on the grid-cell
+  wrapper `PanelRegion` already renders — never inside `ControlCell`, which is memoized so a 20 Hz
+  delta re-renders only the controls that moved, and whose props an `isOver` flip would defeat —
+  and one per strip on the `data-strip` backdrop 3a left for exactly this.
+- **Legal targets follow the source, told twice.** A **row** (group or fixture) lands on a strip and
+  nothing else; a **chip** lands on one control whose kind matches its target — continuous on a
+  fader or encoder, button on a button or bank button — including a control a strip already covers,
+  which is what makes the direct-beats-strip rule reachable from the UI. Enforced by dnd-kit's own
+  `disabled` (so `over` never lights a place the drop would refuse) *and* by a pure `canLand`, which
+  is the half a test can reach.
+- **Drop → one binding request, as a pure mapping** (`slotDrop.ts`'s shape, for its reason). PATCH
+  the control's **own row at the exact bank** if it has one — `index.byControl.get(id)?.get(bank)`,
+  never `resolveControl`, which would answer a strip row or a global one and move a binding the
+  operator was not pointing at — else POST, at the **active bank**, because that is the bank the
+  panel is drawing. A row's drop addresses the strip id and carries a `Strip` target; the two slots
+  are not interchangeable and the backend refuses the swap by name.
 - The selection **writes**: `useBuskingSelection` over the cache, and the `selectionSlice` bridge
-  exactly as §3.2 states it — rows through `rowLocateTarget`, never the scope's `targetKeys`.
+  exactly as §3.2 states it — rows through `rowLocateTarget`, never the scope's `targetKeys`. The
+  publish list is `FixturesListContainer`'s `locateTargets`, extracted rather than copied; it is
+  keyed on the **selection** changing rather than on the list, and the return direction's echo guard
+  holds what the frame **resolved to in this list**, both for the reasons the header records.
+- **`BindingTargetPicker` learns the variants the drag now mints** — `selectionProperty`,
+  `selectTarget`, `clearSelection`, `locateSelection`, `encoderBankSet` — and says plainly that a
+  `strip` row is made by dragging and an `unknown` one cannot be edited. Without this the
+  inspector's *Change target* is a dead sheet on exactly the bindings this session teaches the
+  operator to make.
 - The `FU-FE-USE-TARGET-PROPERTIES` gate **fires here** — the library's property chips are the next
-  consumer of fixture / group property lookup — so this pass extracts `useTargetProperties` into
-  `src/hooks/` and moves the existing call sites onto it. The follow-up says five and means three:
-  `PropertyAssignmentsList`, `PresetEditor` and `PresetLivePreview` are gone with the presets and
-  the busking target panel went with the busk sidebar, leaving `FixtureContent.tsx`,
-  `GroupCard.tsx` and `GroupDetailModal.tsx`. Correct its count as it is closed.
-- Tests: `SurfaceLibrary.test.tsx` (rows and chips from the store; slot-style dimming), a
-  `slotDrop`-style pure mapping test for drop → binding request, `useBuskingSelection.test.tsx`
-  against the WS cache, and a `selectionSlice` bridge test whose load-bearing case is that a
-  selected **group row** publishes one `group` entry rather than its members.
+  consumer of fixture / group property lookup — so this pass extracts it into `src/hooks/` and moves
+  the existing call sites onto it. The follow-up says five and means three: `PropertyAssignmentsList`,
+  `PresetEditor` and `PresetLivePreview` are gone with the presets and the busking target panel went
+  with the busk sidebar, leaving `FixtureContent.tsx`, `GroupCard.tsx` and `GroupDetailModal.tsx` —
+  of which only the first two duplicate the *categorisation*. It lands as **two** exports, not one:
+  a pure generic `categoriseProperties` for the descriptor surfaces and a flat `useTargetProperties`
+  for the binding ones. Correct the follow-up's count as it is closed.
+- **The inspector's stage value**, 3a's deferred fourth live line, as a component dispatched on the
+  resolved target's property type — slider and colour only, which is what `PropertyChannelResolver`
+  accepts on a continuous control.
+- Tests: `SurfaceLibrary.test.tsx` (rows and chips from the store; the eligibility dim), a
+  `slotDrop`-style pure mapping test for drop → binding request (`canLand`, PATCH-vs-POST, the bank,
+  the strip slot), `useBuskingSelection.test.tsx` against the WS cache, and a `selectionSlice`
+  bridge test whose load-bearing case is that a selected **group row** publishes one `group` entry
+  rather than its members.
 - Docs: `lighting-react/docs` gains a short engineering note for the view; `CLAUDE.md` route list.
 
 ### Session 4 — records on buttons (both repos) — Opus 5, high
@@ -603,6 +730,11 @@ written.
   movers" — today the model passes targets explicitly and that stays correct.
 - **`FU-SYNC-BINDING-PAYLOAD-UUIDS` second half**: project-scoping `CueStackManager.fireCue`'s
   lookups is untouched by this plan whatever §11's first answer is.
+- **`FU-MIDI-BIND-CONTROL-KIND`** (recorded in session 3b, Ready): the write boundary refuses a
+  `Strip` off a strip slot and an `Unknown` from a request, but not a *kind* mismatch — a
+  `FireCue` on a fader saves and then never dispatches. 3b's `canLand` and its dim are the only
+  guard, and they cover one drag gesture in one client; MIDI Learn's commit, a script and an import
+  all reach the service unchecked. Same shape as `refuseWrongSlot`, same three-doors reason.
 
 ## 9. Verification
 

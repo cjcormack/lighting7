@@ -26,7 +26,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
 | [`FU-FE-REBIND-INPLACE`](#fu-fe-rebind-inplace) | Rejected | FE | decision record — no surface hosts it |
 | [`FU-FE-HEALTH-BADGE`](#fu-fe-health-badge) | Trigger | FE | a 2nd surface renders `AssignmentHealth` |
-| [`FU-FE-USE-TARGET-PROPERTIES`](#fu-fe-use-target-properties) | Trigger | FE | a 6th consumer of fixture/group property lookup |
 | [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
@@ -37,6 +36,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
+| [`FU-MIDI-BIND-CONTROL-KIND`](#fu-midi-bind-control-kind) | Ready | MIDI | — |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
 | [`FU-BUSK-PAGE-MIDI`](#fu-busk-page-midi) | Trigger | Busk | an operator wants to change busk page from hardware |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
@@ -259,21 +259,6 @@ its own markup.
 **Trigger**: a second surface needs it. A shared `<HealthBadge>` over a single call site is pure
 indirection; `describeHealth()` is already the shared part.
 
-### `FU-FE-USE-TARGET-PROPERTIES`
-
-**Shared hook for fixture/group property lookup** · Trigger · `moveInDark` row-list editor,
-2026-04-25
-
-`PropertyAssignmentsList.tsx::useTargetProperties` fetches a fixture's or group's properties via
-`useFixtureListQuery` / `useGroupPropertiesQuery` and maps to a uniform shape. The same
-fetch-and-map appears in `FixtureContent.tsx`, `GroupCard.tsx`, `PresetEditor.tsx`,
-`PresetLivePreview.tsx` and the busking target panel, each re-doing the categorisation inline.
-Extract `useTargetProperties(selection)` into `src/hooks/`, returning a flat `AvailableProperty[]`
-plus a categorised variant for surfaces that need colour/dimmer/position grouping.
-
-**Trigger**: a sixth consumer, or a property-shape change that forces a multi-file edit. Today's
-implementations are stable, so pulling them together now is churn that risks visual regressions.
-
 ### `FU-FE-REVISION-REFETCH-DEDUP`
 
 **Shared primitive for "coalesce a high-frequency broadcast, refetch only on real change"** ·
@@ -410,6 +395,39 @@ plus an authoring surface that can name a constituent), not just a per-output ph
 
 **Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
 express it as separate instances.
+
+---
+
+## MIDI surface
+
+### `FU-MIDI-BIND-CONTROL-KIND`
+
+**A binding whose target the control can never dispatch is accepted** · Ready · midi-surface plan
+session 3b review, 2026-09-07
+
+`ControlSurfaceBindingService` refuses two things at the write boundary: a `Strip` target off a
+strip slot (`refuseWrongSlot`) and an `Unknown` target from a request (`refuseUnknown`). It does
+**not** refuse a *kind* mismatch — a `FireCue` on a fader, a `GroupProperty` on a plain button, a
+row of any kind on a bank button. `SurfaceInputRouter` then silently drops it: `dispatchContinuous`
+has no arm for `FireCue`, `dispatchButtonPress` none for `GroupProperty`, and `route` answers
+`ResolvedInput.BankButton` and switches the bank before resolving a binding at all. The row saves,
+health reads `Ok`, and the control does nothing.
+
+`lighting-react`'s `canLand` (`lib/surfaceDrop.ts`) and the dim it drives are currently the whole
+of the guard, and they only cover the one drag gesture in that one UI. MIDI Learn's commit, a
+hand-rolled REST call, a script, an import and any future client all reach the same service with no
+check — the same three-doors problem session 2 already hit with the strip-slot rule, and solved by
+putting the invariant on the service beside `refuseUnknown` rather than in the routes.
+
+The fix is the same shape: a `refuseWrongKind(deviceTypeKey, controlId, target)` on the service,
+deriving the control's dispatchable kinds from its descriptor (a fader is continuous; an encoder is
+continuous *and*, when it declares a `pushNote`, a button; a button is a button; a **bank button is
+neither**) and refusing a target whose dispatch arm cannot be reached. A coded 400 beside
+`BINDING_STRIP_NEEDS_STRIP` lets the frontend branch on it, and `controlKinds` in
+`lib/surfaceDrop.ts` becomes the client mirror rather than the only copy.
+
+**Ready**: the vocabulary already exists on both sides and the client half is written and tested;
+what is missing is the service-side refusal and its test.
 
 ---
 
@@ -1675,6 +1693,16 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-FE-USE-TARGET-PROPERTIES` — extracted to `hooks/useTargetProperties.ts` when the MIDI
+  surface library's per-target property chips became the next consumer. It says five call sites
+  and meant **three**: `PropertyAssignmentsList`, `PresetEditor` and `PresetLivePreview` went with
+  the presets and the busking target panel with the busk sidebar, leaving `FixtureContent`,
+  `GroupCard` and `GroupDetailModal` — of which only the first two duplicated the categorisation
+  at all, the third rendering `GroupCard`'s own `GroupPropertiesSection`. It also asked for one
+  hook and landed as **two** exports: the surfaces that *render* properties need the descriptors
+  (`min`/`max`, channel refs) so they take a pure generic `categoriseProperties`, while the ones
+  that *bind* them need names plus "can a fader drive this" and take the flat
+  `useTargetProperties` / `useRigProperties` — lighting-react, midi-surface plan session 3b
 - `FU-BUSK-ON-PAGES-HINT` — `TemplateDto` and `LookDto` carry `buskPageCount`, batched into the
   `TemplateUsage` / `LookUsage` the library list already reads, so the "second query per list" the
   item was parked on costs one query rather than one per record. The row shows *on n pages* and the
