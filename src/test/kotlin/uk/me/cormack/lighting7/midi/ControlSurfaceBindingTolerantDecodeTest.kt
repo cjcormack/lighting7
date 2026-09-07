@@ -17,7 +17,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 
 /**
- * D11 of `docs/plans/midi-surface-plan.md`: a binding row whose payload this build cannot decode
+ * D11 of `docs/plans/completed/midi-surface-plan.md`: a binding row whose payload this build cannot decode
  * loads as a dead, rebindable [BindingTarget.Unknown] and the rest of the project loads with it.
  * Also the v11 uuid fill: a cue binding created by int is stored with the cue's uuid beside it.
  * Needs a real database, which is why it is not in [ControlSurfaceBindingResolverTest].

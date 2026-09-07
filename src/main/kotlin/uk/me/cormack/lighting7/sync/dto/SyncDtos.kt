@@ -29,7 +29,7 @@ data class FormatVersionJson(
     // v11: control-surface binding payloads. No folder or field changes — `targetPayload` stays
     // an opaque string — but what it may *contain* grows in two ways. New `type` discriminators
     // (`selectionProperty`, `selectTarget`, `clearSelection`, `locateSelection`; more in later
-    // sessions of `docs/plans/midi-surface-plan.md`), and a `cueUuid` / `stackUuid` beside the
+    // sessions of `docs/plans/completed/midi-surface-plan.md`), and a `cueUuid` / `stackUuid` beside the
     // int on `fireCue` / `cueStack*`, which is what finally lets a clone or a cross-install import
     // keep its cue bindings (`FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half). `minReader` stays at
     // **5**: the reader decodes each binding row on its own and keeps an undecodable one as a

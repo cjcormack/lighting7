@@ -75,7 +75,7 @@ class SurfaceInputRouter(
          * How long a `SelectTarget(TOGGLE)` button must be held before it *also* replaces the
          * selection. Toggling still happens on press, so the LED is immediate; keeping the
          * button down then narrows the selection to that one target, which is how every fader
-         * wing surveyed in `docs/plans/midi-surface-plan.md` §1 behaves.
+         * wing surveyed in `docs/plans/completed/midi-surface-plan.md` §1 behaves.
          */
         const val SELECT_HOLD_MS = 500L
     }

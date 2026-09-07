@@ -14,7 +14,7 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
  *
  * A slot holds **exactly one** of [cue] / [look]. The overlay has no selection, so it can hold only
  * what needs none: a cue, or a Look with no deferred effect — its rows are always bound, so a Look
- * slot presses the Look onto its own fixtures (`docs/plans/busk-layout-plan.md` D7). A cue *stack*
+ * slot presses the Look onto its own fixtures (`docs/plans/completed/busk-layout-plan.md` D7). A cue *stack*
  * used to be a third arm; it went with the overlay's own assign flow, and nothing else ever wanted
  * a stack on a tile.
  *

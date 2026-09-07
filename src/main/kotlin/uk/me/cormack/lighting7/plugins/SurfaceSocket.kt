@@ -220,7 +220,7 @@ data class SurfaceDevicesStateOutMessage(
  * One attached device's whole control state: the connect snapshot, and the frame after every
  * full resync (attach, bank change, project change, a binding / fixture / selection change).
  * `controls` is keyed by `controlId`; an empty map means the device detached. The view draws
- * exactly this — never a recomputation from DMX (`docs/plans/midi-surface-plan.md` D7).
+ * exactly this — never a recomputation from DMX (`docs/plans/completed/midi-surface-plan.md` D7).
  */
 @Serializable
 @SerialName("surfaceControls.state")

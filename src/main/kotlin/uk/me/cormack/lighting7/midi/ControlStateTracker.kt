@@ -57,7 +57,7 @@ data class ControlState(
  * send sites and read by the `surfaceControls.state` / `.changed` socket family. The screen
  * draws *what the hardware was told*, never a recomputation from DMX: if the picture and the
  * desk disagree, the publisher is wrong, which is the bug worth finding
- * (`docs/plans/midi-surface-plan.md` D7).
+ * (`docs/plans/completed/midi-surface-plan.md` D7).
  *
  * Writes arrive from the ArtNet transmit thread, the router's coroutine and the publisher's
  * subscribers, so the store is lock-free ([ConcurrentHashMap.compute]) like the takeover machine.

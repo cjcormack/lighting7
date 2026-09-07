@@ -89,7 +89,7 @@ interface SurfaceFeedbackHooks {
  * channels agree on, and **null when they disagree**: nothing goes to the motor, the ring is
  * driven to its off state, takeover is disarmed, and the stream reports `value: null`. A turn
  * or move then writes every head and the next tick reads uniform
- * (`docs/plans/midi-surface-plan.md` D10).
+ * (`docs/plans/completed/midi-surface-plan.md` D10).
  *
  * ## The control-state stream
  *
@@ -166,7 +166,7 @@ class SurfaceFeedbackPublisher(
         /**
          * The ring CC value that darkens an encoder ring, per style. `0` for every style the
          * X-Touch Compact can be put in is the working assumption until the rig confirms it
-         * (`docs/plans/midi-surface-plan.md` §9 check 3): if the desk lights the first dot on
+         * (`docs/plans/completed/midi-surface-plan.md` §9 check 3): if the desk lights the first dot on
          * `0`, this is the one constant to change. The tracker's [RingState.OFF] is the truth
          * the view reads regardless of which byte went to the hardware.
          */

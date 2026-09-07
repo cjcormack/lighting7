@@ -1,10 +1,13 @@
 # Busk layout — pages of rows, columns and banks the operator builds
 
-> **Document status: COMPLETE — session 1 (the model and the routes) landed 2026-09-04 as
-> `63e519f`; session 2 (the busk view) landed 2026-09-04 as lighting-react `89649d6`; session 3
-> (the removals) landed 2026-09-04 as lighting-react `f024713` and lighting7 `fed63a8`;
-> session 4 (the edges) landed 2026-09-05 as lighting7 `444956f` and lighting-react `3fa49e5`.** The seven desk checks of §9 are **staged, not run** —
-> they are `FU-MANUAL-BUSK-LAYOUT` in [`manual-validation.md`](manual-validation.md). Where a
+> **Document status: RETIRED 2026-09-07 — all five sessions landed.** Session 1 (the model and the
+> routes) landed 2026-09-04 as `63e519f`; session 2 (the busk view) 2026-09-04 as lighting-react
+> `89649d6`; session 3 (the removals) 2026-09-04 as lighting-react `f024713` and lighting7
+> `fed63a8`; session 4 (the edges) 2026-09-05 as lighting7 `444956f` and lighting-react `3fa49e5`;
+> session 5 (the first desk use) 2026-09-05 as lighting-react `ccee4be`. The desk checks of §9 are
+> **staged, and only the first has been attempted** — they are
+> [`FU-MANUAL-BUSK-LAYOUT`](../manual-validation.md#fu-manual-busk-layout), which is the
+> authoritative wording; follow-ups are in [`followups.md`](../followups.md). Where a
 > session refined a
 > decision, the text below says "session 1 amendment" … "session 4 amendment"
 > beside it. The visual design is settled
@@ -475,7 +478,7 @@ rather than two suites), so the eligibility mapping is covered only through
   property pane that renders this control a navigation source; the empty state names the view
   instead.
 
-### Session 5 — the first desk use (lighting-react) — Fable 5.1
+### Session 5 — the first desk use (lighting-react) — Fable 5.1 — **landed**, lighting-react `ccee4be` (recorded here as `1528c1f`)
 
 The §9 desk checks had not been run when session 4 landed. The first one on a real desk found
 three things, all client-side:
@@ -505,7 +508,10 @@ three things, all client-side:
   implemented. Editing at narrow widths is out of scope by decision: below `md` the palette is not
   shown and *Edit layout* is hidden with it.
 
-`FU-MANUAL-BUSK-LAYOUT` is still to be recorded once the remaining §9 checks are run.
+The §9 checks are staged as `FU-MANUAL-BUSK-LAYOUT` in
+[`manual-validation.md`](../manual-validation.md#fu-manual-busk-layout). That first attempt is the
+only one made: nothing has been recorded as passed, and checks 1 and 7 need a re-run on the fixed
+build.
 
 ## 6. Migration
 
@@ -532,13 +538,16 @@ None (D11). The only versioning is the sync format bump (D12).
 - `FU-SLOT-LOOK-ELIGIBILITY` — Trigger: a rows-only Look on a slot that asserts nothing on the
   fixtures it names. Sits beside `FU-LOOK-COMPAT-ROW-COVERAGE`, which is the same question asked of
   busk pads.
-- `FU-BUSK-ON-PAGES-HINT` — Trigger: an operator deletes a template and is surprised pads went with it.
+- ~~`FU-BUSK-ON-PAGES-HINT`~~ — closed by session 4: `buskPageCount` on both list DTOs, and the
+  delete confirm names the pages.
 
 ## 9. Verification
 
 Backend: the tests in §5 S1, plus the existing `ProgrammerLayerStackTest` unchanged (the engine
-does not move — if it has to, the plan is wrong). Frontend: §5 S2. Desk checks, to be added to
-`manual-validation.md` as `FU-MANUAL-BUSK-LAYOUT` when they are run, not before:
+does not move — if it has to, the plan is wrong). Frontend: §5 S2. Desk checks, staged 2026-09-05
+as [`FU-MANUAL-BUSK-LAYOUT`](../manual-validation.md#fu-manual-busk-layout) — which is the
+authoritative wording, and adds an eighth check for session 4's placement from elsewhere; the list
+below is the record of what was originally asked:
 
 1. Build a page from empty: two rows, a stacked column, a `COLUMN` bank; reload; it is the same page.
 2. Solo bank of a position template and a movement Look: press each on the movers; the other goes

@@ -581,7 +581,7 @@ isn't lost by both.
 `state.show.globalScalerState` is re-created on project switch and a plain `combine` at connect
 time would observe the previous project's facade forever.
 
-`surfaceControls.*` is the control-state stream of `docs/plans/midi-surface-plan.md` D7: what
+`surfaceControls.*` is the control-state stream of `docs/plans/completed/midi-surface-plan.md` D7: what
 `SurfaceFeedbackPublisher` *told the hardware* — the fed-back value (null for mixed, unbound or no
 selection), the last inbound physical position of a fader, touch, LED and ring — written at the
 publisher's send sites before any early return and stored in `midi/ControlStateTracker.kt`. The

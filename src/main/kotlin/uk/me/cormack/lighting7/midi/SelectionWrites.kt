@@ -15,7 +15,7 @@ import uk.me.cormack.lighting7.show.Fixtures
  * Record can collapse the entries back to a group row. A head that lacks the property, or a
  * target that no longer resolves, is skipped — the write reaches the heads it can. An empty
  * selection yields no writes; the caller drops the move rather than widening it to
- * "everything" (`docs/plans/midi-surface-plan.md` D3).
+ * "everything" (`docs/plans/completed/midi-surface-plan.md` D3).
  */
 object SelectionWrites {
     fun forTargets(

@@ -246,7 +246,7 @@ data class AdvanceShowRequest(
  *
  * There is deliberately no `cueId`: it existed only for the busk view's pinned-cue pads, and a busk
  * pad now applies a cue through `CueStackManager` without moving the playhead at all
- * (`docs/plans/busk-layout-plan.md` D5). Jumping within a stack is
+ * (`docs/plans/completed/busk-layout-plan.md` D5). Jumping within a stack is
  * `POST /cue-stacks/{id}/go-to-cue`'s job, and it stays the authority.
  */
 @Serializable

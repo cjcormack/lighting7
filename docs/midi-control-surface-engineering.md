@@ -6,7 +6,7 @@ LEDs and motorised faders.
 
 Related:
 - Strategic plan (phases, decisions, open questions): [control-surface-plan.md](plans/completed/control-surface-plan.md).
-- The selection-relative layer, strips and the surface view: [midi-surface-plan.md](plans/midi-surface-plan.md)
+- The selection-relative layer, strips and the surface view: [midi-surface-plan.md](plans/completed/midi-surface-plan.md)
   (session 1 — the selection, the four selection targets, the mixed arm and the control-state
   stream — has landed; the rest is proposed).
 - Composition layers surfaces write into: [lighting-composition-model.md](lighting-composition-model.md).
@@ -383,7 +383,7 @@ by its int. This is what makes a cloned or imported project keep its cue binding
 
 The **record** variants are uuid-addressed for the same reason and with no int beside them: they
 were minted after v11, so there is no pre-uuid form to fall back to. Each has **exactly one
-behaviour**, which is the whole design rule (`docs/plans/midi-surface-plan.md` D6): a Look always
+behaviour**, which is the whole design rule (`docs/plans/completed/midi-surface-plan.md` D6): a Look always
 onto its own fixtures, a template always onto the selection, a pad always its own bank's plan. A
 button that meant different things depending on what was selected is what a fixed binding exists not
 to be.
@@ -513,7 +513,7 @@ On `channelsChanged(universe, changes)`:
      `TouchStateTracker.isTouched(displayKey, controlId) == true`, **skip the motor write** — the
      operator's finger is on it; otherwise send `ControlChangeFeedback(channel, motorCc, value7Bit)`
      (fader) or `ControlChangeFeedback(channel, ringCc, value7Bit)` (encoder ring).
-   - **Null — the mixed arm** (`docs/plans/midi-surface-plan.md` D10): nothing to the motor, the
+   - **Null — the mixed arm** (`docs/plans/completed/midi-surface-plan.md` D10): nothing to the motor, the
      encoder ring driven to its off byte (`ringOffValue(style)`, `0` for every style until the rig
      says otherwise — §9 check 3), `SoftTakeoverStateMachine.disarm` so the next move writes through
      rather than waiting for a crossing that has nothing to cross, and the tracker reads
@@ -663,7 +663,7 @@ any early return.** `sendControlFeedback` records the value first, then bails fo
 fader or a touched motor; `sendLed` records before it sends; `onTouch` records the flag. So the
 screen sees what a non-motor fader *would* have been told and what a touched motor was spared,
 and never recomputes a control from DMX — if the picture and the desk disagree, the publisher is
-wrong, which is the bug worth finding (`docs/plans/midi-surface-plan.md` D7).
+wrong, which is the bug worth finding (`docs/plans/completed/midi-surface-plan.md` D7).
 
 Writes come from the ArtNet transmit thread, the router coroutine and the publisher's subscribers,
 so the store is lock-free (`ConcurrentHashMap.compute`). Changes are conflated per device: a write
@@ -766,7 +766,7 @@ From `State.kt`:
 
 6. **Backpressure: input events can drop.** The `MutableSharedFlow` buffer is 256 with `DROP_OLDEST`. For normal use this is several seconds of headroom; under pathological input the router may miss events silently. There is no counter / alarm.
 
-7. **The ring-off byte is an assumption.** `ringOffValue(style)` sends `0` for every `EncoderRingStyle`; if the X-Touch lights its first dot on `0` rather than darkening, that one constant changes (`docs/plans/midi-surface-plan.md` §9 check 3). The `surfaceControls` stream's `ring: off` is the truth the view reads either way.
+7. **The ring-off byte is an assumption.** `ringOffValue(style)` sends `0` for every `EncoderRingStyle`; if the X-Touch lights its first dot on `0` rather than darkening, that one constant changes (`docs/plans/completed/midi-surface-plan.md` §9 check 3). The `surfaceControls` stream's `ring: off` is the truth the view reads either way.
 
 ## Testing
 

@@ -1,13 +1,18 @@
 # MIDI surface — a picture of the desk, a selection, and strips
 
-> **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
-> `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, session 3a (the picture) as
-> lighting-react `45c3d3e`, session 3b (editing it) as lighting-react `e97096b`, and session 4
-> (records on buttons) as `8ce7dc8` / lighting-react `e642c14`; session 5 is the rig, and is all
-> that remains.**
+> **Document status: RETIRED 2026-09-07 — all five sessions landed.** Session 1 (the selection and
+> the stream) landed 2026-09-06 as `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`,
+> session 3a (the picture) as lighting-react `45c3d3e`, session 3b (editing it) as lighting-react
+> `e97096b`, session 4 (records on buttons) as `8ce7dc8` / lighting-react `e642c14`, and session 5
+> (the first desk use) was run on the X-Touch on 2026-09-07 — its record is `1de6d9a`, its two
+> fixes `3a1d87d` and `e401871`. Every §9 check passes or has no subject on this hardware, and
+> `FU-MANUAL-MIDI-SURFACE` is recorded as validated in
+> [`manual-validation.md`](../manual-validation.md#validated). One follow-up is open from the rig,
+> [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](../followups.md#fu-midi-selection-colour-red-only); §8's
+> three gated items were recorded in [`followups.md`](../followups.md) on retirement.
 > Session 5 results, from the desk itself. The pre-read's four findings all held, one of them turned
 > out to be a live bug, and one check has no subject on this hardware. Detail per check is the
-> progress table in `manual-validation.md`.
+> results table in §9.
 > **The colour narrowing is real and reproducible, and it is now `FU-MIDI-SELECTION-COLOUR-RED-ONLY`.**
 > Two Freedom Par Hex selected on `Sel · rgbColour`: `#FF0000`/`#0000FF` darkens the ring correctly,
 > and `#FF0000`/`#FFFF00` **lights it at full** — a red-and-yellow selection reported as uniform,
@@ -376,16 +381,18 @@
 > `busk-layout-plan.md` style.
 
 Related:
-- [midi-control-surface-engineering.md](../midi-control-surface-engineering.md) — the subsystem
+- [midi-control-surface-engineering.md](../../midi-control-surface-engineering.md) — the subsystem
   as it is: transport, profiles, bindings, routing, feedback.
-- [control-surface-plan.md](completed/control-surface-plan.md) — the plan that built it, and its
+- [control-surface-plan.md](control-surface-plan.md) — the plan that built it, and its
   open questions 1, 4 and 7, two of which this plan finally answers.
-- [lighting-composition-model.md](../lighting-composition-model.md) §"Layer 2 — Programmer" and
+- [lighting-composition-model.md](../../lighting-composition-model.md) §"Layer 2 — Programmer" and
   §"Looks, templates and layers" — what a surface write is, and what a press is.
 - [busk-layout-plan.md](busk-layout-plan.md) — the library palette, the pad press, and the
   edit-mode pattern this view copies.
-- [followups.md](followups.md): `FU-LOOK-MIDI-RECALL`, `FU-BUSK-PAGE-MIDI`,
-  `FU-SYNC-BINDING-PAYLOAD-UUIDS`, `FU-FE-USE-TARGET-PROPERTIES`, `FU-SPEED-SURFACE-TAP-LED`.
+- [followups.md](../followups.md): `FU-LOOK-MIDI-RECALL`, `FU-BUSK-PAGE-MIDI`,
+  `FU-SYNC-BINDING-PAYLOAD-UUIDS`, `FU-FE-USE-TARGET-PROPERTIES`, `FU-SPEED-SURFACE-TAP-LED`;
+  raised by this plan: `FU-MIDI-SELECTION-COLOUR-RED-ONLY`, `FU-MIDI-RING-STYLE-MIXED`,
+  `FU-MIDI-ENCODER-HUE`, `FU-AI-SET-SELECTION`.
 
 ## 1. Context
 
@@ -941,10 +948,16 @@ cases replayed through the service); `BindingHealthEvaluatorTest` for every new 
 `BuskPageStateTest`; `ControlSurfaceBindingServiceTest` for `refuseWrongKind` and the Look refusal;
 and on the client, the picker's four variants, the library's four rows and `targetControlKind`.
 
-### Session 5 — the first desk use (both repos) — Sonnet 5, high
+### Session 5 — the first desk use (both repos) — Sonnet 5, high — **run 2026-09-07**, record `1de6d9a`, fixes `3a1d87d` and `e401871`
 
 The §9 checks on the X-Touch, with the fixes they turn up. The checks are staged in
 `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when session 5 starts, not before.
+
+Run the same day, interactively, against project 6 on the dev desk with an X-Touch Compact
+attached. Checks 2, 3, 5, 6, 7 and 9 passed on the first pass; check 4 has no subject on this
+hardware; check 8 failed and took check 1 with it, which is how the two hot-plug bugs were found —
+both fixed the same day, and both checks re-run and passing. The per-check results are the table
+in §9; `FU-MANUAL-MIDI-SURFACE` moved to `manual-validation.md`'s Validated table on retirement.
 
 Staged 2026-09-07, with the pre-read's corrections folded in — see the header's session 5
 amendments for what §9 got wrong. **`FU-MANUAL-MIDI-SURFACE` in `manual-validation.md` is the
@@ -984,11 +997,18 @@ written.
 
 - **Tap confirmation LED** (`FU-SPEED-SURFACE-TAP-LED`): the record LEDs' subscription makes a
   one-beat tap LED a small addition; still gated on an operator asking.
-- **Encoder ring styles**: `FAN` / `PAN` rings need a mixed-state rendering of their own; the
-  X-Touch is `SINGLE_DOT`, so the legend draws one style. Gate: a second profile.
-- **Hue on encoders** (§7).
-- **Selection in the AI surface**: a `set_selection` tool once a conversation asks "select the
-  movers" — today the model passes targets explicitly and that stays correct.
+- **Encoder ring styles** (`FU-MIDI-RING-STYLE-MIXED`, recorded on retirement): `FAN` / `PAN`
+  rings need a mixed-state rendering of their own; the X-Touch is `SINGLE_DOT`, so the legend draws
+  one style. Gate: a second profile.
+- **Hue on encoders** (§7; `FU-MIDI-ENCODER-HUE`, recorded on retirement — to be settled with
+  `FU-MIDI-SELECTION-COLOUR-RED-ONLY`, which is the same decision asked from the feedback side).
+- **Selection in the AI surface** (`FU-AI-SET-SELECTION`, recorded on retirement): a
+  `set_selection` tool once a conversation asks "select the movers" — today the model passes
+  targets explicitly and that stays correct.
+- **`FU-MIDI-SELECTION-COLOUR-RED-ONLY`** — raised by session 5, Ready: a colour-bound control's
+  feedback reads the red channel only, so a red-and-yellow selection reports as uniform.
+- ~~`FU-MIDI-HOTPLUG-UNDETECTED`~~ / ~~`FU-MIDI-RESYNC-DELTA-SUPPRESSED`~~ — raised and closed by
+  session 5 (`e401871`, `3a1d87d`).
 - **`FU-SYNC-BINDING-PAYLOAD-UUIDS` second half**: project-scoping `CueStackManager.fireCue`'s
   lookups is untouched by this plan whatever §11's first answer is.
 - ~~**`FU-MIDI-BIND-CONTROL-KIND`**~~ — closed in session 4.
@@ -999,8 +1019,10 @@ Backend: the tests in §5 S1, S2 and S4; `ProgrammerLayerStackTest` unchanged (t
 move — a press from hardware is the same `toggle` a pad makes). Frontend: §5 S3a and S3b. Desk checks, to
 be added to `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when they are run:
 
-> **Staged 2026-09-07 as [`FU-MANUAL-MIDI-SURFACE`](manual-validation.md#fu-manual-midi-surface),
-> which is the authoritative wording.** The list below is kept as the record of what was originally
+> **Staged 2026-09-07 as `FU-MANUAL-MIDI-SURFACE`, run the same day, and recorded as validated in
+> [`manual-validation.md`](../manual-validation.md#validated).** The staged wording, with the
+> pre-read's corrections folded in, is in that file's history; the results are the table after the
+> list. The list below is kept as the record of what was originally
 > asked; the pre-read found checks 9 and 6 unpassable as written, check 3 dependent on which colours
 > are chosen, and checks 5 and 8 missing an expected result each. The header's session 5 amendments
 > say why for each.
@@ -1027,6 +1049,24 @@ be added to `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when they are run
    surface plan open question 8, now with more state to restore).
 9. Import a project exported by this build into a build from before session 1: the project loads,
    the new bindings read as dead, everything else works.
+
+**Results, 2026-09-07**, run interactively against project 6 on the dev desk with an X-Touch
+Compact attached — an operator at the desk, the checks read back from `surfaceControls`, the busk
+view and the DMX channels. Four throwaway records were added for the checks (`S5 Per-fixture
+colour`, `S5 Red-trap`, `S5 Deferred FX`, `S5 Check Page`) and a binding map was left in place on
+the X-Touch.
+
+| # | State | What was established |
+|---|---|---|
+| 1 | **pass** | The picture half was confirmed in the first run: it draws from `layout` (8 strip columns, right block, master column) and nine `data-strip` backdrops render — 3b's `columnStrips` fix on real profile data. The snapshot half was blocked on check 8 (a cold open depends on `DeviceAttached` → `sendFullResync`, and that event never fired) and passed once it was fixed: every attach in the re-run is followed by a `surface-out` line per bound control and the sends behind them. |
+| 2 | **pass** | A library row **dragged** onto strip 1 created a global `strip` row and all four derived controls label correctly. Precedence confirmed on one strip at once: on bank A, `enc-1` reads its own exact-bank binding while `btn-1`/`btn-25` derive from the global strip and `fader-1` keeps its global direct row — §10's second risk, both bank levels. On strip 5 (a fixture), from the hardware: the fader drove the dimmer (channel read back at 70%, so composed through to output), the strip's **encoder tracked the same property** (ring 8/13), the flash asserted **full** with **its own LED lit while held** and released cleanly, and the select button toggled the fixture into the desk selection and lit. |
+| 3 | **pass**, with a bug | From the hardware: with two heads selected, turning `Sel · rgbColour` moved the ring 0/13 → 8/13 and both heads changed **together** — a lit ring proves it, since `computeValue7Bit` answers null the moment the two disagree. The mixed arm fires on both control classes: `#FF0000`/`#0000FF` darkens the encoder ring, and a three-head selection at mixed levels left `Sel · dimmer` on a **motor fader** with no value and no write. The bug is that `#FF0000`/`#FFFF00` *also* reads uniform — [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](../followups.md#fu-midi-selection-colour-red-only). |
+| 4 | **n/a** | Not runnable on an X-Touch Compact: all nine faders are `motorFader`, so `classDefault` never yields PICKUP and a driven motor never diverges from the logical value. Needs a second profile — the same gate §8 puts on encoder ring styles. |
+| 5 | **pass** | Generic template with two heads → LED lit; third head added → dark. Per-fixture template pressed with no selection → layer live on the rig (`R:255,0,0` / `R:0,0,255` observed) with its LED **dark**, and dark even once the selection matches, because the layer carries no targets. Documented divergence, confirmed. |
+| 6 | **pass** | `S5 Deferred FX` lists greyed with detail *"needs a selection"* and **no chip**; a hand-written binding is refused `BINDING_LOOK_NEEDS_SELECTION`. `BINDING_WRONG_CONTROL_KIND` also confirmed on a `fireCue` dropped on a fader. |
+| 7 | **pass** | From the hardware, with a clean baseline (Green on, Red off, both LEDs dark): pressing the button bound to the **Red pad in the solo bank** put Red on and **knocked Green off**, lighting both `Press pad Red` and the direct `Press Red` button — the pad and the template button agreeing from one `appliedState`. Then *Next page* on a button moved a **second browser** from `?page=1` to `?page=3`, untouched, with its bank correctly gone. Both halves are things only hardware plus two clients can show. |
+| 8 | **pass** | Re-run after both fixes: three unplug/replug cycles, detach within ~250 ms of the pull and attach plus full resync on every replug, all through the notification path, fallback never fired. First run, which found the bugs: unplugged, the device row still read `in · out` 30 s later. Replugged: no motor moved, no LED lit. Two bugs, both filed and both since fixed — hot-plug was never detected (`FU-MIDI-HOTPLUG-UNDETECTED`, `e401871`), and because the surviving controller's `lastSentBytes` still held the pre-unplug bytes, a resync was discarded for every control whose value was unchanged (`FU-MIDI-RESYNC-DELTA-SUPPRESSED`, `3a1d87d`). Isolated on the rig: a resync moved fader 5 (0%→50%, changed) and lit two select LEDs (off→on, changed) while fader 1 (74%→74%) stayed at the bottom. Not the touch latch — a touch-and-release on fader 1 followed by a resync still sent nothing. The layer A/B LED is the device's own and is never driven by us; a dark one is correct. |
+| 9 | **pass** | Session 1 (`758ee9a`) imported a v11 session-4 export and read **all 17** bindings. The ten it cannot know — 2 `strip`, 1 `encoderBankSet`, 2 `pressTemplate`, 1 `applyLook`, 1 `pressPad`, 3 `buskPage*` — each decoded as `unknown` with health `unknownTarget` naming the discriminator and `rawPayload` intact; the seven it knows decoded normally; one warning per bad row. Templates, Looks, busk pages and cue stacks all survived. D11 validated in the only scenario it was written for. |
 
 ## 10. Scope honesty
 

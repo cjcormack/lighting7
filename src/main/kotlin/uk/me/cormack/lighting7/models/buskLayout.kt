@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory
  * The **busk layout**: pages of rows of columns of banks of pads, built by the operator.
  *
  * The busk view used to lay itself out from the library — a column per family, a template group
- * drawn as a cluster, every Look with a deferred effect in a pool. `docs/plans/busk-layout-plan.md`
+ * drawn as a cluster, every Look with a deferred effect in a pool. `docs/plans/completed/busk-layout-plan.md`
  * moves that decision to the operator (D1): a page is something they build, referencing library
  * records, and the page owns the two facts a template group used to own — where a pad sits and what
  * else goes off when it is pressed. The library goes back to being a flat list.

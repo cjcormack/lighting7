@@ -22,7 +22,7 @@ import kotlinx.coroutines.flow.update
  *
  * Session state, like the active bank: it survives a device unplug, and unlike the active bank
  * it is **reset on project switch**, because the vocabulary it draws from is the patch's
- * (`docs/plans/midi-surface-plan.md` D5).
+ * (`docs/plans/completed/midi-surface-plan.md` D5).
  */
 class EncoderBankState {
     /** Snapshot of `deviceTypeKey → propertyName`; absent means [DEFAULT_PROPERTY]. */

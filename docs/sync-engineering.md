@@ -227,7 +227,7 @@ install refuse a v7 repo rather than silently write those fields back on its nex
 `targetPayload` as the opaque string it always was; what moves is what that string may *contain*,
 in two ways.
 
-New `type` discriminators. Session 1 of `docs/plans/midi-surface-plan.md` adds the
+New `type` discriminators. Session 1 of `docs/plans/completed/midi-surface-plan.md` adds the
 selection-relative targets (`selectionProperty`, `selectTarget`, `clearSelection`,
 `locateSelection`), and later sessions add more (strips, the encoder bank, records on buttons).
 Rather than bump the writer for each, the **reader** changed: `ControlSurfaceBindingService`
@@ -254,7 +254,7 @@ is dead.
 ### Version 10 — busk pages and Look slots
 
 **v10 adds one folder and one field.** `buskPages/{uuid}.json` is the busk layout
-(`docs/plans/busk-layout-plan.md`): one document per page with its columns, banks and pads
+(`docs/plans/completed/busk-layout-plan.md`): one document per page with its columns, banks and pads
 embedded inline the way a Look carries its rows, so a drag changes one file. A pad names its
 template, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
 `CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` joins `cueUuid` on a cue slot: a

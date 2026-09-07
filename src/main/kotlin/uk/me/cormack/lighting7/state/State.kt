@@ -595,7 +595,7 @@ class State(val config: ApplicationConfig) {
      * Which attribute each device's strip encoders drive. Session state like [activeBankState],
      * but **reset on project switch**: the property names it holds come from the patch, so
      * carrying one across projects would point the encoders at an attribute the new rig may not
-     * have (`docs/plans/midi-surface-plan.md` D5).
+     * have (`docs/plans/completed/midi-surface-plan.md` D5).
      */
     val encoderBankState: EncoderBankState by lazy { EncoderBankState() }
 
@@ -613,7 +613,7 @@ class State(val config: ApplicationConfig) {
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
      * ways of making one gesture, so there is one answer. State-scoped and transient like
      * [deskSelection]: cleared on project switch, reconciled when the layout changes, never
-     * persisted (`docs/plans/midi-surface-plan.md` D6).
+     * persisted (`docs/plans/completed/midi-surface-plan.md` D6).
      */
     val buskPageState: BuskPageState by lazy {
         BuskPageState {

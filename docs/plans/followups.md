@@ -31,6 +31,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
 | [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) | Ready | MIDI | — |
+| [`FU-MIDI-RING-STYLE-MIXED`](#fu-midi-ring-style-mixed) | Trigger | MIDI | a second profile declares a `FAN` or `PAN` encoder ring |
+| [`FU-MIDI-ENCODER-HUE`](#fu-midi-encoder-hue) | Trigger | MIDI | an operator asks for hue on an encoder, or `FU-MIDI-SELECTION-COLOUR-RED-ONLY` is picked up |
+| [`FU-AI-SET-SELECTION`](#fu-ai-set-selection) | Trigger | AI | a conversation asks the AI to select fixtures rather than act on them |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
 | [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
@@ -307,6 +310,10 @@ machinery that exists nowhere else in that class. The nearest existing shape,
 **Trigger**: an operator taps from hardware and asks why the button doesn't acknowledge, or a
 second momentary-with-no-steady-state target appears and the two can share the machinery.
 
+The MIDI surface plan (§8, retired 2026-09-07) notes that its session 4 gave the publisher a
+subscription to the programmer's layer state for the record LEDs, which makes a one-beat tap LED a
+smaller addition than it was when this was cut. The trigger stands.
+
 ### `FU-SPEED-CUSTOM-RATIO`
 
 **Backend accepts any positive follow ratio; the UI offers five** · Trigger · Busking-view plan
@@ -519,6 +526,62 @@ same decision from the other side and is already out of scope, so this should be
 `findChannels` (and to the takeover machine, which currently arms against red), and pin it with a
 multi-channel fixture in `SurfaceFeedbackPublisherTest` — the missing coverage is as much the
 finding as the behaviour is.
+
+---
+
+### `FU-MIDI-RING-STYLE-MIXED`
+
+**`FAN` and `PAN` encoder rings have no mixed-state rendering of their own** · Trigger · MIDI
+surface plan (2026-09-07), §8
+
+D10 drives an encoder's ring to its **off** state on a mixed selection, and
+`SurfaceFeedbackPublisher.ringOffValue(style)` answers `0` for every `EncoderRingStyle` that has a
+ring — `SINGLE_DOT`, `FAN` and `PAN` alike. The X-Touch Compact is `SINGLE_DOT`, so that is the only
+style ever confirmed on hardware (the plan's §9 check 3) and the only one the surfaces panel draws:
+its encoder cell is a 13-dot single-dot ring. Whether the same byte reads as "off" on a `FAN` or
+`PAN` ring, or as a definite position, is a question only that hardware can answer, and the client
+has no drawing for either style. The `surfaceControls` stream's `ring: off` is the truth the view
+reads either way, so the screen cannot be wrong about it — only the hardware can.
+
+**Trigger**: a second profile declares an encoder with a `FAN` or `PAN` ring. Then: a per-style off
+value in `ringOffValue`, an encoder cell that draws that style, and check 3 repeated on the new
+hardware.
+
+---
+
+### `FU-MIDI-ENCODER-HUE`
+
+**Colour on an encoder is one 7-bit value fanned to R, G and B, not a hue** · Trigger · MIDI
+surface plan (2026-09-07), §7
+
+`SelectionProperty(colour)` on an encoder — and a `FixtureProperty` / `GroupProperty` colour
+binding before it — writes the same 7-bit value to every channel of the `DmxColour`, as
+`PropertyChannelResolver` does for any colour on a continuous control. So a turn sweeps black to
+white and cannot reach a colour. The plan kept that deliberately: a hue wheel is a resolver
+decision, not a surface one, and it is the *write*-side half of the question
+[`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) asks of the *feedback*
+side. Settle the two together, because whatever a colour-bound control's value *is* decides both
+what a turn writes and what the ring shows.
+
+**Trigger**: an operator asks for hue on an encoder, or `FU-MIDI-SELECTION-COLOUR-RED-ONLY` is
+picked up.
+
+---
+
+### `FU-AI-SET-SELECTION`
+
+**The AI can read the desk selection but has no tool to move it** · Trigger · MIDI surface plan
+(2026-09-07), §8
+
+`get_current_state` reports `selection` (the desk's shared selection, what a selection-relative
+surface control acts on), but there is no `set_selection` tool: the model passes explicit targets
+to every press and apply tool, which is correct and stays so. A tool would only matter for a
+conversation that talks about the selection as a thing — "select the movers, then …" — and none
+has yet. When one does, it is one tool over `DeskSelection.set` with the `selection.*` family's
+existing semantics: a group and its members are two spellings of one selection, and a target that
+no longer resolves is dropped.
+
+**Trigger**: a conversation asks the AI to select fixtures by name rather than to act on them.
 
 ---
 
@@ -1513,7 +1576,7 @@ counter-level assertions on the retry budget and a real test for the reset-befor
 
 **Cue-stack lookups are project-blind** · Trigger (correctness, latent) · Code review of the
 project-clone rewrite, 2026-07-27; **first half landed** in session 1 of
-[`midi-surface-plan.md`](midi-surface-plan.md) (sync `formatVersion` 11)
+[`midi-surface-plan.md`](completed/midi-surface-plan.md) (sync `formatVersion` 11)
 
 What landed: `FireCue` / `CueStackGo` / `Back` / `Pause` carry a `cueUuid` / `stackUuid` beside
 the int, `ControlSurfaceBindingService` fills it on every create and update, `BindingHealthEvaluator`

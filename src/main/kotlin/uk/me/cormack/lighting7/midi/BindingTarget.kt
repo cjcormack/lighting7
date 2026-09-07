@@ -23,7 +23,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
  *   - **Selection-relative** ([SelectionProperty], [SelectTarget], [ClearSelection],
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
- *     See `docs/plans/midi-surface-plan.md` §D3.
+ *     See `docs/plans/completed/midi-surface-plan.md` §D3.
  *   - **Records** ([ApplyLook], [PressTemplate], [PressPad]) — a named thing from the library on a
  *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
