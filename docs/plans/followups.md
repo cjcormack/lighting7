@@ -1667,7 +1667,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
-- `FU-MIDI-HOTPLUG-UNDETECTED` — `CoreMidiHotPlug`: a daemon thread that makes the process's first
+- `FU-MIDI-HOTPLUG-UNDETECTED` (`e401871`) — `CoreMidiHotPlug`: a daemon thread that makes the process's first
   `MIDIClientCreate` and then pumps its `CFRunLoop`, because that is the loop CoreMIDI delivers on
   and a headless JVM never ran one — so the notification `State` registered for could not arrive,
   and every CoreMIDI-backed enumeration in the process (libremidi's observer, CoreMIDI4J's map,
