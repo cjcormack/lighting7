@@ -315,6 +315,11 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
 | `Strip(target)` | — (a strip slot) | Never dispatched: `resolve` derives it to the target of the control the event arrived on. See [Strips](#strips) |
 | `EncoderBankSet(propertyName)` | Button | `EncoderBankState.setProperty` for the device the button is on; LED lit while that property is the device's encoder bank. Health `unknownProperty` when no patched fixture can take it |
+| `ApplyLook(lookUuid)` | Button | `ProgrammerLayerStack.toggle` on the Look's **own fixtures** — `resolveLookToggleTargets` with no targets, never the desk selection. LED lit while the Look has any layer on the stack (selection-independent, `AppliedSource.targets.isNotEmpty()`). A Look with a **deferred effect** has no own targets, so it is refused at bind time (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one after |
+| `PressTemplate(templateUuid)` | Button | `ProgrammerLayerStack.toggle` on the **desk selection**, masked to the template's own derived family, siblingless. A *generic* template with an empty selection is dropped — its rows take their targets from the press; a per-fixture one names its own heads. LED lit while it covers every selected target |
+| `PressPad(padUuid)` | Button | The pad's own press through `BuskPressService`, solo siblings included, with the desk selection as the targets. LED is the pad's ring: `appliedState` for a template or Look pad, the stack's live cue for a cue pad |
+| `BuskPageNext` / `BuskPagePrev` | Button | `BuskPageState.step(±1)`, wrapping. Page-agnostic, so always healthy — a project with no pages simply has nowhere to step |
+| `BuskPageSet(pageUuid)` | Button | `BuskPageState.setByUuid`; LED lit while that page is the one showing |
 | `Unknown(targetType, rawPayload)` | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant row decode for a `type` this build does not know; re-encoded verbatim; refused by the create / PATCH routes |
 
 The cue and stack variants carry a **uuid beside the int** (`FireCue(cueId, cueUuid?)`,
@@ -325,6 +330,39 @@ resolves to nothing in the current project is dead, and the press is dropped rat
 back to an int that may name another project's row. Only a pre-v11 row with no uuid is dispatched
 by its int. This is what makes a cloned or imported project keep its cue bindings
 (`docs/sync-engineering.md` §"Version 11"; `FU-SYNC-BINDING-PAYLOAD-UUIDS`, first half).
+
+The **record** variants are uuid-addressed for the same reason and with no int beside them: they
+were minted after v11, so there is no pre-uuid form to fall back to. Each has **exactly one
+behaviour**, which is the whole design rule (`docs/plans/midi-surface-plan.md` D6): a Look always
+onto its own fixtures, a template always onto the selection, a pad always its own bank's plan. A
+button that meant different things depending on what was selected is what a fixed binding exists not
+to be.
+
+### Bind-time refusals
+
+Three rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
+service is the one door every write comes through — MIDI Learn's commit reaches `create` directly,
+with no route validation of its own:
+
+| Rule | Refuses | Code |
+|---|---|---|
+| `refuseUnknown` | a `Unknown` target from a request — it exists to be rebound, not re-sent | — |
+| `refuseWrongSlot` | a `Strip` off a strip slot, or anything else on one | `BINDING_STRIP_NEEDS_STRIP` / `BINDING_CONTROL_NOT_STRIP` |
+| `refuseWrongKind` | a target the control's half of the dispatch can never reach | `BINDING_WRONG_CONTROL_KIND` |
+| `refuseUnpressableLook` | an `ApplyLook` on a Look with a deferred effect | `BINDING_LOOK_NEEDS_SELECTION` |
+
+`refuseWrongKind` closes `FU-MIDI-BIND-CONTROL-KIND`, and its two tables are in
+`midi/BindingControlKind.kt`: `dispatchableKinds(descriptor)` — a fader is continuous, an encoder is
+continuous *and*, when it declares a `pushNote`, a button, a button is a button, and a **bank button
+is neither**, because `route` switches the bank before resolving a binding at all — and
+`targetControlKind(target)`. **Strip slots are skipped**: a strip id names no descriptor, and its
+target reaches a control by derivation rather than dispatch. `lib/surfaceDrop.ts` in
+`lighting-react` mirrors both tables and drives the palette's eligibility dim.
+
+The last two carry a machine-readable code out through `BindingRefused(message, code)`, an
+`IllegalArgumentException` every existing caller already maps to a 400. Session 2 got a coded
+refusal by *duplicating* each strip rule into the routes' `validateRequestShape`; the rules added
+since take this path instead, because four more rules would have meant four more copies.
 
 **Related non-MIDI path.** Phase 7 of `docs/plans/completed/cue-authoring-unification-plan.md` adds a
 separate FX-layer resolver, `fx/PropertyChannelWriter`, for property-value → channel
@@ -457,8 +495,25 @@ Parallel coroutines collect from:
 - `DeskSelection.targets` → rebuild index (selection entries' channel sets) + resync every device
   (select LEDs, selection faders)
 - `LocateManager.activeTargets` (per show, re-armed on project switch like the scaler) → locate LEDs
+- `ProgrammerLayerStack.layersFlow` (per show, re-armed the same way) → record LEDs
+- `BuskPageState.pageId` → `BuskPageSet` LEDs
+- `FixturesChangeListener.cueRunStateChanged` → record LEDs, for the cue pads among them
+- `lookListChanged` / `templateListChanged` / `buskLayoutChanged` → **rebuild** the index, not just
+  the LEDs: a `PressPad` entry carries its pad's *resolved record*, so a delete or a layout write
+  stales the index itself
 
 All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
+
+**Record LEDs resolve their record at index time, not at LED time.** A `PressPad` needs to know
+what its pad holds, which is a database read; doing it per LED per resync would put one on the
+feedback path. `State.buildBuskRefs` supplies the whole map (`BuskRefs`) and the publisher calls it
+**lazily and at most once per rebuild** — a rebuild runs on every selection change, and an
+unconditional read there would be a query per press of a select button.
+
+**`ledOn` ends in `else -> null`, and so does the index's own `when`.** Every other exhaustive
+`when` in the grammar's blast radius fails to compile on a new variant; these two do not, so a
+target added without an arm here is silently never indexed and never lit — on hardware no browser
+can show. It is the one place in this class where the compiler is not the safety net.
 
 ## Interaction with the composition model
 
@@ -475,6 +530,9 @@ All subscribers are cancelled together on `SurfaceFeedbackPublisher.stop()`.
 | Fader → SelectionProperty | `ProgrammerWriter.writeProperties` (owner `surface`) | **Layer 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
 | Select / Clear button | `State.deskSelection` | *(no layer — the desk's selection)* | What the next selection-relative move acts on |
 | Locate button | `LocateManager.toggle` (owner `locate`) | **Layer 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |
+| Apply Look / Press template | `ProgrammerLayerStack.toggle` | **Layer 2 (a programmer layer)** | The Look onto its own fixtures, the template onto the selection; the same `toggle` a busk pad makes |
+| Press pad | `BuskPressService` | **Layer 2, or Layer 4 for a cue pad** | The pad's whole plan — solo siblings included — through the one implementation `POST /busk/pads/{id}/press` also uses |
+| Busk page buttons | `State.buskPageState` | *(no layer — a screen position)* | Every client's busk view follows it |
 
 **A fader always writes the programmer.** Phase 6 added a second destination — when a cue-edit session was open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` routed to `cueEdit.setProperty` (the cue layer) instead, and `SurfaceFeedbackPublisher` drove the motor from the cue's Layer 4 value rather than the stage. Backend sweep item D1 retired the `cueEdit.*` family, so both halves are gone: one write destination, and feedback that always means the live composed DMX value. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6 for what the session-routing design was.
 
@@ -498,9 +556,47 @@ spelling, a group it only partly covers is respelt as the members left behind. A
 group expands to itself, so a stale entry stays comparable rather than vanishing.
 
 The surface reaches it through three targets (`SelectionProperty`, `SelectTarget`,
-`ClearSelection`) plus `LocateSelection`; the router stays selection-blind — every arm calls a
-`SurfaceActions` method and `DefaultSurfaceActions` reads `state.deskSelection`, which is what
-keeps `RecordingActions` a complete test double.
+`ClearSelection`) plus `LocateSelection`, and — since the record variants — `PressTemplate` and
+`PressPad` too; the router stays selection-blind — every arm calls a `SurfaceActions` method and
+`DefaultSurfaceActions` reads `state.deskSelection`, which is what keeps `RecordingActions` a
+complete test double.
+
+## The showing busk page
+
+`state/BuskPageState.kt` is `DeskSelection`'s twin for a *position*: which busk page the desk is
+showing, as a `StateFlow<Int?>` on `State`, transient, cleared on project switch and reconciled on
+`buskLayoutChanged`. It exists for the same reason the selection does — a hardware *next page*
+button and a tab click in the busk view are two ways of making one gesture, so there has to be one
+answer or the button and the screen disagree the moment either is used. WS family
+`busk.pageState` / `busk.setPage`; the client's `?page=` mirrors it.
+
+Three details are decisions rather than shape:
+
+- **Ids on the wire, uuid only at the binding.** Everything else addresses a page by id (`?page=`,
+  the page routes), and a binding addresses one by uuid because a binding has to survive a clone.
+  `setByUuid` is the one place the two meet.
+- **`step` wraps.** Next and Prev are the only page controls a surface has; a *next* that stopped at
+  the last page would leave the operator with no way back but a mouse, on the one surface whose
+  point is not needing one.
+- **`reconcile` resolves a deleted page to `null`, not to the first page.** The busk view already
+  resolves a page it cannot find against the list it fetched, so saying nothing leaves each client
+  on its own fallback rather than dragging every client onto a page none of them asked for.
+
+It shares only a namespace with `busk.layoutChanged`, which names pages whose *document* changed and
+is what the client's echo suppression is written against. A page-state frame carries no layout.
+
+## The busk press, from two doors
+
+`routes/BuskPressService.kt` holds the whole of a pad press — reading the pad, its record and (in a
+solo bank) its siblings in one transaction, then applying — and `POST /busk/pads/{padId}/press` is
+its HTTP door while `PressPad` is its MIDI one. It answers an `Outcome` rather than responding,
+because only one of the two callers has a reply channel: a MIDI press has nowhere to put a 400, so
+a refusal is a log line there and a coded error in the route. The route's request body carries one
+thing hardware cannot — `beatDivision` — and a surface press passes null.
+
+The point of the extraction is that the two doors cannot diverge: the solo rules, the
+empty-selection refusals and the cue toggle are the *pad's* behaviour, not the endpoint's.
+`BuskPressRouteTest` drives both against one set of fixtures for exactly that reason.
 
 ## Control-state stream
 
@@ -577,6 +673,7 @@ From `State.kt`:
 | `surfaceLearn.cancel` | `{ sessionId }` |
 | `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
 | `selection.set` / `.toggle` / `.clear` | `{ targets }` / `{ target }` / — (`SelectionSocket.kt`) |
+| `busk.setPage` | `{ pageId }` — the showing busk page (`BuskSocket.kt`) |
 
 ### Outbound
 
@@ -592,6 +689,7 @@ From `State.kt`:
 | `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |
 | `surfaceControls.state` / `.changed` | `{ displayKey, controls: {controlId: ControlState} }` — whole device / conflated delta |
 | `selection.state` | `{ targets }` — connect snapshot + broadcast (`SelectionSocket.kt`) |
+| `busk.pageState` | `{ pageId }` — connect snapshot + broadcast; `null` means the desk has not been pointed at a page (`BuskSocket.kt`). Shares only a namespace with the `busk.layoutChanged` broadcast, which is about *documents* |
 
 ## REST surface
 

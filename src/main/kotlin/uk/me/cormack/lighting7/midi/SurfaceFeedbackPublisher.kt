@@ -12,6 +12,10 @@ import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fx.AppliedExtent
+import uk.me.cormack.lighting7.fx.AppliedSource
+import uk.me.cormack.lighting7.fx.CueRunState
+import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
@@ -22,6 +26,7 @@ import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.LocateManager
+import uk.me.cormack.lighting7.state.BuskPageState
 import uk.me.cormack.lighting7.state.DeskSelection
 import java.util.Collections
 import java.util.IdentityHashMap
@@ -122,6 +127,30 @@ class SurfaceFeedbackPublisher(
     private val deskSelection: DeskSelection? = null,
     /** Locate state for `LocateSelection` LEDs; a provider because the manager is per show. */
     private val locateManagerProvider: (() -> LocateManager)? = null,
+    /**
+     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressTemplate` read its
+     * `appliedState`, which is the same answer a busk pad's ring reads, resolved server-side so the
+     * two cannot drift. A provider because the stack is per show.
+     */
+    private val programmerLayerStackProvider: (() -> ProgrammerLayerStack)? = null,
+    /** The desk's showing busk page, for `BuskPageSet` LEDs. Null disables that arm. */
+    private val buskPageState: BuskPageState? = null,
+    /**
+     * A stack's live cue, for a `PressPad` on a **cue** pad — its ring is stack liveness, not the
+     * layer stack, exactly as the busk view's cue pads read `useActiveCueIds` rather than the
+     * applied state. A function of one stack rather than the manager itself, because that is the
+     * whole of what this class asks of it.
+     */
+    private val cueStackActiveCueIdProvider: ((stackId: Int) -> Int?)? = null,
+    /**
+     * What each busk pad presses and what id each busk page has — the database half of a record LED.
+     *
+     * A provider, and **called at most once per rebuild and only when some attached device actually
+     * has a `PressPad` or `BuskPageSet` bound**: a rebuild happens on every selection change, and a
+     * DB read there for a desk that has neither binding would be a query per press of a select
+     * button.
+     */
+    private val buskRefsProvider: ((projectId: Int) -> BuskRefs)? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
@@ -175,6 +204,36 @@ class SurfaceFeedbackPublisher(
     )
 
     /**
+     * A record button's LED, with **its record already resolved**.
+     *
+     * A `PressPad` LED is the pad's ring, and reading it means knowing what the pad holds — which is
+     * a database read. Doing it at LED time would put one on the feedback path, per lit button, per
+     * resync; doing it here costs one read per rebuild, and rebuild already happens on exactly the
+     * events that can stale it (a binding change, a Look / template list change, a layout write).
+     *
+     * [layerUuid] is a Look's or template's uuid, for the applied-state read; [cue] is
+     * `(cueId, stackId)` for a pad holding a cue, whose ring comes from stack liveness instead and
+     * has nothing to do with the layer stack at all. Exactly one is set. Both null means the record
+     * has gone — health says so, and the LED is dark.
+     */
+    private data class RecordLedEntry(
+        val entry: LedEntry,
+        val kind: RecordLedKind,
+        val layerUuid: UUID?,
+        val cue: Pair<Int, Int>? = null,
+    )
+
+    /**
+     * How a record button's LED is read.
+     *
+     * [LOOK_APPLIED] is **selection-independent**: `ApplyLook` presses onto the Look's own fixtures,
+     * so "is it on the rig" is the whole question, and folding it over a selection would leave the
+     * button dark whenever nothing was selected. [COVERS_SELECTION] is the selection-scoped fold, and
+     * dark on an empty selection is right there — that is also when the press is dropped.
+     */
+    private enum class RecordLedKind { LOOK_APPLIED, COVERS_SELECTION, CUE_LIVE }
+
+    /**
      * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
      * that type is built around a DMX [PropertyChannelResolver.PropertyChannel], and a speed
      * master has no channel behind it — its value lives in the bank.
@@ -208,6 +267,16 @@ class SurfaceFeedbackPublisher(
         /** `EncoderBankSet` buttons: lit while that property is the device's encoder bank. */
         val encoderBankLeds: List<LedEntry>,
         /**
+         * `ApplyLook` / `PressTemplate` / `PressPad` buttons, with their records resolved — as a
+         * list for the layer-change sweep and **by binding id** for [ledOn], which is handed one
+         * entry at a time by the full resync and has only the binding to go on.
+         */
+        val recordLeds: List<RecordLedEntry>,
+        val recordLedByBindingId: Map<Int, RecordLedEntry>,
+        /** `BuskPageSet` buttons, paired with the page id their uuid resolves to; likewise both ways. */
+        val buskPageLeds: List<Pair<LedEntry, Int?>>,
+        val buskPageIdByBindingId: Map<Int, Int?>,
+        /**
          * Tempo-bound continuous controls. A flat list rather than a map: there is at most
          * one per physical encoder on an attached surface, so a scan per tempo change is
          * cheaper than maintaining an index — and tempo changes are operator-rate, not
@@ -218,7 +287,8 @@ class SurfaceFeedbackPublisher(
         companion object {
             val EMPTY = Index(
                 emptyMap(), emptyMap(), emptyMap(), emptyMap(),
-                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(),
             )
         }
     }
@@ -235,12 +305,23 @@ class SurfaceFeedbackPublisher(
         // A rename is cosmetic, but a create/delete changes which master uuids resolve — and
         // a tempo-bound encoder pointing at a deleted master must stop being fed.
         override fun speedMasterListChanged() { rebuildAndResync() }
+        // The record LEDs (D6). A deleted Look, template or pad must stop lighting its button, and a
+        // pad's *resolved record* is baked into the index — so these are index-staling events, not
+        // merely health ones. A layout write is included: it is what moves a pad between banks and
+        // what takes one off a page.
+        override fun lookListChanged() { rebuildAndResync() }
+        override fun templateListChanged() { rebuildAndResync() }
+        override fun buskLayoutChanged(pageIds: List<Int>) { rebuildAndResync() }
+        // A cue pad's ring is its stack's live cue, so a GO or a release moves it. Discrete — this
+        // fires on transitions, not per fade frame.
+        override fun cueRunStateChanged(runState: CueRunState) { resyncRecordLeds() }
     }
 
     private val jobs = mutableListOf<Job>()
     private var scalerJob: Job? = null
     private var speedMasterJob: Job? = null
     private var locateJob: Job? = null
+    private var layersJob: Job? = null
     private var publisherScope: CoroutineScope? = null
     private var running = false
 
@@ -273,9 +354,52 @@ class SurfaceFeedbackPublisher(
                 selection.targets.collect { rebuildAndResync() }
             }
         }
+        buskPageState?.let { pages ->
+            jobs += scope.launch(CoroutineName("FeedbackPublisher-busk-page")) {
+                pages.pageId.collect { resyncBuskPageLeds() }
+            }
+        }
         subscribeScaler(scope)
         subscribeSpeedMasters(scope)
         subscribeLocate(scope)
+        subscribeProgrammerLayers(scope)
+    }
+
+    /**
+     * (Re)subscribe to the programmer's layer stack, per show like [subscribeLocate].
+     *
+     * This is the record LEDs' live signal. It is a **`SharedFlow` with `replay = 1`**, so
+     * subscribing re-delivers the current stack — the same harmless duplicate first emission the
+     * selection subscription documents. Only the LEDs are re-fed, not the whole index: a layer
+     * moving changes nothing about which buttons are bound.
+     */
+    private fun subscribeProgrammerLayers(scope: CoroutineScope) {
+        layersJob?.cancel()
+        val stack = try {
+            programmerLayerStackProvider?.invoke()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        layersJob = stack.layersFlow
+            .onEach { resyncRecordLeds() }
+            .launchIn(scope)
+    }
+
+    /** Re-read every record button's LED. Cheap: a handful of buttons, one `appliedState` fold. */
+    private fun resyncRecordLeds() {
+        val idx = index.get()
+        if (idx.recordLeds.isEmpty()) return
+        // Folded once for the whole pass, not once per button — `appliedState()` walks every
+        // layer/target/group, so N bound buttons used to mean N folds of the same state.
+        val applied = appliedSources()
+        for (record in idx.recordLeds) sendLed(record.entry, recordLedOn(record, applied))
+    }
+
+    private fun resyncBuskPageLeds() {
+        val idx = index.get()
+        if (idx.buskPageLeds.isEmpty()) return
+        val showing = buskPageState?.pageId?.value
+        for ((entry, pageId) in idx.buskPageLeds) sendLed(entry, pageId != null && pageId == showing)
     }
 
     /**
@@ -342,6 +466,8 @@ class SurfaceFeedbackPublisher(
         speedMasterJob = null
         locateJob?.cancel()
         locateJob = null
+        layersJob?.cancel()
+        layersJob = null
         controlStates.stop()
         publisherScope = null
         detachFromFixtures()
@@ -360,6 +486,7 @@ class SurfaceFeedbackPublisher(
             subscribeScaler(it)
             subscribeSpeedMasters(it)
             subscribeLocate(it)
+            subscribeProgrammerLayers(it)
         }
         // Push a full resync for every currently-attached device so the new show's logical
         // values land on the hardware.
@@ -559,6 +686,52 @@ class SurfaceFeedbackPublisher(
     internal fun simulateChannelsChangedForTest(universe: Universe, changes: Map<Int, UByte>) =
         onChannelsChanged(universe, changes)
 
+    /**
+     * Uuid → record, for one [rebuildIndex] pass.
+     *
+     * A Look's and a template's uuid need no lookup at all — `appliedState` reports the record's own
+     * uuid, so parsing the string is the whole of it. Only a pad and a page need the database, and
+     * [refs] is `lazy` so a desk with neither bound never touches it: a rebuild runs on every
+     * selection change, and an unconditional read there would be a query per press of a select
+     * button.
+     */
+    private inner class RecordRefResolver(private val projectId: Int) {
+        private val refs: BuskRefs by lazy {
+            try {
+                buskRefsProvider?.invoke(projectId) ?: BuskRefs.EMPTY
+            } catch (e: Exception) {
+                logger.debug("Busk refs unavailable for project {}: {}", projectId, e.message)
+                BuskRefs.EMPTY
+            }
+        }
+
+        fun lookUuid(raw: String): UUID? = uuidOrNull(raw)
+        fun templateUuid(raw: String): UUID? = uuidOrNull(raw)
+        fun pageId(raw: String): Int? = uuidOrNull(raw)?.let { refs.pageIds[it] }
+
+        fun padLed(entry: LedEntry, raw: String): RecordLedEntry =
+            when (val ref = uuidOrNull(raw)?.let { refs.pads[it] }) {
+                is PadRef.Layer -> RecordLedEntry(
+                    entry,
+                    // A Look pad's ring is the busk view's, and the busk view's is selection-scoped:
+                    // it is `lookLayerPresence`, not `lookIsApplied`, because a pad presses onto the
+                    // selection. Only an `ApplyLook` *button* is selection-independent, and that is
+                    // because it presses onto the Look's own fixtures instead.
+                    RecordLedKind.COVERS_SELECTION,
+                    ref.sourceUuid,
+                )
+                is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId to ref.stackId)
+                // The pad is gone; health says so and the LED stays dark.
+                null -> RecordLedEntry(entry, RecordLedKind.COVERS_SELECTION, null)
+            }
+
+        private fun uuidOrNull(raw: String): UUID? = try {
+            UUID.fromString(raw)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+
     private fun rebuildIndex() {
         val projectId = try {
             projectIdProvider()
@@ -578,7 +751,12 @@ class SurfaceFeedbackPublisher(
         val selectLeds = mutableListOf<LedEntry>()
         val locateLeds = mutableListOf<LedEntry>()
         val encoderBankLeds = mutableListOf<LedEntry>()
+        val recordLeds = mutableListOf<RecordLedEntry>()
+        val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
+        // Every record and page uuid a bound button on an attached device names, resolved in one
+        // batch below rather than one lookup per button.
+        val recordRefs = RecordRefResolver(projectId)
         // Expanded once per rebuild, not once per bound control.
         val selectedHeads = deskSelection?.coverage().orEmpty()
 
@@ -633,6 +811,30 @@ class SurfaceFeedbackPublisher(
                         is BindingTarget.SelectTarget -> { selectLeds += entry; true }
                         is BindingTarget.LocateSelection -> { locateLeds += entry; true }
                         is BindingTarget.EncoderBankSet -> { encoderBankLeds += entry; true }
+                        // The record and page arms, and the one place in this class where an
+                        // omission is silent rather than a compile error: this `when` and [ledOn]
+                        // both end in `else`, so a variant with no arm here is simply never
+                        // indexed and never lit, on hardware no browser can show.
+                        is BindingTarget.ApplyLook -> {
+                            recordLeds += RecordLedEntry(
+                                entry, RecordLedKind.LOOK_APPLIED, recordRefs.lookUuid(target.lookUuid),
+                            )
+                            true
+                        }
+                        is BindingTarget.PressTemplate -> {
+                            recordLeds += RecordLedEntry(
+                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.templateUuid(target.templateUuid),
+                            )
+                            true
+                        }
+                        is BindingTarget.PressPad -> {
+                            recordLeds += recordRefs.padLed(entry, target.padUuid)
+                            true
+                        }
+                        is BindingTarget.BuskPageSet -> {
+                            buskPageLeds += entry to recordRefs.pageId(target.pageUuid)
+                            true
+                        }
                         else -> false
                     }
                     if (listed) ledsByDisplay.getOrPut(displayKey) { mutableListOf() }.add(entry)
@@ -651,6 +853,10 @@ class SurfaceFeedbackPublisher(
                 selectLeds = selectLeds,
                 locateLeds = locateLeds,
                 encoderBankLeds = encoderBankLeds,
+                recordLeds = recordLeds,
+                recordLedByBindingId = recordLeds.associateBy { it.entry.binding.id },
+                buskPageLeds = buskPageLeds,
+                buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
                 speedMasterEntries = speedMasterEntries,
             )
         )
@@ -730,8 +936,10 @@ class SurfaceFeedbackPublisher(
         // Tempo-bound encoders are not ContinuousEntries (they have no channel), so the reset
         // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
+        // Folded once for the whole device resync rather than once per record-button LED in it.
+        val applied = appliedSources()
         for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
-            sendLed(entry, ledOn(entry) ?: false)
+            sendLed(entry, ledOn(entry, applied) ?: false)
         }
         controlStates.publishSnapshot(displayKey)
     }
@@ -741,7 +949,7 @@ class SurfaceFeedbackPublisher(
      * than edge events — so a Flash held at the moment a device attaches lights up immediately.
      * Null for a target that carries no LED semantics.
      */
-    private fun ledOn(entry: LedEntry): Boolean? = when (val target = entry.binding.target) {
+    private fun ledOn(entry: LedEntry, applied: List<AppliedSource>? = null): Boolean? = when (val target = entry.binding.target) {
         is BindingTarget.Flash -> flashTracker.isActive(entry.binding.id)
         // The scaler facade is per show; before the show is up there is nothing to read.
         is BindingTarget.Blackout -> runCatching { globalScalerStateProvider().blackoutEnabled.value }.getOrDefault(false)
@@ -754,8 +962,60 @@ class SurfaceFeedbackPublisher(
             encoderBankState.propertyFor(entry.binding.deviceTypeKey) == target.propertyName
         // Never indexed: resolve() derives a strip to the target of the control it stands on.
         is BindingTarget.Strip -> null
+        // Answered from the *index*, which carries each button's record already resolved: this
+        // function has only the binding, and a uuid → record lookup here would be a database read
+        // per LED per resync.
+        is BindingTarget.ApplyLook,
+        is BindingTarget.PressTemplate,
+        is BindingTarget.PressPad,
+            -> index.get().recordLedByBindingId[entry.binding.id]
+                ?.let { recordLedOn(it, applied ?: appliedSources()) }
+        is BindingTarget.BuskPageSet -> {
+            val pageId = index.get().buskPageIdByBindingId[entry.binding.id]
+            pageId != null && buskPageState?.pageId?.value == pageId
+        }
         else -> null
     }
+
+    /**
+     * A record button's LED, read from the state the busk view's ring reads.
+     *
+     * `ApplyLook` is deliberately **not** folded over the selection: it presses onto the Look's own
+     * fixtures, so "is this Look on the rig" is the whole question — the same split
+     * `lookIsApplied` answers for an FX cue slot, which likewise has no selection. Everything else
+     * is the selection-scoped fold, and dark on an empty selection is right: that is also when the
+     * press is dropped.
+     */
+    private fun recordLedOn(record: RecordLedEntry, applied: List<AppliedSource>): Boolean = when (record.kind) {
+        RecordLedKind.CUE_LIVE -> record.cue?.let { (cueId, stackId) ->
+            runCatching { cueStackManagerActiveCueId(stackId) }.getOrNull() == cueId
+        } ?: false
+        RecordLedKind.LOOK_APPLIED -> {
+            val uuid = record.layerUuid
+            uuid != null && applied.any { it.source.uuid == uuid && it.targets.isNotEmpty() }
+        }
+        RecordLedKind.COVERS_SELECTION -> {
+            val uuid = record.layerUuid
+            val selected = deskSelection?.targets?.value.orEmpty()
+            if (uuid == null || selected.isEmpty()) false else {
+                val entry = applied.firstOrNull { it.source.uuid == uuid }
+                // "Covers every selected target" — the same fold `lookLayerPresence` makes in the
+                // client, and the same `all`/`some` vocabulary, so a pad and its button agree.
+                entry != null && selected.all { target ->
+                    entry.targets.any {
+                        it.target.type == target.type && it.target.key == target.key &&
+                            it.extent == AppliedExtent.ALL
+                    }
+                }
+            }
+        }
+    }
+
+    private fun appliedSources() =
+        runCatching { programmerLayerStackProvider?.invoke()?.appliedState() }.getOrNull().orEmpty()
+
+    private fun cueStackManagerActiveCueId(stackId: Int): Int? =
+        cueStackActiveCueIdProvider?.invoke(stackId)
 
     /** True when the selection is non-empty and every target in it is located. */
     private fun selectionLocated(located: Set<TargetRef>): Boolean {
@@ -921,4 +1181,35 @@ class SurfaceFeedbackPublisher(
         }
         latencyTracker.measure(MidiLatencyStage.EGRESS_LED) { controller.sendFeedback(msg) }
     }
+}
+
+/**
+ * The database half of a record LED: what each busk pad presses, and what id each busk page has.
+ *
+ * Read in one pass by `State` and handed to [SurfaceFeedbackPublisher] as a value, because that
+ * class deliberately touches no database — every other thing it needs from the show arrives as a
+ * provider too. Keyed by uuid on both sides, because a binding addresses a record by uuid.
+ */
+data class BuskRefs(
+    val pads: Map<UUID, PadRef>,
+    val pageIds: Map<UUID, Int>,
+) {
+    companion object {
+        val EMPTY = BuskRefs(emptyMap(), emptyMap())
+    }
+}
+
+/**
+ * What one busk pad presses, as much of it as an LED needs.
+ *
+ * Two arms rather than one, because the ring is read from two different places: a template's or a
+ * Look's from the programmer's applied state, and a cue's from its stack's live cue. That is the
+ * whole reason `PressPad`'s LED is not simply "read `appliedState`" — the busk view's own cue pads
+ * light from `useActiveCueIds` for the same reason.
+ */
+sealed interface PadRef {
+    /** A template or a Look, by the uuid `ProgrammerLayerStack.appliedState` reports. */
+    data class Layer(val sourceUuid: UUID, val isLook: Boolean) : PadRef
+
+    data class Cue(val cueId: Int, val stackId: Int) : PadRef
 }

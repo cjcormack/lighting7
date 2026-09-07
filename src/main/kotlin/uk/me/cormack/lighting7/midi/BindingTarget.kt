@@ -24,6 +24,11 @@ import uk.me.cormack.lighting7.models.CueTargetDto
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
  *     See `docs/plans/midi-surface-plan.md` §D3.
+ *   - **Records** ([ApplyLook], [PressTemplate], [PressPad]) — a named thing from the library on a
+ *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
+ *     fixtures, a template always onto the selection, a pad always its own bank's plan.
+ *   - **Busk pages** ([BuskPageNext], [BuskPagePrev], [BuskPageSet]) — move the desk's showing busk
+ *     page (`state.BuskPageState`), which the busk view follows.
  *
  * Cue and stack variants carry a **uuid beside the int id** ([FireCue.cueUuid],
  * [CueStackGo.stackUuid] …). The int is what the REST client sends and what `CueStackManager`
@@ -221,6 +226,67 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("encoderBankSet")
     data class EncoderBankSet(val propertyName: String) : BindingTarget()
+
+    /**
+     * Press a **Look** onto its own fixtures on button press.
+     *
+     * One behaviour, every press (D6): the targets are always the Look's own — the empty-targets
+     * arm of `resolveLookToggleTargets` — never the desk selection. A button that meant something
+     * different depending on what was selected is the thing a fixed binding exists not to be, and
+     * a Look already names its fixtures.
+     *
+     * A Look with a **deferred effect** has no own targets to fall back on, so it is refused at
+     * bind time (`BINDING_LOOK_NEEDS_SELECTION`); one that gains a deferred effect afterwards reads
+     * as health [uk.me.cormack.lighting7.models.AssignmentHealth.LookNeedsSelection] and its press
+     * is dropped by the dead-binding gate.
+     */
+    @Serializable
+    @SerialName("applyLook")
+    data class ApplyLook(val lookUuid: String) : BindingTarget()
+
+    /**
+     * Press a **template** onto the desk selection on button press.
+     *
+     * The other half of D6's pair, and deliberately the opposite choice from [ApplyLook]: a
+     * template has no targets of its own — that is what makes it a template — so the selection is
+     * the only thing it can land on, and "one behaviour every press" here means *always the
+     * selection*, never a baked-in target set.
+     *
+     * A **generic** template with an empty selection is dropped: its rows take their targets from
+     * the press, so it would assert nothing while lighting the button. A **per-fixture** template
+     * names its own heads and presses with an empty target list, exactly as its busk pad does.
+     * The family mask is derived from the template's own rows server-side, never sent.
+     */
+    @Serializable
+    @SerialName("pressTemplate")
+    data class PressTemplate(val templateUuid: String) : BindingTarget()
+
+    /**
+     * Press a **busk pad** on button press — the pad's own plan, solo siblings included.
+     *
+     * Runs through the same `BuskPressService` the busk view's `POST /busk/pads/{id}/press` runs,
+     * with the desk selection as the press's targets, so a hardware press and a screen press of one
+     * pad cannot diverge. The LED is the pad's ring: its record's applied state for a template or a
+     * Look, and its stack's live cue for a cue.
+     */
+    @Serializable
+    @SerialName("pressPad")
+    data class PressPad(val padUuid: String) : BindingTarget()
+
+    /** Show the next busk page ([uk.me.cormack.lighting7.state.BuskPageState]); wraps at the end. */
+    @Serializable
+    @SerialName("buskPageNext")
+    data object BuskPageNext : BindingTarget()
+
+    /** Show the previous busk page; wraps at the start. */
+    @Serializable
+    @SerialName("buskPagePrev")
+    data object BuskPagePrev : BindingTarget()
+
+    /** Show one named busk page. The LED is lit while that page is the one showing. */
+    @Serializable
+    @SerialName("buskPageSet")
+    data class BuskPageSet(val pageUuid: String) : BindingTarget()
 
     /**
      * A persisted payload whose `type` this build does not know. Never constructed by a client

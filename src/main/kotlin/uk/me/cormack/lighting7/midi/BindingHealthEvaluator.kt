@@ -41,6 +41,16 @@ object BindingHealthEvaluator {
      * @param selectionProperties every property name some patched fixture declares that a
      *   continuous control can write (sliders and colour) — the vocabulary of
      *   [BindingTarget.SelectionProperty]; see [selectionPropertiesOf]
+     * @param validLookUuids Looks that exist in the project
+     * @param looksNeedingSelection the subset of [validLookUuids] carrying a **deferred effect**, so
+     *   an [BindingTarget.ApplyLook] on one has no own targets to press onto. A separate set rather
+     *   than a filter on the first, because "does it exist" and "can a button press it" are
+     *   different questions with different answers and different fixes — and the second cannot be
+     *   derived from a set of uuids at all.
+     * @param validTemplateUuids templates that exist in the project
+     * @param validPadUuids busk pads that exist — a pad dragged off a page, or swept by its
+     *   record's delete, is gone
+     * @param validPageUuids busk pages that exist
      */
     data class Context(
         val fixtures: Fixtures,
@@ -51,6 +61,11 @@ object BindingHealthEvaluator {
         val validStackUuids: Set<UUID> = emptySet(),
         val validCueUuids: Set<UUID> = emptySet(),
         val selectionProperties: Set<String> = emptySet(),
+        val validLookUuids: Set<UUID> = emptySet(),
+        val looksNeedingSelection: Set<UUID> = emptySet(),
+        val validTemplateUuids: Set<UUID> = emptySet(),
+        val validPadUuids: Set<UUID> = emptySet(),
+        val validPageUuids: Set<UUID> = emptySet(),
     )
 
     /**
@@ -92,6 +107,29 @@ object BindingHealthEvaluator {
             else AssignmentHealth.UnknownProperty(target.propertyName)
         BindingTarget.ClearSelection -> AssignmentHealth.Ok
         BindingTarget.LocateSelection -> AssignmentHealth.Ok
+        // Two failures, not one, because the fixes differ: a Look that is gone has to be rebound,
+        // one that has gained a deferred effect only has to be given targets. Both drop the press.
+        is BindingTarget.ApplyLook -> when (val uuid = uuidOrNull(target.lookUuid)) {
+            null -> AssignmentHealth.MissingLook(target.lookUuid)
+            !in context.validLookUuids -> AssignmentHealth.MissingLook(target.lookUuid)
+            in context.looksNeedingSelection -> AssignmentHealth.LookNeedsSelection(target.lookUuid)
+            else -> AssignmentHealth.Ok
+        }
+        // A template's *emptiness* is not a health question: a generic template pressed with
+        // nothing selected is a dropped press, which is a fact about the selection at that moment
+        // and not about the binding — the same line `SelectionProperty` draws.
+        is BindingTarget.PressTemplate ->
+            uuidHealth(target.templateUuid, context.validTemplateUuids) { AssignmentHealth.MissingTemplate(it) }
+        // The pad, not its record: a pad whose record was deleted is itself swept in the same
+        // transaction, so "the pad exists" already answers "its record does".
+        is BindingTarget.PressPad ->
+            uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
+        is BindingTarget.BuskPageSet ->
+            uuidHealth(target.pageUuid, context.validPageUuids) { AssignmentHealth.MissingPage(it) }
+        // Page-agnostic: they move along whatever pages there are, and a project with none simply
+        // has nowhere to move to — not a dead binding.
+        BindingTarget.BuskPageNext -> AssignmentHealth.Ok
+        BindingTarget.BuskPagePrev -> AssignmentHealth.Ok
         is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)
         is BindingTarget.SetBank -> {
             val profile = context.deviceTypes.firstOrNull { it.typeKey == target.deviceTypeKey }
@@ -145,6 +183,16 @@ object BindingHealthEvaluator {
     } catch (_: IllegalArgumentException) {
         null
     }
+
+    /**
+     * Shared shape for "does this raw uuid resolve into [valid]" — [PressTemplate]/[PressPad]/
+     * [BuskPageSet] all reduce to this, differing only in which set and which [AssignmentHealth]
+     * arm names the miss. One helper rather than three copies, so a future arm reusing the wrong
+     * `valid*Uuids` set at the call site is a value passed at the call, not a re-typed condition
+     * that would compile silently wrong.
+     */
+    private fun uuidHealth(raw: String, valid: Set<UUID>, missing: (String) -> AssignmentHealth): AssignmentHealth =
+        if (uuidOrNull(raw)?.let { it in valid } == true) AssignmentHealth.Ok else missing(raw)
 
     /**
      * Null means master 1, which always exists — so an unkeyed binding is always healthy.

@@ -12,6 +12,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.midi.BindingRefused
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
@@ -77,7 +78,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
             } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid binding target"))
+                call.respond(HttpStatusCode.BadRequest, refusalResponse(e))
             }
         }
     }
@@ -154,7 +155,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
             } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid binding target"))
+                call.respond(HttpStatusCode.BadRequest, refusalResponse(e))
             }
         }
     }
@@ -214,7 +215,7 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.Conflict, ErrorResponse(e.message ?: "Binding slot already taken"))
             } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid binding target"))
+                call.respond(HttpStatusCode.BadRequest, refusalResponse(e))
             }
         }
     }
@@ -227,6 +228,19 @@ internal fun Route.routeApiRestProjectSurfaceBindings(state: State) {
         }
     }
 }
+
+/**
+ * The 400 body for a write the service refused.
+ *
+ * [BindingRefused] carries a machine-readable code, which is how a rule can live on
+ * [ControlSurfaceBindingService] — the one door every write comes through — *and* still answer
+ * something the frontend can branch on. Session 2 got both by duplicating the strip rules into
+ * [validateRequestShape]; the rules added since do it this way instead.
+ */
+private fun refusalResponse(e: IllegalArgumentException) = ErrorResponse(
+    e.message ?: "Invalid binding target",
+    code = (e as? BindingRefused)?.code,
+)
 
 /** A `Strip` target was bound to an ordinary control rather than to a strip id. */
 internal const val CODE_BINDING_STRIP_NEEDS_STRIP = "BINDING_STRIP_NEEDS_STRIP"

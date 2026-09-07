@@ -109,7 +109,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val existing = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-            bank = null, target = BindingTarget.Blackout,
+            bank = null, target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
         )
 
         val created = service.replace(
@@ -130,8 +130,10 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
                 projectId = projectId,
                 deleteIds = emptyList(),
                 creates = listOf(
-                    newBinding("fader-1", BindingTarget.Blackout),
-                    newBinding("fader-1", BindingTarget.GrandMasterToggle),
+                    // Continuous targets: a fader takes no button target since `refuseWrongKind`,
+                    // and this test is about the slot clash rather than the kind.
+                    newBinding("fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer")),
+                    newBinding("fader-1", BindingTarget.GroupProperty("front-wash", "dimmer")),
                 ),
             )
         }
@@ -176,6 +178,95 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
             service.update(projectId = projectId, bindingId = strip.id, controlId = "fader-1")
         }
         assertEquals("strip-1", service.get(projectId, strip.id)?.controlId)
+    }
+
+    // ─── The control-kind rule (`FU-MIDI-BIND-CONTROL-KIND`) ──────────
+    //
+    // Nothing refused these before, and the failure was total silence: the row saved, health read
+    // `Ok`, and the control did nothing, because the router's dispatch has no arm for it. Like the
+    // slot rule these live on the service rather than only in the routes — MIDI Learn's commit
+    // writes through `create` with no route validation of its own.
+
+    @Test
+    fun `a button target on a fader is refused`() {
+        val service = service()
+        val e = assertFailsWith<BindingRefused> {
+            service.create(
+                projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
+                bank = null, target = BindingTarget.FireCue(1),
+            )
+        }
+        assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
+        assertEquals(emptyList(), service.list(projectId))
+    }
+
+    @Test
+    fun `a continuous target on a plain button is refused`() {
+        val service = service()
+        assertFailsWith<BindingRefused> {
+            service.create(
+                projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-1",
+                bank = null, target = BindingTarget.GroupProperty("front-wash", "dimmer"),
+            )
+        }
+        assertEquals(emptyList(), service.list(projectId))
+    }
+
+    @Test
+    fun `an encoder with a push note takes both halves of the dispatch`() {
+        // The surprise the client's `controlKinds` mirrors: an encoder's CC is a `Continuous` and
+        // its note a `ButtonPress`, on one control id — so a cue target on one is legitimate.
+        val service = service()
+        service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-1",
+            bank = null, target = BindingTarget.SelectionProperty("dimmer"),
+        )
+        service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-2",
+            bank = null, target = BindingTarget.Blackout,
+        )
+        assertEquals(2, service.list(projectId).size)
+    }
+
+    @Test
+    fun `a bank button takes nothing at all`() {
+        // `route` answers `ResolvedInput.BankButton` and switches the bank *before* resolving a
+        // binding, so a row on one can never fire whatever it holds.
+        val service = service()
+        val bankButton = ControlSurfaceRegistry.typeFor(deviceTypeKey)!!
+            .controls.filterIsInstance<BankButtonDescriptor>().first()
+        val e = assertFailsWith<BindingRefused> {
+            service.create(
+                projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = bankButton.controlId,
+                bank = null, target = BindingTarget.Blackout,
+            )
+        }
+        assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
+    }
+
+    @Test
+    fun `a strip slot is exempt from the kind rule`() {
+        // A strip id names no descriptor, and its target reaches a control by derivation rather
+        // than dispatch — so the kind rule must skip it and leave `refuseWrongSlot` to judge it.
+        val service = service()
+        val strip = service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "strip-1",
+            bank = null, target = BindingTarget.Strip(wash),
+        )
+        assertNotNull(service.get(projectId, strip.id))
+    }
+
+    @Test
+    fun `update is guarded too`() {
+        val service = service()
+        val fader = service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
+            bank = null, target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+        )
+        assertFailsWith<BindingRefused> {
+            service.update(projectId = projectId, bindingId = fader.id, target = BindingTarget.Blackout)
+        }
+        assertIs<BindingTarget.FixtureProperty>(service.get(projectId, fader.id)?.target)
     }
 
     @Test

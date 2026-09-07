@@ -2,8 +2,102 @@
 
 > **Document status: IN PROGRESS — session 1 (the selection and the stream) landed 2026-09-06 as
 > `758ee9a`, session 2 (strips and the encoder bank) as `09b877c`, session 3a (the picture) as
-> lighting-react `45c3d3e`, and session 3b (editing it) as lighting-react `e97096b`; sessions 4
-> and 5 are proposed.**
+> lighting-react `45c3d3e`, session 3b (editing it) as lighting-react `e97096b`, and session 4
+> (records on buttons) across both repos; session 5 is proposed.**
+> Session 4 amendments. The review's own findings first, then the pre-read's.
+> **A busk page click while offline did nothing at all.** Making the desk the source of the showing
+> page put the tab click through `sendGesture`, which drops the frame and toasts when the socket is
+> down — so `BuskingView` keeps a local **offline override** that beats the desk, set only on that
+> failure and cleared by any change to the desk's value. The precedence is four deep, not three.
+> **Four surfaces resolved a record's uuid and three did not**: the panel's control labels, the
+> binding matrix, and the inspector's own *other banks* line and bank-button notice all still called
+> the raw `describeTarget`, so the picture showed `Apply Look 3f2a…` beside an inspector saying
+> *Apply Warm Wash*. `useRecordBindingOptions` is now hoisted to the route and threaded to all of
+> them.
+> Three smaller ones worth recording because each is a rule stated in one place and not another:
+> **a malformed `ApplyLook` uuid was refused with the deferred-effect code**, which names a
+> different fix and disagreed with the health evaluator's own `MissingLook` for the same input;
+> **MIDI Learn's commit dropped `BindingRefused.code`**, so this session's coded refusals were
+> unreachable from the one door the whole `refuseWrongKind` design exists to cover; and
+> **`validPadUuids` counted malformed pads** that `buildBuskRefs` excludes, so a binding on one read
+> healthy while its LED stayed dark and its press did nothing. `TargetKind` in the picker is now
+> `Exclude<BindingTarget["type"], "strip" | "unknown">` rather than a hand-copied union — the gap
+> that produced 3a's empty-body bug is a compile error now.
+> Pre-session-4 amendments, from checking 4's own bullets against the two shipped repos. Nine
+> things are wider than they read and four are missing outright, so §5's session 4 list is
+> rewritten rather than annotated. Two of the four are silent failures already present in the
+> shipped code that the bullets would have walked past.
+> **Nothing invalidates binding health when a Look, a template or a busk page changes.**
+> `State.bindingHealthListener` has four arms — `fixturesChanged`, `cueListChanged`,
+> `cueStackListChanged`, `patchListChanged` — and every one of the four new variants names a record
+> outside that set. Delete the Look a button holds and the row keeps reading `Ok`, and keeps being
+> dispatched, until something unrelated moves a fixture. `lookListChanged`, `templateListChanged`
+> and `buskLayoutChanged` arms are part of the work, not a nicety.
+> **`SurfaceFeedbackPublisher.ledOn` ends in `else -> null`, and so does the index's `listed`
+> `when`.** Every other exhaustive `when` in the grammar's blast radius fails to compile on a new
+> variant — `SurfaceInputRouter.dispatchButtonPress`, `BindingHealthEvaluator.evaluate`,
+> `describeAssignmentHealth`, and the client's `targetControlKind` and `describeTarget`. The two in
+> the publisher do not: a record target added without an LED arm is simply never indexed and never
+> lit, on a surface nobody can see in a browser. It is the one place in this session where the
+> compiler is not the safety net.
+> **`LookNeedsSelection` cannot be answered from a uuid set.** §3.1 says the health context "gains
+> valid Look, template, pad and page uuids" and then lists `LookNeedsSelection` beside the four
+> `Missing*`; the second needs to know *which* Look uuids carry a deferred effect, which is a
+> different read. The context carries a set of valid Look uuids **and** a set of the ones a press
+> would refuse.
+> **"Record LEDs from `appliedState`" is two thirds of the rule.** A pad may hold a **cue**, whose
+> ring in the busk view comes from cue liveness (`CueStack.activeCueId`, via `useActiveCueIds`) and
+> not from the layer stack at all — `appliedState` has nothing to say about it. So `PressPad`'s LED
+> is two-sourced, and the publisher needs `cueRunStateChanged` beside the `layersFlow`
+> subscription. It also needs the pad's record **resolved at index time**, not at LED time: a
+> uuid → record lookup per LED per resync is a DB read on the feedback path, and rebuild already
+> happens on exactly the events that can stale it.
+> **`refuseWrongKind` lands here, and `BindingRefused` is what makes it affordable.**
+> `FU-MIDI-BIND-CONTROL-KIND` is Ready and this session opens the same door four more times, so the
+> refusal goes on `ControlSurfaceBindingService` beside `refuseUnknown` and `refuseWrongSlot` —
+> session 2's three-doors lesson, MIDI Learn's commit included, which reaches `create` directly.
+> The deferred-effect Look refusal is a *fifth* rule wanting a coded 400, and duplicating each into
+> `validateRequestShape` the way the strip rules are duplicated would be four more copies. So the
+> service throws a `BindingRefused(message, code)` and the routes map its code; the strip rules keep
+> their existing duplication rather than being churned. `refuseWrongKind` must **skip strip slots** —
+> a strip id has no descriptor, and its target is validated and dispatched by derivation — and
+> `controlKinds` in `lib/surfaceDrop.ts` becomes the client mirror.
+> **`BuskPressService` cannot be a straight lift.** `routes/buskPress.kt` reads its plan and then
+> `call.respond`s the refusals inline, twice, from inside the `when` — so the extraction is a result
+> ADT (applied / refused-with-code / not found) and the route becomes its mapper. The router's call
+> supplies the **desk selection** as the press's targets and no `beatDivision`, which is the one
+> thing the route's request body carries that hardware has no way to.
+> **`PressTemplate`'s empty-selection rule is `isGeneric`, not "empty".** §3.1's table says "the
+> template onto the selection" flatly; D6 says "a generic template with an empty selection is
+> dropped", and the busk press route's rule is D6's. A **per-fixture** template pressed with nothing
+> selected presses with an empty target list, exactly as its busk pad does — and its layer then
+> contributes nothing to `appliedState`, so the LED stays dark. That is the busk pad's own behaviour
+> reproduced faithfully, not a new bug; it is stated here so the dark LED is not "fixed" into a
+> divergence between the pad and the button.
+> **The library's kind row stays at six, so templates and busk pages have to fold into it.**
+> `Edit.dc.html` draws *All · Groups · Fixtures · Looks · Cues · Desk* and the artboards win on
+> layout and copy, but it also draws a *Template* row and a *Busk* row. A template is filed under
+> **Looks** — the row of named recallable records — and a busk page under **Desk**, which already
+> holds the encoder bank. A seventh segment in a 360px segmented control is the worse trade.
+> **`Next page` / `Prev page` go on the Desk row, not on every page row.** The artboard draws them
+> on its single *Busk · Verse* row, which cannot distinguish "on this page's row" from "on each
+> page's row"; a project with ten pages would repeat two identical chips ten times, and a chip
+> repeated per page reads as page-*specific*, which is the one thing those two are not. `Page` and
+> the pad chips stay on the page's own row.
+> Missing outright, and each is how a bullet's work fails on arrival: **`BindingTargetPicker` needs
+> the four variants** — 3b's finding repeats verbatim, since adding them to the union alone leaves
+> *Change target* opening an empty body under a kind Select reading *Fixture property*;
+> **`describePlacements` needs a record key space** (`look:{uuid}` and friends — no collision, since
+> a `CueTarget` type is only `fixture` or `group`), or the new rows never earn their *on n controls*
+> badge; **`healthDescriptor.ts` needs the five new arms**, whose `default` arm hides the omission
+> behind "This reference no longer resolves"; and **the inspector's binding card has to resolve a
+> uuid to a name**, which `describeTarget` deliberately will not do — the same split
+> `useSpeedMasterDisplay` already answers for `speedMasterBpm`.
+> Already true, and so not work: **`BuskPageState` does not interact with `busk.layoutChanged`'s
+> echo suppression.** They are different frames with different keys; the suppression is keyed on a
+> page id *being saved*, and a page-state frame carries no layout. And **the ring / LED agreement is
+> server-owned**: both read `ProgrammerLayerStack.appliedState`, which speaks `CueTargetDto`, so the
+> group-name-as-key convention has one owner rather than two spellings to keep in step.
 > Session 3b amendments, from building it and reviewing it. Six bugs, three of them shipped in 3a
 > and two of them 3b's own; every one silent.
 > **`columnStrips` returned an empty map for the only profile that has strips**: it asked whether
@@ -676,17 +770,66 @@ included — not on Fable.
 
 ### Session 4 — records on buttons (both repos) — Opus 5, high
 
-- lighting7: `ApplyLook`, `PressTemplate`, `PressPad`, `BuskPageNext/Prev/Set` (D6);
-  `BuskPressService` extracted from `routes/buskPress.kt` with the route as its first caller;
-  `BuskPageState` + `busk.pageState` / `busk.setPage`; health variants; record LEDs from
-  `appliedState`; bind-time refusal of a deferred-effect Look. `RichProjectFixture` gains one of
-  each; round-trip and clone tests. `FU-LOOK-MIDI-RECALL` and `FU-BUSK-PAGE-MIDI` become Completed
-  rows.
-- lighting-react: library rows for templates, Looks, busk pages and pads; the busk view follows
-  `busk.pageState` and writes it on tab change; the inspector's binding card for each kind.
-- Tests: `SurfaceInputRouterTest` arms (Look onto own fixtures; template onto the selection and
-  dropped when empty; pad press narrows a solo sibling — the `BuskPressRouteTest` cases replayed
-  through the service); `BindingHealthEvaluatorTest` for every new `Missing*`; `BuskPageStateTest`.
+**lighting7 — the grammar and the press.**
+
+- **The six variants** (D6): `ApplyLook(lookUuid)`, `PressTemplate(templateUuid)`,
+  `PressPad(padUuid)`, `BuskPageNext`, `BuskPagePrev`, `BuskPageSet(pageUuid)`. Uuids throughout,
+  never ints, for `FU-SYNC-BINDING-PAYLOAD-UUIDS`'s reason — and no `formatVersion` bump, the
+  discriminators being additive inside the payload D11 already made tolerant.
+- **`BuskPressService`, extracted as a result ADT.** `routes/buskPress.kt` `call.respond`s its two
+  refusals from inside the dispatch `when`, so the lift is *applied / refused-with-code / not found*
+  and the route becomes its mapper. The router's call passes the **desk selection** as the targets
+  and no `beatDivision`. One implementation, so a hardware press and a screen press cannot diverge.
+- **`BuskPageState`** — project-scoped, transient, cleared on project switch, exactly
+  `DeskSelection`'s shape: a `StateFlow<Int?>` of the showing page id, with `next` / `prev` over the
+  project's ordered page list and a `setByUuid` for `BuskPageSet`. WS `busk.pageState` /
+  `busk.setPage`, reply convention 3. It is **unrelated to `busk.layoutChanged`'s echo suppression**,
+  which is keyed on a page id being *saved*.
+- **Health: five new variants and a listener that can see them.** `MissingLook`, `MissingTemplate`,
+  `MissingPad`, `MissingPage`, `LookNeedsSelection`, plus the context's four uuid sets **and** the
+  set of Looks a press would refuse — `LookNeedsSelection` is not answerable from a uuid set.
+  `State.bindingHealthListener` gains `lookListChanged`, `templateListChanged` and
+  `buskLayoutChanged`; without them a deleted Look's button reads `Ok` and keeps dispatching until
+  an unrelated fixture change.
+- **Record LEDs, and the one place the compiler will not help.** `ledOn` and the index's `listed`
+  `when` both end in `else`, so a variant with no arm is silently never lit. `ApplyLook` reads
+  `appliedState`'s LOOK entry (selection-independent — the record is on the rig or it is not);
+  `PressTemplate` reads the selection-scoped fold, dark on an empty selection, which is also when
+  the press is dropped; `PressPad` reads **whichever of the two its record wants, or cue liveness**
+  — so the publisher subscribes to `layersFlow` *and* `cueRunStateChanged`, and resolves each pad's
+  record at index time rather than per LED. `BuskPageSet` lights while its page is showing.
+- **Bind-time refusal, on the service, with codes.** `refuseWrongKind` closes
+  `FU-MIDI-BIND-CONTROL-KIND` — a control's dispatchable kinds from its descriptor, a bank button
+  taking nothing, **strip slots skipped** — and a deferred-effect Look is refused beside it
+  (`BINDING_LOOK_NEEDS_SELECTION`). Both go on `ControlSurfaceBindingService`, the one door MIDI
+  Learn's commit also comes through, and a `BindingRefused(message, code)` carries the coded 400 out
+  rather than adding four more copies to `validateRequestShape`.
+- `RichProjectFixture` gains one binding of each variant; round-trip and clone tests.
+  `FU-LOOK-MIDI-RECALL`, `FU-BUSK-PAGE-MIDI` and `FU-MIDI-BIND-CONTROL-KIND` become Completed rows.
+
+**lighting-react — the library and the picker.**
+
+- **Library rows for templates, Looks, busk pages and pads.** They are **not** `TargetRowItem`s:
+  that component exists to mount `useTargetProperties` per target and is memoized on primitives for
+  exactly that reason, and none of the four has a per-target property lookup. They belong in
+  `SurfaceLibrary`'s `rows` memo beside Selection and Desk, built from `actionChip`. The kind row
+  stays at the artboard's six: a template files under **Looks**, a busk page under **Desk**. *Next
+  page* / *Prev page* sit on the Desk row once, not on every page row.
+- **`BindingTargetPicker` learns the four**, or *Change target* opens an empty body under a kind
+  Select reading *Fixture property* — 3b's finding, repeating verbatim if the union is widened
+  alone.
+- **`describePlacements` gains a record key space** (`look:{uuid}` …), or the new rows never earn
+  their *on n controls* badge; **`healthDescriptor.ts` gains the five arms**, whose `default` hides
+  the omission; and **the inspector's binding card resolves a uuid to a name**, which
+  `describeTarget` deliberately will not — the split `useSpeedMasterDisplay` already answers.
+- **The busk view follows `busk.pageState`** and writes it on tab change, with `?page=` still
+  mirroring it.
+
+**Tests**: `SurfaceInputRouterTest` arms (Look onto its own fixtures; a generic template onto the
+selection and dropped when empty; a pad press narrowing a solo sibling — the `BuskPressRouteTest`
+cases replayed through the service); `BindingHealthEvaluatorTest` for every new variant;
+`BuskPageStateTest`; `ControlSurfaceBindingServiceTest` for `refuseWrongKind` and the Look refusal;
+and on the client, the picker's four variants, the library's four rows and `targetControlKind`.
 
 ### Session 5 — the first desk use (both repos) — Sonnet 5, high
 
@@ -730,11 +873,7 @@ written.
   movers" — today the model passes targets explicitly and that stays correct.
 - **`FU-SYNC-BINDING-PAYLOAD-UUIDS` second half**: project-scoping `CueStackManager.fireCue`'s
   lookups is untouched by this plan whatever §11's first answer is.
-- **`FU-MIDI-BIND-CONTROL-KIND`** (recorded in session 3b, Ready): the write boundary refuses a
-  `Strip` off a strip slot and an `Unknown` from a request, but not a *kind* mismatch — a
-  `FireCue` on a fader saves and then never dispatches. 3b's `canLand` and its dim are the only
-  guard, and they cover one drag gesture in one client; MIDI Learn's commit, a script and an import
-  all reach the service unchecked. Same shape as `refuseWrongSlot`, same three-doors reason.
+- ~~**`FU-MIDI-BIND-CONTROL-KIND`**~~ — closed in session 4.
 
 ## 9. Verification
 

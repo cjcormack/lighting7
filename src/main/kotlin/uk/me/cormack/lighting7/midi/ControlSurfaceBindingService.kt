@@ -256,7 +256,12 @@ class ControlSurfaceBindingService(
     ): ResolvedBinding {
         refuseUnknown(target)
         refuseWrongSlot(deviceTypeKey, controlId, target)
+        refuseWrongKind(deviceTypeKey, controlId, target)
         ensureLoaded(projectId)
+        // Resolved once and reused for both the refusal check and the health tag below, rather
+        // than rebuilding the whole snapshot (stacks/cues/masters/looks/templates/pages) twice.
+        val healthContext = resolveHealthContext(projectId)
+        refuseUnpressableLook(healthContext, target)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
                 ?.get(ControlKey(deviceTypeKey, controlId))
@@ -278,7 +283,7 @@ class ControlSurfaceBindingService(
                     this.sortOrder = sortOrder
                 }.toResolved()
             }
-            val entity = raw.withHealth(resolveHealthContext(projectId))
+            val entity = raw.withHealth(healthContext)
             cache.getOrPut(projectId) { ProjectCache() }.install(entity)
             entity
         }
@@ -303,12 +308,18 @@ class ControlSurfaceBindingService(
     ): ResolvedBinding? {
         target?.let(::refuseUnknown)
         ensureLoaded(projectId)
+        // Resolved once, before the lock, and reused for both the refusal check and the health
+        // tag below — matching create()/replace() rather than holding the per-project lock across
+        // the multi-query DB read this triggers.
+        val healthContext = resolveHealthContext(projectId)
+        target?.let { refuseUnpressableLook(healthContext, it) }
         val resolved = synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return null
             val existing = pc.byId[bindingId] ?: return null
             val newDeviceTypeKey = deviceTypeKey ?: existing.deviceTypeKey
             val newControlId = controlId ?: existing.controlId
             refuseWrongSlot(newDeviceTypeKey, newControlId, target ?: existing.target)
+            refuseWrongKind(newDeviceTypeKey, newControlId, target ?: existing.target)
             val newBank = when (bankUpdate) {
                 is FieldUpdate.NoChange -> existing.bank
                 is FieldUpdate.Set -> bankUpdate.value
@@ -334,7 +345,7 @@ class ControlSurfaceBindingService(
                 if (sortOrder != null) row.sortOrder = sortOrder
                 row.toResolved()
             } ?: return null
-            val entity = raw.withHealth(resolveHealthContext(projectId))
+            val entity = raw.withHealth(healthContext)
             pc.uninstall(existing)
             pc.install(entity)
             entity
@@ -390,8 +401,13 @@ class ControlSurfaceBindingService(
         creates.forEach {
             refuseUnknown(it.target)
             refuseWrongSlot(it.deviceTypeKey, it.controlId, it.target)
+            refuseWrongKind(it.deviceTypeKey, it.controlId, it.target)
         }
         ensureLoaded(projectId)
+        // Resolved once for the whole batch — one refusal check per create still runs, but each
+        // reuses this snapshot instead of rebuilding it from scratch per ApplyLook target.
+        val healthContext = resolveHealthContext(projectId)
+        creates.forEach { refuseUnpressableLook(healthContext, it.target) }
         val created = synchronized(lockFor(projectId)) {
             val pc = cache.getOrPut(projectId) { ProjectCache() }
 
@@ -440,9 +456,8 @@ class ControlSurfaceBindingService(
                 }
             }
 
-            val context = resolveHealthContext(projectId)
             doomed.forEach { pc.uninstall(it) }
-            raw.map { it.withHealth(context) }.onEach { pc.install(it) }
+            raw.map { it.withHealth(healthContext) }.onEach { pc.install(it) }
         }
         _changes.tryEmit(BindingChange.Reloaded(projectId))
         return created
@@ -559,6 +574,80 @@ class ControlSurfaceBindingService(
             throw IllegalArgumentException(
                 "'$controlId' on $deviceTypeKey is a strip and takes a strip target; " +
                     "bind its controls individually instead",
+            )
+        }
+    }
+
+    /**
+     * A control can only be given a target its own half of the dispatch will reach
+     * (`FU-MIDI-BIND-CONTROL-KIND`).
+     *
+     * Nothing else refused this, and the failure was total silence: a `FireCue` on a fader saved,
+     * read health `Ok`, and did nothing — `dispatchContinuous` has no arm for it. A `GroupProperty`
+     * on a plain button, likewise. And a binding of any kind on a **bank button** can never fire at
+     * all, because `SurfaceInputRouter.route` answers `ResolvedInput.BankButton` and switches the
+     * bank *before* it resolves a binding.
+     *
+     * Here rather than in the routes for [refuseWrongSlot]'s reason — this service is the one door
+     * every write comes through, MIDI Learn's commit included, which has no route validation of its
+     * own. `lib/surfaceDrop.ts`'s `controlKinds` is the client mirror of the table below; keep the
+     * two in step.
+     *
+     * **Strip slots are skipped.** A strip id names no descriptor, and a `Strip` target is validated
+     * by [refuseWrongSlot] and reaches a control only by derivation, never by dispatch.
+     */
+    private fun refuseWrongKind(deviceTypeKey: String, controlId: String, target: BindingTarget) {
+        if (controlId in stripIndexFor(deviceTypeKey).stripIds) return
+        val descriptor = ControlSurfaceRegistry.typeFor(deviceTypeKey)
+            ?.controls?.firstOrNull { it.controlId == controlId }
+            ?: return  // Unknown control: the routes' own shape check answers that, with a better message.
+        val wanted = targetControlKind(target) ?: return  // Strip / Unknown: refused by name elsewhere.
+        val kinds = dispatchableKinds(descriptor)
+        if (wanted in kinds) return
+        throw BindingRefused(
+            if (kinds.isEmpty()) {
+                "'$controlId' on $deviceTypeKey is a bank button — it switches the bank before any " +
+                    "binding is resolved, so a binding on it can never fire"
+            } else {
+                "'$controlId' on $deviceTypeKey is a ${kinds.joinToString(" and ") { it.name.lowercase() }} " +
+                    "control and cannot dispatch a ${wanted.name.lowercase()} target"
+            },
+            CODE_BINDING_WRONG_CONTROL_KIND,
+        )
+    }
+
+    /**
+     * A Look whose press has no targets cannot be put on a button (D6).
+     *
+     * [BindingTarget.ApplyLook] presses onto the Look's **own** fixtures, and a Look with a deferred
+     * effect has none to fall back on — a button has no selection to supply. Refused at bind time so
+     * the operator is told at the drop rather than by a silent press; a Look that gains one
+     * afterwards reads as [AssignmentHealth.LookNeedsSelection] instead.
+     *
+     * Judged through the health context, so the refusal and the health arm cannot disagree about
+     * what "needs a selection" means. No context (tests, pre-show init) means no refusal.
+     *
+     * Takes an already-resolved [context] rather than a `projectId` — callers resolve it once
+     * (it's a multi-query DB snapshot) and reuse it for both this check and the created/updated
+     * row's health tag, rather than rebuilding it per call.
+     */
+    private fun refuseUnpressableLook(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
+        if (target !is BindingTarget.ApplyLook) return
+        if (context == null) return
+        val uuid = try {
+            java.util.UUID.fromString(target.lookUuid)
+        } catch (_: IllegalArgumentException) {
+            // Malformed input, not "needs a selection" — don't reuse that code, or a client
+            // branching on it (per BindingRefused's doc comment) would show the wrong fix for a
+            // garbage uuid. Uncoded, like refuseUnknown / refuseWrongSlot's shape refusals, and
+            // consistent with BindingHealthEvaluator mapping the same input to MissingLook rather
+            // than LookNeedsSelection.
+            throw IllegalArgumentException("'${target.lookUuid}' is not a Look uuid")
+        }
+        if (uuid in context.looksNeedingSelection) {
+            throw BindingRefused(
+                "This Look has a deferred effect, so it needs a selection — a button has none to give",
+                CODE_BINDING_LOOK_NEEDS_SELECTION,
             )
         }
     }

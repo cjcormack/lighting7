@@ -36,9 +36,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
-| [`FU-MIDI-BIND-CONTROL-KIND`](#fu-midi-bind-control-kind) | Ready | MIDI | — |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
-| [`FU-BUSK-PAGE-MIDI`](#fu-busk-page-midi) | Trigger | Busk | an operator wants to change busk page from hardware |
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
 | [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
@@ -49,7 +47,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PROG-HIGHLIGHT-PERSONALITY`](#fu-prog-highlight-personality) | Trigger | Prog | a rig big enough to lose a head in |
 | [`FU-API-FORCE-FIELDS`](#fu-api-force-fields) | Ready | Prog | — |
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
-| [`FU-LOOK-MIDI-RECALL`](#fu-look-midi-recall) | Trigger | Look | an operator wants a Look on a button |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
@@ -398,39 +395,6 @@ express it as separate instances.
 
 ---
 
-## MIDI surface
-
-### `FU-MIDI-BIND-CONTROL-KIND`
-
-**A binding whose target the control can never dispatch is accepted** · Ready · midi-surface plan
-session 3b review, 2026-09-07
-
-`ControlSurfaceBindingService` refuses two things at the write boundary: a `Strip` target off a
-strip slot (`refuseWrongSlot`) and an `Unknown` target from a request (`refuseUnknown`). It does
-**not** refuse a *kind* mismatch — a `FireCue` on a fader, a `GroupProperty` on a plain button, a
-row of any kind on a bank button. `SurfaceInputRouter` then silently drops it: `dispatchContinuous`
-has no arm for `FireCue`, `dispatchButtonPress` none for `GroupProperty`, and `route` answers
-`ResolvedInput.BankButton` and switches the bank before resolving a binding at all. The row saves,
-health reads `Ok`, and the control does nothing.
-
-`lighting-react`'s `canLand` (`lib/surfaceDrop.ts`) and the dim it drives are currently the whole
-of the guard, and they only cover the one drag gesture in that one UI. MIDI Learn's commit, a
-hand-rolled REST call, a script, an import and any future client all reach the same service with no
-check — the same three-doors problem session 2 already hit with the strip-slot rule, and solved by
-putting the invariant on the service beside `refuseUnknown` rather than in the routes.
-
-The fix is the same shape: a `refuseWrongKind(deviceTypeKey, controlId, target)` on the service,
-deriving the control's dispatchable kinds from its descriptor (a fader is continuous; an encoder is
-continuous *and*, when it declares a `pushNote`, a button; a button is a button; a **bank button is
-neither**) and refusing a target whose dispatch arm cannot be reached. A coded 400 beside
-`BINDING_STRIP_NEEDS_STRIP` lets the frontend branch on it, and `controlKinds` in
-`lib/surfaceDrop.ts` becomes the client mirror rather than the only copy.
-
-**Ready**: the vocabulary already exists on both sides and the client half is written and tested;
-what is missing is the service-side refusal and its test.
-
----
-
 ## Busk
 
 ### `FU-BUSK-MOMENTARY`
@@ -454,23 +418,6 @@ be added.
 
 **Trigger**: an operator asks to flash a pad rather than latch it, or a second surface wants the
 same gesture and the press-handling can be shared.
-
----
-
-### `FU-BUSK-PAGE-MIDI`
-
-**Busk pages are unreachable from hardware** · Trigger · Busk-layout plan (2026-09-04), §7
-
-A control surface can name a cue, a stack or a speed master, but not a busk page: there is no
-`BindingTarget` for "next page" / "previous page" / "page *n*", and no target for a pad either.
-Deliberate for the first cut — the layout landed as a screen surface, and a pad binding raises the
-question of what a *hardware* press means for a pad whose record needs a selection the surface has
-no way to make.
-
-Page up/down is the small half and would go in first: two targets, resolved against the page list
-the busk view already reads, with the showing page kept where `?page=` keeps it today.
-
-**Trigger**: an operator wants to change busk page from hardware.
 
 ---
 
@@ -697,20 +644,6 @@ needs to reach it. The cost is entirely in the UI, which would go from two contr
 per property per layer. Recorded rather than silently cut.
 
 **Trigger**: an operator asks for one property of a layer to behave differently from the rest.
-
-### `FU-LOOK-MIDI-RECALL`
-
-**A `RecallLook` binding target** · Trigger · Looks-and-layers §7
-
-No binding target names a Look (or, before, a preset or palette) — `midi/BindingTarget.kt` has
-nothing in this space, so the surface needs no redesign to accommodate one. But a Look is an obvious
-thing to want on a button, and the busking pads already do it from the web UI.
-
-Decide first *what* the button does: toggle the Look on the current selection, add it as a programmer
-layer, or recall it onto a fixed target set baked into the binding. The third is the only one that
-behaves identically every press, which is usually what a button should do.
-
-**Trigger**: an operator asks for a Look on the control surface.
 
 ### `FU-LOOK-NESTED`
 
@@ -1693,6 +1626,29 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-LOOK-MIDI-RECALL` — `BindingTarget.ApplyLook(lookUuid)`. The item asked which of three
+  behaviours a button should have and answered its own question: the one that behaves identically
+  every press. So it presses the Look onto **its own fixtures** — never the desk selection, and
+  never a target set baked into the binding, which would have been a second place to keep in step
+  with the Look. A Look with a deferred effect has no own fixtures, so it is refused at bind time
+  (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one after —
+  midi-surface plan session 4
+- `FU-BUSK-PAGE-MIDI` — `BuskPageNext` / `BuskPagePrev` / `BuskPageSet(pageUuid)` over a
+  project-scoped, transient `BuskPageState` (`busk.pageState` / `busk.setPage`), which the busk view
+  now follows and `?page=` mirrors. The item's "keep the showing page where `?page=` keeps it today"
+  turned out to be the one thing that could not stand: a hardware button and a tab click are one
+  gesture, so a URL-only answer would have left the desk and the screen disagreeing the moment
+  either was used. Its other half — a pad binding, and what a hardware press means for a pad whose
+  record needs a selection — is `PressPad(padUuid)` through the extracted `BuskPressService`, with
+  the **desk selection** supplying the targets — midi-surface plan session 4
+- `FU-MIDI-BIND-CONTROL-KIND` — `ControlSurfaceBindingService.refuseWrongKind`, beside
+  `refuseUnknown` and `refuseWrongSlot`, with `midi/BindingControlKind.kt` holding the two tables
+  (`dispatchableKinds`, `targetControlKind`) that `lib/surfaceDrop.ts` now mirrors rather than
+  owning alone. Strip slots are skipped — a strip id names no descriptor and its target reaches a
+  control by derivation. The coded 400 arrives through a new `BindingRefused(message, code)`, an
+  `IllegalArgumentException` every existing caller already maps to a 400: session 2 got a coded
+  refusal by duplicating each strip rule into `validateRequestShape`, and four more rules would
+  have meant four more copies — midi-surface plan session 4
 - `FU-FE-USE-TARGET-PROPERTIES` — extracted to `hooks/useTargetProperties.ts` when the MIDI
   surface library's per-target property chips became the next consumer. It says five call sites
   and meant **three**: `PropertyAssignmentsList`, `PresetEditor` and `PresetLivePreview` went with

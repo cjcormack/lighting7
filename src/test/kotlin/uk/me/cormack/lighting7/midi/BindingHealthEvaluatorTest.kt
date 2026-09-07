@@ -37,6 +37,13 @@ class BindingHealthEvaluatorTest {
     private val liveCue: UUID = UUID.fromString("11111111-2222-3333-4444-555555555555")
     private val liveStack: UUID = UUID.fromString("66666666-7777-8888-9999-000000000000")
 
+    private val liveLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001")
+    private val deferredLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000002")
+    private val liveTemplate: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
+    private val livePad: UUID = UUID.fromString("cccccccc-0000-4000-8000-000000000001")
+    private val livePage: UUID = UUID.fromString("dddddddd-0000-4000-8000-000000000001")
+    private val gone: UUID = UUID.fromString("eeeeeeee-0000-4000-8000-000000000001")
+
     private fun context(
         fixtures: Fixtures = fixturesWithHex(),
         validStackIds: Set<Int> = setOf(1, 2),
@@ -51,7 +58,54 @@ class BindingHealthEvaluatorTest {
         validStackUuids = setOf(liveStack),
         validCueUuids = setOf(liveCue),
         selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
+        validLookUuids = setOf(liveLook, deferredLook),
+        looksNeedingSelection = setOf(deferredLook),
+        validTemplateUuids = setOf(liveTemplate),
+        validPadUuids = setOf(livePad),
+        validPageUuids = setOf(livePage),
     )
+
+    // ─── Records on buttons (midi-surface plan D6) ─────────────────────
+
+    @Test
+    fun `a record binding is healthy when its uuid resolves and dead when it does not`() {
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$liveLook"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressTemplate("$liveTemplate"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$livePad"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$livePage"), ctx))
+
+        assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingTemplate>(BindingHealthEvaluator.evaluate(BindingTarget.PressTemplate("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingPage>(BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$gone"), ctx))
+    }
+
+    @Test
+    fun `a Look that gained a deferred effect is unpressable rather than missing`() {
+        // Two states, not one, because the fixes differ: a Look that is gone has to be rebound, one
+        // that has gained a deferred effect only has to be given targets. Both drop the press.
+        assertEquals(
+            AssignmentHealth.LookNeedsSelection("$deferredLook"),
+            BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$deferredLook"), context()),
+        )
+    }
+
+    @Test
+    fun `a malformed record uuid is dead rather than parsed leniently`() {
+        val ctx = context()
+        assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("not-a-uuid"), ctx))
+        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad(""), ctx))
+    }
+
+    @Test
+    fun `busk page next and prev are page-agnostic and always healthy`() {
+        // A project with no pages has nowhere to step, which is not a dead binding — the same line
+        // `ClearSelection` draws with an empty selection.
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPageNext, ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPagePrev, ctx))
+    }
 
     @Test
     fun `a cue binding with a uuid is judged by the uuid alone`() {

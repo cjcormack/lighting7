@@ -298,6 +298,15 @@ class SurfaceInputRouter(
                 "Strip binding {} reached button dispatch — resolve should have derived it", binding.id,
             )
             is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
+            // Records: one behaviour each (D6). The Look onto its own fixtures, the template onto
+            // the selection, the pad through its own bank's plan — never any of the three onto
+            // whatever the other two would have chosen.
+            is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)
+            is BindingTarget.PressTemplate -> actions.pressTemplate(target.templateUuid)
+            is BindingTarget.PressPad -> actions.pressPad(target.padUuid)
+            BindingTarget.BuskPageNext -> actions.buskPageStep(1)
+            BindingTarget.BuskPagePrev -> actions.buskPageStep(-1)
+            is BindingTarget.BuskPageSet -> actions.buskPageSet(target.pageUuid)
             is BindingTarget.SpeedMasterBpm -> logger.debug(
                 "Ignoring button press on binding {} → speed-master BPM (continuous target)",
                 binding.id,

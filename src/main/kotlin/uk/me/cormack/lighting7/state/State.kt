@@ -10,7 +10,10 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
@@ -34,10 +37,13 @@ import uk.me.cormack.lighting7.midi.createPlatformKtmidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
 import uk.me.cormack.lighting7.midi.NoOpMidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiLearnSessionManager
+import uk.me.cormack.lighting7.midi.BuskRefs
+import uk.me.cormack.lighting7.midi.PadRef
 import uk.me.cormack.lighting7.midi.SurfaceFeedbackPublisher
 import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
+import uk.me.cormack.lighting7.routes.buskPageContents
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
@@ -489,26 +495,67 @@ class State(val config: ApplicationConfig) {
         // Speed masters are read from the DB for [projectId] rather than from the live
         // bank, for the same reason the stack / cue ids are: this context is built for an
         // arbitrary project, which may not be the one currently loaded.
-        val (stacks, cues, speedMasterUuids) = transaction(database) {
+        val snapshot = transaction(database) {
             val stacks = DaoCueStack.find { DaoCueStacks.project eq projectId }
                 .map { it.id.value to it.uuid }
             val cues = DaoCue.find { DaoCues.project eq projectId }
                 .map { it.id.value to it.uuid }
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
                 .map { it.uuid }.toSet()
-            Triple(stacks, cues, masters)
+            val looks = DaoLook.find { DaoLooks.project eq projectId }.map { it.id.value to it.uuid }
+            val lookUuidById = looks.toMap()
+            // The Looks a button cannot press: one deferred effect is enough. One batched read
+            // over this project's Looks rather than `look.effects.any { … }` per Look, which
+            // would be a query per library row on every fixture change.
+            val deferred = if (looks.isEmpty()) emptySet() else DaoLookEffect
+                .find {
+                    (DaoLookEffects.targetType eq DEFERRED_TARGET_TYPE) and
+                        (DaoLookEffects.look inList looks.map { it.first })
+                }
+                .mapNotNullTo(HashSet()) { lookUuidById[it.readValues[DaoLookEffects.look].value] }
+            val templates = DaoTemplate.find { DaoTemplates.project eq projectId }.mapTo(HashSet()) { it.uuid }
+            val pages = DaoBuskPage.find { DaoBuskPages.project eq projectId }.map { it.id.value to it.uuid }
+            // A pad has no project column of its own — it is reached through its bank's column's
+            // page, which is the one level that has one. `buskPageContents` owns that descent.
+            // A malformed (kind == null) pad is excluded, matching `buildBuskRefs` — otherwise a
+            // binding pointing at one would report Ok here while its LED never lights and its
+            // press resolves to NotFound.
+            val pads = buskPageContents(pages.map { it.first })
+                .pads.values.filter { it.kind != null }.mapTo(HashSet()) { it.uuid }
+            BindingRefs(
+                stacks, cues, masters,
+                looks.mapTo(HashSet()) { it.second }, deferred, templates,
+                pads, pages.mapTo(HashSet()) { it.second },
+            )
         }
         return BindingHealthEvaluator.Context(
             fixtures = fixtures,
-            validStackIds = stacks.mapTo(HashSet()) { it.first },
-            validCueIds = cues.mapTo(HashSet()) { it.first },
+            validStackIds = snapshot.stacks.mapTo(HashSet()) { it.first },
+            validCueIds = snapshot.cues.mapTo(HashSet()) { it.first },
             deviceTypes = ControlSurfaceRegistry.allTypes,
-            validSpeedMasterUuids = speedMasterUuids,
-            validStackUuids = stacks.mapTo(HashSet()) { it.second },
-            validCueUuids = cues.mapTo(HashSet()) { it.second },
+            validSpeedMasterUuids = snapshot.speedMasterUuids,
+            validStackUuids = snapshot.stacks.mapTo(HashSet()) { it.second },
+            validCueUuids = snapshot.cues.mapTo(HashSet()) { it.second },
             selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
+            validLookUuids = snapshot.lookUuids,
+            looksNeedingSelection = snapshot.looksNeedingSelection,
+            validTemplateUuids = snapshot.templateUuids,
+            validPadUuids = snapshot.padUuids,
+            validPageUuids = snapshot.pageUuids,
         )
     }
+
+    /** What one transaction reads for [buildBindingHealthContext]. A named holder, not a `Triple`. */
+    private data class BindingRefs(
+        val stacks: List<Pair<Int, java.util.UUID>>,
+        val cues: List<Pair<Int, java.util.UUID>>,
+        val speedMasterUuids: Set<java.util.UUID>,
+        val lookUuids: Set<java.util.UUID>,
+        val looksNeedingSelection: Set<java.util.UUID>,
+        val templateUuids: Set<java.util.UUID>,
+        val padUuids: Set<java.util.UUID>,
+        val pageUuids: Set<java.util.UUID>,
+    )
 
     /**
      * MIDI Learn session coordinator. Subscribes to [deviceMatcher] attach events and routes
@@ -543,6 +590,26 @@ class State(val config: ApplicationConfig) {
      */
     val deskSelection: DeskSelection by lazy {
         DeskSelection { runCatching { show.fixtures }.getOrNull() }
+    }
+
+    /**
+     * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
+     * ways of making one gesture, so there is one answer. State-scoped and transient like
+     * [deskSelection]: cleared on project switch, reconciled when the layout changes, never
+     * persisted (`docs/plans/midi-surface-plan.md` D6).
+     */
+    val buskPageState: BuskPageState by lazy {
+        BuskPageState {
+            val projectId = runCatching { projectManager.currentProject.id.value }.getOrNull()
+                ?: return@BuskPageState emptyList()
+            runCatching {
+                transaction(database) {
+                    DaoBuskPage.find { DaoBuskPages.project eq projectId }
+                        .orderBy(DaoBuskPages.sortOrder to SortOrder.ASC, DaoBuskPages.name to SortOrder.ASC)
+                        .map { it.id.value to it.uuid }
+                }
+            }.getOrDefault(emptyList())
+        }
     }
 
     /**
@@ -632,8 +699,42 @@ class State(val config: ApplicationConfig) {
             speedMasterBankProvider = { show.speedMasterBank },
             deskSelection = deskSelection,
             locateManagerProvider = { show.locateManager },
+            programmerLayerStackProvider = { show.programmerLayerStack },
+            buskPageState = buskPageState,
+            cueStackActiveCueIdProvider = { stackId ->
+                runCatching { show.cueStackManager.getActiveCueId(stackId) }.getOrNull()
+            },
+            buskRefsProvider = ::buildBuskRefs,
             latencyTracker = midiLatencyTracker,
         )
+    }
+
+    /**
+     * What each busk pad presses and what id each busk page has, for the record LEDs.
+     *
+     * Read here rather than in the publisher because that class touches no database — everything it
+     * needs from the show arrives as a provider. It is invoked at most once per index rebuild, and
+     * only when some attached device actually has a `PressPad` or `BuskPageSet` bound.
+     */
+    private fun buildBuskRefs(projectId: Int): BuskRefs = try {
+        transaction(database) {
+            val pages = DaoBuskPage.find { DaoBuskPages.project eq projectId }.map { it.id.value to it.uuid }
+            val pads = buskPageContents(pages.map { it.first }).pads.values
+                .mapNotNull { pad ->
+                    when (pad.kind) {
+                        BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.template!!.uuid, isLook = false)
+                        BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
+                        BuskPadKind.CUE -> pad.cue!!.let { c -> pad.uuid to PadRef.Cue(c.id.value, c.cueStack.id.value) }
+                        // A malformed pad is absent everywhere it is read, an LED included.
+                        null -> null
+                    }
+                }
+                .toMap()
+            BuskRefs(pads = pads, pageIds = pages.associate { (id, uuid) -> uuid to id })
+        }
+    } catch (e: Exception) {
+        logger.debug("Busk refs unavailable for project {}: {}", projectId, e.message)
+        BuskRefs.EMPTY
     }
 
     /**
@@ -686,6 +787,9 @@ class State(val config: ApplicationConfig) {
                 // attribute the new rig has no fixture for would leave every strip encoder dark.
                 deskSelection.clear()
                 encoderBankState.clearAll()
+                // A page id belongs to one project's page list, so carrying one across would show
+                // a page that is not there — or, worse, another project's page by id collision.
+                buskPageState.clear()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
@@ -754,6 +858,17 @@ class State(val config: ApplicationConfig) {
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
         override fun patchListChanged() {
             deskSelection.prune()
+            refreshActiveProjectBindingHealth()
+        }
+        // The record variants (midi-surface plan D6) name Looks, templates, pads and pages, so
+        // their health goes stale on the lists that carry those — and a delete is exactly the
+        // case that matters. Without these three a button holding a deleted Look keeps reading
+        // `Ok`, and keeps being dispatched, until something unrelated moves a fixture.
+        override fun lookListChanged() = refreshActiveProjectBindingHealth()
+        override fun templateListChanged() = refreshActiveProjectBindingHealth()
+        override fun buskLayoutChanged(pageIds: List<Int>) {
+            // A pad or a page may have gone; which ones is the client's question, not health's.
+            buskPageState.reconcile()
             refreshActiveProjectBindingHealth()
         }
     }

@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -31,11 +32,16 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * `POST /busk/pads/{id}/press` — each kind, and the solo rules.
+ * `POST /busk/pads/{id}/press` — each kind, the solo rules, and **the surface's own door onto the
+ * same press**.
  *
  * The stack's own tests (`ProgrammerLayerStackTest`) prove `toggle`'s `releaseSiblings` narrows
  * and `release` drops; these prove the route *resolves* the siblings from the bank — per kind,
  * per pad, at press time — and that a cue pad presses the way a cue slot does.
+ *
+ * The last section drives `DefaultSurfaceActions` against the same fixtures. That is the whole
+ * point of `BuskPressService` existing: a `PressPad` binding and a screen press are one press, and
+ * two test classes could each be green while the two doors did different things.
  */
 class BuskPressRouteTest : RouteIntegrationTest() {
 
@@ -405,5 +411,109 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         assertEquals(HttpStatusCode.NotFound, client.pressRaw(999_999, "hex-1").status)
+    }
+
+    // ─── The same press, from a button (midi-surface plan D6) ───────────
+
+    private fun actions() = DefaultSurfaceActions(state)
+
+    private suspend fun HttpClient.lookUuid(id: Int): String =
+        get("/api/rest/projects/$projectId/looks/$id").body<LookDetails>().uuid
+
+    private suspend fun HttpClient.templateUuid(id: Int): String =
+        get("/api/rest/projects/$projectId/templates/$id").body<TemplateDto>().uuid
+
+    private suspend fun HttpClient.padUuid(padId: Int): String =
+        get(pages()).body<List<BuskPageDto>>()
+            .flatMap { it.rows }.flatMap { it.columns }.flatMap { it.banks }.flatMap { it.pads }
+            .single { it.id == padId }.uuid
+
+    @Test
+    fun `applyLook presses onto the Look's own fixtures, not the selection`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.createLook("warm", "hex-1")
+        // A selection naming a *different* head, to prove the button ignores it: an `ApplyLook`
+        // does the same thing every press, which is what makes it safe on a button.
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
+
+        actions().applyLook(client.lookUuid(warm))
+        assertEquals(setOf("warm@hex-1"), live())
+
+        actions().applyLook(client.lookUuid(warm))
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "a second press takes it off")
+    }
+
+    @Test
+    fun `applyLook on a deferred-effect Look is dropped`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val pulse = client.createLook("pulse", "hex-1", deferredEffect = true)
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
+
+        // Refused at bind time, so this is the state a Look *edited afterwards* falls into — and
+        // the selection must not be quietly substituted for the targets it no longer has.
+        actions().applyLook(client.lookUuid(pulse))
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+    }
+
+    @Test
+    fun `pressTemplate lands on the selection and is dropped when a generic one has none`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val uuid = client.templateUuid(amber)
+
+        actions().pressTemplate(uuid)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "generic, nothing selected")
+
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
+        actions().pressTemplate(uuid)
+        assertEquals(setOf("amber@hex-2"), live())
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask, "mask derived, not sent")
+    }
+
+    @Test
+    fun `pressPad runs the pad's own plan, solo siblings included`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val blue = client.createTemplate("blue", "#0044ff")
+        val (amberPad, bluePad) = client.bank("keys", solo = true, tpl(amber), tpl(blue))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
+
+        actions().pressPad(client.padUuid(amberPad))
+        assertEquals(setOf("amber@hex-1"), live())
+
+        actions().pressPad(client.padUuid(bluePad))
+        assertEquals(setOf("blue@hex-1"), live(), "the solo bank released its sibling from a hardware press too")
+    }
+
+    @Test
+    fun `the busk page targets move the desk's showing page`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val first = client.post(pages()) {
+            contentType(ContentType.Application.Json)
+            setBody(CreateBuskPageRequest("act one"))
+        }.body<BuskPageDto>()
+        val second = client.post(pages()) {
+            contentType(ContentType.Application.Json)
+            setBody(CreateBuskPageRequest("act two"))
+        }.body<BuskPageDto>()
+
+        actions().buskPageSet(second.uuid)
+        assertEquals(second.id, state.buskPageState.pageId.value)
+
+        actions().buskPageStep(1)
+        assertEquals(first.id, state.buskPageState.pageId.value, "next wraps")
+
+        // A uuid that resolves to nothing leaves the page where it is rather than clearing it.
+        actions().buskPageSet("00000000-0000-4000-8000-000000000000")
+        assertEquals(first.id, state.buskPageState.pageId.value)
     }
 }

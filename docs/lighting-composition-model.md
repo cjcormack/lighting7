@@ -388,9 +388,10 @@ sheets — hold no page document to splice and re-`PUT`, and re-`PUT`ing a stale
 concurrent edit. The bank is addressed by **id** rather than by a position, so the address survives
 any reshuffle of the page that keeps the bank alive.
 
-**A press goes through the pad, and the bank decides the siblings** (D4, `routes/buskPress.kt`).
-`POST /busk/pads/{id}/press` reads the pad, its record and — when the bank is **solo** — the
-records on its sibling pads in one transaction, then calls the same `ProgrammerLayerStack.toggle`
+**A press goes through the pad, and the bank decides the siblings** (D4,
+`routes/BuskPressService.kt`). `POST /busk/pads/{id}/press` reads the pad, its record and — when the
+bank is **solo** — the records on its sibling pads in one transaction, then calls the same
+`ProgrammerLayerStack.toggle`
 the `/templates/{id}/toggle` and `/looks/{id}/toggle` routes call, handing it the siblings as
 `releaseSiblings`. Those two routes stay for the programmer's ⌥click strip and the AI, always
 siblingless. A **cue** pad is apply / stop through `CueStackManager`, exactly as a cue slot
@@ -416,6 +417,18 @@ The derived targets are passed to the layer explicitly, so the applied state bel
 The busk press applies the same reading to a **generic** template — its rows take their targets
 from the press, so with none it is refused (`TEMPLATE_NEEDS_SELECTION`) — while a per-fixture
 template names its own heads and lands on them.
+
+**A pad has a second door, and it is the same press.** A MIDI control surface can hold a
+`PressPad(padUuid)` binding, which runs the whole of the above through `BuskPressService` with the
+**desk selection** as the press's targets. The service exists precisely so the two cannot diverge:
+the solo rules, the empty-selection refusals and the cue toggle are the *pad's* behaviour, not the
+HTTP endpoint's. It answers an outcome rather than responding, because a MIDI press has nowhere to
+put a 400. See `docs/midi-control-surface-engineering.md` §"The busk press, from two doors".
+
+**Which page is showing is a desk fact, not a browser one.** `state/BuskPageState.kt` holds it —
+transient, project-scoped, `busk.pageState` / `busk.setPage` — so a hardware *next page* button and
+a tab click in the busk view are one gesture rather than two disagreeing ones. The client's `?page=`
+mirrors it. It is unrelated to `busk.layoutChanged`, which names pages whose *document* changed.
 
 ### Applied state is resolved by the desk
 

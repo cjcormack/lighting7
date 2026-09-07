@@ -351,6 +351,11 @@ class SurfaceFeedbackPublisherTest {
                     midiValue7Bit: UByte,
                 ) {}
                 override fun tapSpeedMaster(masterUuid: String?) {}
+                override fun applyLook(lookUuid: String) {}
+                override fun pressTemplate(templateUuid: String) {}
+                override fun pressPad(padUuid: String) {}
+                override fun buskPageStep(delta: Int) {}
+                override fun buskPageSet(pageUuid: String) {}
             }
             val router = SurfaceInputRouter(
                 deviceMatcher = h.matcher,

@@ -480,7 +480,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoBuskPad.new { bank = keysBank; sortOrder = 0; template = colourTemplate }
     DaoBuskPad.new { bank = keysBank; sortOrder = 1; look = boundLook }
-    DaoBuskPad.new { bank = keysBank; sortOrder = 2; cue = cue1 }
+    val cuePad = DaoBuskPad.new { bank = keysBank; sortOrder = 2; cue = cue1 }
     val sideColumn = DaoBuskColumn.new {
         page = actOne; row = 0; sortOrder = 1; width = 4
     }
@@ -605,6 +605,51 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         targetType = "encoderBankSet"
         targetPayload = """{"type":"encoderBankSet","propertyName":"pan"}"""
         sortOrder = 8
+    }
+    // One of each **record** variant and each busk-page variant (midi-surface plan, session 4).
+    // Every one is uuid-addressed, which is exactly what the export remapper rewrites and the clone
+    // test checks: an int here would survive the round trip and point at the source project's row.
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-7"
+        targetType = "applyLook"
+        targetPayload = """{"type":"applyLook","lookUuid":"${boundLook.uuid}"}"""
+        sortOrder = 9
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-8"
+        targetType = "pressTemplate"
+        targetPayload = """{"type":"pressTemplate","templateUuid":"${colourTemplate.uuid}"}"""
+        sortOrder = 10
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-9"
+        targetType = "pressPad"
+        targetPayload = """{"type":"pressPad","padUuid":"${cuePad.uuid}"}"""
+        sortOrder = 11
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-10"
+        targetType = "buskPageSet"
+        targetPayload = """{"type":"buskPageSet","pageUuid":"${actOne.uuid}"}"""
+        sortOrder = 12
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-11"
+        targetType = "buskPageNext"
+        targetPayload = """{"type":"buskPageNext"}"""
+        sortOrder = 13
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-12"
+        targetType = "buskPagePrev"
+        targetPayload = """{"type":"buskPagePrev"}"""
+        sortOrder = 14
     }
 
     // Wire up the show playhead to the first stack.

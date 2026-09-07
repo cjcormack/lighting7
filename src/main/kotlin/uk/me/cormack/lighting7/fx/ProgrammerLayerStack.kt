@@ -495,6 +495,16 @@ class ProgrammerLayerStack(
         }
     }
 
+    /**
+     * The stack's change signal, forwarded from [ProgrammerStore.layersFlow].
+     *
+     * A pass-through because the store is the only place a layer list changes and so the only place
+     * that can emit — but a caller wanting "the applied state, and a nudge when it moves" is asking
+     * this object for both, and should not have to reach around it for one of them. The surface
+     * feedback publisher, whose record LEDs are exactly that pair, is why this exists.
+     */
+    val layersFlow get() = store.layersFlow
+
     /** Remove a layer by id. A no-op when it is already gone. */
     fun remove(layerId: Int, fadeMs: Long = 0): ProgrammerLayerOutcome {
         val (next, _) = store.mutateLayers { current ->

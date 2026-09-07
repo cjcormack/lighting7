@@ -523,7 +523,7 @@ None (D11). The only versioning is the sync format bump (D12).
 
 ## 8. Follow-ups to record
 
-- `FU-BUSK-PAGE-MIDI` — Trigger: an operator wants to change busk page from hardware.
+- ~~`FU-BUSK-PAGE-MIDI`~~ — closed by the midi-surface plan's session 4.
 - `FU-BUSK-AI-LAYOUT` — Trigger: the AI is asked to put something on the busk page.
 - `FU-BUSK-PAD-SIZE` — Trigger: a page needs more density than width and flow give.
 - `FU-BUSK-EDIT-CONCURRENCY` — Trigger: two desks edit one page at once. Per-gesture saves mean a

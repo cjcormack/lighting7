@@ -659,6 +659,80 @@ class SurfaceInputRouterTest {
         )
     }
 
+    // ─── Records on buttons (midi-surface plan D6) ─────────────────────
+    //
+    // The router's job for these six is a pure hand-off — every rule about *what* a press does
+    // lives in `DefaultSurfaceActions` and `BuskPressService`, which is the point: a hardware press
+    // and a screen press of one pad go through one implementation. What is worth pinning here is
+    // that each variant reaches its own action with its own uuid, since the six are structurally
+    // identical and a copy-paste slip between them would be invisible.
+
+    @Test
+    fun `a record button dispatches to its own action with its own uuid`() {
+        val lookUuid = "11111111-1111-4111-8111-111111111111"
+        val templateUuid = "22222222-2222-4222-8222-222222222222"
+        val padUuid = "33333333-3333-4333-8333-333333333333"
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid)),
+            binding(2, "btn-2", BindingTarget.PressTemplate(templateUuid)),
+            binding(3, "btn-3", BindingTarget.PressPad(padUuid)),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+        assertEquals(
+            listOf(
+                RecordedCall.ApplyLook(lookUuid),
+                RecordedCall.PressTemplate(templateUuid),
+                RecordedCall.PressPad(padUuid),
+            ),
+            actions.calls,
+        )
+    }
+
+    @Test
+    fun `busk page next and prev step in opposite directions`() {
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.BuskPageNext),
+            binding(2, "btn-2", BindingTarget.BuskPagePrev),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        assertEquals(listOf<RecordedCall>(RecordedCall.BuskPageStep(1), RecordedCall.BuskPageStep(-1)), actions.calls)
+    }
+
+    @Test
+    fun `a dead record binding never reaches the actions`() {
+        val lookUuid = "11111111-1111-4111-8111-111111111111"
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            // The state a Look that gained a deferred effect after it was bound falls into: it is
+            // still there, but a button has no selection to give it, so the press must be dropped
+            // rather than reaching a `toggle` that would refuse it one layer down.
+            binding(
+                1, "btn-1", BindingTarget.ApplyLook(lookUuid),
+                health = AssignmentHealth.LookNeedsSelection(lookUuid),
+            ),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test
+    fun `a record target on a fader is ignored rather than dispatched`() {
+        // The router half of `FU-MIDI-BIND-CONTROL-KIND`: `refuseWrongKind` stops such a row being
+        // written, but an older row or an imported archive can still hold one, and continuous
+        // dispatch must drop it rather than find some arm for it.
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "fader-1", BindingTarget.PressTemplate("22222222-2222-4222-8222-222222222222")),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
     @Test
     fun `an Unknown target is dead and never reaches the actions`() {
         val actions = RecordingActions()
@@ -711,6 +785,11 @@ private class RecordingActions : SurfaceActions {
     override fun tapSpeedMaster(masterUuid: String?) {
         calls += RecordedCall.TapSpeedMaster(masterUuid)
     }
+    override fun applyLook(lookUuid: String) { calls += RecordedCall.ApplyLook(lookUuid) }
+    override fun pressTemplate(templateUuid: String) { calls += RecordedCall.PressTemplate(templateUuid) }
+    override fun pressPad(padUuid: String) { calls += RecordedCall.PressPad(padUuid) }
+    override fun buskPageStep(delta: Int) { calls += RecordedCall.BuskPageStep(delta) }
+    override fun buskPageSet(pageUuid: String) { calls += RecordedCall.BuskPageSet(pageUuid) }
 }
 
 /** Recording fake of [SurfaceFeedbackHooks] for tests. */
@@ -754,6 +833,11 @@ private sealed class RecordedCall {
     data object LocateSelection : RecordedCall()
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
+    data class ApplyLook(val lookUuid: String) : RecordedCall()
+    data class PressTemplate(val templateUuid: String) : RecordedCall()
+    data class PressPad(val padUuid: String) : RecordedCall()
+    data class BuskPageStep(val delta: Int) : RecordedCall()
+    data class BuskPageSet(val pageUuid: String) : RecordedCall()
     data class WriteSpeedMasterBpm(
         val masterUuid: String?,
         val minBpm: Double,

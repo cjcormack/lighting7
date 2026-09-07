@@ -89,6 +89,46 @@ sealed class AssignmentHealth {
     data class UnknownProperty(val propertyName: String) : AssignmentHealth()
 
     /**
+     * A `applyLook` binding names a Look that no longer exists in the project. Control-surface-only,
+     * and keyed by uuid because that is what the binding carries — an int id would not survive the
+     * clone the uuid exists for.
+     */
+    @Serializable
+    @SerialName("missingLook")
+    data class MissingLook(val lookUuid: String) : AssignmentHealth()
+
+    /** A `pressTemplate` binding names a template that no longer exists. Control-surface-only. */
+    @Serializable
+    @SerialName("missingTemplate")
+    data class MissingTemplate(val templateUuid: String) : AssignmentHealth()
+
+    /**
+     * A `pressPad` binding names a busk pad that no longer exists — the page was deleted, the pad
+     * was dragged off it, or the record behind it was deleted and swept its pads with it.
+     * Control-surface-only.
+     */
+    @Serializable
+    @SerialName("missingPad")
+    data class MissingPad(val padUuid: String) : AssignmentHealth()
+
+    /** A `buskPageSet` binding names a busk page that no longer exists. Control-surface-only. */
+    @Serializable
+    @SerialName("missingPage")
+    data class MissingPage(val pageUuid: String) : AssignmentHealth()
+
+    /**
+     * An `applyLook` binding names a Look that exists but has gained a **deferred effect**, so it
+     * has no own targets to press onto and a button has no selection to supply. Refused at bind
+     * time; this is the state a Look edited afterwards falls into. Control-surface-only.
+     *
+     * Distinct from [MissingLook] because the fix is different: the Look is still there, and either
+     * the effect is bound to targets or the button is rebound.
+     */
+    @Serializable
+    @SerialName("lookNeedsSelection")
+    data class LookNeedsSelection(val lookUuid: String) : AssignmentHealth()
+
+    /**
      * The binding's persisted payload carries a `type` discriminator this build does not know
      * — an archive written by a newer desk. The row is kept, dead and rebindable, rather than
      * refusing the project. Control-surface-only.
@@ -116,4 +156,9 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
     is AssignmentHealth.UnknownProperty -> "no patched fixture has property '${health.propertyName}'"
     is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
+    is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
+    is AssignmentHealth.MissingTemplate -> "missing template ${health.templateUuid}"
+    is AssignmentHealth.MissingPad -> "missing busk pad ${health.padUuid}"
+    is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"
+    is AssignmentHealth.LookNeedsSelection -> "Look ${health.lookUuid} has a deferred effect and needs a selection"
 }

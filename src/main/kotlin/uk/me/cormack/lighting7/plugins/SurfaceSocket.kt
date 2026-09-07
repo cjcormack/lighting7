@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.midi.BindingRefused
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.ControlState
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
@@ -125,6 +126,11 @@ data class SurfaceLearnCancelledOutMessage(
 data class SurfaceLearnErrorOutMessage(
     val sessionId: String?,
     val message: String,
+    // Mirrors `routes/projectSurfaceBindings.kt`'s `refusalResponse`: MIDI Learn's commit reaches
+    // `ControlSurfaceBindingService.create` directly, with no route validation of its own, so a
+    // [uk.me.cormack.lighting7.midi.BindingRefused]'s machine-readable code has to be forwarded
+    // here too, or a client branching on it never sees it from this door.
+    val code: String? = null,
 ) : SurfaceOutMessage()
 
 @Serializable
@@ -471,6 +477,10 @@ private fun handleSurfaceLearnCommit(state: State, message: SurfaceLearnCommitIn
     } catch (e: IllegalStateException) {
         SurfaceLearnErrorOutMessage(message.sessionId, e.message ?: "Binding slot already taken")
     } catch (e: IllegalArgumentException) {
-        SurfaceLearnErrorOutMessage(message.sessionId, e.message ?: "Invalid binding target")
+        SurfaceLearnErrorOutMessage(
+            message.sessionId,
+            e.message ?: "Invalid binding target",
+            code = (e as? BindingRefused)?.code,
+        )
     }
 }

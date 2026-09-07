@@ -21,7 +21,18 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStacks
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.SpeedMasterSource
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.routes.BuskPressService
+import uk.me.cormack.lighting7.routes.familyOf
+import uk.me.cormack.lighting7.routes.isGenericTemplate
+import uk.me.cormack.lighting7.routes.LookTargetResolution
+import uk.me.cormack.lighting7.routes.resolveLookToggleTargets
+import uk.me.cormack.lighting7.routes.toggleSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -95,6 +106,29 @@ interface SurfaceActions {
      * the same toggle `POST /locate/toggle` makes, once per target.
      */
     fun locateSelection()
+
+    /**
+     * Press a Look onto **its own fixtures** — never the selection (D6). A Look that has gained a
+     * deferred effect since it was bound has no own targets, so the press is dropped; health has
+     * already marked it and the router's dead gate drops it before this is reached.
+     */
+    fun applyLook(lookUuid: String)
+
+    /**
+     * Press a template onto the **desk selection**. A generic template with nothing selected is
+     * dropped, exactly as its busk pad refuses; a per-fixture one presses on its own heads. The
+     * family mask is derived from the template's rows, never sent.
+     */
+    fun pressTemplate(templateUuid: String)
+
+    /** Press a busk pad — its own bank's plan, solo siblings included, on the desk selection. */
+    fun pressPad(padUuid: String)
+
+    /** Move the desk's showing busk page by one, wrapping. */
+    fun buskPageStep(delta: Int)
+
+    /** Show one named busk page. */
+    fun buskPageSet(pageUuid: String)
 }
 
 /**
@@ -309,6 +343,103 @@ class DefaultSurfaceActions(
             // All on → all off; otherwise bring the unlocated ones up and leave the rest lit.
             if (allLocated || target !in located) toggleLocate(state, target)
         }
+    }
+
+    /**
+     * A Look onto its own fixtures, through the same `ProgrammerLayerStack.toggle` the toggle route
+     * uses — with **no targets**, which is exactly what makes `resolveLookToggleTargets` fall back
+     * to the Look's own. A refusal there (a deferred effect, or nothing patched left) is logged: a
+     * MIDI press has no reply channel, so the log line is the only trace the operator gets.
+     */
+    override fun applyLook(lookUuid: String) {
+        val uuid = uuidOrNull(lookUuid) ?: run {
+            logger.warn("Surface applyLook dropped: '{}' is not a uuid", lookUuid)
+            return
+        }
+        val projectId = currentProjectId() ?: return
+        val source = transaction(state.database) {
+            DaoLook.find { (DaoLooks.uuid eq uuid) and (DaoLooks.project eq projectId) }
+                .firstOrNull()
+                ?.toggleSource(state.show.fixtures)
+        }
+        if (source == null) {
+            logger.warn("Surface applyLook dropped: no Look {} in project {}", lookUuid, projectId)
+            return
+        }
+        when (val resolved = resolveLookToggleTargets(emptyList(), source)) {
+            is LookTargetResolution.Refused ->
+                logger.warn("Surface applyLook dropped: {}", resolved.message)
+            is LookTargetResolution.Targets -> runCatching {
+                state.show.programmerLayerStack.toggle(source = source.source, targets = resolved.targets)
+            }.onFailure { logger.warn("Surface applyLook failed: {}", it.message) }
+        }
+    }
+
+    /**
+     * A template onto the desk selection, through `toggle` with the template's own derived family
+     * mask — the server derives it because which family a template layer belongs to is a fact about
+     * the template, not about the press (the ⌥click rule, `CLAUDE.md` §The two apply gestures).
+     * Siblingless: a button is not in a bank.
+     */
+    override fun pressTemplate(templateUuid: String) {
+        val uuid = uuidOrNull(templateUuid) ?: run {
+            logger.warn("Surface pressTemplate dropped: '{}' is not a uuid", templateUuid)
+            return
+        }
+        val projectId = currentProjectId() ?: return
+        val press = transaction(state.database) {
+            DaoTemplate.find { (DaoTemplates.uuid eq uuid) and (DaoTemplates.project eq projectId) }
+                .firstOrNull()
+                ?.let { t ->
+                    Triple(
+                        LayerSource.template(t.id.value, t.uuid, t.name),
+                        t.familyOf()?.name,
+                        t.isGenericTemplate(),
+                    )
+                }
+        }
+        if (press == null) {
+            logger.warn("Surface pressTemplate dropped: no template {} in project {}", templateUuid, projectId)
+            return
+        }
+        val (source, family, isGeneric) = press
+        val targets = state.deskSelection.targets.value
+        if (isGeneric && targets.isEmpty()) {
+            logger.debug("Surface pressTemplate of '{}' dropped: nothing selected", source.name)
+            return
+        }
+        runCatching {
+            state.show.programmerLayerStack.toggle(source = source, targets = targets, propertyMask = family)
+        }.onFailure { logger.warn("Surface pressTemplate failed: {}", it.message) }
+    }
+
+    /**
+     * A busk pad, through [BuskPressService] — the same press the busk view makes, so the solo
+     * rules, the empty-selection refusals and the cue toggle cannot diverge between the two.
+     */
+    override fun pressPad(padUuid: String) {
+        val uuid = uuidOrNull(padUuid) ?: run {
+            logger.warn("Surface pressPad dropped: '{}' is not a uuid", padUuid)
+            return
+        }
+        val projectId = currentProjectId() ?: return
+        when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, state.deskSelection.targets.value)) {
+            is BuskPressService.Outcome.Pressed -> {}
+            is BuskPressService.Outcome.Refused -> logger.warn("Surface pressPad dropped: {}", outcome.message)
+            is BuskPressService.Outcome.TargetMissing -> logger.warn("Surface pressPad dropped: {}", outcome.message)
+            BuskPressService.Outcome.NotFound ->
+                logger.warn("Surface pressPad dropped: no busk pad {} in project {}", padUuid, projectId)
+        }
+    }
+
+    override fun buskPageStep(delta: Int) = state.buskPageState.step(delta)
+
+    override fun buskPageSet(pageUuid: String) {
+        val uuid = uuidOrNull(pageUuid) ?: run {
+            logger.warn("Surface buskPageSet dropped: '{}' is not a uuid", pageUuid)
+            return
+        }
+        state.buskPageState.setByUuid(uuid)
     }
 
     override fun writeSpeedMasterBpm(

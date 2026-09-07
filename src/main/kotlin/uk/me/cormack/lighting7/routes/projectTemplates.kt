@@ -1087,6 +1087,22 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
         .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
         ?: effect?.let { familyForEffectCategory(it.category) }
 
+/**
+ * Does this template take its targets from the press?
+ *
+ * An effect template is generic by construction (D3) — it names no target at all, so the "every row
+ * is deferred" test has nothing to run over and would answer false. Extracted because three callers
+ * need it and each is a place a press could refuse differently: [toDto], which is what the library
+ * shows, `BuskPressService`, which refuses a generic press with nothing selected, and
+ * `DefaultSurfaceActions.pressTemplate`, which is the same refusal from a button. Must be called
+ * inside a transaction.
+ */
+internal fun DaoTemplate.isGenericTemplate(): Boolean {
+    if (effect != null) return true
+    val rowList = rows.toList()
+    return rowList.isNotEmpty() && rowList.all { it.isDeferred }
+}
+
 /** Must be called inside a transaction. */
 internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = null): TemplateDto {
     // `sortedBy`, not Exposed's `orderBy`, for the reason [familyOf] gives: the PUT route reads
@@ -1102,9 +1118,7 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         notes = notes,
         fadeDurationMs = fadeDurationMs,
         family = familyOf()?.name,
-        // An effect template is generic by construction (D3) — it names no target at all, so the
-        // "every row is deferred" test has nothing to run over and would answer false.
-        isGeneric = if (storedEffect != null) true else rowList.isNotEmpty() && rowList.all { it.isDeferred },
+        isGeneric = isGenericTemplate(),
         kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
         rows = rowList.map { it.toDto() },
         effect = storedEffect?.toDto(registry),
