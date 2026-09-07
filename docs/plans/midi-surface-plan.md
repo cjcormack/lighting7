@@ -5,6 +5,113 @@
 > lighting-react `45c3d3e`, session 3b (editing it) as lighting-react `e97096b`, and session 4
 > (records on buttons) as `8ce7dc8` / lighting-react `e642c14`; session 5 is the rig, and is all
 > that remains.**
+> Session 5 results, from the desk itself. The pre-read's four findings all held, one of them turned
+> out to be a live bug, and one check has no subject on this hardware. Detail per check is the
+> progress table in `manual-validation.md`.
+> **The colour narrowing is real and reproducible, and it is now `FU-MIDI-SELECTION-COLOUR-RED-ONLY`.**
+> Two Freedom Par Hex selected on `Sel · rgbColour`: `#FF0000`/`#0000FF` darkens the ring correctly,
+> and `#FF0000`/`#FFFF00` **lights it at full** — a red-and-yellow selection reported as uniform,
+> because every arm of `findChannels` takes `.firstOrNull()` of a three-channel `DmxColour`. §10's
+> first risk, found exactly where §10 said it would be and for the reason it gave: the unit tests use
+> single-channel sliders, where first-channel and whole-property are the same thing. Left for the
+> follow-up rather than fixed here, because what a colour-bound control's feedback value *is* is a
+> `PropertyChannelResolver` decision and belongs with §7's hue question.
+> **§10's second risk is correct, and one strip now demonstrates all four resolution paths at once.**
+> With a global `strip` row on strip 1, a global `speedMasterBpm` on `fader-1` and an exact-bank
+> `fixtureProperty` on `enc-1`, bank A reads: encoder → its own row, fader → the global direct row,
+> flash and select → derived from the strip. Direct-before-strip at *both* bank levels, on the
+> picture and in the desk's own tracker values, which come from the publisher rather than the mirror.
+> **Check 4 has no subject on an X-Touch Compact.** All nine faders are declared `motorFader`, so
+> `rebuildIndex`'s `classDefault` never yields PICKUP, and a motor driven to the logical value never
+> diverges from it. The check needs a profile with a non-motorised fader — the same gate §8 already
+> puts on encoder ring styles, and worth stating because "PICKUP is untested" reads like an
+> oversight rather than a missing device.
+> **Check 9 passes against the corrected baseline.** Session 1 imported a v11 session-4 export and
+> read all seventeen bindings: the ten discriminators it cannot know (session 2's `strip` ×2 and
+> `encoderBankSet`, session 4's six) each decoded as `unknown` with `unknownTarget` health naming the
+> type and `rawPayload` intact, the seven it knows decoded normally, one warning per bad row, and the
+> project's templates, Looks, busk pages and cue stacks all survived. D11 does what it was written
+> to do, in the only scenario it was written for.
+> **The hardware halves were then run interactively** — an operator at the desk, the results read
+> back from `surfaceControls`, the busk view and the DMX channels. Checks 2, 3 and 7 pass; check 8
+> fails and takes check 1 with it.
+> **Check 8 fails, and not for the reason it was written.** It asks whether *state* comes back after
+> a replug. The answer is that the desk never learns the surface went away: the device row still read
+> `in · out` thirty seconds after the USB was pulled, and the replug produced no attach either. Two
+> independent bugs, both filed — hot-plug detection rests entirely on a CoreMIDI4J notification
+> because the 1 Hz poll re-enumerates a `LibreMidiAccess` that is never rebuilt
+> (`FU-MIDI-HOTPLUG-UNDETECTED`); and `KtMidiController`'s delta suppression discards any resync
+> whose value is unchanged, because `lastSentBytes` records *what we sent* and is trusted as *what
+> the hardware holds* (`FU-MIDI-RESYNC-DELTA-SUPPRESSED`). Isolated on the rig: one resync moved
+> fader 5 (0%→50%, changed) and lit two select LEDs (off→on, changed) while fader 1 (74%→74%) stayed
+> at the bottom. The second bug is normally hidden because a real attach builds a fresh controller
+> with an empty cache — so it will still bite after the first is fixed, if the fix reuses the
+> controller. **This is what §10 meant** about hardware showing what tests do not, and neither bug
+> was anything §9 thought to ask.
+> **Check 1 is blocked rather than failed.** Its picture half is confirmed, but the snapshot half
+> cannot be exercised until an attach event fires at all.
+> **What passed on the desk.** Strip 5 end to end: fader → dimmer (read back off the DMX channel, so
+> composed through to output), the strip's encoder tracking the same property, the flash asserting
+> `max = 255` with its own LED lit while held, and the select button toggling the desk selection.
+> Turning `Sel · rgbColour` moved both heads together — a lit ring is the proof, since the value is
+> null the moment they disagree. A solo-bank pad pressed from a **button** put Red on and knocked
+> Green off, lighting both the pad button and the direct template button from one `appliedState`.
+> And *Next page* on a button moved a **second browser's** page, untouched — the only proof
+> `busk.pageState` really broadcasts.
+> Session 5 amendments, from checking §9's nine checks against the two shipped repos before running
+> any of them. Two checks cannot pass as written, one has a hardware-visible narrowing nobody stated,
+> and one has a divergence that will read as a bug on the rig. §9 is rewritten in
+> `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` with these folded in; the numbering is kept so
+> the two documents line up.
+> **Check 9's baseline is wrong, and the design says so itself.** "A build from before session 1"
+> cannot load a v11 export at all: `ProjectImporter.SUPPORTED_FORMAT_VERSION` was **10** at
+> `758ee9a^`, so the import is refused at the gate with *"Repo format v11 is newer than this install
+> supports"* before a binding is ever decoded — which is exactly what `SyncDtos`'s own v11 note says
+> should happen ("a v10 reader had neither tolerance … so it must refuse the repo"). Behind that
+> gate it fails a second time: pre-session-1 `toResolved()` calls `decodeFromString` with no
+> try/catch, and the throw escapes `ensureLoaded` before `loaded` or `cache[projectId]` is set — so
+> `list()` answers empty, `resolve()` answers null, **every** binding on the desk is gone, and the
+> DB read is retried on every MIDI event. The check D11 was actually written for is **session 1
+> (`758ee9a`) reading a session-4 project**: same format version, tolerant decode present, six
+> discriminators it has never seen. That is what the staged check now says.
+> **Colour feedback reads the red channel only, and check 3 can pass or fail on which colours are
+> picked.** `PropertyChannelResolver.describeFixtureProperty` returns three channels for a
+> `DmxColour`, and all three arms of `SurfaceFeedbackPublisher.findChannels` take `.firstOrNull()`
+> — so a colour-bound encoder's ring is computed from red alone. Two heads at colours that share a
+> red value (`#FF0000` and `#FFFF00`) read as *uniform*, and the ring stays lit on what is really a
+> mixed selection: §10's first named risk, reachable today. The *write* path is unaffected (it fans
+> one 7-bit value to R/G/B as §7 says). Stated rather than fixed, because narrowing three channels
+> to one common value is a resolver decision, not a surface one; the check now names it and pins the
+> colours. If the rig confirms it reads badly, it is an `FU-` item, not an inline fix.
+> **Check 5's "no selection" rule is `isGeneric`, and the per-fixture case ends with a live layer
+> under a dark LED.** The pre-session-4 amendment already records that a per-fixture template
+> presses on its own heads with an empty selection; what it does not say is what the *button* then
+> does. `recordLedOn`'s `COVERS_SELECTION` arm returns false outright when the selection is empty,
+> so the layer goes on the rig and the LED stays dark — a state an operator will read as a dead
+> button. Faithful to the pad (which has the same fold) and therefore not a divergence to "fix", but
+> it has to be in the check as an expected result or it will be filed as one.
+> **Check 6's "will not drop from the library" is not what the library does.** A deferred-effect
+> Look is *listed*, greyed, with `chips: []` and the detail *"needs a selection — cannot go on a
+> button"* (`recordOptions.ts`, `SurfaceLibrary.tsx`). There is nothing to drag rather than a drop
+> that is refused; the refusal (`BINDING_LOOK_NEEDS_SELECTION`) is only reachable through a
+> hand-written row. Both halves are worth checking, and the check now says so.
+> **Check 8's "every LED comes back" excludes the layer button.** The X-Touch's A/B layer switch is
+> device-side, emitting Program Change, and `route` short-circuits it as `ResolvedInput.BankButton`
+> before resolving any binding — so there is no `bankLeds` list and nothing to restore. A dark layer
+> LED after a replug is correct, and would otherwise be reported as check 8 failing.
+> Verified as already correct, and so not work: the resolver's precedence matches §3.3 exactly
+> (direct exact-bank → direct global → strip exact-bank → strip global) and `lib/surfaceResolve.ts`
+> mirrors it clause for clause; `busk.pageState` is a per-socket `StateFlow` subscription and so
+> genuinely broadcasts; a selection change is a rebuild trigger, so checks 3 and 4 are reachable;
+> the mixed arm writes **nothing** to a motor (`sendRingOff` returns early for a non-encoder) and
+> disarms takeover; the encoder-bank-property-missing case answers §11's drafted "reads unbound"
+> through `findChannels`' `takeIf { it.isNotEmpty() }`; and `ExportUuidRemapper`'s blind
+> substitution rewrites uuids inside `targetPayload`, so the record variants survive a clone.
+> Two `else` arms remain the one place an omission is silent, as the session 4 amendment warned:
+> `ledOn` and the index's `listed`. Cross-checked against `targetControlKind`'s BUTTON list, the
+> variants with no LED arm are `cueStackGo` / `Back` / `Pause`, `fireCue`, `clearSelection`,
+> `setBank`, `speedMasterTap` and `buskPageNext` / `Prev` — all momentary or stateless, so all
+> correct. Nothing is missing today; the trap is still live for the next variant.
 > Session 4 amendments. The review's own findings first, then the pre-read's.
 > **A busk page click while offline did nothing at all.** Making the desk the source of the showing
 > page put the tab click through `sendGesture`, which drops the frame and toasts when the socket is
@@ -837,6 +944,14 @@ and on the client, the picker's four variants, the library's four rows and `targ
 The §9 checks on the X-Touch, with the fixes they turn up. The checks are staged in
 `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when session 5 starts, not before.
 
+Staged 2026-09-07, with the pre-read's corrections folded in — see the header's session 5
+amendments for what §9 got wrong. **`FU-MANUAL-MIDI-SURFACE` in `manual-validation.md` is the
+authoritative wording now; §9 below is the record of what was originally asked.** Two
+preconditions the checks cannot supply themselves: a desk running a post-session-4 build (sessions
+2 and 4 added routes, classes and WS message types, so a hot-swap will not do, and a pre-strip
+desk makes checks 1–4 unrunnable), and an attached X-Touch. Neither is a code change and neither
+is substitutable by a test.
+
 ## 6. Migration
 
 None. No table or column changes; every new target is a new discriminator in an opaque payload;
@@ -881,6 +996,12 @@ written.
 Backend: the tests in §5 S1, S2 and S4; `ProgrammerLayerStackTest` unchanged (the engine does not
 move — a press from hardware is the same `toggle` a pad makes). Frontend: §5 S3a and S3b. Desk checks, to
 be added to `manual-validation.md` as `FU-MANUAL-MIDI-SURFACE` when they are run:
+
+> **Staged 2026-09-07 as [`FU-MANUAL-MIDI-SURFACE`](manual-validation.md#fu-manual-midi-surface),
+> which is the authoritative wording.** The list below is kept as the record of what was originally
+> asked; the pre-read found checks 9 and 6 unpassable as written, check 3 dependent on which colours
+> are chosen, and checks 5 and 8 missing an expected result each. The header's session 5 amendments
+> say why for each.
 
 1. Cold open with the X-Touch attached: the picture matches the panel, every LED and fader on the
    desk matches the screen without touching anything (D7's snapshot).

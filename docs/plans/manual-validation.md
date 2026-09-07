@@ -52,6 +52,7 @@ as a one-line row.
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
+| [`FU-MANUAL-MIDI-SURFACE`](#fu-manual-midi-surface) | the picture, the motors, the LEDs and the presses survive a real X-Touch — nothing in sessions 1–4 has been seen on hardware | MIDI surface S5, 2026-09-07 |
 
 ---
 
@@ -1318,3 +1319,103 @@ the right siblings; only a rig proves the light goes where the operator expected
    the failure is reported, not swallowed.
 
 30 minutes, 40 with two browsers for the solo items.
+
+---
+
+## `FU-MANUAL-MIDI-SURFACE`
+
+**The first desk use** · from the MIDI surface plan §9, 2026-09-07
+
+Sessions 1–4 (`758ee9a`, `09b877c`, lighting-react `45c3d3e` / `e97096b`, `8ce7dc8` /
+lighting-react `e642c14`) landed on `./gradlew test` and `npm run check` alone. **Nothing in any of
+them has been seen on hardware.** Every claim about the picture, the LEDs, the motors and the
+presses rests on unit tests, and §10 of the plan names the three places where that is least
+adequate: the publisher's mixed-selection arm (a ring left lit, or a motor written, on a mixed
+selection is exactly what hardware shows and tests do not), direct-first resolution against bank
+precedence at both levels, and the tolerant decode never turning one bad row into an empty table.
+
+Two preconditions, neither a code change: the desk must be running a **post-session-4 build** —
+sessions 2 and 4 added routes, classes and WS message types, so a hot-swap will not do, and a
+pre-strip desk serves no `strips` and no `layout`, falls back to the grouped table, and makes
+checks 1–4 unrunnable — and an **X-Touch Compact must be attached**. Check 7's second half and
+check 9 additionally need a second browser and a second data dir respectively.
+
+**Progress, 2026-09-07.** Checks 2, 3, 5, 6, 7 and 9 pass; **check 8 fails and blocks check 1**;
+check 4 is unrunnable on this hardware. Run interactively against a real X-Touch — an operator at
+the desk, the checks read back from `surfaceControls`, the busk view and the DMX channels. Three bugs found, all promoted to `followups.md`:
+[`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](followups.md#fu-midi-selection-colour-red-only),
+[`FU-MIDI-HOTPLUG-UNDETECTED`](followups.md#fu-midi-hotplug-undetected) and
+[`FU-MIDI-RESYNC-DELTA-SUPPRESSED`](followups.md#fu-midi-resync-delta-suppressed). The last two are
+the session's most valuable result and neither was anything §9 thought to ask about: check 8 was
+written to ask whether *state* comes back, and the answer is that the desk never learns the surface
+went away at all.
+
+| # | State | What was established |
+|---|---|---|
+| 1 | **blocked** | The picture half is confirmed: it draws from `layout` (8 strip columns, right block, master column) and nine `data-strip` backdrops render — 3b's `columnStrips` fix on real profile data. The **snapshot half cannot be tested until check 8's two bugs are fixed**: a cold open depends on `DeviceAttached` → `sendFullResync`, and on this build that event never fires and the write would be delta-suppressed even if it did. |
+| 2 | **pass** | A library row **dragged** onto strip 1 created a global `strip` row and all four derived controls label correctly. Precedence confirmed on one strip at once: on bank A, `enc-1` reads its own exact-bank binding while `btn-1`/`btn-25` derive from the global strip and `fader-1` keeps its global direct row — §10's second risk, both bank levels. On strip 5 (a fixture), from the hardware: the fader drove the dimmer (channel read back at 70%, so composed through to output), the strip's **encoder tracked the same property** (ring 8/13), the flash asserted **full** with **its own LED lit while held** and released cleanly, and the select button toggled the fixture into the desk selection and lit. |
+| 3 | **pass**, with a bug | From the hardware: with two heads selected, turning `Sel · rgbColour` moved the ring 0/13 → 8/13 and both heads changed **together** — a lit ring proves it, since `computeValue7Bit` answers null the moment the two disagree. The mixed arm fires on both control classes: `#FF0000`/`#0000FF` darkens the encoder ring, and a three-head selection at mixed levels left `Sel · dimmer` on a **motor fader** with no value and no write. The bug is that `#FF0000`/`#FFFF00` *also* reads uniform — [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](followups.md#fu-midi-selection-colour-red-only). |
+| 4 | **n/a** | Not runnable on an X-Touch Compact: all nine faders are `motorFader`, so `classDefault` never yields PICKUP and a driven motor never diverges from the logical value. Needs a second profile — the same gate §8 puts on encoder ring styles. |
+| 5 | **pass** | Generic template with two heads → LED lit; third head added → dark. Per-fixture template pressed with no selection → layer live on the rig (`R:255,0,0` / `R:0,0,255` observed) with its LED **dark**, and dark even once the selection matches, because the layer carries no targets. Documented divergence, confirmed. |
+| 6 | **pass** | `S5 Deferred FX` lists greyed with detail *"needs a selection"* and **no chip**; a hand-written binding is refused `BINDING_LOOK_NEEDS_SELECTION`. `BINDING_WRONG_CONTROL_KIND` also confirmed on a `fireCue` dropped on a fader. |
+| 7 | **pass** | From the hardware, with a clean baseline (Green on, Red off, both LEDs dark): pressing the button bound to the **Red pad in the solo bank** put Red on and **knocked Green off**, lighting both `Press pad Red` and the direct `Press Red` button — the pad and the template button agreeing from one `appliedState`. Then *Next page* on a button moved a **second browser** from `?page=1` to `?page=3`, untouched, with its bank correctly gone. Both halves are things only hardware plus two clients can show. |
+| 8 | **FAIL** | Unplugged: the device row still read `in · out` 30 s later. Replugged: no motor moved, no LED lit. Two bugs, both filed — hot-plug is never detected ([`FU-MIDI-HOTPLUG-UNDETECTED`](followups.md#fu-midi-hotplug-undetected)), and because the surviving controller's `lastSentBytes` still holds the pre-unplug bytes, a resync is discarded for every control whose value is unchanged ([`FU-MIDI-RESYNC-DELTA-SUPPRESSED`](followups.md#fu-midi-resync-delta-suppressed)). Isolated on the rig: a resync moved fader 5 (0%→50%, changed) and lit two select LEDs (off→on, changed) while fader 1 (74%→74%) stayed at the bottom. Not the touch latch — a touch-and-release on fader 1 followed by a resync still sent nothing. The layer A/B LED is the device's own and is never driven by us; a dark one is correct. |
+| 9 | **pass** | Session 1 (`758ee9a`) imported a v11 session-4 export and read **all 17** bindings. The ten it cannot know — 2 `strip`, 1 `encoderBankSet`, 2 `pressTemplate`, 1 `applyLook`, 1 `pressPad`, 3 `buskPage*` — each decoded as `unknown` with health `unknownTarget` naming the discriminator and `rawPayload` intact; the seven it knows decoded normally; one warning per bad row. Templates, Looks, busk pages and cue stacks all survived. D11 validated in the only scenario it was written for. |
+
+The rig used is project 6 on the dev desk, with four throwaway records added for the checks
+(`S5 Per-fixture colour`, `S5 Red-trap`, `S5 Deferred FX`, `S5 Check Page`) and a binding map left in
+place on the X-Touch.
+
+**Test**:
+
+1. **Cold open.** Start the desk with the X-Touch attached, then open `/settings/surfaces`. The
+   picture must be the profile's `layout` (8 strip columns, the right-hand block, the master
+   column), not the grouped fallback table. Every motor fader, encoder ring and LED on the desk
+   must match the screen with nothing touched — that is D7's `surfaceControls.state` snapshot. The
+   **layer A/B LED is the device's own** and is not driven by us; a dark one is not a failure.
+2. **A strip.** Drop *Front wash* on strip 1. The fader drives the group's dimmer and a value
+   busked from the screen drives the motor back. The select button lights on press and the busk
+   view's target band shows the group selected. The lit encoder-bank button names the property the
+   encoder drives; switching the bank moves its meaning and redraws the ring. Then bind something
+   else directly to `fader-1` on the **active bank** and confirm it wins over the strip — including
+   when the strip's own row is bank-agnostic, which is the precedence §10 calls out.
+3. **Mixed on an encoder.** Select Front wash and Movers; turn *Sel · colour* — both change and the
+   ring lights. Select Movers only: the ring reads their value. Add Front wash back **at a colour
+   whose red channel differs** and the ring must go dark; a small turn then writes both.
+   *Colour feedback reads the red channel only* (see the plan's session 5 amendments), so two
+   colours sharing a red value will read as uniform and leave the ring lit — that is the known
+   narrowing, not a new fault, but note which colours were used.
+4. **PICKUP on a non-motor fader.** Bind one to *Sel · dimmer*. The dashed target draws at the
+   uniform value; crossing it engages. A mixed selection shows no target at all. On a **motor**
+   fader a mixed selection leaves the motor physically where it was while the screen shows no
+   value — nothing is written, which is the intended arm; confirm the motor does not jump.
+5. **A template button.** A **generic** colour template with nothing selected: nothing happens and
+   nothing lights. Two heads selected: the layer goes on and the LED lights. Add a third: the LED
+   goes off (not every selected head is covered) until pressed again. Then a **per-fixture**
+   template with nothing selected — it presses on its own heads and the LED stays **dark**, because
+   the LED folds over the selection and there is none. That divergence is documented and deliberate;
+   confirm it and do not file it as a bug.
+6. **A Look button.** A bound Look: on and off on its own fixtures with nothing selected. A
+   deferred-effect Look appears in the library **greyed, with no chip to drag** ("needs a selection
+   — cannot go on a button"); there is nothing to drop, and a hand-written row for one is refused
+   with `BINDING_LOOK_NEEDS_SELECTION`.
+7. **A pad, and the page.** A pad in a **solo** bank on a button: pressing it narrows its sibling on
+   the selected heads exactly as the busk view does. Then *Next page* on a button with **two
+   browsers open on the busk view** — both tabs must move. One browser proves nothing here. If a
+   tab click seems not to follow the desk, check the socket first: `setShowingBuskPage` goes through
+   `sendGesture`, which drops the frame and toasts when the socket is down, and the local override
+   that then wins is deliberate.
+8. **Unplug and replug** mid-session. Bank, encoder bank and every LED come back; the state is
+   session state and survives the detach, so nothing should need re-pressing. PICKUP faders re-arm
+   (the physical position is stale after an attach).
+9. **An older desk reading a newer project.** The baseline is **session 1 (`758ee9a`)**, *not* a
+   pre-session-1 build — see the plan's session 5 amendments: a pre-session-1 build has
+   `SUPPORTED_FORMAT_VERSION = 10` and refuses a v11 repo outright, and has no tolerant decode
+   behind that gate either. So: `git checkout 758ee9a`, a second `-Dlighting7.dataDir`, import a
+   project exported by this build. The six session-4 discriminators must each load as a dead,
+   rebindable `unknown` row, the rest of the bindings must work, and the project must not fail to
+   load. If check 9 cannot be reached this session, say so rather than reporting it untested-but-fine.
+
+Roughly 90 minutes for 1–8, plus 30 for check 9. If a check fails, promote the finding to a `FU-`
+item in [`followups.md`](followups.md) rather than fixing inline, unless it is small and clearly
+this plan's.

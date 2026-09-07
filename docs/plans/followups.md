@@ -30,6 +30,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
+| [`FU-MIDI-HOTPLUG-UNDETECTED`](#fu-midi-hotplug-undetected) | Ready | MIDI | — |
+| [`FU-MIDI-RESYNC-DELTA-SUPPRESSED`](#fu-midi-resync-delta-suppressed) | Ready | MIDI | — |
+| [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) | Ready | MIDI | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
 | [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
@@ -478,6 +481,132 @@ for the route — a read-modify-write from four surfaces that never show the pag
 stale document the *normal* case rather than the racing one.
 
 **Trigger**: two desks edit one busk page at once.
+
+---
+
+### `FU-MIDI-HOTPLUG-UNDETECTED`
+
+**A control surface unplugged or plugged in after boot is never noticed** · Ready · MIDI surface
+plan session 5 (2026-09-07), found on the rig
+
+Observed on a real X-Touch Compact: the USB was unplugged and the `/settings/surfaces` device row
+still read `in · out` **thirty seconds later**. Replugging produced no attach either — no motor
+moved, no LED lit — while the desk went on happily driving the controller it still held open.
+
+There are two detection paths and only one of them can work:
+
+* `MidiDeviceRegistry.pollLoop` runs at 1 Hz and calls `access.enumerateInputs()/enumerateOutputs()`.
+  `KtmidiAccessSource` implements those as `access.inputs` / `access.outputs` on a **`LibreMidiAccess`
+  instance that is never rebuilt** — libremidi enumerates when the observer is constructed, so this
+  poll returns the same list for the life of the process. It cannot see a change, and the diff in
+  `tickLocked` therefore never fires.
+* `State.registerCoreMidiChangeListener` calls `midiRegistry.rescan(createPlatformKtmidiAccessSource())`,
+  which *does* rebuild the access source. This is the only working path, and `State.kt` says so:
+  "Rebuilds of LibreMidiAccess are driven by CoreMIDI4J notifications rather than a timer — periodic
+  recreation leaks observers into libremidi's shared Arena and eventually breaks input on open
+  controllers."
+
+So hot-plug rests entirely on a CoreMIDI4J notification arriving, with no fallback and no log line
+when it doesn't. On the machine tested it did not arrive in either direction. The registry has an
+`onTransmissionGaveUp` hook on `KtMidiController` whose comment says it exists for exactly this
+shape of failure ("libremidi's enumeration still lists a physically-gone device") — but it only
+fires once *sends* start failing, and sends do not fail here, because the port stays valid across a
+replug.
+
+Everything downstream of the missing event is also skipped: no `sendFullResync(rearmPickup = true)`,
+and `touchState` / `takeover` are never cleared, since `clearDevice` is called only in the
+`DeviceDetached` arm.
+
+**Ready**: give the poll loop a way to see reality — either rebuild the access source on a cadence
+that is safe for libremidi's Arena, or diff against a cheap second source (CoreMIDI4J's own
+`getMidiDeviceInfo()` is already called in the debug path) and rescan when the two disagree. Log
+loudly when a notification-only build is running, because today the failure is completely silent.
+
+---
+
+### `FU-MIDI-RESYNC-DELTA-SUPPRESSED`
+
+**A full resync is discarded for every control whose value happens to be unchanged** · Ready ·
+MIDI surface plan session 5 (2026-09-07), found on the rig
+
+`KtMidiController` suppresses redundant sends (`KtMidiController.kt:146`):
+
+```kotlin
+val previous = lastSentBytes[key]
+if (previous != null && previous.contentEquals(bytes)) continue
+```
+
+That cache records **what we last sent**, and is used as though it recorded **what the hardware
+holds**. The two diverge the moment the hardware's state is reset behind the desk's back — a power
+cycle, a replug the registry did not notice ([`FU-MIDI-HOTPLUG-UNDETECTED`](#fu-midi-hotplug-undetected)),
+a device reset button, or dropped messages.
+
+`sendFullResync(displayKey, rearmPickup = true)` exists precisely for the case where *the physical
+position is stale* — its three callers are attach, bank change and project change — and it is the
+one thing delta suppression must not be allowed to swallow. Today it does not invalidate the cache,
+so a resync is a no-op for every control whose recomputed value matches the last one sent.
+
+Demonstrated on the rig, with the surface replugged and the desk still holding the old controller:
+
+| Control | Desk's value before / after | Sent? |
+|---|---|---|
+| Fader 1 (`speedMasterBpm`) | 74% → 74% | **no** — stayed at the bottom |
+| Fader 5 (`single-channel-dimmer.dimmer`) | 0% → 50% | yes — drove to halfway |
+| Buttons 25/26 (`selectTarget`) | off → on | yes — lit |
+
+A real detach/attach hides this, because `doOpen` builds a fresh `KtMidiController` with an empty
+`lastSentBytes`; it only bites when the resync runs against a controller that survived. That is why
+it has never been seen, and why it will still bite after the hot-plug bug is fixed if the fix
+reuses the controller.
+
+The primitive to fix it already exists and is already used for exactly this reason on a single LED:
+`invalidateFeedbackCache(key)`, called by `SurfaceFeedbackPublisher.onButtonRelease` so a
+re-asserted LED is not deduplicated away.
+
+**Ready**: have `sendFullResync` invalidate the feedback cache for the controls it is about to
+write when `rearmPickup` is true — the flag already means "the hardware may not match us". A
+`MidiController.invalidateAllFeedback()` is the smaller change than per-key invalidation at each
+send site. Pin it with a test that resyncs twice with an unchanged value and asserts two sends.
+
+---
+
+### `FU-MIDI-SELECTION-COLOUR-RED-ONLY`
+
+**A colour-bound fader or encoder reads only the red channel, so a mixed selection can report as
+uniform** · Ready · MIDI surface plan session 5 (2026-09-07), found on the rig
+
+`PropertyChannelResolver.describeFixtureProperty` returns **three** channels for a `DmxColour`
+(red, green, blue), and all three arms of `SurfaceFeedbackPublisher.findChannels` —
+`FixtureProperty`, `GroupProperty` and `SelectionProperty` — take `.firstOrNull()`. So a colour
+binding's `ContinuousEntry` stands on the **red** channel alone, and `computeValue7Bit`'s
+"do the channels agree" test never sees green or blue.
+
+Reproduced on the X-Touch against project 6, two Chauvet Freedom Par Hex both selected:
+
+| Heads | Red channel | Ring |
+|---|---|---|
+| `#FF0000` / `#0000FF` | 255 / 0 | **dark** — mixed, correct |
+| `#FF0000` / `#FFFF00` | 255 / 255 | **lit at full** — reported uniform on a red-and-yellow selection |
+
+The second row is the bug: the ring claims the selection agrees when it visibly does not, and a
+small turn then fans one 7-bit value to R/G/B on both heads from a position the operator was told
+was their common colour. It is exactly the class the plan's §10 named — "a ring left lit on a mixed
+selection is what hardware shows and the tests do not" — and the unit tests miss it because their
+fixtures use single-channel sliders, where first-channel and whole-property are the same thing.
+
+The *write* path is unaffected and stays as §7 describes it: one 7-bit value fanned to R/G/B.
+
+Not fixed inline because it is not this plan's to decide. Narrowing three channels to one common
+value is a `PropertyChannelResolver` question, and the honest answers differ in what the ring
+*means*: all-three-must-agree (correct, but a ring position then has no single value to show —
+arguably `null` whenever the head is not greyscale), or a luminance/derived scalar (shows something
+always, but no longer the thing the encoder writes). §7's "colour on an encoder as hue" is the
+same decision from the other side and is already out of scope, so this should be settled with it.
+
+**Ready**: pick a rule for what a colour-bound continuous control's feedback value *is*, apply it in
+`findChannels` (and to the takeover machine, which currently arms against red), and pin it with a
+multi-channel fixture in `SurfaceFeedbackPublisherTest` — the missing coverage is as much the
+finding as the behaviour is.
 
 ---
 
