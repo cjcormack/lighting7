@@ -30,9 +30,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
-| [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) | Ready | MIDI | — |
 | [`FU-MIDI-RING-STYLE-MIXED`](#fu-midi-ring-style-mixed) | Trigger | MIDI | a second profile declares a `FAN` or `PAN` encoder ring |
-| [`FU-MIDI-ENCODER-HUE`](#fu-midi-encoder-hue) | Trigger | MIDI | an operator asks for hue on an encoder, or `FU-MIDI-SELECTION-COLOUR-RED-ONLY` is picked up |
 | [`FU-AI-SET-SELECTION`](#fu-ai-set-selection) | Trigger | AI | a conversation asks the AI to select fixtures rather than act on them |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
@@ -489,46 +487,6 @@ stale document the *normal* case rather than the racing one.
 
 ---
 
-### `FU-MIDI-SELECTION-COLOUR-RED-ONLY`
-
-**A colour-bound fader or encoder reads only the red channel, so a mixed selection can report as
-uniform** · Ready · MIDI surface plan session 5 (2026-09-07), found on the rig
-
-`PropertyChannelResolver.describeFixtureProperty` returns **three** channels for a `DmxColour`
-(red, green, blue), and all three arms of `SurfaceFeedbackPublisher.findChannels` —
-`FixtureProperty`, `GroupProperty` and `SelectionProperty` — take `.firstOrNull()`. So a colour
-binding's `ContinuousEntry` stands on the **red** channel alone, and `computeValue7Bit`'s
-"do the channels agree" test never sees green or blue.
-
-Reproduced on the X-Touch against project 6, two Chauvet Freedom Par Hex both selected:
-
-| Heads | Red channel | Ring |
-|---|---|---|
-| `#FF0000` / `#0000FF` | 255 / 0 | **dark** — mixed, correct |
-| `#FF0000` / `#FFFF00` | 255 / 255 | **lit at full** — reported uniform on a red-and-yellow selection |
-
-The second row is the bug: the ring claims the selection agrees when it visibly does not, and a
-small turn then fans one 7-bit value to R/G/B on both heads from a position the operator was told
-was their common colour. It is exactly the class the plan's §10 named — "a ring left lit on a mixed
-selection is what hardware shows and the tests do not" — and the unit tests miss it because their
-fixtures use single-channel sliders, where first-channel and whole-property are the same thing.
-
-The *write* path is unaffected and stays as §7 describes it: one 7-bit value fanned to R/G/B.
-
-Not fixed inline because it is not this plan's to decide. Narrowing three channels to one common
-value is a `PropertyChannelResolver` question, and the honest answers differ in what the ring
-*means*: all-three-must-agree (correct, but a ring position then has no single value to show —
-arguably `null` whenever the head is not greyscale), or a luminance/derived scalar (shows something
-always, but no longer the thing the encoder writes). §7's "colour on an encoder as hue" is the
-same decision from the other side and is already out of scope, so this should be settled with it.
-
-**Ready**: pick a rule for what a colour-bound continuous control's feedback value *is*, apply it in
-`findChannels` (and to the takeover machine, which currently arms against red), and pin it with a
-multi-channel fixture in `SurfaceFeedbackPublisherTest` — the missing coverage is as much the
-finding as the behaviour is.
-
----
-
 ### `FU-MIDI-RING-STYLE-MIXED`
 
 **`FAN` and `PAN` encoder rings have no mixed-state rendering of their own** · Trigger · MIDI
@@ -546,25 +504,6 @@ reads either way, so the screen cannot be wrong about it — only the hardware c
 **Trigger**: a second profile declares an encoder with a `FAN` or `PAN` ring. Then: a per-style off
 value in `ringOffValue`, an encoder cell that draws that style, and check 3 repeated on the new
 hardware.
-
----
-
-### `FU-MIDI-ENCODER-HUE`
-
-**Colour on an encoder is one 7-bit value fanned to R, G and B, not a hue** · Trigger · MIDI
-surface plan (2026-09-07), §7
-
-`SelectionProperty(colour)` on an encoder — and a `FixtureProperty` / `GroupProperty` colour
-binding before it — writes the same 7-bit value to every channel of the `DmxColour`, as
-`PropertyChannelResolver` does for any colour on a continuous control. So a turn sweeps black to
-white and cannot reach a colour. The plan kept that deliberately: a hue wheel is a resolver
-decision, not a surface one, and it is the *write*-side half of the question
-[`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) asks of the *feedback*
-side. Settle the two together, because whatever a colour-bound control's value *is* decides both
-what a turn writes and what the ring shows.
-
-**Trigger**: an operator asks for hue on an encoder, or `FU-MIDI-SELECTION-COLOUR-RED-ONLY` is
-picked up.
 
 ---
 
@@ -1730,6 +1669,18 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-MIDI-SELECTION-COLOUR-RED-ONLY` + `FU-MIDI-ENCODER-HUE` (uncommitted) — settled together, as
+  the two items said they must be: a colour on a continuous control is a **hue**.
+  `PropertyChannelResolver` owns both directions — `toPropertyValue` writes the new hue at the
+  head's current value and saturation, the saturation floored at a quarter so a turn on a white
+  is visible; `describePropertyRead` + `readHead` read a colour's three channels as one hue, with
+  black, grey and any tint under a tenth saturated reading as no value; and `commonValue` says
+  when a set of reads is one setting — every pair within tolerance, the tolerance a hue's chroma
+  quantisation (chroma, not value: a bright pastel is as coarse as a dim saturated head).
+  `SurfaceFeedbackPublisher.findHeads` takes the whole read instead of the first channel, so a
+  red-and-yellow selection darkens the ring and a PICKUP fader arms against the hue. The floor,
+  the chroma tolerance and the all-pairs test were the review's three findings on the first cut. `resolveFixtureProperty`, the last statement of the
+  fan-out with no production caller, is deleted. Rig check staged as `FU-MANUAL-MIDI-COLOUR-HUE`
 - `FU-MIDI-HOTPLUG-UNDETECTED` (`e401871`) — `CoreMidiHotPlug`: a daemon thread that makes the process's first
   `MIDIClientCreate` and then pumps its `CFRunLoop`, because that is the loop CoreMIDI delivers on
   and a headless JVM never ran one — so the notification `State` registered for could not arrive,

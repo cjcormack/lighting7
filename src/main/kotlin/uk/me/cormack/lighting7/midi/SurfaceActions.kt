@@ -161,7 +161,9 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: fixture '{}' not found", fixtureKey)
             return
         }
-        val value = PropertyChannelResolver.toPropertyValue(fixture, propertyName, midiValue7Bit) ?: run {
+        val value = PropertyChannelResolver.toPropertyValue(
+            fixture, propertyName, midiValue7Bit, PropertyChannelResolver.channelReader(fixtures),
+        ) ?: run {
             logger.debug("Surface write: property '{}' on '{}' not fader-writable", propertyName, fixtureKey)
             return
         }
@@ -175,9 +177,11 @@ class DefaultSurfaceActions(
             logger.debug("Surface write: group '{}' not found", groupName)
             return
         }
-        // Convert per member — sliders scale through each member's own min..max sub-range.
+        // Convert per member — sliders scale through each member's own min..max sub-range, and
+        // a hue lands on each member's own current colour.
+        val read = PropertyChannelResolver.channelReader(fixtures)
         val writes = group.fixtures.filterIsInstance<Fixture>().mapNotNull { member ->
-            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit)?.let {
+            PropertyChannelResolver.toPropertyValue(member, propertyName, midiValue7Bit, read)?.let {
                 ProgrammerWriter.PropertyWrite(member, propertyName, it, sourceGroup = groupName)
             }
         }

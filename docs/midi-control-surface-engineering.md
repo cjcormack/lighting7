@@ -115,7 +115,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 | File | Purpose |
 |---|---|
 | `MidiController.kt` | Transport interface (relaxed from `sealed` — see Phase 4 change log in plan). Exposes `input: SharedFlow<MidiInputEvent>`, `sendFeedback(MidiFeedbackMessage)`, `close()`. Test-seam interfaces: `MidiSendTarget`, `MidiInputSource`, `MidiAccessSource`. |
-| `KtMidiController.kt` | ktmidi-backed implementation. Dedicated `newSingleThreadContext("MidiThread-${displayKey}")`; per-`MidiControlKey` conflated channels; 60 Hz transmission loop with delta suppression. |
+| `KtMidiController.kt` | ktmidi-backed implementation. Dedicated `newSingleThreadContext("MidiThread-${displayKey}")`; per-`MidiControlKey` conflated channels; 60 Hz transmission loop with delta suppression. Logs every byte in and out as `midi-raw in` / `midi-raw out` under `uk.me.cormack.lighting7.midi.raw` (DEBUG, on by default via the package logger) — the wire itself, separate from what the parser and router make of it. |
 | `KtmidiAccessSource.kt` | Wraps a ktmidi `MidiAccess` into the `MidiAccessSource` abstraction. `createPlatformKtmidiAccess()` picks `LibreMidiAccess` (native libremidi via Panama FFM) on macOS / Linux and falls back to `JvmMidiAccess` (`javax.sound.midi`) on Windows, where libremidi-panama lacks an arm64 binary and its x64 binary trips an LLP64 ABI bug. |
 | `MidiInputEvent.kt` | Sealed ADT: `NoteOn` / `NoteOff` / `ControlChange` / `PitchBend` / `SysEx`. |
 | `MidiFeedbackMessage.kt` | Outbound ADT with `controlKey` for conflation and `encode(): ByteArray`. |
@@ -148,7 +148,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 |---|---|
 | `SurfaceInputRouter.kt` | Per-device `CoroutineName("SurfaceRouter-$displayKey")` collector. Pipeline: `matchEvent → soft-takeover gate → binding resolve → SurfaceActions dispatch`. |
 | `SurfaceActions.kt` | Port interface between router and show services. Production: `DefaultSurfaceActions` resolves `state.show.*` on every call so project switches route cleanly, reads `state.deskSelection` for the selection arms, and resolves a cue / stack uuid to the current project's row before calling `CueStackManager`. Tests: `RecordingActions`. |
-| `PropertyChannelResolver.kt` | `object` for **MIDI surface input only**: takes a 7-bit MIDI value and produces `List<ChannelWrite>`. Sliders scale to each channel's native `min..max`; Colour fans the 7-bit value to R/G/B; Settings return empty (enum bindings are button-only — Open Question 7). For property-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/PropertyChannelWriter` which accepts full-range `CueAssignmentResolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
+| `PropertyChannelResolver.kt` | `object` owning what a continuous control **means** on a property, in both directions — the write (`toPropertyValue`, a 7-bit value → the programmer's `PropertyValue`) and the read (`describePropertyRead` + `readHead`, the property's current channels → a 7-bit feedback position). Sliders scale through their own `min..max`. **Colour is hue**: a turn writes the new hue at the head's current value and saturation, the saturation floored at `MIN_SATURATION` (a quarter) so a turn on a white is visible; the ring reads the head's hue, and a head under `HUE_READ_MIN_SATURATION` — black, grey, a warm white — reads as no value rather than lighting for a colour the rig is not showing. A read carries a tolerance from its **chroma** (not its value: a bright pastel holds hue as coarsely as a dim saturated head), and `commonValue` requires **every pair** of heads to agree, since a tolerance test is not transitive and anchoring on the first head would make the answer depend on enumeration order. The two directions live in one file so a ring can never claim a position a move would not reproduce; the old rule (one value fanned to R/G/B, red read back) is `FU-MIDI-SELECTION-COLOUR-RED-ONLY` / `FU-MIDI-ENCODER-HUE`. A flash on a colour is still grey at the binding's max — a flash is a level. Settings return null (enum bindings are button-only — Open Question 7). For property-value → channel resolution elsewhere (preset toggles, locate, programmer publishes), see `fx/PropertyChannelWriter` which accepts full-range `CueAssignmentResolver.PropertyValue` variants and handles Colour + Position without MIDI-7bit scaling. |
 | `ActiveBankState.kt` | Ephemeral `deviceTypeKey → bank` map backed by a `ConcurrentHashMap` fast-lookup plus a `changes: SharedFlow<BankChange>` for WS broadcast. Not persisted. |
 | `FlashStateTracker.kt` | Lock-free `Set<Int>` of currently-held binding IDs (overlapping presses don't clobber release semantics). Exposes `changes: SharedFlow<FlashChange>`. |
 | `GlobalScalerState.kt` | Show-scoped `TransmitModifier` implementation of Blackout + Grand Master. Walks fixtures on `fixturesChanged` to classify intensity-category channels into a packed-`Long` `AtomicReference<Set<Long>>` for allocation-free hot-path lookup. A toggle only flips the modifier's own state — output is a continuous stream, so the next frame of each universe carries it (see [dmx-engineering.md §Change latency](dmx-engineering.md#change-latency)). The `blackoutEnabled` / `grandMasterEnabled` flags read through to a project-scoped `GlobalScalerStateHolder` so state survives project switches within a session. |
@@ -496,18 +496,25 @@ The index is rebuilt on a swap in an `AtomicReference` on any of: device attach/
 
 ### Continuous feedback
 
-A `ContinuousEntry` stands on **one or more channels**: one for a fixture slider (the red axis for
-a colour, symmetric with the write path that fans one value to all three), one per member for a
-`GroupProperty`, one per selected head for a `SelectionProperty` — and none for a selection
-binding with nothing selected, which is an entry that exists so the control reads "no selection"
-rather than "unbound". The entry is indexed under every channel it stands on.
+A `ContinuousEntry` stands on **one or more heads**: the fixture itself for a `FixtureProperty`,
+one per member for a `GroupProperty`, one per selected head for a `SelectionProperty` — and none
+for a selection binding with nothing selected, which is an entry that exists so the control reads
+"no selection" rather than "unbound". A head is a `PropertyChannelResolver.PropertyRead`: a
+slider's one channel, or a colour's three read together as **one hue**. The entry is indexed under
+every channel of every head, so a tick on any of a colour's three channels re-reads the hue.
+(Each arm used to take the *first* channel of the flat description, so a colour binding stood on
+red alone and a red-and-yellow selection read as uniform — `FU-MIDI-SELECTION-COLOUR-RED-ONLY`.)
 
 On `channelsChanged(universe, changes)`:
 
 1. For each changed `(universe, channel)`, look up `byChannel[packChannelKey(universe.universe, channel)]`.
 2. For each `ContinuousEntry` (a multi-channel entry once per tick, however many of its channels moved):
-   - `computeValue7Bit(entry)` reads live DMX on every channel via `DmxController.getValue`, scales each
-     through its own `min..max` to 0..127, and returns the **common value — or null when they disagree**.
+   - `computeValue7Bit(entry)` reads every head through `PropertyChannelResolver.readHead` — a slider
+     scaled through its own `min..max` to 0..127, a colour as its hue — and returns the **common value
+     — or null when they disagree**, or when a head has no value to give (a colour with no hue).
+     "Agree" is `PropertyChannelResolver.commonValue`: every pair within tolerance — exact for a
+     slider, a colour's hue within the quantisation its chroma allows — so two heads written at one
+     hue still agree after each rounded it into its channels, whatever order they are enumerated in.
    - Non-null: feed it into `SoftTakeoverStateMachine.setLogical(displayKey, controlId, value7Bit)` so
      pickup policy has an up-to-date target; if the target is a motor fader and
      `TouchStateTracker.isTouched(displayKey, controlId) == true`, **skip the motor write** — the

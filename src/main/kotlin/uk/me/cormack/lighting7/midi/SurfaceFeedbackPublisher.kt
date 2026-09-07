@@ -8,7 +8,6 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -84,12 +83,14 @@ interface SurfaceFeedbackHooks {
  * effective takeover policy is baked into [ContinuousEntry] at rebuild time so the hot
  * [onChannelsChanged] path never walks the binding cache or attached-devices list.
  *
- * A continuous entry may stand on **several channels** — a fixed group binding on every member,
- * a selection binding on every selected head. Its feedback value is the one 7-bit value those
- * channels agree on, and **null when they disagree**: nothing goes to the motor, the ring is
- * driven to its off state, takeover is disarmed, and the stream reports `value: null`. A turn
- * or move then writes every head and the next tick reads uniform
- * (`docs/plans/completed/midi-surface-plan.md` D10).
+ * A continuous entry may stand on **several heads** — a fixed group binding on every member,
+ * a selection binding on every selected head — and a head on several channels, since a colour
+ * is read as one hue from three. Its feedback value is the one 7-bit value those heads agree
+ * on, and **null when they disagree**: nothing goes to the motor, the ring is driven to its
+ * off state, takeover is disarmed, and the stream reports `value: null`. A turn or move then
+ * writes every head and the next tick reads uniform
+ * (`docs/plans/completed/midi-surface-plan.md` D10). What a head's value *is* — and so what a
+ * turn writes — is [PropertyChannelResolver]'s rule, not this class's.
  *
  * ## The control-state stream
  *
@@ -181,20 +182,23 @@ class SurfaceFeedbackPublisher(
      * takeover policy (per-binding override > device-class default) computed once at
      * [rebuildIndex] time — saves a binding-cache lookup per DMX tick on the hot path.
      *
-     * [channels] are the channels whose DMX values drive the 7-bit feedback position — one for
-     * a fixture slider (the red axis for a colour, keeping the mapping symmetric with the write
-     * path which fans the same 7-bit value to all three), one per member for a group, one per
-     * selected head for a selection binding. Empty for a selection binding with nothing
-     * selected: the entry exists so the control reads "no selection" rather than "unbound".
+     * [heads] are what the 7-bit feedback position is read from — one per head the target names:
+     * the fixture itself, each member of a group, each selected head of a selection binding. A
+     * head is a slider's one channel or a colour's three read together as a hue
+     * ([PropertyChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
+     * Empty for a selection binding with nothing selected: the entry exists so the control reads
+     * "no selection" rather than "unbound". [channels] is the flat list the index is keyed on.
      */
     private data class ContinuousEntry(
         val displayKey: String,
         val deviceTypeKey: String,
         val control: ControlDescriptor,
         val binding: ControlSurfaceBindingService.ResolvedBinding,
-        val channels: List<PropertyChannelResolver.PropertyChannel>,
+        val heads: List<PropertyChannelResolver.PropertyRead>,
         val policy: BindingTakeoverPolicy,
-    )
+    ) {
+        val channels: List<PropertyChannelResolver.PropertyChannel> = heads.flatMap { it.channels }
+    }
 
     /** Discrete-binding entry for LED feedback (Flash / Blackout / GrandMasterToggle / Select / Locate). */
     private data class LedEntry(
@@ -784,17 +788,17 @@ class SurfaceFeedbackPublisher(
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
-                    val channels = fixtures?.let { findChannels(it, binding.target, selectedHeads) }
-                    if (channels != null) {
+                    val heads = fixtures?.let { findHeads(it, binding.target, selectedHeads) }
+                    if (heads != null) {
                         val entry = ContinuousEntry(
                             displayKey = displayKey,
                             deviceTypeKey = a.typeKey,
                             control = control,
                             binding = binding,
-                            channels = channels,
+                            heads = heads,
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
-                        for (pc in channels) {
+                        for (pc in entry.channels) {
                             byChannel.getOrPut(packChannelKey(pc.universe.universe, pc.channel)) { mutableListOf() }
                                 .add(entry)
                         }
@@ -866,21 +870,25 @@ class SurfaceFeedbackPublisher(
     }
 
     /**
-     * The channels a continuous target's feedback reads — null when the target is not a DMX
+     * The heads a continuous target's feedback reads — null when the target is not a DMX
      * property or does not resolve, so no entry is built. A selection target always resolves
      * (to nothing when nothing is selected), because "no selection" is a state the control
      * shows rather than the absence of a binding.
+     *
+     * Every arm takes the **whole** [PropertyChannelResolver.PropertyRead]. Each used to take the
+     * first channel of the flat description, so a colour binding stood on red alone and a
+     * red-and-yellow selection read as uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`).
      */
-    private fun findChannels(
+    private fun findHeads(
         fixtures: Fixtures,
         target: BindingTarget,
         selectedHeads: List<CueTargetDto>,
-    ): List<PropertyChannelResolver.PropertyChannel>? = when (target) {
+    ): List<PropertyChannelResolver.PropertyRead>? = when (target) {
         is BindingTarget.FixtureProperty -> {
             val fixture = try {
                 fixtures.untypedFixture(target.fixtureKey)
             } catch (_: Exception) { null }
-            fixture?.let { PropertyChannelResolver.describeFixtureProperty(it, target.propertyName).firstOrNull() }
+            fixture?.let { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
                 ?.let { listOf(it) }
         }
         is BindingTarget.GroupProperty -> {
@@ -888,7 +896,7 @@ class SurfaceFeedbackPublisher(
                 fixtures.untypedGroup(target.groupName)
             } catch (_: Exception) { null }
             group?.fixtures?.filterIsInstance<Fixture>()
-                ?.mapNotNull { PropertyChannelResolver.describeFixtureProperty(it, target.propertyName).firstOrNull() }
+                ?.mapNotNull { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
                 ?.takeIf { it.isNotEmpty() }
         }
         is BindingTarget.SelectionProperty -> selectedHeads.mapNotNull { head ->
@@ -896,7 +904,7 @@ class SurfaceFeedbackPublisher(
             val fixture = try {
                 fixtures.untypedFixture(head.key)
             } catch (_: Exception) { null }
-            fixture?.let { PropertyChannelResolver.describeFixtureProperty(it, target.propertyName).firstOrNull() }
+            fixture?.let { PropertyChannelResolver.describePropertyRead(it, target.propertyName) }
         }
         // Never seen here: resolve() derives a strip to one of the property targets above.
         is BindingTarget.Strip -> null
@@ -1041,24 +1049,21 @@ class SurfaceFeedbackPublisher(
      * family retired a cue is read-only from a surface, and the stage is the only thing
      * feedback can mean.
      *
-     * Null when the channels disagree (a divergent group, a mixed selection) or when there are
-     * none (nothing selected): the control has no one value to show.
+     * Null when the heads disagree (a divergent group, a mixed selection), when one of them has
+     * no position to report (a colour with no hue), or when there are none (nothing selected):
+     * the control has no one value to show. What "agree" means — exact for a slider, within a
+     * head's hue quantisation for a colour, and every pair rather than each against the first —
+     * is [PropertyChannelResolver.commonValue]'s.
      */
     private fun computeValue7Bit(entry: ContinuousEntry): UByte? {
         val fixtures = currentFixtures ?: return null
-        if (entry.channels.isEmpty()) return null
-        var common: UByte? = null
-        for (pc in entry.channels) {
-            val controller: DmxController = try {
-                fixtures.controller(pc.universe)
-            } catch (_: Exception) {
-                return null
-            }
-            val value = PropertyChannelResolver.scaleWithinRangeTo7Bit(controller.getValue(pc.channel), pc.min, pc.max)
-            if (common == null) common = value
-            else if (common != value) return null
+        if (entry.heads.isEmpty()) return null
+        val read = PropertyChannelResolver.channelReader(fixtures)
+        val reads = ArrayList<PropertyChannelResolver.HeadValue>(entry.heads.size)
+        for (head in entry.heads) {
+            reads += PropertyChannelResolver.readHead(head, read) ?: return null
         }
-        return common
+        return PropertyChannelResolver.commonValue(reads)
     }
 
     /**

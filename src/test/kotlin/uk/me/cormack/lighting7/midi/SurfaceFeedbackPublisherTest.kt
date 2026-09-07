@@ -1050,4 +1050,93 @@ class SurfaceFeedbackPublisherTest {
             scope.cancel()
         }
     }
+    // hex-1's rgbColour is channels 2..4, hex-2's 14..16.
+    private fun MockDmxController.paint(first: Int, r: Int, g: Int, b: Int) {
+        setValue(first, r.toUByte(), 0)
+        setValue(first + 1, g.toUByte(), 0)
+        setValue(first + 2, b.toUByte(), 0)
+    }
+
+    @Test
+    fun `a colour-bound encoder reads one hue from all three channels, so red and yellow read mixed`() = runBlocking {
+        val h = Harness(listOf(binding(1, "enc-1", BindingTarget.SelectionProperty("rgbColour"))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.paint(2, 0, 0, 255)
+            h.controller.paint(14, 0, 0, 255)
+            h.selection.set(listOf(hex1, hex2))
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            val blue = PropertyChannelResolver.hueRead(0u, 0u, 255u)!!.value7Bit
+            assertEquals(blue, h.recordingController.feedback.ccOn(10).last().value, "two blue heads: the ring reads blue")
+            assertEquals(blue.toInt(), h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1").value)
+
+            // The FU-MIDI-SELECTION-COLOUR-RED-ONLY case: red and yellow share a full red channel.
+            h.recordingController.feedback.clear()
+            h.controller.paint(2, 255, 0, 0)
+            h.controller.paint(14, 255, 255, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(2 to 255u.toUByte(), 4 to 0u.toUByte(), 14 to 255u.toUByte(), 15 to 255u.toUByte(), 16 to 0u.toUByte()))
+            yield()
+            val mixed = h.recordingController.feedback.ccOn(10)
+            assertEquals(1, mixed.size, "mixed: exactly one ring write, the off byte")
+            assertEquals(0u.toUByte(), mixed.single().value)
+            h.publisher.controlStates.flushForTest()
+            val state = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1")
+            assertNull(state.value, "red and yellow are not one colour")
+            assertEquals(RingState.OFF, state.ring)
+
+            // Both red: uniform at hue 0 — a lit ring at position 0, not the off state.
+            h.recordingController.feedback.clear()
+            h.controller.paint(14, 255, 0, 0)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(15 to 0u.toUByte()))
+            yield()
+            h.publisher.controlStates.flushForTest()
+            val red = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1")
+            assertEquals(0, red.value)
+            assertEquals(RingState.ON, red.ring)
+
+            // A grey head has no hue: the selection has no one value.
+            h.controller.paint(2, 100, 100, 100)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(2 to 100u.toUByte(), 3 to 100u.toUByte(), 4 to 100u.toUByte()))
+            yield()
+            h.publisher.controlStates.flushForTest()
+            assertNull(h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue("enc-1").value, "grey has no hue")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a colour-bound PICKUP fader arms against the hue and disarms on a grey head`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.SelectionProperty("rgbColour"), policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.controller.paint(2, 0, 0, 255)
+            h.controller.paint(14, 0, 0, 255)
+            h.selection.set(listOf(hex1, hex2))
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 5u),
+                "uniform blue: PICKUP is armed against the hue, and red is nowhere near it",
+            )
+            // Under the red-only read both heads' red channel was 0 and a fader at 0 would have picked up.
+            assertFalse(h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 0u))
+            h.controller.paint(14, 90, 90, 90)
+            h.publisher.simulateChannelsChangedForTest(Universe(0, 0), mapOf(14 to 90u.toUByte(), 15 to 90u.toUByte(), 16 to 90u.toUByte()))
+            yield()
+            assertTrue(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "fader-1", 6u),
+                "a grey head: nothing to cross, so the move writes through",
+            )
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
 }
