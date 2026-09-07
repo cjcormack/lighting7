@@ -30,6 +30,13 @@ import uk.me.cormack.lighting7.midi.LedFeedback
  *     to re-assert LED state on button release — see [SurfaceFeedbackPublisher.onButtonRelease].
  *   - **Layer A / B** — the device-side layer switch emits **Program Change** (value 0 = A,
  *     1 = B) — *not* a NoteOn.
+ *   - **Power-on quirk (firmware, not ours)** — from power-on until a layer button is pressed
+ *     *on the device*, every fader sends only `00` and `7F` as it is moved, and echoes a motor
+ *     move back inverted, so a bound fader under the desk chases itself at tick rate. Proven
+ *     2026-09-07 with `receivemidi` and no host connected at all; a host-side resync, a motor
+ *     CC and an attach-settle hold were each tried and none cleared it. Press Layer A after
+ *     powering the surface on. If a host-sent Program Change ever proves to switch the layer,
+ *     send it on attach here and delete this note.
  */
 @ControlSurfaceType(
     typeKey = "x-touch-compact-standard",

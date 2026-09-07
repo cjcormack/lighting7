@@ -40,6 +40,17 @@ class KtMidiController internal constructor(
 ) : MidiController {
 
     companion object {
+        /**
+         * Every byte in and out of a device, under its own logger name so it can be switched on
+         * alone: `uk.me.cormack.lighting7.midi.raw` at DEBUG. What the parser and the router make
+         * of the traffic is logged by them; this is the wire itself, for the day a device
+         * misbehaves and the question is what it actually sent.
+         */
+        private val rawLogger = org.slf4j.LoggerFactory.getLogger("uk.me.cormack.lighting7.midi.raw")
+
+        private fun hex(bytes: ByteArray, offset: Int, length: Int): String =
+            (offset until offset + length).joinToString(" ") { "%02x".format(bytes[it].toInt() and 0xFF) }
+
         /** 60 Hz — matches the feel of the ArtNet 25 ms loop, slightly faster to keep LED response crisp. */
         const val DEFAULT_TRANSMIT_INTERVAL_MS: Long = 17L
     }
@@ -67,6 +78,7 @@ class KtMidiController internal constructor(
 
     init {
         inputSource?.setListener { bytes, offset, length ->
+            if (rawLogger.isDebugEnabled) rawLogger.debug("midi-raw in  {}: {}", handle.displayKey, hex(bytes, offset, length))
             parser.parse(bytes, offset, length) { event ->
                 if (event is MidiInputEvent.ControlChange) inboundCcRate.record()
                 _input.tryEmit(event)
@@ -153,6 +165,7 @@ class KtMidiController internal constructor(
             val bytes = message.encode()
             val previous = lastSentBytes[key]
             if (previous != null && previous.contentEquals(bytes)) continue
+            if (rawLogger.isDebugEnabled) rawLogger.debug("midi-raw out {}: {}", handle.displayKey, hex(bytes, 0, bytes.size))
             target.send(bytes)
             if (message is MidiFeedbackMessage.ControlChangeFeedback) outboundCcRate.record()
             lastSentBytes[key] = bytes
