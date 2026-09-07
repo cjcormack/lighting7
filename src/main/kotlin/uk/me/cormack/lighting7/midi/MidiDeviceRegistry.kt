@@ -10,15 +10,36 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
 /**
+ * A second, cheap reading of the MIDI environment for the poll loop to cross-check against, and
+ * the means to rebuild the access source when the two disagree.
+ *
+ * On macOS the notification path ([CoreMidiHotPlug] → `State`'s listener → [MidiDeviceRegistry.rescan])
+ * is the detector, and this is its backstop: [fingerprint] is sampled every poll, and a change
+ * that is still unanswered by a rescan one poll interval later triggers exactly one
+ * [rebuildAccess]. It is a change detector, never an equality test between two backends — two
+ * enumerations that spell one device differently would otherwise disagree forever and rebuild on
+ * every tick, which is the Arena leak `State.midiRegistry` warns about. The rebuild count is
+ * bounded by the number of changes observed, so a dead notification path costs one rebuild per
+ * plug event and a live one costs nothing extra.
+ */
+class HotPlugFallback(
+    val fingerprint: () -> String,
+    val rebuildAccess: () -> MidiAccessSource,
+)
+
+/**
  * Phase 0 device registry. Owns the [MidiAccessSource], polls for connected MIDI ports on a
  * fixed interval, pairs ports into [MidiDeviceHandle]s, and emits connect/disconnect events.
  * Polling diffs the enumerated port lists because libremidi does not expose native
- * device-added/removed events.
+ * device-added/removed events. On macOS the poll only sees a plug or unplug at all because
+ * [CoreMidiHotPlug] pumps the run loop CoreMIDI updates on; [HotPlugFallback] is how it notices
+ * one that CoreMIDI announced to nobody.
  */
 class MidiDeviceRegistry(
     access: MidiAccessSource,
     private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
     private val autoOpen: Boolean = true,
+    private val hotPlugFallback: HotPlugFallback? = null,
 ) {
     @Volatile
     private var access: MidiAccessSource = access
@@ -56,6 +77,13 @@ class MidiDeviceRegistry(
     // port IDs already captured for an in-flight doOpen, since each KtmidiAccessSource
     // stamps its own instance-ID into them.
     private val accessMutex = Mutex()
+
+    // HotPlugFallback state, guarded by accessMutex. `fallbackBaseline` is the fingerprint the
+    // current access source was built against (null = re-baseline on the next tick, which is
+    // what a rescan sets so a notification-driven rebuild is never followed by a fallback one);
+    // `fallbackPending` is set when one tick saw a change, and a second consecutive one rebuilds.
+    private var fallbackBaseline: String? = null
+    private var fallbackPending: Boolean = false
 
     fun start(parentScope: CoroutineScope) {
         if (pollJob != null) return
@@ -108,9 +136,12 @@ class MidiDeviceRegistry(
      */
     suspend fun rescan(newAccess: MidiAccessSource) {
         accessMutex.withLock {
-            val old = access
-            access = newAccess
-            runCatching { old.close() }
+            swapAccessLocked(newAccess)
+            // The environment changed by this very notification, so whatever fingerprint the poll
+            // last baselined against is stale by definition. Re-baseline on the next tick rather
+            // than here: a fallback rebuild of what this rescan just built is the thing to avoid.
+            fallbackBaseline = null
+            fallbackPending = false
             tickLocked()
         }
     }
@@ -145,12 +176,15 @@ class MidiDeviceRegistry(
     }
 
     private suspend fun tickLocked() {
+        val fingerprint = reconcileFallbackLocked()
         val snapshotAccess = access
         val ports = snapshotAccess.enumerateInputs() + snapshotAccess.enumerateOutputs()
         val newHandles = MidiDeviceHandle.pair(ports).sortedBy { it.displayKey }
         val previous = _devices.value
         if (logger.isDebugEnabled) {
-            val jvmNames = runCatching {
+            // `split` on an empty fingerprint (no MIDI devices at all) yields one empty entry, not
+            // none — so filter, or the summary reports a phantom unnamed device.
+            val jvmNames = fingerprint?.split(';')?.filter { it.isNotEmpty() }?.map { it.substringBefore('|') } ?: runCatching {
                 javax.sound.midi.MidiSystem.getMidiDeviceInfo().map { it.name }
             }.getOrDefault(emptyList())
             val coreMidi4j = runCatching {
@@ -188,6 +222,49 @@ class MidiDeviceRegistry(
             }
             _events.emit(DeviceEvent.Connected(handle))
         }
+    }
+
+    /**
+     * Sample [HotPlugFallback.fingerprint] and rebuild the access source if the environment has
+     * changed and stayed changed across two consecutive ticks with no [rescan] in between. Returns
+     * the fingerprint sampled, or null when there is no fallback or it could not be read.
+     */
+    private fun reconcileFallbackLocked(): String? {
+        val fallback = hotPlugFallback ?: return null
+        val fingerprint = runCatching { fallback.fingerprint() }.getOrElse {
+            logger.debug("Hot-plug fallback fingerprint unavailable: {}", it.message)
+            return null
+        }
+        val baseline = fallbackBaseline
+        when {
+            baseline == null -> fallbackBaseline = fingerprint
+            fingerprint == baseline -> fallbackPending = false
+            !fallbackPending -> {
+                fallbackPending = true
+                logger.debug("javax.sound.midi sees a MIDI environment change; waiting one poll interval for a CoreMIDI notification")
+            }
+            else -> {
+                logger.warn(
+                    "MIDI environment changed and no CoreMIDI notification rescanned within a poll interval — " +
+                        "rebuilding the access source from the poll loop. Was [{}], now [{}]",
+                    baseline, fingerprint,
+                )
+                fallbackBaseline = fingerprint
+                fallbackPending = false
+                val rebuilt = runCatching { fallback.rebuildAccess() }.getOrElse {
+                    logger.warn("Hot-plug fallback could not rebuild the MIDI access source: ${it.message}", it)
+                    return fingerprint
+                }
+                swapAccessLocked(rebuilt)
+            }
+        }
+        return fingerprint
+    }
+
+    private fun swapAccessLocked(newAccess: MidiAccessSource) {
+        val old = access
+        access = newAccess
+        runCatching { old.close() }
     }
 
     private suspend fun doOpen(handle: MidiDeviceHandle, forAccess: MidiAccessSource): MidiController = coroutineScope {

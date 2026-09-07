@@ -30,7 +30,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-FE-DBO-INERT`](#fu-fe-dbo-inert) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
-| [`FU-MIDI-HOTPLUG-UNDETECTED`](#fu-midi-hotplug-undetected) | Ready | MIDI | — |
 | [`FU-MIDI-SELECTION-COLOUR-RED-ONLY`](#fu-midi-selection-colour-red-only) | Ready | MIDI | — |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
 | [`FU-SPEED-CUSTOM-RATIO`](#fu-speed-custom-ratio) | Trigger | Speed | an operator asks for a ratio beyond the five chips |
@@ -480,46 +479,6 @@ for the route — a read-modify-write from four surfaces that never show the pag
 stale document the *normal* case rather than the racing one.
 
 **Trigger**: two desks edit one busk page at once.
-
----
-
-### `FU-MIDI-HOTPLUG-UNDETECTED`
-
-**A control surface unplugged or plugged in after boot is never noticed** · Ready · MIDI surface
-plan session 5 (2026-09-07), found on the rig
-
-Observed on a real X-Touch Compact: the USB was unplugged and the `/settings/surfaces` device row
-still read `in · out` **thirty seconds later**. Replugging produced no attach either — no motor
-moved, no LED lit — while the desk went on happily driving the controller it still held open.
-
-There are two detection paths and only one of them can work:
-
-* `MidiDeviceRegistry.pollLoop` runs at 1 Hz and calls `access.enumerateInputs()/enumerateOutputs()`.
-  `KtmidiAccessSource` implements those as `access.inputs` / `access.outputs` on a **`LibreMidiAccess`
-  instance that is never rebuilt** — libremidi enumerates when the observer is constructed, so this
-  poll returns the same list for the life of the process. It cannot see a change, and the diff in
-  `tickLocked` therefore never fires.
-* `State.registerCoreMidiChangeListener` calls `midiRegistry.rescan(createPlatformKtmidiAccessSource())`,
-  which *does* rebuild the access source. This is the only working path, and `State.kt` says so:
-  "Rebuilds of LibreMidiAccess are driven by CoreMIDI4J notifications rather than a timer — periodic
-  recreation leaks observers into libremidi's shared Arena and eventually breaks input on open
-  controllers."
-
-So hot-plug rests entirely on a CoreMIDI4J notification arriving, with no fallback and no log line
-when it doesn't. On the machine tested it did not arrive in either direction. The registry has an
-`onTransmissionGaveUp` hook on `KtMidiController` whose comment says it exists for exactly this
-shape of failure ("libremidi's enumeration still lists a physically-gone device") — but it only
-fires once *sends* start failing, and sends do not fail here, because the port stays valid across a
-replug.
-
-Everything downstream of the missing event is also skipped: no `sendFullResync(rearmPickup = true)`,
-and `touchState` / `takeover` are never cleared, since `clearDevice` is called only in the
-`DeviceDetached` arm.
-
-**Ready**: give the poll loop a way to see reality — either rebuild the access source on a cadence
-that is safe for libremidi's Arena, or diff against a cheap second source (CoreMIDI4J's own
-`getMidiDeviceInfo()` is already called in the debug path) and rescan when the two disagree. Log
-loudly when a notification-only build is running, because today the failure is completely silent.
 
 ---
 
@@ -1708,6 +1667,15 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-MIDI-HOTPLUG-UNDETECTED` — `CoreMidiHotPlug`: a daemon thread that makes the process's first
+  `MIDIClientCreate` and then pumps its `CFRunLoop`, because that is the loop CoreMIDI delivers on
+  and a headless JVM never ran one — so the notification `State` registered for could not arrive,
+  and every CoreMIDI-backed enumeration in the process (libremidi's observer, CoreMIDI4J's map,
+  `javax.sound.midi`) was frozen at boot. Not a libremidi caching bug, and the native library did
+  load. With it: the poll's `HotPlugFallback` (one rebuild per unannounced change, never per
+  tick), a 250 ms coalesce on the notification burst, and the startup log line that says which
+  path is live. Verified on the desk the same day: three unplug/replug cycles, the notification path
+  answered every one within ~250 ms, and the fallback never fired — midi-surface plan session 5
 - `FU-MIDI-RESYNC-DELTA-SUPPRESSED` (`3a1d87d`) — `MidiController.invalidateAllFeedback()`, called by
   `SurfaceFeedbackPublisher.sendFullResync` whenever it re-arms pickup. That flag already means
   "the physical position is stale", so it is exactly the condition under which `lastSentBytes` — a

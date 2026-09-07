@@ -189,6 +189,49 @@ Concurrency shape deliberately mirrors [ArtNetController](dmx-engineering.md):
 
 `MidiDeviceRegistry` diffs `MidiAccess.inputs ∪ outputs` on a 1 Hz timer — libremidi has no state-changed callbacks (`MidiAccess.canDetectStateChanges = false` for every desktop backend). Connect / disconnect events fan out on a `SharedFlow<DeviceEvent>`. Auto-open is controlled by the `autoOpen` flag; on connect the registry opens the device and wraps it in a `KtMidiController`, pushing to a `StateFlow<List<MidiDeviceHandle>>` that downstream consumers observe.
 
+On macOS that poll sees nothing on its own, and the reason is CoreMIDI's rather than libremidi's.
+CoreMIDI delivers `MIDIClientCreate`'s notification callback — and processes the setup changes
+behind it, which is what makes `MIDIGetNumberOfSources()` move — on **the run loop that was current
+at the process's first `MIDIClientCreate`**. A headless JVM pumps no `CFRunLoop` anywhere, so every
+CoreMIDI-backed reading in the process was frozen at boot: libremidi's observer, CoreMIDI4J's device
+map and `javax.sound.midi`'s own provider alike, and the CoreMIDI4J notification `State` registered
+for could never be delivered. That was `FU-MIDI-HOTPLUG-UNDETECTED`: an X-Touch unplugged after
+boot still read `in · out` thirty seconds later, and a replug attached nothing. The native library
+*was* loaded, and CoreMIDI4J's client *did* exist — only because the poll loop's debug branch
+happened to call `MidiSystem.getMidiDeviceInfo()`, since `addNotificationListener` creates no
+client on macOS.
+
+Three pieces make it work now, in this order:
+
+1. **`CoreMidiHotPlug.ensureStarted()`** (`midi/CoreMidiHotPlug.kt`) — a process singleton that
+   `State.midiRegistry`'s initialiser calls *before* it creates `LibreMidiAccess`. It starts a
+   daemon thread, `coremidi-runloop`, which constructs a `CoreMidiDeviceProvider` (CoreMIDI4J's
+   client, and so the process's first `MIDIClientCreate`) and then pumps that thread's run loop for
+   the life of the JVM through `CFRunLoopRunInMode` over Panama. The order is the whole point: the
+   first client decides the loop, and libremidi's observer is the second. It logs the path it
+   resolved to once — INFO when notifications are live, WARN when they are not — where the old
+   listener returned silently if the native library was missing.
+2. **The CoreMIDI4J notification** → `State.onCoreMidiEnvironmentChanged` → one
+   `midiRegistry.rescan(createPlatformKtmidiAccessSource())` per burst. A plug is several
+   notifications and every rescan leaks one libremidi observer into its shared `Arena`, so they are
+   coalesced over 250 ms. The rescan swaps the access source and re-ticks under the same mutex as
+   the poll. This is the detector; the poll then sees the new list.
+3. **`HotPlugFallback`** — the poll's cross-check. Each tick samples `javax.sound.midi`'s device
+   list (the JDK's macOS provider re-reads `MIDIGetNumberOfSources()` per call, so with the loop
+   pumped it moves the moment a surface is plugged or pulled); a change still unanswered by a
+   rescan one tick later triggers exactly one rebuild, at WARN. It is a change detector, never an
+   equality test between backends, so it cannot rebuild on every tick — the rebuild count is
+   bounded by the number of changes seen. On Windows the registry gets no fallback: `JvmMidiAccess`
+   *is* `javax.sound.midi`, live on every poll.
+
+What is deliberately **not** here is a timer that rebuilds `LibreMidiAccess`. That was the first
+attempt, and periodic recreation leaked observers until input on open controllers stopped.
+
+`KtMidiController.onTransmissionGaveUp` is the backstop for a port libremidi still lists but can no
+longer write to — 20 consecutive send failures. It is not a hot-plug detector: a send only happens
+when a value changes, so a surface pulled while nothing moves is never seen there, and a replug
+gives the device a fresh endpoint the stale one never writes to.
+
 ## Device profile model
 
 Profiles are Kotlin classes, not DB rows. The registry is the source of truth. Adding a device = one `.kt` file in `midi/devices/` and one line in `ControlSurfaceRegistry.known`. Pattern mirrors `FixtureTypeRegistry`.

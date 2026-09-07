@@ -140,4 +140,77 @@ class MidiDeviceRegistryTest {
             assertEquals(1, collected.size, "only one Connected expected despite three ticks")
         }
     }
+
+    // ── HotPlugFallback ──────────────────────────────────────────────────────────────────────
+    //
+    // The poll loop's second reading of the environment. A change must survive two consecutive
+    // ticks with no rescan in between before it rebuilds, so a live notification path — which
+    // rescans within milliseconds — never pays for a second rebuild, and a dead one pays for
+    // exactly one per change rather than one per tick.
+
+    private class FallbackHarness {
+        @Volatile var fingerprint = "boot"
+        val rebuilt = FakeMidiAccess().apply {
+            inputs += MidiDevicePort("in-2", "X-Touch Compact", "Behringer", PortDirection.INPUT)
+        }
+        var rebuilds = 0
+        val fallback = HotPlugFallback(
+            fingerprint = { fingerprint },
+            rebuildAccess = { rebuilds++; rebuilt },
+        )
+    }
+
+    @Test
+    fun `fallback rebuilds the access source once a change has stood for two ticks`() {
+        val h = FallbackHarness()
+        val registry = MidiDeviceRegistry(FakeMidiAccess(), autoOpen = false, hotPlugFallback = h.fallback)
+        withEventCollector(registry) { collected ->
+            registry.tick() // baseline
+            h.fingerprint = "surface plugged"
+            registry.tick() // first sighting: wait a poll interval for the notification path
+            assertEquals(0, h.rebuilds)
+            assertEquals(0, collected.size)
+
+            registry.tick() // still changed, nothing rescanned: rebuild
+            assertEquals(1, h.rebuilds)
+            assertEquals(1, collected.size)
+            assertIs<MidiDeviceRegistry.DeviceEvent.Connected>(collected[0])
+            assertEquals("x-touch-compact", registry.devices.value.single().displayKey)
+
+            repeat(3) { registry.tick() }
+            assertEquals(1, h.rebuilds, "a change is paid for once, not once per tick")
+        }
+    }
+
+    @Test
+    fun `fallback stands down when a rescan answers the change first`() {
+        val h = FallbackHarness()
+        val registry = MidiDeviceRegistry(FakeMidiAccess(), autoOpen = false, hotPlugFallback = h.fallback)
+        withEventCollector(registry) { collected ->
+            registry.tick()
+            h.fingerprint = "surface plugged"
+            registry.tick() // pending
+            registry.rescan(h.rebuilt) // the notification path got there
+            assertEquals(1, collected.size)
+
+            repeat(3) { registry.tick() }
+            assertEquals(0, h.rebuilds, "the rescan re-baselined; the fallback must not rebuild what it built")
+            assertEquals(1, collected.size)
+        }
+    }
+
+    @Test
+    fun `fallback ignores a change that reverts within a tick, and never fires while nothing changes`() {
+        val h = FallbackHarness()
+        val registry = MidiDeviceRegistry(FakeMidiAccess(), autoOpen = false, hotPlugFallback = h.fallback)
+        withEventCollector(registry) { collected ->
+            repeat(5) { registry.tick() }
+            h.fingerprint = "blip"
+            registry.tick()
+            h.fingerprint = "boot"
+            repeat(3) { registry.tick() }
+            assertEquals(0, h.rebuilds)
+            assertEquals(0, collected.size)
+        }
+    }
 }

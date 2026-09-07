@@ -6,6 +6,7 @@ import io.ktor.server.config.*
 import java.io.Closeable
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.concurrent.atomic.AtomicBoolean
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.jetbrains.exposed.v1.jdbc.SchemaUtils
@@ -18,6 +19,7 @@ import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.auth.AuthService
@@ -32,6 +34,8 @@ import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.midi.DeviceMatcher
 import uk.me.cormack.lighting7.midi.FlashStateTracker
 import uk.me.cormack.lighting7.midi.GlobalScalerStateHolder
+import uk.me.cormack.lighting7.midi.CoreMidiHotPlug
+import uk.me.cormack.lighting7.midi.HotPlugFallback
 import uk.me.cormack.lighting7.midi.MidiAccessSource
 import uk.me.cormack.lighting7.midi.createPlatformKtmidiAccessSource
 import uk.me.cormack.lighting7.midi.MidiDeviceRegistry
@@ -445,14 +449,27 @@ class State(val config: ApplicationConfig) {
      */
     // Rebuilds of LibreMidiAccess are driven by CoreMIDI4J notifications rather than a timer —
     // periodic recreation leaks observers into libremidi's shared Arena and eventually breaks
-    // input on open controllers. See registerCoreMidiChangeListener().
+    // input on open controllers. See registerCoreMidiChangeListener(). Those notifications only
+    // arrive because CoreMidiHotPlug pumps the run loop CoreMIDI delivers on, and only if its
+    // thread made the process's first MIDIClientCreate — so it runs before LibreMidiAccess, which
+    // makes the second. The fallback lets the poll catch a change the notification missed, at the
+    // cost of one rebuild per change rather than one per tick.
     val midiRegistry: MidiDeviceRegistry by lazy {
+        val hotPlug = CoreMidiHotPlug.ensureStarted()
         val access: MidiAccessSource = runCatching { createPlatformKtmidiAccessSource() }
             .getOrElse {
                 logger.warn("Native MIDI backend failed to load — control surfaces disabled.", it)
                 NoOpMidiAccessSource()
             }
-        MidiDeviceRegistry(access = access)
+        val fallback = if (hotPlug is CoreMidiHotPlug.Status.PollOnly && !hotPlug.fallbackWanted) {
+            null // the platform enumeration is already live on every poll
+        } else {
+            HotPlugFallback(
+                fingerprint = CoreMidiHotPlug::javaxFingerprint,
+                rebuildAccess = ::createPlatformKtmidiAccessSource,
+            )
+        }
+        MidiDeviceRegistry(access = access, hotPlugFallback = fallback)
     }
 
     /**
@@ -893,32 +910,63 @@ class State(val config: ApplicationConfig) {
         controlSurfaceBindingService.invalidateHealth(projectId)
     }
 
-    // CoreMIDI4J pushes midiSystemUpdated callbacks on macOS plug/unplug. We turn each one
-    // into a single access-source rebuild on GlobalScope (the callback runs on a CoreMIDI
-    // thread). On non-macOS the native dylib won't load and this is a no-op.
-    @OptIn(DelicateCoroutinesApi::class)
+    // CoreMIDI4J pushes midiSystemUpdated callbacks on macOS plug/unplug — provided CoreMidiHotPlug
+    // is pumping the run loop they are delivered on, which is the only reason they ever arrive in
+    // a headless JVM. Each burst becomes a single access-source rebuild on GlobalScope (the
+    // callback runs on CoreMIDI4J's delivery thread). Where CoreMidiHotPlug resolved to poll-only
+    // there is nothing to register, and it has already said so in the log.
     private fun registerCoreMidiChangeListener() {
+        if (CoreMidiHotPlug.ensureStarted() !is CoreMidiHotPlug.Status.Notifications) return
         try {
-            if (!CoreMidiDeviceProvider.isLibraryLoaded()) return
             // Held so [shutdown] can take it back off. CoreMIDI4J's listener list is **static**,
             // and this lambda captures `this` — so without the removal a `State` stays strongly
             // reachable for the life of the JVM, dragging its Show, registries, both scripting
             // hosts and every compiled-script classloader with it. That is invisible in
             // production (one State per process) and fatal in the test suite, which builds one
             // per test: it is why the Test task needed `maxHeapSize = 2g`.
-            val listener = CoreMidiNotification {
-                GlobalScope.launch {
-                    runCatching { midiRegistry.rescan(createPlatformKtmidiAccessSource()) }
-                }
-            }
+            val listener = CoreMidiNotification { onCoreMidiEnvironmentChanged() }
             CoreMidiDeviceProvider.addNotificationListener(listener)
             coreMidiListener = listener
         } catch (t: Throwable) {
-            logger.debug("CoreMIDI4J notification listener unavailable: {}", t.message)
+            logger.warn("CoreMIDI4J notification listener could not be registered — hot-plug is down to the poll: {}", t.message)
         }
     }
 
-    /** Registered by [registerCoreMidiChangeListener]; removed in [shutdown]. See there for why. */
+    /** True while a rescan is scheduled for a CoreMIDI notification; see [onCoreMidiEnvironmentChanged]. */
+    private val coreMidiRescanScheduled = AtomicBoolean(false)
+
+    // One plug event is several notifications (setup changed, an object added per endpoint, a
+    // property change or two), and every rescan leaks one libremidi observer into its shared
+    // Arena. So a burst is coalesced: the first callback schedules one rescan a window later,
+    // and the rest of the burst rides on it. The window does not restart on each callback — a
+    // restartable one has no upper bound, and a burst that outlasted the poll's one-tick grace
+    // would earn a second, needless rebuild from HotPlugFallback and a WARN saying the
+    // notification path was dead. A notification landing after the flag is cleared, mid-rescan,
+    // schedules the next window, so nothing is lost either way.
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun onCoreMidiEnvironmentChanged() {
+        if (!coreMidiRescanScheduled.compareAndSet(false, true)) return
+        GlobalScope.launch {
+            delay(COREMIDI_RESCAN_DEBOUNCE_MS)
+            coreMidiRescanScheduled.set(false)
+            // The debounce is a window in which [shutdown] can run. `rescan` re-ticks, and a tick
+            // on a closed registry re-opens every connected device on a scope nothing will close
+            // again — `close()` clears the controller map but leaves `_devices` and `scope` set.
+            // The listener being gone is the same fact as the State being down, and it is taken
+            // off first in [shutdown], before the MIDI stack goes with it.
+            if (coreMidiListener == null) return@launch
+            logger.info("CoreMIDI reported a MIDI environment change — rescanning")
+            runCatching { midiRegistry.rescan(createPlatformKtmidiAccessSource()) }
+                .onFailure { logger.warn("MIDI rescan after a CoreMIDI notification failed: ${it.message}", it) }
+        }
+    }
+
+    /**
+     * Registered by [registerCoreMidiChangeListener]; removed in [shutdown]. See there for why.
+     * Volatile because [onCoreMidiEnvironmentChanged] reads it from a coroutine to decide whether
+     * the State is still up, and [shutdown] writes it from whichever thread is tearing down.
+     */
+    @Volatile
     private var coreMidiListener: CoreMidiNotification? = null
 
     private fun unregisterCoreMidiChangeListener() {
@@ -1012,3 +1060,6 @@ class State(val config: ApplicationConfig) {
     }
 
 }
+
+/** How long a CoreMIDI notification burst is allowed to settle before one rescan answers it. */
+private const val COREMIDI_RESCAN_DEBOUNCE_MS = 250L

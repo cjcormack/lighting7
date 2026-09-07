@@ -30,8 +30,12 @@ class KtMidiController internal constructor(
     private val inputSource: MidiInputSource?,
     private val transmitIntervalMs: Long = DEFAULT_TRANSMIT_INTERVAL_MS,
     parentScope: CoroutineScope = GlobalScope,
-    // Invoked once when the transmission loop gives up; registry uses this to surface a
-    // Disconnected event when libremidi's enumeration still lists a physically-gone device.
+    // Invoked once when the transmission loop gives up; the registry surfaces a Disconnected
+    // event for a port libremidi still lists but can no longer write to. A backstop, not a
+    // hot-plug detector: it fires only after 20 consecutive send *failures*, and a send happens
+    // only when a value changes — so a surface pulled while nothing moves is never seen here, and
+    // a replug gives the device a fresh endpoint that this controller's stale one never writes
+    // to at all. Noticing either is CoreMidiHotPlug's job.
     private val onTransmissionGaveUp: (() -> Unit)? = null,
 ) : MidiController {
 

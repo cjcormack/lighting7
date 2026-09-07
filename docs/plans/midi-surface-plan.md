@@ -46,8 +46,9 @@
 > fader 5 (0%→50%, changed) and lit two select LEDs (off→on, changed) while fader 1 (74%→74%) stayed
 > at the bottom. The second bug is normally hidden because a real attach builds a fresh controller
 > with an empty cache — so it will still bite after the first is fixed, if the fix reuses the
-> controller. ~~`FU-MIDI-RESYNC-DELTA-SUPPRESSED`~~ — fixed in `3a1d87d`. Hot-plug detection is
-> still open, so checks 8 and 1 stand as written. **This is what §10 meant** about hardware showing what tests do not, and neither bug
+> controller. ~~`FU-MIDI-RESYNC-DELTA-SUPPRESSED`~~ — fixed in `3a1d87d`.
+> ~~`FU-MIDI-HOTPLUG-UNDETECTED`~~ — fixed by `CoreMidiHotPlug` (the run loop CoreMIDI delivers on
+> was never pumped) and watched on the desk: checks 8 and 1 now pass. **This is what §10 meant** about hardware showing what tests do not, and neither bug
 > was anything §9 thought to ask.
 > **Check 1 is blocked rather than failed.** Its picture half is confirmed, but the snapshot half
 > cannot be exercised until an attach event fires at all.
