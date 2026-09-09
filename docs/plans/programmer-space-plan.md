@@ -1,8 +1,8 @@
 # Programmer space — the grid as the page
 
-> **Document status: PROPOSED 2026-09-09.** Nothing here is built. Four sessions plus one
-> optional, all in `lighting-react`; there is no backend work, and no route, protocol or table
-> changes. The plan lives here because every plan does, and because the design it cites is
+> **Document status: IN PROGRESS 2026-09-09.** Session 1 is done (`42b15ad`); sessions 2–4 plus one
+> optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
+> table changes. The plan lives here because every plan does, and because the design it cites is
 > committed alongside it.
 >
 > **The design is committed alongside this plan** at
@@ -164,7 +164,7 @@ Each session is one shippable commit on `main` that leaves `npm run check` green
 usable at every width. They are ordered so each one's screenshot is the acceptance test for the
 next one's starting point.
 
-### Session 1 — Two rows
+### Session 1 — Two rows — **done 2026-09-09** (`42b15ad`)
 
 **Outcome.** The six bands above the grid are two. At 1440×900 the grid gains ~190px of height
 before anything else changes.
@@ -204,6 +204,37 @@ route group.
 **Cuts to record.** The scope band's *"Click a tinted cell to jump to whatever won it"* was the
 only place that gesture was taught; a `title` on the Output pill is thinner. If it proves too
 thin, the answer is a first-visit hint, not the sentence back.
+
+**What the session found, for the sessions after it.** Three of these change what a later session
+should expect.
+
+- **The `y ≤ 320` figure does not come from here, and is not reachable in session 1.** Measured at
+  1440×900 with the sidebar collapsed and nothing selected, the first fixture row lands at **329**:
+  app header 53 · ShowHeader 65 · ShowBar 59.5 · row A 41 · row B 36 · the grid's toolbar block and
+  table head 74.5. The block is the always-on template strip, and removing it *is* D3 — session 2's.
+  §1's own acceptance is met: the grid is 549px, **61%** of the height, against D1's 60%.
+- **"Long glosses only at `@[1100px]`" cannot mean the grid column.** With the rail at today's 404px
+  the column is 972px at 1440, and 1076px even after session 3 takes the rail to 300 — so a
+  container query on the footer would never fire. Both `Main` and `TabletLandscape` in fact draw the
+  *short* words, so the legend gained a `LEGEND_SHORT` map and kept the threshold literally; the
+  long form arrives on a wider desk. Narrower, the footer **drops** items (the header word at
+  `@[420px]`, the trailing layer badge at `@[520px]`) rather than letting an `overflow-hidden` row
+  of `shrink-0` items slice one off mid-word.
+- **A row that cannot wrap needs the filter to be allowed to shrink.** `FixturesListContainer`'s
+  filter carries `min-w-48`, which is right in the default toolbar — that one wraps — and wrong in
+  row B. Below roughly 1300px of page width the 192px input overran its flex track and painted its
+  placeholder *over* the Lit button, with no overflow reported on either. Row B unpicks it with
+  `[&>div]:min-w-0`. Session 4's icon-arm for the filter is the real answer; until then the field
+  gives.
+- Two smaller things worth not rediscovering: a native `title` on a control that is already inside a
+  Radix `TooltipTrigger` puts two tooltip surfaces on one hover (and a `title` on an *ancestor* is
+  what the browser shows for any descendant that has none — which is how the source box's hover
+  sentence reached the Update button); and `buildRows` emits one `fixture` row per group membership,
+  so the footer's count had to dedupe by key the way `selectedRowTargets` already does, or a head in
+  two expanded groups reads as two.
+- **Do not run `npm run format` on `lighting-react`.** The tree is not Prettier-clean and
+  `.prettierrc.json` sets no `singleQuote`, so Prettier rewrites every quote in every file it
+  touches. Fix indentation by hand until that is decided separately.
 
 ### Session 2 — The selection bar, and selection that looks like selection
 
