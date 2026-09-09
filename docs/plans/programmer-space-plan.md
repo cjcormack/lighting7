@@ -1,9 +1,10 @@
 # Programmer space — the grid as the page
 
-> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`), 2 (`83c8a0e`) and 3
-> (`52ec16b`) are done; session 4 plus one optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
-> table changes. The plan lives here because every plan does, and because the design it cites is
-> committed alongside it.
+> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`), 2 (`83c8a0e`), 3
+> (`52ec16b`) and 4 (`03c2c27`) are done, all in `lighting-react`. What remains is the **desk pass**
+> (§6) and, only if that pass asks for it, the optional session 5. There is no backend work, and no
+> route, protocol or table changes. The plan lives here because every plan does, and because the
+> design it cites is committed alongside it.
 >
 > **The design is committed alongside this plan** at
 > [`programmer-space-design/`](programmer-space-design/INDEX.md) — nine artboards drawn against
@@ -353,7 +354,7 @@ width and that the stored width survives a remount.
   1180 the overlay leaves the grid at 1076; at 820×1180 the page is not the scroller and a
   stomping row fits at the 260px floor with 9px to spare.
 
-### Session 4 — Small viewports
+### Session 4 — Small viewports — **done 2026-09-09** (`03c2c27`)
 
 **Outcome.** A phone shows fixtures above the fold, and a landscape phone shows more than three.
 
@@ -381,6 +382,25 @@ width and that the stored width survives a remount.
 **Tests.** `ShowBar.test.tsx` for the new rung. A `ProgrammerWorkspace` case for the sheet arm,
 asserting the grid's mount count across open/close. The rest is a browser pass at 393×852 and
 852×393 (§6).
+
+**What the session found.** Two of this section's own claims were false; two smaller things
+are worth not rediscovering.
+
+- **"`Layout`'s header stops being sticky" buys nothing on the four live views**, and §6's landscape
+  target depends on it. They are `h-full` and own their scrollers, so `<main>` never overflows and
+  there is no scroll for the header to leave in — measured identical at 852×393 whether `sticky` or
+  `static`. The change was kept because the routes that *do* scroll gain the 53px, but the landscape
+  phone shows **four whole fixture rows and part of a fifth**, not five: the missing 53px is that
+  header, and hiding it would take the only navigation with it below 768px of width, where the
+  sidebar is off-canvas. Say `y ≥ 4` there, or move the header, and stop calling it "scrolled away".
+- **The folded row cannot keep the wide arm's words.** `PhoneLandscape` draws `EDITING … Update`
+  beside icon-only tools, but the artboard's action bar is ~155px against the real one's ~230 —
+  the fade select alone is 86px, and 64px clips `Snap` to `Sna`. So the pair gets an `@container` of
+  its own and drops to the icon arm, and the row's tools drop their words with it. One step narrower
+  than drawn, and measured rather than hoped.
+- Two smaller things: 704px of *workspace* is the bottom-sheet threshold (a 768px viewport with the
+  sidebar on its 64px rail), and `TabletPortrait`'s ShowBar rung needed no work at all — 820 wide
+  already lands on the existing 700–1000 rung.
 
 ### Session 5 (optional) — One chrome band
 
@@ -426,7 +446,9 @@ a green suite called 2a working with two defects in it.
    the rail: the layer arrived, Local shows the literal, and the selected cells read *white* while
    the owned cells read *blue*.
 3. On a phone, do the same from the bottom sheet, then GO from the one-row bar with the sheet open.
-4. Landscape phone: confirm five fixture rows are on screen with the header scrolled away.
+4. Landscape phone: confirm at least four fixture rows are on screen. **Not five, and the header
+   does not scroll away** — see session 4's findings; the question for the desk is whether four is
+   enough to busk from, or whether that 53px is worth session 5.
 
 Record the outcome in [`manual-validation.md`](manual-validation.md) as `FU-MANUAL-DESK-SPACE`.
 
