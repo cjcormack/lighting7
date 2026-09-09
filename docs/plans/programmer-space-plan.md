@@ -1,7 +1,7 @@
 # Programmer space — the grid as the page
 
-> **Document status: IN PROGRESS 2026-09-09.** Session 1 is done (`42b15ad`); sessions 2–4 plus one
-> optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
+> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`) and 2 (`83c8a0e`) are done;
+> sessions 3–4 plus one optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
 > table changes. The plan lives here because every plan does, and because the design it cites is
 > committed alongside it.
 >
@@ -94,6 +94,12 @@ which is what the ownership legend already says it means. The six ownership ring
 (bottom-right) sit at the same `right` inset, and the cell body reserves 16px on the right so a
 value never runs under either. Today the value text is centred across the whole cell and the marks
 float over its last characters. *(design: `Main`, the Colour column)*
+>
+> **Corrected in session 2: the gutter is 18px, not 16.** The widest mark is the effect badge —
+> `size-3.5` (14px) inset `right-1` (4px) — so it reaches 18px from the edge and a 16px gutter left
+> it still overlapping the value by 2px, which is the defect this decision exists to remove. 18px is
+> what `Main` reserved all along (`.ci { padding: 0 18px 0 6px }`); the `pr-4` below was a rounding
+> of it that nobody checked against the badge's own size.
 
 **D6 — The rail is 300px, drag-to-size, and collapses to a 40px strip.** Default 300, bounds
 260–480, remembered per desk in `localStorage`. Collapsed, it is a 40px strip carrying the two
@@ -236,7 +242,7 @@ should expect.
   `.prettierrc.json` sets no `singleQuote`, so Prettier rewrites every quote in every file it
   touches. Fix indentation by hand until that is decided separately.
 
-### Session 2 — The selection bar, and selection that looks like selection
+### Session 2 — The selection bar, and selection that looks like selection — **done 2026-09-09** (`83c8a0e`)
 
 **Outcome.** The templates cost no height until there is something to press them onto, and a
 selected cell cannot be mistaken for an owned one.
@@ -257,7 +263,7 @@ selected cell cannot be mistaken for an owned one.
   bg-foreground/5` with foreground handles; the selection bar's wash → `bg-foreground/5`. The
   floating scope chip stays primary — it follows the pointer and never sits still beside an owned
   cell.
-- **The marks gutter (D5).** The cell wrapper gets `pr-4`; the effect badge and the layer glyph
+- **The marks gutter (D5).** The cell wrapper gets `pr-[18px]` (see D5's correction); the effect badge and the layer glyph
   both sit at `right-1`; the template-division mark (`effectDriven`) already shares the layer
   glyph's corner and never coexists with it, so it moves with it. `PropertyCell`'s inner layout is
   untouched — the gutter is around it, for the reason `ownershipCellClass` documents.
@@ -265,6 +271,29 @@ selected cell cannot be mistaken for an owned one.
 **Tests.** `TemplateStrip.test.tsx` gains "renders nothing with no targets" and keeps the
 click / ⌥click split. `FixturesTable.test.tsx` pins the selected row's class and that the marquee
 band carries no `border-primary`. `OwnershipLegend.test.ts` is unchanged — the rings did not move.
+
+**What the session found.** Two of these change what Session 3 should expect.
+
+- **`@[1100px]` on this bar can never fire, and Session 3 does not fix it either.** The bar's
+  container is the *grid column*, which is 972px at 1440 with today's 404px rail and 1076px once
+  D6 takes the rail to 300 — so the keyboard hints only appear above ~1465px of page width. Kept
+  literally, the way Session 1 kept the legend's, but it is now a threshold nothing on a 1440
+  desk reaches. If the hints are wanted at 1440, the number to change is this one, not the rail.
+- **The measured height beat the estimate.** First fixture row at 1440×900, sidebar collapsed,
+  nothing selected: **285**, against §1's target of ≤320 and Session 1's 329. The grid is 622px,
+  **69%** of the height against D1's 60%. Session 3's remaining job is therefore *width* — 972px,
+  67.5%, against D1's 75% — not height.
+- **D4's list is one short, deliberately.** `cellSelectionClass` still paints a selected *cell*
+  with `bg-primary/25` under its foreground ring, so "`--primary` is reserved for *you own this
+  value*" is not literally true after this session. It was left alone because it is not in D4's
+  enumerated list, because its own docblock argues for it, and because a foreground fill would now
+  merge into the foreground row wash. Decide it on a desk rather than by grep.
+- **Two defects the review caught would have shipped.** The `New` sheet was rendered *inside* the
+  D3 guard, so a remotely-cleared selection (the desk selection is server-owned) discarded a
+  half-typed template name with no prompt; and the bar had two competing `flex-1` siblings, which
+  silently halved the chip scroller (218 → 507px once fixed). Both are invisible to jsdom. Session
+  3 adds a drag handle and three container-query arms to this same row — run its browser pass at
+  more than one width before believing it.
 
 ### Session 3 — The rail
 
