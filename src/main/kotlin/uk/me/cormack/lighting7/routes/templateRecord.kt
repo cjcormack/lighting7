@@ -148,6 +148,26 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
         // property → (fixtureKey → intent). Grouped by property first because the generic/per-fixture
         // decision is per property: a selection may agree on colour and differ on position.
         val byProperty = LinkedHashMap<String, LinkedHashMap<String, TemplateIntent>>()
+
+        // Which heads busked an emitter *as its own property* — a MIDI fader, or the programmer's
+        // white slider — rather than only through a colour. Needed before the loop because it
+        // changes how that head's colour reads back: the explicit row carries the neutral, so the
+        // colour must not also fold it into the hex under an EXTRACT policy (the write boundary
+        // refuses that combination, and it would double the emitter besides).
+        val emittersRecordedSeparately: Map<String, Set<TemplateProperty>> = entries
+            .mapNotNull { entry ->
+                TemplateProperty.ofOrNull(entry.propertyName)
+                    ?.takeIf { it.isEmitter }
+                    ?.let { entry.fixtureKey to it }
+            }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, properties) -> properties.toSet() }
+
+        // A UV component busked through a colour, per head. Held aside rather than written straight
+        // into [byProperty]: an explicit `uv` entry for the same head is the better answer and may
+        // arrive after this one, so these are merged in at the end and only where none exists.
+        val derivedUv = LinkedHashMap<String, TemplateIntent>()
+
         for (entry in entries) {
             val vocabulary = TemplateProperty.ofOrNull(entry.propertyName)
             if (vocabulary == null) {
@@ -163,7 +183,14 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
             val fixture = runCatching {
                 state.show.fixtures.untypedGroupableFixture(entry.fixtureKey)
             }.getOrNull()
-            val intent = intentFor(vocabulary, entry.value, fixture)
+            val recordedSeparately = emittersRecordedSeparately[entry.fixtureKey].orEmpty()
+            val intent = intentFor(
+                vocabulary,
+                entry.value,
+                fixture,
+                whiteRecordedSeparately = TemplateProperty.WHITE in recordedSeparately,
+                amberRecordedSeparately = TemplateProperty.AMBER in recordedSeparately,
+            )
             if (intent == null) {
                 skipped += TemplateSkipDto(
                     entry.fixtureKey, entry.propertyName,
@@ -172,6 +199,29 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
                 continue
             }
             byProperty.getOrPut(vocabulary.propertyName) { LinkedHashMap() }[entry.fixtureKey] = intent
+
+            // The colour inverse folds white and amber back into the hex, but **no policy has ever
+            // driven UV** — so a UV busked through the colour picker had nowhere to go and was
+            // silently lost. It gets a row of its own instead, which is also the one case where
+            // recording concretely costs no portability: a `uv` row demands only a UV emitter, and a
+            // head with UV busked on it certainly has one.
+            if (vocabulary == TemplateProperty.COLOUR) {
+                // **Every head with a colour entry, zeroes included.** Recording only the non-zero
+                // ones let the generic/per-fixture collapse below read "the two heads that had UV
+                // agree" as "all the recorded heads agree", and emit one deferred row that then
+                // turned UV on for the head that never had any. The whole set is added only if some
+                // head actually had UV — see the merge below.
+                val uv = ((entry.value as? CueAssignmentResolver.PropertyValue.Colour)?.value?.uv ?: 0u).toInt()
+                derivedUv[entry.fixtureKey] = TemplateIntent.Level(uv)
+            }
+        }
+
+        // Only worth a row at all if some head was actually lit in UV. Every head at zero means the
+        // operator never touched UV, and a template demanding a UV emitter to assert nothing would
+        // narrow where it can be applied for no gain.
+        if (derivedUv.values.any { (it as? TemplateIntent.Level)?.value?.let { v -> v > 0 } == true }) {
+            val explicit = byProperty.getOrPut(TemplateProperty.UV.propertyName) { LinkedHashMap() }
+            derivedUv.forEach { (fixtureKey, intent) -> explicit.putIfAbsent(fixtureKey, intent) }
         }
 
         if (byProperty.isEmpty()) {
@@ -254,12 +304,35 @@ private fun intentFor(
     property: TemplateProperty,
     value: CueAssignmentResolver.PropertyValue,
     fixture: GroupableFixture?,
+    /**
+     * True when this head has an explicit `white` entry in the same record, which takes that emitter
+     * over from the policy — see the [TemplateProperty.COLOUR] arm.
+     */
+    whiteRecordedSeparately: Boolean = false,
+    /** As [whiteRecordedSeparately], for amber. Tracked apart because `extra` folds only one byte. */
+    amberRecordedSeparately: Boolean = false,
 ): TemplateIntent? = when (property) {
     TemplateProperty.COLOUR -> {
         val colour = (value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
         // Fold the extra emitters back into RGB, and let the policy say they were driven. See the
         // file's class doc: the inverse is not unique, and this is the reading that round-trips.
-        val extra = maxOf(colour.white.toInt(), colour.amber.toInt())
+        //
+        // **Kept as the default deliberately, now that an explicit emitter row exists.** Recording
+        // concrete white and amber bytes would be more faithful to this one rig and less use as a
+        // template: the whole-template rule means such a template could then only ever be applied to
+        // heads with both emitters, where the extract reading travels to an RGB-only PAR intact.
+        // The exception is a head whose white or amber was busked *as its own property* — then the
+        // explicit row already carries it, and folding it in again would double it and trip the
+        // policy conflict at the write boundary.
+        //
+        // **Per emitter, not one flag for both.** `extra` is a single byte standing for whichever of
+        // the two was driven, so zeroing it because *amber* had its own fader would also throw away
+        // a white that only ever existed inside the colour — the operator would watch that component
+        // vanish from a template recorded off a rig they could see it on.
+        val extra = maxOf(
+            if (whiteRecordedSeparately) 0 else colour.white.toInt(),
+            if (amberRecordedSeparately) 0 else colour.amber.toInt(),
+        )
         val hex = String.format(
             "#%02X%02X%02X",
             (colour.color.red + extra).coerceAtMost(255),
@@ -267,6 +340,18 @@ private fun intentFor(
             (colour.color.blue + extra).coerceAtMost(255),
         )
         TemplateIntent.Colour(hex, if (extra > 0) WhitePolicy.EXTRACT else WhitePolicy.RGB_ONLY)
+    }
+
+    // A byte straight back out — no range scaling, unlike the percent family below. The emitter's
+    // slider is what the value came off and what it will be written to, and `TemplateResolver`
+    // clamps it into that slider's own range on the way out.
+    TemplateProperty.WHITE, TemplateProperty.AMBER, TemplateProperty.UV -> {
+        val level = when (value) {
+            is CueAssignmentResolver.PropertyValue.Slider -> value.value.toInt()
+            is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue.toInt()
+            else -> return null
+        }
+        TemplateIntent.Level(level)
     }
 
     TemplateProperty.POSITION -> {

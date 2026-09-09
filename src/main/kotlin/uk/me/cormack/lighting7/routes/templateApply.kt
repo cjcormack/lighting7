@@ -9,6 +9,8 @@ import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
@@ -64,12 +66,49 @@ internal fun applyTemplateToProgrammer(
     val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val skips = ArrayList<TemplateSkipDto>()
 
-    for (row in template.rows) {
-        val intent = parseTemplateIntent(row.value)
-        if (intent == null) {
-            logger.warn("template '{}': row '{}' is not an intent — skipping", template.name, row.value)
-            continue
+    // The whole-template colour rule, computed once per head before the row loop: a head that cannot
+    // serve every colour row serves none of them, and reports one skip rather than a skip per row.
+    // An explicit amber is in the template because the hex alone did not get where the operator
+    // wanted, so writing the hex without it would put a *different* colour on that head under this
+    // template's name — see `TemplateResolver.unmetColourRequirement`.
+    val unmetColour = HashMap<String, String>()
+    val parsedRows = template.rows.mapNotNull { row ->
+        parseTemplateIntent(row.value)?.let { row to it }
+            ?: run {
+                logger.warn("template '{}': row '{}' is not an intent — skipping", template.name, row.value)
+                null
+            }
+    }
+    for (fixtureKey in fixtureKeys) {
+        val fixture = runCatching {
+            state.show.fixtures.untypedGroupableFixture(fixtureKey)
+        }.getOrNull() ?: continue
+        val applicable = parsedRows.mapNotNull { (row, intent) ->
+            val target = row.target
+            if (target is TargetRef.Fixture && target.key != fixtureKey) null else row.propertyName to intent
         }
+        when (val requirement = TemplateResolver.unmetColourRequirement(fixture, applicable)) {
+            // Reported for both arms: a click that lands on nothing must say why, and unlike the
+            // editor's panel there is no "was never a candidate" to stay quiet about — the operator
+            // selected this head deliberately.
+            is TemplateResolver.ColourRequirement.NotACandidate -> {
+                unmetColour[fixtureKey] = requirement.reason
+                skips += TemplateSkipDto(fixtureKey, TemplateProperty.COLOUR.propertyName, requirement.reason)
+            }
+            is TemplateResolver.ColourRequirement.Unmet -> {
+                unmetColour[fixtureKey] = requirement.reason
+                // The row that actually failed, not `rgbColour`: a UV-only template has no colour
+                // row, so naming one would report a skip against a property the template lacks.
+                skips += TemplateSkipDto(fixtureKey, requirement.propertyName, requirement.reason)
+            }
+            TemplateResolver.ColourRequirement.Met -> Unit
+        }
+    }
+
+    // Iterated as already-parsed pairs: `parsedRows` was built for the requirement check above, and
+    // re-parsing each row here would double the parse work on every apply for no gain. A row that
+    // failed to parse is absent from it — warned about once, at the point it was dropped.
+    for ((row, intent) in parsedRows) {
         // A per-fixture row applies only to the head it names, *and* only if that head is in the
         // selection: applying a focus position to two of its eight heads must move those two and
         // leave the rest alone.
@@ -83,6 +122,12 @@ internal fun applyTemplateToProgrammer(
             }.getOrNull()
             if (fixture == null) {
                 skips += TemplateSkipDto(fixtureKey, row.propertyName, "fixture not patched")
+                continue
+            }
+            // Already reported once for this head, above. Silent here so one refusal is one skip.
+            if (fixtureKey in unmetColour &&
+                TemplateProperty.ofOrNull(row.propertyName)?.family == PropertyMaskGroup.COLOUR
+            ) {
                 continue
             }
             val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent)

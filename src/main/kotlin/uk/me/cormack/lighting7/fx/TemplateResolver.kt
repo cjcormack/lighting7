@@ -89,7 +89,82 @@ object TemplateResolver {
         is TemplateIntent.Colour -> resolveColour(fixture, propertyName, intent)
         is TemplateIntent.Position -> resolvePosition(fixture, propertyName, intent)
         is TemplateIntent.Percent -> resolvePercent(fixture, propertyName, intent)
+        is TemplateIntent.Level -> resolveLevel(fixture, propertyName, intent)
         is TemplateIntent.Switch -> resolveSwitch(fixture, propertyName, intent)
+    }
+
+    /**
+     * [unmetColourRequirement]'s answer, and the distinction the editor's panel turns on.
+     *
+     * A **string was not enough.** `resolveTemplateAgainstPatch` has to tell "this head was never a
+     * candidate" (omit it silently — a hazer has no business in a colour template's panel) from
+     * "this head could have taken it and cannot" (say so, loudly: *that* is the question the panel
+     * exists to answer). It used to make that call by string-matching the reason against a private
+     * `NOT_A_CANDIDATE = "no colour"` constant, which broke the moment emitters arrived — a UV-only
+     * template answers `"no uv"` for every head in the rig, so a rig-wide resolve listed every
+     * dimmer and PAR as a failure instead of omitting them.
+     */
+    sealed interface ColourRequirement {
+        /** Every colour row resolves on this head. */
+        data object Met : ColourRequirement
+
+        /** No colour at all — not a candidate for a colour template, and not worth reporting. */
+        data class NotACandidate(val reason: String) : ColourRequirement
+
+        /**
+         * Has colour, but lacks an emitter this template names outright. Reported.
+         *
+         * [propertyName] is the row that actually failed, and it is carried rather than left to the
+         * caller to guess: a skip reported against `rgbColour` for a UV-only template names a
+         * property that template does not have, which a client cross-referencing the skip against
+         * the row list would drop on the floor.
+         */
+        data class Unmet(val reason: String, val propertyName: String) : ColourRequirement
+    }
+
+    /**
+     * Can this head serve [rows]' **colour-family** rows as a set?
+     *
+     * A colour template's rows are facets of one output: an explicit amber row is there precisely
+     * because the hex alone does not get where the operator wanted, so a head missing that emitter
+     * would take a *different* colour rather than a partial one. Half a colour is a wrong answer
+     * delivered confidently, which is worse than no answer — so the head takes none of them and the
+     * reason is reported.
+     *
+     * Deliberately scoped to colour. The other families' rows are independent roles — a head with
+     * zoom but no frost should still take the zoom — so they keep the per-row skip they have always
+     * had. [rows] may hold rows of any family; the others are ignored here.
+     *
+     * Lives beside [resolve] rather than in each caller for the reason this whole object is a
+     * singleton: cook, click-apply and the editor's panel must give one answer, and the panel's job
+     * is to show the operator this refusal *before* they save.
+     */
+    fun unmetColourRequirement(
+        fixture: GroupableFixture,
+        rows: List<Pair<String, TemplateIntent>>,
+    ): ColourRequirement {
+        val colourFamily = rows.filter {
+            TemplateProperty.ofOrNull(it.first)?.family == PropertyMaskGroup.COLOUR
+        }
+        if (colourFamily.isEmpty()) return ColourRequirement.Met
+
+        // "Has this head any colour at all" is asked through [resolveColour] itself rather than by a
+        // second property walk, so the panel's omit rule and the cook's resolution cannot drift
+        // apart about what having colour means. The hex is irrelevant — only the Unsupported arm is
+        // read — and it has to be asked separately rather than inferred from the rows, because an
+        // emitter-only template has no colour row to infer it from.
+        val hasColour = resolve(
+            fixture,
+            TemplateProperty.COLOUR.propertyName,
+            TemplateIntent.Colour("#000000", WhitePolicy.RGB_ONLY),
+        ).note !is Note.Unsupported
+        if (!hasColour) return ColourRequirement.NotACandidate("no colour")
+
+        for ((propertyName, intent) in colourFamily) {
+            val note = resolve(fixture, propertyName, intent).note
+            if (note is Note.Unsupported) return ColourRequirement.Unmet(note.reason, propertyName)
+        }
+        return ColourRequirement.Met
     }
 
     // ─── Colour ─────────────────────────────────────────────────────────────
@@ -123,6 +198,51 @@ object TemplateResolver {
     fun resolveColourGeneric(intent: TemplateIntent.Colour): ExtendedColour? {
         val target = parseHex(intent.hex) ?: return null
         return mixColour(target, intent.policy, hasWhite = true, hasAmber = true).first
+    }
+
+    /**
+     * [resolveColourGeneric] over a whole colour template — the hex row plus its explicit emitters.
+     *
+     * An FX colour parameter naming a template gets **one** [ExtendedColour] to apply to every head
+     * it targets, so the emitter rows have to be folded in here or they would simply not happen:
+     * reading `rows[0]` and stopping was correct only while a colour template could hold exactly one
+     * row, and relaxing that without this would make `tmpl:` silently drop an amber the operator can
+     * see in the library.
+     *
+     * An explicit emitter row **overwrites** whatever the policy put in that emitter rather than
+     * adding to it. That cannot actually collide today — the write boundary refuses an explicit
+     * white or amber row beside a non-`RGB_ONLY` policy — but the precedence is stated rather than
+     * left to argument order, because a row an operator typed should win over one the desk inferred.
+     *
+     * Null when there is no colour row *and* no emitter row, or when the hex will not parse. A
+     * template of emitters alone resolves against black, which is the honest reading: it asserts
+     * those emitters and says nothing about RGB, and an effect's single output has no way to say
+     * "leave RGB alone" — the layer path, which does, is where that distinction survives.
+     */
+    fun resolveColourGeneric(rows: List<Pair<String, TemplateIntent>>): ExtendedColour? {
+        var base: ExtendedColour? = null
+        var white: UByte? = null
+        var amber: UByte? = null
+        var uv: UByte? = null
+
+        for ((propertyName, intent) in rows) {
+            when (TemplateProperty.ofOrNull(propertyName)) {
+                TemplateProperty.COLOUR ->
+                    if (intent is TemplateIntent.Colour) base = resolveColourGeneric(intent) ?: return null
+                TemplateProperty.WHITE -> if (intent is TemplateIntent.Level) white = intent.value.toUByte()
+                TemplateProperty.AMBER -> if (intent is TemplateIntent.Level) amber = intent.value.toUByte()
+                TemplateProperty.UV -> if (intent is TemplateIntent.Level) uv = intent.value.toUByte()
+                else -> Unit
+            }
+        }
+
+        if (base == null && white == null && amber == null && uv == null) return null
+        val resolved = base ?: ExtendedColour(Color.BLACK)
+        return resolved.copy(
+            white = white ?: resolved.white,
+            amber = amber ?: resolved.amber,
+            uv = uv ?: resolved.uv,
+        )
     }
 
     private fun resolveColour(
@@ -368,6 +488,40 @@ object TemplateResolver {
                 Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
             }
         }
+    }
+
+    // ─── Level ──────────────────────────────────────────────────────────────
+
+    /**
+     * A DMX byte straight at one of the head's bundled colour emitters.
+     *
+     * The `Unsupported` answer **is** the capability check for the whole feature: nothing probes a
+     * head for a white emitter anywhere else, and [unmetColourRequirement] is only a fold over this.
+     * So the reason string is operator-facing — "no uv" is what the resolves-to panel prints and
+     * what an apply skip carries.
+     *
+     * Still clamped into the slider's own `min..max` rather than written raw. No bundled emitter in
+     * this rig declares a narrower range, so the clamp is a no-op today; it is here because an
+     * annotation *may* declare one, and a byte silently landing outside a declared range is the kind
+     * of thing nobody finds until a head behaves oddly on one cue.
+     */
+    private fun resolveLevel(
+        fixture: GroupableFixture,
+        propertyName: String,
+        intent: TemplateIntent.Level,
+    ): Resolution {
+        val resolved = PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName))
+            ?: return Resolution(null, propertyName, Note.Unsupported("no $propertyName"))
+        val slider = resolved.value as? DmxSlider
+            ?: return Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
+        val min = slider.min.toInt()
+        val max = slider.max.toInt()
+        val dmx = intent.value.coerceIn(min, max)
+        return Resolution(
+            CueAssignmentResolver.PropertyValue.Slider(dmx.toUByte()),
+            propertyName,
+            if (dmx == intent.value) Note.Exact else Note.Clamped(dmx.toString()),
+        )
     }
 
     // ─── Switch ─────────────────────────────────────────────────────────────

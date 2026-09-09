@@ -163,6 +163,313 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         }
     }
 
+    private fun emitterRow(propertyName: String, value: Int) = TemplateRowDto(
+        targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+        propertyName = propertyName, value = "dmx:$value",
+    )
+
+    @Test
+    fun `a colour naming an emitter outright reports it as required`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "uv-wash",
+                    rows = listOf(
+                        colourRow("#FF9D4A;policy=rgbonly"),
+                        emitterRow("uv", 255),
+                        emitterRow("white", 180),
+                    ),
+                )
+            )
+        }.body<TemplateDto>()
+
+        // Still one family — every emitter is COLOUR, which is what lets a hex and an amber be one
+        // named thing. The emitters are what the client filters on beyond that.
+        assertEquals("COLOUR", created.family)
+        // In vocabulary order, not row order, so the wire form has one spelling.
+        assertEquals(listOf("white", "uv"), created.requiredEmitters)
+    }
+
+    @Test
+    fun `a plain colour template requires no emitter, so it still travels`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val created = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "warm-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+        assertTrue(created.requiredEmitters.isEmpty(), created.requiredEmitters.toString())
+    }
+
+    @Test
+    fun `an explicit white beside a deriving policy is refused by name`() = testApplication {
+        // Extract and Additive drive the same emitter byte the explicit row names, so a template
+        // holding both asks two things of one channel. Refused rather than letting one win, because
+        // the operator who set a policy and then dialled a white should be told it does nothing.
+        mountTestApp(state)
+        val client = jsonClient()
+        for (policy in listOf("extract", "additive")) {
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "clash-$policy",
+                        rows = listOf(colourRow("#FF9D4A;policy=$policy"), emitterRow("white", 180)),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, policy)
+            assertTrue(resp.bodyAsText().contains("rgbonly"), resp.bodyAsText())
+        }
+    }
+
+    @Test
+    fun `a deferred deriving colour clashes with a per-fixture white on the same rig`() =
+        testApplication {
+            // The rule is **co-applicability**, not a shared target key. A deferred colour row
+            // applies to every head the template lands on, so it meets a per-fixture white row there
+            // — and grouping by target key put the two in separate buckets and waved this through,
+            // leaving that head's white channel driven from two unarbitrated sources at cook time.
+            // `POST /templates/from-programmer` can genuinely record this shape, because the
+            // generic/per-fixture collapse is decided per property.
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            val client = jsonClient()
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "split-clash",
+                        rows = listOf(
+                            colourRow("#FF9D4A;policy=extract"),
+                            TemplateRowDto("fixture", "hex-1", "white", "dmx:180"),
+                        ),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+            assertTrue(resp.bodyAsText().contains("rgbonly"), resp.bodyAsText())
+        }
+
+    @Test
+    fun `two heads that never meet keep their own policies`() = testApplication {
+        // The other side of co-applicability: per-fixture rows on *different* heads do not conflict,
+        // so a template may derive white on one head and set it outright on another.
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+        val resp = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "per-head",
+                    rows = listOf(
+                        TemplateRowDto("fixture", "hex-1", "rgbColour", "#FF9D4A;policy=extract"),
+                        TemplateRowDto("fixture", "hex-2", "white", "dmx:180"),
+                    ),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+    }
+
+    @Test
+    fun `a UV-only template omits every head with no colour, rather than listing the rig`() =
+        testApplication {
+            // The resolves-to panel's omit rule used to be a string match against `"no colour"`. A
+            // UV-only template answers `"no uv"` for every head in the rig, so a rig-wide resolve
+            // listed every dimmer and hazer as a failure instead of omitting them — the opposite of
+            // what the panel documents. A head that *has* colour but no UV is still reported: it
+            // could have taken this and cannot, which is the question the panel exists to answer.
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-16ch", "mover-1", 40)
+            LocateTestSupport.seedFixture(state, projectId, "hazer", "haze-1", 90)
+            val client = jsonClient()
+
+            val body = client.post("${base()}/resolve") {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateResolveRequest(rows = listOf(emitterRow("uv", 255))))
+            }.body<TemplateResolveResponse>()
+
+            val keys = body.entries.map { it.fixtureKey }.toSet()
+            assertTrue("haze-1" !in keys, "a head with no colour is not a candidate: $keys")
+            assertTrue("hex-1" in keys, keys.toString())
+            assertTrue("mover-1" in keys, "RGBW head has colour but no UV — reported: $keys")
+            assertEquals("no uv", body.entries.single { it.fixtureKey == "mover-1" }.detail)
+        }
+
+    @Test
+    fun `the refusal does not depend on which row was authored first`() = testApplication {
+        // `unmetColourRequirement` short-circuited on the first Unsupported row it met, so the same
+        // hazer was omitted or listed depending on whether the emitter row happened to sort before
+        // the hex. The colour row is now consulted first whatever the stored order.
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "hazer", "haze-1", 90)
+        val client = jsonClient()
+        for (rows in listOf(
+            listOf(colourRow("#FF9D4A;policy=rgbonly"), emitterRow("uv", 255)),
+            listOf(emitterRow("uv", 255), colourRow("#FF9D4A;policy=rgbonly")),
+        )) {
+            val body = client.post("${base()}/resolve") {
+                contentType(ContentType.Application.Json)
+                setBody(TemplateResolveRequest(rows = rows))
+            }.body<TemplateResolveResponse>()
+            assertTrue(
+                body.entries.none { it.fixtureKey == "haze-1" },
+                "row order must not decide whether a colourless head is listed: ${body.entries}",
+            )
+        }
+    }
+
+    @Test
+    fun `one row per property — a second colour row is refused rather than silently losing`() =
+        testApplication {
+            // Every reader downstream takes the first colour row it finds, and nothing says which
+            // that is. Reachable before emitters existed but hidden, because `isOfferable`'s old
+            // "exactly one row" clause kept such a template off the one surface that folds rows.
+            mountTestApp(state)
+            val client = jsonClient()
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "two-colours",
+                        rows = listOf(colourRow("#FF9D4A;policy=rgbonly"), colourRow("#4A9DFF;policy=rgbonly")),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+            assertTrue(resp.bodyAsText().contains("twice"), resp.bodyAsText())
+        }
+
+    @Test
+    fun `the same property on two different heads is not a duplicate`() = testApplication {
+        // Per property *per target* — a focus position is one pan/tilt row per head by construction.
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val client = jsonClient()
+        val resp = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "per-head-colour",
+                    rows = listOf(
+                        TemplateRowDto("fixture", "hex-1", "rgbColour", "#FF9D4A;policy=rgbonly"),
+                        TemplateRowDto("fixture", "hex-2", "rgbColour", "#4A9DFF;policy=rgbonly"),
+                    ),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+    }
+
+    @Test
+    fun `UV sits beside any policy, because no policy has ever driven it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val resp = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateInput(
+                    name = "warm-plus-uv",
+                    rows = listOf(colourRow("#FF9D4A;policy=extract"), emitterRow("uv", 255)),
+                )
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+    }
+
+    @Test
+    fun `a head missing a named emitter takes none of the colour, and says so once`() =
+        testApplication {
+            // The whole-template rule. The Shehds mover is RGBW: it has the white this template
+            // names but not the amber, so it must take neither *nor* the hex — half a colour under
+            // this template's name would be a wrong answer delivered confidently.
+            mountTestApp(state)
+            LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+            LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-16ch", "mover-1", 40)
+            val client = jsonClient()
+
+            val template = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    TemplateInput(
+                        name = "amber-key",
+                        rows = listOf(colourRow("#FF9D4A;policy=rgbonly"), emitterRow("amber", 200)),
+                    )
+                )
+            }.body<TemplateDto>()
+
+            val body = client.post("${base()}/${template.id}/apply") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    ApplyTemplateRequest(
+                        targets = listOf(
+                            TemplateTargetDto("fixture", "hex-1"),
+                            TemplateTargetDto("fixture", "mover-1"),
+                        ),
+                    )
+                )
+            }.body<ApplyTemplateResponse>()
+
+            // The Hex has amber, so both of its rows land.
+            assertEquals(2, body.written)
+            // One refusal is one skip, not one per colour row.
+            assertEquals(1, body.skipped.size, body.skipped.toString())
+            assertEquals("mover-1", body.skipped.single().fixtureKey)
+            assertEquals("no amber", body.skipped.single().reason)
+        }
+
+    @Test
+    fun `resolve shows the refusal per head, before the template is saved`() = testApplication {
+        // The panel is where an operator is meant to learn this — the whole reason `/resolve` takes
+        // a draft. Each colour row reports the *template's* reason rather than its own, so the hex
+        // does not read as landing fine beside an unsupported amber.
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-16ch", "mover-1", 40)
+        val client = jsonClient()
+
+        val body = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                TemplateResolveRequest(
+                    rows = listOf(colourRow("#FF9D4A;policy=rgbonly"), emitterRow("amber", 200)),
+                )
+            )
+        }.body<TemplateResolveResponse>()
+
+        val forMover = body.entries.filter { it.fixtureKey == "mover-1" }
+        assertEquals(2, forMover.size, forMover.toString())
+        assertTrue(forMover.all { it.outcome == "UNSUPPORTED" }, forMover.toString())
+        assertTrue(forMover.all { it.detail == "no amber" }, forMover.toString())
+        // Null even for the hex row, which resolves on its own: the head receives nothing, and
+        // printing the value it *would* have taken would say the opposite.
+        assertTrue(forMover.all { it.value == null }, forMover.toString())
+    }
+
+    @Test
+    fun `an emitter level lands on that head's own slider`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val body = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateResolveRequest(rows = listOf(emitterRow("uv", 200))))
+        }.body<TemplateResolveResponse>()
+
+        val entry = body.entries.single { it.fixtureKey == "hex-1" }
+        assertEquals("EXACT", entry.outcome)
+        assertEquals("uv", entry.resolvedPropertyName)
+        assertEquals("200", entry.value)
+    }
+
     @Test
     fun `an intent of the wrong shape for its property is refused`() = testApplication {
         mountTestApp(state)

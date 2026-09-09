@@ -24,6 +24,8 @@ class TemplateIntentTest {
         roundTrip(TemplateIntent.Colour("#FF9D4A", WhitePolicy.EXTRACT))
         roundTrip(TemplateIntent.Colour("#FF9D4A", WhitePolicy.ADDITIVE))
         roundTrip(TemplateIntent.Colour("#FF9D4A", WhitePolicy.RGB_ONLY))
+        roundTrip(TemplateIntent.Level(180))
+        roundTrip(TemplateIntent.Level(0))
         roundTrip(TemplateIntent.Percent(75.0))
         roundTrip(TemplateIntent.Percent(12.5))
         roundTrip(TemplateIntent.Position(45.0, -12.5))
@@ -63,7 +65,7 @@ class TemplateIntentTest {
     fun `the literal parser refuses an intent rather than misreading it`() {
         // The second deliberate degradation, and the more important one: `pct:75` must never become
         // a DMX 75. `CueAssignmentResolver` answers null, and its callers skip the row with a warn.
-        for (raw in listOf("pct:75", "deg:45,12.5", "on", "off")) {
+        for (raw in listOf("pct:75", "deg:45,12.5", "dmx:180", "on", "off")) {
             assertNull(
                 CueAssignmentResolver.parseAssignmentValue(PropertyCategoryForTest.DIMMER, "dimmer", raw),
                 "'$raw' must not parse as a literal",
@@ -73,7 +75,13 @@ class TemplateIntentTest {
 
     @Test
     fun `garbage is null, not a guess`() {
-        for (raw in listOf("", "   ", "#GGGGGG", "pct:", "deg:45", "deg:a,b", "#12345", "maybe")) {
+        for (raw in listOf(
+            "", "   ", "#GGGGGG", "pct:", "deg:45", "deg:a,b", "#12345", "maybe",
+            // A bare number is *not* a level intent, which is the whole reason `dmx:` carries a
+            // prefix its payload does not need: `180` is what the literal parser reads, so the two
+            // grammars would agree on some rows and silently disagree on others.
+            "180", "dmx:", "dmx:abc",
+        )) {
             assertNull(parseTemplateIntent(raw), "'$raw'")
         }
     }
@@ -82,6 +90,37 @@ class TemplateIntentTest {
     fun `a percent is clamped to nought-to-a-hundred on the way in`() {
         assertEquals(TemplateIntent.Percent(100.0), parseTemplateIntent("pct:180"))
         assertEquals(TemplateIntent.Percent(0.0), parseTemplateIntent("pct:-20"))
+    }
+
+    @Test
+    fun `a level is clamped to a byte on the way in`() {
+        assertEquals(TemplateIntent.Level(255), parseTemplateIntent("dmx:400"))
+        assertEquals(TemplateIntent.Level(0), parseTemplateIntent("dmx:-20"))
+    }
+
+    @Test
+    fun `the three emitters are colour, and take a level`() {
+        // Mirrors `PropertyCategory.WHITE.maskGroup()`: emitters of the same mixed colour, so a
+        // template naming a hex *and* an amber is still one family and still one named thing.
+        assertEquals(
+            listOf(TemplateProperty.WHITE, TemplateProperty.AMBER, TemplateProperty.UV),
+            TemplateProperty.EMITTERS,
+        )
+        for (emitter in TemplateProperty.EMITTERS) {
+            assertEquals(PropertyMaskGroup.COLOUR, emitter.family, emitter.name)
+            assertTrue(emitter.isEmitter, emitter.name)
+            assertTrue(emitter.accepts(TemplateIntent.Level(1)), emitter.name)
+            // Not a percentage, unlike every other continuous role — an emitter has no range of its
+            // own to be a proportion of, and the operator is matching a colour by eye.
+            assertTrue(!emitter.accepts(TemplateIntent.Percent(50.0)), emitter.name)
+            assertEquals(emitter, TemplateProperty.ofOrNull(emitter.propertyName), emitter.name)
+        }
+        // The names the desk already drives them by — pinned against the rig by
+        // `BundledEmitterNamesTest`, and relied on here.
+        assertEquals(
+            listOf("white", "amber", "uv"),
+            TemplateProperty.EMITTERS.map { it.propertyName },
+        )
     }
 
     @Test

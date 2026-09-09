@@ -730,11 +730,53 @@ internal object CueComposer {
             }
         }
 
+        // The whole-template colour rule, per head, before anything is accumulated. A template's
+        // colour rows are facets of one output — an explicit amber row is there because the hex
+        // alone did not get where the operator wanted — so a head missing one of them must take
+        // none of them rather than a *different* colour under this template's name. Computed over
+        // `pending` because that is where a row and the head it landed on have already been paired.
+        // Empty for a Look layer, whose rows carry no intent.
+        val hasColourRow = content is LayerContent.OfTemplate && pending.any {
+            TemplateProperty.ofOrNull(it.propertyName)?.family == PropertyMaskGroup.COLOUR
+        }
+        val unmetColour: Map<String, String> = if (hasColourRow) {
+            pending.groupBy { it.fixture.key }.mapNotNull { (key, forFixture) ->
+                val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
+                val requirement =
+                    TemplateResolver.unmetColourRequirement(forFixture.first().fixture, applicable)
+                // Both arms drop the head's colour rows; the cook has no panel to stay quiet for, so
+                // "no colour at all" and "no amber" are the same answer to it.
+                when (requirement) {
+                    is TemplateResolver.ColourRequirement.NotACandidate -> key to requirement.reason
+                    is TemplateResolver.ColourRequirement.Unmet -> key to requirement.reason
+                    TemplateResolver.ColourRequirement.Met -> null
+                }
+            }.toMap()
+        } else {
+            // Guarded rather than left to `unmetColourRequirement`'s own cheap early-out: the
+            // grouping and the two allocations around it would otherwise run on every cook of every
+            // beam, position and intensity template, for a check that can never fire.
+            emptyMap()
+        }
+
         // Group-origin contributions first, then fixture-origin, so a source holding both a group
         // row and a fixture row for one member resolves fixture-wins — the same rule
         // [LookRegistry.expand] applies. `sortedBy` is stable, so row order survives within each
         // bucket.
         for (p in pending.sortedBy { if (it.isGroupOrigin) 0 else 1 }) {
+            val unmet = unmetColour[p.fixture.key]
+            if (unmet != null &&
+                TemplateProperty.ofOrNull(p.propertyName)?.family == PropertyMaskGroup.COLOUR
+            ) {
+                // **Debug, not warn**, for the reason the per-row skip below gives: a template
+                // pointed at a mixed rig meets this on every cook, and it is the editor's
+                // resolves-to panel that tells an operator, once, before saving.
+                logger.debug(
+                    "cue {}: template '{}' — {} cannot serve its colour rows as a set ({})",
+                    cueId, layer.source.name, p.fixture.key, unmet,
+                )
+                continue
+            }
             // A template row resolves per head **first**, because resolution is what decides which
             // property carries the value on this head — the MAC 250's colour is a wheel called
             // `colour`, which `canonicalPropertyName` rewrites to `rgbColour` and then misses. So

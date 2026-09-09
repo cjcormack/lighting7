@@ -7,6 +7,12 @@ package uk.me.cormack.lighting7.fx
  * template and a recorded row. A recorded colour row carries explicit emitter bytes
  * (`#ff8000;w120;a64`) decided against **one** fixture at authoring time; a template carries the hex
  * plus this policy and lets each head answer for itself.
+ *
+ * This is the *derived* half of a template's emitter story. The other half is an explicit
+ * [TemplateProperty.WHITE] / [TemplateProperty.AMBER] / [TemplateProperty.UV] row carrying a
+ * [TemplateIntent.Level], and the two must not both drive one emitter: an explicit white or amber
+ * row forces the colour row to [RGB_ONLY], refused by name at the write boundary. UV is exempt,
+ * because no policy has ever driven it.
  */
 enum class WhitePolicy {
     /**
@@ -47,9 +53,18 @@ enum class WhitePolicy {
  * | Arm | Form | Family |
  * |---|---|---|
  * | [Colour] | `#FF9D4A;policy=extract` | colour |
+ * | [Level] | `dmx:180` | colour — the bundled white / amber / UV emitters |
  * | [Percent] | `pct:75` | intensity (dimmer *and* strobe), and the continuous beam roles |
  * | [Position] | `deg:45.0,12.5` | position — **degrees**, never DMX |
  * | [Switch] | `on` / `off` | prism |
+ *
+ * **[Level] is a literal where everything else here is an intent, and that is deliberate.** The
+ * grammar exists so a value can mean the same thing on heads that differ; a percentage answers "how
+ * far up its own range", degrees answer "where in the room". An emitter has neither — it is one LED
+ * of one colour, its slider is 0–255 on every head in this rig, and the operator setting it is
+ * matching a colour by eye against a rig that is already lit. There is nothing to re-derive per
+ * head, so `pct:` would only have added a rounding trip. The one thing that *is* per head is
+ * whether the emitter exists at all, and that is answered by resolution, not by the value.
  *
  * **Strobe is a percentage, not a rate**, and that is a departure from the design worth knowing.
  * `BeamColour.dc.html` promises "strobe in Hz, which is the only unit two fixtures agree on" — but
@@ -74,10 +89,12 @@ enum class WhitePolicy {
  *   ([parseExtendedColour] here, `parseExtendedColour` in `components/fx/colourUtils.ts`) ignore an
  *   unrecognised `;`-token. So every existing swatch, preview and cell renderer already draws it —
  *   as the RGB-only reading, which is the safe one.
- * - `pct:` / `deg:` / `on` all fail `toUByteParam()` in
+ * - `pct:` / `deg:` / `dmx:` / `on` all fail `toUByteParam()` in
  *   [CueAssignmentResolver.parseAssignmentValue], which returns null and makes its caller **skip
  *   the row with a warn**. Loudly doing nothing is right; a stray reader must never turn `pct:75`
- *   into a DMX 75.
+ *   into a DMX 75. `dmx:180` keeps the prefix for exactly that reason even though its payload
+ *   already *is* a DMX byte: a bare `180` would be read by the literal parser, so the two grammars
+ *   would silently agree on some rows and disagree on others.
  */
 sealed interface TemplateIntent {
     /** The serialised form, round-tripping through [parseTemplateIntent]. */
@@ -103,6 +120,18 @@ sealed interface TemplateIntent {
         override fun serialize(): String = "deg:${trimNumber(panDeg)},${trimNumber(tiltDeg)}"
     }
 
+    /**
+     * A DMX byte, written straight at the head's own slider — the bundled colour emitters only.
+     *
+     * The one literal in this grammar; see the interface doc for why an emitter is the case where
+     * re-deriving per head would buy nothing. [value] is `0..255` at construction, and
+     * [TemplateResolver] still clamps it into the slider's own `min..max` on the way out, because a
+     * bundled emitter *may* declare a narrower range even though none in this rig does.
+     */
+    data class Level(val value: Int) : TemplateIntent {
+        override fun serialize(): String = "dmx:$value"
+    }
+
     /** A two-state beam role — prism in or out. */
     data class Switch(val on: Boolean) : TemplateIntent {
         override fun serialize(): String = if (on) "on" else "off"
@@ -111,6 +140,7 @@ sealed interface TemplateIntent {
 
 private const val PERCENT_PREFIX = "pct:"
 private const val DEGREES_PREFIX = "deg:"
+private const val LEVEL_PREFIX = "dmx:"
 private const val POLICY_TOKEN = "policy="
 
 /**
@@ -152,6 +182,10 @@ fun parseTemplateIntent(raw: String): TemplateIntent? {
         val value = lower.removePrefix(PERCENT_PREFIX).trim().toDoubleOrNull() ?: return null
         return TemplateIntent.Percent(value.coerceIn(0.0, 100.0))
     }
+    if (lower.startsWith(LEVEL_PREFIX)) {
+        val value = lower.removePrefix(LEVEL_PREFIX).trim().toIntOrNull() ?: return null
+        return TemplateIntent.Level(value.coerceIn(0, 255))
+    }
     if (lower.startsWith(DEGREES_PREFIX)) {
         val axes = lower.removePrefix(DEGREES_PREFIX).split(",")
         if (axes.size != 2) return null
@@ -184,6 +218,14 @@ private fun trimNumber(value: Double): String =
  *
  * `strobe` sits under [PropertyMaskGroup.INTENSITY], not BEAM, because that is where
  * `PropertyCategory.STROBE.maskGroup()` puts it: an intensity modulation, HTP like a dimmer.
+ *
+ * [WHITE], [AMBER] and [UV] are **colour**, matching `PropertyCategory.WHITE.maskGroup()` — they are
+ * emitters of the same mixed colour, so a template naming a hex and an amber is still one family and
+ * still one named thing. They are rows in their own right rather than fields on [TemplateIntent.Colour]
+ * so that each writes only its own channel: that is what lets a UV-only template sit *over* a colour
+ * rather than replacing it, since `ColourTarget.composeProgrammerOver` already arbitrates the bundled
+ * emitters per component. It is also the only way to say "UV at 200" at all — no [WhitePolicy] has
+ * ever driven UV.
  */
 enum class TemplateProperty(
     /** The property name as it is stored on the row and looked up on a head. */
@@ -196,6 +238,9 @@ enum class TemplateProperty(
     STROBE("strobe", PropertyMaskGroup.INTENSITY, "Strobe"),
     POSITION("position", PropertyMaskGroup.POSITION, "Position"),
     COLOUR("rgbColour", PropertyMaskGroup.COLOUR, "Colour"),
+    WHITE("white", PropertyMaskGroup.COLOUR, "White"),
+    AMBER("amber", PropertyMaskGroup.COLOUR, "Amber"),
+    UV("uv", PropertyMaskGroup.COLOUR, "UV"),
     ZOOM("zoom", PropertyMaskGroup.BEAM, "Zoom"),
     FOCUS("focus", PropertyMaskGroup.BEAM, "Focus"),
     IRIS("iris", PropertyMaskGroup.BEAM, "Iris"),
@@ -208,10 +253,23 @@ enum class TemplateProperty(
         COLOUR -> intent is TemplateIntent.Colour
         POSITION -> intent is TemplateIntent.Position
         PRISM -> intent is TemplateIntent.Switch
+        WHITE, AMBER, UV -> intent is TemplateIntent.Level
         DIMMER, STROBE, ZOOM, FOCUS, IRIS, FROST -> intent is TemplateIntent.Percent
     }
 
+    /** True for the three bundled colour emitters, which share every rule that is not the hex's. */
+    val isEmitter: Boolean get() = this == WHITE || this == AMBER || this == UV
+
     companion object {
+        /**
+         * The bundled emitters, in the order the editor and the resolves-to panel show them.
+         *
+         * The property names are the categories, which is safe to rely on: `BundledEmitterNamesTest`
+         * pins every `bundledProperty(WHITE|AMBER|UV)` in the rig to exactly these spellings, and
+         * `FxTarget.getSlider` already reaches them by the same names.
+         */
+        val EMITTERS: List<TemplateProperty> = listOf(WHITE, AMBER, UV)
+
         /**
          * The vocabulary entry for a stored property name, or null when a template may not name it.
          *

@@ -71,6 +71,8 @@ private fun DmxFixture.detectCapabilities(): List<String> {
     if (this is WithDimmer) caps.add("dimmer")
     if (this is WithColour) caps.add("colour")
     if (this is WithPosition) caps.add("position")
+    if (this is WithWhite) caps.add("white")
+    if (this is WithAmber) caps.add("amber")
     if (this is WithUv) caps.add("uv")
     if (this is WithStrobe) caps.add("strobe")
     if (this is MultiElementFixture<*>) {

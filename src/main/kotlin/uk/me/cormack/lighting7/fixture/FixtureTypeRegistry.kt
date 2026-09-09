@@ -222,6 +222,8 @@ object FixtureTypeRegistry {
         if (fixture is WithDimmer) caps.add("dimmer")
         if (fixture is WithColour) caps.add("colour")
         if (fixture is WithPosition) caps.add("position")
+        if (fixture is WithWhite) caps.add("white")
+        if (fixture is WithAmber) caps.add("amber")
         if (fixture is WithUv) caps.add("uv")
         if (fixture is WithStrobe) caps.add("strobe")
         if (fixture is MultiElementFixture<*>) {

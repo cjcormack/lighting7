@@ -21,8 +21,10 @@ import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.WhitePolicy
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.serializeTemplateColourRef
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -473,6 +475,21 @@ internal data class TemplateDto(
      * because `FU-TMPL-MULTI-EFFECT` would give it a third arm before it gave it a second flag.
      */
     val kind: String,
+    /**
+     * The bundled colour emitters this template names outright — a subset of `white`, `amber`, `uv`,
+     * **derived** from its rows the way [family] is.
+     *
+     * The client's offer filter. A template that names an emitter cannot be served by a head without
+     * it — the whole template refuses, not just the row (`TemplateResolver.unmetColourRequirement`)
+     * — so `TemplateStrip` and the busk palette need to know before offering it, and the family
+     * alone cannot say: white, amber, UV and the hex are all `COLOUR`.
+     *
+     * Not on the fixture the way `compatibleLookIds` is. The requirement belongs to the template and
+     * is three tokens long; the *capability* half is already on the wire as a colour descriptor's
+     * `whiteChannel` / `amberChannel` / `uvChannel`, so pairing them client-side costs one memo and
+     * no round trip per patch change.
+     */
+    val requiredEmitters: List<String> = emptyList(),
     val rows: List<TemplateRowDto> = emptyList(),
     /** The one effect an effect template holds; null for a value template. */
     val effect: TemplateEffectDto? = null,
@@ -801,6 +818,82 @@ internal fun validateTemplateContents(
         return "A template holds exactly one attribute family, but these rows span " +
             families.joinToString { it.name }
     }
+    duplicateRow(rows)?.let { return it }
+    return conflictingWhitePolicy(rows)
+}
+
+/**
+ * Rule 5: one row per property per target.
+ *
+ * Two `rgbColour` rows are not a template holding two colours — they are one colour and one that
+ * silently loses, since every reader downstream takes the first it finds (`templateRowsSwatch` in
+ * the client, `resolveColourGeneric`'s fold here) and nothing says which. Refused rather than
+ * ordered, because "the first one wins" is a rule about *storage order* and a template is a named
+ * thing whose meaning should not depend on which half of it was typed first.
+ *
+ * This was reachable before emitters existed and merely invisible: `isOfferable`'s old
+ * `rows.length === 1` clause hid such a template from the one surface that would have folded both.
+ * Relaxing that clause is what made the gap worth closing.
+ */
+private fun duplicateRow(rows: List<TemplateRowDto>): String? {
+    val seen = HashSet<Pair<String, String>>()
+    for (row in rows) {
+        val property = TemplateProperty.ofOrNull(row.propertyName) ?: continue
+        val target = if (row.isDeferred) "" else row.targetKey
+        if (!seen.add(property.propertyName to target)) {
+            return "This template sets ${property.propertyName} twice" +
+                (if (target.isEmpty()) "" else " on '$target'") +
+                " — a template holds one value per property, and the second would silently lose."
+        }
+    }
+    return null
+}
+
+/**
+ * Rule 6: an explicit white or amber row and a colour row that *derives* one are refused together.
+ *
+ * [WhitePolicy.EXTRACT] and [WhitePolicy.ADDITIVE] both drive the same emitter byte the explicit row
+ * names, so a template holding both asks two things of one channel and the answer would come down to
+ * composition order — which is exactly the kind of "it depends" a named, portable thing must not
+ * have. Refused rather than silently letting the explicit row win, because the operator who set a
+ * policy and then dialled an amber should be told the policy is now doing nothing.
+ *
+ * **UV is exempt**, and that is not an oversight: `mixColour` has never driven UV under any policy,
+ * so a `uv` row conflicts with nothing.
+ *
+ * Checked **per target** rather than across the whole template: a per-fixture template holds a row
+ * set per head, and one head's explicit amber says nothing about another head's policy.
+ */
+private fun conflictingWhitePolicy(rows: List<TemplateRowDto>): String? {
+    val emitters = rows.filter {
+        TemplateProperty.ofOrNull(it.propertyName)
+            .let { p -> p == TemplateProperty.WHITE || p == TemplateProperty.AMBER }
+    }
+    if (emitters.isEmpty()) return null
+    val deriving = rows.filter { row ->
+        TemplateProperty.ofOrNull(row.propertyName) == TemplateProperty.COLOUR &&
+            (parseTemplateIntent(row.value) as? TemplateIntent.Colour)
+                ?.policy.let { it != null && it != WhitePolicy.RGB_ONLY }
+    }
+
+    // **Co-applicability, not a shared target key.** Two rows meet on a head when either is deferred
+    // — a deferred row applies to *every* head the template lands on — or when they name the same
+    // one. Grouping by target key instead put deferred rows in a bucket of their own, so a deferred
+    // `extract` colour beside a per-fixture `white` row passed validation and then drove that head's
+    // white channel from two unarbitrated sources at cook time: exactly the ambiguity this rule
+    // exists to forbid, and a shape `POST /templates/from-programmer` can genuinely record (the
+    // generic/per-fixture collapse is decided *per property*, so one row can be deferred while
+    // another is not).
+    for (emitter in emitters) {
+        for (colour in deriving) {
+            if (!emitter.isDeferred && !colour.isDeferred && emitter.targetKey != colour.targetKey) continue
+            val policy = (parseTemplateIntent(colour.value) as? TemplateIntent.Colour)?.policy ?: continue
+            val name = TemplateProperty.ofOrNull(emitter.propertyName)?.propertyName ?: emitter.propertyName
+            return "This template sets $name directly, so the colour's '${policy.token}' policy has " +
+                "nothing left to do — it drives the same emitter. Set the colour to 'rgbonly', or " +
+                "drop the $name row."
+        }
+    }
     return null
 }
 
@@ -1088,6 +1181,18 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
         ?: effect?.let { familyForEffectCategory(it.category) }
 
 /**
+ * The bundled emitters this template's rows name outright — `TemplateDto.requiredEmitters`.
+ *
+ * In [TemplateProperty.EMITTERS] order rather than row order, so the wire form has one spelling and
+ * a client can compare two templates' requirements without sorting. Must be called inside a
+ * transaction.
+ */
+internal fun DaoTemplate.requiredEmittersOf(): List<String> {
+    val named = rows.mapNotNull { TemplateProperty.ofOrNull(it.propertyName) }.toSet()
+    return TemplateProperty.EMITTERS.filter { it in named }.map { it.propertyName }
+}
+
+/**
  * Does this template take its targets from the press?
  *
  * An effect template is generic by construction (D3) — it names no target at all, so the "every row
@@ -1120,6 +1225,7 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         family = familyOf()?.name,
         isGeneric = isGenericTemplate(),
         kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
+        requiredEmitters = requiredEmittersOf(),
         rows = rowList.map { it.toDto() },
         effect = storedEffect?.toDto(registry),
         layerCount = resolvedUsage.layerCount,
@@ -1159,9 +1265,28 @@ private fun resolveTemplateAgainstPatch(
         fixtures.fixtures.filter { it.key in keys }
     }
 
+    // The whole-template colour rule, per head, before any row is reported. A head that cannot serve
+    // every colour row serves none of them, so each of its colour rows has to say *that* rather than
+    // its own answer — otherwise the panel shows the hex landing fine beside an unsupported amber and
+    // the operator reads it as "mostly works", which is the opposite of what the desk will do.
+    // Parsed **once**, not once per candidate: this backs the editor's live panel, so on a rig-wide
+    // resolve the old shape re-parsed every row for every patched head on every debounced keystroke.
+    val parsedRows = request.rows.mapNotNull { row -> parseTemplateIntent(row.value)?.let { row to it } }
+    val colourRequirement: Map<String, TemplateResolver.ColourRequirement> = buildMap {
+        for (fixture in candidates) {
+            val applicable = parsedRows.mapNotNull { (row, intent) ->
+                val target = row.target
+                if (target is TargetRef.Fixture && target.key != fixture.key) null
+                else row.propertyName to intent
+            }
+            put(fixture.key, TemplateResolver.unmetColourRequirement(fixture, applicable))
+        }
+    }
+
     val entries = ArrayList<TemplateResolutionDto>()
     for (row in request.rows) {
         val intent = parseTemplateIntent(row.value) ?: continue
+        val isColourRow = TemplateProperty.ofOrNull(row.propertyName)?.family == PropertyMaskGroup.COLOUR
         // A per-fixture row answers only for the head it names; a generic row answers for all.
         val forThisRow = when (val target = row.target) {
             is TargetRef.Fixture -> candidates.filter { it.key == target.key }
@@ -1169,11 +1294,23 @@ private fun resolveTemplateAgainstPatch(
         }
         for (fixture in forThisRow) {
             val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent)
-            val (outcome, detail, deltaE) = describeNote(resolution.note)
+            val requirement = if (isColourRow) colourRequirement[fixture.key] else null
+            // A head with nothing in this family was never a candidate — omitted rather than listed
+            // as a failure, which is what the resolver's own `NotACandidate` arm says. It used to be
+            // decided by matching the reason against a `"no colour"` constant, and a UV-only template
+            // answers `"no uv"` for every head in the rig — so a rig-wide resolve listed every
+            // dimmer and PAR as a failure instead of omitting them.
+            if (requirement is TemplateResolver.ColourRequirement.NotACandidate) continue
+            val unmet = (requirement as? TemplateResolver.ColourRequirement.Unmet)?.reason
+            val (outcome, detail, deltaE) = if (unmet != null) {
+                // Reported under the *template's* reason, not this row's.
+                Triple("UNSUPPORTED", unmet, null)
+            } else {
+                describeNote(resolution.note)
+            }
             // A head with nothing in this family was never a candidate — omitted rather than listed
             // as a failure. `Unsupported` still appears when the head *could* have taken it but
             // cannot (no degree range, no dimmer), which is the distinction worth drawing.
-            if (resolution.value == null && detail == NOT_A_CANDIDATE) continue
             entries.add(
                 TemplateResolutionDto(
                     fixtureKey = fixture.key,
@@ -1182,9 +1319,12 @@ private fun resolveTemplateAgainstPatch(
                     propertyName = row.propertyName,
                     resolvedPropertyName = resolution.propertyName,
                     outcome = outcome,
-                    detail = detail.takeIf { it != NOT_A_CANDIDATE },
+                    detail = detail,
                     deltaE = deltaE,
-                    value = resolution.value?.serialize(),
+                    // Null when the template refuses as a whole, even though this row on its own
+                    // resolved — the head receives nothing, and printing the value it *would* have
+                    // taken would say the opposite.
+                    value = if (unmet == null) resolution.value?.serialize() else null,
                 )
             )
         }
@@ -1192,15 +1332,6 @@ private fun resolveTemplateAgainstPatch(
     return TemplateResolveResponse(entries)
 }
 
-/**
- * The sentinel that marks "this head has nothing in this family", so the panel can drop it while
- * every other [TemplateResolver.Note.Unsupported] is shown.
- *
- * A magic string rather than a note arm because it is a *presentation* distinction, not a resolution
- * one: the resolver's job is to say why it could not resolve, and "no colour at all" and "no degree
- * range annotated" are the same kind of answer to it. Only the panel cares which to draw.
- */
-private const val NOT_A_CANDIDATE = "no colour"
 
 private fun describeNote(note: TemplateResolver.Note): Triple<String, String?, Double?> = when (note) {
     is TemplateResolver.Note.Exact -> Triple("EXACT", null, null)

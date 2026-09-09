@@ -117,6 +117,169 @@ class TemplateResolverTest {
         assertEquals(TemplateResolver.Note.Unsupported("no colour"), r.note)
     }
 
+    // ─── Emitters set outright ──────────────────────────────────────────
+
+    @Test
+    fun `an emitter level is written straight at the head's own slider`() {
+        // A byte, not a percentage — the one literal in the grammar. A Hex has all three.
+        for ((property, expected) in listOf("white" to 180, "amber" to 64, "uv" to 255)) {
+            val r = TemplateResolver.resolve(hex(), property, TemplateIntent.Level(expected))
+            val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value, property)
+            assertEquals(expected.toUByte(), value.value, property)
+            assertEquals(TemplateResolver.Note.Exact, r.note, property)
+            // The resolved name is the row's: an emitter is not aliased the way colour is.
+            assertEquals(property, r.propertyName, property)
+        }
+    }
+
+    @Test
+    fun `a head without that emitter says so, and that is the capability check`() {
+        // Nothing else probes a head for an emitter — `unmetColourRequirement` is a fold over this,
+        // and the reason string is what an apply skip carries and the resolves-to panel prints.
+        val r = TemplateResolver.resolve(mover(), "amber", TemplateIntent.Level(200))
+        assertNull(r.value, "the Shehds mover is RGBW — no amber")
+        assertEquals(TemplateResolver.Note.Unsupported("no amber"), r.note)
+
+        val uv = TemplateResolver.resolve(mover(), "uv", TemplateIntent.Level(200))
+        assertNull(uv.value)
+        assertEquals(TemplateResolver.Note.Unsupported("no uv"), uv.note)
+    }
+
+    // ─── The whole-template colour rule ─────────────────────────────────
+
+    @Test
+    fun `a head serving every colour row has no unmet requirement`() {
+        val rows = listOf(
+            "rgbColour" to colour("#FF9D4A", WhitePolicy.RGB_ONLY),
+            "white" to TemplateIntent.Level(180),
+            "uv" to TemplateIntent.Level(255),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.Met,
+            TemplateResolver.unmetColourRequirement(hex(), rows),
+        )
+    }
+
+    @Test
+    fun `a head missing one named emitter cannot serve any of the colour rows`() {
+        // The rule, and the reason for it: an explicit amber is in the template because the hex
+        // alone did not get where the operator wanted, so a head without amber taking just the hex
+        // would put a *different* colour on stage under this template's name.
+        val rows = listOf(
+            "rgbColour" to colour("#FF9D4A", WhitePolicy.RGB_ONLY),
+            "amber" to TemplateIntent.Level(200),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.Unmet("no amber", "amber"),
+            TemplateResolver.unmetColourRequirement(mover(), rows),
+        )
+    }
+
+    @Test
+    fun `a head with no colour at all is not a candidate, whatever the row order`() {
+        // The distinction the editor's panel turns on, and it must not depend on which row was
+        // authored first: a short-circuit over the stored order answered "no uv" for a hazer when
+        // the emitter row sorted before the hex, which the panel then *listed* instead of omitting.
+        val withHexFirst = listOf(
+            "rgbColour" to colour("#FF9D4A", WhitePolicy.RGB_ONLY),
+            "uv" to TemplateIntent.Level(255),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.NotACandidate("no colour"),
+            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.NotACandidate("no colour"),
+            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst.reversed()),
+        )
+        // And with no colour row at all to infer it from — an emitter-only template.
+        assertEquals(
+            TemplateResolver.ColourRequirement.NotACandidate("no colour"),
+            TemplateResolver.unmetColourRequirement(hazer(), listOf("uv" to TemplateIntent.Level(255))),
+        )
+    }
+
+    @Test
+    fun `the rule is colour only — other families keep their per-row skip`() {
+        // A beam template naming zoom and frost on a head with one of them should still set the one.
+        // Scoped deliberately: independent roles, unlike the facets of one colour.
+        val rows = listOf(
+            "zoom" to TemplateIntent.Percent(50.0),
+            "frost" to TemplateIntent.Percent(50.0),
+            "position" to TemplateIntent.Position(0.0, 0.0),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.Met,
+            TemplateResolver.unmetColourRequirement(hazer(), rows),
+        )
+    }
+
+    @Test
+    fun `a plain hex template still reaches a head with no emitters at all`() {
+        // `FU-MANUAL-DESK-S3` check 1: one colour template across an RGBWA hex, a white-only head
+        // and a colour wheel. Naming no emitter must keep degrading rather than refusing, or the
+        // whole-template rule would have narrowed the feature it was added to.
+        val rows = listOf("rgbColour" to colour("#FF9D4A", WhitePolicy.EXTRACT))
+        assertEquals(
+            TemplateResolver.ColourRequirement.Met,
+            TemplateResolver.unmetColourRequirement(mover(), rows),
+        )
+        assertEquals(
+            TemplateResolver.ColourRequirement.Met,
+            TemplateResolver.unmetColourRequirement(mac(), rows),
+        )
+    }
+
+    // ─── The fixture-free reading ───────────────────────────────────────
+
+    @Test
+    fun `a generic resolve folds the emitter rows into the one colour`() {
+        // An FX colour parameter gets one `ExtendedColour` for every head it targets, so an emitter
+        // row has to land here or it would simply not happen.
+        val resolved = assertNotNull(
+            TemplateResolver.resolveColourGeneric(
+                listOf(
+                    "rgbColour" to colour("#FF9D4A", WhitePolicy.RGB_ONLY),
+                    "amber" to TemplateIntent.Level(200),
+                    "uv" to TemplateIntent.Level(64),
+                ),
+            ),
+        )
+        assertEquals(255, resolved.color.red)
+        assertEquals(200u.toUByte(), resolved.amber)
+        assertEquals(64u.toUByte(), resolved.uv)
+    }
+
+    @Test
+    fun `an explicit emitter overwrites what the policy derived`() {
+        // Cannot collide today — the write boundary refuses the pair — but the precedence is stated
+        // rather than left to argument order: a row an operator typed beats one the desk inferred.
+        val resolved = assertNotNull(
+            TemplateResolver.resolveColourGeneric(
+                listOf(
+                    "rgbColour" to colour("#FF9D4A", WhitePolicy.EXTRACT),
+                    "white" to TemplateIntent.Level(10),
+                ),
+            ),
+        )
+        assertEquals(10u.toUByte(), resolved.white, "not the 74 extract would have derived")
+    }
+
+    @Test
+    fun `an emitter-only template resolves against black`() {
+        // The honest reading of what an effect output can express: one colour per frame, and no way
+        // to say "leave RGB alone". The layer path keeps that distinction; a reference cannot.
+        val resolved = assertNotNull(
+            TemplateResolver.resolveColourGeneric(listOf("uv" to TemplateIntent.Level(255))),
+        )
+        assertEquals(0, resolved.color.red)
+        assertEquals(0, resolved.color.green)
+        assertEquals(0, resolved.color.blue)
+        assertEquals(255u.toUByte(), resolved.uv)
+        // Nothing colour-ish at all is null, so a caller falls through to its literal parser.
+        assertNull(TemplateResolver.resolveColourGeneric(listOf("dimmer" to TemplateIntent.Percent(50.0))))
+    }
+
     // ─── Intensity ──────────────────────────────────────────────────────
 
     @Test

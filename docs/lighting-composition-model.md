@@ -309,9 +309,37 @@ channels, and it is asked by all three consumers — `CueComposer.applyLayer` at
 resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
 that computed its own ΔE would promise what the rig does not do.
 
+**The one exception is a bundled emitter, which is a literal — `dmx:180`.** White, amber and UV are
+rows of the closed vocabulary in their own right (family COLOUR, matching
+`PropertyCategory.WHITE.maskGroup()`), and the departure is deliberate: an emitter has no range to
+be a proportion of and no room to be a position in — it is one LED, its slider is 0–255 on every
+head in this rig, and the operator setting it is matching a colour by eye against a rig that is
+already lit. What *is* per head — whether the emitter exists at all — is answered by resolution.
+The prefix stays even though the payload is already a DMX byte: a bare `180` is what the *literal*
+parser reads, so the two grammars would agree on some rows and silently disagree on others.
+
+Rows rather than fields on the colour intent, because each then writes only its own channel:
+`ColourTarget.composeProgrammerOver` already arbitrates the bundled emitters per component, so a
+UV-only template sits **over** an amber wash instead of replacing it. It is also the only way to say
+"UV at 200" at all — no `WhitePolicy` has ever driven UV. Two rules keep the derived and the explicit
+halves from fighting over one byte: an explicit `white` or `amber` row **forces the colour row to
+`rgbonly`**, refused by name at the write boundary, and UV is exempt because no policy touches it.
+
+**A colour template refuses as a whole.** If any of its colour rows is `Unsupported` on a head, that
+head takes *none* of them — `TemplateResolver.unmetColourRequirement`, folded in by cook, apply and
+the resolves-to panel alike. The rows are facets of one output: an explicit amber is in the template
+because the hex alone did not get where the operator wanted, so a head without amber taking just the
+hex would put a *different* colour on stage under that template's name. Scoped to colour on purpose
+— zoom and frost are independent roles and keep their per-row skip. `TemplateDto.requiredEmitters`
+is the derived form of the same fact, and what the client filters its offers on; a template naming
+no emitter requires none, so the type-agnostic degradation across an RGBWA hex, a white-only head
+and a colour wheel is untouched.
+
 A template's property vocabulary is **closed** (`TemplateProperty`), which is where "a template
 cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
-recorded Look, which names a head and can hold anything that head has. It has always held no
+recorded Look, which names a head and can hold anything that head has. The three bundled emitters
+are *in* that vocabulary — they are not slotted, they mean the same thing on every head that has
+one, and the only per-model question about them is presence. It has always held no
 positional colour list either — and now nothing does, because that grammar is gone: an effect
 parameter names a colour template rather than indexing a list, so a template *is* the named colour
 instead of being one more scope that holds several.
@@ -683,10 +711,16 @@ Two rules that fall out of that, both enforced rather than conventional:
   head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
   as though the head were RGBW, which makes it identical to the same template applied as a layer on
   any RGBW/RGBWA head. A per-fixture template holds no single colour and is refused, and so is an
-  **effect** template: it has no rows at all, so it holds no colour to resolve. Both sides already
-  say so by construction — the AI prompt's list and `resolveColourGeneric` both need a single
-  deferred Colour row — but the write boundary also refuses a template's effect naming *its own*
-  uuid, which is the one shape that would recurse in `createEffectWithTemplates`.
+  **effect** template, which has no rows at all. The generic test is **per row** — no row naming a
+  head — and not "exactly one row": a colour template may hold a hex *and* explicit emitters, and
+  both halves fold the whole colour-family row set into one colour (`resolveColourGeneric` over the
+  set on the desk, `templateRowsSwatch` in the client), so it means something exact rather than "one
+  of these". An explicit emitter row overwrites what the policy derived, which cannot collide while
+  the write boundary refuses that pair but is stated rather than left to argument order. A template
+  of emitters alone resolves against **black**, which is the honest reading of what an effect output
+  can express: one colour per frame, and no way to say "leave RGB alone" — the layer path keeps that
+  distinction, a reference cannot. The write boundary also refuses a template's effect naming *its
+  own* uuid, the one shape that would recurse in `createEffectWithTemplates`.
 
   The other direction is allowed and useful: an **effect template's** colour parameter may name a
   *value* colour template, which is how "Amber Breathe" follows "Amber Key". `template_effects` is

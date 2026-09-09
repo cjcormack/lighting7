@@ -8,7 +8,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
-import uk.me.cormack.lighting7.fx.TemplateProperty
+import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 
@@ -379,17 +379,20 @@ class AiService(
         // Colour templates, with their uuids — the only thing a colour parameter can reference, so
         // the uuid has to be in the prompt or `tmpl:` is unusable.
         //
-        // An **effect** template is excluded for free and correctly (D12): it has no rows at all,
-        // so `singleOrNull` answers null. An effect template is not a colour — the reference would
-        // resolve to nothing, and a running effect's colour would silently fall back to white.
+        // Through [genericColourRows], which is the one place that rule lives. This was an
+        // independent `singleOrNull` copy of "exactly one row" — so once a colour template could
+        // hold a hex *and* an explicit amber, the desk resolved such a reference perfectly while the
+        // AI was never told the template existed and could not offer it.
+        //
+        // An **effect** template is still excluded (D12), now by name rather than by the accident of
+        // holding no rows: it is not a colour, so the reference would resolve to nothing and a
+        // running effect's colour would silently fall back to white.
         val colourTemplates = transaction(state.database) {
             DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
-                val rows = template.rows.toList()
-                val colour = rows.singleOrNull()
-                    ?.takeIf { TemplateProperty.ofOrNull(it.propertyName) == TemplateProperty.COLOUR }
-                    ?.takeIf { it.targetType == DEFERRED_TARGET_TYPE }
-                    ?: return@mapNotNull null
-                "${template.name} — `tmpl:${template.uuid}` (${colour.value})"
+                val colour = genericColourRows(
+                    template.rows.toList(), { it.propertyName }, { it.isDeferred },
+                ) ?: return@mapNotNull null
+                "${template.name} — `tmpl:${template.uuid}` (${colour.joinToString(" ") { it.value }})"
             }
         }
         if (colourTemplates.isNotEmpty()) {

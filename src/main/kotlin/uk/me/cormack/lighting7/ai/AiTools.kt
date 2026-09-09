@@ -452,14 +452,15 @@ class AiTools(private val state: State) {
                 val project = state.projectManager.currentProject
                 val templates = transaction(state.database) {
                     DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
-                        val row = template.rows.toList().singleOrNull()
-                            ?.takeIf { TemplateProperty.ofOrNull(it.propertyName) == TemplateProperty.COLOUR }
-                            ?.takeIf { it.targetType == DEFERRED_TARGET_TYPE }
-                            ?: return@mapNotNull null
+                        // [genericColourRows] owns this rule — see its doc for why the row count is
+                        // not one of its clauses any more.
+                        val rows = genericColourRows(
+                            template.rows.toList(), { it.propertyName }, { it.isDeferred },
+                        ) ?: return@mapNotNull null
                         buildJsonObject {
                             put("name", template.name)
                             put("ref", "tmpl:${template.uuid}")
-                            put("intent", row.value)
+                            put("intent", rows.joinToString(" ") { it.value })
                         }
                     }
                 }

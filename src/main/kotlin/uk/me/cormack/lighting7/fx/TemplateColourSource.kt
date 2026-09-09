@@ -28,6 +28,12 @@ import java.util.UUID
  * colour template can be named: a per-fixture template (eight heads aimed at one spot) holds no
  * single colour, so there is nothing for a fixture-agnostic effect output to take from it.
  *
+ * All of the template's colour-family rows are folded into that one colour — the hex *and* any
+ * explicit `white` / `amber` / `uv` row. A template of emitters alone (a UV-only one, say) resolves
+ * against black, which is the honest reading of what an effect output can express: it has one colour
+ * per frame and no way to say "leave RGB where it is". The layer path keeps that distinction; a
+ * reference cannot.
+ *
  * ## The one thing to hold when wiring a call site
  *
  * [TemplateRegistry.snapshot] falls back to `loadTemplateSnapshot`, which opens its **own
@@ -54,6 +60,41 @@ fun parseTemplateColourRefUuid(value: String): UUID? {
 
 /** Serialise a reference to [templateUuid]. */
 fun serializeTemplateColourRef(templateUuid: UUID): String = "$TEMPLATE_COLOUR_REF_PREFIX$templateUuid"
+
+/**
+ * The colour-family rows of a template a `tmpl:` reference may name, or **null** when it may not.
+ *
+ * One predicate for the four places that ask the same question — [resolveTemplateColour] here, the
+ * AI's system prompt (`AiService`), the AI's `get_state` tool (`AiTools`), and `isOfferable` in the
+ * client's `FxColourTemplates.tsx`. Three of those were independent `rows.singleOrNull()` copies of
+ * "exactly one row", and relaxing that rule for emitters moved only one of them: a generic colour
+ * template holding a hex *and* an explicit amber resolved correctly on the desk while being
+ * invisible to the AI, which could not offer a `tmpl:` ref it was never told about.
+ *
+ * Two clauses, and the row count is deliberately not one of them:
+ *
+ *  - **At least one colour-family row**, which is what excludes an **effect** template (D12). That
+ *    used to fall out of `singleOrNull` by the accident of an effect template holding no rows; it is
+ *    stated here instead, because accidents do not survive a rule change.
+ *  - **Every colour row deferred.** A per-fixture template (eight heads aimed at one spot) holds a
+ *    different colour per head, so there is no single one for a fixture-agnostic effect output to
+ *    take. This is the clause `singleOrNull` was really standing in for.
+ *
+ * Generic over the row type because the three server-side callers hold different ones — a
+ * `TemplateRowEntry` off a snapshot, a `DaoTemplateRow` out of a transaction — and neither is worth
+ * converting to the other just to ask this.
+ */
+fun <R> genericColourRows(
+    rows: List<R>,
+    propertyName: (R) -> String,
+    isDeferred: (R) -> Boolean,
+): List<R>? {
+    val colour = rows.filter {
+        TemplateProperty.ofOrNull(propertyName(it))?.family == PropertyMaskGroup.COLOUR
+    }
+    if (colour.isEmpty() || colour.any { !isDeferred(it) }) return null
+    return colour
+}
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.fx.TemplateColourSource")
 
@@ -89,25 +130,23 @@ private fun resolveTemplateColour(registry: TemplateRegistry, uuid: UUID): Exten
         logger.warn("Template colour reference names no template: {}", uuid)
         return null
     }
-    val colourRows = snapshot.rows.filter { TemplateProperty.ofOrNull(it.propertyName) == TemplateProperty.COLOUR }
-    if (colourRows.isEmpty()) {
-        logger.warn("Template '{}' ({}) holds no colour", snapshot.name, uuid)
-        return null
-    }
-    val row = colourRows.singleOrNull()?.takeIf { it.isDeferred } ?: run {
-        // Per-fixture: several rows, or one naming a head. Either way there is no single colour for
-        // a fixture-agnostic effect output to take.
+    // Every colour-family row, not just the hex: a template may also name white, amber or UV
+    // explicitly, and those are part of the one colour this reference stands for.
+    val colourRows = genericColourRows(snapshot.rows, { it.propertyName }, { it.isDeferred }) ?: run {
         logger.warn(
-            "Template '{}' ({}) is per fixture — an effect parameter needs a generic colour",
+            "Template '{}' ({}) holds no generic colour — an effect parameter needs one",
             snapshot.name, uuid,
         )
         return null
     }
-    val intent = parseTemplateIntent(row.value) as? TemplateIntent.Colour ?: run {
-        logger.warn("Template '{}' ({}) has an unreadable colour intent '{}'", snapshot.name, uuid, row.value)
-        return null
+    val intents = colourRows.map { row ->
+        val intent = parseTemplateIntent(row.value) ?: run {
+            logger.warn("Template '{}' ({}) has an unreadable colour intent '{}'", snapshot.name, uuid, row.value)
+            return null
+        }
+        row.propertyName to intent
     }
-    return TemplateResolver.resolveColourGeneric(intent)
+    return TemplateResolver.resolveColourGeneric(intents)
 }
 
 /**
