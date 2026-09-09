@@ -52,6 +52,7 @@ as a one-line row.
 | [`FU-MANUAL-BUSK-VIEW`](#fu-manual-busk-view) | the Busk view is a place an operator can run a show from, and a follower tracks its leader | Busking view, 2026-09-01 |
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
+| [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
 
 ---
 
@@ -1310,6 +1311,65 @@ session 5. Checks 1 and 7 need a re-run on the fixed build; 2–6 and 8 have not
    the failure is reported, not swallowed.
 
 30 minutes, 40 with two browsers for the solo items.
+
+---
+
+## `FU-MANUAL-TEMPLATE-EMITTERS`
+
+**An emitter set outright, on stage** · from the template-emitter work, 2026-09-09
+
+White, amber and UV became template rows of their own carrying a DMX byte, and a colour template
+that names one now refuses **as a whole** on a head that lacks it. Shipped as lighting7 `8919c29` /
+lighting-react `cc6490e`.
+
+**Most of this was already verified against the running desk, and is not worth repeating.** The
+strip's emitter filter (a white-only bar is offered every other colour template and not the UV one),
+the resolves-to panel's three-way split, the whole-template refusal's skip payload, the policy lock
+and its restore, and the guarantee that a plain `extract` template still reaches every colour head
+including a wheel — all confirmed on 2026-09-09 through the UI and the apply/resolve routes. What no
+part of that could reach is **light**: there is no DMX from the sandbox, so every check below was
+verified only as far as the value the desk holds.
+
+The claim worth a rig is the one the whole design rests on: an emitter is a **row**, not a field on
+the colour, so it writes only its own channel. Read from a grid that is two numbers; on stage it is
+the difference between a UV wash *over* an amber one and a UV wash that replaced it.
+
+**Test**: with an RGBWA-UV hex, a white-only head (a 12-pixel bar) and a colour-wheel head patched:
+
+1. **UV over a colour, not instead of it.** Busk an amber on the hex. Press a UV-only template
+   (one `uv` row). The amber must still be there, with UV added — *not* a dark violet head. This is
+   the single check the feature exists for; if it fails, the row/field decision was wrong and that
+   is a design finding, not a bug.
+2. **The bytes are the emitters.** A template with `white` 180, `amber` 200 and `uv` 255 on the hex
+   should look like those three emitters at those levels — warm and bright, with UV — rather than an
+   RGB approximation of them. Confirms the byte reaches the bundled slider rather than being folded
+   into the mix.
+3. **Explicit white against Extract.** On the hex, compare `#FF9D4A;policy=extract` with
+   `#FF9D4A;policy=rgbonly` plus an explicit `white` row at the level Extract derives (74 for that
+   hex — the resolves-to panel shows it as `#b55300;w74`). They should be indistinguishable. A
+   visible difference means the explicit path and the derived path disagree about the same channel,
+   which is exactly what the `rgbonly` refusal assumes they cannot do. Distinct from
+   [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) check 5, which compares Extract against RGB-only.
+4. **A refusal is stillness.** Apply a template holding RGB + white + UV to the hex *and* the
+   white-only bar together. The hex changes; the bar must **not move at all**. A bar that takes the
+   hex and drops the UV would look like an ordinary colour change, which is the failure mode the
+   whole-template rule exists to prevent and the one an operator would never think to report.
+5. **Record and re-apply.** Busk a white and an amber on the hex — one through the colour picker,
+   one on its own fader — then *New from selection*, then apply the result back to the same head. It
+   should look the same. That exercises the per-emitter record heuristic, where a single flag once
+   discarded the emitter that lived only inside the colour.
+6. **A pixel bar.** Put a `white` row on a template and apply it to the 48-channel bar, whose colour
+   lives on its elements. It is omitted from the resolves-to panel entirely today, so the honest
+   expectation is "nothing happens" — confirm that, and if the bar *does* light unevenly promote it
+   to [`FU-FX-ELEMENT-BUNDLED-COLOUR`](followups.md#fu-fx-element-bundled-colour), which already
+   covers elements dropping their bundled component.
+7. **An effect follows it.** Point a colour effect's parameter at a template holding a hex *and* an
+   amber row (`tmpl:`), and watch the running effect on the hex. The amber must be in its output —
+   the reference folds every colour-family row into one colour. Then retune the amber and watch it
+   follow, which is [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour)'s mechanism over
+   the new row type.
+
+15 minutes; longer only if check 3 needs a camera to settle by eye.
 
 ---
 
