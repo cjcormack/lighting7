@@ -1,7 +1,7 @@
 # Programmer space — the grid as the page
 
-> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`) and 2 (`83c8a0e`) are done;
-> sessions 3–4 plus one optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
+> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`), 2 (`83c8a0e`) and 3
+> (`52ec16b`) are done; session 4 plus one optional remain, all in `lighting-react`. There is no backend work, and no route, protocol or
 > table changes. The plan lives here because every plan does, and because the design it cites is
 > committed alongside it.
 >
@@ -295,7 +295,7 @@ band carries no `border-primary`. `OwnershipLegend.test.ts` is unchanged — the
   3 adds a drag handle and three container-query arms to this same row — run its browser pass at
   more than one width before believing it.
 
-### Session 3 — The rail
+### Session 3 — The rail — **done 2026-09-09** (`52ec16b`)
 
 **Outcome.** The rail is one list that the operator can size, hide and — on a narrow page — pull
 over the grid. Below 900px the layers are never off-screen again.
@@ -330,6 +330,28 @@ over the grid. Below 900px the layers are never off-screen again.
 overlay open/close. `ProgrammerLookStack.test.tsx` covers the dense rows' handlers.
 `ProgrammerFxList.test.tsx` is unchanged. A `ProgrammerWorkspace.test.tsx` pins the three arms by
 width and that the stored width survives a remount.
+
+**What the session found.**
+
+- **The dense list has to be drawn reversed.** The desk's layer array is `sortOrder` ascending and
+  later wins, so a rail labelled *top wins* must draw the last element first; the first cut drew
+  it array-order under that label and a drag to the top would have landed in the weakest slot.
+  Only the rendering reverses — badges and handler indices are the array's, so the FX band's
+  *layer 3* still names badge 3.
+- **The cue editor has no `LookStack`.** It renders `LayerRow` directly and read-only, so "the cue
+  editor's `LookStack` keeps its current density" was true of the *row* and vacuous of the list:
+  the wide list now has no production caller and is kept as §7's general form.
+- **The width rides its own context.** A width in the arm context re-rendered every rail row per
+  pointer move; `RailGeometry` is read by the body frame alone, whose children are the rail's
+  already-rendered elements.
+- **`Make layer` on the Local row is reachable in every scope**, where row B's button hid outside
+  Local. The press points the grid at Local before opening its sheet.
+- **A disabled door cannot carry its reason on a `title`** — `Button` and `DropdownMenuItem` are
+  both `pointer-events-none` when disabled. The footer's tooltip trigger is a span around the
+  button; the strip's menu writes the reason under the item.
+- Measured at 1440×900, sidebar collapsed: grid **1076px** docked (75%), **1336px** collapsed; at
+  1180 the overlay leaves the grid at 1076; at 820×1180 the page is not the scroller and a
+  stomping row fits at the 260px floor with 9px to spare.
 
 ### Session 4 — Small viewports
 
