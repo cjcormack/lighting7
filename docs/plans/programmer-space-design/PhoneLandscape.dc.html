@@ -1,0 +1,401 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); } a:hover { color: oklch(0.809 0.105 251.813); }
+    .app {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; color: oklch(0.985 0 0); background: oklch(0.141 0.005 285.823);
+      box-sizing: border-box; overflow: hidden; position: relative;
+    }
+    .app *, .app *::before, .app *::after { box-sizing: border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .ico20 { width:20px; height:20px; flex:0 0 auto; }
+    .row-flex { display:flex; align-items:center; }
+    /* shadcn Button size="sm": h-8, text-xs, rounded-md, px-2.5 with an icon */
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); color:oklch(0.985 0 0);
+      font-size:12px; font-weight:500; white-space:nowrap; flex:0 0 auto; }
+    .btn.pri { background:oklch(0.623 0.214 259.815); border-color:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.ghost { border-color:transparent; background:transparent; }
+    .btn.off { opacity:0.5; }
+    .btn.ic { width:32px; padding:0; justify-content:center; }
+    .btn.h7 { height:28px; font-size:11px; }
+    .btn.h11 { height:44px; font-size:13px; padding:0 14px; }
+    .btn.on { background:oklch(0.274 0.006 286.033); }
+    /* the split button: Clear + fade, Record + menu */
+    .split { display:inline-flex; align-items:stretch; height:32px; border-radius:6px; overflow:hidden; border:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto; }
+    .split > span { display:inline-flex; align-items:center; gap:6px; padding:0 10px; font-size:12px; font-weight:500; white-space:nowrap; }
+    .split > span + span { border-left:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.40); }
+    .split.pri { border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); }
+    .split.pri > span + span { border-left:1px solid oklch(0.21 0.006 285.885 / 0.25); background:transparent; }
+    .zlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:oklch(0.705 0.015 286.067); white-space:nowrap; }
+    .vr { width:1px; align-self:stretch; background:oklch(0.274 0.006 286.033); flex:0 0 auto; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; flex:0 0 auto; }
+    .badge.sec { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .badge.out { border:1px solid oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    /* ToggleGroup size=sm, and the ViewSwitcher's pill nav */
+    .seg { display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px; flex:0 0 auto; }
+    .seg > span { display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:oklch(0.705 0.015 286.067); white-space:nowrap; }
+    .seg > span.on { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .seg.sm > span { padding:3px 8px; font-size:11px; }
+    /* show bar tiles */
+    .tile { display:flex; flex-direction:column; gap:1px; align-items:flex-start; justify-content:flex-start; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 12px; flex:0 0 auto; }
+    .tile .l { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067); display:flex; align-items:center; gap:4px; white-space:nowrap; }
+    .tile .v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:18px; font-weight:700; line-height:1; letter-spacing:0.05em; }
+    .tile.blind { border-color:oklch(0.666 0.179 58.318); background:oklch(0.279 0.077 45.635 / 0.40); box-shadow:0 0 12px oklch(0.769 0.188 70.08 / 0.25); }
+    .tile.blind .l, .tile.blind .v { color:oklch(0.879 0.169 91.605); }
+    .dot { width:6px; height:6px; border-radius:999px; background:oklch(0.623 0.214 259.815); flex:0 0 auto; }
+    /* value grid — FixturesTable */
+    .gh { font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067); padding:7px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .grow { height:36px; border-bottom:1px solid oklch(0.274 0.006 286.033); font-size:14px; display:grid; align-items:center; }
+    .gdiv { height:26px; display:flex; align-items:center; gap:6px; padding:0 8px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067); }
+    .namecell { display:flex; align-items:center; gap:6px; padding:0 8px; height:100%; background:oklch(0.141 0.005 285.823); position:relative; min-width:0; }
+    .namecell .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cw { position:relative; height:100%; min-width:0; padding:2px 1px; }
+    .ci { display:flex; align-items:center; gap:6px; height:100%; padding:0 18px 0 6px; border-radius:4px; min-width:0; }
+    .bar { position:relative; height:6px; min-width:20px; flex:1; overflow:hidden; border-radius:999px; background:oklch(0.274 0.006 286.033); }
+    .barfill { position:absolute; inset-block:0; left:0; border-radius:999px; background:oklch(0.623 0.214 259.815); }
+    .pct { width:40px; flex:0 0 auto; text-align:right; font-size:12px; color:oklch(0.705 0.015 286.067); }
+    .sw { width:16px; height:16px; flex:0 0 auto; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); position:relative; overflow:hidden; }
+    .cval { font-size:12px; color:oklch(0.705 0.015 286.067); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dash { font-size:12px; color:oklch(0.705 0.015 286.067 / 0.60); padding-left:6px; }
+    .cb { width:14px; height:14px; flex:0 0 auto; border-radius:3px; border:1px solid oklch(0.45 0.01 286); }
+    .cb.on { background:oklch(0.985 0 0); border-color:oklch(0.985 0 0); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2318181b' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); background-size:11px; background-position:center; background-repeat:no-repeat; }
+    /* ownership rings — mirror ownershipCellClass() */
+    .own-prog   { box-shadow: inset 0 0 0 1px oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .own-progq  { box-shadow: inset 0 0 0 1px oklch(0.623 0.214 259.815 / 0.40); }
+    .own-effect { box-shadow: inset 0 0 0 1px oklch(0.606 0.25 292.717 / 0.50); }
+    .own-cue    { box-shadow: inset 0 0 0 1px oklch(0.685 0.169 237.323 / 0.40); }
+    .own-base   { opacity: 0.55; }
+    .own-park   { box-shadow: inset 0 0 0 1px oklch(0.769 0.188 70.08); background:oklch(0.769 0.188 70.08 / 0.15); }
+    .own-mixed  { border:1px dashed oklch(0.623 0.214 259.815 / 0.55); }
+    .layglyph { position:absolute; bottom:4px; right:5px; width:11px; height:11px; color:oklch(0.705 0.015 286.067); pointer-events:none; }
+    .fxmark { position:absolute; top:4px; right:4px; width:13px; height:13px; border-radius:3px; background:oklch(0.606 0.25 292.717 / 0.9); color:#fff; display:flex; align-items:center; justify-content:center; }
+    /* selection is NEUTRAL — a white edge, a white marquee — so colour stays reserved for ownership */
+    .grow.sel { background:oklch(0.985 0 0 / 0.06); box-shadow:inset 3px 0 0 oklch(0.985 0 0); }
+    .grow.sel .namecell { background:transparent; }
+    .grow.sel .namecell .nm { font-weight:600; }
+    /* stack rail entries */
+    .se { display:flex; align-items:center; gap:7px; padding:6px 8px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); font-size:12px; }
+    .se.local { border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .se.on { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.55); box-shadow:inset 0 0 0 1px oklch(0.45 0.16 300); }
+    .se.off { opacity:0.55; }
+    .se .t { font-weight:600; display:flex; align-items:center; gap:5px; min-width:0; white-space:nowrap; }
+    .se .t .nm { overflow:hidden; text-overflow:ellipsis; }
+    .se .s { font-size:9.5px; color:oklch(0.705 0.015 286.067); display:flex; align-items:center; gap:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ord { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:4px; background:oklch(0.274 0.006 286.033); font-size:9.5px; font-weight:700; flex:0 0 auto; }
+    .cap { font-size:11px; line-height:1.45; color:oklch(0.705 0.015 286.067); margin:0; }
+    .tchip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 8px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); font-size:11.5px; white-space:nowrap; flex:0 0 auto; }
+    .tchip .sw { width:12px; height:12px; border-radius:3px; }
+    .kbd { border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.50); padding:0 5px; font-size:9.5px; font-family:ui-monospace, Menlo, monospace; }
+    /* sidebar rail (collapsed drawer, 64px) */
+    .side { width:64px; flex:0 0 auto; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.141 0.005 285.823); display:flex; flex-direction:column; }
+    .side .ic { width:40px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:oklch(0.705 0.015 286.067); margin:1px auto; }
+    .side .ic.on { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    /* low-fi wireframe boxes for the alternates page */
+    .wf { border:1.5px solid oklch(0.55 0.01 286); border-radius:6px; background:oklch(0.19 0.005 286); display:flex; align-items:center; justify-content:center; font-size:11px; color:oklch(0.705 0.015 286.067); text-align:center; padding:6px; }
+    .wf.hot { border-color:oklch(0.623 0.214 259.815); color:oklch(0.985 0 0); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .note { font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067); margin:0; }
+    .note b { color:oklch(0.985 0 0); font-weight:600; }
+
+  </style>
+</helmet>
+<div class="app" style="width:852px; height:393px; display:flex; flex-direction:column;">
+
+<!-- below 500px of height the app header scrolls away with the page and the two programmer rows fold into one -->
+<div style="display:flex; align-items:center; gap:12px; padding:8px 12px; border-bottom:1px solid transparent; flex:0 0 auto;">
+    <div style="flex:1; min-width:0; display:flex;"><div style="display:flex; align-items:center; gap:4px; font-size:14px; color:oklch(0.705 0.015 286.067); min-width:0; white-space:nowrap; overflow:hidden;">
+        <span>Projects</span><svg class="ico16" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m9 6 6 6-6 6"/></svg>
+        <span style="display:inline-flex; align-items:center; gap:8px; min-width:0;"><span style="overflow:hidden; text-overflow:ellipsis;">Hamlet &mdash; Rev C</span>
+          <span class="badge" style="background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:12px; padding:2px 8px; border-radius:6px;">active</span></span>
+        <svg class="ico16" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m9 6 6 6-6 6"/></svg><span style="color:oklch(0.985 0 0); font-weight:500;">Programmer</span>
+      </div></div>
+    <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+      <span class="badge" style="border:1px solid oklch(0.393 0.095 152.535); background:oklch(0.266 0.065 152.934); color:oklch(0.792 0.209 151.711); padding:2px 7px;"><svg class="ico12" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M20 6 9 17l-5-5"/></svg>Saved</span>
+      <nav class="seg" style="border-radius:10px;">
+    <span class="on"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>Programmer</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 10h20"/><path d="M4 10v9h16v-9"/><path d="M8 5h8l1 5H7Z"/></svg>Show</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 18.5Z"/><path d="M12 7v10"/></svg>Prompt Book</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>Busk</span>
+  </nav>
+      <span class="btn" style="background:oklch(0.704 0.191 22.216 / 0.60); border-color:transparent; color:oklch(0.985 0 0); font-weight:600;"><svg class="ico" style="" viewBox="0 0 24 24" fill="currentColor" ><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Stop</span>
+      <span style="width:12px; height:12px; border-radius:999px; background:oklch(0.723 0.219 149.579); box-shadow:0 0 6px oklch(0.723 0.219 149.579); flex:0 0 auto; margin-left:4px;"></span>
+    </div>
+  </div>
+<div style="display:flex; align-items:stretch; gap:8px; padding:8px 16px; border-bottom:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto;">
+      <div class="tile" style="padding:6px 12px; "><span class="l">Blackout</span><span class="v" style="">DBO</span></div><div class="tile blind" style="padding:6px 12px; "><span class="l">Stage</span><span class="v" style="">BLIND</span></div><div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden; flex:0 0 auto;">
+      <div style="display:grid; grid-auto-flow:column; grid-template-rows:1fr 1fr; align-content:center; gap:1px; padding:0 4px; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30);">
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M1</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885);">M2</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M3</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M4</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;">
+        <span style="display:flex; align-items:center; gap:4px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067); white-space:nowrap;"><span class="dot"></span>M2</span>
+        <span class="mono num" style="font-size:18px; font-weight:700; line-height:1;">96</span>
+      </div>
+      <div style="display:flex; align-items:center; padding:0 10px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; color:oklch(0.705 0.015 286.067);">&frac14;</div>
+      <div style="display:flex; align-items:center; padding:0 12px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; letter-spacing:0.08em;">TAP</div>
+    </div>
+      <div style="flex:1; display:flex; align-items:center; gap:8px; min-width:0; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 8px; overflow:hidden;">
+        
+        <span style="width:22px; height:22px; border-radius:999px; display:grid; place-items:center; background:oklch(0.266 0.065 152.934); border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); flex:0 0 auto;"><svg class="ico12" style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor" ><path d="M6 4l14 8-14 8Z"/></svg></span>
+       <span class="mono" style="font-size:14px; font-weight:700; color:oklch(0.792 0.209 151.711); flex:0 0 auto;">Q4</span>
+       <span style="font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 1 auto; min-width:28px;">Warm Wash</span>
+       <svg class="ico" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+       
+       <span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624); flex:0 0 auto;">Q5</span>
+       
+      </div>
+      <div style="display:flex; align-items:stretch; gap:8px; flex:0 0 auto;"><div style="display:flex; align-items:center; justify-content:center; gap:6px; padding:0 12px;  border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); font-size:14px; font-weight:600; letter-spacing:0.05em; flex:0 0 auto;">&#9664; BACK</div><div style="display:flex; align-items:center; justify-content:center; padding:0 24px;  min-width:100px; flex:0 0 auto; border-radius:6px; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:16px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35);">GO</div></div>
+    </div>
+<div style="display:flex; align-items:center; gap:8px; padding:4px 12px; height:40px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885 / 0.50); flex:0 0 auto;">
+  <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1; height:30px; padding:0 8px; border-radius:6px; border:1px solid oklch(0.379 0.146 265.522 / 0.70); background:oklch(0.282 0.091 267.935 / 0.30);">
+    <span class="zlab" style="color:oklch(0.809 0.105 251.813);">Editing</span><span class="mono" style="font-size:13px; font-weight:700;">Q4</span><span style="font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Warm Wash</span>
+    <span class="badge" style="border:1px solid oklch(0.414 0.112 45.904); background:oklch(0.279 0.077 45.635 / 0.40); color:oklch(0.879 0.169 91.605); border-radius:999px; padding:0 8px;"><span style="width:6px; height:6px; border-radius:999px; background:oklch(0.828 0.189 84.429);"></span>3</span>
+    <span style="flex:1;"></span><span class="btn h7 pri" style="height:24px;"><svg class="ico12" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>Update</span>
+  </div>
+  <span class="split" style="height:30px;"><span><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m7 21-4-4 11-11 4 4-8 8"/><path d="M11 21h10"/></svg></span><span class="mono" style="font-size:11px; color:oklch(0.705 0.015 286.067); padding:0 8px;">2s<svg class="ico12" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg></span></span>
+  <span class="btn ic" style="height:30px; width:30px;"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg></span>
+  <span class="split pri" style="height:30px;"><span><svg class="ico12" style="" viewBox="0 0 24 24" fill="currentColor" ><circle cx="12" cy="12" r="7"/></svg></span><span style="padding:0 7px;"><svg class="ico12" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg></span></span>
+  <span class="vr" style="height:20px;"></span>
+  <nav class="seg sm"><span><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 12s3-6 10-6 10 6 10 6-3 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></span><span class="on"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></span></nav>
+  <span class="btn ic h7" style="height:28px; width:28px;"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+  <span class="btn ic h7" style="height:28px; width:28px;"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>
+  <span class="btn ic h7 on" style="height:28px; width:28px;"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></span>
+  <span class="btn ic h7" style="height:28px; width:28px;"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18"/></svg></span>
+</div>
+<div style="flex:1; min-height:0; display:flex;">
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <div style="display:grid; grid-template-columns:200px repeat(5, minmax(96px,1fr)); border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.141 0.005 285.823); flex:0 0 auto; height:30px; align-items:center;">
+    <div class="gh" style="padding-left:10px; position:sticky; left:0; background:oklch(0.141 0.005 285.823);">Fixture</div>
+    <div class="gh">Dimmer</div><div class="gh">Colour</div><div class="gh">Position</div><div class="gh">Gobo</div><div class="gh">Zoom</div>
+  </div>
+    <div style="flex:1; min-height:0; overflow:hidden;"><div class="grow sel" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="">
+      <span class="cb on"></span>
+      <svg class="ico12" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg>
+      <span class="nm" style="font-weight:500;">SL Wash</span>
+      <span class="badge sec" style="padding:0 5px;">4</span>
+    </div>
+    <div class="cw"><div class="ci own-prog"><span class="bar"><span class="barfill" style="width:82%; "></span></span><span class="pct mono num" style="">82%</span></div></div><div class="cw"><div class="ci own-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono num">255,157,74</span></div><svg class="layglyph" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow sel" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb on"></span>
+      
+      <span class="nm" style="">SL Wash 1</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-prog"><span class="bar"><span class="barfill" style="width:82%; "></span></span><span class="pct mono num" style="">82%</span></div></div><div class="cw"><div class="ci own-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono num">255,157,74</span></div><svg class="layglyph" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow sel" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb on"></span>
+      
+      <span class="nm" style="">SL Wash 2</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-prog"><span class="bar"><span class="barfill" style="width:82%; "></span></span><span class="pct mono num" style="">82%</span></div></div><div class="cw"><div class="ci own-prog"><span class="sw" style="background:#ff9d4a;"></span><span class="cval mono num">255,157,74</span></div><svg class="layglyph" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow sel" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb on"></span>
+      
+      <span class="nm" style="">SL Wash 3</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-prog"><span class="bar"><span class="barfill" style="width:82%; "></span></span><span class="pct mono num" style="">82%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#d16bff;"></span><span class="cval mono num">209,107,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow sel" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb on"></span>
+      
+      <span class="nm" style="">SL Wash 4</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-prog"><span class="bar"><span class="barfill" style="width:82%; "></span></span><span class="pct mono num" style="">82%</span></div></div><div class="cw"><div class="ci own-prog own-mixed"><span class="sw" style="background:linear-gradient(90deg,#ff9d4a,#d16bff);"></span><span class="cval">Mixed</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="">
+      <span class="cb"></span>
+      <svg class="ico12" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg>
+      <span class="nm" style="font-weight:500;">SR Wash</span>
+      <span class="badge sec" style="padding:0 5px;">4</span>
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:60%; "></span></span><span class="pct mono num" style="">60%</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:#ffd9a8;"></span><span class="cval mono num">255,217,168</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">SR Wash 1</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:60%; "></span></span><span class="pct mono num" style="">60%</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:#ffd9a8;"></span><span class="cval mono num">255,217,168</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">SR Wash 2</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:60%; "></span></span><span class="pct mono num" style="">60%</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:#ffd9a8;"></span><span class="cval mono num">255,217,168</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">SR Wash 3</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:60%; "></span></span><span class="pct mono num" style="">60%</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:#ffd9a8;"></span><span class="cval mono num">255,217,168</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">SR Wash 4</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:60%; "></span></span><span class="pct mono num" style="">60%</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:#ffd9a8;"></span><span class="cval mono num">255,217,168</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="">
+      <span class="cb"></span>
+      <svg class="ico12" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg>
+      <span class="nm" style="font-weight:500;">Cyc</span>
+      <span class="badge sec" style="padding:0 5px;">4</span>
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:100%; "></span></span><span class="pct mono num" style="">100%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#5ec8ff;"></span><span class="cval mono num">94,200,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Cyc 1</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:100%; "></span></span><span class="pct mono num" style="">100%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#5ec8ff;"></span><span class="cval mono num">94,200,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Cyc 2</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:100%; "></span></span><span class="pct mono num" style="">100%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#7ad0ff;"></span><span class="cval mono num">94,200,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Cyc 3</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:100%; "></span></span><span class="pct mono num" style="">100%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#9ad8ff;"></span><span class="cval mono num">94,200,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Cyc 4</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:100%; "></span></span><span class="pct mono num" style="">100%</span></div></div><div class="cw"><div class="ci own-effect"><span class="sw" style="background:#b8e0ff;"></span><span class="cval mono num">94,200,255</span></div><span class="fxmark"><svg class="ico12" style="width:9px;height:9px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg></span></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="">
+      <span class="cb"></span>
+      <svg class="ico12" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg>
+      <span class="nm" style="font-weight:500;">Movers</span>
+      <span class="badge sec" style="padding:0 5px;">6</span>
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">18&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 1</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:7px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">18&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 2</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:8px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">21&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-cue"><span class="cval">Breakup</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 3</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:9px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">24&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 4</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:10px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">27&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 5</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:11px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">30&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">Mover 6</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-cue"><span class="bar"><span class="barfill" style="width:45%; "></span></span><span class="pct mono num" style="">45%</span></div></div><div class="cw"><div class="ci own-base"><span class="sw" style="background:#ffffff;"></span><span class="cval mono num">255,255,255</span></div></div><div class="cw"><div class="ci own-cue"><span class="sw" style="background:oklch(0.274 0.006 286.033);"><span style="position:absolute; left:12px; top:5px; width:3px; height:3px; border-radius:999px; background:oklch(0.985 0 0);"></span></span><span class="cval mono num">33&deg;,&minus;7&deg;</span></div></div><div class="cw"><div class="ci own-base"><span class="cval">Open</span></div></div><div class="cw"><div class="ci own-base"><span class="bar"><span class="barfill" style="width:40%; "></span></span><span class="pct mono num" style="">40%</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="">
+      <span class="cb"></span>
+      <svg class="ico12" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m6 9 6 6 6-6"/></svg>
+      <span class="nm" style="font-weight:500;">House</span>
+      <span class="badge sec" style="padding:0 5px;">2</span>
+    </div>
+    <div class="cw"><div class="ci own-park"><span class="bar"><span class="barfill" style="width:100%; background:oklch(0.769 0.188 70.08);"></span></span><span class="pct mono num" style="color:oklch(0.828 0.189 84.429);">100%</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">House 1</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-park"><span class="bar"><span class="barfill" style="width:100%; background:oklch(0.769 0.188 70.08);"></span></span><span class="pct mono num" style="color:oklch(0.828 0.189 84.429);">100%</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div><div class="grow" style="grid-template-columns:200px repeat(5, minmax(96px,1fr)); ">
+    <div class="namecell" style="padding-left:22px;">
+      <span class="cb"></span>
+      
+      <span class="nm" style="">House 2</span>
+      
+    </div>
+    <div class="cw"><div class="ci own-park"><span class="bar"><span class="barfill" style="width:100%; background:oklch(0.769 0.188 70.08);"></span></span><span class="pct mono num" style="color:oklch(0.828 0.189 84.429);">100%</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div><div class="cw"><div class="ci"><span class="dash">&mdash;</span></div></div>
+  </div></div>
+  </div>
+  <div style="width:40px; flex:0 0 auto; border-left:1px solid oklch(0.274 0.006 286.033); display:flex; flex-direction:column; align-items:center; background:oklch(0.21 0.006 285.885 / 0.40);">
+    <span class="btn ic h7 ghost" style="height:36px; width:40px; color:oklch(0.705 0.015 286.067); border-radius:0; border-bottom:1px solid oklch(0.274 0.006 286.033);"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m15 6-6 6 6 6"/></svg></span>
+    <span style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 0; color:oklch(0.985 0 0);"><svg class="ico16" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="m2.5 12.5 9.5-5.5 9.5 5.5L12 18Z"/><path d="m2.5 17 9.5 5.5 9.5-5.5"/></svg><span class="badge sec num" style="padding:0 5px; font-size:9px;">3</span></span><span style="display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 0; color:oklch(0.606 0.25 292.717);"><svg class="ico16" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg><span class="badge sec num" style="padding:0 5px; font-size:9px;">2</span></span>
+    <span style="flex:1;"></span>
+    <span class="btn ic h7 ghost" style="height:36px; width:40px; color:oklch(0.705 0.015 286.067);"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M12 5v14M5 12h14"/></svg></span>
+  </div>
+</div>
+</div>
+</x-dc>
+</body>
+</html>

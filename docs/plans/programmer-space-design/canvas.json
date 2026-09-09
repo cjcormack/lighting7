@@ -1,0 +1,125 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Programmer"
+    },
+    {
+      "id": "page-2",
+      "name": "Alternates"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Programmer · 1440×900",
+      "page": "page-1",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900
+    },
+    {
+      "file": "Budget.dc.html",
+      "title": "Where the page goes",
+      "page": "page-1",
+      "x": 1540,
+      "y": 0,
+      "w": 760,
+      "h": 570
+    },
+    {
+      "file": "ChromeMerge.dc.html",
+      "title": "Option · one chrome band",
+      "page": "page-1",
+      "x": 1540,
+      "y": 700,
+      "w": 1376,
+      "h": 190
+    },
+    {
+      "file": "TabletLandscape.dc.html",
+      "title": "iPad landscape · 1180×820",
+      "page": "page-1",
+      "x": 0,
+      "y": 1040,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "TabletPortrait.dc.html",
+      "title": "iPad portrait · 820×1180 · rail open",
+      "page": "page-1",
+      "x": 1280,
+      "y": 1040,
+      "w": 820,
+      "h": 1180
+    },
+    {
+      "file": "Phone.dc.html",
+      "title": "iPhone · 393×852",
+      "page": "page-1",
+      "x": 2200,
+      "y": 1040,
+      "w": 393,
+      "h": 852
+    },
+    {
+      "file": "PhoneLandscape.dc.html",
+      "title": "iPhone landscape · 852×393",
+      "page": "page-1",
+      "x": 2700,
+      "y": 1040,
+      "w": 852,
+      "h": 393
+    },
+    {
+      "file": "DirectionB.dc.html",
+      "title": "B · Bottom band",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 760,
+      "h": 520
+    },
+    {
+      "file": "DirectionC.dc.html",
+      "title": "C · Left rail",
+      "page": "page-2",
+      "x": 860,
+      "y": 0,
+      "w": 760,
+      "h": 520
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-direction",
+      "page": "page-1",
+      "x": 0,
+      "y": -560,
+      "w": 720,
+      "text": "The Programmer, with the grid as the page.\n\nSix bands of chrome become two rows and a rail:\n• Row A — the noun and the verbs. The source strip (Editing Q4 · 3 changes · Update · Revert) and Clear / Include / Record on one 40px row. The STAGE / LOAD / SAVE labels move into tooltips.\n• Row B — what the grid shows. Output / Local / focused layer, the filter, Lit, Groups, Columns. Its explanatory sentences become tooltips; \"Make layer\" moves onto the Local values row in the rail.\n• The templates ride the selection bar, one line, scrolling sideways — they only appear once there is something for a press to land on.\n• The rail is 300px, drag-to-size, and collapses to a 40px strip. Under 1200px of content width it opens as an overlay over the grid instead of squeezing it.\n• No outer padding; the sidebar defaults to its collapsed rail on the live views.\n• Selection is neutral — a white edge on the row, a white marquee, a white tick — and colour is reserved for ownership, so a selected cell and a cell you own no longer look alike. The FX and layer marks share one right-hand gutter in every cell, so the value never runs under them.\n\nAssumed: static mockups (not a prototype); the show is running with Q4 included; the ShowHeader and ShowBar are left as they are — the one-band option beside is separable."
+    },
+    {
+      "id": "note-small",
+      "page": "page-1",
+      "x": 3640,
+      "y": 1040,
+      "w": 560,
+      "text": "Small viewports.\n\niPad: same two rows; the rail starts collapsed and opens over the grid. The 700–1000 show-bar arm is unchanged.\n\niPhone: the show bar becomes ONE row, 56px with its padding (DBO · BLIND · tempo · Q4→Q5 · BACK · GO) instead of chips plus a 52px GO line. Rows A and B go to icons; the templates scroll; the fixture column keeps its min(45vw, 260px) width and the value columns scroll sideways under a fade. The rail is a bottom sheet with a 44px handle naming the layers. The legend goes behind the key button.\n\niPhone landscape: below 500px of height the app header scrolls away with the page and rows A and B fold into one."
+    },
+    {
+      "id": "note-alts",
+      "page": "page-2",
+      "x": 0,
+      "y": -280,
+      "w": 640,
+      "text": "Two other places the stack could live. Both keep rows A and B exactly as on the Programmer page; only the rail moves. B is worth a second look if the width still feels short on a 24-column rig; C is the plan's own earlier sketch and is here for the record."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

@@ -1,0 +1,159 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); } a:hover { color: oklch(0.809 0.105 251.813); }
+    .app {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; color: oklch(0.985 0 0); background: oklch(0.141 0.005 285.823);
+      box-sizing: border-box; overflow: hidden; position: relative;
+    }
+    .app *, .app *::before, .app *::after { box-sizing: border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .ico { width:14px; height:14px; flex:0 0 auto; }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .ico20 { width:20px; height:20px; flex:0 0 auto; }
+    .row-flex { display:flex; align-items:center; }
+    /* shadcn Button size="sm": h-8, text-xs, rounded-md, px-2.5 with an icon */
+    .btn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px;
+      border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); color:oklch(0.985 0 0);
+      font-size:12px; font-weight:500; white-space:nowrap; flex:0 0 auto; }
+    .btn.pri { background:oklch(0.623 0.214 259.815); border-color:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-weight:600; }
+    .btn.ghost { border-color:transparent; background:transparent; }
+    .btn.off { opacity:0.5; }
+    .btn.ic { width:32px; padding:0; justify-content:center; }
+    .btn.h7 { height:28px; font-size:11px; }
+    .btn.h11 { height:44px; font-size:13px; padding:0 14px; }
+    .btn.on { background:oklch(0.274 0.006 286.033); }
+    /* the split button: Clear + fade, Record + menu */
+    .split { display:inline-flex; align-items:stretch; height:32px; border-radius:6px; overflow:hidden; border:1px solid oklch(0.274 0.006 286.033); flex:0 0 auto; }
+    .split > span { display:inline-flex; align-items:center; gap:6px; padding:0 10px; font-size:12px; font-weight:500; white-space:nowrap; }
+    .split > span + span { border-left:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.40); }
+    .split.pri { border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); }
+    .split.pri > span + span { border-left:1px solid oklch(0.21 0.006 285.885 / 0.25); background:transparent; }
+    .zlab { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:oklch(0.705 0.015 286.067); white-space:nowrap; }
+    .vr { width:1px; align-self:stretch; background:oklch(0.274 0.006 286.033); flex:0 0 auto; }
+    .badge { display:inline-flex; align-items:center; gap:4px; border-radius:5px; padding:1px 6px;
+      font-size:10px; line-height:1.5; white-space:nowrap; flex:0 0 auto; }
+    .badge.sec { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .badge.out { border:1px solid oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .f-int { border:1px solid oklch(0.555 0.163 48.998); color:oklch(0.828 0.189 84.429); background:oklch(0.279 0.077 45.635); }
+    .f-pos { border:1px solid oklch(0.379 0.146 265.522); color:oklch(0.809 0.105 251.813); background:oklch(0.282 0.091 267.935); }
+    .f-col { border:1px solid oklch(0.45 0.16 300); color:oklch(0.82 0.11 305); background:oklch(0.27 0.09 302); }
+    .f-bea { border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); background:oklch(0.266 0.065 152.934); }
+    /* ToggleGroup size=sm, and the ViewSwitcher's pill nav */
+    .seg { display:inline-flex; align-items:center; gap:2px; border-radius:8px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:2px; flex:0 0 auto; }
+    .seg > span { display:inline-flex; align-items:center; gap:6px; border-radius:6px; padding:4px 10px; font-size:12px; font-weight:600; color:oklch(0.705 0.015 286.067); white-space:nowrap; }
+    .seg > span.on { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    .seg.sm > span { padding:3px 8px; font-size:11px; }
+    /* show bar tiles */
+    .tile { display:flex; flex-direction:column; gap:1px; align-items:flex-start; justify-content:flex-start; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 12px; flex:0 0 auto; }
+    .tile .l { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:oklch(0.705 0.015 286.067); display:flex; align-items:center; gap:4px; white-space:nowrap; }
+    .tile .v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:18px; font-weight:700; line-height:1; letter-spacing:0.05em; }
+    .tile.blind { border-color:oklch(0.666 0.179 58.318); background:oklch(0.279 0.077 45.635 / 0.40); box-shadow:0 0 12px oklch(0.769 0.188 70.08 / 0.25); }
+    .tile.blind .l, .tile.blind .v { color:oklch(0.879 0.169 91.605); }
+    .dot { width:6px; height:6px; border-radius:999px; background:oklch(0.623 0.214 259.815); flex:0 0 auto; }
+    /* value grid — FixturesTable */
+    .gh { font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067); padding:7px 6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .grow { height:36px; border-bottom:1px solid oklch(0.274 0.006 286.033); font-size:14px; display:grid; align-items:center; }
+    .gdiv { height:26px; display:flex; align-items:center; gap:6px; padding:0 8px; border-bottom:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:oklch(0.705 0.015 286.067); }
+    .namecell { display:flex; align-items:center; gap:6px; padding:0 8px; height:100%; background:oklch(0.141 0.005 285.823); position:relative; min-width:0; }
+    .namecell .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cw { position:relative; height:100%; min-width:0; padding:2px 1px; }
+    .ci { display:flex; align-items:center; gap:6px; height:100%; padding:0 18px 0 6px; border-radius:4px; min-width:0; }
+    .bar { position:relative; height:6px; min-width:20px; flex:1; overflow:hidden; border-radius:999px; background:oklch(0.274 0.006 286.033); }
+    .barfill { position:absolute; inset-block:0; left:0; border-radius:999px; background:oklch(0.623 0.214 259.815); }
+    .pct { width:40px; flex:0 0 auto; text-align:right; font-size:12px; color:oklch(0.705 0.015 286.067); }
+    .sw { width:16px; height:16px; flex:0 0 auto; border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); position:relative; overflow:hidden; }
+    .cval { font-size:12px; color:oklch(0.705 0.015 286.067); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .dash { font-size:12px; color:oklch(0.705 0.015 286.067 / 0.60); padding-left:6px; }
+    .cb { width:14px; height:14px; flex:0 0 auto; border-radius:3px; border:1px solid oklch(0.45 0.01 286); }
+    .cb.on { background:oklch(0.985 0 0); border-color:oklch(0.985 0 0); background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2318181b' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); background-size:11px; background-position:center; background-repeat:no-repeat; }
+    /* ownership rings — mirror ownershipCellClass() */
+    .own-prog   { box-shadow: inset 0 0 0 1px oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .own-progq  { box-shadow: inset 0 0 0 1px oklch(0.623 0.214 259.815 / 0.40); }
+    .own-effect { box-shadow: inset 0 0 0 1px oklch(0.606 0.25 292.717 / 0.50); }
+    .own-cue    { box-shadow: inset 0 0 0 1px oklch(0.685 0.169 237.323 / 0.40); }
+    .own-base   { opacity: 0.55; }
+    .own-park   { box-shadow: inset 0 0 0 1px oklch(0.769 0.188 70.08); background:oklch(0.769 0.188 70.08 / 0.15); }
+    .own-mixed  { border:1px dashed oklch(0.623 0.214 259.815 / 0.55); }
+    .layglyph { position:absolute; bottom:4px; right:5px; width:11px; height:11px; color:oklch(0.705 0.015 286.067); pointer-events:none; }
+    .fxmark { position:absolute; top:4px; right:4px; width:13px; height:13px; border-radius:3px; background:oklch(0.606 0.25 292.717 / 0.9); color:#fff; display:flex; align-items:center; justify-content:center; }
+    /* selection is NEUTRAL — a white edge, a white marquee — so colour stays reserved for ownership */
+    .grow.sel { background:oklch(0.985 0 0 / 0.06); box-shadow:inset 3px 0 0 oklch(0.985 0 0); }
+    .grow.sel .namecell { background:transparent; }
+    .grow.sel .namecell .nm { font-weight:600; }
+    /* stack rail entries */
+    .se { display:flex; align-items:center; gap:7px; padding:6px 8px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); font-size:12px; }
+    .se.local { border-color:oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .se.on { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.55); box-shadow:inset 0 0 0 1px oklch(0.45 0.16 300); }
+    .se.off { opacity:0.55; }
+    .se .t { font-weight:600; display:flex; align-items:center; gap:5px; min-width:0; white-space:nowrap; }
+    .se .t .nm { overflow:hidden; text-overflow:ellipsis; }
+    .se .s { font-size:9.5px; color:oklch(0.705 0.015 286.067); display:flex; align-items:center; gap:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .ord { display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:4px; background:oklch(0.274 0.006 286.033); font-size:9.5px; font-weight:700; flex:0 0 auto; }
+    .cap { font-size:11px; line-height:1.45; color:oklch(0.705 0.015 286.067); margin:0; }
+    .tchip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 8px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); font-size:11.5px; white-space:nowrap; flex:0 0 auto; }
+    .tchip .sw { width:12px; height:12px; border-radius:3px; }
+    .kbd { border-radius:4px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.50); padding:0 5px; font-size:9.5px; font-family:ui-monospace, Menlo, monospace; }
+    /* sidebar rail (collapsed drawer, 64px) */
+    .side { width:64px; flex:0 0 auto; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.141 0.005 285.823); display:flex; flex-direction:column; }
+    .side .ic { width:40px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center; color:oklch(0.705 0.015 286.067); margin:1px auto; }
+    .side .ic.on { background:oklch(0.274 0.006 286.033); color:oklch(0.985 0 0); }
+    /* low-fi wireframe boxes for the alternates page */
+    .wf { border:1.5px solid oklch(0.55 0.01 286); border-radius:6px; background:oklch(0.19 0.005 286); display:flex; align-items:center; justify-content:center; font-size:11px; color:oklch(0.705 0.015 286.067); text-align:center; padding:6px; }
+    .wf.hot { border-color:oklch(0.623 0.214 259.815); color:oklch(0.985 0 0); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .note { font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067); margin:0; }
+    .note b { color:oklch(0.985 0 0); font-weight:600; }
+
+  </style>
+</helmet>
+<div class="app" style="width:1376px; height:190px; display:flex; flex-direction:column;">
+
+<div style="padding:14px 16px 0; display:flex; flex-direction:column; gap:10px; height:190px;">
+  <div style="display:flex; align-items:stretch; gap:8px; padding:8px 12px; border:1px solid oklch(0.274 0.006 286.033); border-radius:8px; background:oklch(0.141 0.005 285.823);">
+    <div style="display:flex; align-items:center;"><nav class="seg" style="border-radius:10px;">
+    <span class="on"><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>Programmer</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 10h20"/><path d="M4 10v9h16v-9"/><path d="M8 5h8l1 5H7Z"/></svg>Show</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 18.5Z"/><path d="M12 7v10"/></svg>Prompt Book</span><span class=""><svg class="ico" style="" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M2 12h3l2-6 3 12 3-9 2 5 2-3h5"/></svg>Busk</span>
+  </nav></div>
+    <div class="tile"><span class="l">Blackout</span><span class="v">DBO</span></div>
+    <div class="tile blind"><span class="l">Stage</span><span class="v">BLIND</span></div>
+    <div style="display:flex; align-items:stretch; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); overflow:hidden;">
+      <div style="display:grid; grid-auto-flow:column; grid-template-rows:1fr 1fr; align-content:center; gap:1px; padding:0 4px; border-right:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30);">
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M1</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885);">M2</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M3</span>
+        <span style="border-radius:4px; padding:1px 5px; font-size:9px; font-weight:700; color:oklch(0.705 0.015 286.067);">M4</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:1px; padding:6px 12px;"><span class="zlab" style="display:flex; align-items:center; gap:4px; letter-spacing:0.08em;"><span class="dot"></span>M2 &middot; Chases</span><span class="mono num" style="font-size:18px; font-weight:700; line-height:1;">96</span></div>
+      <div style="display:flex; align-items:center; padding:0 10px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; color:oklch(0.705 0.015 286.067);">&frac14;</div>
+      <div style="display:flex; align-items:center; padding:0 12px; border-left:1px solid oklch(0.274 0.006 286.033); font-size:12px; font-weight:700; letter-spacing:0.08em;">TAP</div>
+    </div>
+    <div style="flex:1; display:flex; align-items:center; gap:10px; min-width:0; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885); padding:6px 12px; overflow:hidden;">
+      <span style="width:22px; height:22px; border-radius:999px; display:grid; place-items:center; background:oklch(0.266 0.065 152.934); border:1px solid oklch(0.393 0.095 152.535); color:oklch(0.792 0.209 151.711); flex:0 0 auto;"><svg class="ico12" style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor" ><path d="M6 4l14 8-14 8Z"/></svg></span>
+      <span class="mono" style="font-size:14px; font-weight:700; color:oklch(0.792 0.209 151.711); flex:0 0 auto;">Q4</span><span style="font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:28px;">Warm Wash</span>
+      <svg class="ico" style="color:oklch(0.705 0.015 286.067)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg><span class="zlab">Next</span><span class="mono" style="font-size:12px; font-weight:700; color:oklch(0.707 0.165 254.624); flex:0 0 auto;">Q5</span>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center; padding:0 16px; border-radius:6px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.274 0.006 286.033 / 0.30); font-size:14px; font-weight:600; letter-spacing:0.05em; flex:0 0 auto;">&#9664; BACK</div>
+    <div style="display:flex; align-items:center; justify-content:center; padding:0 32px; min-width:120px; border-radius:6px; background:oklch(0.623 0.214 259.815); color:oklch(0.21 0.006 285.885); font-size:16px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); flex:0 0 auto;">GO</div>
+    <span class="vr"></span>
+    <div style="display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+      <span class="btn" style="background:oklch(0.704 0.191 22.216 / 0.60); border-color:transparent; color:oklch(0.985 0 0); font-weight:600;"><svg class="ico" style="" viewBox="0 0 24 24" fill="currentColor" ><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Stop</span>
+      <span style="width:12px; height:12px; border-radius:999px; background:oklch(0.723 0.219 149.579); box-shadow:0 0 6px oklch(0.723 0.219 149.579);"></span>
+    </div>
+  </div>
+  <p class="note"><b>Optional, and shared by all four live views:</b> fold the ShowHeader into the ShowBar. One 64px band instead of two (123px). The breadcrumb goes &mdash; the sidebar&rsquo;s project switcher and the active pill already say where you are &mdash; the masters take the railed tile, the Saved pill moves up to the app header, and Stop and the live dot keep their right-anchored slot. It holds at 1300px of content; below that it wraps the way the ShowBar already does, and on the phone arm the switcher drops its labels. Every number on the Main artboard is computed <i>without</i> this; with it the grid reaches 72% of the height.</p>
+</div>
+</div>
+</x-dc>
+</body>
+</html>
