@@ -129,6 +129,9 @@ one. *(design: `Phone`, `PhoneLandscape`)*
 saves 59px on all four live views and is drawn (design: `ChromeMerge`), but it touches surfaces
 this plan otherwise leaves alone. It is Session 5, decided after Session 1 lands and the height is
 felt at a desk. Every number in §1 is computed *without* it; with it the desktop grid reaches 72%.
+> **Overtaken by the desk pass, 2026-09-10.** The merge was built on all four views and rejected.
+> The programmer drops its `ShowBar` outright and the other three keep both bands — same height on
+> the programmer, none of the reach. See Session 5's outcome block.
 
 **Not decided, and deliberately: the rail's side.** `DirectionB` (a bottom band) and `DirectionC`
 (a left rail) are on page 2 of the canvas as records. The right-hand rail keeps `FixturesTable`'s
@@ -402,15 +405,48 @@ are worth not rediscovering.
   sidebar on its 64px rail), and `TabletPortrait`'s ShowBar rung needed no work at all — 820 wide
   already lands on the existing 700–1000 rung.
 
-### Session 5 (optional) — One chrome band
+### ~~Session 5 (optional) — One chrome band~~ — **done 2026-09-10, and not as written**
 
-Decide after Session 1 has been used at a desk. Folds `ShowHeader` into `ShowBar` on all four live
-views: the pill switcher leads the bar, the breadcrumb goes (the sidebar's project switcher and the
-active pill already say where you are), `SaveStatusIndicator` moves into the app header, Stop and
-the live dot keep their right-anchored slot, and the masters take the railed tile. It holds at
-1300px of content and wraps below that the way the bar already does. *(design: `ChromeMerge`)*
-This is the one session that touches Show, the Prompt Book and Busk, and `useShowBarProps` /
-`ShowHeader.test.tsx` / `ShowBar.test.tsx` would all move with it.
+**Outcome. The programmer draws no `ShowBar`; the other three live views are untouched.** What was
+proposed here — folding `ShowHeader` into `ShowBar` on all four views — was built in full and then
+rejected at the desk. What shipped is two files.
+
+*(design: `ChromeMerge` — drawn, built, not taken.)*
+
+**What the session found.** The merge worked, and that is not the same as being right.
+
+- **It was built and measured before it was rejected.** One 60px band on all four views, the
+  switcher leading it, the breadcrumb gone, `SaveStatusIndicator` in the app header, Stop and the
+  dot right-anchored, the whole thing holding one row at 1440 and wrapping below 1300 exactly as
+  §4 said it would. At 852×393 it bought the landscape phone **4 → 7** whole fixture rows. The
+  numbers were never the problem.
+- **The problem was what the band is *for*.** Three successive desk reactions all pushed the same
+  way — don't compress it on a short viewport, then don't draw it on a phone, then don't draw it on
+  the programmer at all — and the third is the general form of the first two. The programmer's
+  subject is editing values; blackout, Blind, tempo, cue numbers and a transport are the show's
+  chrome, and the switcher is one pill from three views that carry all of it. Folding two bands
+  into one is a *space* answer to what turned out to be a *scope* question.
+- **So D9's premise was wrong, not its arithmetic.** "Saves 59px on all four live views" is true
+  and is the wrong frame: three of those four views want the bar, and the one that does not wants
+  it gone rather than smaller. Anyone reopening this should reopen the scope question, not the
+  merge.
+- **The cost is named rather than mitigated.** The programmer has no Blind, no blackout, no GO and
+  no speed masters, and binds no transport keys. The temptation is to put a second Blind toggle
+  back in the action bar; that is the exact split `useShowBarProps` was written to end, and it is
+  refused by name in `ProgrammerPage.tsx` and this repo's `lighting-react/CLAUDE.md`.
+- **A pre-existing bug surfaced on the way, and is still there.** `ShowBar`'s root element carries
+  `@[440px]:gap-2 @[440px]:px-4 @[440px]:py-2` **and** its own `@container`. A container query is
+  evaluated against the nearest *ancestor* container, never the element that declares one, and
+  `ShowBar` has no container ancestor — so those three classes have never applied at any width, and
+  the bar has always drawn at its `gap-1.5 px-2 py-1.5` base. Measured, not inferred:
+  `getComputedStyle(bar)` reads `8px / 6px / 6px` at 1440 as well as at 393. It is the trap
+  `ProgrammerWorkspace`'s doc comment already records ("`@container` is a wrapper, and the queried
+  classes go on its child"). Left alone deliberately: fixing it changes the bar's padding on three
+  live views, which is a look decision rather than this session's. Record it as
+  `FU-SHOWBAR-SELF-CONTAINER` before it is rediscovered a third time.
+- **§6's landscape target is met on the programmer without the merge**: 4 whole rows and part of a
+  fifth becomes **6 whole rows and part of a seventh** (first fixture `y` 228 → 169), because the
+  bar was ~60px of the same 393. The app header still does not scroll away, and still should not.
 
 ---
 
