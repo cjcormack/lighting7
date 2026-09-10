@@ -1,12 +1,20 @@
 # Programmer space — the grid as the page
 
-> **Document status: BUILT 2026-09-10, awaiting the desk pass.** All five sessions are done, all in
-> `lighting-react`: 1 (`42b15ad`), 2 (`83c8a0e`), 3 (`52ec16b`), 4 (`03c2c27`), and 5 (`1b670fd`) —
-> the last **not as written**, see §4. What remains is the **desk pass** (§6) and nothing else; it
-> is staged as [`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space), where check 4's
-> mark is six whole rows rather than the four §6 asks for, and a fifth check covers the chrome
-> session 5 removed. On a pass, this plan and `programmer-space-design/` retire to `completed/`.
-> There is no backend work, and no route, protocol or table changes. The plan lives here because
+> **Document status: RETIRED 2026-09-10.** All five sessions shipped, all in `lighting-react`:
+> 1 (`42b15ad`), 2 (`83c8a0e`), 3 (`52ec16b`), 4 (`03c2c27`), and 5 (`1b670fd`) — the last **not as
+> written**, see §4. The desk pass ran the same day: **checks 1–4 pass, check 5 fails on Blind**,
+> per-check results in §6.
+>
+> **The plan retires with that failure recorded**, because what check 5 asks for is not unfinished
+> work from this plan — it is the *scope* question session 5 itself said to reopen ("anyone
+> reopening this should reopen the scope question, not the merge"). The layout work this plan is
+> about is done and its §1 targets are met. Blind on the programmer, the touch gestures check 3
+> found, and the twelve things the operator noticed while running the checks are all in
+> [`programmer-desk-findings.md`](../programmer-desk-findings.md), to be stepped through in a
+> session of its own. Of §7's four follow-ups, **none was recorded**: the rail's per-desk width was
+> confirmed fine at the desk, and the other three were never triggered.
+>
+> There was no backend work, and no route, protocol or table changes. The plan lives here because
 > every plan does, and because the design it cites is committed alongside it.
 >
 > **The design is committed alongside this plan** at
@@ -470,7 +478,7 @@ rejected at the desk. What shipped is two files.
 - **`/fixtures/list` and `/groups/list`.** They mount the same `FixturesTable`, so D4 and D5 reach
   them — that is intended, a selected row should look the same everywhere — but their toolbars,
   filters and cards/list switcher are untouched.
-- **DBO.** Still inert ([`FU-FE-DBO-INERT`](followups.md#fu-fe-dbo-inert)); this plan draws it
+- **DBO.** Still inert ([`FU-FE-DBO-INERT`](../followups.md#fu-fe-dbo-inert)); this plan draws it
   where it is.
 
 ---
@@ -497,10 +505,42 @@ a green suite called 2a working with two defects in it.
    dropped the `ShowBar` from this view, so the mark is **six** whole rows and part of a seventh,
    and its question is answered. The header still does not scroll away.
 
-The list above is the record of what was asked for; the pass mark is
-[`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space), staged 2026-09-10, which
-carries check 4 at six and adds a fifth check on the chrome session 5 removed. Record the outcome
-there.
+The list above is the record of what was asked for; the pass mark was
+[`FU-MANUAL-DESK-SPACE`](../manual-validation.md#fu-manual-desk-space), staged 2026-09-10, which
+carried check 4 at six and added a fifth check on the chrome session 5 removed.
+
+### Desk pass result — 2026-09-10, Safari/WebKit on a desk and a real iPhone
+
+**Checks 1–4 pass; check 5 fails on Blind.**
+
+1. **Pass.** At 1180 the rail overlays the grid rather than moving it, and the chevron, Escape and a
+   click on the grid all close it. The handle drag (docked arm, ≥1200 — there is none at 1180) is
+   smooth, clamps at 480 and 260, is inert after a release outside the window, and the width
+   survived a reload. **Per-desk width is fine**, so §7's rail-scoping follow-up was not recorded.
+2. **Pass, all four parts.** Click applies literals to Local, ⌥click adds the tracking layer to the
+   rail, and selected cells read white against blue owned cells at a glance. Session 2's deliberate
+   exception — a selected *cell* keeping a `primary/25` fill under its foreground ring — was put to
+   the eye as it asked to be, and **stays**: the white ring carries the distinction on its own.
+3. **Layout passes, gestures fail.** Fixtures are above the fold, the bottom sheet opens and leaves
+   the grid put, and row B's icon arms drop nothing. The **touch gestures are not good enough** —
+   see `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`. Check 3's
+   second half (*GO from the one-row bar with the sheet open*) has **no subject**: session 5 left
+   the programmer with no `ShowBar`, so the sheet and that bar cannot coexist on any view — the FU
+   moved check 4's mark for session 5 and did not revisit check 3's.
+4. **Pass.** Six whole fixture rows and part of a seventh. First fixture `y` **175.5 in WebKit**
+   against the 169 measured in Chromium — a 6.5px cross-engine difference on a target with 60px of
+   headroom. The header does not scroll away. Caveat, tracked separately as `PD-MOBILE-SAFARI-CHROME`:
+   mobile Safari's own bar and tabs take space the viewport advertises.
+5. **Fail, on Blind alone.** Blackout's absence is confirmed unimportant and GO/BACK's is confirmed
+   deliberate and fine; the speed masters want **an overlay** rather than the band back
+   (`PD-SPEED-OVERLAY`). But **Blind must be togglable on the programmer** — going blind is a
+   programmer activity, and switching to `/show` and back to do it is not liveable. That is
+   `PD-BLIND-ON-PROGRAMMER`, and the rule this check states still binds whatever answers it: one
+   control, one place — the bar back whole, or an overlay, never a second toggle in the action bar.
+
+Every finding, including the twelve the operator raised while running the checks, is in
+[`programmer-desk-findings.md`](../programmer-desk-findings.md), to be stepped through in a session
+of its own.
 
 ---
 

@@ -53,7 +53,6 @@ as a one-line row.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
-| [`FU-MANUAL-DESK-SPACE`](#fu-manual-desk-space) | the programmer's new layout is room where an operator's hands actually are, and selection reads apart from ownership | Programmer space, 2026-09-10 |
 
 ---
 
@@ -1374,60 +1373,6 @@ the difference between a UV wash *over* an amber one and a UV wash that replaced
 
 ---
 
-## `FU-MANUAL-DESK-SPACE`
-
-**The grid as the page, from the seat** · from the programmer space plan, 2026-09-10
-
-Five sessions gave the programmer's value grid the room the rest of the page was spending: two rows
-of chrome instead of six, selection that no longer wears the ownership colour, a rail the operator
-sizes, a bottom sheet on a phone, and — session 5's reversal — no `ShowBar` on this view at all.
-Shipped as lighting-react `42b15ad`, `83c8a0e`, `52ec16b`, `03c2c27`, `1b670fd`; the procedure is
-[`programmer-space-plan.md`](programmer-space-plan.md) §6, restated here with check 4's mark moved.
-
-**This is the rare check whose subject is the seat rather than the rig.** Nothing in it reaches
-DMX, and every number was already measured in a browser. What a desk adds is the two questions a
-measurement cannot answer: whether the room bought is room in the place a busking operator's hands
-actually are, and whether a selected cell and an owned cell now read apart *at a glance* — under
-house light, at the angle the screen is really at. Run it as an operator, not as a reader.
-
-**Test**: at the five sizes the design is drawn at — 1440×900, 1180×820, 820×1180, 393×852,
-852×393 — with Q4 included and four heads selected.
-
-1. **The rail covers, and remembers.** Busk a wash with the rail collapsed, then open it from the
-   strip at 1180 wide: it must sit *over* the grid rather than moving it. Drag it to 480 and back,
-   reload, and confirm the width held. That width is stored per desk and not per project; if this
-   desk drives two very different rigs, say so — that is the condition the plan's §7 follow-up is
-   waiting on.
-2. **The two apply gestures, and the colour split.** Select four colour cells, press a template
-   from the selection bar, then ⌥-press another. The layer arrives in the rail and Local shows the
-   literal — then the check that matters: the **selected** cells read white while the **owned**
-   cells read blue. Both were primary blue before session 2. That is the defect the session existed
-   to fix, and the only eye can confirm it is fixed.
-3. **The phone.** The same from the bottom sheet at 393×852, then GO from the one-row bar with the
-   sheet open: GO fires and the sheet stays put.
-4. **The landscape phone, against six — not four.** At 852×393, count whole fixture rows on
-   screen. The plan asked for four and session 5 moved the mark: dropping the `ShowBar` from this
-   view bought ~60px of the same 393, so the target is **6 whole rows and part of a seventh**
-   (first fixture `y` 169, down from 228). Fewer than six means something regressed after
-   2026-09-10, not that the plan fell short. The app header still does not scroll away, and still
-   should not.
-5. **The chrome that is deliberately absent.** On the programmer there is no Blind toggle, no
-   blackout, no GO/BACK and no speed masters, and no transport keys are bound; Blind is *reported*
-   by the app header's `ProgrammerIndicator` badge and nowhere else. Confirm that is liveable while
-   busking, because it is the one thing session 5 traded away on purpose. If it is not, the answer
-   is the bar returning to this view whole — never a second Blind toggle in the action bar, which
-   is the exact split `useShowBarProps` exists to end.
-
-**What the outcome feeds.** Three of the plan's §7 follow-ups wait on this pass and should reach
-[`followups.md`](followups.md) only if it asks for them: `FU-PROG-OUTPUT-JUMP-HINT` if nobody
-clicks a tinted cell in Output scope, a chip opening the library filtered to the selection's
-families if D3's selection-gated templates are felt as a loss, and the rail-width scoping from
-check 1. Then the plan and `programmer-space-design/` retire to `completed/`.
-
-20 minutes, most of it check 2; check 4 is a screenshot and a count.
-
----
-
 ## Validated
 
 Passed on the rig, or retired unrun because the feature went away; the procedures are in this
@@ -1442,3 +1387,4 @@ file's git history if one is ever needed again.
 | `FU-MANUAL-MIDI-SURFACE` | 2026-09-07 | all nine checks pass on the X-Touch Compact or have no subject on it (check 4: every fader is motorised, so PICKUP needs a second profile); check 8 found two hot-plug bugs, fixed the same day (`3a1d87d`, `e401871`) and re-run with check 1; check 3 raised `FU-MIDI-SELECTION-COLOUR-RED-ONLY`. Per-check results in `completed/midi-surface-plan.md` §9 |
 | `FU-MANUAL-MIDI-COLOUR-HUE` | 2026-09-07 | run the same day it was staged, on the X-Touch's `Sel · rgbColour` encoder over the two Freedom Par Hex in project 6, colours painted from a WS probe and the ring read back from `surfaceControls`. Steps 1–5 pass: a full sweep moves both heads together with the ring following; the session 5 red-trap (`#FF0000`/`#FFFF00`) darkens the ring within 80 ms and a small turn re-lights it; a dim blue stays at 200 through a turn (`200,0,9` at hue 127) and a pastel stays pale (`100,200,125`); grey `#787878` reads dark and a click lifts it to the floor (`120,93,90`), near-white `#FFFAFA` reads dark and its first click is `255,209,191`, black comes up `255,12,0`; blue beside `#00000C` stays lit at 85 and goes dark when the dim head turns red. Step 5's three-head order case needs a third colour head the rig lacks (unit-tested); step 6 (PICKUP) has no subject on an all-motor desk; step 7 (flash) had no colour flash bound. The 13-dot ring reading a hue was usable; the quarter-saturation floor is the one judgement left to the operator's eye |
 | `FU-MANUAL-MIDI-COLOUR-AXES` | 2026-09-07 | run by the user on the restarted desk the day it was staged, X-Touch over the Freedom Par Hex in project 6, and reported passing; the fine trim's end-of-travel flip (one colour reading as fine 0 or 127) is the documented limit, in `PropertyChannelResolver`'s KDoc |
+| `FU-MANUAL-DESK-SPACE` | 2026-09-10 | checks 1–4 pass in Safari/WebKit on a desk and a real iPhone — the rail overlays and remembers its width, the two apply gestures work and selection reads white against blue ownership, and the landscape phone shows six whole fixture rows (first fixture `y` 175.5 in WebKit against 169 in Chromium). Check 3's touch gestures and check 5's Blind both fail: the marquee has no touch story, ⌥-press has no touch equivalent, and Blind must be togglable on the programmer. Check 3's GO half has no subject — session 5 left this view with no `ShowBar`. None of §7's four follow-ups was asked for. Per-check results in `completed/programmer-space-plan.md` §6; the seventeen findings are in `programmer-desk-findings.md` |
