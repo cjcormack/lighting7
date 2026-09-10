@@ -1,10 +1,13 @@
 # Programmer space — the grid as the page
 
-> **Document status: IN PROGRESS 2026-09-09.** Sessions 1 (`42b15ad`), 2 (`83c8a0e`), 3
-> (`52ec16b`) and 4 (`03c2c27`) are done, all in `lighting-react`. What remains is the **desk pass**
-> (§6) and, only if that pass asks for it, the optional session 5. There is no backend work, and no
-> route, protocol or table changes. The plan lives here because every plan does, and because the
-> design it cites is committed alongside it.
+> **Document status: BUILT 2026-09-10, awaiting the desk pass.** All five sessions are done, all in
+> `lighting-react`: 1 (`42b15ad`), 2 (`83c8a0e`), 3 (`52ec16b`), 4 (`03c2c27`), and 5 (`1b670fd`) —
+> the last **not as written**, see §4. What remains is the **desk pass** (§6) and nothing else; it
+> is staged as [`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space), where check 4's
+> mark is six whole rows rather than the four §6 asks for, and a fifth check covers the chrome
+> session 5 removed. On a pass, this plan and `programmer-space-design/` retire to `completed/`.
+> There is no backend work, and no route, protocol or table changes. The plan lives here because
+> every plan does, and because the design it cites is committed alongside it.
 >
 > **The design is committed alongside this plan** at
 > [`programmer-space-design/`](programmer-space-design/INDEX.md) — nine artboards drawn against
@@ -488,11 +491,16 @@ a green suite called 2a working with two defects in it.
    the rail: the layer arrived, Local shows the literal, and the selected cells read *white* while
    the owned cells read *blue*.
 3. On a phone, do the same from the bottom sheet, then GO from the one-row bar with the sheet open.
-4. Landscape phone: confirm at least four fixture rows are on screen. **Not five, and the header
+4. ~~Landscape phone: confirm at least four fixture rows are on screen. **Not five, and the header
    does not scroll away** — see session 4's findings; the question for the desk is whether four is
-   enough to busk from, or whether that 53px is worth session 5.
+   enough to busk from, or whether that 53px is worth session 5.~~ **Superseded**: session 5
+   dropped the `ShowBar` from this view, so the mark is **six** whole rows and part of a seventh,
+   and its question is answered. The header still does not scroll away.
 
-Record the outcome in [`manual-validation.md`](manual-validation.md) as `FU-MANUAL-DESK-SPACE`.
+The list above is the record of what was asked for; the pass mark is
+[`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space), staged 2026-09-10, which
+carries check 4 at six and adds a fifth check on the chrome session 5 removed. Record the outcome
+there.
 
 ---
 
