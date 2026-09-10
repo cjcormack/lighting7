@@ -34,7 +34,7 @@ Chromium it says so, because the two disagreed once already in this pass.
 | [`PD-COLOUR-EDITOR-INPUTS`](#pd-colour-editor-inputs) | Grid | the colour editor asks for hex; it should offer a picker and per-emitter fields |
 | [`PD-POPUP-AFTER-DRAG`](#pd-popup-after-drag) | Grid | a completed single-column drag should open its value popup |
 | [`PD-TWO-RECORD-BUTTONS`](#pd-two-record-buttons) | Grid | two Record buttons, and one has a stray right margin |
-| [`PD-TEMPLATE-MULTIHEAD-CELL`](#pd-template-multihead-cell) | Grid | a multi-head fixture's top-level colour cell takes no template — **diagnosed**; blocked behind `FU-LOOK-ELEMENT-ROWS`'s wall |
+| [~~`PD-TEMPLATE-MULTIHEAD-CELL`~~](#pd-template-multihead-cell) | Grid | ~~a multi-head fixture's top-level colour cell takes no template~~ — done, `813eb54`, `10b4d90` |
 | [`PD-FILTER-PLACEHOLDER-CLIP`](#pd-filter-placeholder-clip) | Text | the filter's placeholder is clipped at every width |
 | [`PD-SOURCE-TRUNCATION`](#pd-source-truncation) | Text | the source line truncates mid-word instead of dropping whole parts |
 | [`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome) | Global | mobile Safari's own chrome eats the landscape budget — app-wide, tracked elsewhere |
@@ -53,12 +53,10 @@ a smaller model drifts on.
 
 ### The order
 
-1. **`PD-TEMPLATE-MULTIHEAD-CELL`** — first, and on its own. It is the only finding that silently
-   does nothing on a rig, and it is independent of every other item on this list. **Diagnosed
-   2026-09-10**: the cause is *not* key resolution in `rowModel.ts`, so it touches nothing the later
-   groups build on — it is a server-side resolution gap, blocked behind the same missing cook
-   capability as `FU-LOOK-ELEMENT-ROWS`. What comes first is now writing that plan, not writing the
-   fix.
+1. ~~**`PD-TEMPLATE-MULTIHEAD-CELL`** — first, and on its own. It is the only finding that silently
+   does nothing on a rig, and it is independent of every other item on this list.~~ — done,
+   `813eb54`, `10b4d90`. It touches nothing the later groups build on, so the order below is
+   unchanged; the successor is `FU-LOOK-ELEMENT-ROWS`.
 2. **Group E · Truncation** — cheap, self-contained, one commit, and it makes the page stop looking
    broken while the larger work is still being decided.
 3. **Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
@@ -85,7 +83,7 @@ a smaller model drifts on.
 
 | Item | Model | Effort | Why |
 |---|---|---|---|
-| `PD-TEMPLATE-MULTIHEAD-CELL` | Opus 5 | high | The one confirmed **bug**, and the diagnosis is done (see the entry). It is not key resolution: a multi-element fixture's parent declares no properties of its own and `TemplateResolver` never looks below the head it is given, so the client offers a template the resolver refuses. The remaining work is a plan, not a commit: the fix is a parent-to-element fan-out whose cost is the cook's accumulator taking an element key — the same wall `FU-LOOK-ELEMENT-ROWS` is behind. **Two items, one plan**: that follow-up is the prerequisite and ships first; this one adds the fan-out on top. |
+| ~~`PD-TEMPLATE-MULTIHEAD-CELL`~~ | — | — | ~~The one confirmed **bug**.~~ Done, `813eb54`, `10b4d90` — diagnosed, and the remaining work is `FU-LOOK-ELEMENT-ROWS` plus a parent-to-element fan-out on top of it. See the entry. |
 | `PD-TWO-RECORD-BUTTONS` | Sonnet 5 | medium | Starts as an **investigation** — establish which two buttons and whether they do the same thing — and only then is it a change. If they differ, the fix is naming; if they don't, one goes. The stray margin rides along with whichever wins. |
 | `PD-MOBILE-SAFARI-CHROME` | — | — | Not this list's work. App-wide, tracked by the operator separately. |
 
@@ -358,7 +356,10 @@ Establish first *which two* — the action bar's Record with its destination men
 is presenting as Record — and then whether they do the same thing. If they do, one goes; if they do
 not, the naming does. The margin is cosmetic and rides along with whichever answer wins.
 
-### `PD-TEMPLATE-MULTIHEAD-CELL`
+### ~~`PD-TEMPLATE-MULTIHEAD-CELL`~~
+
+**Done** — `813eb54`, `10b4d90`. What remains is
+[`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows).
 
 **A multi-head fixture's top-level colour cell takes no template**: applying one reports
 `0 heads set · 1 could not take it`.
@@ -440,16 +441,8 @@ and starting the fan-out without it hits the same wall half way. Design them tog
 this item's fan-out is the **safe answer** to the follow-up's own open question about deferred element
 rows: it derives element targets from each head at cook time rather than carrying one on the row.
 
-That follow-up was corrected in the same pass. It named one drop site; there are **three** — the cook,
-plus `LookRegistry.expand`'s two loops, which serve **Include**, so an element row is invisible in the
-programmer as well as in a cue. And it named `buildCueAssignmentsForCue` as a fourth, which is wrong:
-`CuePropertyAssignmentDto` has no `elementKey` field, so a cue's own Layer 4 row cannot be
-element-scoped at all. The cook's comment claiming a *"caller-side element path"* handled these rows
-was wrong when it was written — `applyLayer` has one caller, the cook loop itself — and has been
-corrected too.
-
-Re-sized on that basis: still Opus 5 / high, still first in the order, but as a plan to write rather
-than a defect to fix. The bug hunt is done.
+Re-sized on that basis: the successor is still Opus 5 / high, but a plan to write rather than a
+defect to fix. The bug hunt is done.
 
 **Reproduction, for the next session** — needs only a running desk, writes nothing to the rig:
 

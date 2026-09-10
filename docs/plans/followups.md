@@ -748,11 +748,11 @@ effects* do have an element path (`elementMode` / `elementFilter`), so the vocab
 the static-row half that was never wired. `CueComposer`'s own comment claimed the effects path
 covered these rows too; it did not, and it has been corrected.
 
-**Prerequisite for [`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)**,
-which needs everything here *plus* a parent-to-element fan-out at resolution time. Containment, not
-equivalence: plan the two together, ship this one first — "a Look row on one pixel of Bar 1 composes"
-is a complete, desk-checkable outcome on its own, and starting the fan-out without it hits this wall
-half way.
+**Prerequisite for the fan-out [`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)
+leaves behind** — that triage item is closed, and what it did not fix needs everything here *plus* a
+parent-to-element fan-out at resolution time. Containment, not equivalence: plan the two together,
+ship this one first — "a Look row on one pixel of Bar 1 composes" is a complete, desk-checkable
+outcome on its own, and starting the fan-out without it hits this wall half way.
 
 **Decide before implementing**: whether a deferred element row is even meaningful. An element key
 identifies a sub-part of a *specific* fixture geometry, so a deferred row carrying one is asking to
