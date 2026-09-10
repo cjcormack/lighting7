@@ -34,7 +34,7 @@ Chromium it says so, because the two disagreed once already in this pass.
 | [`PD-COLOUR-EDITOR-INPUTS`](#pd-colour-editor-inputs) | Grid | the colour editor asks for hex; it should offer a picker and per-emitter fields |
 | [`PD-POPUP-AFTER-DRAG`](#pd-popup-after-drag) | Grid | a completed single-column drag should open its value popup |
 | [`PD-TWO-RECORD-BUTTONS`](#pd-two-record-buttons) | Grid | two Record buttons, and one has a stray right margin |
-| [`PD-TEMPLATE-MULTIHEAD-CELL`](#pd-template-multihead-cell) | Grid | a multi-head fixture's top-level colour cell takes no template |
+| [`PD-TEMPLATE-MULTIHEAD-CELL`](#pd-template-multihead-cell) | Grid | a multi-head fixture's top-level colour cell takes no template — **diagnosed**; blocked behind `FU-LOOK-ELEMENT-ROWS`'s wall |
 | [`PD-FILTER-PLACEHOLDER-CLIP`](#pd-filter-placeholder-clip) | Text | the filter's placeholder is clipped at every width |
 | [`PD-SOURCE-TRUNCATION`](#pd-source-truncation) | Text | the source line truncates mid-word instead of dropping whole parts |
 | [`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome) | Global | mobile Safari's own chrome eats the landscape budget — app-wide, tracked elsewhere |
@@ -54,8 +54,11 @@ a smaller model drifts on.
 ### The order
 
 1. **`PD-TEMPLATE-MULTIHEAD-CELL`** — first, and on its own. It is the only finding that silently
-   does nothing on a rig, it is independent of every other item, and if the cause is what it looks
-   like (key resolution) it may touch `rowModel.ts` in a way later groups build on.
+   does nothing on a rig, and it is independent of every other item on this list. **Diagnosed
+   2026-09-10**: the cause is *not* key resolution in `rowModel.ts`, so it touches nothing the later
+   groups build on — it is a server-side resolution gap, blocked behind the same missing cook
+   capability as `FU-LOOK-ELEMENT-ROWS`. What comes first is now writing that plan, not writing the
+   fix.
 2. **Group E · Truncation** — cheap, self-contained, one commit, and it makes the page stop looking
    broken while the larger work is still being decided.
 3. **Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
@@ -82,7 +85,7 @@ a smaller model drifts on.
 
 | Item | Model | Effort | Why |
 |---|---|---|---|
-| `PD-TEMPLATE-MULTIHEAD-CELL` | Opus 5 | high | The one probable **bug**. Key resolution between a fixture row, an element row and the patch — where `templateTargetsFor`'s existing rule ("an element row lands on its fixture") looks like the mirror of the case that fails. High because the first job is reproducing and *diagnosing*, and the neighbouring known gap (`FU-LOOK-ELEMENT-ROWS`) means the honest answer might be that they are one item. |
+| `PD-TEMPLATE-MULTIHEAD-CELL` | Opus 5 | high | The one confirmed **bug**, and the diagnosis is done (see the entry). It is not key resolution: a multi-element fixture's parent declares no properties of its own and `TemplateResolver` never looks below the head it is given, so the client offers a template the resolver refuses. The remaining work is a plan, not a commit: the fix is a parent-to-element fan-out whose cost is the cook's accumulator taking an element key — the same wall `FU-LOOK-ELEMENT-ROWS` is behind. Whether the two are filed as one plan or two sharing a first step is still open. |
 | `PD-TWO-RECORD-BUTTONS` | Sonnet 5 | medium | Starts as an **investigation** — establish which two buttons and whether they do the same thing — and only then is it a change. If they differ, the fix is naming; if they don't, one goes. The stray margin rides along with whichever wins. |
 | `PD-MOBILE-SAFARI-CHROME` | — | — | Not this list's work. App-wide, tracked by the operator separately. |
 
@@ -361,14 +364,92 @@ not, the naming does. The margin is cosmetic and rides along with whichever answ
 `0 heads set · 1 could not take it`.
 
 Selecting the *top-level* colour cell of a multi-head fixture — the fixture row rather than an
-element row — and pressing a template lands on nothing. Likely the key resolution: `templateTargetsFor`
-in `fixtures-list/rowModel.ts` maps an element row to its *fixture*, "because the template route
-resolves keys against the patch and would drop an element key silently", and the top-level row of a
-multi-head fixture is the mirror case that rule was not written for. `FU-LOOK-ELEMENT-ROWS` is the
-neighbouring known gap.
+element row — and pressing a template lands on nothing.
 
-This is the most likely **genuine bug** on this list, and the only one that silently does nothing on
-a rig rather than looking wrong on a screen. Reproduce it before designing anything else here.
+**Reproduced 2026-09-10**, read-only against the running desk (project 6 *Experiment*, fixture
+`led-lightbar-12-pixel-2`, type `led-lightbar-12-pixel-48ch`). `POST /projects/6/templates/resolve`
+with the *Red* template's one row answers `{"entries":[]}` for that bar and `EXACT` for every other
+head in the project, `led-lightbar-12-pixel` — the same model in its **12ch** mode — included.
+
+**The client's key is right, and the hypothesis this entry was written on is wrong.**
+`templateTargetsFor` sends `{type: "fixture", key: "led-lightbar-12-pixel-2"}`: the parent's own key,
+a patched fixture, resolved without complaint. Nothing about element rows or key resolution is
+involved on the way in.
+
+**The cause is a shell parent.** In its 48-channel mode that bar declares **no `@FixtureProperty` at
+all** — all twelve `RgbwPixel` elements carry the colour, and the parent carries nothing. The REST
+row says so outright: `properties: []`, `elements: 12`, `elementGroupProperties: ['rgbColour']`.
+`TemplateResolver` resolves against the head it is handed **and nothing below it**, so
+`unmetColourRequirement` answers `NotACandidate("no colour")` and the whole template is refused for
+that head. That is the skip, verbatim.
+
+**Three other places fold elements in, which is why it looks offerable.** `capabilities` gains
+`colour` from `elementGroupProperties` in `FixtureTypeRegistry`; the client's `targetFamilies` and
+`targetEmitters` scan `target.elements`; and the **cell** comes from `buildRowCells`
+(`fixtures-list/useRowValues.ts`) through `resolveTargetCells`, whose own docblock is the rule —
+*"a target's own properties claim the column outright when they resolve it … only when they resolve
+nothing do elements contribute one resolution each"*. So the patch advertises colour, the strip
+offers the template and the grid draws the cell — and the resolver alone disagrees. It is the
+failure class this list's own §Groups names: **a rule stated in one place and not another.**
+
+Not `findGroupColourSource` / `elementGroupProperties`, which is the *stage* surfaces' colour
+dispatch and reaches no cell in `fixtures-list/`. Read `resolveTargetCells`' docblock before
+designing the fix for a second reason: it names the canonical multi-head shape as **a master
+dimmer/strobe on the parent with colour/position on the heads**, so the general case is a parent
+with *some* properties and not the shell below, and a fan-out that ignores which family is being
+asked for would take the wrong heads on that shape.
+
+**It is not a colour problem and not an apply problem.** Any family behaves the same way, and the
+resolves-to panel is *silent* where apply is loud — `NotACandidate` is omitted there by design — so a
+template editor pointed at a rig containing this bar says nothing about it whatsoever.
+
+**A client-side fix is not available.** Element keys would be the obvious answer, and the three
+consumers of `TemplateResolver` reach a head three different ways:
+
+| consumer | lookup | takes an element key? |
+|---|---|---|
+| apply — `routes/templateApply.kt` | `untypedGroupableFixture` | **yes** |
+| resolves-to panel — `routes/projectTemplates.kt` | `fixtures.fixtures.filter { it.key in keys }` | no — top-level register only |
+| cook, i.e. ⌥click's layer — `fx/CueComposer.expandTargets` | `untypedFixture` | no — top-level register only |
+
+So sending element keys would make **click** work and leave **⌥click** silently asserting nothing,
+which is worse than today's honest skip. The cook's half is a type wall rather than an oversight:
+`Expanded` and `Pending` hold a `Fixture`, and a `FixtureElement` does not extend one.
+
+Correct `templateTargetsFor`'s docstring whatever ships — *"an element key is not a fixture key: the
+template route resolves targets against the patch and would drop it silently"* is true of two of
+those three and false of apply.
+
+**So the fix is server-side, and it is a plan rather than a commit.** One expansion — a
+multi-element parent fans out to its element heads inside the template path — placed once and used
+by all three consumers. Its cost is where it stops being small: `Expanded.fixture` and
+`Pending.fixture` widen from `Fixture` to `GroupableFixture`, and the cook then has to carry
+**element-keyed** contributions.
+
+**That is the same wall [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) is behind**, and the cook says so in
+one line: `if (row.elementKey != null) continue`, commented *"an element is not a (fixture,
+property) key"*. Both items need the cook's accumulator to take an element, and neither can be
+finished without building it. They are **not** the same item, though, and the entry's earlier guess
+that they might be should not be read as settled: that follow-up is about rows **already authored**
+with an `elementKey` being dropped, where this one is about a **parent target that must fan out**
+before any such row exists. Whether they are filed as one plan or two that share a first step is a
+call for whoever writes it — flagged here rather than answered, which is what this list is for.
+(Note while you are in there: the cook's comment claims element rows are "handled by the caller-side
+element path", and `FU-LOOK-ELEMENT-ROWS` says `buildCueAssignmentsForCue` has no such path. One of
+the two is stale. Settle that first — it decides how much is left to build.)
+
+Re-sized on that basis: still Opus 5 / high, still first in the order, but as a plan to write rather
+than a defect to fix. The bug hunt is done.
+
+**Reproduction, for the next session** — needs only a running desk, writes nothing to the rig:
+
+```bash
+curl -s -c c.txt -X POST localhost:8413/api/rest/auth/login \
+  -H 'Content-Type: application/json' -d '{"username":"admin","password":"…"}'
+curl -s -b c.txt -X POST localhost:8413/api/rest/projects/6/templates/resolve \
+  -H 'Content-Type: application/json' \
+  -d '{"rows":[{"targetType":"deferred","targetKey":"","propertyName":"rgbColour","value":"#FF0000;policy=extract"}],"targets":[{"type":"fixture","key":"led-lightbar-12-pixel-2"}]}'
+```
 
 ---
 
