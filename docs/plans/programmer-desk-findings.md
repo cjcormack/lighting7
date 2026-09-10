@@ -35,8 +35,8 @@ Chromium it says so, because the two disagreed once already in this pass.
 | [`PD-POPUP-AFTER-DRAG`](#pd-popup-after-drag) | Grid | a completed single-column drag should open its value popup |
 | [`PD-TWO-RECORD-BUTTONS`](#pd-two-record-buttons) | Grid | two Record buttons, and one has a stray right margin |
 | [~~`PD-TEMPLATE-MULTIHEAD-CELL`~~](#pd-template-multihead-cell) | Grid | ~~a multi-head fixture's top-level colour cell takes no template~~ — done, `813eb54`, `10b4d90` |
-| [`PD-FILTER-PLACEHOLDER-CLIP`](#pd-filter-placeholder-clip) | Text | the filter's placeholder is clipped at every width |
-| [`PD-SOURCE-TRUNCATION`](#pd-source-truncation) | Text | the source line truncates mid-word instead of dropping whole parts |
+| [~~`PD-FILTER-PLACEHOLDER-CLIP`~~](#pd-filter-placeholder-clip) | Text | ~~the filter's placeholder is clipped at every width~~ — done, `7b33420` |
+| [~~`PD-SOURCE-TRUNCATION`~~](#pd-source-truncation) | Text | ~~the source line truncates mid-word instead of dropping whole parts~~ — done, `7b33420` |
 | [`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome) | Global | mobile Safari's own chrome eats the landscape budget — app-wide, tracked elsewhere |
 
 ---
@@ -57,8 +57,9 @@ a smaller model drifts on.
    does nothing on a rig, and it is independent of every other item on this list.~~ — done,
    `813eb54`, `10b4d90`. It touches nothing the later groups build on, so the order below is
    unchanged; the successor is `FU-LOOK-ELEMENT-ROWS`.
-2. **Group E · Truncation** — cheap, self-contained, one commit, and it makes the page stop looking
-   broken while the larger work is still being decided.
+2. ~~**Group E · Truncation** — cheap, self-contained, one commit, and it makes the page stop looking
+   broken while the larger work is still being decided.~~ — done, `7b33420`. Group C is next, and is
+   unaffected: nothing in E touched the selection bar or the marquee.
 3. **Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
    in the flow, and Group B then re-lays out *what is in it* against a row that has stopped moving.
 4. **Group B · Touch and the phone** — the biggest of the buildable groups.
@@ -76,7 +77,7 @@ a smaller model drifts on.
 | **B · Touch and the phone** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | **C · The bar's geometry** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | **D · The cell editors** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
-| **E · Truncation** | `PD-FILTER-PLACEHOLDER-CLIP`, `PD-SOURCE-TRUNCATION` | Sonnet 5 | medium | One rule applied twice — **drop whole parts, don't ellipse a sentence** — which session 1 already wrote down and already implemented for the legend (`LEGEND_SHORT`, and the footer dropping items rather than slicing them). So there is a worked example in the tree to copy, and the only judgement is the drop *order*. Cheapest real improvement on the list. |
+| ~~**E · Truncation**~~ **— done, `7b33420`** | `PD-FILTER-PLACEHOLDER-CLIP`, `PD-SOURCE-TRUNCATION` | Sonnet 5 | medium | One rule applied twice — **drop whole parts, don't ellipse a sentence** — which session 1 already wrote down and already implemented for the legend (`LEGEND_SHORT`, and the footer dropping items rather than slicing them). So there is a worked example in the tree to copy, and the only judgement is the drop *order*. Cheapest real improvement on the list. |
 | **F · The rail's sheet** | `PD-SHEET-ICONS-OPEN`, `PD-SHEET-CLOSE-ALIGN` | Sonnet 5 | medium | Same surface, same file, one pass. Medium rather than low for one reason: the close X may be the **shared `SheetContent` primitive**, and a fix in the wrong layer moves every sheet in the app. The judgement is which layer, not the change. |
 
 ### The standalones
@@ -458,7 +459,9 @@ curl -s -b c.txt -X POST localhost:8413/api/rest/projects/6/templates/resolve \
 
 ## Text and truncation
 
-### `PD-FILTER-PLACEHOLDER-CLIP`
+### ~~`PD-FILTER-PLACEHOLDER-CLIP`~~
+
+**Done** — `7b33420`.
 
 **`Filter fixtures by name, manufacturer, or type…` is clipped at every width**, and badly at narrow
 ones.
@@ -469,7 +472,9 @@ placeholder is being asked to fit a box that is deliberately allowed to shrink. 
 shorter placeholder, or a placeholder with arms (`Filter fixtures…` / `Filter…`), not a wider field:
 the field gives on purpose, and that decision is documented in `ProgrammerGrid`.
 
-### `PD-SOURCE-TRUNCATION`
+### ~~`PD-SOURCE-TRUNCATION`~~
+
+**Done** — `7b33420`.
 
 **`No source — 6 values, nothing to update` truncates mid-string and looks broken.**
 
