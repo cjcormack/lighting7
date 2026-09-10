@@ -23,10 +23,10 @@ Chromium it says so, because the two disagreed once already in this pass.
 |---|---|---|
 | [`PD-BLIND-ON-PROGRAMMER`](#pd-blind-on-programmer) | Chrome | Blind can't be toggled on the page where you go blind — **the one failed check** |
 | [`PD-SPEED-OVERLAY`](#pd-speed-overlay) | Chrome | the speed masters want an overlay rather than a band |
-| [`PD-MARQUEE-TOUCH`](#pd-marquee-touch) | Touch | scrolling the table selects cells; text selects mid-drag |
-| [`PD-TRACKING-GESTURE-TOUCH`](#pd-tracking-gesture-touch) | Touch | ⌥-press has no touch equivalent, so a phone can't add a tracking layer |
-| [`PD-SELECTION-BAR-DENSITY`](#pd-selection-bar-density) | Touch | the bar spends its narrow width on detail rather than chips |
-| [`PD-CLEAR-SELECTION-TOUCH`](#pd-clear-selection-touch) | Touch | no easy way to clear a selection on a phone |
+| [~~`PD-MARQUEE-TOUCH`~~](#pd-marquee-touch) | Touch | ~~scrolling the table selects cells; text selects mid-drag~~ — done, `10b0c7c` |
+| [~~`PD-TRACKING-GESTURE-TOUCH`~~](#pd-tracking-gesture-touch) | Touch | ~~⌥-press has no touch equivalent, so a phone can't add a tracking layer~~ — done, `10b0c7c` |
+| [~~`PD-SELECTION-BAR-DENSITY`~~](#pd-selection-bar-density) | Touch | ~~the bar spends its narrow width on detail rather than chips~~ — done, `10b0c7c` |
+| [~~`PD-CLEAR-SELECTION-TOUCH`~~](#pd-clear-selection-touch) | Touch | ~~no easy way to clear a selection on a phone~~ — done, `10b0c7c` |
 | [`PD-SHEET-ICONS-OPEN`](#pd-sheet-icons-open) | Rail | the collapsed sheet's Layers / FX icons should open it at that band |
 | [`PD-SHEET-CLOSE-ALIGN`](#pd-sheet-close-align) | Rail | the phone sheet's close X isn't vertically centred |
 | [~~`PD-SELECTION-BAR-SHIFT`~~](#pd-selection-bar-shift) | Grid | ~~the bar's arrival moves the grid under a live drag~~ — done, `fe36ee6` |
@@ -63,7 +63,8 @@ a smaller model drifts on.
 3. ~~**Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
    in the flow, and Group B then re-lays out *what is in it* against a row that has stopped moving.~~
    — done, `fe36ee6`. Group B is next, and the row it re-lays out has stopped moving.
-4. **Group B · Touch and the phone** — the biggest of the buildable groups.
+4. ~~**Group B · Touch and the phone** — the biggest of the buildable groups.~~ — done, `10b0c7c`.
+   Group D is next.
 5. **Group D · The cell editors.**
 6. **Group F · The rail's sheet**, and the **`PD-TWO-RECORD-BUTTONS`** standalone — both small,
    both fine to fold into whichever session has room.
@@ -75,7 +76,7 @@ a smaller model drifts on.
 | Group | Items | Model | Effort | Why |
 |---|---|---|---|---|
 | **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | **One piece of work if the answer to both is an overlay** — Blind wants a way to be pressed here, the speed masters want to be summoned rather than resident, and a summoned show-chrome layer answers both at once. Solving them separately is how the programmer ends up with two bespoke summoning gestures. High because the rule in play (*one control, one place*) forbids the obvious fix and is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant. **Blocked**: pick one of the three candidates in `PD-BLIND-ON-PROGRAMMER` first. |
-| **B · Touch and the phone** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
+| ~~**B · Touch and the phone**~~ **— done, `10b0c7c`** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | **D · The cell editors** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
 | ~~**E · Truncation**~~ **— done, `7b33420`** | `PD-FILTER-PLACEHOLDER-CLIP`, `PD-SOURCE-TRUNCATION` | Sonnet 5 | medium | One rule applied twice — **drop whole parts, don't ellipse a sentence** — which session 1 already wrote down and already implemented for the legend (`LEGEND_SHORT`, and the footer dropping items rather than slicing them). So there is a worked example in the tree to copy, and the only judgement is the drop *order*. Cheapest real improvement on the list. |
@@ -160,7 +161,9 @@ also an overlay, these are one piece of work — a summoned show-chrome layer �
 
 ## Touch and the phone
 
-### `PD-MARQUEE-TOUCH`
+### ~~`PD-MARQUEE-TOUCH`~~ — done, `10b0c7c`
+
+Decided: touch pans, a 500 ms hold marquees (touch and pen; mouse unchanged).
 
 **The cell marquee has no touch story, so a scroll selects cells** — check 3.2.
 
@@ -188,7 +191,9 @@ phone cell selection is taps only. Do not simply raise the threshold: a bigger n
 If the answer is long-press, settle [`PD-TRACKING-GESTURE-TOUCH`](#pd-tracking-gesture-touch) at the
 same time — long press cannot mean two things on one screen.
 
-### `PD-TRACKING-GESTURE-TOUCH`
+### ~~`PD-TRACKING-GESTURE-TOUCH`~~ — done, `10b0c7c`
+
+Decided: a hold on the chip, touch and pen only — a mouse has ⌥.
 
 **⌥-press has no touch equivalent, so a phone can't add a tracking layer** — check 3.2.
 
@@ -206,7 +211,9 @@ press arms the marquee, it is taken), or an explicit apply/track segmented contr
 is then also a [`PD-SELECTION-BAR-DENSITY`](#pd-selection-bar-density) question. These three are one
 design problem seen from three sides.
 
-### `PD-SELECTION-BAR-DENSITY`
+### ~~`PD-SELECTION-BAR-DENSITY`~~ — done, `10b0c7c`
+
+Decided: below `@[600px]` the bar is glyph · cell count · chips · New · Deselect, per the `Phone` artboard.
 
 **The selection bar spends its narrow width on detail rather than chips** — check 3.2, and again
 unprompted for iPhone portrait.
@@ -230,7 +237,9 @@ Locate / Fan / Deselect against the chips rather than shrinking everything evenl
 Interacts with [`PD-SELECTION-BAR-SHIFT`](#pd-selection-bar-shift), which changes when this row is
 in the flow at exactly these widths.
 
-### `PD-CLEAR-SELECTION-TOUCH`
+### ~~`PD-CLEAR-SELECTION-TOUCH`~~ — done, `10b0c7c`
+
+Decided: a tap on the empty grid runs the Escape ladder, and a cells-only marquee gets its own Deselect.
 
 **No easy way to clear a selection on mobile.**
 
