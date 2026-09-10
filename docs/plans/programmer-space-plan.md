@@ -434,16 +434,22 @@ rejected at the desk. What shipped is two files.
   no speed masters, and binds no transport keys. The temptation is to put a second Blind toggle
   back in the action bar; that is the exact split `useShowBarProps` was written to end, and it is
   refused by name in `ProgrammerPage.tsx` and this repo's `lighting-react/CLAUDE.md`.
-- **A pre-existing bug surfaced on the way, and is still there.** `ShowBar`'s root element carries
+- **A pre-existing bug surfaced on the way, and was fixed after the fact** (`lighting-react`
+  `1b670fd`, closing `FU-SHOWBAR-SELF-CONTAINER`). `ShowBar`'s root element carries
   `@[440px]:gap-2 @[440px]:px-4 @[440px]:py-2` **and** its own `@container`. A container query is
   evaluated against the nearest *ancestor* container, never the element that declares one, and
   `ShowBar` has no container ancestor — so those three classes have never applied at any width, and
   the bar has always drawn at its `gap-1.5 px-2 py-1.5` base. Measured, not inferred:
   `getComputedStyle(bar)` reads `8px / 6px / 6px` at 1440 as well as at 393. It is the trap
   `ProgrammerWorkspace`'s doc comment already records ("`@container` is a wrapper, and the queried
-  classes go on its child"). Left alone deliberately: fixing it changes the bar's padding on three
-  live views, which is a look decision rather than this session's. Record it as
-  `FU-SHOWBAR-SELF-CONTAINER` before it is rediscovered a third time.
+  classes go on its child"), and a sweep found this was the only element in the repo still making
+  it. The fix is a wrapper, with `@container` kept on the bar as well so its descendants keep
+  querying the bar: the query should ask how much room the bar's *contents* have, which is the
+  content box. The consequence is that two 32px bands take the lower rung than their outer width
+  suggests — 440–472 draws the phone rung, 700–732 puts the transport on its own line — which is
+  the ladder's own arithmetic applied at last rather than changed. Verified across 393 / 470 / 600
+  / 730 / 788 / 966 / 1376 of bar width: no overflow, the live block never below 69px, nothing
+  spilling its border. The bar is 64px tall above 440 now instead of 60.
 - **§6's landscape target is met on the programmer without the merge**: 4 whole rows and part of a
   fifth becomes **6 whole rows and part of a seventh** (first fixture `y` 228 → 169), because the
   bar was ~60px of the same 393. The app header still does not scroll away, and still should not.
