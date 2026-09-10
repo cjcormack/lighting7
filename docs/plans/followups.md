@@ -723,20 +723,44 @@ show the shape it had.
 **A Look's element row composes nowhere** · Ready · Looks-and-layers correction #10, 2026-08-22
 
 `DaoLookRows.elementKey` exists, the migration carries element rows across, and
-`RichProjectFixture` seeds one — but `CueComposer.applyLayer` drops every element row, and
-`buildCueAssignmentsForCue` has no element path either. So a Look holding a per-element value
+`RichProjectFixture` seeds one — but nothing consumes them. So a Look holding a per-element value
 (one pixel of a bar, one head of a multi-head fixture) round-trips through the library, the sync
-export and the editor, and then contributes nothing when a cue layers it.
+export and the editor, and then contributes nothing.
 
-**Pre-existing, not a session-3 regression** — the same gap existed for palette entries — and
-recorded explicitly rather than left as an implied capability, which is what §3.1 currently reads
-as. Cue *ad-hoc effects* do have an element path (`elementMode` / `elementFilter`), so the vocabulary
-exists; it is the static-row half that was never wired.
+**Three drop sites, not one** (corrected 2026-09-10, while diagnosing
+[`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)):
+
+- `CueComposer.applyLayer` — `if (row.elementKey != null) continue`. The cue cook.
+- `LookRegistry.expand`, **twice** — its docblock says "whole-fixture rows" outright. This is the
+  **Include** path (`programmerLookInclude`) and `literalFor`, so an element row is invisible in
+  the *programmer* as well as in a cue. This entry originally missed it.
+- Not `buildCueAssignmentsForCue`, which this entry used to name. `CuePropertyAssignmentDto` has no
+  `elementKey` field at all, so a cue's own Layer 4 row cannot be element-scoped in the first place
+  — an unminted vocabulary rather than a missing branch, and a separate decision if anyone wants it.
+
+`models/templates.kt` deliberately omits `elementKey` citing this entry, and
+`PersistedFixtureReferenceValidator` already *has* an element branch — it validates against
+`elementGroupProperties` — so health reports `Ok` for a row that composes nowhere. The client knows:
+`LookRowStore.tsx` counts element rows to draw the notice.
+
+**Pre-existing, not a session-3 regression** — the same gap existed for palette entries. Cue *ad-hoc
+effects* do have an element path (`elementMode` / `elementFilter`), so the vocabulary exists; it is
+the static-row half that was never wired. `CueComposer`'s own comment claimed the effects path
+covered these rows too; it did not, and it has been corrected.
+
+**Prerequisite for [`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)**,
+which needs everything here *plus* a parent-to-element fan-out at resolution time. Containment, not
+equivalence: plan the two together, ship this one first — "a Look row on one pixel of Bar 1 composes"
+is a complete, desk-checkable outcome on its own, and starting the fan-out without it hits this wall
+half way.
 
 **Decide before implementing**: whether a deferred element row is even meaningful. An element key
 identifies a sub-part of a *specific* fixture geometry, so a deferred row carrying one is asking to
 be applied to whatever the layer targets — which may not have that element. The bound case is
-unambiguous and is probably the whole of it.
+unambiguous and is probably the whole of it. Note that `PD-TEMPLATE-MULTIHEAD-CELL`'s fan-out is the
+**safe answer to the same question**: it derives element targets from each head at cook time rather
+than carrying one on the row, so the ambiguity never arises. That is an argument for designing the
+two together even though they ship apart.
 
 ### `FU-LOOK-STOMP-GRANULAR`
 

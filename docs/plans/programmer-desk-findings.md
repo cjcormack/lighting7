@@ -85,7 +85,7 @@ a smaller model drifts on.
 
 | Item | Model | Effort | Why |
 |---|---|---|---|
-| `PD-TEMPLATE-MULTIHEAD-CELL` | Opus 5 | high | The one confirmed **bug**, and the diagnosis is done (see the entry). It is not key resolution: a multi-element fixture's parent declares no properties of its own and `TemplateResolver` never looks below the head it is given, so the client offers a template the resolver refuses. The remaining work is a plan, not a commit: the fix is a parent-to-element fan-out whose cost is the cook's accumulator taking an element key — the same wall `FU-LOOK-ELEMENT-ROWS` is behind. Whether the two are filed as one plan or two sharing a first step is still open. |
+| `PD-TEMPLATE-MULTIHEAD-CELL` | Opus 5 | high | The one confirmed **bug**, and the diagnosis is done (see the entry). It is not key resolution: a multi-element fixture's parent declares no properties of its own and `TemplateResolver` never looks below the head it is given, so the client offers a template the resolver refuses. The remaining work is a plan, not a commit: the fix is a parent-to-element fan-out whose cost is the cook's accumulator taking an element key — the same wall `FU-LOOK-ELEMENT-ROWS` is behind. **Two items, one plan**: that follow-up is the prerequisite and ships first; this one adds the fan-out on top. |
 | `PD-TWO-RECORD-BUTTONS` | Sonnet 5 | medium | Starts as an **investigation** — establish which two buttons and whether they do the same thing — and only then is it a change. If they differ, the fix is naming; if they don't, one goes. The stray margin rides along with whichever wins. |
 | `PD-MOBILE-SAFARI-CHROME` | — | — | Not this list's work. App-wide, tracked by the operator separately. |
 
@@ -426,17 +426,27 @@ by all three consumers. Its cost is where it stops being small: `Expanded.fixtur
 `Pending.fixture` widen from `Fixture` to `GroupableFixture`, and the cook then has to carry
 **element-keyed** contributions.
 
-**That is the same wall [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) is behind**, and the cook says so in
-one line: `if (row.elementKey != null) continue`, commented *"an element is not a (fixture,
-property) key"*. Both items need the cook's accumulator to take an element, and neither can be
-finished without building it. They are **not** the same item, though, and the entry's earlier guess
-that they might be should not be read as settled: that follow-up is about rows **already authored**
-with an `elementKey` being dropped, where this one is about a **parent target that must fan out**
-before any such row exists. Whether they are filed as one plan or two that share a first step is a
-call for whoever writes it — flagged here rather than answered, which is what this list is for.
-(Note while you are in there: the cook's comment claims element rows are "handled by the caller-side
-element path", and `FU-LOOK-ELEMENT-ROWS` says `buildCueAssignmentsForCue` has no such path. One of
-the two is stale. Settle that first — it decides how much is left to build.)
+**That is the same wall [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) is behind**, and
+the cook says so in one line: `if (row.elementKey != null) continue`. Both items need the cook's
+accumulator to take an element, and neither can be finished without building it.
+
+**Two items, one plan, in that order** — settled 2026-09-10, so it is not left open. The relationship
+is **containment, not equivalence**: that follow-up is about rows **already authored** with an
+`elementKey` being dropped, where this one is about a **parent target that must fan out** before any
+such row exists — so it needs everything the follow-up needs *plus* the fan-out, across three
+consumers with three different lookups. Ship the follow-up first: *"a Look row on one pixel of Bar 1
+composes"* is a complete, desk-checkable outcome by itself, which filing them as one item would hide,
+and starting the fan-out without it hits the same wall half way. Design them together anyway, because
+this item's fan-out is the **safe answer** to the follow-up's own open question about deferred element
+rows: it derives element targets from each head at cook time rather than carrying one on the row.
+
+That follow-up was corrected in the same pass. It named one drop site; there are **three** — the cook,
+plus `LookRegistry.expand`'s two loops, which serve **Include**, so an element row is invisible in the
+programmer as well as in a cue. And it named `buildCueAssignmentsForCue` as a fourth, which is wrong:
+`CuePropertyAssignmentDto` has no `elementKey` field, so a cue's own Layer 4 row cannot be
+element-scoped at all. The cook's comment claiming a *"caller-side element path"* handled these rows
+was wrong when it was written — `applyLayer` has one caller, the cook loop itself — and has been
+corrected too.
 
 Re-sized on that basis: still Opus 5 / high, still first in the order, but as a plan to write rather
 than a defect to fix. The bug hunt is done.

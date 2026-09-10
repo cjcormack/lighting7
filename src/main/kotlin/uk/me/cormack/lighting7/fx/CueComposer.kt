@@ -685,8 +685,14 @@ internal object CueComposer {
 
         val pending = ArrayList<Pending>()
         for (row in content.rows) {
-            // Element-scoped rows are handled by the caller-side element path; they never reach the
-            // per-fixture accumulator because an element is not a (fixture, property) key.
+            // **Dropped, and nothing downstream picks them up** — `FU-LOOK-ELEMENT-ROWS`. The
+            // accumulator is keyed `(fixture, property)` and an element is not a fixture, so an
+            // element row cannot reach it; this is one of three places that drop one, beside
+            // `LookRegistry.expand`'s two loops, which serve Include. An earlier version of this
+            // comment claimed a "caller-side element path" handled them. There is none: this
+            // function has one caller, the cook loop above, and the pre-Looks composer had no
+            // element handling either. The path that does exist is the *effects* one
+            // (`elementMode` / `elementFilter`), which is a different mechanism.
             if (row.elementKey != null) continue
             // A template row's intent is the row's, not the head's — parse it here and drop the
             // whole row if it is not one, rather than repeating the parse and the warning per head.
