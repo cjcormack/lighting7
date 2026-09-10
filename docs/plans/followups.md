@@ -64,6 +64,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
+| [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
 | [`FU-AUTH-RESET-TOKEN-STALENESS`](#fu-auth-reset-token-staleness) | Trigger | Auth | two admins routinely administering one desk |
 | [`FU-AUTH-SESSION-LIST-STALENESS`](#fu-auth-session-list-staleness) | Trigger | Auth | "why isn't my phone in the list?" |
 | [`FU-AUTH-ATTRIBUTION`](#fu-auth-attribution) | Trigger | Auth | two accounts co-author, or any `formatVersion` bump |
@@ -1683,6 +1684,46 @@ but it is a backend change, which is why the sweep item that found it did not ta
 
 **Trigger**: a script-defined effect declares a numeric parameter whose sensible range is not the
 one the heuristic picks, and the operator finds the slider unusable.
+
+---
+
+### `FU-FE-FILTER-FLEX-SPLIT`
+
+**Row B's filter is given half the width it asks for, because a decorative spacer competes with
+it** · Ready · found by the review of `PD-SOURCE-TRUNCATION` / `PD-FILTER-PLACEHOLDER-CLIP`
+(`7b33420`), 2026-09-10
+
+`ProgrammerGrid`'s row B draws the filter field as `min-w-0 max-w-[340px] flex-1`, and a few
+siblings later draws `<span className={cn('flex-1', leading && 'hidden')} />` — a spacer whose only
+job is to push `Groups` and `Columns` to the right end of the row. Two `flex: 1 1 0%` siblings
+**split** the row's free space rather than one of them taking it, so the field never reaches its own
+`max-w-[340px]` intent at any width: measured at a row B of 664px it is ~122px wide where the row's
+genuine leftover is closer to ~260px.
+
+This is the same bug the file's own comment already names **for the other arm** — the note beside
+`TemplateStrip` in the selection bar explains that `ml-auto` is used there precisely because "a
+spacer here silently stole roughly half the scroller's width". The default arm of row B was never
+given the same treatment, and nothing pointed at it because the field simply looked small rather
+than broken.
+
+It surfaced as the *cause* of `PD-FILTER-PLACEHOLDER-CLIP` being worse than it needed to be: the
+placeholder needs 96px, and a field getting about half the slack runs out of room at roughly twice
+the row width an unstarved one would. Don't take a second number from that sentence — the point is
+the factor, and the crossover itself has to be measured (see below).
+
+**Fix**: delete the spacer and give the right-hand group `ml-auto` — an auto margin is resolved
+after flex growth, so it takes the whole slack when the field is absent and exactly nothing when it
+is there. `ProgrammerSourceStrip`'s busking arm was converted this way in `7b33420` and is the
+worked example.
+
+**Then re-measure the filter's `@[800px]` threshold**, which is the reason this is worth doing
+rather than leaving. That threshold is where the field gives way to the search icon over a popover,
+and it was set against the *starved* field; an unstarved one fits its placeholder a good deal
+narrower, so the field could stay on the row across a band where it is currently an icon. The two
+numbers to re-take are the ones the comment there records: the placeholder needs 96px, and the field
+had ~113px at a row B of 800. Do not move the threshold without re-measuring — the comment in that
+file deliberately declines to quote a crossover figure, because two sweeps of it disagreed by ~30px
+depending on how the width was forced.
 
 ---
 

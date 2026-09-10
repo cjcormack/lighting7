@@ -461,7 +461,8 @@ curl -s -b c.txt -X POST localhost:8413/api/rest/projects/6/templates/resolve \
 
 ### ~~`PD-FILTER-PLACEHOLDER-CLIP`~~
 
-**Done** — `7b33420`.
+**Done** — `7b33420`. The review found a pre-existing cause underneath it; the successor is
+[`FU-FE-FILTER-FLEX-SPLIT`](followups.md#fu-fe-filter-flex-split).
 
 **`Filter fixtures by name, manufacturer, or type…` is clipped at every width**, and badly at narrow
 ones.
