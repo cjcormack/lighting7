@@ -29,10 +29,10 @@ Chromium it says so, because the two disagreed once already in this pass.
 | [`PD-CLEAR-SELECTION-TOUCH`](#pd-clear-selection-touch) | Touch | no easy way to clear a selection on a phone |
 | [`PD-SHEET-ICONS-OPEN`](#pd-sheet-icons-open) | Rail | the collapsed sheet's Layers / FX icons should open it at that band |
 | [`PD-SHEET-CLOSE-ALIGN`](#pd-sheet-close-align) | Rail | the phone sheet's close X isn't vertically centred |
-| [`PD-SELECTION-BAR-SHIFT`](#pd-selection-bar-shift) | Grid | the bar's arrival moves the grid under a live drag |
+| [~~`PD-SELECTION-BAR-SHIFT`~~](#pd-selection-bar-shift) | Grid | ~~the bar's arrival moves the grid under a live drag~~ — done, `fe36ee6` |
 | [`PD-ENTER-FOCUS`](#pd-enter-focus) | Grid | Enter opens the cell editor without focusing it, and won't close it |
 | [`PD-COLOUR-EDITOR-INPUTS`](#pd-colour-editor-inputs) | Grid | the colour editor asks for hex; it should offer a picker and per-emitter fields |
-| [`PD-POPUP-AFTER-DRAG`](#pd-popup-after-drag) | Grid | a completed single-column drag should open its value popup |
+| [~~`PD-POPUP-AFTER-DRAG`~~](#pd-popup-after-drag) | Grid | ~~a completed single-column drag should open its value popup~~ — done, `fe36ee6` |
 | [`PD-TWO-RECORD-BUTTONS`](#pd-two-record-buttons) | Grid | two Record buttons, and one has a stray right margin |
 | [~~`PD-TEMPLATE-MULTIHEAD-CELL`~~](#pd-template-multihead-cell) | Grid | ~~a multi-head fixture's top-level colour cell takes no template~~ — done, `813eb54`, `10b4d90` |
 | [~~`PD-FILTER-PLACEHOLDER-CLIP`~~](#pd-filter-placeholder-clip) | Text | ~~the filter's placeholder is clipped at every width~~ — done, `7b33420` |
@@ -60,8 +60,9 @@ a smaller model drifts on.
 2. ~~**Group E · Truncation** — cheap, self-contained, one commit, and it makes the page stop looking
    broken while the larger work is still being decided.~~ — done, `7b33420`. Group C is next, and is
    unaffected: nothing in E touched the selection bar or the marquee.
-3. **Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
-   in the flow, and Group B then re-lays out *what is in it* against a row that has stopped moving.
+3. ~~**Group C · The selection bar's geometry** — before Group B, because it settles *when* the bar is
+   in the flow, and Group B then re-lays out *what is in it* against a row that has stopped moving.~~
+   — done, `fe36ee6`. Group B is next, and the row it re-lays out has stopped moving.
 4. **Group B · Touch and the phone** — the biggest of the buildable groups.
 5. **Group D · The cell editors.**
 6. **Group F · The rail's sheet**, and the **`PD-TWO-RECORD-BUTTONS`** standalone — both small,
@@ -75,7 +76,7 @@ a smaller model drifts on.
 |---|---|---|---|---|
 | **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | **One piece of work if the answer to both is an overlay** — Blind wants a way to be pressed here, the speed masters want to be summoned rather than resident, and a summoned show-chrome layer answers both at once. Solving them separately is how the programmer ends up with two bespoke summoning gestures. High because the rule in play (*one control, one place*) forbids the obvious fix and is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant. **Blocked**: pick one of the three candidates in `PD-BLIND-ON-PROGRAMMER` first. |
 | **B · Touch and the phone** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
-| **C · The bar's geometry** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
+| ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | **D · The cell editors** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
 | ~~**E · Truncation**~~ **— done, `7b33420`** | `PD-FILTER-PLACEHOLDER-CLIP`, `PD-SOURCE-TRUNCATION` | Sonnet 5 | medium | One rule applied twice — **drop whole parts, don't ellipse a sentence** — which session 1 already wrote down and already implemented for the legend (`LEGEND_SHORT`, and the footer dropping items rather than slicing them). So there is a worked example in the tree to copy, and the only judgement is the drop *order*. Cheapest real improvement on the list. |
 | **F · The rail's sheet** | `PD-SHEET-ICONS-OPEN`, `PD-SHEET-CLOSE-ALIGN` | Sonnet 5 | medium | Same surface, same file, one pass. Medium rather than low for one reason: the close X may be the **shared `SheetContent` primitive**, and a fix in the wrong layer moves every sheet in the app. The judgement is which layer, not the change. |
@@ -266,7 +267,7 @@ layout or the primitive, because a fix in the wrong one moves every sheet in the
 
 ## The grid
 
-### `PD-SELECTION-BAR-SHIFT`
+### ~~`PD-SELECTION-BAR-SHIFT`~~ — done, `fe36ee6`
 
 **The selection bar's arrival moves the grid under a live drag** — found while busking for check 1.
 
@@ -335,7 +336,7 @@ enter"*, but the hex complaint can only be about **colour** cells. Establish whe
 finding about colour cells or two findings that share an opening clause — [`PD-ENTER-FOCUS`](#pd-enter-focus)
 is written as the dimmer half on the assumption that it is two.
 
-### `PD-POPUP-AFTER-DRAG`
+### ~~`PD-POPUP-AFTER-DRAG`~~ — done, `fe36ee6`
 
 **A completed drag should open its value popup**, when the drag stayed within one column.
 
