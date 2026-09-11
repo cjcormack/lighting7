@@ -134,8 +134,10 @@ is a pre-existing, proven mechanism rather than something invented here — this
 claim gets tested on a rig.
 
 **With the show running.** Try to drag a cue and fail. Press `L`, edit, press GO, and confirm it
-re-locked itself. Leave it unlocked and idle, and watch the countdown re-lock it. Confirm Blind
-appears beside DBO **only** while unlocked, and that it actually gates the rig.
+re-locked itself. Leave it unlocked and idle, and watch the countdown re-lock it. Confirm the bar
+offers no Blind press in either lock state — Blind is the programmer's action bar's since
+`PD-BLIND-ON-PROGRAMMER`, and the bar only *reports* it through the programmer chip — and, from
+`/programmer`, that pressing it there actually gates the rig.
 
 **With the show stopped.** Confirm it is simply editable, with no lock chrome anywhere.
 
@@ -816,7 +818,9 @@ the app) and watch the connection pill go red. Then, without reconnecting:
 1. Drag a dimmer cell in the grid — the cell must not open at all (mouse *and* Tab-then-Enter), and
    the hover text should say the desk is unreachable. Confirm a cell that Output scope has already
    made read-only still says *its* reason, not the connection's.
-2. Press Blind in the show bar, and blackout / GM on `/settings/surfaces` — all three disabled.
+2. Press Blind in the programmer's action bar (beside Clear — the bar has no Blind since
+   `PD-BLIND-ON-PROGRAMMER`), and blackout / GM on `/settings/surfaces` — all three disabled, and
+   Blind's hover text says the desk is unreachable.
 3. On `/channels`, in Edit mode: the level sliders, the park/unpark affordances, Unpark All, and
    both "…at Value" buttons are refused, and the park tooltip and its context-menu item say the
    same thing.

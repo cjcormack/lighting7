@@ -1606,6 +1606,10 @@ deliberately frontend-only.
 **Alternative if that is not wanted**: draw DBO differently from Blind, or remove it. Two peers where
 one is a placeholder is the part that must not stand.
 
+**2026-09-11**: the Blind tile left the bar — `PD-BLIND-ON-PROGRAMMER` made Blind the programmer's
+action bar's control, reported elsewhere by `ProgrammerIndicator`. DBO now stands alone in the bar, so
+the "two peers" framing no longer applies; a tile that does nothing still does. Not resolved.
+
 ### `FU-FE-SHARED-LOOK-EDIT-GUARD`
 
 **The shared-Look edit guard was never implemented** · Ready · Noticed during desk-simplification

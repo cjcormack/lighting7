@@ -21,7 +21,7 @@ Chromium it says so, because the two disagreed once already in this pass.
 
 | Slug | Area | What |
 |---|---|---|
-| [`PD-BLIND-ON-PROGRAMMER`](#pd-blind-on-programmer) | Chrome | Blind can't be toggled on the page where you go blind — **the one failed check** |
+| [~~`PD-BLIND-ON-PROGRAMMER`~~](#pd-blind-on-programmer) | Chrome | ~~Blind can't be toggled on the page where you go blind — **the one failed check**~~ — done, `a46fe1e` |
 | [`PD-SPEED-OVERLAY`](#pd-speed-overlay) | Chrome | the speed masters want an overlay rather than a band |
 | [~~`PD-MARQUEE-TOUCH`~~](#pd-marquee-touch) | Touch | ~~scrolling the table selects cells; text selects mid-drag~~ — done, `10b0c7c` |
 | [~~`PD-TRACKING-GESTURE-TOUCH`~~](#pd-tracking-gesture-touch) | Touch | ~~⌥-press has no touch equivalent, so a phone can't add a tracking layer~~ — done, `10b0c7c` |
@@ -70,15 +70,15 @@ a smaller model drifts on.
    both fine to fold into whichever session has room.~~ — done, `86a18fa` and `3ebaa8e`. Group A is
    next, and is still blocked on the decision in `PD-BLIND-ON-PROGRAMMER`.
 7. **Group A · Show chrome on the programmer** — last, and the only one that could reverse a
-   shipped session. **Unblocked on the Blind half**: `PD-BLIND-ON-PROGRAMMER` is decided (the
-   third candidate — see the entry). `PD-SPEED-OVERLAY` is no longer part of the same piece of
-   work and still needs a decision of its own.
+   shipped session. ~~**Unblocked on the Blind half**: `PD-BLIND-ON-PROGRAMMER` is decided (the
+   third candidate — see the entry).~~ — Blind half done, `a46fe1e`. `PD-SPEED-OVERLAY` is no
+   longer part of the same piece of work and still needs a decision of its own.
 
 ### The groups
 
 | Group | Items | Model | Effort | Why |
 |---|---|---|---|---|
-| **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | ~~**One piece of work if the answer to both is an overlay**~~ — **they are two.** `PD-BLIND-ON-PROGRAMMER` is decided and the answer is *not* an overlay (Blind becomes a programmer fact), so the two items no longer share a gesture and `PD-SPEED-OVERLAY` stands alone, still needing its own decision. High is unchanged, and for the original reason: the rule in play (*one control, one place*) is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant — and this answer rewrites several of those statements at once, which is exactly when they drift apart. |
+| **A · Show chrome** — Blind half done, `a46fe1e` | ~~`PD-BLIND-ON-PROGRAMMER`~~, `PD-SPEED-OVERLAY` | Opus 5 | high | ~~**One piece of work if the answer to both is an overlay**~~ — **they are two.** `PD-BLIND-ON-PROGRAMMER` is decided and the answer is *not* an overlay (Blind becomes a programmer fact), so the two items no longer share a gesture and `PD-SPEED-OVERLAY` stands alone, still needing its own decision. High is unchanged, and for the original reason: the rule in play (*one control, one place*) is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant — and this answer rewrites several of those statements at once, which is exactly when they drift apart. |
 | ~~**B · Touch and the phone**~~ **— done, `10b0c7c`** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | ~~**D · The cell editors**~~ **— done, `ec70f32`** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
@@ -105,7 +105,7 @@ its own.
 
 ## Chrome
 
-### `PD-BLIND-ON-PROGRAMMER`
+### ~~`PD-BLIND-ON-PROGRAMMER`~~ — done, `a46fe1e`
 
 **Blind can't be toggled on the page you go blind for** — check 5.1, the pass's only failure.
 
@@ -121,8 +121,9 @@ is confirmed deliberate and fine (check 3, check 5.4).
 **The constraint that makes this a design question rather than a change.**
 [`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space) names the only sanctioned
 remedy: *the bar returning to this view whole* — **never a second Blind toggle in the action bar**,
-which is the one-control-in-two-places split `useShowBarProps` was written to end, and which is
-refused by name in `lighting-react/src/routes/ProgrammerPage.tsx` and in `lighting-react/CLAUDE.md`.
+which is the one-control-in-two-places split `useShowBarProps` was written to end, and which was
+refused by name in `lighting-react/src/routes/ProgrammerPage.tsx` and in `lighting-react/CLAUDE.md`
+(both rewritten by `a46fe1e`, under the decision below).
 Session 5's own note says the same thing from the other side: *"anyone reopening this should reopen
 the scope question, not the merge."*
 
