@@ -197,7 +197,54 @@ and this repo's history says a second near-copy of a speed surface drifts (`Spee
 docblock is the record of the last time).
 
 Note the overlap with [`PD-BLIND-ON-PROGRAMMER`](#pd-blind-on-programmer): if the answer there is
-also an overlay, these are one piece of work — a summoned show-chrome layer — not two.
+also an overlay, these are one piece of work — a summoned show-chrome layer — not two. *(It was
+not: Blind became a programmer fact, `a46fe1e`, so this item stands alone.)*
+
+**Decided, 2026-09-11: a fourth overview panel, holding the speed masters and nothing else.** Not
+a programmer surface at all: the panel hangs under the app header beside Stage, Fixture and Cue
+Slots, so the bank is one summon away from *every* view, and no view — the programmer included —
+gains chrome of its own. The reasoning:
+
+- **It reuses, so it cannot drift.** The panel mounts `components/SpeedMasters.tsx` whole — the
+  bar's own component, in a wider box — rather than drawing a readout of its own. That is what
+  makes it different from the Effects Overview panel `overviewPanels.tsx`'s docblock records the
+  deletion of: that one spoke for master 1 only and carried a Kill All, a *narrower* second answer
+  to the bar. This one is the bar's answer, relocated. The only design choice inside it is which of
+  `SpeedMasters`' three arms a full-width panel gets — its arms are picked by the *ShowBar's*
+  `@container` width and the master count, so the panel supplies its own container and the
+  `TILED_ARM` ceiling still applies.
+- **The registry already says a new panel is one row.** `DESCRIPTORS` plus one `usePersistentToggle`
+  paired by id; the header toggle and the Cmd+K entry come with it. `Layout`'s rule holds: the body
+  goes behind `CollapsiblePanel` so it unmounts after collapsing, or every route pays the
+  subscription.
+- **Summoned is the operator's word, and this is what the app already means by it.** The three
+  panels are the desk's existing "summon a surface over the page" gesture; a fourth is the same
+  gesture, not a new one.
+
+**What it costs, and the two things to re-check at a desk.** Panel visibility **persists**, per
+panel and app-wide: opened once, it stays open on every view and across reloads. On the programmer
+that is a tempo band back — by a door the operator chose and can close — and on the three views
+with a bar it is the bank drawn twice until dismissed. Neither is a defect; both must be *said*, so
+nobody later reads the panel as session 5's band returning. And the moment check 5.3 actually
+named — *a tempo readout while editing an effect's timing* — happens inside a **modal sheet**:
+`EffectParameterForm`'s three hosts (`AddEditFxSheet`, `ActiveEffectSheet`, `TemplateEditor`) are
+all `SheetContent`, which draws a Radix overlay, so the panel sits dimmed behind the timing picker —
+readable, not pressable. Whether that answers 5.3 or only half of it is the desk question; report
+it rather than design around it.
+
+**What has to be rewritten, because it currently asserts the opposite** — the same
+"rule stated in one place and not another" class as the Blind half, so all of it moves in one
+commit: `lighting-react/CLAUDE.md` §The show-editing lock's *"The speed masters are not on the
+programmer"* bullet (~1259), §Speed Masters' *"`SpeedMasters.tsx` is the ShowBar's performance
+surface"* (~976) and §Navigation Registry's *"three overview panels now — Stage, Fixture, Cue
+Slots"* paragraph (~1693); `overviewPanels.tsx`'s docblock — both the *"three collapsible panels"*
+opening and the Effects Overview paragraph whose parenthetical says the programmer carrying no tempo
+readout *"is not an argument for bringing this panel back"* (true of that panel, and the reason this
+one is different has to be stated there); `Layout.tsx`'s *"The three overview panels"* comment;
+`ProgrammerPage.tsx`'s header note bullet *"The speed masters are not on this page"*;
+`ProgrammerPage.test.tsx`'s *"draws no show bar"* comment, which lists tempo among what went;
+`SpeedMasters.tsx`'s docblock line saying its arms are *"chosen by the ShowBar's `@container`
+width"*; and `docs/show-mode-engineering.md`'s list of side panels (~479).
 
 ---
 
