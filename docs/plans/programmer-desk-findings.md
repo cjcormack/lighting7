@@ -22,7 +22,7 @@ Chromium it says so, because the two disagreed once already in this pass.
 | Slug | Area | What |
 |---|---|---|
 | [~~`PD-BLIND-ON-PROGRAMMER`~~](#pd-blind-on-programmer) | Chrome | ~~Blind can't be toggled on the page where you go blind — **the one failed check**~~ — done, `a46fe1e` |
-| [`PD-SPEED-OVERLAY`](#pd-speed-overlay) | Chrome | the speed masters want an overlay rather than a band |
+| ~~[`PD-SPEED-OVERLAY`](#pd-speed-overlay)~~ | Chrome | ~~the speed masters want an overlay rather than a band~~ — done, `80714da` |
 | [~~`PD-MARQUEE-TOUCH`~~](#pd-marquee-touch) | Touch | ~~scrolling the table selects cells; text selects mid-drag~~ — done, `10b0c7c` |
 | [~~`PD-TRACKING-GESTURE-TOUCH`~~](#pd-tracking-gesture-touch) | Touch | ~~⌥-press has no touch equivalent, so a phone can't add a tracking layer~~ — done, `10b0c7c` |
 | [~~`PD-SELECTION-BAR-DENSITY`~~](#pd-selection-bar-density) | Touch | ~~the bar spends its narrow width on detail rather than chips~~ — done, `10b0c7c` |
@@ -69,16 +69,17 @@ a smaller model drifts on.
 6. ~~**Group F · The rail's sheet**, and the **`PD-TWO-RECORD-BUTTONS`** standalone — both small,
    both fine to fold into whichever session has room.~~ — done, `86a18fa` and `3ebaa8e`. Group A is
    next, and is still blocked on the decision in `PD-BLIND-ON-PROGRAMMER`.
-7. **Group A · Show chrome on the programmer** — last, and the only one that could reverse a
-   shipped session. ~~**Unblocked on the Blind half**: `PD-BLIND-ON-PROGRAMMER` is decided (the
-   third candidate — see the entry).~~ — Blind half done, `a46fe1e`. `PD-SPEED-OVERLAY` is no
-   longer part of the same piece of work and still needs a decision of its own.
+7. ~~**Group A · Show chrome on the programmer**~~ — done, `a46fe1e` + `80714da`. Last, and the
+   only one that could reverse a shipped session. ~~**Unblocked on the Blind half**:
+   `PD-BLIND-ON-PROGRAMMER` is decided (the third candidate — see the entry).~~ — Blind half done,
+   `a46fe1e`. ~~`PD-SPEED-OVERLAY` is no longer part of the same piece of work and still needs a
+   decision of its own.~~ — it was two pieces of work, and both have landed.
 
 ### The groups
 
 | Group | Items | Model | Effort | Why |
 |---|---|---|---|---|
-| **A · Show chrome** — Blind half done, `a46fe1e` | ~~`PD-BLIND-ON-PROGRAMMER`~~, `PD-SPEED-OVERLAY` | Opus 5 | high | ~~**One piece of work if the answer to both is an overlay**~~ — **they are two.** `PD-BLIND-ON-PROGRAMMER` is decided and the answer is *not* an overlay (Blind becomes a programmer fact), so the two items no longer share a gesture and `PD-SPEED-OVERLAY` stands alone, still needing its own decision. High is unchanged, and for the original reason: the rule in play (*one control, one place*) is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant — and this answer rewrites several of those statements at once, which is exactly when they drift apart. |
+| ~~**A · Show chrome**~~ — done, `a46fe1e` + `80714da` | ~~`PD-BLIND-ON-PROGRAMMER`~~, ~~`PD-SPEED-OVERLAY`~~ | Opus 5 | high | ~~**One piece of work if the answer to both is an overlay**~~ — **they are two.** `PD-BLIND-ON-PROGRAMMER` is decided and the answer is *not* an overlay (Blind becomes a programmer fact), so the two items no longer share a gesture and `PD-SPEED-OVERLAY` stands alone~~, still needing its own decision~~. High is unchanged, and for the original reason: the rule in play (*one control, one place*) is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant — and this answer rewrites several of those statements at once, which is exactly when they drift apart. |
 | ~~**B · Touch and the phone**~~ **— done, `10b0c7c`** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | ~~**D · The cell editors**~~ **— done, `ec70f32`** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
@@ -169,7 +170,7 @@ has already left Blind. That reasoning is the risk; it is the thing a desk pass 
 
 **Consequence for Group A.** The group's premise was that it is one piece of work *if the answer to
 both is an overlay*. This answer is not an overlay, so [`PD-SPEED-OVERLAY`](#pd-speed-overlay) is
-now independent, and still needs an answer of its own.
+now independent ~~, and still needs an answer of its own~~ — answered separately, `80714da`.
 
 **What has to be rewritten, because it currently asserts the opposite** — this is the "rule stated
 in one place and not another" failure class, so all of it moves together or none of it does:
@@ -180,7 +181,7 @@ docblock and the `blindShownSeparately` prop (whose last true caller goes), plus
 pin today's arrangement — `ShowPage.test.tsx` asserting `onBlind` is a function, and
 `ProgrammerPage.test.tsx` pinning Blind's absence from the programmer.
 
-### `PD-SPEED-OVERLAY`
+### ~~`PD-SPEED-OVERLAY`~~ — done, `80714da`
 
 **The speed masters want an overlay, not a band** — check 5.3.
 
