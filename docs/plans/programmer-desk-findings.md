@@ -30,14 +30,14 @@ Chromium it says so, because the two disagreed once already in this pass.
 | [~~`PD-SHEET-ICONS-OPEN`~~](#pd-sheet-icons-open) | Rail | ~~the collapsed sheet's Layers / FX icons should open it at that band~~ — done, `86a18fa` |
 | [~~`PD-SHEET-CLOSE-ALIGN`~~](#pd-sheet-close-align) | Rail | ~~the phone sheet's close X isn't vertically centred~~ — done, `86a18fa` |
 | [~~`PD-SELECTION-BAR-SHIFT`~~](#pd-selection-bar-shift) | Grid | ~~the bar's arrival moves the grid under a live drag~~ — done, `fe36ee6` |
-| [`PD-ENTER-FOCUS`](#pd-enter-focus) | Grid | Enter opens the cell editor without focusing it, and won't close it |
-| [`PD-COLOUR-EDITOR-INPUTS`](#pd-colour-editor-inputs) | Grid | the colour editor asks for hex; it should offer a picker and per-emitter fields |
+| [~~`PD-ENTER-FOCUS`~~](#pd-enter-focus) | Grid | ~~Enter opens the cell editor without focusing it, and won't close it~~ — done, `ec70f32` |
+| [~~`PD-COLOUR-EDITOR-INPUTS`~~](#pd-colour-editor-inputs) | Grid | ~~the colour editor asks for hex; it should offer a picker and per-emitter fields~~ — done, `ec70f32` |
 | [~~`PD-POPUP-AFTER-DRAG`~~](#pd-popup-after-drag) | Grid | ~~a completed single-column drag should open its value popup~~ — done, `fe36ee6` |
 | [~~`PD-TWO-RECORD-BUTTONS`~~](#pd-two-record-buttons) | Grid | ~~two Record buttons, and one has a stray right margin~~ — done, `3ebaa8e` |
 | [~~`PD-TEMPLATE-MULTIHEAD-CELL`~~](#pd-template-multihead-cell) | Grid | ~~a multi-head fixture's top-level colour cell takes no template~~ — done, `813eb54`, `10b4d90` |
 | [~~`PD-FILTER-PLACEHOLDER-CLIP`~~](#pd-filter-placeholder-clip) | Text | ~~the filter's placeholder is clipped at every width~~ — done, `7b33420` |
 | [~~`PD-SOURCE-TRUNCATION`~~](#pd-source-truncation) | Text | ~~the source line truncates mid-word instead of dropping whole parts~~ — done, `7b33420` |
-| [`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome) | Global | mobile Safari's own chrome eats the landscape budget — app-wide, tracked elsewhere |
+| [~~`PD-MOBILE-SAFARI-CHROME`~~](#pd-mobile-safari-chrome) | Global | ~~mobile Safari's own chrome eats the landscape budget~~ — closed, nothing to build |
 
 ---
 
@@ -69,14 +69,16 @@ a smaller model drifts on.
 6. ~~**Group F · The rail's sheet**, and the **`PD-TWO-RECORD-BUTTONS`** standalone — both small,
    both fine to fold into whichever session has room.~~ — done, `86a18fa` and `3ebaa8e`. Group A is
    next, and is still blocked on the decision in `PD-BLIND-ON-PROGRAMMER`.
-7. **Group A · Show chrome on the programmer** — last, and **blocked on a decision that is yours**,
-   not the implementer's. It is also the only one that could reverse a shipped session.
+7. **Group A · Show chrome on the programmer** — last, and the only one that could reverse a
+   shipped session. **Unblocked on the Blind half**: `PD-BLIND-ON-PROGRAMMER` is decided (the
+   third candidate — see the entry). `PD-SPEED-OVERLAY` is no longer part of the same piece of
+   work and still needs a decision of its own.
 
 ### The groups
 
 | Group | Items | Model | Effort | Why |
 |---|---|---|---|---|
-| **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | **One piece of work if the answer to both is an overlay** — Blind wants a way to be pressed here, the speed masters want to be summoned rather than resident, and a summoned show-chrome layer answers both at once. Solving them separately is how the programmer ends up with two bespoke summoning gestures. High because the rule in play (*one control, one place*) forbids the obvious fix and is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant. **Blocked**: pick one of the three candidates in `PD-BLIND-ON-PROGRAMMER` first. |
+| **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | ~~**One piece of work if the answer to both is an overlay**~~ — **they are two.** `PD-BLIND-ON-PROGRAMMER` is decided and the answer is *not* an overlay (Blind becomes a programmer fact), so the two items no longer share a gesture and `PD-SPEED-OVERLAY` stands alone, still needing its own decision. High is unchanged, and for the original reason: the rule in play (*one control, one place*) is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant — and this answer rewrites several of those statements at once, which is exactly when they drift apart. |
 | ~~**B · Touch and the phone**~~ **— done, `10b0c7c`** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
 | ~~**D · The cell editors**~~ **— done, `ec70f32`** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
@@ -89,7 +91,7 @@ a smaller model drifts on.
 |---|---|---|---|
 | ~~`PD-TEMPLATE-MULTIHEAD-CELL`~~ | — | — | ~~The one confirmed **bug**.~~ Done, `813eb54`, `10b4d90` — diagnosed, and the remaining work is `FU-LOOK-ELEMENT-ROWS` plus a parent-to-element fan-out on top of it. See the entry. |
 | ~~`PD-TWO-RECORD-BUTTONS`~~ **— done, `3ebaa8e`** | Sonnet 5 | medium | Starts as an **investigation** — establish which two buttons and whether they do the same thing — and only then is it a change. If they differ, the fix is naming; if they don't, one goes. The stray margin rides along with whichever wins. |
-| `PD-MOBILE-SAFARI-CHROME` | — | — | Not this list's work. App-wide, tracked by the operator separately. |
+| ~~`PD-MOBILE-SAFARI-CHROME`~~ **— closed** | — | — | ~~Not this list's work. App-wide, tracked by the operator separately.~~ Options considered, none useful; see the entry. |
 
 **Two rules carried over from the space plan's §9, because both earned their place here.** Run a
 one-tier-down review (`/code-review-lite` or `/verified-ship`) after Groups **A**, **B** and **C** at
@@ -124,7 +126,7 @@ refused by name in `lighting-react/src/routes/ProgrammerPage.tsx` and in `lighti
 Session 5's own note says the same thing from the other side: *"anyone reopening this should reopen
 the scope question, not the merge."*
 
-So there are three candidate answers, and picking one is this item:
+There were three candidate answers, and picking one was this item.
 
 - **The bar comes back whole**, and session 5 is reversed on this view. Costs the ~60px that took
   the landscape phone from 4 whole fixture rows to 6 — measured, not guessed.
@@ -138,6 +140,44 @@ So there are three candidate answers, and picking one is this item:
   the largest of the three and the only one that changes what Blind *is*.
 
 Do not reach for the fourth option the rule forbids. Whatever ships, one control, one place.
+
+**Decided, 2026-09-11: the third.** Blind becomes a programmer fact, toggled there and reported
+everywhere else. It is the only one of the three that *resolves* the item rather than working
+around it, and the model has been saying so all along:
+
+- **The wire already calls Blind the programmer's.** `blind` is a field on `ProgrammerSummary`,
+  server-owned and arriving on programmer frames; the write is `programmerSetBlind`; the fade is
+  read from the programmer's own fade store at press time. `ProgrammerIndicator`'s tooltip already
+  reads *"Blind — the programmer is gated out of the stage output"*. Only the **placement** was
+  inverted, never the concept.
+- **The seam is already cut.** `ShowBar` draws its tile only under `{onBlind && …}` and passes
+  `blindShownSeparately={onBlind != null}` to the indicator beside it. So `useShowBarProps` ceasing
+  to supply `onBlind` — **for every host, never per host** — takes the tile off all three bars and
+  turns the indicator into the reporter there, with `ShowBar`'s "do not reintroduce a per-host arm"
+  rule intact.
+- **The toggle returns to the programmer's action bar**, in the Stage zone it occupied before
+  session 5. The "never a second Blind toggle in the action bar" refusal dissolves on its own
+  terms: it would not be second. One control, one place — still true, in a different place.
+- **`ProgrammerIndicator` stays the reporter and stays not a toggle.** That rule is about it also
+  being the link to the programmer, which none of this changes.
+
+**What it costs, and the one thing to re-check at a desk.** The other three views lose the press —
+the exact inverse of the complaint that raised this. Accepted on the reasoning that Blind gates what
+the *programmer* puts on stage, so an operator on `/show` running cues has an empty programmer and
+has already left Blind. That reasoning is the risk; it is the thing a desk pass must confirm.
+
+**Consequence for Group A.** The group's premise was that it is one piece of work *if the answer to
+both is an overlay*. This answer is not an overlay, so [`PD-SPEED-OVERLAY`](#pd-speed-overlay) is
+now independent, and still needs an answer of its own.
+
+**What has to be rewritten, because it currently asserts the opposite** — this is the "rule stated
+in one place and not another" failure class, so all of it moves together or none of it does:
+`lighting-react/CLAUDE.md` §The show-editing lock (the *Blind lives in the bar* paragraph and the
+*Blind cannot be toggled on the programmer* bullet), `ProgrammerPage.tsx`'s note beside the header,
+`ShowBar.tsx`'s Blind comment and its `blind` / `onBlind` prop docs, `ProgrammerIndicator`'s
+docblock and the `blindShownSeparately` prop (whose last true caller goes), plus the two tests that
+pin today's arrangement — `ShowPage.test.tsx` asserting `onBlind` is a function, and
+`ProgrammerPage.test.tsx` pinning Blind's absence from the programmer.
 
 ### `PD-SPEED-OVERLAY`
 
@@ -508,7 +548,12 @@ still a true sentence.
 
 ## Global
 
-### `PD-MOBILE-SAFARI-CHROME`
+### ~~`PD-MOBILE-SAFARI-CHROME`~~
+
+**Closed, with nothing to build.** The options were considered and none of them is useful: the
+space is taken by the browser's own chrome, and the remedy is the one already in the operator's
+hands — Mobile Safari's setting to hide the tab bar. So this is user education rather than work,
+and it is recorded here rather than carried as a task.
 
 **Mobile Safari's own bar and tabs eat the landscape budget.** Raised as a caveat on check 4 (which
 passed on its own terms: six whole fixture rows) and again for landscape generally.
