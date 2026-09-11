@@ -729,7 +729,7 @@ show the shape it had.
 export and the editor, and then contributes nothing.
 
 **Three drop sites, not one** (corrected 2026-09-10, while diagnosing
-[`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)):
+[`PD-TEMPLATE-MULTIHEAD-CELL`](completed/programmer-desk-findings.md#pd-template-multihead-cell)):
 
 - `CueComposer.applyLayer` — `if (row.elementKey != null) continue`. The cue cook.
 - `LookRegistry.expand`, **twice** — its docblock says "whole-fixture rows" outright. This is the
@@ -749,7 +749,7 @@ effects* do have an element path (`elementMode` / `elementFilter`), so the vocab
 the static-row half that was never wired. `CueComposer`'s own comment claimed the effects path
 covered these rows too; it did not, and it has been corrected.
 
-**Prerequisite for the fan-out [`PD-TEMPLATE-MULTIHEAD-CELL`](programmer-desk-findings.md#pd-template-multihead-cell)
+**Prerequisite for the fan-out [`PD-TEMPLATE-MULTIHEAD-CELL`](completed/programmer-desk-findings.md#pd-template-multihead-cell)
 leaves behind** — that triage item is closed, and what it did not fix needs everything here *plus* a
 parent-to-element fan-out at resolution time. Containment, not equivalence: plan the two together,
 ship this one first — "a Look row on one pixel of Bar 1 composes" is a complete, desk-checkable

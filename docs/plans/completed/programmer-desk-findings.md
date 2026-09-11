@@ -1,15 +1,29 @@
 # Programmer — desk findings, 2026-09-10
 
+> **Document status: RETIRED 2026-09-11 — all seventeen findings closed.** Sixteen were built and
+> one ([`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome)) closed with nothing to build. The
+> commits, in the order the groups were taken: `813eb54` / `10b4d90`, `7b33420`, `fe36ee6`,
+> `10b0c7c`, `ec70f32`, `86a18fa` / `3ebaa8e`, `a46fe1e` / `80714da`. The single successor is
+> [`FU-LOOK-ELEMENT-ROWS`](../followups.md#fu-look-element-rows); the desk check is
+> `FU-MANUAL-DESK-FINDINGS`, recorded as validated in
+> [`manual-validation.md`](../manual-validation.md#validated). The triage rule below — that an item
+> graduates to `followups.md` or into a plan when this list is stepped through — is discharged, so
+> **nothing here is live work**. The entries survive as decision records, and two are worth reading
+> as such: [`PD-BLIND-ON-PROGRAMMER`](#pd-blind-on-programmer), which decided where Blind lives and
+> why it is one control rather than a tile per view, and
+> [`PD-MOBILE-SAFARI-CHROME`](#pd-mobile-safari-chrome), which is the record of a finding deliberately
+> not fixed here.
+
 Everything the programmer space plan's desk pass turned up, in one place, to be **stepped through
 in a session of its own**. It is a triage list, not a plan: each item is written so it can be
 picked up cold, but none has been designed, sized or sequenced yet.
 
-Raised during [`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space), run at the desk
-on 2026-09-10 against [`completed/programmer-space-plan.md`](completed/programmer-space-plan.md).
+Raised during [`FU-MANUAL-DESK-SPACE`](../manual-validation.md#fu-manual-desk-space), run at the desk
+on 2026-09-10 against [`programmer-space-plan.md`](programmer-space-plan.md).
 Checks 1–4 passed; check 5 failed on Blind. Six items come from the checks themselves; the rest are
 what the operator noticed while running them, which is the point of a desk pass.
 
-**These are not `FU-` items yet.** [`followups.md`](followups.md) is dormant work left behind by
+**These are not `FU-` items yet.** [`followups.md`](../followups.md) is dormant work left behind by
 *completed* plans, and each item there has had its shape decided. These have not. An item graduates
 to `followups.md` — or straight into a plan — when this list is stepped through; anything rejected
 stays here as its own decision record.
@@ -120,7 +134,7 @@ Programmer.** Blackout is separately confirmed as *not* important (check 5.2), a
 is confirmed deliberate and fine (check 3, check 5.4).
 
 **The constraint that makes this a design question rather than a change.**
-[`FU-MANUAL-DESK-SPACE`](manual-validation.md#fu-manual-desk-space) names the only sanctioned
+[`FU-MANUAL-DESK-SPACE`](../manual-validation.md#fu-manual-desk-space) names the only sanctioned
 remedy: *the bar returning to this view whole* — **never a second Blind toggle in the action bar**,
 which is the one-control-in-two-places split `useShowBarProps` was written to end, and which was
 refused by name in `lighting-react/src/routes/ProgrammerPage.tsx` and in `lighting-react/CLAUDE.md`
@@ -466,7 +480,7 @@ not, the naming does. The margin is cosmetic and rides along with whichever answ
 ### ~~`PD-TEMPLATE-MULTIHEAD-CELL`~~
 
 **Done** — `813eb54`, `10b4d90`. What remains is
-[`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows).
+[`FU-LOOK-ELEMENT-ROWS`](../followups.md#fu-look-element-rows).
 
 **A multi-head fixture's top-level colour cell takes no template**: applying one reports
 `0 heads set · 1 could not take it`.
@@ -534,7 +548,7 @@ by all three consumers. Its cost is where it stops being small: `Expanded.fixtur
 `Pending.fixture` widen from `Fixture` to `GroupableFixture`, and the cook then has to carry
 **element-keyed** contributions.
 
-**That is the same wall [`FU-LOOK-ELEMENT-ROWS`](followups.md#fu-look-element-rows) is behind**, and
+**That is the same wall [`FU-LOOK-ELEMENT-ROWS`](../followups.md#fu-look-element-rows) is behind**, and
 the cook says so in one line: `if (row.elementKey != null) continue`. Both items need the cook's
 accumulator to take an element, and neither can be finished without building it.
 
@@ -568,7 +582,7 @@ curl -s -b c.txt -X POST localhost:8413/api/rest/projects/6/templates/resolve \
 ### ~~`PD-FILTER-PLACEHOLDER-CLIP`~~
 
 **Done** — `7b33420`. The review found a pre-existing cause underneath it; the successor is
-[`FU-FE-FILTER-FLEX-SPLIT`](followups.md#fu-fe-filter-flex-split).
+[`FU-FE-FILTER-FLEX-SPLIT`](../followups.md#fu-fe-filter-flex-split).
 
 **`Filter fixtures by name, manufacturer, or type…` is clipped at every width**, and badly at narrow
 ones.

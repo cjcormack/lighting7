@@ -10,7 +10,7 @@
 > reopening this should reopen the scope question, not the merge"). The layout work this plan is
 > about is done and its §1 targets are met. Blind on the programmer, the touch gestures check 3
 > found, and the twelve things the operator noticed while running the checks are all in
-> [`programmer-desk-findings.md`](../programmer-desk-findings.md), to be stepped through in a
+> [`programmer-desk-findings.md`](programmer-desk-findings.md), to be stepped through in a
 > session of its own. Of §7's four follow-ups, **none was recorded**: the rail's per-desk width was
 > confirmed fine at the desk, and the other three were never triggered.
 >
@@ -539,7 +539,7 @@ carried check 4 at six and added a fifth check on the chrome session 5 removed.
    control, one place — the bar back whole, or an overlay, never a second toggle in the action bar.
 
 Every finding, including the twelve the operator raised while running the checks, is in
-[`programmer-desk-findings.md`](../programmer-desk-findings.md), to be stepped through in a session
+[`programmer-desk-findings.md`](programmer-desk-findings.md), to be stepped through in a session
 of its own.
 
 ---
