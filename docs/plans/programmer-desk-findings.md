@@ -65,7 +65,7 @@ a smaller model drifts on.
    — done, `fe36ee6`. Group B is next, and the row it re-lays out has stopped moving.
 4. ~~**Group B · Touch and the phone** — the biggest of the buildable groups.~~ — done, `10b0c7c`.
    Group D is next.
-5. **Group D · The cell editors.**
+5. ~~**Group D · The cell editors.**~~ — done, `ec70f32`
 6. **Group F · The rail's sheet**, and the **`PD-TWO-RECORD-BUTTONS`** standalone — both small,
    both fine to fold into whichever session has room.
 7. **Group A · Show chrome on the programmer** — last, and **blocked on a decision that is yours**,
@@ -78,7 +78,7 @@ a smaller model drifts on.
 | **A · Show chrome** | `PD-BLIND-ON-PROGRAMMER`, `PD-SPEED-OVERLAY` | Opus 5 | high | **One piece of work if the answer to both is an overlay** — Blind wants a way to be pressed here, the speed masters want to be summoned rather than resident, and a summoned show-chrome layer answers both at once. Solving them separately is how the programmer ends up with two bespoke summoning gestures. High because the rule in play (*one control, one place*) forbids the obvious fix and is refused **by name** in two files, so the failure mode is a plausible-looking change that breaks a documented invariant. **Blocked**: pick one of the three candidates in `PD-BLIND-ON-PROGRAMMER` first. |
 | ~~**B · Touch and the phone**~~ **— done, `10b0c7c`** | `PD-MARQUEE-TOUCH`, `PD-TRACKING-GESTURE-TOUCH`, `PD-SELECTION-BAR-DENSITY`, `PD-CLEAR-SELECTION-TOUCH` | Opus 5 | high | **They contend for two resources: the long-press gesture and the selection bar's width.** If the marquee claims long-press, the template chip cannot have it; if Deselect grows for touch, the chips shrink. Decide all four together or the third one undoes the first. High also because jsdom sees **no** touch behaviour at all — every one of these is verified in a browser on a real device or not at all, which is exactly how the marquee shipped with no `pointerType` check in the first place. |
 | ~~**C · The bar's geometry**~~ **— done, `fe36ee6`** | `PD-SELECTION-BAR-SHIFT`, `PD-POPUP-AFTER-DRAG` | Opus 5 | high | **Sequential, not merely related**: the popup anchors at the first selected cell, so it must open *after* whatever the bar does to the layout has settled, or it lands 34px off. The shift's shape is already decided at the desk, so the difficulty is not the design — it is that "is a drag in progress" must cross `ProgrammerBody`'s memo barrier at pointer rate, which is the hazard session 3 carved `RailGeometry` out for. Opus for that reason alone. |
-| **D · The cell editors** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
+| ~~**D · The cell editors**~~ **— done, `ec70f32`** | `PD-ENTER-FOCUS`, `PD-COLOUR-EDITOR-INPUTS` | Opus 5 | high | Both are *what happens when a cell editor opens*, in the same components with the same tests, so one browser pass covers both. High because the colour half touches the model's strongest rules: emitters come off the **colour descriptor**, and this side **never resolves an intent** — the client may serialise and parse only. A confident wrong answer here looks completely reasonable in review. |
 | ~~**E · Truncation**~~ **— done, `7b33420`** | `PD-FILTER-PLACEHOLDER-CLIP`, `PD-SOURCE-TRUNCATION` | Sonnet 5 | medium | One rule applied twice — **drop whole parts, don't ellipse a sentence** — which session 1 already wrote down and already implemented for the legend (`LEGEND_SHORT`, and the footer dropping items rather than slicing them). So there is a worked example in the tree to copy, and the only judgement is the drop *order*. Cheapest real improvement on the list. |
 | **F · The rail's sheet** | `PD-SHEET-ICONS-OPEN`, `PD-SHEET-CLOSE-ALIGN` | Sonnet 5 | medium | Same surface, same file, one pass. Medium rather than low for one reason: the close X may be the **shared `SheetContent` primitive**, and a fix in the wrong layer moves every sheet in the app. The judgement is which layer, not the change. |
 
@@ -313,7 +313,7 @@ showed the whole library for a press that could only toast, cost ~90px permanent
 four rows on a real rig. This item is about the band's *height being stable*, not its contents being
 present.
 
-### `PD-ENTER-FOCUS`
+### ~~`PD-ENTER-FOCUS`~~ — done, `ec70f32`
 
 **Enter opens the cell editor without focusing it, and won't close it.**
 
@@ -326,7 +326,7 @@ Check `cellKeyboardPermission` and the scope in play when reproducing: entry is 
 scope and on a focused template layer by design, and a refusal that *opens the popover anyway* would
 look exactly like this.
 
-### `PD-COLOUR-EDITOR-INPUTS`
+### ~~`PD-COLOUR-EDITOR-INPUTS`~~ — done, `ec70f32`
 
 **The colour editor asks for hex; it should offer a picker and per-emitter fields.**
 
