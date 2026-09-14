@@ -45,6 +45,19 @@ interface FixturesChangeListener {
     fun templateListChanged() {}
 
     /**
+     * A template was **pressed** — applied from any of the four doors — and now carries
+     * [lastPressedAt] (ISO-8601).
+     *
+     * Separate from [templateListChanged] because the two cost different things: that one is a CRUD
+     * signal whose client bridge drops the template, cue and cue-list caches, and a press happens
+     * at busking rate. This one carries the whole of what moved, so a client patches rather than
+     * refetches — the same argument [cuesRecomposed] makes for being keyed.
+     *
+     * Not fired for a toggle *off*: a release is not a press. See `TemplatePressLog`.
+     */
+    fun templatePressed(templateId: Int, lastPressedAt: String) {}
+
+    /**
      * A Look or template contents edit changed what [cueIds] compose to.
      *
      * The *contents* counterpart to [lookListChanged] / [templateListChanged], and deliberately
@@ -366,6 +379,12 @@ class Fixtures {
     fun templateListChanged() {
         changeListeners.forEach {
             it.templateListChanged()
+        }
+    }
+
+    fun templatePressed(templateId: Int, lastPressedAt: String) {
+        changeListeners.forEach {
+            it.templatePressed(templateId, lastPressedAt)
         }
     }
 

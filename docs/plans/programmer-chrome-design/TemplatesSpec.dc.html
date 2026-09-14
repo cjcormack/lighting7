@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); } a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; color: oklch(0.985 0 0); background: oklch(0.11 0.005 286); box-sizing: border-box; overflow: hidden; position: relative; }
+    .app *, .app *::before, .app *::after { box-sizing: border-box; }
+  </style>
+</helmet>
+<div class="app" style="width:760px; height:900px; padding:28px 32px; display:flex; flex-direction:column; gap:18px;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <span style="font-size:20px; font-weight:700;">Templates on the programmer — the rules</span>
+    <span style="font-size:12px; color:oklch(0.705 0.015 286.067);">A scroller of chips was sized for six templates; a show has sixty. The row keeps the ones you reach for, and one button opens the rest as a searchable pad grid.</span>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">Recents on the row, the library behind one button</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">Row C keeps a strip of chips, but they are the last ones pressed for the selected family on this desk — most recent first, up to eight, persisted per desk and per family. `All · n` sits after them at every width and opens the picker. `New` stays on the row: it is the one gesture that needs no library.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">What the row sheds to make room</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">Below 800px of row B/C the fixture count and Locate / Highlight fold (both are on the busk target band; the fixture count is on the cell count's hover). That is what gives an iPad portrait two recent chips. Below 600 the strip is not drawn: the phone reaches the library through the button alone, and Recent is the sheet's first section.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">The picker is a pad grid, not a list</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">Same pad as the busk page — swatch, name, one line of detail, the presence ring when a layer already tracks it. `repeat(auto-fill, minmax(110px, 1fr))`, so five columns at 640, four at 560, three on a phone. Sections: Recent · All A–Z · Per fixture · Effects, the same value-then-effect split the strip makes.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">Search first</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">The search field is focused on open; typing filters every section. Scope is the selection's: cells fix the family, and the header says which and for how many; a rows-only selection shows the family segments instead (capability-only, as the strip filters today). Templates the selection cannot take are not drawn — the footer says how many of the library fit.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">Two gestures, unchanged</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">A pad press is the chip press: click sets literals, hold or ⌥click adds a layer that tracks the template. A press does not close the picker — auditioning three colours in a row is the normal case — so it closes on Escape, an outside press, or the X. Every press also moves that template to the front of Recent.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">Three forms, from the cell editor</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">A popover anchored under `All` on a desk and an iPad (640×540, or 560×520 where the column is narrower); a bottom sheet at 80% on an upright phone; a right-hand sheet where the viewport is short. Same queries `CellEditorSurface` already makes (`max-width: 639px`, `max-height: 500px`), so the two panels never disagree about which form a screen gets.</p></div><div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">Where it reuses what exists</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:oklch(0.705 0.015 286.067);">The pad is `BuskPad`'s face and presence class; the sections are `TemplateStrip`'s offerability (family, emitters, generic-vs-per-fixture); the forms are `CellEditorSurface`'s. New pieces: a per-desk recents store keyed by family, the picker body, and the `All · n` trigger.</p></div>
+</div>
+</x-dc>
+</body>
+</html>

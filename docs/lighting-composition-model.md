@@ -344,6 +344,44 @@ positional colour list either — and now nothing does, because that grammar is 
 parameter names a colour template rather than indexing a list, so a template *is* the named colour
 instead of being one more scope that holds several.
 
+### A press is recorded, so the desk knows what you reach for
+
+`DaoTemplates.last_pressed_at_ms` is stamped on every press that **applies** a template, and the
+programmer's row of template chips is "the templates that fit the selection and have a stamp,
+newest first, up to eight". One nullable column and no second table: the family is already derived
+from the rows, so a list filtered by family is a history filtered by family; a delete takes the
+stamp with it; and nothing needs sweeping.
+
+**Four doors, one recorder** — `routes/templatePress.kt`'s `TemplatePressLog.record`. They are four
+because the gestures genuinely differ, and they share a recorder because "was that a press?" must
+not get four answers:
+
+1. `applyTemplateToProgrammer` — the chip's click, both the value and the effect arm.
+2. The **toggle-on** arm of `POST /templates/{id}/toggle` — ⌥click, or a hold on a touchscreen.
+3. `BuskPressService.apply`, for a template pad that ended **on**.
+4. `SurfaceActions.pressTemplate`, from a MIDI button.
+
+Two rules run through all four. **A release is not a press**: both toggle doors stamp only on the
+arm that puts the layer on, because what you reached for is not undone by putting it down. And **a
+refusal is not a press**: a generic template pressed with nothing selected, a template that is not
+this project's, and a click that reached no head all leave the stamp where it was — the last of
+those being the one door that cannot say so with a status code, since it answers 200 with
+`written = 0` and a skip per head.
+
+The frame is **`templatePressed { templateId, lastPressedAt }`**, and it is keyed rather than a
+reuse of `templateListChanged` for `cuesRecomposed`'s reason: that signal's client bridge drops the
+`TemplateList`, `Cue` and `CueList` caches, and a press happens at busking rate. This one carries
+the whole of what moved, so a client patches its cached list and makes no request at all. It is
+fired to **every** socket including the acting one, which is what makes the server's stamp the value
+every client ends up holding — two clients reading their own clocks would order a burst of presses
+differently from each other and from the next refetch. Flat rather than dotted, against the "new
+messages take the dotted form" rule in `docs/websocket-engineering.md`, because the failure that
+rule prevents is a *mixed* family and `templateListChanged` beside it is flat.
+
+The column is deliberately **absent from the sync export** (`TemplateJson` names every field it
+carries and this is not one): a desk's press history is not show content, and carrying it would hand
+a cloned project someone else's habits.
+
 ### A press is per target
 
 **A press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press

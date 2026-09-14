@@ -253,7 +253,23 @@ function rowB({ mode, gw, vw, folded = false, leading = null, short = false }) {
 function chip({ swatch, name, pct }) {
   return `<span style="display:inline-flex; align-items:center; gap:6px; height:${SYS.nested}px; padding:0 8px; border-radius:6px; border:1px solid ${T.border}; background:${T.card}; font-size:11.5px; white-space:nowrap; flex:0 0 auto;">${swatch ? `<span style="width:12px; height:12px; border-radius:3px; background:${swatch}; border:1px solid oklch(0.274 0.006 286.033 / 0.60);"></span>` : ''}${pct ? `<span style="font-family:ui-monospace,Menlo,monospace; font-size:10px; color:${T.mfg};">${pct}</span>` : ''}<span>${name}</span></span>`
 }
-function rowC({ mode, gw, vw }) {
+// Templates on row C, the recommended direction: recents on the row, a picker for the rest.
+//   - `All · n` opens the picker at every width; the recents scroller is drawn only from 600 up.
+//   - Below 800 the fixture count and Locate / Highlight fold (they are on the busk target band),
+//     which is what buys an iPad portrait its two recent chips.
+const RECENT = [
+  { swatch: 'oklch(0.75 0.16 60)', name: 'Warm wash' },
+  { swatch: 'oklch(0.72 0.2 145)', name: 'Green' },
+  { swatch: 'oklch(0.8 0.17 80)', name: 'Amber' },
+  { swatch: 'oklch(0.55 0.2 300)', name: 'UV blue' },
+  { swatch: 'oklch(0.7 0.19 20)', name: 'Deep red' },
+  { swatch: 'oklch(0.85 0.05 80)', name: 'CTO' },
+]
+function allButton({ count, open = false }) {
+  return `<span style="display:inline-flex; align-items:center; gap:6px; height:${SYS.nested}px; padding:0 8px; border-radius:6px; border:1px solid ${open ? T.primary : T.border}; background:${open ? 'oklch(0.623 0.214 259.815 / 0.15)' : 'oklch(0.274 0.006 286.033 / 0.30)'}; font-size:12px; font-weight:500; white-space:nowrap; flex:0 0 auto;">${ico('grid', 14)}All${countBadge(count)}</span>`
+}
+function rowC({ mode, gw, vw, templates = null }) {
+  if (templates) return rowCTemplates({ mode, gw, vw, ...templates })
   if (mode === 'empty') {
     return `<div style="height:${SYS.row}px; flex:0 0 auto; display:flex; align-items:center; gap:${SYS.gap}px; padding:0 ${SYS.gutter}px; border-bottom:1px solid ${T.border}; color:${T.mfg};">${ico('marquee', 14, 'opacity:0.6')}<span style="font-size:12px;">Nothing selected</span></div>`
   }
@@ -274,9 +290,74 @@ function rowC({ mode, gw, vw }) {
   return `<div style="height:${SYS.row}px; flex:0 0 auto; display:flex; align-items:center; gap:${SYS.gap}px; padding:0 ${SYS.gutter}px; border-bottom:1px solid ${T.border}; background:oklch(0.985 0 0 / 0.05);">${counts}${strip}${toolbar}</div>`
 }
 
+function rowCTemplates({ gw, vw, recents, count = 84, open = false }) {
+  const phone = gw < 600
+  const mid = gw < 800
+  const words = vw >= 640 && gw >= 1100
+  const counts = `${ico('marquee', 14)}${mid ? '' : `<span style="font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap;">4 fixtures</span><span style="color:oklch(0.705 0.015 286.067 / 0.50);">·</span>`}<span style="font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; white-space:nowrap;">4 cells</span>${phone ? '' : pill('Colour')}`
+  const chips = phone ? '' : `<div style="display:flex; align-items:center; gap:6px; flex:1 1 0; min-width:0; overflow:hidden; -webkit-mask-image:linear-gradient(to right, black calc(100% - 24px), transparent); mask-image:linear-gradient(to right, black calc(100% - 24px), transparent);">${RECENT.slice(0, recents).map(chip).join('')}</div>`
+  const strip = `${divider()}${chips}<span id="all-anchor" style="display:inline-flex; flex:0 0 auto;">${allButton({ count, open })}</span>${btn({ icon: ico('plus', 14), label: 'New', h: SYS.nested, extra: 'border-style:dashed; background:transparent;' })}`
+  const toolbar = `<div style="display:flex; align-items:center; gap:${vw >= 640 ? 8 : 6}px; flex:0 0 auto; margin-left:${phone ? 'auto' : '0'};">
+    ${gw >= 1100 ? `<span style="font-size:12px; color:${T.mfg}; font-variant-numeric:tabular-nums;">4${vw >= 640 ? ' selected' : ''}</span>` : ''}
+    ${btn({ icon: ico('pencil', 14), label: 'Set', word: words })}${btn({ icon: ico('backspace', 14), label: 'Clear', word: words })}
+    ${phone ? '' : btn({ icon: ico('fan', 14), label: 'Fan', word: words })}
+    ${mid ? '' : btn({ icon: ico('crosshair', 14), label: 'Locate', word: words })}${mid ? '' : btn({ icon: ico('flashlight', 14), label: 'Highlight', word: words })}
+    ${btn({ icon: ico('x', 14), label: 'Deselect', variant: 'ghost', word: vw >= 640 })}
+  </div>`
+  return `<div style="height:${SYS.row}px; flex:0 0 auto; display:flex; align-items:center; gap:${SYS.gap}px; padding:0 ${SYS.gutter}px; border-bottom:1px solid ${T.border}; background:oklch(0.985 0 0 / 0.05);">${counts}${strip}${toolbar}</div>`
+}
+
+// ---- the picker: a searchable pad grid, in the cell editor's three forms -------------------
+const LIB = [
+  ['Amber', 'oklch(0.8 0.17 80)'], ['Blue', 'oklch(0.55 0.22 262)'], ['CTB', 'oklch(0.9 0.04 240)'], ['CTO', 'oklch(0.85 0.05 80)'],
+  ['Congo', 'oklch(0.4 0.2 300)'], ['Cyan', 'oklch(0.8 0.15 200)'], ['Deep red', 'oklch(0.55 0.22 25)'], ['Green', 'oklch(0.72 0.2 145)'],
+  ['Lavender', 'oklch(0.75 0.12 300)'], ['Magenta', 'oklch(0.65 0.25 330)'], ['Mint', 'oklch(0.85 0.12 160)'], ['Orange', 'oklch(0.72 0.19 50)'],
+  ['Pink', 'oklch(0.8 0.15 350)'], ['Red', 'oklch(0.62 0.24 25)'], ['Rose', 'oklch(0.7 0.18 10)'], ['Sky', 'oklch(0.75 0.13 230)'],
+  ['Steel', 'oklch(0.7 0.04 240)'], ['Sunset', 'oklch(0.7 0.19 40)'], ['Teal', 'oklch(0.65 0.13 190)'], ['UV blue', 'oklch(0.55 0.2 300)'],
+  ['Warm wash', 'oklch(0.75 0.16 60)'], ['White', 'oklch(0.97 0.01 90)'],
+]
+const PER_FIXTURE = ['Movers · pinks', 'Wash split']
+const EFFECTS = ['Colour pulse', 'Rainbow chase', 'Strobe white']
+function pad({ name, swatch, detail, effect = false, presence = 'none' }) {
+  const shell = presence === 'all' ? `border-color:${T.primary}; background:oklch(0.623 0.214 259.815 / 0.20); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.50);` : presence === 'some' ? `border-color:oklch(0.623 0.214 259.815 / 0.40); background:oklch(0.623 0.214 259.815 / 0.10);` : `border-color:${T.border}; background:${T.card};`
+  return `<div style="position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; min-height:56px; padding:8px; border-radius:8px; border:1px solid; ${shell}">
+    <span style="display:flex; align-items:center; gap:6px; min-width:0;">${effect ? ico('wave', 12, `color:${T.mfg}`) : swatch ? `<span style="width:12px; height:12px; border-radius:4px; background:${swatch}; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); flex:0 0 auto;"></span>` : ''}<span style="font-size:14px; font-weight:500; line-height:1.2; color:${presence === 'none' ? T.fg : T.primary}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span></span>
+    <span style="margin-top:2px; font-size:10px; line-height:1.2; color:${T.mfg}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${detail}</span>
+    ${presence !== 'none' ? `<span style="position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:999px; background:${presence === 'all' ? T.primary : 'oklch(0.623 0.214 259.815 / 0.50)'};"></span>` : ''}
+  </div>`
+}
+function padGrid(items, cols) {
+  return `<div style="display:grid; grid-template-columns:repeat(${cols}, minmax(0, 1fr)); gap:8px;">${items.join('')}</div>`
+}
+function picker({ w, h, form, cols, count = 84, fit = 71, gridRows = 99 }) {
+  const search = `<div style="position:relative; flex:1 1 0; min-width:0; height:${SYS.control}px; display:flex; align-items:center; border-radius:6px; border:1px solid ${T.primary}; box-shadow:0 0 0 3px oklch(0.623 0.214 259.815 / 0.30); background:oklch(0.274 0.006 286.033 / 0.30); padding-left:36px; font-size:14px; color:${T.mfg}; white-space:nowrap; overflow:hidden;">${ico('search', 16, `position:absolute; left:12px; color:${T.mfg}`)}Search ${fit} colour templates…<span style="margin-left:1px; width:1px; height:16px; background:${T.fg};"></span></div>`
+  const scope = `<span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:${T.mfg}; white-space:nowrap; flex:0 0 auto;">${pill('Colour')}<span>for 4 cells</span></span>`
+  const isSheet = form !== 'popover'
+  const header = isSheet
+    ? `<div style="display:flex; align-items:center; gap:8px; height:44px; padding:0 ${SYS.gutter}px; border-bottom:1px solid ${T.border}; flex:0 0 auto;">${form === 'sheet-bottom' ? `<span style="position:absolute; top:6px; left:50%; width:36px; height:4px; margin-left:-18px; border-radius:999px; background:${T.muted};"></span>` : ''}<span style="font-size:14px; font-weight:600;">Templates</span>${scope}<span style="flex:1"></span><span style="width:32px; height:32px; display:flex; align-items:center; justify-content:center; color:${T.mfg};">${ico('x', 16)}</span></div><div style="display:flex; align-items:center; gap:8px; padding:8px ${SYS.gutter}px 4px; flex:0 0 auto;">${search}</div>`
+    : `<div style="display:flex; align-items:center; gap:8px; padding:${SYS.gutter}px ${SYS.gutter}px 4px; flex:0 0 auto;">${search}${scope}</div>`
+  const section = (t, extra = '') => `<div style="display:flex; align-items:center; gap:8px; padding:10px 2px 6px;">${zlab(t)}<span style="font-size:10px; color:${T.mfg};">${extra}</span></div>`
+  const recent = padGrid(RECENT.slice(0, Math.min(cols, 4)).map((r, i) => pad({ name: r.name, swatch: r.swatch, detail: 'Colour', presence: i === 0 ? 'all' : 'none' })), cols)
+  const all = LIB.slice(0, gridRows * cols).map(([n, c]) => pad({ name: n, swatch: c, detail: 'Colour', presence: n === 'Warm wash' ? 'all' : 'none' }))
+  const per = PER_FIXTURE.map((n) => pad({ name: n, detail: '8 heads' }))
+  const fx = EFFECTS.map((n) => pad({ name: n, effect: true, detail: 'Colour · ½' }))
+  const body = `<div style="flex:1 1 0; min-height:0; overflow:hidden; padding:0 ${SYS.gutter}px; -webkit-mask-image:linear-gradient(to bottom, black calc(100% - 24px), transparent); mask-image:linear-gradient(to bottom, black calc(100% - 24px), transparent);">
+    ${section('Recent', 'what you pressed last, for this family')}${recent}
+    ${section('All', 'A–Z')}${padGrid(all, cols)}
+    ${section('Per fixture', 'name their own heads')}${padGrid(per, cols)}
+    ${section('Effects', 'one running instance each')}${padGrid(fx, cols)}
+  </div>`
+  const footer = `<div style="display:flex; align-items:center; gap:8px; height:44px; padding:0 ${SYS.gutter}px; border-top:1px solid ${T.border}; flex:0 0 auto; font-size:11px; color:${T.mfg}; white-space:nowrap; overflow:hidden;">
+    ${form === 'popover' ? `<span style="overflow:hidden; text-overflow:ellipsis; min-width:0;">Click sets values · hold or ⌥click adds a layer that tracks it</span>` : ''}<span style="flex:1"></span><span style="flex:0 0 auto;">${fit} of ${count} fit the selection</span>${btn({ icon: ico('plus', 14), label: form === 'sheet-bottom' ? 'New' : 'New from selection', h: SYS.nested, extra: 'border-style:dashed; background:transparent;' })}
+  </div>`
+  const shape = form === 'popover' ? `border-radius:10px; border:1px solid ${T.border}; box-shadow:0 12px 40px rgba(0,0,0,0.6);` : form === 'sheet-bottom' ? `border-radius:12px 12px 0 0; border-top:1px solid ${T.border}; box-shadow:0 -12px 40px rgba(0,0,0,0.6);` : `border-left:1px solid ${T.border}; box-shadow:-12px 0 40px rgba(0,0,0,0.6);`
+  return `<div style="position:relative; width:${w}px; height:${h}px; display:flex; flex-direction:column; background:${T.card}; color:${T.fg}; overflow:hidden; ${shape}">${header}${body}${footer}</div>`
+}
+
 // ---- the grid: column header and two rows -----------------------------------------------------
 const COLS = ['Dimmer', 'Colour', 'Position', 'Gobo', 'Zoom', 'Strobe', 'Focus', 'Iris', 'Prism', 'Frost']
-function grid({ gw, phone, mode }) {
+const MORE_ROWS = ['Single-channel dimmer', 'Single-channel dimmer 2', 'LED Lightbar 12 Pixel 2', 'Fusion 100 Spot MKII', 'MAC 250 Entour', 'Freedom Par Hex 3', 'Hex Bar 6', 'Fusion 100 Spot MKII 2', 'LED Lightbar 12 Pixel 3', 'Single-channel dimmer 3', 'Freedom Par Hex 4', 'Hex Bar 6 2']
+function grid({ gw, phone, mode, rows = 2 }) {
   const nameW = phone ? Math.min(Math.round(gw * 0.45), 260) : 260
   const avail = gw - nameW
   const n = phone ? Math.max(2, Math.ceil(avail / 130)) : Math.min(COLS.length, Math.floor(avail / 96))
@@ -295,7 +376,8 @@ function grid({ gw, phone, mode }) {
   </div>`
   const r1 = row('Freedom Par Hex', (busk ? bar(50, 'you') : edit ? bar(80, 'cue') : dash) + (edit ? swatchCell('oklch(0.75 0.16 60)', 'you', edit) : dash) + dash.repeat(Math.max(0, n - 2)), busk || edit)
   const r2 = row('LED Lightbar 12 Pixel', (busk ? bar(50, 'you') : dash) + (edit ? swatchCell('oklch(0.75 0.16 60)', 'you', edit) : swatchCell('oklch(0.55 0.25 320)', 'mixed', false)) + dash.repeat(Math.max(0, n - 2)), busk || edit)
-  return hdr + r1 + r2
+  const more = MORE_ROWS.slice(0, Math.max(0, rows - 2)).map((nm) => row(nm, dash.repeat(n), false)).join('')
+  return hdr + r1 + r2 + more
 }
 function footer({ gw, mode }) {
   const sel = mode === 'empty' ? '' : ` · ${mode === 'busking' ? 3 : 4} selected`
@@ -361,24 +443,25 @@ const MODES = {
   editing: { title: 'Editing a cue', sub: 'Q4 included with 3 changes · four colour cells selected' },
   layer: { title: 'A layer focused', sub: 'Scope on the Warm Wash layer · a live write, said out loud' },
 }
-function strip({ device, mode }) {
+function strip({ device, mode, templates = null, rows = 2, overlay = '' }) {
   const { vw, cw, gw, rail, short = false } = device
   const phone = vw < 640
   let column = ''
   const workspaceRows = (h) => (rail === 'docked' ? railDocked({ mode, height: h }) : rail === 'strip' ? railStrip({ mode, height: h }) : '')
-  const gridCol = (extra = '') => `<div style="display:flex; flex-direction:column; flex:1 1 0; min-width:0;">${extra}${rowC({ mode, gw, vw })}${grid({ gw, phone: vw < 640 || gw < 600, mode })}${gw >= 600 && !short ? footer({ gw, mode }) : ''}</div>`
+  const rowsH = 36 * rows
+  const gridCol = (extra = '') => `<div style="display:flex; flex-direction:column; flex:1 1 0; min-width:0;">${extra}${rowC({ mode, gw, vw, templates })}${grid({ gw, phone: vw < 640 || gw < 600, mode, rows })}${gw >= 600 && !short ? footer({ gw, mode }) : ''}</div>`
   if (short) {
     // folded arm: row A's two halves lead row B, on one 40px line
     const leading = sourceBox({ mode, cw: 420 }) + `<span style="width:1px; height:22px; background:${T.border}; flex:0 0 auto;"></span>` + verbs({ mode, cw: 420 })
-    const wsH = SYS.row + SYS.row + 30 + 72
+    const wsH = SYS.row + SYS.row + 30 + rowsH
     column = `${appHeader({ vw, cw })}${showHeader({ cw })}<div style="display:flex; flex:0 0 auto;">${gridCol(rowB({ mode, gw, vw, folded: true, leading, short: true }))}${workspaceRows(wsH)}</div>`
   } else {
-    const wsH = SYS.row + SYS.row + 30 + 72 + (gw >= 600 ? 22 : 0)
+    const wsH = SYS.row + SYS.row + 30 + rowsH + (gw >= 600 ? 22 : 0)
     column = `${appHeader({ vw, cw })}${showHeader({ cw })}${rowA({ mode, cw })}<div style="display:flex; flex:0 0 auto;">${gridCol(rowB({ mode, gw, vw }))}${workspaceRows(wsH)}</div>${rail === 'handle' ? railHandle({ mode }) : ''}`
   }
   const body = `<div style="display:flex; flex-direction:column; flex:1 1 0; min-width:0; background:${T.bg};">${column}</div>`
-  const h = short ? 52 + SYS.header + SYS.row + SYS.row + 30 + 72 : 52 + SYS.header + SYS.row + SYS.row + SYS.row + 30 + 72 + (gw >= 600 ? 22 : 0) + (rail === 'handle' ? 44 : 0)
-  return { html: `<div style="display:flex; width:${vw}px; height:${h}px; overflow:hidden; border:1px solid ${T.border};">${vw >= 768 ? sidebar(h) : ''}${body}</div>`, h }
+  const h = short ? 52 + SYS.header + SYS.row + SYS.row + 30 + rowsH : 52 + SYS.header + SYS.row + SYS.row + SYS.row + 30 + rowsH + (gw >= 600 ? 22 : 0) + (rail === 'handle' ? 44 : 0)
+  return { html: `<div style="position:relative; display:flex; width:${vw}px; height:${h}px; overflow:hidden; border:1px solid ${T.border};">${vw >= 768 ? sidebar(h) : ''}${body}${overlay}</div>`, h }
 }
 
 // ---- artboard wrappers ---------------------------------------------------------------------------
@@ -506,6 +589,75 @@ ${TAIL}`
 }
 boards.Spec = { ...spec(), title: 'The system · today → proposed' }
 
+// ---- page 2: templates on row C, and the picker ----------------------------------------------
+const TMODES = {
+  closed: { title: 'Row C, closed', sub: 'Recents for the family on the row · All · n opens the picker · New stays' },
+  open: { title: 'Picker open', sub: 'Search, then Recent · All A–Z · Per fixture · Effects as pads · a press keeps it open' },
+}
+function tLabel(key) {
+  const m = TMODES[key]
+  return `<div style="display:flex; align-items:baseline; gap:10px; padding:0 2px 8px;"><span style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:${T.fg};">${m.title}</span><span style="font-size:11px; color:${T.mfg};">${m.sub}</span></div>`
+}
+function scrim(html, extra = '') {
+  return `<div style="position:absolute; inset:0; background:rgba(0,0,0,0.45); ${extra}">${html}</div>`
+}
+function templateBoard(file, device, { recents, anchorLeft, popW, popH, cols, rows }) {
+  const closed = strip({ device, mode: 'editing', templates: { recents }, rows })
+  const rowCTop = 52 + SYS.header + SYS.row + SYS.row + SYS.row
+  const contentLeft = device.vw >= 768 ? 64 : 0
+  const gridRight = contentLeft + device.gw
+  let overlay = ''
+  if (device.short) {
+    // the side sheet: the whole height, right-hand, 360 wide
+    overlay = `<div style="position:absolute; top:0; right:0; height:100%;">${picker({ w: 360, h: closed.h, form: 'sheet-side', cols, gridRows: 99 })}</div>`
+  } else if (device.vw < 640) {
+    overlay = scrim(`<div style="position:absolute; left:0; right:0; bottom:0;">${picker({ w: device.vw, h: Math.round(closed.h * 0.8), form: 'sheet-bottom', cols })}</div>`)
+  } else {
+    const left = Math.min(anchorLeft, gridRight - popW - 8)
+    overlay = `<div style="position:absolute; top:${rowCTop + 4}px; left:${left}px;">${picker({ w: popW, h: popH, form: 'popover', cols })}</div>`
+  }
+  const open = strip({ device, mode: 'editing', templates: { recents, open: true }, rows, overlay })
+  const parts = [`<div style="display:flex; flex-direction:column;">${tLabel('closed')}${closed.html}</div>`, `<div style="display:flex; flex-direction:column;">${tLabel('open')}${open.html}</div>`]
+  const total = 24 * 2 + (26 + closed.h) + 40 + (26 + open.h)
+  const w = device.vw + 48
+  writeFileSync(`${file}.dc.html`, `${HEAD}
+<div class="app" style="width:${w}px; height:${total}px; padding:24px; display:flex; flex-direction:column; gap:40px;">
+${parts.join('\n')}
+</div>
+${TAIL}`)
+  boards[file] = { w, h: total, title: `${device.name} · templates`, page: 'page-2' }
+}
+templateBoard('TemplatesDesktop', DEVICES.Main, { recents: 3, anchorLeft: 64 + 12 + 230 + 17 + 3 * 100, popW: 640, popH: 540, cols: 5, rows: 12 })
+templateBoard('TemplatesTabletLandscape', DEVICES.TabletLandscape, { recents: 3, anchorLeft: 64 + 12 + 230 + 17 + 3 * 100, popW: 640, popH: 540, cols: 5, rows: 12 })
+templateBoard('TemplatesTabletPortrait', DEVICES.TabletPortrait, { recents: 2, anchorLeft: 64 + 12 + 150 + 17 + 2 * 100, popW: 560, popH: 520, cols: 4, rows: 12 })
+templateBoard('TemplatesPhone', { ...DEVICES.Phone, name: 'iPhone · 393×852' }, { recents: 0, cols: 3, rows: 12 })
+templateBoard('TemplatesPhoneLandscape', { ...DEVICES.PhoneLandscape }, { recents: 2, cols: 3, rows: 4 })
+
+// the rules for page 2
+{
+  const rules = [
+    ['Recents on the row, the library behind one button', 'Row C keeps a strip of chips, but they are the last ones pressed for the selected family on this desk — most recent first, up to eight, persisted per desk and per family. `All · n` sits after them at every width and opens the picker. `New` stays on the row: it is the one gesture that needs no library.'],
+    ['What the row sheds to make room', 'Below 800px of row B/C the fixture count and Locate / Highlight fold (both are on the busk target band; the fixture count is on the cell count\'s hover). That is what gives an iPad portrait two recent chips. Below 600 the strip is not drawn: the phone reaches the library through the button alone, and Recent is the sheet\'s first section.'],
+    ['The picker is a pad grid, not a list', 'Same pad as the busk page — swatch, name, one line of detail, the presence ring when a layer already tracks it. `repeat(auto-fill, minmax(110px, 1fr))`, so five columns at 640, four at 560, three on a phone. Sections: Recent · All A–Z · Per fixture · Effects, the same value-then-effect split the strip makes.'],
+    ['Search first', 'The search field is focused on open; typing filters every section. Scope is the selection\'s: cells fix the family, and the header says which and for how many; a rows-only selection shows the family segments instead (capability-only, as the strip filters today). Templates the selection cannot take are not drawn — the footer says how many of the library fit.'],
+    ['Two gestures, unchanged', 'A pad press is the chip press: click sets literals, hold or ⌥click adds a layer that tracks the template. A press does not close the picker — auditioning three colours in a row is the normal case — so it closes on Escape, an outside press, or the X. Every press also moves that template to the front of Recent.'],
+    ['Three forms, from the cell editor', 'A popover anchored under `All` on a desk and an iPad (640×540, or 560×520 where the column is narrower); a bottom sheet at 80% on an upright phone; a right-hand sheet where the viewport is short. Same queries `CellEditorSurface` already makes (`max-width: 639px`, `max-height: 500px`), so the two panels never disagree about which form a screen gets.'],
+    ['Where it reuses what exists', 'The pad is `BuskPad`\'s face and presence class; the sections are `TemplateStrip`\'s offerability (family, emitters, generic-vs-per-fixture); the forms are `CellEditorSurface`\'s. New pieces: a per-desk recents store keyed by family, the picker body, and the `All · n` trigger.'],
+  ]
+  const rulesHtml = rules.map(([h, p]) => `<div style="display:flex; flex-direction:column; gap:3px;"><span style="font-size:12px; font-weight:700;">${h}</span><p style="margin:0; font-size:11.5px; line-height:1.5; color:${T.mfg};">${p}</p></div>`).join('')
+  const html = `${HEAD}
+<div class="app" style="width:760px; height:900px; padding:28px 32px; display:flex; flex-direction:column; gap:18px;">
+  <div style="display:flex; flex-direction:column; gap:4px;">
+    <span style="font-size:20px; font-weight:700;">Templates on the programmer — the rules</span>
+    <span style="font-size:12px; color:${T.mfg};">A scroller of chips was sized for six templates; a show has sixty. The row keeps the ones you reach for, and one button opens the rest as a searchable pad grid.</span>
+  </div>
+  ${rulesHtml}
+</div>
+${TAIL}`
+  writeFileSync('TemplatesSpec.dc.html', html)
+  boards.TemplatesSpec = { w: 760, h: 900, title: 'Templates · the rules', page: 'page-2' }
+}
+
 // ---- canvas.json ----------------------------------------------------------------------------------
 const GAPX = 100, GAPY = 140
 const layout = [
@@ -516,11 +668,36 @@ let y2 = Math.max(boards.Spec.h, boards.Main.h) + GAPY
 layout.push(['TabletLandscape', 0, y2], ['TabletPortrait', boards.TabletLandscape.w + GAPX, y2])
 let y3 = y2 + Math.max(boards.TabletLandscape.h, boards.TabletPortrait.h) + GAPY
 layout.push(['Phone', 0, y3], ['PhoneLandscape', boards.Phone.w + GAPX, y3])
+const p2 = [
+  ['TemplatesSpec', 0, 0],
+  ['TemplatesDesktop', boards.TemplatesSpec.w + GAPX, 0],
+]
+let y2b = Math.max(boards.TemplatesSpec.h, boards.TemplatesDesktop.h) + GAPY
+p2.push(['TemplatesTabletLandscape', 0, y2b], ['TemplatesTabletPortrait', boards.TemplatesTabletLandscape.w + GAPX, y2b])
+let y3b = y2b + Math.max(boards.TemplatesTabletLandscape.h, boards.TemplatesTabletPortrait.h) + GAPY
+p2.push(['TemplatesPhone', 0, y3b], ['TemplatesPhoneLandscape', boards.TemplatesPhone.w + GAPX, y3b])
 const canvas = {
-  artboards: layout.map(([file, x, y]) => ({ file: `${file}.dc.html`, title: boards[file].title, x, y, w: boards[file].w, h: boards[file].h })),
+  pages: [
+    { id: 'page-1', name: 'Chrome' },
+    { id: 'page-2', name: 'Templates' },
+  ],
+  artboards: [
+    ...layout.map(([file, x, y]) => ({ file: `${file}.dc.html`, title: boards[file].title, page: 'page-1', x, y, w: boards[file].w, h: boards[file].h })),
+    ...p2.map(([file, x, y]) => ({ file: `${file}.dc.html`, title: boards[file].title, page: 'page-2', x, y, w: boards[file].w, h: boards[file].h })),
+  ],
   annotations: [
     {
+      id: 'templates-brief',
+      page: 'page-2',
+      x: 0,
+      y: -240,
+      w: 720,
+      text:
+        'Templates on the programmer — recents on the row, a picker for the rest.\n\nRow C shows the last-pressed templates for the selected family and an All · n button; the button opens a searchable pad grid (Recent · All · Per fixture · Effects) built from the busk pad, in the cell editor\'s three forms: a popover on a desk and an iPad, a bottom sheet on a phone, a side sheet where the viewport is short. A press sets values or, held / ⌥, adds a tracking layer, and leaves the picker open.\n\nEach board is the same colour selection twice: the row closed, then the picker open. The library drawn is 84 templates of which 71 fit the selection.',
+    },
+    {
       id: 'brief',
+      page: 'page-1',
       x: 0,
       y: -300,
       w: 720,
@@ -528,7 +705,7 @@ const canvas = {
         'Programmer chrome — a tidy-up, not a redesign.\n\nEvery row keeps its job and its controls; what changes is the spacing system: a 12px gutter on every row (the header included), 40px rows holding 32px controls so the inset is 4px everywhere, three control tiers by nesting (32 · 28 · 24, pills 20), the header at 48px at every height, and row B\'s filter as a field wherever the row is 360px or wider so the middle is never a hole.\n\nEach device artboard stacks the four operating modes: nothing loaded, busking, editing a cue, a layer focused. The Spec sheet has the measured today → proposed table.\n\nAssumed: static mockups; dark only (read at a desk); the app header is drawn as it is and left alone; Show, Prompt Book and Busk inherit the 48px header, since ShowHeader is shared.',
     },
   ],
-  launch: { view: 'canvas' },
+  launch: { view: 'canvas', page: 'page-2' },
 }
 writeFileSync('canvas.json', JSON.stringify(canvas, null, 2) + '\n')
 console.log(Object.entries(boards).map(([k, b]) => `${k} ${b.w}×${b.h}`).join('\n'))

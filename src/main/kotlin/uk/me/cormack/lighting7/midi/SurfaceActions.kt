@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.routes.familyOf
 import uk.me.cormack.lighting7.routes.isGenericTemplate
 import uk.me.cormack.lighting7.routes.LookTargetResolution
 import uk.me.cormack.lighting7.routes.resolveLookToggleTargets
+import uk.me.cormack.lighting7.routes.TemplatePressLog
 import uk.me.cormack.lighting7.routes.toggleSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.show.Fixtures
@@ -436,6 +437,15 @@ class DefaultSurfaceActions(
         }
         runCatching {
             state.show.programmerLayerStack.toggle(source = source, targets = targets, propertyMask = family)
+        }.onSuccess { outcome ->
+            // The hardware door of the press log — pressing from the desk's own buttons counts, or
+            // the programmer's recents row would disagree with the surface the operator is using.
+            // The **on** arm only: a release is not a press (`TemplatePressLog`). The two refusals
+            // above (no uuid / no such template, and a generic template with nothing selected) have
+            // already returned, and a `toggle` that threw lands in `onFailure`.
+            if (outcome.action == "applied") {
+                TemplatePressLog.record(state, projectId, source.id)
+            }
         }.onFailure { logger.warn("Surface pressTemplate failed: {}", it.message) }
     }
 

@@ -44,6 +44,7 @@ import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.TemplateEffectDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
+import java.time.Instant
 import java.util.UUID
 import uk.me.cormack.lighting7.state.State
 
@@ -355,6 +356,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
             }
             val outcome = applyTemplateToProgrammer(
                 state,
+                project.id.value,
                 snapshot,
                 request.targets.map { CueTargetDto(it.type, it.key) },
                 request.fadeMs ?: snapshot.fadeDurationMs ?: 0,
@@ -399,6 +401,11 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     targets = request.targets.map { CueTargetDto(it.type, it.key) },
                     propertyMask = derivedMask,
                 )
+                // The ⌥click / hold door of the press log — the **on** arm only. A second press
+                // takes the layer off, and a release is not a press (`TemplatePressLog`).
+                if (outcome.action == "applied") {
+                    TemplatePressLog.record(state, project.id.value, source.id)
+                }
                 call.respond(
                     ToggleTemplateResponse(outcome.action, outcome.effectCount, derivedMask, outcome.released),
                 )
@@ -490,6 +497,21 @@ internal data class TemplateDto(
      * no round trip per patch change.
      */
     val requiredEmitters: List<String> = emptyList(),
+    /**
+     * When this template was last **pressed** on this desk, as an ISO-8601 instant; null until it
+     * has been.
+     *
+     * The programmer's recent-chip row is "the offerable templates that have one, newest first",
+     * which is why this rides the list rather than having a route of its own: the family filter and
+     * the emitter filter the strip already applies *are* the per-family scoping, and a deleted
+     * template takes its history with it.
+     *
+     * A string rather than a number so it reads in a log and in a diff. **Not** a sortable string:
+     * `Instant.toString()` omits the fractional part altogether on an exact second, so a stamp at
+     * `…:34Z` compares *after* one at `…:34.500Z` — a client orders these by parsing them, never by
+     * comparing the text. See `DaoTemplates.lastPressedAtMs` for why the column is millis.
+     */
+    val lastPressedAt: String? = null,
     val rows: List<TemplateRowDto> = emptyList(),
     /** The one effect an effect template holds; null for a value template. */
     val effect: TemplateEffectDto? = null,
@@ -1226,6 +1248,7 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         isGeneric = isGenericTemplate(),
         kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
         requiredEmitters = requiredEmittersOf(),
+        lastPressedAt = lastPressedAtMs?.let { Instant.ofEpochMilli(it).toString() },
         rows = rowList.map { it.toDto() },
         effect = storedEffect?.toDto(registry),
         layerCount = resolvedUsage.layerCount,

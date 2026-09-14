@@ -46,16 +46,37 @@ private val logger = LoggerFactory.getLogger("templateApply")
  */
 internal fun applyTemplateToProgrammer(
     state: State,
+    projectId: Int,
     template: TemplateSnapshot,
     targets: List<CueTargetDto>,
     fadeMs: Long,
 ): ApplyTemplateResponse {
     // D1: a template holds a value *or* an effect, so the two arms are exclusive and this is the
-    // only place that has to know which. Ahead of the row loop rather than beside it, because the
-    // effect arm shares none of it — not the fixture expansion (it keeps group shape, see
-    // [applyEffectTemplateToProgrammer]), not the group hints, not the fade.
-    template.effect?.let { return applyEffectTemplateToProgrammer(state, template.name, it, targets) }
+    // only place that has to know which. The dispatch is here rather than inside the value arm
+    // because the effect arm shares none of it — not the fixture expansion (it keeps group shape,
+    // see [applyEffectTemplateToProgrammer]), not the group hints, not the fade.
+    val outcome = template.effect
+        ?.let { applyEffectTemplateToProgrammer(state, template.name, it, targets) }
+        ?: applyValueTemplateToProgrammer(state, template, targets, fadeMs)
 
+    // The click door of the press log. Gated on the press having *done* something, which is the
+    // "never on a refusal" rule applied to the one door that cannot refuse with a status code: a
+    // click onto heads that can take none of the rows returns 200 with `written = 0` and a skip per
+    // head, and putting that in an eight-slot recents row would fill it with templates this rig
+    // cannot use. Both arms are covered by one test, which is the point of dispatching above.
+    if (outcome.written > 0 || outcome.effectIds.isNotEmpty()) {
+        TemplatePressLog.record(state, projectId, template.templateId)
+    }
+    return outcome
+}
+
+/** The value arm of [applyTemplateToProgrammer]: resolve every row per head and write literals. */
+private fun applyValueTemplateToProgrammer(
+    state: State,
+    template: TemplateSnapshot,
+    targets: List<CueTargetDto>,
+    fadeMs: Long,
+): ApplyTemplateResponse {
     val fixtureKeys = expandTargetsToFixtureKeys(state, targets)
     if (fixtureKeys.isEmpty()) return ApplyTemplateResponse(0, emptyList())
 

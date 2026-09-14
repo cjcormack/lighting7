@@ -93,6 +93,7 @@ internal object BuskPressService {
         val ownUuid = (record as? PressRecord.Layer)?.source?.uuid
         val ownCue = (record as? PressRecord.Cue)?.cueId
         return PressPlan(
+            projectId = projectId,
             record = record,
             layerSiblings = siblings
                 .mapNotNullTo(HashSet()) { sibling ->
@@ -162,6 +163,12 @@ internal object BuskPressService {
                         releaseSiblings = plan.layerSiblings,
                     )
                     val stopped = if (outcome.action == "applied") stopCueSiblings() else 0
+                    // The busk-pad door of the press log. Templates only — a Look has no recents
+                    // row — and only on the arm that put it on, since a release is not a press
+                    // (`TemplatePressLog`). A refusal above has already returned.
+                    if (record is PressRecord.Template && outcome.action == "applied") {
+                        TemplatePressLog.record(state, plan.projectId, record.source.id)
+                    }
                     Outcome.Pressed(record.kind.name, outcome.action, outcome.effectCount, outcome.released + stopped)
                 } catch (e: IllegalStateException) {
                     Outcome.TargetMissing(e.message ?: "Target not found")
@@ -200,6 +207,14 @@ internal object BuskPressService {
 
 /** What the one transaction read about the pressed pad. */
 internal data class PressPlan(
+    /**
+     * The project the pad was read under — already checked against the page's own, so it is the
+     * pad's project and not merely the caller's belief about it.
+     *
+     * Carried so [BuskPressService.apply] can record a template press without a second read: the
+     * press log scopes its update by project, and `apply` runs outside any transaction.
+     */
+    val projectId: Int,
     val record: PressRecord,
     /** Template and Look uuids on the sibling pads — what `toggle` / `release` take off. */
     val layerSiblings: Set<UUID>,

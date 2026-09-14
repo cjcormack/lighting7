@@ -39,6 +39,29 @@ data object LookListChangedOutMessage : BroadcastOutMessage()
 data object TemplateListChangedOutMessage : BroadcastOutMessage()
 
 /**
+ * A template was **pressed** — applied, from any of the four doors — and now carries [lastPressedAt].
+ *
+ * Keyed, and deliberately **not** a reuse of [TemplateListChangedOutMessage]: that frame's client
+ * bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press happens at busking rate. This
+ * one carries the whole of what changed, so the client patches its cached list in place and makes
+ * no request at all — the same reasoning [CuesRecomposedOutMessage] records for naming its ids.
+ *
+ * Flat rather than dotted, against the "new messages take the dotted form" rule in
+ * `docs/websocket-engineering.md`, because the failure that rule exists to prevent is a *mixed*
+ * family: `templateListChanged` is flat, and `templates.pressed` beside it would leave a reader
+ * unable to tell which convention this family follows. If the family is ever renamed, both move.
+ *
+ * [lastPressedAt] is the stamp the server wrote, ISO-8601, not "now": two clients reading their own
+ * clocks would order a burst of presses differently from each other and from a refetch.
+ */
+@Serializable
+@SerialName("templatePressed")
+data class TemplatePressedOutMessage(
+    val templateId: Int,
+    val lastPressedAt: String,
+) : BroadcastOutMessage()
+
+/**
  * A Look or template contents edit changed what [cueIds] compose to.
  *
  * The contents counterpart to the two list signals above, which is why it carries ids where they
@@ -205,6 +228,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
 
         override fun lookListChanged() = fire(LookListChangedOutMessage)
         override fun templateListChanged() = fire(TemplateListChangedOutMessage)
+        override fun templatePressed(templateId: Int, lastPressedAt: String) =
+            fire(TemplatePressedOutMessage(templateId, lastPressedAt))
         override fun cuesRecomposed(cueIds: List<Int>) = fire(CuesRecomposedOutMessage(cueIds))
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)

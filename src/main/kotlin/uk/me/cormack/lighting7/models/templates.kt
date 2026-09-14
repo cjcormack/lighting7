@@ -77,6 +77,31 @@ object DaoTemplates : IntIdTable("templates") {
     val fadeDurationMs = long("fade_duration_ms").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
+    /**
+     * When this template was last **pressed** on this desk, in epoch milliseconds; null until it
+     * has been.
+     *
+     * What the programmer's row of recent chips is ordered by, and the whole of the storage for it:
+     * "templates with a stamp, newest first" needs no second table, no per-family bookkeeping (the
+     * family is derived from the rows, so a filtered list is already a filtered history) and no
+     * cleanup — a deleted template takes its stamp with it.
+     *
+     * **A press is an application, never a release.** The four doors that stamp it are the chip's
+     * click, ⌥click / hold, a busk pad and a MIDI `pressTemplate`, and each stamps only on the arm
+     * that puts the template *on* — see `TemplatePressLog`. Toggling a layer off leaves the stamp
+     * where it was, because "what I reached for" is not undone by putting it down.
+     *
+     * `_ms` and a `long`, like every other instant in this schema (`created_at_ms`,
+     * `last_login_at_ms`, …): there is no `exposed-java-time` in the dependency set, so a
+     * `timestamp` column would mean adding one for a field two lines of arithmetic already serve.
+     * The DTO still exposes it as an ISO-8601 instant, which is what a client sorts and reads.
+     *
+     * **Deliberately absent from the sync export** (`TemplateJson` names every field it carries,
+     * and this is not one of them): a desk's press history is not show content, and carrying it
+     * would make cloning a project hand the clone someone else's habits.
+     */
+    val lastPressedAtMs = long("last_pressed_at_ms").nullable()
+
     init {
         // Same identity rule as a Look: (project, name). "Amber Key" is one template per project,
         // which is the entire point of dropping the fixture type — the old per-type namespace is
@@ -93,6 +118,7 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
     var notes by DaoTemplates.notes
     var fadeDurationMs by DaoTemplates.fadeDurationMs
     var uuid by DaoTemplates.uuid
+    var lastPressedAtMs by DaoTemplates.lastPressedAtMs
 
     val rows by DaoTemplateRow referrersOn DaoTemplateRows.template
 

@@ -1,8 +1,19 @@
 {
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Chrome"
+    },
+    {
+      "id": "page-2",
+      "name": "Templates"
+    }
+  ],
   "artboards": [
     {
       "file": "Spec.dc.html",
       "title": "The system · today → proposed",
+      "page": "page-1",
       "x": 0,
       "y": 0,
       "w": 1180,
@@ -11,6 +22,7 @@
     {
       "file": "Main.dc.html",
       "title": "Desktop · 1440 wide",
+      "page": "page-1",
       "x": 1280,
       "y": 0,
       "w": 1488,
@@ -19,6 +31,7 @@
     {
       "file": "TabletLandscape.dc.html",
       "title": "iPad landscape · 1180 wide",
+      "page": "page-1",
       "x": 0,
       "y": 1804,
       "w": 1228,
@@ -27,6 +40,7 @@
     {
       "file": "TabletPortrait.dc.html",
       "title": "iPad portrait · 820 wide",
+      "page": "page-1",
       "x": 1328,
       "y": 1804,
       "w": 868,
@@ -35,6 +49,7 @@
     {
       "file": "Phone.dc.html",
       "title": "iPhone · 393 wide",
+      "page": "page-1",
       "x": 0,
       "y": 3608,
       "w": 441,
@@ -43,15 +58,79 @@
     {
       "file": "PhoneLandscape.dc.html",
       "title": "iPhone landscape · 852×393 · short-height fold",
+      "page": "page-1",
       "x": 541,
       "y": 3608,
       "w": 900,
       "h": 1416
+    },
+    {
+      "file": "TemplatesSpec.dc.html",
+      "title": "Templates · the rules",
+      "page": "page-2",
+      "x": 0,
+      "y": 0,
+      "w": 760,
+      "h": 900
+    },
+    {
+      "file": "TemplatesDesktop.dc.html",
+      "title": "Desktop · 1440 wide · templates",
+      "page": "page-2",
+      "x": 860,
+      "y": 0,
+      "w": 1488,
+      "h": 1548
+    },
+    {
+      "file": "TemplatesTabletLandscape.dc.html",
+      "title": "iPad landscape · 1180 wide · templates",
+      "page": "page-2",
+      "x": 0,
+      "y": 1688,
+      "w": 1228,
+      "h": 1548
+    },
+    {
+      "file": "TemplatesTabletPortrait.dc.html",
+      "title": "iPad portrait · 820 wide · templates",
+      "page": "page-2",
+      "x": 1328,
+      "y": 1688,
+      "w": 868,
+      "h": 1548
+    },
+    {
+      "file": "TemplatesPhone.dc.html",
+      "title": "iPhone · 393×852 · templates",
+      "page": "page-2",
+      "x": 0,
+      "y": 3376,
+      "w": 441,
+      "h": 1592
+    },
+    {
+      "file": "TemplatesPhoneLandscape.dc.html",
+      "title": "iPhone landscape · 852×393 · short-height fold · templates",
+      "page": "page-2",
+      "x": 541,
+      "y": 3376,
+      "w": 900,
+      "h": 848
     }
   ],
   "annotations": [
     {
+      "id": "templates-brief",
+      "page": "page-2",
+      "x": 0,
+      "y": -240,
+      "w": 720,
+      "text": "Templates on the programmer — recents on the row, a picker for the rest.\n\nRow C shows the last-pressed templates for the selected family and an All · n button; the button opens a searchable pad grid (Recent · All · Per fixture · Effects) built from the busk pad, in the cell editor's three forms: a popover on a desk and an iPad, a bottom sheet on a phone, a side sheet where the viewport is short. A press sets values or, held / ⌥, adds a tracking layer, and leaves the picker open.\n\nEach board is the same colour selection twice: the row closed, then the picker open. The library drawn is 84 templates of which 71 fit the selection."
+    },
+    {
       "id": "brief",
+      "page": "page-1",
       "x": 0,
       "y": -300,
       "w": 720,
@@ -59,6 +138,7 @@
     }
   ],
   "launch": {
-    "view": "canvas"
+    "view": "canvas",
+    "page": "page-2"
   }
 }
