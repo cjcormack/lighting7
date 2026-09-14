@@ -1,0 +1,64 @@
+{
+  "artboards": [
+    {
+      "file": "Spec.dc.html",
+      "title": "The system · today → proposed",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 1400
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Desktop · 1440 wide",
+      "x": 1280,
+      "y": 0,
+      "w": 1488,
+      "h": 1664
+    },
+    {
+      "file": "TabletLandscape.dc.html",
+      "title": "iPad landscape · 1180 wide",
+      "x": 0,
+      "y": 1804,
+      "w": 1228,
+      "h": 1664
+    },
+    {
+      "file": "TabletPortrait.dc.html",
+      "title": "iPad portrait · 820 wide",
+      "x": 1328,
+      "y": 1804,
+      "w": 868,
+      "h": 1664
+    },
+    {
+      "file": "Phone.dc.html",
+      "title": "iPhone · 393 wide",
+      "x": 0,
+      "y": 3608,
+      "w": 441,
+      "h": 1752
+    },
+    {
+      "file": "PhoneLandscape.dc.html",
+      "title": "iPhone landscape · 852×393 · short-height fold",
+      "x": 541,
+      "y": 3608,
+      "w": 900,
+      "h": 1416
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -300,
+      "w": 720,
+      "text": "Programmer chrome — a tidy-up, not a redesign.\n\nEvery row keeps its job and its controls; what changes is the spacing system: a 12px gutter on every row (the header included), 40px rows holding 32px controls so the inset is 4px everywhere, three control tiers by nesting (32 · 28 · 24, pills 20), the header at 48px at every height, and row B's filter as a field wherever the row is 360px or wider so the middle is never a hole.\n\nEach device artboard stacks the four operating modes: nothing loaded, busking, editing a cue, a layer focused. The Spec sheet has the measured today → proposed table.\n\nAssumed: static mockups; dark only (read at a desk); the app header is drawn as it is and left alone; Show, Prompt Book and Busk inherit the 48px header, since ShowHeader is shared."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
