@@ -60,7 +60,11 @@ data class UserRecord(
     val lastLoginAt: Instant?,
 )
 
-/** Where a password reset token is in its short life. Derived from the row's timestamps, never stored. */
+/**
+ * Where a password reset token is in its short life. Derived from the row's timestamps, never
+ * stored — by [TokenLifecycle], the one precedence ladder this and [DeviceLoginStatus] share.
+ * The two enums stay separate; only the ordering is common.
+ */
 @Serializable
 enum class ResetTokenStatus {
     /** Live and redeemable. */
@@ -140,6 +144,12 @@ sealed interface ResetRedemption {
  * Deliberately **not** a reuse of [ResetTokenStatus]. The two tokens grant different things —
  * a reset token can only ever set a password, this one is exchanged for a session — and a
  * shared type is the first step towards a shared lookup that could redeem one as the other.
+ * Each also reaches the frontend in its own DTO, which discriminates on it.
+ *
+ * What the two *do* share is the precedence ordering they are derived by: that lives once, in
+ * [TokenLifecycle], because ordering drift is what silently makes a dead credential read live.
+ * The member-for-member symmetry here is therefore load-bearing, not coincidental — adding a
+ * member to one means adding it to [TokenLifecycle], which won't compile until both are done.
  */
 @Serializable
 enum class DeviceLoginStatus {
@@ -981,13 +991,15 @@ class AuthService(
         DaoPasswordResetTokens.deleteWhere { DaoPasswordResetTokens.createdAt less cutoff }
     }
 
-    /** Must be called inside a transaction. Status is derived from timestamps, never stored. */
-    private fun DaoPasswordResetToken.statusAt(now: Instant): ResetTokenStatus = when {
-        usedAt != null -> ResetTokenStatus.USED
-        cancelledAt != null -> ResetTokenStatus.CANCELLED
-        expiresAt <= now -> ResetTokenStatus.EXPIRED
-        else -> ResetTokenStatus.PENDING
-    }
+    /**
+     * Must be called inside a transaction. Status is derived from timestamps, never stored.
+     *
+     * The ordering lives in [tokenLifecycleAt], shared with the device-login ladder, so a
+     * precedence change can't be made here and missed there.
+     */
+    private fun DaoPasswordResetToken.statusAt(now: Instant): ResetTokenStatus =
+        tokenLifecycleAt(usedAt = usedAt, cancelledAt = cancelledAt, expiresAt = expiresAt, now = now)
+            .asResetTokenStatus()
 
     // ─── Device-login tokens (QR sign-in on a phone) ───────────────────
     //
@@ -1032,12 +1044,19 @@ class AuthService(
      */
     private val deviceLoginLock = Any()
 
-    private fun DeviceLoginEntry.statusAt(now: Instant): DeviceLoginStatus = when {
-        usedAt != null -> DeviceLoginStatus.USED
-        cancelledAt != null -> DeviceLoginStatus.CANCELLED
-        expiresAt <= now -> DeviceLoginStatus.EXPIRED
-        else -> DeviceLoginStatus.PENDING
-    }
+    /**
+     * Status is derived from timestamps, never stored — and the ordering lives in
+     * [tokenLifecycleAt], shared with the reset-token ladder, so a precedence change can't be
+     * made here and missed there.
+     *
+     * The three fields are `@Volatile var`s written under [deviceLoginLock]; this reads them
+     * once each into the pure helper, so the answer is a snapshot rather than something that
+     * could see `usedAt` set and `cancelledAt` cleared mid-ladder. Callers that act on the
+     * answer ([redeemDeviceLogin]) still have to hold the lock across the read and the write.
+     */
+    private fun DeviceLoginEntry.statusAt(now: Instant): DeviceLoginStatus =
+        tokenLifecycleAt(usedAt = usedAt, cancelledAt = cancelledAt, expiresAt = expiresAt, now = now)
+            .asDeviceLoginStatus()
 
     /**
      * Mint a device-login token for [userId] — always the caller's own account — returning the
