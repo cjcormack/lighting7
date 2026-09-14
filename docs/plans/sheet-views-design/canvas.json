@@ -1,0 +1,71 @@
+{
+  "artboards": [
+    {
+      "file": "Spec.dc.html",
+      "title": "The survey, the rules, the open calls",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1080
+    },
+    {
+      "file": "Kit.dc.html",
+      "title": "The kit · one sheet, four surfaces",
+      "x": 1340,
+      "y": 0,
+      "w": 1240,
+      "h": 1480
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Patch list · 1440 wide",
+      "x": 0,
+      "y": 1640,
+      "w": 1488,
+      "h": 2682
+    },
+    {
+      "file": "Channels.dc.html",
+      "title": "Channels · Cards and Table · 1440 wide",
+      "x": 1588,
+      "y": 1640,
+      "w": 1488,
+      "h": 1800
+    },
+    {
+      "file": "Show.dc.html",
+      "title": "Show · the cue sheet · 1440 wide",
+      "x": 0,
+      "y": 4482,
+      "w": 1488,
+      "h": 2454
+    },
+    {
+      "file": "ChannelsRows.dc.html",
+      "title": "Channels · alternate · one row per address",
+      "x": 1588,
+      "y": 4482,
+      "w": 900,
+      "h": 1040
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -300,
+      "w": 760,
+      "text": "Sheet views — the programmer's grid gestures on the patch list, channels and show.\n\nDrag selection (rows from the first column, cells from the rest), single click selects, double click or ⏎ opens one editor for every selected cell, typing seeds it, ⌫ clears, and row C carries the counts, the family pill and the verbs. Each surface keeps its own columns and adds its own verbs after Set · Clear · Fan.\n\nChannels and Show gain a Cards · Table switcher on their header row: a sibling route plus a sticky localStorage preference, the Fixtures / Groups wiring. The patch list is already a table and simply becomes this one.\n\nAssumed: static mockups, dark only (read at a desk), 1440 wide; the app header and sidebar drawn as they are. Spec has the desk survey and the open calls; Kit says which code moves where."
+    },
+    {
+      "id": "channels-call",
+      "x": 1588,
+      "y": 4332,
+      "w": 520,
+      "text": "Two shapes for the channels table. The 16-wide DMX sheet (above) is the recommendation — every desk draws raw output as a grid. This row list is the alternate: identical kit, worse at reading an address space."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
