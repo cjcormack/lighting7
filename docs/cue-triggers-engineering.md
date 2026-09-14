@@ -33,6 +33,10 @@ Script hooks are stored in the `cue_triggers` table and always reference a scrip
 
 ### Timing on `cue_preset_applications`
 
+> **Historical.** This table is no longer in `ALL_TABLES` — it went with the presets/palettes
+> model. Its columns are shown as they were, which is why they still read `delay_ms` while every
+> live table below now uses a `Duration` column named `delay`.
+
 ```
 cue_preset_applications
 ├── id (auto-increment PK)
@@ -48,7 +52,7 @@ cue_preset_applications
 ### Timing on `cue_ad_hoc_effects`
 
 Same timing columns added to `cue_ad_hoc_effects`:
-- `delay_ms`, `interval_ms`, `random_window_ms`, `sort_order`
+- `delay`, `interval`, `random_window` (each a `Duration`, nanoseconds on disk), `sort_order`
 
 ### Script Hooks: `cue_triggers`
 
@@ -57,9 +61,9 @@ cue_triggers
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
 ├── trigger_type (enum: ACTIVATION, DEACTIVATION, DELAYED, RECURRING)
-├── delay_ms (nullable Long — for DELAYED)
-├── interval_ms (nullable Long — for RECURRING)
-├── random_window_ms (nullable Long — randomisation range)
+├── delay (nullable Duration — for DELAYED; nanoseconds on disk)
+├── interval (nullable Duration — for RECURRING)
+├── random_window (nullable Duration — randomisation range)
 ├── script_id (FK → scripts — required, always a script)
 └── sort_order (Int)
 ```

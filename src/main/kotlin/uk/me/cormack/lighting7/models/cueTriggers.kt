@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.javatime.duration
+
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.dao.IntEntity
 import org.jetbrains.exposed.v1.dao.IntEntityClass
@@ -58,9 +60,9 @@ data class CueTriggerDetailDto(
 object DaoCueTriggers : IntIdTable("cue_triggers") {
     val cue = reference("cue_id", DaoCues)
     val triggerType = enumerationByName<TriggerType>("trigger_type", 20)
-    val delayMs = long("delay_ms").nullable()
-    val intervalMs = long("interval_ms").nullable()
-    val randomWindowMs = long("random_window_ms").nullable()
+    val delay = duration("delay").nullable()
+    val interval = duration("interval").nullable()
+    val randomWindow = duration("random_window").nullable()
     val script = reference("script_id", DaoScripts)
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
@@ -71,9 +73,9 @@ class DaoCueTrigger(id: EntityID<Int>) : IntEntity(id) {
 
     var cue by DaoCue referencedOn DaoCueTriggers.cue
     var triggerType by DaoCueTriggers.triggerType
-    var delayMs by DaoCueTriggers.delayMs
-    var intervalMs by DaoCueTriggers.intervalMs
-    var randomWindowMs by DaoCueTriggers.randomWindowMs
+    var delay by DaoCueTriggers.delay
+    var interval by DaoCueTriggers.interval
+    var randomWindow by DaoCueTriggers.randomWindow
     var script by DaoScript referencedOn DaoCueTriggers.script
     var sortOrder by DaoCueTriggers.sortOrder
     var uuid by DaoCueTriggers.uuid

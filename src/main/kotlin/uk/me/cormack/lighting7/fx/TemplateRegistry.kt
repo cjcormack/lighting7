@@ -275,7 +275,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
             templateId = template.id.value,
             templateUuid = template.uuid,
             name = template.name,
-            fadeDurationMs = template.fadeDurationMs,
+            fadeDurationMs = template.fadeDuration?.toMillis(),
             rows = template.rows
                 .orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)
                 .mapNotNull { row ->

@@ -53,8 +53,8 @@ object DaoAiConversations : IntIdTable("ai_conversations") {
     val title = varchar("title", 255).nullable()
     val project = reference("project_id", DaoProjects)
     val messages = json<List<ConversationMessageDto>>("messages", Json)
-    val createdAt = long("created_at")
-    val updatedAt = long("updated_at")
+    val createdAt = utcInstant("created_at")
+    val updatedAt = utcInstant("updated_at")
 }
 
 class DaoAiConversation(id: EntityID<Int>) : IntEntity(id) {

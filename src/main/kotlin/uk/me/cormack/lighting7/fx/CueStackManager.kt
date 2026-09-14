@@ -547,7 +547,7 @@ class CueStackManager(
         val cueConfig = transaction(state.database) {
             val cue = DaoCue.findById(stackState.activeCueId) ?: return@transaction null
             if (!cue.autoAdvance) return@transaction null
-            val delay = cue.autoAdvanceDelayMs ?: return@transaction null
+            val delay = cue.autoAdvanceDelay?.toMillis() ?: return@transaction null
             delay
         } ?: return false
 

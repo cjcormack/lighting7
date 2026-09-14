@@ -93,8 +93,10 @@ data class OAuthIdentityChangedOutMessage(
     val provider: String,
     val connected: Boolean,
     val login: String? = null,
-    val accessExpiresAtMs: Long? = null,
-    val refreshExpiresAtMs: Long? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val accessExpiresAt: String? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val refreshExpiresAt: String? = null,
     /** True when the identity is present but GitHub has rejected it — only a re-connect fixes it. */
     val reauthRequired: Boolean = false,
 ) : CloudSyncOutMessage()

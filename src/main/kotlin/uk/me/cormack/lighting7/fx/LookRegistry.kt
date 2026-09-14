@@ -280,7 +280,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                         target = target,
                         propertyName = row.propertyName,
                         value = row.value,
-                        fadeDurationMs = row.fadeDurationMs,
+                        fadeDurationMs = row.fadeDuration?.toMillis(),
                         elementKey = row.elementKey,
                     )
                 },

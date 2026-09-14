@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.testsupport.testAppConfig
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.time.Instant
 
 class SyncLoggerTest {
 
@@ -44,7 +45,7 @@ class SyncLoggerTest {
         assertEquals("INFO", e.level)
         assertEquals(SyncLogEvent.RUN_DONE, e.event)
         assertEquals("Pushed 2 commits", e.message)
-        assertTrue(e.tsMs > 0)
+        assertTrue(Instant.parse(e.ts) > Instant.EPOCH)
     }
 
     @Test

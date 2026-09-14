@@ -99,7 +99,7 @@ class RemoteSyncEngineTest {
 
         val (sha, ts) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first()
-            cfg.lastSyncedSha to cfg.lastSyncedAtMs
+            cfg.lastSyncedSha to cfg.lastSyncedAt
         }
         assertEquals(result.headSha, sha)
         assertNotNull(ts)
@@ -196,7 +196,7 @@ class RemoteSyncEngineTest {
         // Then sync — should refuse with FORMAT_TOO_NEW. The local DB and last-synced SHA must remain unchanged.
         val (preSha, preAt) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first()
-            cfg.lastSyncedSha to cfg.lastSyncedAtMs
+            cfg.lastSyncedSha to cfg.lastSyncedAt
         }
         try {
             runSync(projectId)
@@ -206,10 +206,10 @@ class RemoteSyncEngineTest {
         }
         val (postSha, postAt) = transaction(state.database) {
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.first()
-            cfg.lastSyncedSha to cfg.lastSyncedAtMs
+            cfg.lastSyncedSha to cfg.lastSyncedAt
         }
         assertEquals(preSha, postSha, "lastSyncedSha must not advance on FORMAT_TOO_NEW")
-        assertEquals(preAt, postAt, "lastSyncedAtMs must not advance on FORMAT_TOO_NEW")
+        assertEquals(preAt, postAt, "lastSyncedAt must not advance on FORMAT_TOO_NEW")
 
         runCatching { remoteWorkdir.toFile().deleteRecursively() }
     }

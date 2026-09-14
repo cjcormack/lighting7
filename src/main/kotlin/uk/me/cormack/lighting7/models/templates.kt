@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.javatime.duration
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
@@ -67,14 +69,14 @@ object DaoTemplates : IntIdTable("templates") {
 
 
     /**
-     * Fade for every row this template writes, in ms; null = the caller's default.
+     * Fade for every row this template writes; null = the caller's default.
      *
-     * On the template rather than per row, unlike [DaoLookRows.fadeDurationMs]. A template is one
+     * On the template rather than per row, unlike [DaoLookRows.fadeDuration]. A template is one
      * value in one family, so a per-row fade would only ever be N copies of one number — and the
      * per-fixture case (one row per head of the same focus position) is exactly where they must
      * agree.
      */
-    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val fadeDuration = duration("fade_duration").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     /**
@@ -91,16 +93,17 @@ object DaoTemplates : IntIdTable("templates") {
      * that puts the template *on* — see `TemplatePressLog`. Toggling a layer off leaves the stamp
      * where it was, because "what I reached for" is not undone by putting it down.
      *
-     * `_ms` and a `long`, like every other instant in this schema (`created_at_ms`,
-     * `last_login_at_ms`, …): there is no `exposed-java-time` in the dependency set, so a
-     * `timestamp` column would mean adding one for a field two lines of arithmetic already serve.
-     * The DTO still exposes it as an ISO-8601 instant, which is what a client sorts and reads.
+     * A `utcInstant` column like every other instant in this schema (`users.created_at`,
+     * `users.last_login_at`, …): UTC text carrying an explicit `Z`, at millisecond resolution.
+     * Stamp it from `nowUtc()` and render it with `Instant.toIsoUtc()` — see `models/timeColumns.kt`
+     * for why neither is optional. The DTO exposes it as an ISO-8601 instant, which is what a
+     * client sorts and reads.
      *
      * **Deliberately absent from the sync export** (`TemplateJson` names every field it carries,
      * and this is not one of them): a desk's press history is not show content, and carrying it
      * would make cloning a project hand the clone someone else's habits.
      */
-    val lastPressedAtMs = long("last_pressed_at_ms").nullable()
+    val lastPressedAt = utcInstant("last_pressed_at").nullable()
 
     init {
         // Same identity rule as a Look: (project, name). "Amber Key" is one template per project,
@@ -116,9 +119,9 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
     var project by DaoProject referencedOn DaoTemplates.project
     var name by DaoTemplates.name
     var notes by DaoTemplates.notes
-    var fadeDurationMs by DaoTemplates.fadeDurationMs
+    var fadeDuration by DaoTemplates.fadeDuration
     var uuid by DaoTemplates.uuid
-    var lastPressedAtMs by DaoTemplates.lastPressedAtMs
+    var lastPressedAt by DaoTemplates.lastPressedAt
 
     val rows by DaoTemplateRow referrersOn DaoTemplateRows.template
 

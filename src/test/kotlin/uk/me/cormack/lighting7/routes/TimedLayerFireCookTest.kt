@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.util.UUID
 import kotlin.test.assertEquals
+import java.time.Duration
 
 /**
  * A recurring timed layer re-cooks the whole cue on every fire, and `TimedFireCook` memoises that
@@ -90,7 +91,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
                 this.cue = cue
                 look = DaoLook.all().single { it.uuid == lookUuid }
                 sortOrder = 0; targets = emptyList()
-                intervalMs = INTERVAL_MS
+                interval = Duration.ofMillis(INTERVAL_MS)
             }
             // A local row so the cue registers Layer 4 at GO. `replaceAssignments` — which is
             // what a fire publishes through — skips a cue that has no rows registered yet, so a

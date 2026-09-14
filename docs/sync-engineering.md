@@ -727,9 +727,9 @@ sync_configs
   branch VARCHAR DEFAULT 'main'
   enabled BOOLEAN DEFAULT false   -- toggled in phase 4
   auto_sync_enabled BOOLEAN DEFAULT false
-  auto_sync_interval_ms LONG? NULL
+  auto_sync_interval BIGINT? NULL -- java.time.Duration, nanoseconds
   last_synced_sha VARCHAR? NULL   -- last successful push sha (phase 4+)
-  last_synced_at_ms LONG? NULL
+  last_synced_at TEXT? NULL      -- UTC instant, 'YYYY-MM-DD HH:MM:SS.mmmZ'
 ```
 
 Phase 3 reads/writes only `branch`. The other fields exist so the form on
@@ -811,7 +811,7 @@ serialise:
    `LocalAhead(n)`, `RemoteAhead(n)`, `Diverged(ahead, behind)`.
 8. **Reconcile** based on classification (table below).
 9. **Update `sync_configs`**: `lastSyncedSha = HEAD-after-sync`,
-   `lastSyncedAtMs = now`.
+   `lastSyncedAt = now`.
 10. **Hot-reload show** if the just-pulled project happens to be the active
     one — `ProjectManager.switchProject(currentId)` tears down + rebuilds the
     show so fixtures, cues, etc. reflect the new DB state immediately.
@@ -904,10 +904,10 @@ oauth_identities      (machine-local; never synced)
   scope VARCHAR       -- "default"
   github_login VARCHAR
   github_user_id BIGINT
-  access_expires_at_ms BIGINT?
-  refresh_expires_at_ms BIGINT?
-  connected_at_ms BIGINT
-  reauth_required_at_ms BIGINT?   -- see "Re-auth marking"
+  access_expires_at TEXT?         -- UTC instant
+  refresh_expires_at TEXT?        -- UTC instant
+  connected_at TEXT               -- UTC instant
+  reauth_required_at TEXT?        -- UTC instant; see "Re-auth marking"
   reauth_reason VARCHAR?
   UNIQUE(provider, scope)
 ```
@@ -952,10 +952,10 @@ authorisation gets revoked, the App is reinstalled, the client secret rotates, o
 the token is rotated out from under this install. GitHub answers
 `bad_refresh_token` / `invalid_grant`, and **only the user can fix it**.
 
-When that happens `OAuthTokenProvider` stamps `reauthRequiredAtMs` +
+When that happens `OAuthTokenProvider` stamps `reauthRequiredAt` +
 `reauthReason` onto the stored blob (and, via the mirror hook, the DB row and a
 WS frame). `GET /oauth/github/identity` exposes them as `reauthRequired` /
-`reauthReason` / `reauthRequiredAtMs`.
+`reauthReason` / `reauthRequiredAt`.
 
 The frontend surfaces that in three places, because the original failure was one
 of *visibility* rather than detection — the desk knew nothing was syncing, and
@@ -990,7 +990,7 @@ Three deliberate choices:
   keeps syncing while its OAuth identity is marked; that path is unchanged.
 
 Re-marking an already-marked identity is a no-op, so a backed-off retry neither
-rewrites the blob nor re-broadcasts, and `reauthRequiredAtMs` keeps meaning
+rewrites the blob nor re-broadcasts, and `reauthRequiredAt` keeps meaning
 *first* seen — which is what the UI shows as "since".
 
 **`failReauth` re-reads the store before marking, and marks the copy it just
@@ -1588,14 +1588,14 @@ default, so a new call site is loud until it opts out) logs exactly as it always
 Without this the feature didn't work: at the 60s auto-sync floor a *healthy* project wrote
 four rows a minute, so the cap held ~2 hours and every manual run or failure worth reading
 had already scrolled out. The corollary is that a healthy desk's feed now sits still — "is
-auto-sync alive?" is answered by `sync_configs.lastSyncedAtMs`, which is updated on every
+auto-sync alive?" is answered by `sync_configs.lastSyncedAt`, which is updated on every
 non-conflict outcome including `NO_OP`, not by the presence of recent rows.
 
 ```
 sync_log_entry
   id PK
   project_id FK -> projects (indexed)
-  ts_ms LONG (indexed)
+  ts TEXT (indexed)               -- UTC instant
   level VARCHAR             -- INFO | WARN | ERROR
   event VARCHAR             -- stable code, see SyncLogEvent
   message TEXT

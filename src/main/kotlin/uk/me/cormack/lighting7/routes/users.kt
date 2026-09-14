@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.auth.authenticatedUserOrNull
 import uk.me.cormack.lighting7.auth.buildResetUrls
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /** The caller tried to remove the desk's only usable administrator. */
 internal const val CODE_LAST_ADMIN = "LAST_ADMIN"
@@ -187,7 +188,7 @@ internal fun Route.routeApiRestUsers(state: State) {
                 id = record.id,
                 url = urls.primary,
                 alternateUrls = urls.alternates,
-                expiresAtMs = record.expiresAtMs,
+                expiresAt = record.expiresAt.toIsoUtc(),
                 username = user.username,
                 displayName = user.displayName,
             ),
@@ -216,8 +217,8 @@ internal fun Route.routeApiRestUsers(state: State) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("Reset token not found"))
             return@get
         }
-        val (value, expiresAtMs) = status
-        call.respond(ResetTokenStatusDto(status = value, expiresAtMs = expiresAtMs))
+        val (value, expiresAt) = status
+        call.respond(ResetTokenStatusDto(status = value, expiresAt = expiresAt.toIsoUtc()))
     }
 
     /** Cancel a live token — fired when the admin closes the QR sheet. Idempotent. */
@@ -293,8 +294,10 @@ data class UserDto(
     val displayName: String,
     val role: UserRole,
     val disabled: Boolean,
-    val createdAtMs: Long,
-    val lastLoginAtMs: Long? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val createdAt: String,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val lastLoginAt: String? = null,
 )
 
 @Serializable
@@ -325,7 +328,8 @@ data class ResetTokenResponse(
     val url: String,
     /** Other addresses the same page answers on, for a phone that can't reach [url]. */
     val alternateUrls: List<String>,
-    val expiresAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val expiresAt: String,
     val username: String,
     val displayName: String,
 )
@@ -333,7 +337,8 @@ data class ResetTokenResponse(
 @Serializable
 data class ResetTokenStatusDto(
     val status: ResetTokenStatus,
-    val expiresAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val expiresAt: String,
 )
 
 private fun UserRecord.toDto() = UserDto(
@@ -343,6 +348,6 @@ private fun UserRecord.toDto() = UserDto(
     displayName = displayName,
     role = role,
     disabled = disabled,
-    createdAtMs = createdAtMs,
-    lastLoginAtMs = lastLoginAtMs,
+    createdAt = createdAt.toIsoUtc(),
+    lastLoginAt = lastLoginAt?.toIsoUtc(),
 )

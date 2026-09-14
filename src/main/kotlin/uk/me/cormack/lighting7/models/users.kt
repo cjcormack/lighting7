@@ -32,9 +32,9 @@ object DaoUsers : IntIdTable("users") {
     /** BCrypt modular crypt string — always exactly 60 chars for the `$2a$` family. */
     val passwordHash = varchar("password_hash", 60)
     val disabled = bool("disabled").default(false)
-    val createdAtMs = long("created_at_ms")
-    val passwordChangedAtMs = long("password_changed_at_ms")
-    val lastLoginAtMs = long("last_login_at_ms").nullable()
+    val createdAt = utcInstant("created_at")
+    val passwordChangedAt = utcInstant("password_changed_at")
+    val lastLoginAt = utcInstant("last_login_at").nullable()
 }
 
 class DaoUser(id: EntityID<Int>) : IntEntity(id) {
@@ -46,7 +46,7 @@ class DaoUser(id: EntityID<Int>) : IntEntity(id) {
     var role by DaoUsers.role
     var passwordHash by DaoUsers.passwordHash
     var disabled by DaoUsers.disabled
-    var createdAtMs by DaoUsers.createdAtMs
-    var passwordChangedAtMs by DaoUsers.passwordChangedAtMs
-    var lastLoginAtMs by DaoUsers.lastLoginAtMs
+    var createdAt by DaoUsers.createdAt
+    var passwordChangedAt by DaoUsers.passwordChangedAt
+    var lastLoginAt by DaoUsers.lastLoginAt
 }

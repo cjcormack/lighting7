@@ -38,6 +38,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.time.Instant
+import uk.me.cormack.lighting7.models.nowUtc
 
 /**
  * The device-login QR end to end: someone mints a code for their own account on the desk, a
@@ -64,7 +66,7 @@ class DeviceLoginRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, minted.status, minted.bodyAsText())
         val code = minted.body<DeviceLoginResponse>()
         assertEquals("Test boss", code.displayName)
-        assertTrue(code.expiresAtMs > System.currentTimeMillis(), "a fresh code must be in the future")
+        assertTrue(Instant.parse(code.expiresAt) > Instant.now(), "a fresh code must be in the future")
 
         // The public GET names the account with no cookie at all...
         val info = client.get("/api/rest/auth/device/${code.rawToken()}")
@@ -347,12 +349,12 @@ class DeviceLoginRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val boss = seedUser(state, "boss", role = UserRole.ADMIN)
 
-        var now = System.currentTimeMillis()
+        var now = nowUtc()
         val service = AuthService(state.database, bcryptCost = 4, clock = { now })
         val (_, rawToken) = service.createDeviceLogin(boss.userId)
         assertIs<DeviceLoginLookup.Live>(service.lookupDeviceLogin(rawToken))
 
-        now += 3 * 60 * 1000
+        now = now.plusMillis(3 * 60 * 1000)
         val dead = assertIs<DeviceLoginLookup.Dead>(service.lookupDeviceLogin(rawToken))
         assertEquals(DeviceLoginStatus.EXPIRED, dead.status)
     }

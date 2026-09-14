@@ -10,9 +10,9 @@ import uk.me.cormack.lighting7.models.DaoSyncStates
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import java.nio.file.Files
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.util.UUID
+import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.models.nowUtc
 
 /**
  * Snapshots the current database state of a project into its cloud-sync working
@@ -65,7 +65,7 @@ class SnapshotEngine(private val state: State) {
     ): SnapshotResponse {
         val path = workingTree.pathFor(projectUuid)
         val summary = message?.takeIf { it.isNotBlank() }?.trim()
-            ?: "Snapshot ${DateTimeFormatter.ISO_INSTANT.format(Instant.now())}"
+            ?: "Snapshot ${nowUtc().toIsoUtc()}"
         val shortInstall = installUuid.toString().take(8)
         val authorEmail = "$shortInstall@$INSTALL_EMAIL_DOMAIN"
         val commitMessage = "$installFriendlyName: $summary [install:$shortInstall]"

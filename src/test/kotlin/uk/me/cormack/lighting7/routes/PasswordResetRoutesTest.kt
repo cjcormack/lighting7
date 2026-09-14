@@ -32,6 +32,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.time.Instant
+import java.time.Duration
+import uk.me.cormack.lighting7.models.nowUtc
 
 /**
  * The QR reset flow end to end: an admin mints a token, the phone reads it and redeems it
@@ -60,7 +63,7 @@ class PasswordResetRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Created, minted.status, minted.bodyAsText())
         val token = minted.body<ResetTokenResponse>()
         assertEquals("op", token.username)
-        assertTrue(token.expiresAtMs > System.currentTimeMillis(), "a fresh token must be in the future")
+        assertTrue(Instant.parse(token.expiresAt) > Instant.now(), "a fresh token must be in the future")
 
         // The phone has no cookie — that's the whole point of the exempt path.
         val info = client.get("/api/rest/auth/reset/${token.rawToken()}")
@@ -441,7 +444,7 @@ class PasswordResetRoutesTest : RouteIntegrationTest() {
         )
 
         // ...but not forever. A clock 31 days ahead is a boot 31 days later.
-        val muchLater = System.currentTimeMillis() + 31L * 24 * 60 * 60 * 1000
+        val muchLater = nowUtc().plus(Duration.ofDays(31))
         val aged = AuthService(state.database, bcryptCost = 4, clock = { muchLater })
         assertEquals(
             emptyList(),
@@ -453,7 +456,7 @@ class PasswordResetRoutesTest : RouteIntegrationTest() {
     /** Push a token's expiry into the past so the expired-token paths can be exercised. */
     private fun expireResetToken(tokenId: Int) {
         transaction(state.database) {
-            DaoPasswordResetToken.findById(tokenId)!!.expiresAtMs = System.currentTimeMillis() - 1_000
+            DaoPasswordResetToken.findById(tokenId)!!.expiresAt = nowUtc().minusSeconds(1)
         }
     }
 }

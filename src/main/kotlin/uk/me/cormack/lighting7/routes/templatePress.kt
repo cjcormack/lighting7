@@ -7,7 +7,8 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.state.State
-import java.time.Instant
+import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.models.nowUtc
 
 private val logger = LoggerFactory.getLogger("templatePress")
 
@@ -46,19 +47,18 @@ internal object TemplatePressLog {
      * is past its own transaction by the time it presses.
      */
     fun record(state: State, projectId: Int, templateId: Int) {
-        // **Millis first, then the string.** `Instant.now()` on this JVM has microsecond precision,
-        // so stamping the column from it and formatting the frame from the same `Instant` produced
-        // two different texts for one press — `…34.612360Z` on the wire against `…34.612Z` from the
-        // next read. A client that patches from the frame and later refetches would then see the
-        // stamp "change" for no reason. The column's resolution is the one that survives, so it is
-        // the one both are derived from.
-        val stampedAtMs = System.currentTimeMillis()
+        // One stamp feeds both the column and the frame. `nowUtc()` is already truncated to the
+        // column's millisecond resolution and `toIsoUtc()` always prints three fraction digits, so
+        // the text on the wire is byte-identical to what the next read of the row renders. Before
+        // those two existed this had to be done by hand, and getting it wrong put `…34.612360Z` on
+        // the wire against `…34.612Z` from the next read — a stamp that "changed" for no reason.
+        val stampedAt = nowUtc()
         val updated = try {
             transaction(state.database) {
                 DaoTemplates.update({
                     (DaoTemplates.id eq templateId) and (DaoTemplates.project eq projectId)
                 }) {
-                    it[lastPressedAtMs] = stampedAtMs
+                    it[lastPressedAt] = stampedAt
                 }
             }
         } catch (e: Exception) {
@@ -69,6 +69,6 @@ internal object TemplatePressLog {
             logger.debug("template press of {} not recorded: no such template in project {}", templateId, projectId)
             return
         }
-        state.show.fixtures.templatePressed(templateId, Instant.ofEpochMilli(stampedAtMs).toString())
+        state.show.fixtures.templatePressed(templateId, stampedAt.toIsoUtc())
     }
 }

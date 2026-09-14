@@ -26,10 +26,10 @@ import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Cloud-sync remote engine. Three-way diffs the local DB and the remote tree at the
@@ -179,7 +179,7 @@ class RemoteSyncEngine(
                 val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
                     ?: error("sync_config row vanished mid-sync for project $projectId")
                 cfg.lastSyncedSha = outcome.headSha
-                cfg.lastSyncedAtMs = System.currentTimeMillis()
+                cfg.lastSyncedAt = nowUtc()
             }
         }
 
@@ -492,7 +492,7 @@ class RemoteSyncEngine(
         val shortInstall = installUuid.toString().take(8)
         val authorEmail = "$shortInstall@${SnapshotEngine.INSTALL_EMAIL_DOMAIN}"
         val mergeKind = if (isFromConflictSession) "Resolve" else "Merge"
-        val summary = "$mergeKind ${DateTimeFormatter.ISO_INSTANT.format(Instant.now())}"
+        val summary = "$mergeKind ${nowUtc().toIsoUtc()}"
         val message = "$installFriendlyName: $summary [install:$shortInstall]"
         // After resetHard origin, HEAD is at remoteSha — that becomes parent #1
         // automatically. localSha is the extra parent that makes this a merge commit.
@@ -803,7 +803,7 @@ class RemoteSyncEngine(
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
             cfg?.let {
                 it.lastSyncedSha = result.headSha
-                it.lastSyncedAtMs = System.currentTimeMillis()
+                it.lastSyncedAt = nowUtc()
             }
         }
 

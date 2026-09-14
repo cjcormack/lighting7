@@ -67,6 +67,8 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiDeviceProvider
 import uk.co.xfactorylibrarians.coremidi4j.CoreMidiNotification
+import uk.me.cormack.lighting7.models.asInstant
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 private val logger = LoggerFactory.getLogger("State")
 
@@ -347,11 +349,14 @@ class State(val config: ApplicationConfig) {
             tokenStore = store,
             client = client,
             onIdentityUpdated = { identity ->
+                // Converted once, then read by both the row and the broadcast frame.
+                val accessExpiresAt = identity.accessExpiresAtMs.asInstant()
+                val refreshExpiresAt = identity.refreshExpiresAtMs.asInstant()
                 transaction(database) {
                     DaoOAuthIdentity.findGithubDefault()?.let {
-                        it.accessExpiresAtMs = identity.accessExpiresAtMs
-                        it.refreshExpiresAtMs = identity.refreshExpiresAtMs
-                        it.reauthRequiredAtMs = identity.reauthRequiredAtMs
+                        it.accessExpiresAt = accessExpiresAt
+                        it.refreshExpiresAt = refreshExpiresAt
+                        it.reauthRequiredAt = identity.reauthRequiredAtMs.asInstant()
                         it.reauthReason = identity.reauthReason
                     }
                 }
@@ -360,8 +365,8 @@ class State(val config: ApplicationConfig) {
                         provider = DaoOAuthIdentities.PROVIDER_GITHUB,
                         connected = true,
                         login = identity.githubLogin,
-                        accessExpiresAtMs = identity.accessExpiresAtMs,
-                        refreshExpiresAtMs = identity.refreshExpiresAtMs,
+                        accessExpiresAt = accessExpiresAt?.toIsoUtc(),
+                        refreshExpiresAt = refreshExpiresAt?.toIsoUtc(),
                         reauthRequired = identity.reauthRequiredAtMs != null,
                     ),
                 )

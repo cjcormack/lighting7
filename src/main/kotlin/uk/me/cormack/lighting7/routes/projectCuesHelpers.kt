@@ -21,6 +21,8 @@ import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import java.time.Duration
+import uk.me.cormack.lighting7.models.asDuration
 
 private val logger = LoggerFactory.getLogger("projectCues")
 
@@ -325,9 +327,9 @@ internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
     stomp = stomp,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
-    delayMs = delayMs,
-    intervalMs = intervalMs,
-    randomWindowMs = randomWindowMs,
+    delayMs = delay?.toMillis(),
+    intervalMs = interval?.toMillis(),
+    randomWindowMs = randomWindow?.toMillis(),
     source = (source ?: return null).toDto(),
     id = id.value,
 )
@@ -370,9 +372,9 @@ internal fun DaoCue.toCueDetails(
     val triggerDetails = this.triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDetailDto(
             triggerType = trigger.triggerType.name,
-            delayMs = trigger.delayMs,
-            intervalMs = trigger.intervalMs,
-            randomWindowMs = trigger.randomWindowMs,
+            delayMs = trigger.delay?.toMillis(),
+            intervalMs = trigger.interval?.toMillis(),
+            randomWindowMs = trigger.randomWindow?.toMillis(),
             scriptId = trigger.script.id.value,
             scriptName = trigger.script.name,
             sortOrder = trigger.sortOrder,
@@ -391,8 +393,8 @@ internal fun DaoCue.toCueDetails(
         cueStackName = this.cueStack?.name,
         sortOrder = this.sortOrder,
         autoAdvance = this.autoAdvance,
-        autoAdvanceDelayMs = this.autoAdvanceDelayMs,
-        fadeDurationMs = this.fadeDurationMs,
+        autoAdvanceDelayMs = this.autoAdvanceDelay?.toMillis(),
+        fadeDurationMs = this.fadeDuration?.toMillis(),
         fadeCurve = this.fadeCurve,
         cueNumber = this.cueNumber,
         cueNumberAuto = this.cueNumberAuto,
@@ -535,9 +537,9 @@ internal fun createCueChildren(
             this.stomp = layer.stomp
             this.speedMasterUuid = speedMasterUuidOrNull(layer.speedMasterUuid)
             this.rateSpeedMasterUuid = speedMasterUuidOrNull(layer.rateSpeedMasterUuid)
-            this.delayMs = layer.delayMs
-            this.intervalMs = layer.intervalMs
-            this.randomWindowMs = layer.randomWindowMs
+            this.delay = layer.delayMs.asDuration()
+            this.interval = layer.intervalMs.asDuration()
+            this.randomWindow = layer.randomWindowMs.asDuration()
         }
     }
     for (effect in adHocEffects) {
@@ -556,9 +558,9 @@ internal fun createCueChildren(
             elementFilter = effect.elementFilter
             stepTiming = effect.stepTiming
             parameters = effect.parameters
-            delayMs = effect.delayMs
-            intervalMs = effect.intervalMs
-            randomWindowMs = effect.randomWindowMs
+            delay = effect.delayMs.asDuration()
+            interval = effect.intervalMs.asDuration()
+            randomWindow = effect.randomWindowMs.asDuration()
             sortOrder = effect.sortOrder
             speedMasterUuid = speedMasterUuidOrNull(effect.speedMasterUuid)
             rateSpeedMasterUuid = speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
@@ -571,7 +573,7 @@ internal fun createCueChildren(
             targetKey = assignment.targetKey
             propertyName = assignment.propertyName
             value = assignment.value
-            fadeDurationMs = assignment.fadeDurationMs
+            fadeDuration = assignment.fadeDurationMs.asDuration()
             sortOrder = assignment.sortOrder
             moveInDark = assignment.moveInDark
         }
@@ -591,9 +593,9 @@ internal fun createCueChildren(
         DaoCueTrigger.new {
             this.cue = cue
             this.triggerType = normalizedType
-            this.delayMs = trigger.delayMs
-            this.intervalMs = trigger.intervalMs
-            this.randomWindowMs = trigger.randomWindowMs
+            this.delay = trigger.delayMs.asDuration()
+            this.interval = trigger.intervalMs.asDuration()
+            this.randomWindow = trigger.randomWindowMs.asDuration()
             this.script = script
             this.sortOrder = trigger.sortOrder
         }

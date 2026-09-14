@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import java.time.Duration
+
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -24,6 +26,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.asDuration
 
 /**
  * How a recording lands on the target cue.
@@ -81,7 +84,7 @@ data class CueWriteOutcome(
 )
 
 /** A child with timing belongs to `CueTriggerManager`, not to Record. */
-private val DaoCueAdHocEffect.isTimed: Boolean get() = delayMs != null || intervalMs != null
+private val DaoCueAdHocEffect.isTimed: Boolean get() = delay != null || interval != null
 
 /** Match key for a property assignment: target plus canonical property name. */
 private fun assignmentKey(targetType: String, targetKey: String, propertyName: String) =
@@ -175,7 +178,7 @@ internal fun writeRecordingIntoCue(
                 val match = existing[row.matchKey()]
                 if (match != null) {
                     match.value = row.value
-                    match.fadeDurationMs = row.fadeDurationMs
+                    match.fadeDuration = row.fadeDurationMs.asDuration()
                     match.moveInDark = row.moveInDark
                 } else {
                     DaoCuePropertyAssignment.new {
@@ -184,7 +187,7 @@ internal fun writeRecordingIntoCue(
                         targetKey = row.targetKey
                         propertyName = row.propertyName
                         value = row.value
-                        fadeDurationMs = row.fadeDurationMs
+                        fadeDuration = row.fadeDurationMs.asDuration()
                         sortOrder = row.sortOrder
                         moveInDark = row.moveInDark
                     }
@@ -260,7 +263,7 @@ internal fun writeRecordingIntoCue(
                     targetKey = row.targetKey
                     propertyName = row.propertyName
                     value = row.value
-                    fadeDurationMs = row.fadeDurationMs
+                    fadeDuration = row.fadeDurationMs.asDuration()
                     sortOrder = row.sortOrder
                     moveInDark = row.moveInDark
                 }

@@ -113,9 +113,9 @@ Two invariants there, both load-bearing and neither enforced by the type system:
 Emission is from the funnels inside `AuthService`, not from the route handlers, which is what
 covers `BreakGlass` and the startup admin reset for free. The rule is *every administrative write
 to a users row emits* — not every write to the table. `mintSession` is the one exception: it
-writes `lastLoginAtMs` and stays silent, because `login` and the device-login redemption are
+writes `lastLoginAt` and stays silent, because `login` and the device-login redemption are
 unauthenticated endpoints and wiring one to a fan-out across every connected client would make it
-an amplification surface. So `lastLoginAtMs` in the users list is allowed to be stale, and the
+an amplification surface. So `lastLoginAt` in the users list is allowed to be stale, and the
 Devices panel misses a *new* sign-in for the same reason (`FU-AUTH-SESSION-LIST-STALENESS`).
 
 The reset-token history is stale for an unrelated reason worth keeping straight: minting or

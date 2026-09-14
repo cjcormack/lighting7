@@ -15,7 +15,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
  * SQLite file never contains a redeemable credential. TTL is 15 minutes and minting a new
  * token cancels the user's outstanding ones, so at most one live token exists per account.
  *
- * `used_at_ms` / `cancelled_at_ms` are kept rather than deleting the row: the admin's
+ * `used_at` / `cancelled_at` are kept rather than deleting the row: the admin's
  * sheet polls the token's status and must be able to distinguish "the user set their
  * password" from "this token expired" from "unknown token". Spent rows then stay as the
  * account's reset **history** — which is what makes a live link visible and revocable rather
@@ -34,10 +34,10 @@ object DaoPasswordResetTokens : IntIdTable("password_reset_tokens") {
 
     /** The admin who minted it, for a future audit log. Nullable so deleting that admin can't take live tokens with it. */
     val createdByUser = optReference("created_by_user_id", DaoUsers, onDelete = ReferenceOption.SET_NULL)
-    val createdAtMs = long("created_at_ms")
-    val expiresAtMs = long("expires_at_ms")
-    val usedAtMs = long("used_at_ms").nullable()
-    val cancelledAtMs = long("cancelled_at_ms").nullable()
+    val createdAt = utcInstant("created_at")
+    val expiresAt = utcInstant("expires_at")
+    val usedAt = utcInstant("used_at").nullable()
+    val cancelledAt = utcInstant("cancelled_at").nullable()
 }
 
 class DaoPasswordResetToken(id: EntityID<Int>) : IntEntity(id) {
@@ -46,8 +46,8 @@ class DaoPasswordResetToken(id: EntityID<Int>) : IntEntity(id) {
     var tokenHash by DaoPasswordResetTokens.tokenHash
     var user by DaoUser referencedOn DaoPasswordResetTokens.user
     var createdByUser by DaoUser optionalReferencedOn DaoPasswordResetTokens.createdByUser
-    var createdAtMs by DaoPasswordResetTokens.createdAtMs
-    var expiresAtMs by DaoPasswordResetTokens.expiresAtMs
-    var usedAtMs by DaoPasswordResetTokens.usedAtMs
-    var cancelledAtMs by DaoPasswordResetTokens.cancelledAtMs
+    var createdAt by DaoPasswordResetTokens.createdAt
+    var expiresAt by DaoPasswordResetTokens.expiresAt
+    var usedAt by DaoPasswordResetTokens.usedAt
+    var cancelledAt by DaoPasswordResetTokens.cancelledAt
 }

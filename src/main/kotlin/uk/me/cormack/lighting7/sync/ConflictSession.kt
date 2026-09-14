@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.models.DaoSyncSessionConflicts
 import uk.me.cormack.lighting7.models.DaoSyncSessions
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+import uk.me.cormack.lighting7.models.nowUtc
 
 /**
  * Persistent values for [DaoSyncSession.state]. The DB column is a `varchar` so wire
@@ -71,7 +72,7 @@ object ConflictSession {
     ): DaoSyncSession {
         val session = DaoSyncSession.new {
             this.project = project
-            this.startedAtMs = System.currentTimeMillis()
+            this.startedAt = nowUtc()
             this.state = SessionState.CONFLICTS_PENDING.name
             this.localSha = localSha
             this.remoteSha = remoteSha

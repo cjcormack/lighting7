@@ -16,6 +16,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import java.time.Instant
 
 /**
  * Unit tests for [AuthService] against a real (fresh, file-backed) SQLite database.
@@ -26,7 +27,7 @@ import kotlin.test.assertTrue
 class AuthServiceTest {
 
     private lateinit var state: State
-    private var now: Long = 1_000_000_000_000L
+    private var now: Instant = Instant.ofEpochMilli(1_000_000_000_000L)
     private lateinit var auth: AuthService
 
     private val hourMs = 60L * 60 * 1000
@@ -97,15 +98,15 @@ class AuthServiceTest {
         val (_, rawToken) = runBlocking { auth.login("alice", "hunter2hunter2", null, null) }
 
         // 29 days later the session is alive, and the lookup slides expiry forward.
-        now += ttlMs - 24 * hourMs
+        now = now.plusMillis(ttlMs - 24 * hourMs)
         assertNotNull(auth.lookupSession(rawToken))
 
         // Another 29 days of silence — still alive only because of the slide.
-        now += ttlMs - 24 * hourMs
+        now = now.plusMillis(ttlMs - 24 * hourMs)
         assertNotNull(auth.lookupSession(rawToken))
 
         // 31 days of silence exceeds the TTL.
-        now += ttlMs + hourMs
+        now = now.plusMillis(ttlMs + hourMs)
         assertNull(auth.lookupSession(rawToken))
     }
 
@@ -118,7 +119,7 @@ class AuthServiceTest {
 
         // Past the TTL with no lookup in between: the cache entry still exists, but the
         // listing must not report a dead credential as live.
-        now += ttlMs + hourMs
+        now = now.plusMillis(ttlMs + hourMs)
         assertEquals(0, auth.sessionsFor(record.userId, tokenHash).size)
     }
 
@@ -208,21 +209,21 @@ class AuthServiceTest {
 
     @Test
     fun `throttle kicks in after five failures in the window and clears on success`() {
-        assertEquals(0, auth.penaltyDelayMs("alice", now))
+        assertEquals(0, auth.penaltyDelayMs("alice", now.toEpochMilli()))
 
-        repeat(4) { auth.recordLoginFailure("alice", now) }
-        assertEquals(0, auth.penaltyDelayMs("alice", now))
+        repeat(4) { auth.recordLoginFailure("alice", now.toEpochMilli()) }
+        assertEquals(0, auth.penaltyDelayMs("alice", now.toEpochMilli()))
 
-        auth.recordLoginFailure("alice", now)
-        assertTrue(auth.penaltyDelayMs("alice", now) > 0)
+        auth.recordLoginFailure("alice", now.toEpochMilli())
+        assertTrue(auth.penaltyDelayMs("alice", now.toEpochMilli()) > 0)
 
         // Failures age out of the 5-minute window.
-        assertEquals(0, auth.penaltyDelayMs("alice", now + 6 * 60 * 1000))
+        assertEquals(0, auth.penaltyDelayMs("alice", now.toEpochMilli() + 6 * 60 * 1000))
 
         // A success clears the counter outright.
-        repeat(5) { auth.recordLoginFailure("alice", now) }
+        repeat(5) { auth.recordLoginFailure("alice", now.toEpochMilli()) }
         auth.clearLoginFailures("alice")
-        assertEquals(0, auth.penaltyDelayMs("alice", now))
+        assertEquals(0, auth.penaltyDelayMs("alice", now.toEpochMilli()))
     }
 
     // ─── Setup path ────────────────────────────────────────────────────

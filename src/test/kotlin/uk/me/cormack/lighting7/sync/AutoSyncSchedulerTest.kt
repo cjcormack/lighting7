@@ -23,6 +23,9 @@ import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import java.time.Duration
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.asDuration
 
 /**
  * Behavioural tests for [AutoSyncScheduler]. Uses the same bare-repo + InMemoryCredentialStore
@@ -71,7 +74,7 @@ class AutoSyncSchedulerTest {
                 ?: DaoSyncConfig.new { this.project = project }
             cfg.repoUrl = bareRepo.toUri().toString()
             cfg.autoSyncEnabled = autoSyncEnabled
-            cfg.autoSyncIntervalMs = intervalMs
+            cfg.autoSyncInterval = intervalMs.asDuration()
         }
         credentialStore.set(bareRepo.toUri().toString(), "test-pat")
     }
@@ -280,7 +283,7 @@ class AutoSyncSchedulerTest {
         transaction(state.database) {
             DaoSyncSession.new {
                 this.project = DaoProject.findById(projectId)!!
-                this.startedAtMs = System.currentTimeMillis()
+                this.startedAt = nowUtc()
                 this.state = SessionState.CONFLICTS_PENDING.name
             }
         }

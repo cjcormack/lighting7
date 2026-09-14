@@ -113,16 +113,16 @@ private fun DaoCue.toCueApplyData(): CueApplyData = CueApplyData(
     triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDto(
             triggerType = trigger.triggerType.name,
-            delayMs = trigger.delayMs,
-            intervalMs = trigger.intervalMs,
-            randomWindowMs = trigger.randomWindowMs,
+            delayMs = trigger.delay?.toMillis(),
+            intervalMs = trigger.interval?.toMillis(),
+            randomWindowMs = trigger.randomWindow?.toMillis(),
             scriptId = trigger.script.id.value,
             sortOrder = trigger.sortOrder,
         )
     },
     autoAdvance = autoAdvance,
-    autoAdvanceDelayMs = autoAdvanceDelayMs,
-    fadeDurationMs = fadeDurationMs,
+    autoAdvanceDelayMs = autoAdvanceDelay?.toMillis(),
+    fadeDurationMs = fadeDuration?.toMillis(),
     fadeCurve = fadeCurve,
     stomp = stomp,
     cueStackId = cueStack.id.value,
@@ -149,9 +149,9 @@ internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
     stomp = stomp,
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
-    delayMs = delayMs,
-    intervalMs = intervalMs,
-    randomWindowMs = randomWindowMs,
+    delayMs = delay?.toMillis(),
+    intervalMs = interval?.toMillis(),
+    randomWindowMs = randomWindow?.toMillis(),
 )
 
 

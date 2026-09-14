@@ -77,7 +77,7 @@ class AutoSyncScheduler(
                 // A repo-less config (autoSyncEnabled but repoUrl cleared) would only ever
                 // tick to TickDecision.Disabled — don't spawn a loop for it.
                 .filter { !it.repoUrl.isNullOrBlank() }
-                .map { it.project.id.value to (it.autoSyncIntervalMs ?: DEFAULT_INTERVAL_MS) }
+                .map { it.project.id.value to (it.autoSyncInterval?.toMillis() ?: DEFAULT_INTERVAL_MS) }
         }
         for ((projectId, interval) in configs) {
             launchLoopFor(projectId, interval)
@@ -95,7 +95,7 @@ class AutoSyncScheduler(
             val cfg = DaoSyncConfig.find { DaoSyncConfigs.project eq projectId }.firstOrNull()
             // Require an attached repo too — a repo-less config would only tick to Disabled.
             if (cfg?.autoSyncEnabled == true && !cfg.repoUrl.isNullOrBlank()) {
-                cfg.autoSyncIntervalMs ?: DEFAULT_INTERVAL_MS
+                cfg.autoSyncInterval?.toMillis() ?: DEFAULT_INTERVAL_MS
             } else {
                 null
             }

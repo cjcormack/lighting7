@@ -82,6 +82,8 @@ import java.nio.file.Path
 import java.util.UUID
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
+import java.time.Duration
+import uk.me.cormack.lighting7.models.asDuration
 
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
@@ -425,7 +427,7 @@ class ProjectImporter(private val state: State) {
                     targetKey = r.targetKey
                     propertyName = r.propertyName
                     value = r.value
-                    fadeDurationMs = r.fadeDurationMs
+                    fadeDuration = r.fadeDurationMs.asDuration()
                     elementKey = r.elementKey
                     sortOrder = r.sortOrder
                     this.uuid = UUID.fromString(r.uuid)
@@ -665,8 +667,8 @@ class ProjectImporter(private val state: State) {
             cueStack = stack
             sortOrder = c.sortOrder
             autoAdvance = c.autoAdvance
-            autoAdvanceDelayMs = c.autoAdvanceDelayMs
-            fadeDurationMs = c.fadeDurationMs
+            autoAdvanceDelay = c.autoAdvanceDelayMs.asDuration()
+            fadeDuration = c.fadeDurationMs.asDuration()
             fadeCurve = c.fadeCurve
             cueNumber = c.cueNumber
             cueNumberAuto = c.cueNumberAuto
@@ -692,7 +694,7 @@ class ProjectImporter(private val state: State) {
                 targetKey = a.targetKey
                 propertyName = a.propertyName
                 value = a.value
-                fadeDurationMs = a.fadeDurationMs
+                fadeDuration = a.fadeDurationMs.asDuration()
                 sortOrder = a.sortOrder
                 moveInDark = a.moveInDark
                 this.uuid = uuid
@@ -712,7 +714,7 @@ class ProjectImporter(private val state: State) {
                 this.project = project
                 name = t.name
                 notes = t.notes
-                fadeDurationMs = t.fadeDurationMs
+                fadeDuration = t.fadeDurationMs.asDuration()
                 this.uuid = uuid
             }
             t.rows.forEach { r ->
@@ -807,9 +809,9 @@ class ProjectImporter(private val state: State) {
                 stomp = l.stomp
                 speedMasterUuid = l.speedMasterUuid?.let { UUID.fromString(it) }
                 rateSpeedMasterUuid = l.rateSpeedMasterUuid?.let { UUID.fromString(it) }
-                delayMs = l.delayMs
-                intervalMs = l.intervalMs
-                randomWindowMs = l.randomWindowMs
+                delay = l.delayMs.asDuration()
+                interval = l.intervalMs.asDuration()
+                randomWindow = l.randomWindowMs.asDuration()
                 this.uuid = uuid
             }
             uuid to Unit
@@ -838,9 +840,9 @@ class ProjectImporter(private val state: State) {
                 elementFilter = e.elementFilter
                 stepTiming = e.stepTiming
                 parameters = e.parameters
-                delayMs = e.delayMs
-                intervalMs = e.intervalMs
-                randomWindowMs = e.randomWindowMs
+                delay = e.delayMs.asDuration()
+                interval = e.intervalMs.asDuration()
+                randomWindow = e.randomWindowMs.asDuration()
                 sortOrder = e.sortOrder
                 speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                 rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
@@ -868,9 +870,9 @@ class ProjectImporter(private val state: State) {
                 this.cue = cue
                 triggerType = t.triggerType
                 this.script = script
-                delayMs = t.delayMs
-                intervalMs = t.intervalMs
-                randomWindowMs = t.randomWindowMs
+                delay = t.delayMs.asDuration()
+                interval = t.intervalMs.asDuration()
+                randomWindow = t.randomWindowMs.asDuration()
                 sortOrder = t.sortOrder
                 this.uuid = uuid
             }

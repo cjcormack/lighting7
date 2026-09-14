@@ -58,7 +58,7 @@ class UsersRoutesTest : RouteIntegrationTest() {
         assertEquals("ops", dto.username, "username is stored lowercase")
         assertEquals(UserRole.OPERATOR, dto.role)
         assertEquals(false, dto.disabled)
-        assertNull(dto.lastLoginAtMs, "a brand new account has never logged in")
+        assertNull(dto.lastLoginAt, "a brand new account has never logged in")
 
         val list = client.get("/api/rest/users") { header(HttpHeaders.Cookie, admin) }.body<List<UserDto>>()
         assertEquals(listOf("boss", "ops"), list.map { it.username }, "listed in username order")

@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.auth.requireAdmin
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.plugins.InstallChangedOutMessage
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * The install table holds exactly one row per machine — see `state/State.kt` `ensureInstallRow`
@@ -69,7 +70,8 @@ data object InstallResource
 data class InstallDto(
     val uuid: String,
     val friendlyName: String,
-    val createdAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val createdAt: String,
 )
 
 @Serializable
@@ -80,5 +82,5 @@ data class UpdateInstallRequest(
 private fun DaoInstall.toDto() = InstallDto(
     uuid = uuid.toString(),
     friendlyName = friendlyName,
-    createdAtMs = createdAtMs,
+    createdAt = createdAt.toIsoUtc(),
 )

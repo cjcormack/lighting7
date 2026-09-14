@@ -32,6 +32,7 @@ import uk.me.cormack.lighting7.auth.resolveSessionUser
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.state.State
 import java.net.InetAddress
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Session lifecycle routes (multi-user-auth plan, session 1). `status`, `login` and
@@ -152,7 +153,7 @@ internal fun Route.routeApiRestAuth(state: State) {
                 ResetTokenInfoDto(
                     username = lookup.username,
                     displayName = lookup.displayName,
-                    expiresAtMs = lookup.expiresAtMs,
+                    expiresAt = lookup.expiresAt.toIsoUtc(),
                 ),
             )
             // 410 rather than 404 so the phone can say *why* — "already used" and
@@ -217,7 +218,7 @@ internal fun Route.routeApiRestAuth(state: State) {
                 id = record.id,
                 url = urls.primary,
                 alternateUrls = urls.alternates,
-                expiresAtMs = record.expiresAtMs,
+                expiresAt = record.expiresAt.toIsoUtc(),
                 displayName = user.displayName,
             ),
         )
@@ -261,7 +262,7 @@ internal fun Route.routeApiRestAuth(state: State) {
                     DeviceLoginInfoDto(
                         username = lookup.username,
                         displayName = lookup.displayName,
-                        expiresAtMs = lookup.expiresAtMs,
+                        expiresAt = lookup.expiresAt.toIsoUtc(),
                     ),
                 )
             }
@@ -455,7 +456,8 @@ data class UpdateProfileRequest(
 data class ResetTokenInfoDto(
     val username: String,
     val displayName: String,
-    val expiresAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val expiresAt: String,
 )
 
 @Serializable
@@ -472,7 +474,8 @@ data class DeviceLoginResponse(
     val url: String,
     /** Other addresses the same page answers on, for a phone that can't reach [url]. */
     val alternateUrls: List<String>,
-    val expiresAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val expiresAt: String,
     /** Who the phone will be signed in as — always the caller. */
     val displayName: String,
 )
@@ -482,7 +485,8 @@ data class DeviceLoginResponse(
 data class DeviceLoginInfoDto(
     val username: String,
     val displayName: String,
-    val expiresAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val expiresAt: String,
 )
 
 /**
@@ -530,8 +534,8 @@ private fun AuthenticatedUser.toDto() = AuthUserDto(
 /**
  * The same four fields, sourced from the stored row instead of the request's resolved caller —
  * what `PUT /auth/profile` needs, since its whole point is to report a value the caller's copy
- * predates. Not `routes/users.kt`'s `UserRecord.toDto()`: that is the admin shape (`id`,
- * `disabled`, `lastLoginAtMs`), and this route answers any role.
+ * predates. Not `routes/users.kt`'s `UserRecord.toDto()`: that is the admin shape (`uuid`,
+ * `disabled`, `lastLoginAt`), and this route answers any role.
  */
 private fun UserRecord.toAuthDto() = AuthUserDto(
     uuid = uuid.toString(),

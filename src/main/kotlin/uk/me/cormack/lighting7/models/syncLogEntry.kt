@@ -17,7 +17,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
  */
 object DaoSyncLogEntries : IntIdTable("sync_log_entry") {
     val project = reference("project_id", DaoProjects)
-    val tsMs = long("ts_ms")
+    val ts = utcInstant("ts")
     /** One of [uk.me.cormack.lighting7.sync.SyncLogLevel] — persisted as `.name`. */
     val level = varchar("level", 16)
     /** Stable event code (e.g. `RUN_STARTED`, `RUN_DONE`, `PUSH_REJECTED`). UI branches on this. */
@@ -35,7 +35,7 @@ class DaoSyncLogEntry(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoSyncLogEntry>(DaoSyncLogEntries)
 
     var project by DaoProject referencedOn DaoSyncLogEntries.project
-    var tsMs by DaoSyncLogEntries.tsMs
+    var ts by DaoSyncLogEntries.ts
     var level by DaoSyncLogEntries.level
     var event by DaoSyncLogEntries.event
     var message by DaoSyncLogEntries.message

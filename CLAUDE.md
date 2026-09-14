@@ -399,6 +399,31 @@ upgrade path. Before making a non-additive schema change once anything is
 deployed, recover the migration seam from git history; `InstallBootstrap.kt`
 says where it plugs in and what ordering constraint bit last time.
 
+### Time columns
+
+Every point in time is a `utcInstant("…")` column (`models/timeColumns.kt`) — timezone-aware
+`TEXT`, always UTC, `'2026-09-14 12:34:56.789Z'`, millisecond resolution. **Not**
+`exposed-java-time`'s plain `timestamp()`, which on SQLite writes *local* wall-clock text with no
+offset, so the same row means a different moment after a DST change or a move between machines.
+
+Every elapsed interval is `duration("…")` — `java.time.Duration`, stored as **nanoseconds** in a
+`BIGINT`. That is the same SQL type the schema used for millisecond `Long`s, and
+`SQLiteDialect.supportsColumnTypeChange` is `false`, so nothing would notice a column holding one
+unit while the code reads the other: never give a `duration()` column an `_ms` name.
+`TimeColumnsTest` asserts both rules.
+
+Three helpers, and each exists to close a hole:
+
+- `nowUtc()` — the clock for anything stored. Truncated to milliseconds, so an in-memory stamp
+  and the row it was written to can never disagree.
+- `Instant.toIsoUtc()` — the only way an instant reaches the wire. Fixed three-digit fraction, so
+  the string is **sortable**; `Instant.toString()` is not, dropping the fraction on an exact second.
+- `Long?.asInstant()` — for the one boundary that is still millis, the OAuth credential blob.
+
+On the wire, instants are ISO-8601 `String` and durations stay `…Ms: Long`. Sync JSON carries
+neither an instant nor a `Duration`: `ProjectExporter` / `ProjectImporter` convert durations to
+`…Ms: Long` at the boundary, which is what keeps `formatVersion` at 11.
+
 Key tables:
 - `DaoProjects` - Project definitions
 - `DaoScripts` - Lighting script source code

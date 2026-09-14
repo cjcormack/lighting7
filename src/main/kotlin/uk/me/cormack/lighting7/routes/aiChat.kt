@@ -166,7 +166,8 @@ data class AiActionDto(
 data class AiConversationSummaryDto(
     val id: Int,
     val title: String?,
-    val updatedAt: Long,
+    /** ISO-8601 UTC instant, sortable as text. */
+    val updatedAt: String,
 )
 
 @Serializable
@@ -174,7 +175,8 @@ data class AiConversationDetailDto(
     val id: Int,
     val title: String?,
     val messages: List<DisplayMessageDto>,
-    val updatedAt: Long,
+    /** ISO-8601 UTC instant, sortable as text. */
+    val updatedAt: String,
 )
 
 @Serializable

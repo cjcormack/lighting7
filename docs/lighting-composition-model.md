@@ -346,7 +346,7 @@ instead of being one more scope that holds several.
 
 ### A press is recorded, so the desk knows what you reach for
 
-`DaoTemplates.last_pressed_at_ms` is stamped on every press that **applies** a template, and the
+`DaoTemplates.last_pressed_at` is stamped on every press that **applies** a template, and the
 programmer's row of template chips is "the templates that fit the selection and have a stamp,
 newest first, up to eight". One nullable column and no second table: the family is already derived
 from the rows, so a list filtered by family is a history filtered by family; a delete takes the

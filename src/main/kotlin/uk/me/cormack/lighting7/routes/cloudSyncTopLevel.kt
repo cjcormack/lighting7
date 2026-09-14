@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.sync.GitAuthException
 import uk.me.cormack.lighting7.sync.ImportError
 import uk.me.cormack.lighting7.sync.SyncErrorCode
 import uk.me.cormack.lighting7.sync.SyncException
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Install-scoped cloud-sync REST endpoints — the per-project routes live in `cloudSync.kt`
@@ -47,9 +48,9 @@ internal fun Route.routeApiRestCloudSync(state: State) {
             // an N+1 across the batch.
             val linkedByProject = DaoSyncLinkedRepos
                 .selectAll()
-                .orderBy(DaoSyncLinkedRepos.lastLinkedAtMs, SortOrder.DESC)
+                .orderBy(DaoSyncLinkedRepos.lastLinkedAt, SortOrder.DESC)
                 .groupBy({ it[DaoSyncLinkedRepos.project].value }) {
-                    LinkedRepoDto(it[DaoSyncLinkedRepos.repoUrl], it[DaoSyncLinkedRepos.lastLinkedAtMs])
+                    LinkedRepoDto(it[DaoSyncLinkedRepos.repoUrl], it[DaoSyncLinkedRepos.lastLinkedAt].toIsoUtc())
                 }
             DaoSyncConfig.all().map { cfg ->
                 val projectId = cfg.project.id.value

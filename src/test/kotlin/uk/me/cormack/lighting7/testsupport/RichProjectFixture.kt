@@ -49,6 +49,7 @@ import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
+import java.time.Duration
 
 /** Name of the project [seedRichProject] creates. */
 const val RICH_PROJECT_NAME = "round-trip-rich"
@@ -255,7 +256,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoLookRow.new {
         look = boundLook; targetType = "fixture"; targetKey = "hex-1"
         propertyName = "colour"; value = "#ff8800"; sortOrder = 0
-        fadeDurationMs = 750L
+        fadeDuration = Duration.ofMillis(750L)
     }
     DaoLookRow.new {
         look = boundLook; targetType = "group"; targetKey = "front-wash"
@@ -297,7 +298,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         name = "amber-key"
         notes = "warm key light"
-        fadeDurationMs = 1_500L
+        fadeDuration = Duration.ofMillis(1_500L)
     }
     DaoTemplateRow.new {
         template = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
@@ -318,7 +319,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         notes = "slow warm breathe on the selection"
         // Deliberately null: an effect has no arrival, so an effect template has no fade. Left as
         // the one default here so a copier inventing a fade for it is caught.
-        fadeDurationMs = null
+        fadeDuration = null
     }
     DaoTemplateEffect.new {
         template = effectTemplate
@@ -361,19 +362,19 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val cue1 = DaoCue.new {
         this.project = project; name = "open"; cueStack = stack1; sortOrder = 0
         // Every optional cue field set, so a copier that skips one is caught.
-        fadeDurationMs = 1000L
+        fadeDuration = Duration.ofMillis(1000L)
         cueNumber = "1.5"
         notes = "house to half, then go"
         cueType = CueType.STANDARD.name
         stomp = true
         autoAdvance = true
-        autoAdvanceDelayMs = 2500L
+        autoAdvanceDelay = Duration.ofMillis(2500L)
         fadeCurve = "SINE_IN_OUT"
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
         propertyName = "dimmer"; value = "255"; sortOrder = 0
-        fadeDurationMs = 1500L
+        fadeDuration = Duration.ofMillis(1500L)
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
@@ -395,9 +396,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         elementMode = "ALL"
         elementFilter = "ODD"
         stepTiming = true
-        delayMs = 100L
-        intervalMs = 200L
-        randomWindowMs = 50L
+        delay = Duration.ofMillis(100L)
+        interval = Duration.ofMillis(200L)
+        randomWindow = Duration.ofMillis(50L)
         sortOrder = 3
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
@@ -408,9 +409,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         cue = cue1; look = effectsLook
         targets = listOf(CueTargetDto("group", "front-wash"))
         sortOrder = 2
-        delayMs = 250L
-        intervalMs = 500L
-        randomWindowMs = 125L
+        delay = Duration.ofMillis(250L)
+        interval = Duration.ofMillis(500L)
+        randomWindow = Duration.ofMillis(125L)
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
     }
@@ -437,9 +438,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueTrigger.new {
         cue = cue1; this.script = script1
         triggerType = TriggerType.ACTIVATION; sortOrder = 0
-        delayMs = 400L
-        intervalMs = 800L
-        randomWindowMs = 200L
+        delay = Duration.ofMillis(400L)
+        interval = Duration.ofMillis(800L)
+        randomWindow = Duration.ofMillis(200L)
     }
     DaoCue.new {
         this.project = project; name = "build"; cueStack = stack1; sortOrder = 1

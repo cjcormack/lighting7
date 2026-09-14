@@ -40,10 +40,10 @@ object DaoUserSessions : IntIdTable("user_sessions") {
     /** SHA-256 hex of the raw cookie token (see `auth/SessionTokens.kt`). */
     val tokenHash = varchar("token_hash", 64).uniqueIndex()
     val user = reference("user_id", DaoUsers, onDelete = ReferenceOption.CASCADE)
-    val createdAtMs = long("created_at_ms")
-    val lastSeenAtMs = long("last_seen_at_ms")
-    val expiresAtMs = long("expires_at_ms")
-    val revokedAtMs = long("revoked_at_ms").nullable()
+    val createdAt = utcInstant("created_at")
+    val lastSeenAt = utcInstant("last_seen_at")
+    val expiresAt = utcInstant("expires_at")
+    val revokedAt = utcInstant("revoked_at").nullable()
     val userAgent = varchar("user_agent", 200).nullable()
     val clientIp = varchar("client_ip", 45).nullable()
 
@@ -62,10 +62,10 @@ class DaoUserSession(id: EntityID<Int>) : IntEntity(id) {
 
     var tokenHash by DaoUserSessions.tokenHash
     var user by DaoUser referencedOn DaoUserSessions.user
-    var createdAtMs by DaoUserSessions.createdAtMs
-    var lastSeenAtMs by DaoUserSessions.lastSeenAtMs
-    var expiresAtMs by DaoUserSessions.expiresAtMs
-    var revokedAtMs by DaoUserSessions.revokedAtMs
+    var createdAt by DaoUserSessions.createdAt
+    var lastSeenAt by DaoUserSessions.lastSeenAt
+    var expiresAt by DaoUserSessions.expiresAt
+    var revokedAt by DaoUserSessions.revokedAt
     var userAgent by DaoUserSessions.userAgent
     var clientIp by DaoUserSessions.clientIp
     var createdVia by DaoUserSessions.createdVia

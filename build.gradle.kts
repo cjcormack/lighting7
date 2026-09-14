@@ -86,6 +86,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-dao:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposed_version")
     implementation("org.jetbrains.exposed:exposed-json:$exposed_version")
+    implementation("org.jetbrains.exposed:exposed-java-time:$exposed_version")
     implementation("org.xerial:sqlite-jdbc:$sqlite_version")
     implementation("com.zaxxer:HikariCP:$hikaricp_version")
     implementation("io.ktor:ktor-server-websockets")

@@ -27,6 +27,8 @@ import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.state.State
 import kotlin.math.roundToInt
+import java.time.Duration
+import uk.me.cormack.lighting7.models.asDuration
 
 /**
  * **New from selection**: record what the operator has selected as a template.
@@ -266,7 +268,7 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
                 this.project = project
                 this.name = name
                 this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-                this.fadeDurationMs = request.fadeDurationMs
+                this.fadeDuration = request.fadeDurationMs.asDuration()
             }
             for (row in rows) {
                 DaoTemplateRow.new {

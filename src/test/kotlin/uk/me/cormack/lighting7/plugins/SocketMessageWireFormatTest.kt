@@ -594,8 +594,8 @@ class SocketMessageWireFormatTest {
             provider = "github",
             connected = true,
             login = "octocat",
-            accessExpiresAtMs = 1_000L,
-            refreshExpiresAtMs = null,
+            accessExpiresAt = "1970-01-01T00:00:01.000Z",
+            refreshExpiresAt = null,
         )
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"oauthIdentityChanged""""))

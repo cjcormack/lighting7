@@ -17,7 +17,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
  */
 object DaoSyncSessions : IntIdTable("sync_session") {
     val project = reference("project_id", DaoProjects)
-    val startedAtMs = long("started_at_ms")
+    val startedAt = utcInstant("started_at")
     /** One of `CONFLICTS_PENDING`, `APPLYING`, `DONE`, `FAILED`, `ABORTED`. */
     val state = varchar("state", 32)
     /** Commit SHA local HEAD pointed at when the session opened. Used to spot stale `apply`s. */
@@ -33,7 +33,7 @@ class DaoSyncSession(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoSyncSession>(DaoSyncSessions)
 
     var project by DaoProject referencedOn DaoSyncSessions.project
-    var startedAtMs by DaoSyncSessions.startedAtMs
+    var startedAt by DaoSyncSessions.startedAt
     var state by DaoSyncSessions.state
     var localSha by DaoSyncSessions.localSha
     var remoteSha by DaoSyncSessions.remoteSha

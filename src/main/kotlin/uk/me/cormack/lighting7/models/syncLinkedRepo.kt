@@ -22,8 +22,8 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 object DaoSyncLinkedRepos : IntIdTable("sync_linked_repos") {
     val project = reference("project_id", DaoProjects)
     val repoUrl = varchar("repo_url", 512)
-    val firstLinkedAtMs = long("first_linked_at_ms")
-    val lastLinkedAtMs = long("last_linked_at_ms")
+    val firstLinkedAt = utcInstant("first_linked_at")
+    val lastLinkedAt = utcInstant("last_linked_at")
 
     init {
         uniqueIndex(project, repoUrl)
@@ -35,6 +35,6 @@ class DaoSyncLinkedRepo(id: EntityID<Int>) : IntEntity(id) {
 
     var project by DaoProject referencedOn DaoSyncLinkedRepos.project
     var repoUrl by DaoSyncLinkedRepos.repoUrl
-    var firstLinkedAtMs by DaoSyncLinkedRepos.firstLinkedAtMs
-    var lastLinkedAtMs by DaoSyncLinkedRepos.lastLinkedAtMs
+    var firstLinkedAt by DaoSyncLinkedRepos.firstLinkedAt
+    var lastLinkedAt by DaoSyncLinkedRepos.lastLinkedAt
 }

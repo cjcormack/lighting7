@@ -44,6 +44,8 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
+import java.time.Duration
+import uk.me.cormack.lighting7.models.asDuration
 
 /** Error code the client keys the "flatten these into local rows, then delete" recovery flow off. */
 internal const val CODE_LOOK_IN_USE = "LOOK_IN_USE"
@@ -293,7 +295,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         targetKey = row.targetKey
                         propertyName = row.propertyName
                         value = row.value
-                        fadeDurationMs = row.fadeDurationMs
+                        fadeDuration = row.fadeDuration
                         elementKey = row.elementKey
                         sortOrder = row.sortOrder
                     }
@@ -770,7 +772,7 @@ private fun createLookChildren(
             targetKey = row.targetKey
             propertyName = row.propertyName
             value = row.value
-            fadeDurationMs = row.fadeDurationMs
+            fadeDuration = row.fadeDurationMs.asDuration()
             elementKey = row.elementKey
             sortOrder = row.sortOrder
         }
@@ -895,7 +897,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     targetKey = it.targetKey,
                     propertyName = it.propertyName,
                     value = it.value,
-                    fadeDurationMs = it.fadeDurationMs,
+                    fadeDurationMs = it.fadeDuration?.toMillis(),
                     elementKey = it.elementKey,
                     sortOrder = it.sortOrder,
                 )

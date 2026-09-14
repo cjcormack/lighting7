@@ -21,6 +21,8 @@ import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import java.time.Duration
+import uk.me.cormack.lighting7.models.asDuration
 
 
 internal fun Route.routeApiRestProjectCues(state: State) {
@@ -80,8 +82,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     name = newCue.name
                     this.project = project
                     autoAdvance = newCue.autoAdvance
-                    autoAdvanceDelayMs = newCue.autoAdvanceDelayMs
-                    fadeDurationMs = newCue.fadeDurationMs
+                    autoAdvanceDelay = newCue.autoAdvanceDelayMs.asDuration()
+                    fadeDuration = newCue.fadeDurationMs.asDuration()
                     fadeCurve = newCue.fadeCurve
                     cueNumber = newCue.cueNumber
                     notes = newCue.notes
@@ -151,8 +153,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                 cue.name = updatedData.name
                 cue.autoAdvance = updatedData.autoAdvance
-                cue.autoAdvanceDelayMs = updatedData.autoAdvanceDelayMs
-                cue.fadeDurationMs = updatedData.fadeDurationMs
+                cue.autoAdvanceDelay = updatedData.autoAdvanceDelayMs.asDuration()
+                cue.fadeDuration = updatedData.fadeDurationMs.asDuration()
                 cue.fadeCurve = updatedData.fadeCurve
                 cue.notes = updatedData.notes
                 cue.stomp = updatedData.stomp
@@ -247,11 +249,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     cue.cueNumber = next
                     cue.cueNumberAuto = false
                 }
-                if ("fadeDurationMs" in body) cue.fadeDurationMs = body["fadeDurationMs"].nullableLong()
+                if ("fadeDurationMs" in body) cue.fadeDuration = body["fadeDurationMs"].nullableLong().asDuration()
                 if ("fadeCurve" in body) cue.fadeCurve = body["fadeCurve"]!!.jsonPrimitive.content
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
                 if ("autoAdvance" in body) cue.autoAdvance = body["autoAdvance"]!!.jsonPrimitive.boolean
-                if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelayMs = body["autoAdvanceDelayMs"].nullableLong()
+                if ("autoAdvanceDelayMs" in body) cue.autoAdvanceDelay = body["autoAdvanceDelayMs"].nullableLong().asDuration()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
 
                 if (hasLayers || hasEffects || hasAssignments || hasTriggers) {
@@ -366,8 +368,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 name = cueName
                 project = targetProject
                 autoAdvance = sourceCue.autoAdvance
-                autoAdvanceDelayMs = sourceCue.autoAdvanceDelayMs
-                fadeDurationMs = sourceCue.fadeDurationMs
+                autoAdvanceDelay = sourceCue.autoAdvanceDelay
+                fadeDuration = sourceCue.fadeDuration
                 fadeCurve = sourceCue.fadeCurve
                 stomp = sourceCue.stomp
                 cueStack = targetStack
@@ -394,9 +396,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     stomp = layer.stomp
                     speedMasterUuid = layer.speedMasterUuid
                     rateSpeedMasterUuid = layer.rateSpeedMasterUuid
-                    delayMs = layer.delayMs
-                    intervalMs = layer.intervalMs
-                    randomWindowMs = layer.randomWindowMs
+                    delay = layer.delay
+                    interval = layer.interval
+                    randomWindow = layer.randomWindow
                 }
             }
             for (assignment in sourceCue.propertyAssignments) {
@@ -406,7 +408,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     targetKey = assignment.targetKey
                     propertyName = assignment.propertyName
                     value = assignment.value
-                    fadeDurationMs = assignment.fadeDurationMs
+                    fadeDuration = assignment.fadeDuration
                     sortOrder = assignment.sortOrder
                     moveInDark = assignment.moveInDark
                 }
@@ -427,9 +429,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     elementFilter = effect.elementFilter
                     stepTiming = effect.stepTiming
                     parameters = effect.parameters
-                    delayMs = effect.delayMs
-                    intervalMs = effect.intervalMs
-                    randomWindowMs = effect.randomWindowMs
+                    delay = effect.delay
+                    interval = effect.interval
+                    randomWindow = effect.randomWindow
                     sortOrder = effect.sortOrder
                     speedMasterUuid = effect.speedMasterUuid
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid
@@ -440,9 +442,9 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 DaoCueTrigger.new {
                     cue = newCue
                     triggerType = trigger.triggerType
-                    delayMs = trigger.delayMs
-                    intervalMs = trigger.intervalMs
-                    randomWindowMs = trigger.randomWindowMs
+                    delay = trigger.delay
+                    interval = trigger.interval
+                    randomWindow = trigger.randomWindow
                     script = trigger.script
                     sortOrder = trigger.sortOrder
                 }

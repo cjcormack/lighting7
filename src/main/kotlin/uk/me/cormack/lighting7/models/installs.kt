@@ -16,7 +16,7 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
 object DaoInstalls : IntIdTable("installs") {
     val uuid = javaUUID("uuid").autoGenerate()
     val friendlyName = varchar("friendly_name", 100)
-    val createdAtMs = long("created_at_ms")
+    val createdAt = utcInstant("created_at")
 
     /**
      * Whether this desk polls GitHub for new releases in the background.
@@ -34,6 +34,6 @@ class DaoInstall(id: EntityID<Int>) : IntEntity(id) {
 
     var uuid by DaoInstalls.uuid
     var friendlyName by DaoInstalls.friendlyName
-    var createdAtMs by DaoInstalls.createdAtMs
+    var createdAt by DaoInstalls.createdAt
     var updateCheckEnabled by DaoInstalls.updateCheckEnabled
 }

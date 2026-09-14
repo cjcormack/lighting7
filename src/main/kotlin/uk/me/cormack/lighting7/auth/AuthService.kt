@@ -30,6 +30,10 @@ import uk.me.cormack.lighting7.models.UserRole
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.time.Duration
+import java.time.Instant
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /** What the auth gate stashes on a call: everything a handler needs to know about the caller. */
 data class AuthenticatedUser(
@@ -51,9 +55,9 @@ data class UserRecord(
     val role: UserRole,
     val disabled: Boolean,
     val passwordHash: String,
-    val createdAtMs: Long,
-    val passwordChangedAtMs: Long,
-    val lastLoginAtMs: Long?,
+    val createdAt: Instant,
+    val passwordChangedAt: Instant,
+    val lastLoginAt: Instant?,
 )
 
 /** Where a password reset token is in its short life. Derived from the row's timestamps, never stored. */
@@ -79,10 +83,10 @@ enum class ResetTokenStatus {
 data class ResetTokenHistoryEntry(
     val id: Int,
     val status: ResetTokenStatus,
-    val createdAtMs: Long,
-    val expiresAtMs: Long,
-    val usedAtMs: Long? = null,
-    val cancelledAtMs: Long? = null,
+    val createdAt: String,
+    val expiresAt: String,
+    val usedAt: String? = null,
+    val cancelledAt: String? = null,
     /** The admin who minted it. Null once that admin is deleted, or for a break-glass mint. */
     val createdByDisplayName: String? = null,
 )
@@ -104,7 +108,7 @@ sealed interface UserMutation<out T> {
 }
 
 /** A freshly minted reset token, minus its raw value (which the caller receives separately). */
-data class ResetTokenRecord(val id: Int, val expiresAtMs: Long)
+data class ResetTokenRecord(val id: Int, val expiresAt: Instant)
 
 /** What the public `GET /auth/reset/{token}` page learns about a token. */
 sealed interface ResetTokenLookup {
@@ -113,7 +117,7 @@ sealed interface ResetTokenLookup {
         val userId: Int,
         val username: String,
         val displayName: String,
-        val expiresAtMs: Long,
+        val expiresAt: Instant,
     ) : ResetTokenLookup
 
     /** Known token, no longer redeemable — the phone gets 410 plus status-specific copy. */
@@ -156,7 +160,7 @@ sealed interface DeviceLoginLookup {
         val userId: Int,
         val username: String,
         val displayName: String,
-        val expiresAtMs: Long,
+        val expiresAt: Instant,
     ) : DeviceLoginLookup
 
     /** Known token, no longer exchangeable — the phone gets 410 plus status-specific copy. */
@@ -181,13 +185,13 @@ sealed interface DeviceLoginRedemption {
  * than a sequential number, so the poll URL of one desk's sheet says nothing about anyone
  * else's.
  */
-data class DeviceLoginRecord(val id: String, val expiresAtMs: Long)
+data class DeviceLoginRecord(val id: String, val expiresAt: Instant)
 
 /** The desk sheet's poll answer: has a phone taken this QR yet, and if so, which phone? */
 @Serializable
 data class DeviceLoginStatusDto(
     val status: DeviceLoginStatus,
-    val expiresAtMs: Long,
+    val expiresAt: String,
     /**
      * The redeeming device, once there is one. With no confirmation step in the flow, this is
      * the only way the desk can tell that the phone which took the QR was the intended one —
@@ -201,8 +205,8 @@ data class DeviceLoginStatusDto(
 @Serializable
 data class SessionInfo(
     val id: Int,
-    val createdAtMs: Long,
-    val lastSeenAtMs: Long,
+    val createdAt: String,
+    val lastSeenAt: String,
     val userAgent: String?,
     val current: Boolean,
     /**
@@ -224,8 +228,8 @@ data class SessionInfo(
  * stale snapshot over a concurrent change (e.g. a disable racing a password change).
  *
  * Session expiry is sliding (Decision 4): each lookup bumps the in-memory record
- * immediately, but persists `last_seen_at_ms` / `expires_at_ms` at most once per
- * [refreshIntervalMs] per session — with `maximumPoolSize=1`, a DB write per request
+ * immediately, but persists `last_seen_at` / `expires_at` at most once per
+ * [refreshInterval] per session — with `maximumPoolSize=1`, a DB write per request
  * is not acceptable.
  *
  * Revocation takes effect on the next REST request (the gate re-resolves per call) and,
@@ -241,23 +245,23 @@ data class SessionInfo(
 class AuthService(
     private val database: Database,
     bcryptCost: Int = DEFAULT_BCRYPT_COST,
-    private val sessionTtlMs: Long = 30L * 24 * 60 * 60 * 1000,
-    private val refreshIntervalMs: Long = 60L * 60 * 1000,
+    private val sessionTtl: Duration = Duration.ofDays(30),
+    private val refreshInterval: Duration = Duration.ofHours(1),
     /** QR reset tokens are handed over in person and redeemed immediately; 15 minutes is plenty. */
-    private val resetTokenTtlMs: Long = 15L * 60 * 1000,
+    private val resetTokenTtl: Duration = Duration.ofMinutes(15),
     /**
      * How long a *spent* reset token stays visible in the admin's history list. Far longer
-     * than [resetTokenTtlMs], because this is about answering "was a link ever minted for
+     * than [resetTokenTtl], because this is about answering "was a link ever minted for
      * this account, and what became of it" — a question that outlives the link.
      */
-    private val resetTokenHistoryTtlMs: Long = 30L * 24 * 60 * 60 * 1000,
+    private val resetTokenHistoryTtl: Duration = Duration.ofDays(30),
     /**
      * Device-login tokens are scanned off the desk's own screen by someone standing at it.
      * Two minutes covers a phone cold-starting a browser and pulling the SPA bundle over
      * venue Wi-Fi; the control that actually matters is cancellation when the sheet closes.
      */
-    private val deviceLoginTtlMs: Long = 2L * 60 * 1000,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val deviceLoginTtl: Duration = Duration.ofMinutes(2),
+    private val clock: () -> Instant = ::nowUtc,
 ) {
     private val passwords = Passwords(bcryptCost)
 
@@ -265,11 +269,11 @@ class AuthService(
         val id: Int,
         val tokenHash: String,
         val userId: Int,
-        val createdAtMs: Long,
+        val createdAt: Instant,
         val userAgent: String?,
         val createdVia: SessionOrigin,
-        @Volatile var lastSeenAtMs: Long,
-        @Volatile var expiresAtMs: Long,
+        @Volatile var lastSeenAt: Instant,
+        @Volatile var expiresAt: Instant,
         /** When the sliding refresh last reached the DB — the write throttle's CAS anchor. */
         val lastPersistedMs: AtomicLong,
     )
@@ -317,17 +321,17 @@ class AuthService(
      *
      * The rule is **every *administrative* write to a users row emits** — every path a person
      * takes to change who may sign in and how. Deliberately not "every write to the table":
-     * [mintSession] writes `lastLoginAtMs` on the row and in the cache and does *not* emit, and
+     * [mintSession] writes `lastLoginAt` on the row and in the cache and does *not* emit, and
      * must not start, because it is reached from `POST /auth/login` and
      * `POST /auth/device/{token}` — both auth-exempt, the second LAN-public — so emitting there
      * would wire an unauthenticated request path to a fan-out across every connected client.
-     * `lastLoginAtMs` is therefore allowed to be stale in the users list until the next real
+     * `lastLoginAt` is therefore allowed to be stale in the users list until the next real
      * edit. It is the only such write; if you add another, decide which of these two it is.
      *
      * Within that rule [rotatePassword] emits even though no field of the users DTO moves for a
      * plain password set, because the test is "did an admin action write the row?", not "does a
      * current DTO field expose it" — the conditional version breaks silently the day someone adds
-     * `passwordChangedAtMs` to that DTO.
+     * `passwordChangedAt` to that DTO.
      *
      * Emitted with `tryEmit` for the same reason as [revocations], with a milder failure: a
      * dropped frame costs a stale list on that client until its next reconnect, rather than a
@@ -347,9 +351,9 @@ class AuthService(
         // assert the relationship rather than trusting a comment: invert them and startup would
         // silently delete live, redeemable reset links, and the holder would get "unknown link"
         // with nothing to explain why.
-        require(resetTokenHistoryTtlMs >= resetTokenTtlMs) {
-            "resetTokenHistoryTtlMs ($resetTokenHistoryTtlMs) must be at least resetTokenTtlMs " +
-                "($resetTokenTtlMs), or the startup prune would delete tokens that are still live"
+        require(resetTokenHistoryTtl >= resetTokenTtl) {
+            "resetTokenHistoryTtl ($resetTokenHistoryTtl) must be at least resetTokenTtl " +
+                "($resetTokenTtl), or the startup prune would delete tokens that are still live"
         }
 
         // One transaction for prune + both cache loads: with maximumPoolSize=1, each
@@ -405,8 +409,8 @@ class AuthService(
                 this.displayName = displayName
                 this.role = role
                 this.passwordHash = hash
-                this.createdAtMs = now
-                this.passwordChangedAtMs = now
+                this.createdAt = now
+                this.passwordChangedAt = now
             }.toRecord()
         } ?: return null
         users[record.userId] = record
@@ -574,12 +578,12 @@ class AuthService(
      * minutes ago could redeem it *after* being disabled and, because redemption
      * re-enables the account, walk straight back in with a password of their choosing.
      */
-    private fun cancelOutstandingResetTokens(userId: Int, nowMs: Long) {
+    private fun cancelOutstandingResetTokens(userId: Int, now: Instant) {
         DaoPasswordResetTokens.update({
             (DaoPasswordResetTokens.user eq userId) and
-                DaoPasswordResetTokens.usedAtMs.isNull() and
-                DaoPasswordResetTokens.cancelledAtMs.isNull()
-        }) { it[cancelledAtMs] = nowMs }
+                DaoPasswordResetTokens.usedAt.isNull() and
+                DaoPasswordResetTokens.cancelledAt.isNull()
+        }) { it[cancelledAt] = now }
     }
 
     // ─── Login / logout ────────────────────────────────────────────────
@@ -593,7 +597,7 @@ class AuthService(
      */
     suspend fun login(username: String, password: String, userAgent: String?, clientIp: String?): Pair<AuthenticatedUser, String> {
         val uname = normaliseUsername(username)
-        val penalty = penaltyDelayMs(uname, clock())
+        val penalty = penaltyDelayMs(uname, nowMs())
         if (penalty > 0) delay(penalty)
 
         val user = findUserByUsername(uname)
@@ -606,7 +610,7 @@ class AuthService(
             }
         }
         if (user == null || !verified) {
-            recordLoginFailure(uname, clock())
+            recordLoginFailure(uname, nowMs())
             throw AuthenticationException("Incorrect username or password")
         }
         if (user.disabled) {
@@ -624,7 +628,7 @@ class AuthService(
      * The `disabled` check lives **here** rather than only in [login], because not every
      * caller arrives via a password. A disabled account must not get a session row at all:
      * [lookupSession] would refuse the cookie, so it isn't an immediate breach, but the row
-     * would spring to life the moment the account was re-enabled and `lastLoginAtMs` would
+     * would spring to life the moment the account was re-enabled and `lastLoginAt` would
      * record a sign-in that never happened.
      */
     fun mintSession(
@@ -639,47 +643,50 @@ class AuthService(
         val record = transaction(database) {
             val daoUser = DaoUser.findById(user.userId) ?: throw AuthenticationException("Account no longer exists")
             if (daoUser.disabled) throw AuthorizationException("This account is disabled")
-            daoUser.lastLoginAtMs = now
+            daoUser.lastLoginAt = now
             DaoUserSession.new {
                 this.tokenHash = tokenHash
                 this.user = daoUser
-                this.createdAtMs = now
-                this.lastSeenAtMs = now
-                this.expiresAtMs = now + sessionTtlMs
+                this.createdAt = now
+                this.lastSeenAt = now
+                this.expiresAt = now + sessionTtl
                 this.userAgent = userAgent?.take(200)
                 this.clientIp = clientIp?.take(45)
                 this.createdVia = createdVia
             }.toRecord()
         }
         sessions[tokenHash] = record
-        val current = users.computeIfPresent(user.userId) { _, u -> u.copy(lastLoginAtMs = now) } ?: user
+        val current = users.computeIfPresent(user.userId) { _, u -> u.copy(lastLoginAt = now) } ?: user
         return current.toAuthenticated(tokenHash) to rawToken
     }
 
     /**
      * Resolve a raw cookie token to its user, or null for unknown / expired / revoked
      * sessions and disabled users. Pure map lookups on the happy path; the sliding
-     * refresh persists at most once per [refreshIntervalMs] per session.
+     * refresh persists at most once per [refreshInterval] per session.
      */
     fun lookupSession(rawToken: String): AuthenticatedUser? {
         val tokenHash = SessionTokens.sha256Hex(rawToken)
         val session = sessions[tokenHash] ?: return null
         val now = clock()
-        if (session.expiresAtMs <= now) {
+        if (session.expiresAt <= now) {
             sessions.remove(tokenHash)
             return null
         }
         val user = users[session.userId] ?: return null
         if (user.disabled) return null
 
-        session.lastSeenAtMs = now
-        session.expiresAtMs = now + sessionTtlMs
+        session.lastSeenAt = now
+        session.expiresAt = now + sessionTtl
+        val nowMs = now.toEpochMilli()
         val lastPersisted = session.lastPersistedMs.get()
-        if (now - lastPersisted >= refreshIntervalMs && session.lastPersistedMs.compareAndSet(lastPersisted, now)) {
+        if (nowMs - lastPersisted >= refreshInterval.toMillis() &&
+            session.lastPersistedMs.compareAndSet(lastPersisted, nowMs)
+        ) {
             transaction(database) {
                 DaoUserSession.findById(session.id)?.apply {
-                    lastSeenAtMs = now
-                    expiresAtMs = now + sessionTtlMs
+                    lastSeenAt = now
+                    expiresAt = now + sessionTtl
                 }
             }
         }
@@ -692,7 +699,7 @@ class AuthService(
         val session = sessions.remove(tokenHash) ?: return
         val now = clock()
         transaction(database) {
-            DaoUserSession.findById(session.id)?.revokedAtMs = now
+            DaoUserSession.findById(session.id)?.revokedAt = now
         }
         // Signing out retires any device-login QR this account has live. Logging out is a
         // weaker signal than revoke-all — it means "I'm done at this desk", not "I've been
@@ -721,7 +728,7 @@ class AuthService(
                 } else {
                     (DaoUserSessions.user eq userId) and (DaoUserSessions.tokenHash neq exceptTokenHash)
                 }
-            }) { it[revokedAtMs] = now }
+            }) { it[revokedAt] = now }
         }
         doomed.forEach {
             sessions.remove(it.tokenHash)
@@ -759,7 +766,7 @@ class AuthService(
         transaction(database) {
             DaoUser.findById(userId)?.apply {
                 passwordHash = hash
-                passwordChangedAtMs = now
+                passwordChangedAt = now
                 if (enableAsAdmin) {
                     disabled = false
                     role = UserRole.ADMIN
@@ -770,7 +777,7 @@ class AuthService(
             cancelOutstandingResetTokens(userId, now)
         }
         users.computeIfPresent(userId) { _, u ->
-            val rotated = u.copy(passwordHash = hash, passwordChangedAtMs = now)
+            val rotated = u.copy(passwordHash = hash, passwordChangedAt = now)
             if (enableAsAdmin) rotated.copy(disabled = false, role = UserRole.ADMIN) else rotated
         }
         revokeAllSessionsFor(userId, exceptTokenHash)
@@ -783,13 +790,13 @@ class AuthService(
     fun sessionsFor(userId: Int, currentTokenHash: String): List<SessionInfo> {
         val now = clock()
         return sessions.values
-            .filter { it.userId == userId && it.expiresAtMs > now }
-            .sortedByDescending { it.createdAtMs }
+            .filter { it.userId == userId && it.expiresAt > now }
+            .sortedByDescending { it.createdAt }
             .map {
                 SessionInfo(
                     id = it.id,
-                    createdAtMs = it.createdAtMs,
-                    lastSeenAtMs = it.lastSeenAtMs,
+                    createdAt = it.createdAt.toIsoUtc(),
+                    lastSeenAt = it.lastSeenAt.toIsoUtc(),
                     userAgent = it.userAgent,
                     current = it.tokenHash == currentTokenHash,
                     createdVia = it.createdVia,
@@ -805,7 +812,7 @@ class AuthService(
     private fun pruneExpiredSessionRows() {
         val now = clock()
         DaoUserSessions.deleteWhere {
-            (DaoUserSessions.expiresAtMs lessEq now) or DaoUserSessions.revokedAtMs.isNotNull()
+            (DaoUserSessions.expiresAt lessEq now) or DaoUserSessions.revokedAt.isNotNull()
         }
     }
 
@@ -830,10 +837,10 @@ class AuthService(
                 this.tokenHash = tokenHash
                 this.user = dao
                 this.createdByUser = createdByUserId?.let { DaoUser.findById(it) }
-                this.createdAtMs = now
-                this.expiresAtMs = now + resetTokenTtlMs
+                this.createdAt = now
+                this.expiresAt = now + resetTokenTtl
             }
-            ResetTokenRecord(row.id.value, row.expiresAtMs)
+            ResetTokenRecord(row.id.value, row.expiresAt)
         } ?: return null
         return record to rawToken
     }
@@ -852,7 +859,7 @@ class AuthService(
                 userId = row.user.id.value,
                 username = row.user.username,
                 displayName = row.user.displayName,
-                expiresAtMs = row.expiresAtMs,
+                expiresAt = row.expiresAt,
             )
         }
     }
@@ -862,10 +869,10 @@ class AuthService(
      * token id from another user's sheet can't be read through the wrong URL. Null when
      * the token doesn't exist (or isn't theirs).
      */
-    fun resetTokenStatus(userId: Int, tokenId: Int): Pair<ResetTokenStatus, Long>? = transaction(database) {
+    fun resetTokenStatus(userId: Int, tokenId: Int): Pair<ResetTokenStatus, Instant>? = transaction(database) {
         val row = DaoPasswordResetToken.findById(tokenId) ?: return@transaction null
         if (row.user.id.value != userId) return@transaction null
-        row.statusAt(clock()) to row.expiresAtMs
+        row.statusAt(clock()) to row.expiresAt
     }
 
     /**
@@ -881,15 +888,15 @@ class AuthService(
         val now = clock()
         DaoPasswordResetToken
             .find { DaoPasswordResetTokens.user eq userId }
-            .sortedByDescending { it.createdAtMs }
+            .sortedByDescending { it.createdAt }
             .map { row ->
                 ResetTokenHistoryEntry(
                     id = row.id.value,
                     status = row.statusAt(now),
-                    createdAtMs = row.createdAtMs,
-                    expiresAtMs = row.expiresAtMs,
-                    usedAtMs = row.usedAtMs,
-                    cancelledAtMs = row.cancelledAtMs,
+                    createdAt = row.createdAt.toIsoUtc(),
+                    expiresAt = row.expiresAt.toIsoUtc(),
+                    usedAt = row.usedAt?.toIsoUtc(),
+                    cancelledAt = row.cancelledAt?.toIsoUtc(),
                     createdByDisplayName = row.createdByUser?.displayName,
                 )
             }
@@ -903,8 +910,8 @@ class AuthService(
     fun cancelResetToken(userId: Int, tokenId: Int): Boolean = transaction(database) {
         val row = DaoPasswordResetToken.findById(tokenId) ?: return@transaction false
         if (row.user.id.value != userId) return@transaction false
-        if (row.usedAtMs == null && row.cancelledAtMs == null) {
-            row.cancelledAtMs = clock()
+        if (row.usedAt == null && row.cancelledAt == null) {
+            row.cancelledAt = clock()
         }
         true
     }
@@ -916,7 +923,7 @@ class AuthService(
      *
      * The authoritative check is the one inside the transaction. With `maximumPoolSize=1`
      * every transaction is serialised on the single connection, so two phones racing the
-     * same QR cannot both see `used_at_ms == null`: the loser gets [ResetRedemption.Dead].
+     * same QR cannot both see `used_at == null`: the loser gets [ResetRedemption.Dead].
      */
     suspend fun redeemResetToken(rawToken: String, newPassword: String): ResetRedemption {
         when (val preCheck = lookupResetToken(rawToken)) {
@@ -934,10 +941,10 @@ class AuthService(
                 .firstOrNull() ?: return@transaction ResetRedemption.Unknown
             val status = row.statusAt(now)
             if (status != ResetTokenStatus.PENDING) return@transaction ResetRedemption.Dead(status)
-            row.usedAtMs = now
+            row.usedAt = now
             val dao = row.user
             dao.passwordHash = hash
-            dao.passwordChangedAtMs = now
+            dao.passwordChangedAt = now
             // A reset also re-enables: an admin resetting a disabled account's password
             // means to hand it back, and leaving it disabled would answer the new
             // password with 403 (the confusing failure mode this whole flow exists to fix).
@@ -947,7 +954,7 @@ class AuthService(
         if (outcome is ResetRedemption.Applied) {
             val userId = outcome.user.userId
             users.computeIfPresent(userId) { _, u ->
-                u.copy(passwordHash = hash, passwordChangedAtMs = now, disabled = false)
+                u.copy(passwordHash = hash, passwordChangedAt = now, disabled = false)
             }
             revokeAllSessionsFor(userId)
             // Its own emit rather than one inherited from [rotatePassword]: this path writes the
@@ -963,22 +970,22 @@ class AuthService(
      * spent rows to survive a restart, or "has anyone minted a link for this account?" could
      * only ever be answered about the current uptime.
      *
-     * [DaoPasswordResetTokens.createdAtMs] is the right column to age on — and one predicate
+     * [DaoPasswordResetTokens.createdAt] is the right column to age on — and one predicate
      * is enough where there used to be three — because a row is never PENDING for longer
-     * than [resetTokenTtlMs]. Anything older than the retention window is therefore terminal
+     * than [resetTokenTtl]. Anything older than the retention window is therefore terminal
      * by construction, and a live token stays live across a restart for free: the person
      * holding the QR has no way to know the desk bounced.
      */
     private fun pruneOldResetTokenRows() {
-        val cutoff = clock() - resetTokenHistoryTtlMs
-        DaoPasswordResetTokens.deleteWhere { DaoPasswordResetTokens.createdAtMs less cutoff }
+        val cutoff = clock() - resetTokenHistoryTtl
+        DaoPasswordResetTokens.deleteWhere { DaoPasswordResetTokens.createdAt less cutoff }
     }
 
     /** Must be called inside a transaction. Status is derived from timestamps, never stored. */
-    private fun DaoPasswordResetToken.statusAt(now: Long): ResetTokenStatus = when {
-        usedAtMs != null -> ResetTokenStatus.USED
-        cancelledAtMs != null -> ResetTokenStatus.CANCELLED
-        expiresAtMs <= now -> ResetTokenStatus.EXPIRED
+    private fun DaoPasswordResetToken.statusAt(now: Instant): ResetTokenStatus = when {
+        usedAt != null -> ResetTokenStatus.USED
+        cancelledAt != null -> ResetTokenStatus.CANCELLED
+        expiresAt <= now -> ResetTokenStatus.EXPIRED
         else -> ResetTokenStatus.PENDING
     }
 
@@ -997,10 +1004,10 @@ class AuthService(
     private class DeviceLoginEntry(
         val id: String,
         val userId: Int,
-        val expiresAtMs: Long,
-        @Volatile var usedAtMs: Long? = null,
-        @Volatile var cancelledAtMs: Long? = null,
-        /** Which phone took it, for the desk sheet. Set at the same moment as [usedAtMs]. */
+        val expiresAt: Instant,
+        @Volatile var usedAt: Instant? = null,
+        @Volatile var cancelledAt: Instant? = null,
+        /** Which phone took it, for the desk sheet. Set at the same moment as [usedAt]. */
         @Volatile var redeemedByUserAgent: String? = null,
         @Volatile var redeemedSessionId: Int? = null,
     )
@@ -1025,10 +1032,10 @@ class AuthService(
      */
     private val deviceLoginLock = Any()
 
-    private fun DeviceLoginEntry.statusAt(now: Long): DeviceLoginStatus = when {
-        usedAtMs != null -> DeviceLoginStatus.USED
-        cancelledAtMs != null -> DeviceLoginStatus.CANCELLED
-        expiresAtMs <= now -> DeviceLoginStatus.EXPIRED
+    private fun DeviceLoginEntry.statusAt(now: Instant): DeviceLoginStatus = when {
+        usedAt != null -> DeviceLoginStatus.USED
+        cancelledAt != null -> DeviceLoginStatus.CANCELLED
+        expiresAt <= now -> DeviceLoginStatus.EXPIRED
         else -> DeviceLoginStatus.PENDING
     }
 
@@ -1053,15 +1060,15 @@ class AuthService(
         // Sweep, supersede and insert as one step: see [deviceLoginLock] for why splitting them
         // would let two concurrent mints both leave a live code.
         val entry = synchronized(deviceLoginLock) {
-            deviceLogins.entries.removeIf { it.value.expiresAtMs <= now - deviceLoginTtlMs }
+            deviceLogins.entries.removeIf { it.value.expiresAt <= now - deviceLoginTtl }
             cancelOutstandingDeviceLogins(userId, now)
             DeviceLoginEntry(
                 id = UUID.randomUUID().toString(),
                 userId = userId,
-                expiresAtMs = now + deviceLoginTtlMs,
+                expiresAt = now + deviceLoginTtl,
             ).also { deviceLogins[SessionTokens.sha256Hex(rawToken)] = it }
         }
-        return DeviceLoginRecord(entry.id, entry.expiresAtMs) to rawToken
+        return DeviceLoginRecord(entry.id, entry.expiresAt) to rawToken
     }
 
     /** Resolve a raw token from the QR URL. Does **not** consume it — the phone confirms first. */
@@ -1074,7 +1081,7 @@ class AuthService(
             userId = user.userId,
             username = user.username,
             displayName = user.displayName,
-            expiresAtMs = entry.expiresAtMs,
+            expiresAt = entry.expiresAt,
         )
     }
 
@@ -1094,7 +1101,7 @@ class AuthService(
         // and exactly one sees PENDING.
         val status = synchronized(deviceLoginLock) {
             val current = entry.statusAt(now)
-            if (current == DeviceLoginStatus.PENDING) entry.usedAtMs = now
+            if (current == DeviceLoginStatus.PENDING) entry.usedAt = now
             current
         }
         if (status != DeviceLoginStatus.PENDING) return DeviceLoginRedemption.Dead(status)
@@ -1118,7 +1125,7 @@ class AuthService(
         val entry = deviceLogins.values.firstOrNull { it.id == id && it.userId == userId } ?: return null
         return DeviceLoginStatusDto(
             status = entry.statusAt(clock()),
-            expiresAtMs = entry.expiresAtMs,
+            expiresAt = entry.expiresAt.toIsoUtc(),
             redeemedByUserAgent = entry.redeemedByUserAgent,
             sessionId = entry.redeemedSessionId,
         )
@@ -1128,7 +1135,7 @@ class AuthService(
     fun cancelDeviceLogin(userId: Int, id: String): Boolean = synchronized(deviceLoginLock) {
         val entry = deviceLogins.values.firstOrNull { it.id == id && it.userId == userId }
             ?: return@synchronized false
-        if (entry.usedAtMs == null && entry.cancelledAtMs == null) entry.cancelledAtMs = clock()
+        if (entry.usedAt == null && entry.cancelledAt == null) entry.cancelledAt = clock()
         true
     }
 
@@ -1145,11 +1152,11 @@ class AuthService(
      * interlocks, which have no other reason to know about it) is covered. Re-entrant from
      * [createDeviceLogin], which already holds it; `synchronized` on the JVM is re-entrant.
      */
-    private fun cancelOutstandingDeviceLogins(userId: Int, nowMs: Long) = synchronized(deviceLoginLock) {
+    private fun cancelOutstandingDeviceLogins(userId: Int, now: Instant) = synchronized(deviceLoginLock) {
         deviceLogins.values
             .filter { it.userId == userId }
             .forEach { entry ->
-                if (entry.usedAtMs == null && entry.cancelledAtMs == null) entry.cancelledAtMs = nowMs
+                if (entry.usedAt == null && entry.cancelledAt == null) entry.cancelledAt = now
             }
     }
 
@@ -1171,12 +1178,12 @@ class AuthService(
      * on (plan 3.4). Login uses the username-keyed path in [login] instead.
      */
     suspend fun awaitThrottle(key: String) {
-        val penalty = penaltyDelayMs(key, clock())
+        val penalty = penaltyDelayMs(key, nowMs())
         if (penalty > 0) delay(penalty)
     }
 
     /** Record a failure against an arbitrary throttle key — see [awaitThrottle]. */
-    fun recordThrottleFailure(key: String) = recordLoginFailure(key, clock())
+    fun recordThrottleFailure(key: String) = recordLoginFailure(key, nowMs())
 
     /** Forget an arbitrary throttle key's failures — see [awaitThrottle]. */
     fun clearThrottleFailures(key: String) = clearLoginFailures(key)
@@ -1185,7 +1192,16 @@ class AuthService(
      * The throttle policy, kept pure (no sleeping) so it can be unit-tested with a fake
      * clock: 1 s once a username has 5+ failures inside the last 5 minutes. In-memory
      * only — a restart forgives, which is fine for a physically-present crew.
+     *
+     * **Deliberately still millis**, where [clock] and everything it stamps moved to [Instant].
+     * Nothing here is a point in time that gets stored: [loginFailures] holds elapsed-time
+     * windows, and the only arithmetic is `now - first > window`. An `Instant` would buy no
+     * type safety over a subtraction whose operands are both already relative, and would cost
+     * this function the fake-clock arithmetic its tests are written against. Callers pass
+     * `clock().toEpochMilli()`; [SessionRecord.lastPersistedMs] is millis for the same reason.
      */
+    private fun nowMs(): Long = clock().toEpochMilli()
+
     internal fun penaltyDelayMs(username: String, nowMs: Long): Long {
         val window = loginFailures[throttleKey(username)] ?: return 0
         synchronized(window) {
@@ -1236,20 +1252,20 @@ class AuthService(
         role = role,
         disabled = disabled,
         passwordHash = passwordHash,
-        createdAtMs = createdAtMs,
-        passwordChangedAtMs = passwordChangedAtMs,
-        lastLoginAtMs = lastLoginAtMs,
+        createdAt = createdAt,
+        passwordChangedAt = passwordChangedAt,
+        lastLoginAt = lastLoginAt,
     )
 
     private fun DaoUserSession.toRecord() = SessionRecord(
         id = id.value,
         tokenHash = tokenHash,
         userId = user.id.value,
-        createdAtMs = createdAtMs,
+        createdAt = createdAt,
         userAgent = userAgent,
         createdVia = createdVia,
-        lastSeenAtMs = lastSeenAtMs,
-        expiresAtMs = expiresAtMs,
-        lastPersistedMs = AtomicLong(lastSeenAtMs),
+        lastSeenAt = lastSeenAt,
+        expiresAt = expiresAt,
+        lastPersistedMs = AtomicLong(lastSeenAt.toEpochMilli()),
     )
 }

@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.javatime.duration
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.dao.IntEntity
@@ -161,7 +163,7 @@ object DaoLookRows : IntIdTable("look_rows") {
     val targetKey = varchar("target_key", 255)
     val propertyName = varchar("property_name", 255)
     val value = text("value")
-    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val fadeDuration = duration("fade_duration").nullable()
 
     /**
      * Element-local suffix of a multi-element fixture's element key (`"head-0"`, `"element-1"`) —
@@ -181,7 +183,7 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
     var targetKey by DaoLookRows.targetKey
     var propertyName by DaoLookRows.propertyName
     var value by DaoLookRows.value
-    var fadeDurationMs by DaoLookRows.fadeDurationMs
+    var fadeDuration by DaoLookRows.fadeDuration
     var elementKey by DaoLookRows.elementKey
     var sortOrder by DaoLookRows.sortOrder
     var uuid by DaoLookRows.uuid

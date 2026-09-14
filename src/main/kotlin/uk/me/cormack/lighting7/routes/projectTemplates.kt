@@ -47,6 +47,9 @@ import uk.me.cormack.lighting7.models.TemplateRowDto
 import java.time.Instant
 import java.util.UUID
 import uk.me.cormack.lighting7.state.State
+import java.time.Duration
+import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.models.asDuration
 
 /** Error code the client keys the "this template is still applied somewhere" flow off. */
 internal const val CODE_TEMPLATE_IN_USE = "TEMPLATE_IN_USE"
@@ -209,7 +212,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     }
                 }
                 if (request.notesPresent) template.notes = request.notes
-                if (request.fadeDurationMsPresent) template.fadeDurationMs = request.fadeDurationMs
+                if (request.fadeDurationMsPresent) template.fadeDuration = request.fadeDurationMs.asDuration()
 
                 val rows = request.rows
                 if (rows != null) {
@@ -506,10 +509,11 @@ internal data class TemplateDto(
      * the emitter filter the strip already applies *are* the per-family scoping, and a deleted
      * template takes its history with it.
      *
-     * A string rather than a number so it reads in a log and in a diff. **Not** a sortable string:
-     * `Instant.toString()` omits the fractional part altogether on an exact second, so a stamp at
-     * `…:34Z` compares *after* one at `…:34.500Z` — a client orders these by parsing them, never by
-     * comparing the text. See `DaoTemplates.lastPressedAtMs` for why the column is millis.
+     * A string rather than a number so it reads in a log and in a diff, and — since it comes from
+     * `Instant.toIsoUtc()` — a **sortable** one: the fraction is always three digits, so a client
+     * may order these by comparing the text. That was not true while this was hand-formatted with
+     * `Instant.toString()`, which drops the fraction entirely on an exact second and so sorted
+     * `…:34Z` after `…:34.500Z`. See `models/timeColumns.kt`.
      */
     val lastPressedAt: String? = null,
     val rows: List<TemplateRowDto> = emptyList(),
@@ -775,7 +779,7 @@ internal fun performTemplateCreate(
             this.project = project
             this.name = name
             this.notes = input.notes
-            this.fadeDurationMs = input.fadeDurationMs
+            this.fadeDuration = input.fadeDurationMs.asDuration()
         }
         createTemplateRows(template, rows)
         effect?.let { createTemplateEffect(template, it) }
@@ -1243,12 +1247,12 @@ internal fun DaoTemplate.toDto(registry: FxRegistry, usage: TemplateUsage? = nul
         uuid = uuid.toString(),
         name = name,
         notes = notes,
-        fadeDurationMs = fadeDurationMs,
+        fadeDurationMs = fadeDuration?.toMillis(),
         family = familyOf()?.name,
         isGeneric = isGenericTemplate(),
         kind = if (storedEffect != null) TEMPLATE_KIND_EFFECT else TEMPLATE_KIND_VALUE,
         requiredEmitters = requiredEmittersOf(),
-        lastPressedAt = lastPressedAtMs?.let { Instant.ofEpochMilli(it).toString() },
+        lastPressedAt = lastPressedAt?.toIsoUtc(),
         rows = rowList.map { it.toDto() },
         effect = storedEffect?.toDto(registry),
         layerCount = resolvedUsage.layerCount,

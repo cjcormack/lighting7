@@ -496,7 +496,7 @@ Emitted from REST handlers via `State.cloudSyncEventsFlow`; outbound-only, trans
 | `cloudSyncConflictsPending` | `projectId`, `sessionId`, `conflictCount` |
 | `cloudSyncLogAppended` | `projectId`, `entry: SyncLogEntryDto` |
 | `cloudSyncProjectImported` | `projectId`, `projectUuid`, `name` |
-| `oauthIdentityChanged` | `provider`, `connected`, `login?`, `accessExpiresAtMs?`, `refreshExpiresAtMs?`, `reauthRequired` |
+| `oauthIdentityChanged` | `provider`, `connected`, `login?`, `accessExpiresAt?`, `refreshExpiresAt?`, `reauthRequired` |
 
 `oauthIdentityChanged` is a nudge, not the detail: clients invalidate their identity cache and
 re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineering.md).

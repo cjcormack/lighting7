@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.models
 
+import org.jetbrains.exposed.v1.javatime.duration
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.v1.dao.IntEntity
@@ -173,8 +175,8 @@ object DaoCues : IntIdTable("cues") {
     val cueStack = reference("cue_stack_id", DaoCueStacks)
     val sortOrder = integer("sort_order").default(0)
     val autoAdvance = bool("auto_advance").default(false)
-    val autoAdvanceDelayMs = long("auto_advance_delay_ms").nullable()
-    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val autoAdvanceDelay = duration("auto_advance_delay").nullable()
+    val fadeDuration = duration("fade_duration").nullable()
     val fadeCurve = varchar("fade_curve", 50).default("LINEAR")
     val cueNumber = varchar("cue_number", 20).nullable()
     /**
@@ -209,8 +211,8 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var cueStack by DaoCueStack referencedOn DaoCues.cueStack
     var sortOrder by DaoCues.sortOrder
     var autoAdvance by DaoCues.autoAdvance
-    var autoAdvanceDelayMs by DaoCues.autoAdvanceDelayMs
-    var fadeDurationMs by DaoCues.fadeDurationMs
+    var autoAdvanceDelay by DaoCues.autoAdvanceDelay
+    var fadeDuration by DaoCues.fadeDuration
     var fadeCurve by DaoCues.fadeCurve
     var cueNumber by DaoCues.cueNumber
     var cueNumberAuto by DaoCues.cueNumberAuto
@@ -241,9 +243,9 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val elementFilter = varchar("element_filter", 50).nullable()
     val stepTiming = bool("step_timing").nullable()
     val parameters = json<Map<String, String>>("parameters", Json)
-    val delayMs = long("delay_ms").nullable()
-    val intervalMs = long("interval_ms").nullable()
-    val randomWindowMs = long("random_window_ms").nullable()
+    val delay = duration("delay").nullable()
+    val interval = duration("interval").nullable()
+    val randomWindow = duration("random_window").nullable()
     val sortOrder = integer("sort_order").default(0)
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
@@ -276,9 +278,9 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var elementFilter by DaoCueAdHocEffects.elementFilter
     var stepTiming by DaoCueAdHocEffects.stepTiming
     var parameters by DaoCueAdHocEffects.parameters
-    var delayMs by DaoCueAdHocEffects.delayMs
-    var intervalMs by DaoCueAdHocEffects.intervalMs
-    var randomWindowMs by DaoCueAdHocEffects.randomWindowMs
+    var delay by DaoCueAdHocEffects.delay
+    var interval by DaoCueAdHocEffects.interval
+    var randomWindow by DaoCueAdHocEffects.randomWindow
     var sortOrder by DaoCueAdHocEffects.sortOrder
     var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
@@ -293,7 +295,7 @@ object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
     val targetKey = varchar("target_key", 255)
     val propertyName = varchar("property_name", 255)
     val value = text("value")
-    val fadeDurationMs = long("fade_duration_ms").nullable()
+    val fadeDuration = duration("fade_duration").nullable()
     val sortOrder = integer("sort_order").default(0)
     val moveInDark = bool("move_in_dark").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
@@ -307,7 +309,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var targetKey by DaoCuePropertyAssignments.targetKey
     var propertyName by DaoCuePropertyAssignments.propertyName
     var value by DaoCuePropertyAssignments.value
-    var fadeDurationMs by DaoCuePropertyAssignments.fadeDurationMs
+    var fadeDuration by DaoCuePropertyAssignments.fadeDuration
     var sortOrder by DaoCuePropertyAssignments.sortOrder
     var moveInDark by DaoCuePropertyAssignments.moveInDark
     var uuid by DaoCuePropertyAssignments.uuid
@@ -407,9 +409,9 @@ object DaoCueLayers : IntIdTable("cue_layers") {
     /** Per-layer wall-clock rate-master override (null → the effect's own). */
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
 
-    val delayMs = long("delay_ms").nullable()
-    val intervalMs = long("interval_ms").nullable()
-    val randomWindowMs = long("random_window_ms").nullable()
+    val delay = duration("delay").nullable()
+    val interval = duration("interval").nullable()
+    val randomWindow = duration("random_window").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -504,9 +506,9 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     var stomp by DaoCueLayers.stomp
     var speedMasterUuid by DaoCueLayers.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueLayers.rateSpeedMasterUuid
-    var delayMs by DaoCueLayers.delayMs
-    var intervalMs by DaoCueLayers.intervalMs
-    var randomWindowMs by DaoCueLayers.randomWindowMs
+    var delay by DaoCueLayers.delay
+    var interval by DaoCueLayers.interval
+    var randomWindow by DaoCueLayers.randomWindow
     var uuid by DaoCueLayers.uuid
 
     /**
@@ -536,10 +538,10 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
      * True when this layer fires on a timer rather than at cue apply.
      *
      * Mirrors `CookLayer.isTimed`, and the same rule holds:
-     * `randomWindowMs` alone does **not** make a layer timed — it only jitters an interval that is
+     * `randomWindow` alone does **not** make a layer timed — it only jitters an interval that is
      * already there.
      */
-    val isTimed: Boolean get() = delayMs != null || intervalMs != null
+    val isTimed: Boolean get() = delay != null || interval != null
 }
 
 /** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
@@ -548,7 +550,7 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     targetKey = targetKey,
     propertyName = propertyName,
     value = value,
-    fadeDurationMs = fadeDurationMs,
+    fadeDurationMs = fadeDuration?.toMillis(),
     sortOrder = sortOrder,
     moveInDark = moveInDark,
 )
@@ -568,9 +570,9 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     elementFilter = elementFilter,
     stepTiming = stepTiming,
     parameters = parameters,
-    delayMs = delayMs,
-    intervalMs = intervalMs,
-    randomWindowMs = randomWindowMs,
+    delayMs = delay?.toMillis(),
+    intervalMs = interval?.toMillis(),
+    randomWindowMs = randomWindow?.toMillis(),
     sortOrder = sortOrder,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),

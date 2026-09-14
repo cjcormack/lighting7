@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import uk.me.cormack.lighting7.routes.applyCue
+import java.time.Duration
 
 /**
  * `CueApplyData` has exactly one builder.
@@ -88,8 +89,8 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 name = "rich cue"; cueStack = stack; sortOrder = 7
                 cueType = CueType.STANDARD.name
                 autoAdvance = true
-                autoAdvanceDelayMs = 2_500L
-                fadeDurationMs = 1_250L
+                autoAdvanceDelay = Duration.ofMillis(2_500L)
+                fadeDuration = Duration.ofMillis(1_250L)
                 fadeCurve = "SINE_IN_OUT"
                 stomp = true
             }
@@ -97,7 +98,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 this.cue = cue
                 this.look = look
                 sortOrder = 3; targets = emptyList()
-                delayMs = 400L
+                delay = Duration.ofMillis(400L)
             }
             DaoCuePropertyAssignment.new {
                 this.cue = cue
@@ -110,13 +111,13 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
                 beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
                 parameters = emptyMap()
-                delayMs = 750L
+                delay = Duration.ofMillis(750L)
             }
             DaoCueTrigger.new {
                 this.cue = cue
                 triggerType = TriggerType.ACTIVATION
                 this.script = script
-                intervalMs = 5_000L
+                interval = Duration.ofMillis(5_000L)
                 sortOrder = 0
             }
             cue.id.value

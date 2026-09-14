@@ -11,6 +11,8 @@ import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Thrown when the desk's current project changes part-way through [AiService.chat]. Answered as
@@ -41,7 +43,7 @@ class AiService(
      * @return The AI response including the conversation ID for continuation.
      */
     suspend fun chat(conversationId: Int?, userMessage: String): AiChatResponse {
-        val now = System.currentTimeMillis()
+        val now = nowUtc()
 
         // Load or create conversation. Chat is a live-runtime surface — it drives whatever
         // show is loaded — so a conversation from another project is not merely uninteresting,
@@ -197,7 +199,7 @@ class AiService(
         transaction(state.database) {
             val conv = DaoAiConversation.findById(convId)!!
             conv.messages = allMessages
-            conv.updatedAt = System.currentTimeMillis()
+            conv.updatedAt = nowUtc()
             // Auto-title from first user message if not set
             if (conv.title == null) {
                 conv.title = userMessage.take(100)
@@ -220,7 +222,7 @@ class AiService(
                     AiConversationSummary(
                         id = conv.id.value,
                         title = conv.title,
-                        updatedAt = conv.updatedAt,
+                        updatedAt = conv.updatedAt.toIsoUtc(),
                     )
                 }
         }
@@ -237,7 +239,7 @@ class AiService(
                 id = conv.id.value,
                 title = conv.title,
                 messages = conv.messages.toDisplayMessages(),
-                updatedAt = conv.updatedAt,
+                updatedAt = conv.updatedAt.toIsoUtc(),
             )
         }
     }
@@ -541,14 +543,16 @@ data class AiAction(
 data class AiConversationSummary(
     val id: Int,
     val title: String?,
-    val updatedAt: Long,
+    /** ISO-8601 UTC, sortable as text. See `Instant.toIsoUtc`. */
+    val updatedAt: String,
 )
 
 data class AiConversationDetail(
     val id: Int,
     val title: String?,
     val messages: List<DisplayMessage>,
-    val updatedAt: Long,
+    /** ISO-8601 UTC, sortable as text. See `Instant.toIsoUtc`. */
+    val updatedAt: String,
 )
 
 data class DisplayMessage(

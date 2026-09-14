@@ -14,6 +14,8 @@ import uk.me.cormack.lighting7.models.DaoSyncLogEntries
 import uk.me.cormack.lighting7.models.DaoSyncLogEntry
 import uk.me.cormack.lighting7.plugins.CloudSyncLogAppendedOutMessage
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Persisted activity log for cloud sync. Each call writes one [DaoSyncLogEntry], prunes the
@@ -64,12 +66,12 @@ class SyncLogger(
     }
 
     private fun write(projectId: Int, level: SyncLogLevel, event: String, message: String) {
-        val ts = System.currentTimeMillis()
+        val ts = nowUtc()
         val dto = transaction(state.database) {
             val project = DaoProject.findById(projectId) ?: return@transaction null
             val row = DaoSyncLogEntry.new {
                 this.project = project
-                this.tsMs = ts
+                this.ts = ts
                 this.level = level.name
                 this.event = event
                 this.message = message
@@ -106,7 +108,7 @@ class SyncLogger(
 
     private fun DaoSyncLogEntry.toDto(): SyncLogEntryDto = SyncLogEntryDto(
         id = id.value,
-        tsMs = tsMs,
+        ts = ts.toIsoUtc(),
         level = level,
         event = event,
         message = message,
@@ -161,7 +163,8 @@ object SyncLogEvent {
 @Serializable
 data class SyncLogEntryDto(
     val id: Int,
-    val tsMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val ts: String,
     val level: String,
     val event: String,
     val message: String,

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.state
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.models.nowUtc
 
 private val logger = LoggerFactory.getLogger("InstallBootstrap")
 
@@ -41,7 +42,7 @@ internal fun JdbcTransaction.ensureInstallRow() {
         ?: "lighting7"
     DaoInstall.new {
         friendlyName = hostname
-        createdAtMs = System.currentTimeMillis()
+        createdAt = nowUtc()
     }
     logger.info("Created install identity row with friendlyName='{}'", hostname)
 }

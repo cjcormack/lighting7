@@ -35,8 +35,8 @@ cues (modified)
 ├── cue_stack_id (nullable FK → cue_stacks)
 ├── sort_order (int, default 0)
 ├── auto_advance (boolean, default false)
-├── auto_advance_delay_ms (long, nullable)
-├── fade_duration_ms (long, nullable)
+├── auto_advance_delay (Duration, nullable — nanoseconds on disk)
+├── fade_duration (Duration, nullable — nanoseconds on disk)
 ├── fade_curve (varchar 50, default "LINEAR")
 ├── cue_number (varchar 20, nullable — free-form display label)
 ├── cue_number_auto (boolean, default false — cue_number was derived from position)
@@ -110,7 +110,7 @@ is next mutated.
 
 - **Nullable FK** on `cues.cue_stack_id` preserves backward compatibility — standalone cues have `null`
 - **Sort order** as integer allows easy reordering without renumbering (gaps are fine)
-- **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration_ms = null` means snap-cut
+- **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration = null` means snap-cut
 - **`cue_number` is a display label only** — `sort_order` remains the authoritative playback order
 - **MARKER cues are invisible to advance** — `advance` and `go-to` only target `STANDARD` cues
 - **Per-cue auto-advance** allows some cues to auto-advance while others wait for manual progression

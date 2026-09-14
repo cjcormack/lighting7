@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import java.time.Duration
+
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.application.call
@@ -49,6 +51,8 @@ import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.toHttpStatus
 import uk.me.cormack.lighting7.sync.withAttribution
 import java.util.UUID
+import uk.me.cormack.lighting7.models.nowUtc
+import uk.me.cormack.lighting7.models.toIsoUtc
 
 /**
  * Cloud-sync REST endpoints.
@@ -121,7 +125,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     request.branch?.let { cfg.branch = it }
                     request.autoSyncEnabled?.let { cfg.autoSyncEnabled = it }
                     if (request.autoSyncIntervalMs != null) {
-                        cfg.autoSyncIntervalMs = request.autoSyncIntervalMs
+                        cfg.autoSyncInterval = Duration.ofMillis(request.autoSyncIntervalMs)
                     }
                     cfg.toBareDto() to cfg.repoUrl
                 }
@@ -466,18 +470,18 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                 val cfg = ensureSyncConfig(project)
                 val current = cfg.repoUrl?.takeIf { it.isNotBlank() }
                 if (current != null) {
-                    val now = System.currentTimeMillis()
+                    val now = nowUtc()
                     val existing = DaoSyncLinkedRepo
                         .find { DaoSyncLinkedRepos.project eq project.id }
                         .firstOrNull { it.repoUrl == current }
                     if (existing != null) {
-                        existing.lastLinkedAtMs = now
+                        existing.lastLinkedAt = now
                     } else {
                         DaoSyncLinkedRepo.new {
                             this.project = project
                             this.repoUrl = current
-                            this.firstLinkedAtMs = now
-                            this.lastLinkedAtMs = now
+                            this.firstLinkedAt = now
+                            this.lastLinkedAt = now
                         }
                     }
                 }
@@ -524,7 +528,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     }
                     cfg.repoUrl = target
                     cfg.autoSyncEnabled = true
-                    remembered.lastLinkedAtMs = System.currentTimeMillis()
+                    remembered.lastLinkedAt = nowUtc()
                     cfg.toBareDto() to cfg.repoUrl
                 }
             } catch (e: SyncException) {
@@ -612,7 +616,8 @@ data class SyncConfigDto(
     val autoSyncEnabled: Boolean,
     val autoSyncIntervalMs: Long?,
     val lastSyncedSha: String?,
-    val lastSyncedAtMs: Long?,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val lastSyncedAt: String?,
     /**
      * True if a PAT for the configured `repoUrl` is stored in the credential store. The
      * actual token is never returned to the client; this flag is just so the UI can
@@ -630,7 +635,8 @@ data class SyncConfigDto(
 @Serializable
 data class LinkedRepoDto(
     val repoUrl: String,
-    val lastLinkedAtMs: Long,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val lastLinkedAt: String,
 )
 
 @Serializable
@@ -780,8 +786,8 @@ private suspend fun resolveTokenPresent(state: State, repoUrl: String?): Boolean
 internal fun loadLinkedRepos(project: DaoProject): List<LinkedRepoDto> =
     DaoSyncLinkedRepo
         .find { DaoSyncLinkedRepos.project eq project.id }
-        .sortedByDescending { it.lastLinkedAtMs }
-        .map { LinkedRepoDto(repoUrl = it.repoUrl, lastLinkedAtMs = it.lastLinkedAtMs) }
+        .sortedByDescending { it.lastLinkedAt }
+        .map { LinkedRepoDto(repoUrl = it.repoUrl, lastLinkedAt = it.lastLinkedAt.toIsoUtc()) }
 
 /**
  * Build a [SyncConfigDto] from the DAO without consulting the credential store. Callers
@@ -799,9 +805,9 @@ internal fun DaoSyncConfig.toBareDto(
     repoUrl = repoUrl,
     synced = synced,
     autoSyncEnabled = autoSyncEnabled,
-    autoSyncIntervalMs = autoSyncIntervalMs,
+    autoSyncIntervalMs = autoSyncInterval?.toMillis(),
     lastSyncedSha = lastSyncedSha,
-    lastSyncedAtMs = lastSyncedAtMs,
+    lastSyncedAt = lastSyncedAt?.toIsoUtc(),
     tokenPresent = false,
     linkedRepos = linkedRepos,
 )

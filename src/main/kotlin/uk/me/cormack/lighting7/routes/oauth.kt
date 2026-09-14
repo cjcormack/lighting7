@@ -49,6 +49,9 @@ import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
+import uk.me.cormack.lighting7.models.toIsoUtc
+import uk.me.cormack.lighting7.models.asInstant
+import java.time.Instant
 
 /**
  * GitHub OAuth routes — both the user-facing web flow (start + callback) and the
@@ -184,13 +187,13 @@ internal fun Route.routeApiOAuthGitHub(state: State) {
                     connected = true,
                     login = it.githubLogin,
                     githubUserId = it.githubUserId,
-                    accessExpiresAtMs = it.accessExpiresAtMs,
-                    refreshExpiresAtMs = it.refreshExpiresAtMs,
-                    connectedAtMs = it.connectedAtMs,
+                    accessExpiresAt = it.accessExpiresAt?.toIsoUtc(),
+                    refreshExpiresAt = it.refreshExpiresAt?.toIsoUtc(),
+                    connectedAt = it.connectedAt.toIsoUtc(),
                     oauthConfigured = state.oauthGitHubClient != null,
-                    reauthRequired = it.reauthRequiredAtMs != null,
+                    reauthRequired = it.reauthRequiredAt != null,
                     reauthReason = it.reauthReason,
-                    reauthRequiredAtMs = it.reauthRequiredAtMs,
+                    reauthRequiredAt = it.reauthRequiredAt?.toIsoUtc(),
                 )
             }
         } ?: IdentityResponse(connected = false, oauthConfigured = state.oauthGitHubClient != null)
@@ -354,17 +357,24 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
     val identity = newStoredIdentity(token, user, System.currentTimeMillis())
     state.oauthTokenStore?.save(identity)
         ?: error("Token store should be present whenever OAuth client is configured")
+    // Converted once, then read by both the row and the broadcast frame — the same "one value,
+    // two consumers" rule `TemplatePressLog` follows. `connectedAtMs` is non-null on the blob, so
+    // it goes through `Instant.ofEpochMilli` directly: routing it through the nullable
+    // `asInstant()` helper would only buy a `!!` that re-asserts what the type already says.
+    val accessExpiresAt = identity.accessExpiresAtMs.asInstant()
+    val refreshExpiresAt = identity.refreshExpiresAtMs.asInstant()
+    val connectedAt = Instant.ofEpochMilli(identity.connectedAtMs)
     transaction(state.database) {
         val existing = DaoOAuthIdentity.findGithubDefault()
         if (existing != null) {
             existing.githubLogin = identity.githubLogin
             existing.githubUserId = identity.githubUserId
-            existing.accessExpiresAtMs = identity.accessExpiresAtMs
-            existing.refreshExpiresAtMs = identity.refreshExpiresAtMs
-            existing.connectedAtMs = identity.connectedAtMs
+            existing.accessExpiresAt = accessExpiresAt
+            existing.refreshExpiresAt = refreshExpiresAt
+            existing.connectedAt = connectedAt
             // This *is* the recovery path — a re-connect is exactly what the re-auth
             // marking was asking for, so clear it (the fresh blob above already has).
-            existing.reauthRequiredAtMs = null
+            existing.reauthRequiredAt = null
             existing.reauthReason = null
         } else {
             DaoOAuthIdentity.new {
@@ -372,9 +382,9 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
                 this.scope = DaoOAuthIdentities.DEFAULT_SCOPE
                 this.githubLogin = identity.githubLogin
                 this.githubUserId = identity.githubUserId
-                this.accessExpiresAtMs = identity.accessExpiresAtMs
-                this.refreshExpiresAtMs = identity.refreshExpiresAtMs
-                this.connectedAtMs = identity.connectedAtMs
+                this.accessExpiresAt = accessExpiresAt
+                this.refreshExpiresAt = refreshExpiresAt
+                this.connectedAt = connectedAt
             }
         }
     }
@@ -383,8 +393,8 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
             provider = DaoOAuthIdentities.PROVIDER_GITHUB,
             connected = true,
             login = identity.githubLogin,
-            accessExpiresAtMs = identity.accessExpiresAtMs,
-            refreshExpiresAtMs = identity.refreshExpiresAtMs,
+            accessExpiresAt = accessExpiresAt?.toIsoUtc(),
+            refreshExpiresAt = refreshExpiresAt?.toIsoUtc(),
         ),
     )
 
@@ -512,9 +522,12 @@ data class IdentityResponse(
     val connected: Boolean,
     val login: String? = null,
     val githubUserId: Long? = null,
-    val accessExpiresAtMs: Long? = null,
-    val refreshExpiresAtMs: Long? = null,
-    val connectedAtMs: Long? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val accessExpiresAt: String? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val refreshExpiresAt: String? = null,
+    /** ISO-8601 UTC instant, sortable as text. See `Instant.toIsoUtc`. */
+    val connectedAt: String? = null,
     /** False means the UI should hide the OAuth button and offer only the PAT path. */
     val oauthConfigured: Boolean,
     /**
@@ -525,8 +538,8 @@ data class IdentityResponse(
     val reauthRequired: Boolean = false,
     /** GitHub's stated reason, when [reauthRequired]. */
     val reauthReason: String? = null,
-    /** When the rejection was first seen, when [reauthRequired]. */
-    val reauthRequiredAtMs: Long? = null,
+    /** When the rejection was first seen, when [reauthRequired]. ISO-8601 UTC. */
+    val reauthRequiredAt: String? = null,
 )
 
 @Serializable

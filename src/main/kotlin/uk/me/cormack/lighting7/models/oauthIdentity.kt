@@ -23,9 +23,9 @@ object DaoOAuthIdentities : IntIdTable("oauth_identities") {
     val scope = varchar("scope", 64).default(DEFAULT_SCOPE)
     val githubLogin = varchar("github_login", 100)
     val githubUserId = long("github_user_id")
-    val accessExpiresAtMs = long("access_expires_at_ms").nullable()
-    val refreshExpiresAtMs = long("refresh_expires_at_ms").nullable()
-    val connectedAtMs = long("connected_at_ms")
+    val accessExpiresAt = utcInstant("access_expires_at").nullable()
+    val refreshExpiresAt = utcInstant("refresh_expires_at").nullable()
+    val connectedAt = utcInstant("connected_at")
 
     /**
      * When GitHub last rejected our refresh token outright, i.e. the moment this identity
@@ -36,9 +36,9 @@ object DaoOAuthIdentities : IntIdTable("oauth_identities") {
      * ([uk.me.cormack.lighting7.sync.auth.oauth.StoredOAuthIdentity]) so the UI can say
      * "reconnect required" without touching secret material.
      */
-    val reauthRequiredAtMs = long("reauth_required_at_ms").nullable()
+    val reauthRequiredAt = utcInstant("reauth_required_at").nullable()
 
-    /** GitHub's reason for the rejection, shown verbatim to the user. Null iff [reauthRequiredAtMs] is. */
+    /** GitHub's reason for the rejection, shown verbatim to the user. Null iff [reauthRequiredAt] is. */
     val reauthReason = varchar("reauth_reason", 300).nullable()
 
     init {
@@ -62,9 +62,9 @@ class DaoOAuthIdentity(id: EntityID<Int>) : IntEntity(id) {
     var scope by DaoOAuthIdentities.scope
     var githubLogin by DaoOAuthIdentities.githubLogin
     var githubUserId by DaoOAuthIdentities.githubUserId
-    var accessExpiresAtMs by DaoOAuthIdentities.accessExpiresAtMs
-    var refreshExpiresAtMs by DaoOAuthIdentities.refreshExpiresAtMs
-    var connectedAtMs by DaoOAuthIdentities.connectedAtMs
-    var reauthRequiredAtMs by DaoOAuthIdentities.reauthRequiredAtMs
+    var accessExpiresAt by DaoOAuthIdentities.accessExpiresAt
+    var refreshExpiresAt by DaoOAuthIdentities.refreshExpiresAt
+    var connectedAt by DaoOAuthIdentities.connectedAt
+    var reauthRequiredAt by DaoOAuthIdentities.reauthRequiredAt
     var reauthReason by DaoOAuthIdentities.reauthReason
 }

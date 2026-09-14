@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import java.nio.file.Files
 import java.util.UUID
 import kotlin.io.path.exists
+import uk.me.cormack.lighting7.models.nowUtc
 
 /**
  * Clone a remote repository as a brand-new local project. The route handler at
@@ -109,7 +110,7 @@ class CloudSyncImporter(
                         // treat the clone as a one-time import.
                         this.autoSyncEnabled = true
                         this.lastSyncedSha = headSha
-                        this.lastSyncedAtMs = System.currentTimeMillis()
+                        this.lastSyncedAt = nowUtc()
                     }
                 }
             }
