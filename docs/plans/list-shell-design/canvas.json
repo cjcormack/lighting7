@@ -1,0 +1,122 @@
+{
+  "artboards": [
+    {
+      "file": "Spec.dc.html",
+      "title": "Today measured · the rules · the open calls",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1400
+    },
+    {
+      "file": "Kit.dc.html",
+      "title": "The kit · one shell, six lists",
+      "x": 1340,
+      "y": 0,
+      "w": 1240,
+      "h": 3220
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Fixtures › List",
+      "x": 0,
+      "y": 3420,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Groups.dc.html",
+      "title": "Groups › List",
+      "x": 1280,
+      "y": 3420,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Programmer.dc.html",
+      "title": "Programmer",
+      "x": 2560,
+      "y": 3420,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Show.dc.html",
+      "title": "Show › Table",
+      "x": 0,
+      "y": 4440,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Channels.dc.html",
+      "title": "Channels › Table",
+      "x": 1280,
+      "y": 4440,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Patch.dc.html",
+      "title": "Patch List",
+      "x": 2560,
+      "y": 4440,
+      "w": 1180,
+      "h": 820
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -420,
+      "w": 820,
+      "text": "List views on one shell.\n\nFixtures and Groups sit in a Card with their own margins and ground; the other four are full-height columns on the programmer's chrome system, and even those differ in a gutter, a doubled line and three swatch shapes. Every surface is redrawn below on one shell — header 48 · rows 40 · the selection bar · the sheet · footer 22, on a 12px gutter, three grounds — and the Kit says where that shell lives in code so the agreement is automatic. The five open calls were made on 2026-09-15 and are on the Spec board.\n\nAssumed: static mockups at the 1180×820 frame the screenshots were taken at, dark only, the app header and sidebar as they are. Spec has today's values measured from the code and the open calls."
+    },
+    {
+      "id": "n-main",
+      "x": 0,
+      "y": 3270,
+      "w": 1180,
+      "text": "Fixtures › List — the biggest change. Today: a Card (m-2 p-2 sm:m-4 sm:p-4, rounded-xl, bg-card) holding the breadcrumb row, a wrapping toolbar, and a rounded table capped at calc(100vh − 14rem) — two scrollers, no selection bar, no footer. Here: the same full-height shell as Channels › Table."
+    },
+    {
+      "id": "n-groups",
+      "x": 1280,
+      "y": 3270,
+      "w": 1180,
+      "text": "Groups › List — identical to Fixtures, grouped rows. The group row expands over its members; Ungrouped is the one tinted divider."
+    },
+    {
+      "id": "n-programmer",
+      "x": 2560,
+      "y": 3270,
+      "w": 1180,
+      "text": "Programmer — already on the system. Two things move: the grid's body takes the sheet ground (today the name column is bg-background over a transparent body — visibly darker), and the bar's line and the grid's line become one."
+    },
+    {
+      "id": "n-show",
+      "x": 0,
+      "y": 4290,
+      "w": 1180,
+      "text": "Show › Table — the stack header goes from px-4 to the 12px gutter. ShowBar keeps its own @[440px]:px-4 by decision (CLAUDE.md), so bar and rows still differ by 4px there. The doubled line under the bar goes."
+    },
+    {
+      "id": "n-channels",
+      "x": 1280,
+      "y": 4290,
+      "w": 1180,
+      "text": "Channels › Table — the reference shape; only the doubled line and the swatch change."
+    },
+    {
+      "id": "n-patch",
+      "x": 2560,
+      "y": 4290,
+      "w": 1180,
+      "text": "Patch List — its own route again (called 2026-09-15), so it takes the whole shell: the 48px header row with breadcrumbs, the chips as a 40px chrome row with its line, row B, the bar, the sheet, the footer. It leaves Project Settings."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
