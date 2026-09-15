@@ -1,0 +1,136 @@
+{
+  "artboards": [
+    {
+      "file": "Survey.dc.html",
+      "title": "Survey · what the consoles do",
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 780
+    },
+    {
+      "file": "Model.dc.html",
+      "title": "The model · desk facts, window facts, frames",
+      "x": 1340,
+      "y": 0,
+      "w": 1240,
+      "h": 960
+    },
+    {
+      "file": "Main.dc.html",
+      "title": "Screen 1 · Programmer — a Colour marquee over three heads",
+      "x": 0,
+      "y": 1160,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Screen2.dc.html",
+      "title": "Screen 2 · Busk — the same selection, one press away",
+      "x": 1280,
+      "y": 1160,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Tablet.dc.html",
+      "title": "iPad · Busk — a Look in the hand, picked up on Screen 2",
+      "x": 2560,
+      "y": 1160,
+      "w": 1180,
+      "h": 820
+    },
+    {
+      "file": "Screens.dc.html",
+      "title": "Full screen · Screens",
+      "x": 0,
+      "y": 2180,
+      "w": 1240,
+      "h": 1260
+    },
+    {
+      "file": "Hand.dc.html",
+      "title": "The hand · a move across windows",
+      "x": 1340,
+      "y": 2180,
+      "w": 1240,
+      "h": 1600
+    },
+    {
+      "file": "Options.dc.html",
+      "title": "Options · moving a thing across windows",
+      "x": 2680,
+      "y": 2180,
+      "w": 1240,
+      "h": 440
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -440,
+      "w": 900,
+      "text": "The desk on two screens and an iPad.\n\nThe theatre desk runs two touch screens, and with MagicQ both are the app full screen. The equivalent here is a full-screen browser window per screen, plus an iPad. Three asks: (1) controls to go full screen; (2) select on one window, act on another; (3) drag and drop between windows. Plus what the consoles do, and the architecture — selection server-side, optional per session.\n\nWhat this record found: the architecture is mostly there. The fixture selection is already a desk fact (selection.state), and so are the busk page, blind and the template recents. The work is three more facts of the same shape (the attribute mask, a windows registry, the hand), one window fact (follow / local), and one nameable gesture per ask. Static mockups, dark only, 1180×820 for the screens."
+    },
+    {
+      "id": "n-survey",
+      "x": 0,
+      "y": -150,
+      "w": 1240,
+      "text": "Read first: five consoles, three questions. The finding that shapes everything below — every console makes a second screen a view on one programmer, and a remote is either that same programmer (Eos, MagicQ) or a second user (MA, Titan). One operator, two screens, an iPad → follow by default."
+    },
+    {
+      "id": "n-model",
+      "x": 1340,
+      "y": -150,
+      "w": 1240,
+      "text": "The model. Desk facts vs window facts, what is new on the wire, the two states of the desk chip, and the four-step sequence of a press on Screen 2 landing on Screen 1's cells."
+    },
+    {
+      "id": "n-main",
+      "x": 0,
+      "y": 1010,
+      "w": 1180,
+      "text": "Screen 1 — the programmer, full screen (no browser chrome, so the frame is the app alone). A marquee over Colour on three heads. The one new thing on the bar is the desk chip: Desk, linked, with no name because this window moved it."
+    },
+    {
+      "id": "n-screen2",
+      "x": 1280,
+      "y": 1010,
+      "w": 1180,
+      "text": "Screen 2 — Busk, at the same moment. The band lights the three heads, carries the Colour pill the marquee named, and says \"from Screen 1\". Lavender was just pressed here and rings all — the value is already in Screen 1's cells."
+    },
+    {
+      "id": "n-tablet",
+      "x": 2560,
+      "y": 1010,
+      "w": 1180,
+      "text": "The iPad, in Safari full screen. Warm Wash is in the hand — picked up on Screen 2 — and the Looks bank shows the dashed slot where a tap would place it. The chip is drawn on every window; this is the one where the operator is."
+    },
+    {
+      "id": "n-screens",
+      "x": 0,
+      "y": 2030,
+      "w": 1240,
+      "text": "Ask 1. Full screen and Screens as user-menu items and ⌘K commands, the Screens sheet with the windows registry, saved layouts, and the four ways out of the chrome — installed (PWA) is the recommendation for the desk, because Esc."
+    },
+    {
+      "id": "n-hand",
+      "x": 1340,
+      "y": 2030,
+      "w": 1240,
+      "text": "Ask 3. The hand in three frames, then the edge drag: the same-machine shortcut that makes two screens feel like one."
+    },
+    {
+      "id": "n-options",
+      "x": 2680,
+      "y": 2030,
+      "w": 1240,
+      "text": "The three ways it could be done, so A is a choice. B is worth having as the fast path on the desk machine once A exists; C is the accessible fallback under A."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

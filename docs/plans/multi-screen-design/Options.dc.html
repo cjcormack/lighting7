@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); } a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; color: oklch(0.985 0 0); background: oklch(0.11 0.005 286); box-sizing: border-box; overflow: hidden; position: relative; }
+    .app *, .app *::before, .app *::after { box-sizing: border-box; }
+  </style>
+</helmet><div class="app" style="width:1240px; height:440px; padding:32px; display:flex; flex-direction:column; gap:24px; overflow:hidden;"><div style="display:flex; flex-direction:column; gap:6px;"><span style="font-size:22px; font-weight:700; letter-spacing:-0.01em;">Three ways to move a thing between windows</span><p style="margin:0; font-size:12.5px; line-height:1.55; color:oklch(0.705 0.015 286.067); max-width:720px;">The ask was drag and drop; the honest answer is that a pointer drag cannot leave a browser window in general, so each option is a different way of making the move not depend on one.</p></div>
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; flex:1;">
+    <div style="display:flex; flex-direction:column; gap:10px; padding:16px; border-radius:10px; border:1px solid oklch(0.623 0.214 259.815); background:oklch(0.623 0.214 259.815 / 0.10);">
+    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px; font-weight:700;">A · The hand</span><span style="display:inline-flex; align-items:center; gap:6px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.623 0.214 259.815 / 0.40); background:transparent; color:oklch(0.707 0.165 254.624); font-size:10px; font-weight:500; white-space:nowrap; flex:0 0 auto;">recommended</span></div>
+    <span style="font-size:12px; font-weight:600;">Pick up here, place there — a desk-owned held item</span><p style="margin:0; font-size:11.5px; line-height:1.55; color:oklch(0.705 0.015 286.067); max-width:720px;">A hold on any record opens its menu with <b>Pick up</b>; every window draws the chip and lights its targets; a tap places. One mechanism for every pair of windows, and for touch on one.</p>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-top:auto;"><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067);">Reaches</span><span style="font-size:11.5px;">Desk screens, iPad, phone, and a MIDI button (Pick up / Place as bindings)</span><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067); margin-top:6px;">Costs</span><span style="font-size:11.5px; color:oklch(0.705 0.015 286.067); line-height:1.45;">Two gestures where a drag is one. A new frame family and a new desk fact. The chip is one more thing on a live view — it must sit where the ShowBar's GO cannot be hidden by it.</span></div>
+  </div>
+    <div style="display:flex; flex-direction:column; gap:10px; padding:16px; border-radius:10px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885);">
+    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px; font-weight:700;">B · Native drag, same browser</span></div>
+    <span style="font-size:12px; font-weight:600;">HTML5 drag-and-drop between two windows of one browser on one machine</span><p style="margin:0; font-size:11.5px; line-height:1.55; color:oklch(0.705 0.015 286.067); max-width:720px;">The browser carries a <code>dataTransfer</code> across its own windows for free. A pad would have to be a native draggable as well as a dnd-kit one, and the drop resolved from the payload.</p>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-top:auto;"><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067);">Reaches</span><span style="font-size:11.5px;">The two desk screens only</span><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067); margin-top:6px;">Costs</span><span style="font-size:11.5px; color:oklch(0.705 0.015 286.067); line-height:1.45;">Nothing reaches the iPad. dnd-kit and native DnD on one element fight over the pointer; the ghost is the browser's, not ours. Feels great when it works and silently does nothing otherwise.</span></div>
+  </div>
+    <div style="display:flex; flex-direction:column; gap:10px; padding:16px; border-radius:10px; border:1px solid oklch(0.274 0.006 286.033); background:oklch(0.21 0.006 285.885);">
+    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:14px; font-weight:700;">C · Send to…</span></div>
+    <span style="font-size:12px; font-weight:600;">A menu: send this record to a bank / slot / stack on a named window</span><p style="margin:0; font-size:11.5px; line-height:1.55; color:oklch(0.705 0.015 286.067); max-width:720px;">The hold menu grows a <b>Send to</b> submenu listing every bank on every page, and the layer stack. No held state, no second window involved.</p>
+    <div style="display:flex; flex-direction:column; gap:4px; margin-top:auto;"><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067);">Reaches</span><span style="font-size:11.5px;">Everything, with no gesture at all</span><span style="font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:oklch(0.705 0.015 286.067); margin-top:6px;">Costs</span><span style="font-size:11.5px; color:oklch(0.705 0.015 286.067); line-height:1.45;">Choosing a destination from a list is the thing a drag exists to avoid, and a page with twelve banks makes a long menu. Right as the accessible fallback under A, wrong as the primary.</span></div>
+  </div>
+  </div></div></x-dc>
+</body>
+</html>
