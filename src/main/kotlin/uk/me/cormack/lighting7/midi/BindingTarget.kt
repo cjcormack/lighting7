@@ -24,6 +24,8 @@ import uk.me.cormack.lighting7.models.CueTargetDto
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
  *     See `docs/plans/completed/midi-surface-plan.md` §D3.
+ *   - **The hand** ([PickUpPad], [HandPlaceInBank], [HandDrop]) — the desk's held record, moved
+ *     between screens (multi-screen plan §3.5)
  *   - **Records** ([ApplyLook], [PressTemplate], [PressPad]) — a named thing from the library on a
  *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
@@ -290,6 +292,38 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("pressPad")
     data class PressPad(val padUuid: String) : BindingTarget()
+
+    /**
+     * Put the record on a **busk pad** into the desk's hand — the surface door of `hand.pickUp`
+     * (multi-screen plan §3.5).
+     *
+     * A pad, not a record, because a pad is the address a button already knows how to carry and
+     * what it picks up is exactly what it would otherwise press. The pick-up **replaces** whatever
+     * the hand held; there is no "put it back" gesture, on hardware or anywhere else.
+     */
+    @Serializable
+    @SerialName("pickUpPad")
+    data class PickUpPad(val padUuid: String) : BindingTarget()
+
+    /**
+     * Place whatever the hand holds as a pad on the bank [bankUuid] names, then let go.
+     *
+     * The one place binding there is. A window places through its own mutation and then sends
+     * `hand.drop` (D12); a button has no mutation of its own, so this runs the same append
+     * `POST /busk/banks/{bankId}/pads` runs. An **empty hand is a dropped press**, not an error —
+     * there is nothing to place and nothing to say about it from a button.
+     *
+     * There is deliberately no `HandPlaceInSlot` and no layer-stack place: neither a cue slot nor
+     * the programmer's layer stack has a uuid a binding could carry.
+     */
+    @Serializable
+    @SerialName("handPlaceInBank")
+    data class HandPlaceInBank(val bankUuid: String) : BindingTarget()
+
+    /** Let go of whatever the hand holds. A no-op on an empty hand, like every other drop. */
+    @Serializable
+    @SerialName("handDrop")
+    data object HandDrop : BindingTarget()
 
     /** Show the next busk page ([uk.me.cormack.lighting7.state.BuskPageState]); wraps at the end. */
     @Serializable

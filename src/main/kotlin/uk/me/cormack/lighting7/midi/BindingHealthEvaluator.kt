@@ -55,6 +55,8 @@ object BindingHealthEvaluator {
      * @param validTemplateUuids templates that exist in the project
      * @param validPadUuids busk pads that exist — a pad dragged off a page, or swept by its
      *   record's delete, is gone
+     * @param validBankUuids busk banks that exist — what a [BindingTarget.HandPlaceInBank] places
+     *   onto. A bank, not a pad: the place appends, so what must exist is the container
      * @param validPageUuids busk pages that exist
      */
     data class Context(
@@ -71,6 +73,7 @@ object BindingHealthEvaluator {
         val looksNeedingSelection: Set<UUID> = emptySet(),
         val validTemplateUuids: Set<UUID> = emptySet(),
         val validPadUuids: Set<UUID> = emptySet(),
+        val validBankUuids: Set<UUID> = emptySet(),
         val validPageUuids: Set<UUID> = emptySet(),
     )
 
@@ -141,6 +144,16 @@ object BindingHealthEvaluator {
         // transaction, so "the pad exists" already answers "its record does".
         is BindingTarget.PressPad ->
             uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
+        // The hand's three (multi-screen plan §3.5). Each is judged on the *address* it carries and
+        // nothing else: a pick-up needs its pad, a place needs its bank, and a drop addresses
+        // nothing, so it can never be dead. What the hand happens to hold is never a health
+        // question — it is a fact about this second, like an empty selection under a
+        // `SelectionProperty`.
+        is BindingTarget.PickUpPad ->
+            uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
+        is BindingTarget.HandPlaceInBank ->
+            uuidHealth(target.bankUuid, context.validBankUuids) { AssignmentHealth.MissingBank(it) }
+        BindingTarget.HandDrop -> AssignmentHealth.Ok
         is BindingTarget.BuskPageSet ->
             uuidHealth(target.pageUuid, context.validPageUuids) { AssignmentHealth.MissingPage(it) }
         // Page-agnostic: they move along whatever pages there are, and a project with none simply

@@ -542,12 +542,26 @@ class State(val config: ApplicationConfig) {
             // A malformed (kind == null) pad is excluded, matching `buildBuskRefs` — otherwise a
             // binding pointing at one would report Ok here while its LED never lights and its
             // press resolves to NotFound.
-            val pads = buskPageContents(pages.map { it.first })
-                .pads.values.filter { it.kind != null }.mapTo(HashSet()) { it.uuid }
+            val contents = buskPageContents(pages.map { it.first })
+            val pads = contents.pads.values.filter { it.kind != null }.mapTo(HashSet()) { it.uuid }
+            // Every bank on those pages — what a `handPlaceInBank` places onto. Unfiltered, unlike
+            // the pads: a bank has nothing to be malformed about, and an empty one is exactly where
+            // a place is most useful.
+            val banks = contents.banks.values.mapTo(HashSet()) { it.uuid }
+            // Named, not positional. Six of these nine are interchangeable `Set<UUID>`s, so a
+            // transposition compiles clean and silently judges every binding of one kind against
+            // another kind's set — a pad binding that reads `Ok` forever while its LED never lights.
+            // `BindingHealthEvaluator.Context` below already names its arguments for the same data.
             BindingRefs(
-                stacks, cues, masters,
-                looks.mapTo(HashSet()) { it.second }, deferred, templates,
-                pads, pages.mapTo(HashSet()) { it.second },
+                stacks = stacks,
+                cues = cues,
+                speedMasterUuids = masters,
+                lookUuids = looks.mapTo(HashSet()) { it.second },
+                looksNeedingSelection = deferred,
+                templateUuids = templates,
+                padUuids = pads,
+                bankUuids = banks,
+                pageUuids = pages.mapTo(HashSet()) { it.second },
             )
         }
         return BindingHealthEvaluator.Context(
@@ -564,6 +578,7 @@ class State(val config: ApplicationConfig) {
             looksNeedingSelection = snapshot.looksNeedingSelection,
             validTemplateUuids = snapshot.templateUuids,
             validPadUuids = snapshot.padUuids,
+            validBankUuids = snapshot.bankUuids,
             validPageUuids = snapshot.pageUuids,
         )
     }
@@ -577,6 +592,7 @@ class State(val config: ApplicationConfig) {
         val looksNeedingSelection: Set<java.util.UUID>,
         val templateUuids: Set<java.util.UUID>,
         val padUuids: Set<java.util.UUID>,
+        val bankUuids: Set<java.util.UUID>,
         val pageUuids: Set<java.util.UUID>,
     )
 
@@ -625,6 +641,41 @@ class State(val config: ApplicationConfig) {
      * §3.4. Never persisted; rows live exactly as long as their sockets.
      */
     val windowRegistry: WindowRegistry by lazy { WindowRegistry() }
+
+    /**
+     * The desk's **hand** — one record held between a pick-up on one window and a place on another
+     * (multi-screen plan §3.5). Project-scoped and transient like [deskSelection]: the record ids
+     * it carries belong to one project's rows, so the `projectChangedFlow` collector below drops
+     * it, and the three list-changed listeners reconcile it so a record deleted while held leaves
+     * every window's chip.
+     *
+     * The expiry job runs on [GlobalScope] for the reason every other poller here does: it outlives
+     * any one `Show`, and it is cancelled by [HandState.drop] — which [shutdown] calls — rather than
+     * by a scope going away.
+     */
+    @OptIn(DelicateCoroutinesApi::class)
+    internal val handState: HandState by lazy {
+        HandState(GlobalScope, resolves = ::handRecordResolves)
+    }
+
+    /**
+     * Does a held record still exist in the **current** project? [HandState]'s reconcile rule, kept
+     * here because it is the database's question, not the hand's.
+     *
+     * A read that cannot be made — no current project, a show mid-teardown — answers `true`: the
+     * listeners that call this fire on every list change, and dropping the operator's hand because
+     * a query failed would be a worse answer than keeping it until the next one succeeds.
+     */
+    private fun handRecordResolves(kind: BuskPadKind, id: Int): Boolean = runCatching {
+        val projectId = projectManager.currentProject.id.value
+        transaction(database) {
+            when (kind) {
+                BuskPadKind.TEMPLATE -> DaoTemplate.findById(id)?.project?.id?.value
+                BuskPadKind.LOOK -> DaoLook.findById(id)?.project?.id?.value
+                BuskPadKind.CUE -> DaoCue.findById(id)?.project?.id?.value
+            } == projectId
+        }
+    }.getOrDefault(true)
 
     /**
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
@@ -824,6 +875,13 @@ class State(val config: ApplicationConfig) {
                 // A page id belongs to one project's page list, so carrying one across would show
                 // a page that is not there — or, worse, another project's page by id collision.
                 buskPageState.clear()
+                // And the hand, for the same reason: it holds a record id from the project being
+                // left, and the place mutations that id would reach are the new project's. Like the
+                // two clears above this runs in the collector, so there is a window after the switch
+                // where a stale chip is still shown; also like them it is harmless, because every
+                // door scopes its lookup to the *new* project and a stale id simply fails to
+                // resolve rather than landing on another project's row.
+                handState.drop()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
@@ -851,6 +909,13 @@ class State(val config: ApplicationConfig) {
         runCatching { autoSyncScheduler.stop() }
         runCatching { projectChangedJob?.cancel() }
         projectChangedJob = null
+        // The one job this State owns that is not a poller: an armed hand has a five-minute timer
+        // on GlobalScope. `close`, not `drop` — a drop cancels the timer this hold armed, and a
+        // `hand.pickUp` still in flight through a socket this teardown does not close would arm
+        // another, capturing `HandState` and, through `resolves`, the whole State graph. That is
+        // the retention `FU-TEST-COREMIDI-INIT-DEADLOCK` was written about, and `RouteIntegrationTest`
+        // tears a State down between every test.
+        runCatching { handState.close() }
 
         // Before the MIDI stack goes down: the listener's callback reaches back into
         // `midiRegistry`, and it is the one teardown step whose absence silently retains the
@@ -888,7 +953,15 @@ class State(val config: ApplicationConfig) {
             deskSelection.prune()
             refreshActiveProjectBindingHealth()
         }
-        override fun cueListChanged() = refreshActiveProjectBindingHealth()
+        override fun cueListChanged() {
+            // The hand's reconcile rides the same three lists the record bindings' health does, and
+            // for the same reason: a delete is the case that matters, and nothing else tells the
+            // desk that what it is holding has gone. Each passes the kind *it* carries, because
+            // these fire on creates and edits too and a cue list moving cannot affect a held
+            // template — without the kind every library mutation would cost a database read.
+            handState.reconcile(BuskPadKind.CUE)
+            refreshActiveProjectBindingHealth()
+        }
         override fun cueStackListChanged() = refreshActiveProjectBindingHealth()
         override fun patchListChanged() {
             deskSelection.prune()
@@ -898,8 +971,14 @@ class State(val config: ApplicationConfig) {
         // their health goes stale on the lists that carry those — and a delete is exactly the
         // case that matters. Without these three a button holding a deleted Look keeps reading
         // `Ok`, and keeps being dispatched, until something unrelated moves a fixture.
-        override fun lookListChanged() = refreshActiveProjectBindingHealth()
-        override fun templateListChanged() = refreshActiveProjectBindingHealth()
+        override fun lookListChanged() {
+            handState.reconcile(BuskPadKind.LOOK)
+            refreshActiveProjectBindingHealth()
+        }
+        override fun templateListChanged() {
+            handState.reconcile(BuskPadKind.TEMPLATE)
+            refreshActiveProjectBindingHealth()
+        }
         override fun buskLayoutChanged(pageIds: List<Int>) {
             // A pad or a page may have gone; which ones is the client's question, not health's.
             buskPageState.reconcile()

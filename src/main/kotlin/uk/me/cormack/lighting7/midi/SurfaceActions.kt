@@ -28,7 +28,9 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.routes.AddPadOutcome
 import uk.me.cormack.lighting7.routes.BuskPressService
+import uk.me.cormack.lighting7.routes.HandService
 import uk.me.cormack.lighting7.routes.familyOf
 import uk.me.cormack.lighting7.routes.isGenericTemplate
 import uk.me.cormack.lighting7.routes.LookTargetResolution
@@ -140,6 +142,22 @@ interface SurfaceActions {
 
     /** Press a busk pad — its own bank's plan, solo siblings included, on the desk selection. */
     fun pressPad(padUuid: String)
+
+    /**
+     * Put the record on a busk pad into the desk's hand, replacing whatever it held
+     * (multi-screen plan §3.5).
+     */
+    fun pickUpPad(padUuid: String)
+
+    /**
+     * Place whatever the hand holds as a pad on one bank, then let go. An empty hand is a dropped
+     * press. The append is the same one `POST /busk/banks/{bankId}/pads` makes — a place is an
+     * *existing* mutation whichever door makes it (D12).
+     */
+    fun handPlaceInBank(bankUuid: String)
+
+    /** Let go of whatever the hand holds; a no-op on an empty hand. */
+    fun handDrop()
 
     /** Move the desk's showing busk page by one, wrapping. */
     fun buskPageStep(delta: Int)
@@ -487,6 +505,75 @@ class DefaultSurfaceActions(
                 logger.warn("Surface pressPad dropped: no busk pad {} in project {}", padUuid, projectId)
         }
     }
+
+    /**
+     * The hand's surface door. Resolves the pad in the current project and picks up whatever it
+     * presses, stamped [SelectionSource.SURFACE] — to a chip every surface is "the desk", the same
+     * reading a selection write from a surface gets.
+     */
+    override fun pickUpPad(padUuid: String) {
+        val uuid = uuidOrNull(padUuid) ?: run {
+            logger.warn("Surface pickUpPad dropped: '{}' is not a uuid", padUuid)
+            return
+        }
+        val projectId = currentProjectId() ?: return
+        val record = HandService.resolveByPadUuid(state, projectId, uuid, SelectionSource.SURFACE)
+        if (record == null) {
+            logger.warn("Surface pickUpPad dropped: no busk pad {} in project {}", padUuid, projectId)
+            return
+        }
+        // Null once the desk is closing; a press racing teardown is dropped rather than arming a
+        // timer on a State that is going away.
+        if (state.handState.pickUp(record) == null) {
+            logger.debug("Surface pickUpPad dropped: the desk is shutting down")
+        }
+    }
+
+    /**
+     * Place the held record on one bank and let go — the only place a binding can make, because a
+     * bank is the only place target with a uuid to carry.
+     *
+     * The drop is **conditional on this hold still being the hand's**, through
+     * `HandState.dropIfHolding`, which checks and clears under one lock. Reading `held.value` here
+     * and calling the unconditional `drop()` afterwards would be two steps with a gap, and a
+     * pick-up landing in that gap would have this press clear an item it never touched — on the
+     * two-screen case the hand exists for. It is also conditional on the append succeeding: a
+     * refused place leaves the item in the hand so the operator can put it somewhere else, which is
+     * the point of holding it.
+     *
+     * What is deliberately **not** guarded is the read at the top. If the hold expires, or another
+     * window drops it, between that read and the transaction, the pad is still appended. That is
+     * the right answer rather than a hole: the press is the operator saying *put this here*, and a
+     * timeout landing in the same instant should not swallow the gesture. The guard exists to stop
+     * this press clearing somebody else's item, not to stop it finishing its own.
+     */
+    override fun handPlaceInBank(bankUuid: String) {
+        val uuid = uuidOrNull(bankUuid) ?: run {
+            logger.warn("Surface handPlaceInBank dropped: '{}' is not a uuid", bankUuid)
+            return
+        }
+        val held = state.handState.held.value ?: run {
+            logger.debug("Surface handPlaceInBank dropped: the hand is empty")
+            return
+        }
+        val projectId = currentProjectId() ?: return
+        when (val outcome = HandService.placeInBank(state, projectId, uuid, held)) {
+            AddPadOutcome.NotFound ->
+                logger.warn("Surface handPlaceInBank dropped: no busk bank {} in project {}", bankUuid, projectId)
+            is AddPadOutcome.Invalid ->
+                logger.warn("Surface handPlaceInBank dropped: {}", outcome.message)
+            is AddPadOutcome.Ref -> logger.warn(
+                "Surface handPlaceInBank dropped: the hand holds a {} ({}) that is not in project {}",
+                outcome.what, outcome.id, projectId,
+            )
+            is AddPadOutcome.Added -> {
+                state.show.fixtures.buskLayoutChanged(listOf(outcome.pageId))
+                state.handState.dropIfHolding(held.holdId)
+            }
+        }
+    }
+
+    override fun handDrop() = state.handState.drop()
 
     override fun buskPageStep(delta: Int) = state.buskPageState.step(delta)
 

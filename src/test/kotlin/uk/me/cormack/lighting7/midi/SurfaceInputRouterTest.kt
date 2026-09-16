@@ -804,6 +804,79 @@ class SurfaceInputRouterTest {
         assertTrue(actions.calls.isEmpty())
     }
 
+    // ─── The hand (multi-screen plan §3.5) ─────────────────────────────
+
+    @Test
+    fun `the hand's three buttons dispatch to their own actions with their own uuids`() {
+        val padUuid = "44444444-4444-4444-8444-444444444444"
+        val bankUuid = "55555555-5555-4555-8555-555555555555"
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.PickUpPad(padUuid)),
+            binding(2, "btn-2", BindingTarget.HandPlaceInBank(bankUuid)),
+            binding(3, "btn-3", BindingTarget.HandDrop),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+        assertEquals(
+            listOf(
+                RecordedCall.PickUpPad(padUuid),
+                RecordedCall.HandPlaceInBank(bankUuid),
+                RecordedCall.HandDrop,
+            ),
+            actions.calls,
+        )
+    }
+
+    @Test
+    fun `a dead hand binding never reaches the actions`() {
+        val padUuid = "44444444-4444-4444-8444-444444444444"
+        val bankUuid = "55555555-5555-4555-8555-555555555555"
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(
+            binding(1, "btn-1", BindingTarget.PickUpPad(padUuid), health = AssignmentHealth.MissingPad(padUuid)),
+            binding(
+                2, "btn-2", BindingTarget.HandPlaceInBank(bankUuid),
+                health = AssignmentHealth.MissingBank(bankUuid),
+            ),
+        ))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 17, velocity = 127u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    /**
+     * The three are `BUTTON`, so a fader can never dispatch one — and **the server is what says
+     * so**. `refuseWrongKind` stops the row being written (`ControlSurfaceBindingBatchTest`); this
+     * pins the rule it reads, and the router's own drop for a row that predates it. The client
+     * mirror in `lib/surfaceDrop.ts` only dims the drop target; it is not the guard.
+     */
+    @Test
+    fun `the hand's three targets are buttons, and a fader neither takes nor dispatches one`() {
+        val fader = ControlSurfaceRegistry.typeFor(deviceTypeKey)!!
+            .controls.filterIsInstance<FaderDescriptor>().first()
+        val targets = listOf(
+            BindingTarget.PickUpPad("44444444-4444-4444-8444-444444444444"),
+            BindingTarget.HandPlaceInBank("55555555-5555-4555-8555-555555555555"),
+            BindingTarget.HandDrop,
+        )
+        for (target in targets) {
+            assertEquals(ControlKind.BUTTON, targetControlKind(target), "$target")
+            assertTrue(
+                targetControlKind(target) !in dispatchableKinds(fader),
+                "$target is what refuseWrongKind refuses on '${fader.controlId}'",
+            )
+        }
+
+        // And the router half: a row written before the rule existed, or imported from an archive,
+        // is dropped by continuous dispatch rather than finding some arm for it.
+        val actions = RecordingActions()
+        val router = buildRouter(actions, listOf(binding(1, "fader-1", targets.first())))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
+        assertTrue(actions.calls.isEmpty())
+    }
+
     @Test
     fun `an Unknown target is dead and never reaches the actions`() {
         val actions = RecordingActions()
@@ -859,6 +932,9 @@ private class RecordingActions : SurfaceActions {
     override fun applyLook(lookUuid: String) { calls += RecordedCall.ApplyLook(lookUuid) }
     override fun pressTemplate(templateUuid: String) { calls += RecordedCall.PressTemplate(templateUuid) }
     override fun pressPad(padUuid: String) { calls += RecordedCall.PressPad(padUuid) }
+    override fun pickUpPad(padUuid: String) { calls += RecordedCall.PickUpPad(padUuid) }
+    override fun handPlaceInBank(bankUuid: String) { calls += RecordedCall.HandPlaceInBank(bankUuid) }
+    override fun handDrop() { calls += RecordedCall.HandDrop }
     override fun buskPageStep(delta: Int) { calls += RecordedCall.BuskPageStep(delta) }
     override fun buskPageSet(pageUuid: String) { calls += RecordedCall.BuskPageSet(pageUuid) }
 }
@@ -907,6 +983,9 @@ private sealed class RecordedCall {
     data class ApplyLook(val lookUuid: String) : RecordedCall()
     data class PressTemplate(val templateUuid: String) : RecordedCall()
     data class PressPad(val padUuid: String) : RecordedCall()
+    data class PickUpPad(val padUuid: String) : RecordedCall()
+    data class HandPlaceInBank(val bankUuid: String) : RecordedCall()
+    data object HandDrop : RecordedCall()
     data class BuskPageStep(val delta: Int) : RecordedCall()
     data class BuskPageSet(val pageUuid: String) : RecordedCall()
     data class WriteSpeedMasterBpm(

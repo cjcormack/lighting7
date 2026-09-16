@@ -233,47 +233,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
             val request = call.receive<AddBuskPadRequest>()
             val outcome = transaction(state.database) {
                 val bank = bankIn(project, resource.bankId) ?: return@transaction AddPadOutcome.NotFound
-                val kind = buskPadKind(request.templateId, request.lookId, request.cueId)
-                    ?: return@transaction AddPadOutcome.Invalid(
-                        "A pad must name exactly one of templateId, lookId or cueId",
-                    )
-                val records = BuskRecordCache(state)
-                // Resolve the record **before** minting the pad, and set its arm inside the
-                // constructor. This is the layout write's "returns before touching a row" rule, and
-                // here the database enforces it: a pad row with no arm violates the
-                // `busk_pad_exactly_one_ref` check as soon as the transaction flushes, so a refusal
-                // that had already created one would commit a 500 in place of a 400.
-                var newTemplate: DaoTemplate? = null
-                var newLook: DaoLook? = null
-                var newCue: DaoCue? = null
-                when (kind) {
-                    BuskPadKind.TEMPLATE -> {
-                        val id = request.templateId!!
-                        newTemplate = records.template(project, id)
-                            ?: return@transaction AddPadOutcome.Ref("template", id)
-                    }
-                    BuskPadKind.LOOK -> {
-                        val id = request.lookId!!
-                        newLook = records.look(project, id)
-                            ?: return@transaction AddPadOutcome.Ref("look", id)
-                    }
-                    BuskPadKind.CUE -> {
-                        val id = request.cueId!!
-                        newCue = records.cue(project, id)
-                            ?: return@transaction AddPadOutcome.Ref("cue", id)
-                    }
-                }
-                // Dense from zero like every other position here, but read as max + 1 rather than
-                // as a count, so a bank that somehow holds a gap still appends *after* everything.
-                val next = (bank.pads.maxOfOrNull { it.sortOrder } ?: -1) + 1
-                DaoBuskPad.new {
-                    this.bank = bank
-                    sortOrder = next
-                    template = newTemplate
-                    look = newLook
-                    cue = newCue
-                }
-                AddPadOutcome.Added(records.pageDto(bank.column.page))
+                appendBuskPad(state, project, bank, request.templateId, request.lookId, request.cueId)
             }
             when (outcome) {
                 AddPadOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(BANK_NOT_FOUND))
@@ -287,8 +247,10 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
                     ),
                 )
                 is AddPadOutcome.Added -> {
-                    state.show.fixtures.buskLayoutChanged(listOf(outcome.page.id))
-                    call.respond(HttpStatusCode.Created, outcome.page)
+                    state.show.fixtures.buskLayoutChanged(listOf(outcome.pageId))
+                    // Non-null for this caller: `buildPage` defaults true and this route does not
+                    // pass it, because the 201 body *is* the page.
+                    call.respond(HttpStatusCode.Created, outcome.page!!)
                 }
             }
         }
@@ -453,11 +415,82 @@ private sealed interface PageWriteOutcome {
     data class Written(val dto: BuskPageDto) : PageWriteOutcome
 }
 
-private sealed interface AddPadOutcome {
+/**
+ * What an append did, or why it did nothing. Shared with the hand's `HandPlaceInBank`, which is
+ * the same append made from a button and has the same four answers — it simply logs them instead
+ * of responding, having nowhere to put a 400 (`HandService.placeInBank`).
+ */
+internal sealed interface AddPadOutcome {
     data object NotFound : AddPadOutcome
     data class Invalid(val message: String) : AddPadOutcome
     data class Ref(val what: String, val id: Int) : AddPadOutcome
-    data class Added(val page: BuskPageDto) : AddPadOutcome
+    /**
+     * The append landed on the page [pageId] names.
+     *
+     * [page] is the whole page document, and is null exactly when the caller passed
+     * `buildPage = false`. Building it is not free — `pageDto` runs the page-contents descent, the
+     * batched usage priming and a DTO per distinct record on the page — and the REST route needs it
+     * for its 201 body while the surface door needs only [pageId] to broadcast
+     * `buskLayoutChanged`. So the caller says which it wants rather than paying for both.
+     */
+    data class Added(val pageId: Int, val page: BuskPageDto? = null) : AddPadOutcome
+}
+
+/**
+ * Append one pad naming exactly one of [templateId] / [lookId] / [cueId] to [bank]. **Must be
+ * called inside a transaction**, and the caller owns the `buskLayoutChanged` broadcast for the
+ * returned page.
+ *
+ * Extracted from the route body so the hand's surface-side place runs this append rather than a
+ * second copy of it (multi-screen plan D12: a place is an *existing* mutation, and a button's place
+ * has to be the same one a window's is).
+ */
+internal fun appendBuskPad(
+    state: State,
+    project: DaoProject,
+    bank: DaoBuskBank,
+    templateId: Int?,
+    lookId: Int?,
+    cueId: Int?,
+    buildPage: Boolean = true,
+): AddPadOutcome {
+    val kind = buskPadKind(templateId, lookId, cueId)
+        ?: return AddPadOutcome.Invalid("A pad must name exactly one of templateId, lookId or cueId")
+    val records = BuskRecordCache(state)
+    // Resolve the record **before** minting the pad, and set its arm inside the constructor. This
+    // is the layout write's "returns before touching a row" rule, and here the database enforces
+    // it: a pad row with no arm violates the `busk_pad_exactly_one_ref` check as soon as the
+    // transaction flushes, so a refusal that had already created one would commit a 500 in place
+    // of a 400.
+    var newTemplate: DaoTemplate? = null
+    var newLook: DaoLook? = null
+    var newCue: DaoCue? = null
+    when (kind) {
+        BuskPadKind.TEMPLATE -> {
+            val id = templateId!!
+            newTemplate = records.template(project, id) ?: return AddPadOutcome.Ref("template", id)
+        }
+        BuskPadKind.LOOK -> {
+            val id = lookId!!
+            newLook = records.look(project, id) ?: return AddPadOutcome.Ref("look", id)
+        }
+        BuskPadKind.CUE -> {
+            val id = cueId!!
+            newCue = records.cue(project, id) ?: return AddPadOutcome.Ref("cue", id)
+        }
+    }
+    // Dense from zero like every other position here, but read as max + 1 rather than as a count,
+    // so a bank that somehow holds a gap still appends *after* everything.
+    val next = (bank.pads.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    DaoBuskPad.new {
+        this.bank = bank
+        sortOrder = next
+        template = newTemplate
+        look = newLook
+        cue = newCue
+    }
+    val page = bank.column.page
+    return AddPadOutcome.Added(page.id.value, if (buildPage) records.pageDto(page) else null)
 }
 
 internal sealed interface BuskLayoutOutcome {

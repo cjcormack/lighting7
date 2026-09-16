@@ -367,6 +367,9 @@ class SurfaceFeedbackPublisherTest {
                 override fun applyLook(lookUuid: String) {}
                 override fun pressTemplate(templateUuid: String) {}
                 override fun pressPad(padUuid: String) {}
+                override fun pickUpPad(padUuid: String) {}
+                override fun handPlaceInBank(bankUuid: String) {}
+                override fun handDrop() {}
                 override fun buskPageStep(delta: Int) {}
                 override fun buskPageSet(pageUuid: String) {}
             }

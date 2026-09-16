@@ -42,6 +42,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-AI-LAYOUT`](#fu-busk-ai-layout) | Trigger | AI | a prompt asks the AI to put something on a busk page |
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
 | [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
+| [`FU-HAND-PLACE-SHAPE`](#fu-hand-place-shape) | Trigger | Busk | a third caller of `appendBuskPad`, or `AddPadOutcome.Invalid` needs to mean something at a non-REST door |
+| [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Trigger | State | a fourth project-scoped transient state, or one that forgets its clear |
+| [`FU-DTO-RECORD-SUMMARY`](#fu-dto-record-summary) | Trigger | State | a second `state/` class needs a record summary, or a library-only field reaches a frame that should not carry it |
+| [`FU-MIDI-SHOW-GUARD`](#fu-midi-show-guard) | Trigger | MIDI | a project switch kills a surface's input and it has to be replugged |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
 | [`FU-PROG-PER-USER`](#fu-prog-per-user) | Rejected | Prog | decision record — do not re-propose |
 | [`FU-PROG-STALE-SOURCE-NAME`](#fu-prog-stale-source-name) | Trigger | Prog | a renamed Look or template shows its old name on a live programmer layer |
@@ -467,6 +471,96 @@ the bank's grid) rather than a per-pad size, because a bank is already the unit 
 **Trigger**: a page needs more density than width and flow give.
 
 ---
+
+### `FU-HAND-PLACE-SHAPE`
+
+**`appendBuskPad` takes the REST request's three nullable ids, not the `(kind, id)` both callers
+hold** · Trigger · Multi-screen S3 (2026-09-16), review finding 17
+
+The hand's surface place runs the same append the REST route runs, which is the point — a place is
+an *existing* mutation whichever door makes it (D12). But `appendBuskPad(state, project, bank,
+templateId, lookId, cueId)` kept the route's shape, so `HandService.placeInBank` un-flattens a
+`Held` that already has a definite `kind` and `id` into three nullables (`held.id.takeIf { held.kind
+== ... }` ×3) purely so `buskPadKind(...)` can re-derive what it was just given. The visible
+consequence is at the other end: `AddPadOutcome.Invalid` is structurally unreachable from the
+surface door, yet `SurfaceActions.handPlaceInBank` must still carry an arm for it.
+
+`appendBuskPad(state, project, bank, kind: BuskPadKind, recordId: Int)` would fix it, with the route
+calling `buskPadKind` itself and answering its own 400 — **keeping that call after `bankIn`**, or the
+404-before-400 ordering flips.
+
+**Not done when the hand landed**, deliberately. That function is the route's own body, extracted
+verbatim; four independent reviewers checked it statement by statement and confirmed the extraction
+faithful, including that resolve-before-mint still makes the `busk_pad_exactly_one_ref` CHECK
+unviolatable by a refusal. Changing its signature to tidy one caller's argument list trades a
+verified-correct shared path for a small gain in shape.
+
+**Trigger**: a third caller of `appendBuskPad`, or a door where `AddPadOutcome.Invalid` needs to mean
+something other than "unreachable".
+
+### `FU-STATE-PROJECT-SCOPED`
+
+**Three transient states each hand-wire their own clear-on-project-switch** · Trigger · Multi-screen
+S3 (2026-09-16), review finding 19
+
+`deskSelection.clear()`, `buskPageState.clear()` and `handState.drop()` are three separate lines in
+`State`'s `projectChangedFlow` collector. Forgetting one means a record id from the previous show
+stays addressable — the cross-project leak the `buskPageState.clear()` comment already warns about.
+A one-method `ProjectScopedState { fun clearForProjectSwitch() }` that the collector iterates would
+make the omission impossible.
+
+Leave the `reconcile` / `prune` half hand-wired: those fire on genuinely different signals (a patch
+reload, a layout change, three record lists), and a registry pretending they are one would be worse
+than the repetition.
+
+**Not done when the hand landed**: it would change `DeskSelection` and `BuskPageState`, two classes
+that session did not otherwise touch, to buy nothing for the three that exist today.
+
+**Trigger**: a fourth project-scoped transient state, or the first time one is added without its
+clear.
+
+### `FU-DTO-RECORD-SUMMARY`
+
+**`state/` imports three `routes/` DTOs, and the hand freezes their library-only fields** · Trigger ·
+Multi-screen S3 (2026-09-16), review finding 20
+
+`HandState.Held` embeds `TemplateDto` / `LookDto` / `BuskCueDto` from `routes/`, where
+`DeskSelection` takes its wire type from `models/` (`CueTargetDto`) precisely so both layers can
+have it. The embedding itself is settled — the plan requires the frame to carry the record's own
+summary so every window draws the ghost without a lookup — but the *package* is not, and the
+inversion has a nameable cost: those DTOs carry `usage` and `buskPageCount`, computed at pick-up and
+then held frozen in every window's chip for up to five minutes, and anything added to them for the
+library view is silently added to what the hand retains and rebroadcasts.
+
+The freeze is intended (a pad's face is frozen between reads too, and `padFace.ts` says why), so this
+is about the boundary, not the behaviour: moving those DTOs — or a narrower `RecordSummaryDto` — into
+`models/` would make "what may a `state/` class hold" enforceable by package rather than by whoever
+reviews the next one.
+
+**Trigger**: a second `state/` class needs a record summary, or a field added for the library view
+turns up somewhere it should not.
+
+### `FU-MIDI-SHOW-GUARD`
+
+**The MIDI dispatch chain reads `state.show` unguarded, on a collector with no per-event catch** ·
+Trigger · Multi-screen S3 (2026-09-16), review finding 31
+
+`SurfaceInputRouter` collects a controller's input as `controller.input.collect { route(...) }` with
+no `try`/`catch` around the dispatch, and the record actions below it reach `state.show` — which
+throws while a project switch is in flight. One throw cancels that collector, and the device's input
+is dead until it is unplugged and replugged. `currentProjectId()` catches the project lookup; nothing
+catches the show.
+
+Pre-existing and house-wide: `applyLook`, `pressTemplate` and `pressPad` all have this shape. The
+hand added two more instances (`pickUpPad`, `handPlaceInBank`), and `handPlaceInBank` is the first
+that *writes rows* inside that unguarded call, which is why it is worth recording rather than leaving
+implicit.
+
+The fix belongs at the collector, not per action: a per-event guard in `SurfaceInputRouter` that logs
+and continues, mirroring the one `Sockets.kt`'s frame loop already has for exactly this reason ("one
+bad frame must not tear down the operator's whole socket").
+
+**Trigger**: a project switch kills a surface's input and it has to be replugged.
 
 ### `FU-BUSK-EDIT-CONCURRENCY`
 

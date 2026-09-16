@@ -190,6 +190,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
 | Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
 | FX | `FxSocket.kt` | 5 | 2 | `handleFx` | `setupFxSubscriptions` |
+| Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
@@ -205,7 +206,7 @@ Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages ar
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (47)
+## Client → Server (49)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -309,6 +310,59 @@ outlives a project switch and its `view` carries the project id. A registry in t
 announce nothing until the desk was warm, and the desk chip would read *Desk* for the wrong reason
 (plan §10). Nothing is persisted and nothing is a table, so `SyncCoverageTest` gains no row.
 
+### Hand — `HandSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `hand.pickUp` | `kind: "TEMPLATE" \| "LOOK" \| "CUE"`, `id: Int` | none — `hand.state` broadcast |
+| `hand.drop` | `uuid?: String` (absent = drop whatever is held) | none — `hand.state` broadcast |
+
+The desk's one **held record**, picked up on any window and placed on any other (multi-screen plan
+§3.5, `state/HandState.kt`). It is the cross-window move, chosen over a pointer drag because the
+window that saw the press keeps the pointer for the whole gesture, so the neighbour never receives
+a pointer event of its own.
+
+**There is deliberately no `hand.place`** (D12). Every target a place can land on already has a
+mutation with its own validation — `POST /busk/banks/{bankId}/pads`, `assignCueSlot`,
+`programmer.addLayer`, `patchProjectCue` through `buildCueInput` — so one frame that placed would
+reimplement four of them behind one name, and the four would drift. **A place is the placing
+window's own mutation followed by `hand.drop`**, and Undo is that window's inverse mutation. The
+desk's whole share of a place is letting go.
+
+`hand.pickUp` resolves `{kind, id}` **in the current project and nowhere else**, so a stale id from
+another project picks nothing up rather than putting another show's row in the hand. A pick-up that
+resolves nothing is dropped with a log line and no reply, as is an unknown `kind`: like every write
+in this family it has no error channel, and the client sees the `hand.state` it already has. There
+is no `pickedUpOn` field — who picked it up is the socket's own announced window, stamped by the
+handler through the same `SocketScope.selectionSource` that stamps `selection.state`'s `source`
+(D7), because a window that could send it could claim to be another.
+
+**A second pick-up replaces**, and is not an error: the operator changed their mind, and there is no
+other gesture that means it. `hand.drop` is idempotent and a drop that changes nothing broadcasts
+nothing.
+
+**A drop after a place should name what it is dropping.** A place is two independent round-trips —
+the window's own mutation, then the drop — and another window may have picked something up in the
+gap, so a bare `hand.drop` would clear an item this window never touched, on the very two-screen case
+the hand exists for. With `uuid` the desk lets go only if that record is what it holds. Without it —
+the chip's ×, Escape, and any client that predates the field — it lets go of whatever is there.
+
+Every hold also carries a server-stamped `holdId`. It is what the timeout and the surface's place
+match on, and it exists because `MutableStateFlow` conflates by `equals`: two pick-ups of one record
+inside a single clock tick would otherwise be indistinguishable, the second assignment a no-op, and
+the hand left with no armed timer.
+
+**Project-scoped**, unlike `windows.*`: `State`'s project collector drops the hand, because the ids
+it holds belong to one project's rows. Two other things end a hold — a **five-minute timeout** armed
+on every pick-up, and a **reconcile** run from the `lookListChanged` / `templateListChanged` /
+`cueListChanged` listeners, so a record deleted while held leaves every window's chip. Reconcile is
+about identity, not contents: a record *edited* while held keeps its place and its frozen face.
+Nothing is persisted and nothing is a table, so `SyncCoverageTest` gains no row.
+
+The **three MIDI doors** are `PickUpPad(padUuid)`, `HandPlaceInBank(bankUuid)` and `HandDrop`; a
+button's place runs the same append `POST /busk/banks/{bankId}/pads` runs. See
+`docs/midi-control-surface-engineering.md`.
+
 ### Busk page — `BuskSocket.kt`
 
 | Message | Fields | Reply |
@@ -389,7 +443,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (71)
+## Server → Client (72)
 
 ### Boot — `BootSocket.kt`
 
@@ -521,6 +575,26 @@ name on both sides.) `windows.state` is `StateFlow`-backed, so the subscription 
 it arrives before this window has announced anything; `id` is the socket-minted row id and `user` is
 the authenticated caller's display name, both stamped server-side for the reason `selection.state`'s
 `source` is (D7) — a window cannot claim to be another window, or another operator.
+
+### Hand — `HandSocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `hand.state` | `item?: {kind, id, uuid, template?, look?, cue?, pickedUpOn?, holdId, pickedUpAtMs, expiresAtMs}` (absent = an empty hand) | Connect snapshot + broadcast |
+
+`StateFlow`-backed, so the subscription *is* the snapshot. `item` carries the record's **own summary
+DTO** — `template` a `TemplateDto`, `look` a `LookDto`, `cue` a `BuskCueDto` — exactly as
+`BuskPadDto` does, so every window draws the ghost from this frame alone with no second fetch; that
+is what lets the client's ghost be frozen and hookless. Exactly one of the three is set, matching
+`kind`.
+
+`pickedUpOn` is the same `SelectionSource` shape `selection.state`'s `source` carries — `{kind:
+"window" | "surface", id?, name}`, `id` being the windows-registry row id — and is absent for a
+socket that has announced nothing. `holdId`, `pickedUpAtMs` and `expiresAtMs` are the **desk's** to
+write, the way a windows row's `id` and `user` are: a caller that could set its own expiry could hold
+the desk's hand all night, and one that could set its own `holdId` could make a guarded drop match a
+hold that was not its own. `holdId` is monotonic per pick-up, so two holds are never equal — which is
+what keeps `MutableStateFlow`'s `equals` conflation from swallowing a repeated pick-up.
 
 ### Busk page — `BuskSocket.kt`
 
@@ -735,6 +809,10 @@ by the lifecycle above rather than by anything an operator does.
   band buys the snapshot and the broadcast, not an earlier announce.
 - **On disconnect**, `windowRegistry.remove(scope.id)` runs in the same `finally` as the learn-session
   cleanup. There is no heartbeat and no timeout: the socket closing *is* the window closing.
+
+Note the contrast with the **hand**, which looks like a sibling and is not: `hand.*` is registered in
+the *show* band (step 6) and cleared by the project collector, because it holds one project's record
+ids, where a window outlives a switch and its `view` still means something afterwards.
 
 ### On disconnect
 

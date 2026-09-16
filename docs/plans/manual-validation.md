@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the whole of session 3, both halves; nothing in it can be covered in review | Multi-screen S3, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
@@ -63,6 +64,67 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-MULTI-SCREEN-S3`
+
+**What it proves**: *a record picked up on one screen lands on the other* — multi-screen plan §5 S3
+/ §3.5 / §9. The desk holds **one** record at a time: a template, a Look or a cue, picked up on any
+window and placed on any other. It is the cross-window move, chosen over a pointer drag because the
+window that saw the press keeps the pointer for the whole gesture (D12). There is no `hand.place`
+frame — a place is the placing window's own existing mutation followed by `hand.drop` — so what this
+check is really testing is that four different mutations all end with the hand empty and the record
+where it was dropped.
+
+**Test**: two browser windows on the desk, plus the X-Touch for steps 5–6. **Nothing here can be
+covered in review**, unlike `FU-MANUAL-MULTI-SCREEN-S2`, whose browser half a pair of preview-pane
+tabs could stand in for: the desktop app's preview pane creates no child browsing context on any
+route, so two *windows* — as opposed to two tabs of one — are genuinely the desk's to produce, and
+every step below needs the ghost visible on a screen that did not pick the item up.
+
+1. **Pick up and place on a bank.** On Screen 1, hold a busk pad and choose *Pick up*; the chip
+   appears at the bottom of `<main>` on **both** screens, with the record's name, swatch and detail
+   line — and the same face on the screen that did not pick it up, since it is drawn from the frame
+   rather than fetched. On Screen 2, the busk banks that can take it light; tap one. The pad appends
+   at the end of that bank, the chip clears on both screens, and the Undo toast offers the inverse
+   for ten seconds — take it once and confirm the pad goes.
+2. **The other three place targets**, each from the library row's *Pick up* rather than a pad:
+   a **cue slot** (a template and a deferred-effect Look must be refused, exactly as dragging one
+   there is refused today); the **programmer's layer stack** with a selection standing on Screen 2,
+   which lands on the desk selection and masks a template to its own family; and a **cue's stack**
+   from `StackDetail`. A cue in the hand may land only on a bank or a slot — the layer stack and a
+   cue's stack must not light for one.
+3. **Every way of letting go.** The chip's ×; Escape with nothing else claiming it (and Escape while
+   a cell editor is open must reach the editor, not the hand); a second *Pick up*, which replaces
+   rather than erroring. Then the one that needs two screens: pick up on Screen 1, **place it**, and
+   while the place is in flight pick up something else on Screen 2 — Screen 2's item must survive,
+   because the placing window's drop names the record it placed. A bare drop would clear it, and
+   that is the failure this step exists to catch.
+4. **A record deleted while held.** Pick up a Look on Screen 1, delete that Look from the library on
+   Screen 2: the chip must clear on **both** screens rather than sit there naming a row that has
+   gone. Repeat once with a template and once with a cue — three different list-changed listeners
+   carry the reconcile, and only a real delete fires them. Then **edit** a held record's contents
+   instead: the chip stays, with its face frozen as it was picked up.
+5. **The MIDI pad pick-up.** Bind a button to *Pick up pad* naming a pad, and another to *Place in
+   bank* naming a bank on a different page. Press the first: the chip appears on both screens
+   reading *from Control surface*. Press the second: the pad appends to that bank and the chip
+   clears. Press *Place in bank* again with an empty hand — nothing happens, and nothing is logged
+   as an error. Then delete the bank and check the binding reads **missing busk bank** in the
+   inspector rather than staying `Ok` — the backend answers `missingBank`, which is a **new
+   `AssignmentHealth` variant**, so if session 3b has not added its arm to lighting-react's
+   `healthDescriptor.ts` the row will read the generic unknown-variant message instead of that
+   sentence. Either reading proves the backend; only the specific one proves both halves.
+6. **The timeout.** Pick something up and leave it for five minutes without placing it: the chip
+   clears itself on both screens. Worth pairing with a watch rather than guessing — the point is
+   that nobody has to remember they are holding something.
+7. **A project switch while held.** Pick up a template, then switch project from either screen: the
+   chip clears on both. The contrast is the Screens sheet beside it, which must **not** clear — a
+   window outlives a project switch and the hand does not, and seeing the two behave differently in
+   one gesture is the cheapest proof the scoping is right.
+
+20–30 minutes. If step 2's layer-stack place lands on the wrong heads, that is the desk selection's
+business rather than the hand's — check `FU-MANUAL-MULTI-SCREEN-S1` first.
 
 ---
 

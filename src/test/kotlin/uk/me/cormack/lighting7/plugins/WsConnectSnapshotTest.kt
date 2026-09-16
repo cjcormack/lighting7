@@ -51,6 +51,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // stayed there. A windows registry in the show band would announce nothing until the
         // desk was warm (multi-screen plan §10).
         WindowsStateOutMessage::class,
+        // The hand, in the show band beside the selection. Empty on a fresh desk, which is exactly
+        // the case a replay-1 SharedFlow would have nothing to say about.
+        HandStateOutMessage::class,
     )
 
     @Test

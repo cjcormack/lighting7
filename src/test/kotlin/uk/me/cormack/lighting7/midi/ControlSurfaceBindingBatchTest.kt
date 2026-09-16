@@ -228,6 +228,50 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         assertEquals(2, service.list(projectId).size)
     }
 
+    /**
+     * The hand's three, at the write boundary (multi-screen plan §3.5). They are `BUTTON`, so a
+     * fader cannot hold one — and the refusal has to be **here**, whichever door the write came
+     * through: `lib/surfaceDrop.ts` in lighting-react only dims the drop target, and MIDI Learn's
+     * commit, a hand-rolled REST call and a script all reach this service without passing it.
+     */
+    @Test
+    fun `the hand's three targets are refused on a fader`() {
+        val service = service()
+        val targets = listOf(
+            BindingTarget.PickUpPad("44444444-4444-4444-8444-444444444444"),
+            BindingTarget.HandPlaceInBank("55555555-5555-4555-8555-555555555555"),
+            BindingTarget.HandDrop,
+        )
+        for (target in targets) {
+            val e = assertFailsWith<BindingRefused>("$target should be refused on a fader") {
+                service.create(
+                    projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
+                    bank = null, target = target,
+                )
+            }
+            assertEquals(CODE_BINDING_WRONG_CONTROL_KIND, e.code)
+        }
+        assertEquals(0, service.list(projectId).size, "nothing was written")
+    }
+
+    @Test
+    fun `the hand's three targets are accepted on a button`() {
+        val service = service()
+        service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-1",
+            bank = null, target = BindingTarget.PickUpPad("44444444-4444-4444-8444-444444444444"),
+        )
+        service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-2",
+            bank = null, target = BindingTarget.HandPlaceInBank("55555555-5555-4555-8555-555555555555"),
+        )
+        service.create(
+            projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-3",
+            bank = null, target = BindingTarget.HandDrop,
+        )
+        assertEquals(3, service.list(projectId).size)
+    }
+
     @Test
     fun `a bank button takes nothing at all`() {
         // `route` answers `ResolvedInput.BankButton` and switches the bank *before* resolving a

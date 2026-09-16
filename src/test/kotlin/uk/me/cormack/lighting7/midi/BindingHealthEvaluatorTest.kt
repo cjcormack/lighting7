@@ -42,6 +42,7 @@ class BindingHealthEvaluatorTest {
     private val liveTemplate: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
     private val livePad: UUID = UUID.fromString("cccccccc-0000-4000-8000-000000000001")
     private val livePage: UUID = UUID.fromString("dddddddd-0000-4000-8000-000000000001")
+    private val liveBank: UUID = UUID.fromString("ffffffff-0000-4000-8000-000000000001")
     private val gone: UUID = UUID.fromString("eeeeeeee-0000-4000-8000-000000000001")
 
     private fun context(
@@ -63,6 +64,7 @@ class BindingHealthEvaluatorTest {
         looksNeedingSelection = setOf(deferredLook),
         validTemplateUuids = setOf(liveTemplate),
         validPadUuids = setOf(livePad),
+        validBankUuids = setOf(liveBank),
         validPageUuids = setOf(livePage),
     )
 
@@ -97,6 +99,43 @@ class BindingHealthEvaluatorTest {
         val ctx = context()
         assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("not-a-uuid"), ctx))
         assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad(""), ctx))
+    }
+
+    // ─── The hand (multi-screen plan §3.5) ─────────────────────────────
+
+    @Test
+    fun `the hand's two addressed targets are judged on the address they carry`() {
+        val ctx = context()
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$livePad"), ctx))
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$liveBank"), ctx),
+        )
+
+        assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingBank>(
+            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$gone"), ctx),
+        )
+        assertIs<AssignmentHealth.MissingBank>(
+            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("not-a-uuid"), ctx),
+        )
+
+        // A pick-up's pad and a place's bank come from **different** sets: a bank uuid on a pick-up
+        // is as dead as any other stranger, which is what a shared helper reading the wrong set
+        // would hide.
+        assertIs<AssignmentHealth.MissingPad>(
+            BindingHealthEvaluator.evaluate(BindingTarget.PickUpPad("$liveBank"), ctx),
+        )
+        assertIs<AssignmentHealth.MissingBank>(
+            BindingHealthEvaluator.evaluate(BindingTarget.HandPlaceInBank("$livePad"), ctx),
+        )
+    }
+
+    @Test
+    fun `a hand drop addresses nothing and so can never be dead`() {
+        // Whether the hand holds anything is a fact about this second, not about the binding — the
+        // same line `SelectionProperty` draws with an empty selection.
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.HandDrop, context()))
     }
 
     @Test

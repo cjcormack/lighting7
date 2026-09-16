@@ -94,6 +94,10 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
 /**
  * The mover to stamp.
  *
+ * Shared with `hand.pickUp`, which stamps `pickedUpOn` from it: "who did this" is one fact about a
+ * socket, and two copies of the fallback order would be two chances to read a payload the rule says
+ * must never be read.
+ *
  * The announced window wins: its name *and* its row id, so the chip can say *from Screen 1* and a
  * client can tell its own write from another window's. The id stamped is the registry row's
  * socket-minted [uk.me.cormack.lighting7.state.WindowRegistry.Window.id], not the client-minted
@@ -104,7 +108,7 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
  * has done neither — an unnamed mover is recorded as no mover, not as the previous one, because
  * the source is *who moved it last*.
  */
-private fun SocketScope.selectionSource(sourceName: String?): SelectionSource? {
+internal fun SocketScope.selectionSource(sourceName: String?): SelectionSource? {
     window?.let { return SelectionSource.window(it.name, it.id) }
     sourceName?.trim()?.takeIf { it.isNotEmpty() }?.let { windowName = it }
     return windowName?.let { SelectionSource.window(it) }

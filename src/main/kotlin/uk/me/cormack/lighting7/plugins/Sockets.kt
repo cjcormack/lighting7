@@ -141,6 +141,7 @@ fun Application.configureSockets(state: State) {
             setupCloudSyncSubscriptions(scope)
             setupProgrammerSubscriptions(scope)
             setupSpeedMasterSubscriptions(scope)
+            setupHandSubscriptions(scope)
 
             try {
                 for (frame in incoming) {
@@ -156,6 +157,7 @@ fun Application.configureSockets(state: State) {
                             is ProgrammerInMessage -> handleProgrammer(scope, message)
                             is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
                             is SelectionInMessage -> handleSelection(scope, message)
+                            is HandInMessage -> handleHand(scope, message)
                             is WindowsInMessage -> handleWindows(scope, message)
                             is BuskInMessage -> handleBusk(scope, message)
                             null -> System.err.println("WS /api: undeserializable frame ignored")

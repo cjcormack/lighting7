@@ -519,6 +519,42 @@ and the cue toggle are the *pad's* behaviour, not the HTTP endpoint's. It answer
 rather than responding, because a MIDI press has nowhere to put a 400. See
 `docs/midi-control-surface-engineering.md` §"The busk press, from two doors".
 
+**The hand: one held record, picked up on any window and placed on any other.** The busk page is
+where most places land, so it is documented here (multi-screen plan §3.5, D12). `state/HandState.kt`
+holds a template, a Look or a cue — never two, never a cue *stack* — and `hand.state` /
+`hand.pickUp` / `hand.drop` are the whole wire. It exists because a pointer drag cannot cross an OS
+window boundary: the window that saw the press keeps the pointer for the whole gesture, so the
+neighbour never receives a pointer event of its own.
+
+**There is no `hand.place`.** Every target already has a mutation with its own validation —
+`POST /busk/banks/{bankId}/pads` appends a pad, `assignCueSlot` fills a slot, `programmer.addLayer`
+adds a layer, `patchProjectCue` through `buildCueInput` adds a cue layer — so one frame that placed
+would reimplement four of them behind one name. A place is **the placing window's own mutation
+followed by `hand.drop`**, and Undo is that window's inverse mutation. The desk's whole share of a
+place is letting go. A control surface has no mutation of its own to make, so its one place binding,
+`HandPlaceInBank(bankUuid)`, runs that same append rather than a second copy of it — and lets go
+only if it succeeded, so a refused place leaves the item in the hand where the operator can put it
+somewhere else.
+
+The frame carries the record's **own summary DTO**, exactly as `BuskPadDto` does, so every window
+builds the ghost's face from the frame with no lookup — which is what lets that ghost be frozen and
+hookless. `pickedUpOn` is the same `SelectionSource` a selection write is stamped with, read from
+the socket's announced window and never from the payload (D7).
+
+A drop made **after** a place names the record it is letting go of, because a place is two
+round-trips and another window may have picked something up in the gap; a bare drop — the chip's ×,
+Escape — lets go of whatever is there.
+
+**Project-scoped, and three things end a hold.** The ids a held record carries belong to one
+project's rows, so `State`'s project collector drops it — the opposite of the windows registry,
+which outlives a switch. Besides a place: a **five-minute timeout** armed on every pick-up, because
+an item held for the rest of the night is a chip nobody meant to leave lit; and a **reconcile** run
+from the `lookListChanged` / `templateListChanged` / `cueListChanged` listeners, so a record deleted
+while held leaves every window's chip rather than naming a row that has gone. Reconcile asks whether
+the record *exists*, never whether it still looks the way it did: an edit is not a delete, and the
+held face is frozen for the same reason a pad's is. A second pick-up **replaces**, and is not an
+error — the operator changed their mind, and there is no other gesture that means it.
+
 **Which page is showing is a desk fact, not a browser one.** `state/BuskPageState.kt` holds it —
 transient, project-scoped, `busk.pageState` / `busk.setPage` — so a hardware *next page* button and
 a tab click in the busk view are one gesture rather than two disagreeing ones. The client's `?page=`

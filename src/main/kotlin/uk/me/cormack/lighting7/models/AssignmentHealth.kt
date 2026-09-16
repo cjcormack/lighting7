@@ -111,6 +111,18 @@ sealed class AssignmentHealth {
     @SerialName("missingPad")
     data class MissingPad(val padUuid: String) : AssignmentHealth()
 
+    /**
+     * A `handPlaceInBank` binding names a **busk bank** that no longer exists — the bank was
+     * removed by a layout write, or its column or page was. Control-surface-only.
+     *
+     * Not to be confused with [UnknownBank], which is a *device profile's* bank (an X-Touch layer):
+     * one is a row on a busk page, the other a mode of a control surface, and they share only the
+     * word.
+     */
+    @Serializable
+    @SerialName("missingBank")
+    data class MissingBank(val bankUuid: String) : AssignmentHealth()
+
     /** A `buskPageSet` binding names a busk page that no longer exists. Control-surface-only. */
     @Serializable
     @SerialName("missingPage")
@@ -159,6 +171,7 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
     is AssignmentHealth.MissingTemplate -> "missing template ${health.templateUuid}"
     is AssignmentHealth.MissingPad -> "missing busk pad ${health.padUuid}"
+    is AssignmentHealth.MissingBank -> "missing busk bank ${health.bankUuid}"
     is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"
     is AssignmentHealth.LookNeedsSelection -> "Look ${health.lookUuid} has a deferred effect and needs a selection"
 }
