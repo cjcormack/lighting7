@@ -7,6 +7,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
 
@@ -29,9 +30,12 @@ internal const val CODE_TEMPLATE_NEEDS_SELECTION = "TEMPLATE_NEEDS_SELECTION"
  * transaction, exactly as the template toggle reads its group, so a page rewritten by another
  * client mid-press cannot release the wrong set. Then, by kind:
  *
- * - a **template** → `ProgrammerLayerStack.toggle` with its derived family mask and the siblings;
- * - a **Look** → the same `toggle`, unmasked, with the siblings — and the empty-targets rule the
- *   Look toggle route has (`resolveLookToggleTargets`);
+ * - a **template** → `ProgrammerLayerStack.toggle` with its derived family mask and the siblings,
+ *   refused by name when the selection's mask leaves that family out (`TEMPLATE_OUTSIDE_MASK`) —
+ *   on the on arm only, an off press coming off under any mask (`pressWouldRelease`);
+ * - a **Look** → the same `toggle`, masked to what the Look and the selection's mask share
+ *   (`resolveLookMask`, unmasked when the press carries no mask), with the siblings — and the
+ *   empty-targets rule the Look toggle route has (`resolveLookToggleTargets`);
  * - a **cue** → apply / stop through `CueStackManager`, exactly as a cue slot presses: a toggle,
  *   lit from the stack's `activeCueId`, live without being the playhead. Never the playhead's GO.
  *
@@ -53,14 +57,25 @@ internal fun Route.routeApiRestBuskPress(state: State) {
             { p -> "Cannot press busk pads in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<BuskPressRequest>()
+            val families = try {
+                parseMaskGroups(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
             val plan = BuskPressService.plan(state, project.id.value, resource.padId)
             if (plan == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(PAD_NOT_FOUND))
                 return@withCurrentProject
             }
-            when (val outcome = BuskPressService.apply(state, plan, request.targets, request.beatDivision)) {
+            val outcome = BuskPressService.apply(
+                state, plan, request.targets, families = families, beatDivision = request.beatDivision,
+            )
+            when (outcome) {
                 is BuskPressService.Outcome.Pressed -> call.respond(
-                    BuskPressResponse(outcome.kind, outcome.action, outcome.effectCount, outcome.released),
+                    BuskPressResponse(
+                        outcome.kind, outcome.action, outcome.effectCount, outcome.released, outcome.skippedFamilies,
+                    ),
                 )
                 is BuskPressService.Outcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
@@ -78,11 +93,17 @@ internal fun Route.routeApiRestBuskPress(state: State) {
 @Resource("/{projectId}/busk/pads/{padId}/press")
 internal data class BuskPadPressResource(val projectId: String, val padId: Int)
 
-/** The selection. Ignored for a cue pad; may be empty for a Look with no deferred effect. */
+/**
+ * The selection and its attribute mask. Both ignored for a cue pad; [targets] may be empty for a
+ * Look with no deferred effect. [families] (`PropertyMaskGroup` names) absent is every attribute
+ * and an unknown name is 400; a template outside it is `TEMPLATE_OUTSIDE_MASK`, a Look with
+ * nothing inside it `LOOK_OUTSIDE_MASK` — multi-screen plan D5.
+ */
 @Serializable
 internal data class BuskPressRequest(
     val targets: List<CueTargetDto> = emptyList(),
     val beatDivision: Double? = null,
+    val families: List<String>? = null,
 )
 
 @Serializable
@@ -97,4 +118,10 @@ internal data class BuskPressResponse(
      * siblings stopped. Always 0 for an off press and in a stacking bank.
      */
     val released: Int = 0,
+    /**
+     * A Look's families the selection's mask left out (`PropertyMaskGroup` names, declaration
+     * order) — what the pressing window toasts (D6). Empty for a template or cue, an unmasked
+     * press, and an off press.
+     */
+    val skippedFamilies: List<String> = emptyList(),
 )

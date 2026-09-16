@@ -5,6 +5,8 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonNull
+import uk.me.cormack.lighting7.fx.toMaskNames
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
@@ -599,15 +601,29 @@ class AiTools(private val state: State) {
                 // surface passes explicit targets, so the model reads it for context, not to act
                 // through it.
                 val selection = state.deskSelection
+                val snapshot = selection.state.value
                 put("selection", buildJsonObject {
                     put("targets", buildJsonArray {
-                        for (target in selection.targets.value) {
+                        for (target in snapshot.targets) {
                             addJsonObject {
                                 put("type", target.type)
                                 put("key", target.key)
                             }
                         }
                     })
+                    // The attribute mask a press on this selection is narrowed to, and who moved
+                    // it last (multi-screen plan D2/D7). Both null when unmasked / unmoved, and
+                    // written as null rather than omitted so the model sees the two keys exist.
+                    put("families", snapshot.families?.let { families ->
+                        buildJsonArray { families.toMaskNames().forEach { add(it) } }
+                    } ?: JsonNull)
+                    put("source", snapshot.source?.let { source ->
+                        buildJsonObject {
+                            put("kind", source.kind)
+                            put("id", source.id)
+                            put("name", source.name)
+                        }
+                    } ?: JsonNull)
                     put("coverage", buildJsonArray {
                         for (target in selection.coverage()) {
                             addJsonObject {

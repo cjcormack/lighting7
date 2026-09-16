@@ -7,16 +7,20 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
  * The desk selection's head-by-head rules: a group and its members are two spellings of one
- * selection, toggling off narrows, a no-op mutation emits nothing, and a reload prunes.
+ * selection, toggling off narrows, a no-op mutation emits nothing, and a reload prunes — and the
+ * mask rules that make the selection and its attribute mask one fact (multi-screen plan D2):
+ * `set` replaces the whole fact, `toggle` keeps the mask, `clear` drops it, `prune` keeps it.
  */
 class DeskSelectionTest {
 
@@ -25,6 +29,9 @@ class DeskSelectionTest {
     private val hex2 = CueTargetDto("fixture", "hex-2")
     private val hex3 = CueTargetDto("fixture", "hex-3")
     private val wash = CueTargetDto("group", "front-wash")
+    private val screen1 = SelectionSource.window("Screen 1")
+    private val screen2 = SelectionSource.window("Screen 2")
+    private val colour = setOf(PropertyMaskGroup.COLOUR)
 
     private fun fixtures(): Fixtures {
         val fixtures = Fixtures()
@@ -39,20 +46,24 @@ class DeskSelectionTest {
 
     private fun selection(fixtures: Fixtures? = fixtures()) = DeskSelection { fixtures }
 
+    private val DeskSelection.targets get() = state.value.targets
+
+    // ─── Heads ──────────────────────────────────────────────────────────
+
     @Test
     fun `set keeps order and collapses duplicates`() {
         val s = selection()
         s.set(listOf(hex2, hex1, hex2))
-        assertEquals(listOf(hex2, hex1), s.targets.value)
+        assertEquals(listOf(hex2, hex1), s.targets)
     }
 
     @Test
     fun `toggle appends a target that is not covered and takes it off when it is`() {
         val s = selection()
         assertTrue(s.toggle(hex1))
-        assertEquals(listOf(hex1), s.targets.value)
+        assertEquals(listOf(hex1), s.targets)
         assertFalse(s.toggle(hex1))
-        assertEquals(emptyList(), s.targets.value)
+        assertEquals(emptyList(), s.targets)
     }
 
     @Test
@@ -74,7 +85,7 @@ class DeskSelectionTest {
         val s = selection()
         s.set(listOf(hex1, hex2, hex3))
         assertFalse(s.toggle(wash))
-        assertEquals(listOf(hex3), s.targets.value)
+        assertEquals(listOf(hex3), s.targets)
     }
 
     @Test
@@ -82,9 +93,9 @@ class DeskSelectionTest {
         val s = selection()
         s.set(listOf(wash, hex3))
         assertFalse(s.toggle(hex1))
-        assertEquals(listOf(hex2, hex3), s.targets.value, "the group is respelt as its remaining member")
+        assertEquals(listOf(hex2, hex3), s.targets, "the group is respelt as its remaining member")
         assertTrue(s.toggle(hex1))
-        assertEquals(listOf(hex2, hex3, hex1), s.targets.value)
+        assertEquals(listOf(hex2, hex3, hex1), s.targets)
     }
 
     @Test
@@ -98,8 +109,8 @@ class DeskSelectionTest {
     @Test
     fun `a mutation that changes nothing emits nothing`() = runBlocking {
         val s = selection()
-        val seen = mutableListOf<List<CueTargetDto>>()
-        val job = CoroutineScope(Dispatchers.Unconfined).launch { s.targets.collect { seen += it } }
+        val seen = mutableListOf<DeskSelection.Snapshot>()
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { s.state.collect { seen += it } }
         assertEquals(1, seen.size, "the StateFlow replays its current value on subscribe")
         s.set(listOf(hex1))
         yield()
@@ -118,7 +129,7 @@ class DeskSelectionTest {
         val s = selection(fixtures)
         s.set(listOf(hex3, CueTargetDto("group", "gone"), hex1, CueTargetDto("fixture", "hex-9")))
         s.prune()
-        assertEquals(listOf(hex3, hex1), s.targets.value)
+        assertEquals(listOf(hex3, hex1), s.targets)
     }
 
     @Test
@@ -126,6 +137,80 @@ class DeskSelectionTest {
         val s = selection(fixtures = null)
         s.set(listOf(hex1))
         s.prune()
-        assertEquals(listOf(hex1), s.targets.value)
+        assertEquals(listOf(hex1), s.targets)
+    }
+
+    // ─── The mask and the mover (multi-screen plan D2, D7) ──────────────
+
+    @Test
+    fun `set replaces the whole fact — heads, mask and mover`() {
+        val s = selection()
+        s.set(listOf(hex1, hex2), colour, screen1)
+        assertEquals(DeskSelection.Snapshot(listOf(hex1, hex2), colour, screen1), s.state.value)
+
+        // A replace that names no mask is every attribute: a stale Colour mask must not ride onto
+        // heads picked with no column in mind — the narrow-width picker, a surface's REPLACE.
+        s.set(listOf(hex3), source = screen2)
+        assertEquals(DeskSelection.Snapshot(listOf(hex3), null, screen2), s.state.value)
+    }
+
+    @Test
+    fun `an empty or complete mask is no mask`() {
+        val s = selection()
+        s.set(listOf(hex1), emptySet())
+        assertNull(s.state.value.families, "nothing named is every attribute")
+        s.set(listOf(hex1), PropertyMaskGroup.entries.toSet())
+        assertNull(s.state.value.families, "every group named is every attribute, as parseMaskGroups reads it")
+    }
+
+    @Test
+    fun `toggle edits the heads, keeps the mask and stamps the mover`() {
+        val s = selection()
+        s.set(listOf(hex1), colour, screen1)
+
+        assertTrue(s.toggle(hex2, SelectionSource.SURFACE))
+        assertEquals(listOf(hex1, hex2), s.targets)
+        assertEquals(colour, s.state.value.families, "a tap adds a head under the standing mask")
+        assertEquals(SelectionSource.SURFACE, s.state.value.source, "the surface moved it last")
+
+        assertFalse(s.toggle(hex1, screen2))
+        assertEquals(listOf(hex2), s.targets)
+        assertEquals(colour, s.state.value.families, "taking a head off keeps the mask too")
+        assertEquals(screen2, s.state.value.source)
+    }
+
+    @Test
+    fun `clear drops the heads, the mask and the mover`() {
+        val s = selection()
+        s.set(listOf(hex1), colour, screen1)
+        s.clear()
+        assertEquals(DeskSelection.Snapshot(), s.state.value)
+    }
+
+    @Test
+    fun `prune keeps the mask and the mover`() {
+        val s = selection()
+        s.set(listOf(hex1, CueTargetDto("fixture", "hex-9")), colour, screen1)
+        s.prune()
+        assertEquals(DeskSelection.Snapshot(listOf(hex1), colour, screen1), s.state.value, "a repatch is not a gesture")
+    }
+
+    @Test
+    fun `the same heads moved by another window is a change, and the same mover is not`() = runBlocking {
+        val s = selection()
+        s.set(listOf(hex1), colour, screen1)
+        val seen = mutableListOf<DeskSelection.Snapshot>()
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { s.state.collect { seen += it } }
+        assertEquals(1, seen.size)
+
+        s.set(listOf(hex1), colour, screen1)
+        yield()
+        assertEquals(1, seen.size, "the identical fact from the same window emits nothing")
+
+        s.set(listOf(hex1), colour, screen2)
+        yield()
+        assertEquals(2, seen.size, "who moved it last is true information — the chip changes")
+        assertEquals(screen2, seen.last().source)
+        job.cancel()
     }
 }

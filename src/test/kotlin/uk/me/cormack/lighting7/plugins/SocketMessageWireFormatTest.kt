@@ -11,9 +11,11 @@ import uk.me.cormack.lighting7.midi.LedState
 import uk.me.cormack.lighting7.midi.RingState
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
+import uk.me.cormack.lighting7.state.SelectionSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -365,8 +367,16 @@ class SocketMessageWireFormatTest {
         val set = json.decodeFromString<InMessage>("""{"type":"selection.set","targets":[{"type":"group","key":"front-wash"}]}""")
         assertIs<SelectionInMessage>(set)
         assertEquals(listOf(CueTargetDto("group", "front-wash")), assertIs<SelectionSetInMessage>(set).targets)
+        assertNull(assertIs<SelectionSetInMessage>(set).families, "absent families is every attribute")
+        assertNull(assertIs<SelectionSetInMessage>(set).sourceName)
+        val masked = json.decodeFromString<InMessage>(
+            """{"type":"selection.set","targets":[],"families":["COLOUR","POSITION"],"sourceName":"Screen 1"}""",
+        )
+        assertEquals(listOf("COLOUR", "POSITION"), assertIs<SelectionSetInMessage>(masked).families)
+        assertEquals("Screen 1", assertIs<SelectionSetInMessage>(masked).sourceName)
         val toggle = json.decodeFromString<InMessage>("""{"type":"selection.toggle","target":{"type":"fixture","key":"hex-1"}}""")
         assertEquals(CueTargetDto("fixture", "hex-1"), assertIs<SelectionToggleInMessage>(toggle).target)
+        assertNull(assertIs<SelectionToggleInMessage>(toggle).sourceName)
         assertIs<SelectionClearInMessage>(json.decodeFromString<InMessage>("""{"type":"selection.clear"}"""))
     }
 
@@ -376,6 +386,16 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"selection.state""""))
         assertEquals(out, assertIs<SelectionStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
+
+        val masked = SelectionStateOutMessage(
+            listOf(CueTargetDto("fixture", "hex-1")),
+            families = listOf("COLOUR"),
+            source = SelectionSource.window("Screen 1"),
+        )
+        val encodedMasked = json.encodeToString<OutMessage>(masked)
+        assertTrue(encodedMasked.contains(""""families":["COLOUR"]"""), encodedMasked)
+        assertTrue(encodedMasked.contains(""""source":{"kind":"window","name":"Screen 1"}"""), encodedMasked)
+        assertEquals(masked, assertIs<SelectionStateOutMessage>(json.decodeFromString<OutMessage>(encodedMasked)))
     }
 
     // ─── Project domain ─────────────────────────────────────────────────────

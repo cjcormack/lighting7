@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
 import uk.me.cormack.lighting7.fx.TemplateSnapshot
+import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.toEffectSpec
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -20,6 +21,14 @@ import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
 
 private val logger = LoggerFactory.getLogger("templateApply")
+
+/** What a click did, or why it did nothing — the route maps the refusal to a 400 by code. */
+internal sealed interface ApplyTemplateOutcome {
+    data class Applied(val response: ApplyTemplateResponse) : ApplyTemplateOutcome
+
+    /** The selection is masked to families this template's is outside (`TEMPLATE_OUTSIDE_MASK`). */
+    data class Refused(val message: String, val code: String) : ApplyTemplateOutcome
+}
 
 /**
  * The plain-click gesture: resolve a template against a selection and put the result into the
@@ -43,6 +52,10 @@ private val logger = LoggerFactory.getLogger("templateApply")
  *    what Update writes back to. Value arm only: an owner governs a programmer *slot*, and an
  *    effect has none — the effect arm's equivalent is the programmer's priority band, which Record
  *    and Clear read the same way.
+ *  - **The selection's mask is tested before either arm** (multi-screen plan D5). A template is
+ *    one family, so under a mask it either lands whole or not at all: [families] naming a set the
+ *    template's family is outside is [ApplyTemplateOutcome.Refused] by name, on the click exactly
+ *    as on the pad and the button. Null is every attribute — today's press.
  */
 internal fun applyTemplateToProgrammer(
     state: State,
@@ -50,7 +63,15 @@ internal fun applyTemplateToProgrammer(
     template: TemplateSnapshot,
     targets: List<CueTargetDto>,
     fadeMs: Long,
-): ApplyTemplateResponse {
+    families: Set<PropertyMaskGroup>? = null,
+): ApplyTemplateOutcome {
+    val family = template.familyOf()
+    if (families != null && !maskAllows(families, family)) {
+        return ApplyTemplateOutcome.Refused(
+            templateOutsideMaskMessage(template.name, family, families),
+            CODE_TEMPLATE_OUTSIDE_MASK,
+        )
+    }
     // D1: a template holds a value *or* an effect, so the two arms are exclusive and this is the
     // only place that has to know which. The dispatch is here rather than inside the value arm
     // because the effect arm shares none of it — not the fixture expansion (it keeps group shape,
@@ -67,7 +88,7 @@ internal fun applyTemplateToProgrammer(
     if (outcome.written > 0 || outcome.effectIds.isNotEmpty()) {
         TemplatePressLog.record(state, projectId, template.templateId)
     }
-    return outcome
+    return ApplyTemplateOutcome.Applied(outcome)
 }
 
 /** The value arm of [applyTemplateToProgrammer]: resolve every row per head and write literals. */

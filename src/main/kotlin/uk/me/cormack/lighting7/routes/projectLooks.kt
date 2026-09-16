@@ -25,6 +25,9 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.toMaskNames
+import uk.me.cormack.lighting7.fx.toPropertyMask
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
@@ -367,6 +370,12 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             { p -> "Cannot toggle looks in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<ToggleLookRequest>()
+            val families = try {
+                parseMaskGroups(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
 
             val look = transaction(state.database) {
                 DaoLook.findById(resource.lookId)
@@ -384,14 +393,37 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 }
                 is LookTargetResolution.Targets -> resolved.targets
             }
+            // The selection's mask, if it has one, narrows the layer to the families the Look and
+            // the mask share (multi-screen plan D5); the ones left out are reported, not silent.
+            // On the *on* arm only — an off press comes off under any mask (`pressWouldRelease`).
+            val mask = if (pressWouldRelease(state, look.source.uuid, targets)) {
+                LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
+            } else {
+                when (val resolved = resolveLookMask(families, look)) {
+                    is LookMaskResolution.Refused -> {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
+                        return@withCurrentProject
+                    }
+                    is LookMaskResolution.Masked -> resolved
+                }
+            }
 
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
                     source = look.source,
                     targets = targets,
+                    propertyMask = mask.propertyMask,
                     beatDivisionOverride = request.beatDivision,
                 )
-                call.respond(ToggleLookResponse(outcome.action, outcome.effectCount))
+                // Skips belong to the arm that put the layer on — the busk door's rule, kept here so
+                // the two doors onto one gesture cannot toast differently.
+                call.respond(
+                    ToggleLookResponse(
+                        outcome.action,
+                        outcome.effectCount,
+                        if (outcome.action == "applied") mask.skippedFamilies else emptyList(),
+                    ),
+                )
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {
@@ -417,11 +449,15 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 /**
  * Body of `POST /looks/{id}/toggle` — apply the Look as a programmer layer, or remove it. An empty
  * [targets] means the Look's own fixtures, and is refused for a Look with a deferred effect.
+ * [families] is the selection's attribute mask (`PropertyMaskGroup` names); absent is every
+ * attribute, and an unknown name is 400. The layer lands masked to the families the Look and the
+ * mask share — see [resolveLookMask].
  */
 @Serializable
 internal data class ToggleLookRequest(
     val targets: List<CueTargetDto> = emptyList(),
     val beatDivision: Double? = null,
+    val families: List<String>? = null,
 )
 
 /** 400 code: the Look has a deferred effect, so a press with no targets would assert nothing. */
@@ -429,6 +465,9 @@ internal const val CODE_LOOK_NEEDS_SELECTION = "LOOK_NEEDS_SELECTION"
 
 /** 400 code: a press with no targets, on a Look none of whose own fixtures are patched. */
 internal const val CODE_LOOK_NO_TARGETS = "LOOK_NO_TARGETS"
+
+/** 400 code: the selection is masked to families this Look has no row or effect in. */
+internal const val CODE_LOOK_OUTSIDE_MASK = "LOOK_OUTSIDE_MASK"
 
 /**
  * What a toggle has to know about a Look, read in one transaction beside the source so the press
@@ -440,6 +479,8 @@ internal data class LookToggleSource(
     val hasDeferredEffect: Boolean,
     /** The Look's own fixtures and groups, patched ones only — see [ownTargets]. */
     val ownTargets: List<CueTargetDto>,
+    /** The attribute families its rows and effects span, in declaration order — see [derivedFamilyGroups]. */
+    val families: Set<PropertyMaskGroup>,
 )
 
 /** Must be called inside a transaction. */
@@ -447,6 +488,7 @@ internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookTo
     source = LayerSource.look(id.value, uuid, name),
     hasDeferredEffect = effects.any { it.isDeferred },
     ownTargets = ownTargets(fixtures),
+    families = derivedFamilyGroups(fixtures),
 )
 
 /**
@@ -489,11 +531,59 @@ internal fun resolveLookToggleTargets(requested: List<CueTargetDto>, look: LookT
     else -> LookTargetResolution.Targets(look.ownTargets)
 }
 
+/**
+ * How the selection's mask lands on a Look: the layer's `propertyMask`, and which of the Look's
+ * families it left out.
+ */
+internal sealed interface LookMaskResolution {
+    /**
+     * [propertyMask] is `mask ∩ look.families` in layer spelling, or null for an unmasked press.
+     * [skippedFamilies] names the Look's families outside the mask — what the pressing window
+     * toasts (D6) — and is empty for an unmasked press.
+     */
+    data class Masked(val propertyMask: String?, val skippedFamilies: List<String>) : LookMaskResolution
+    data class Refused(val message: String, val code: String) : LookMaskResolution
+}
+
+/**
+ * The mask rule for a Look, decided in one place for `/looks/{id}/toggle` and the busk press
+ * (multi-screen plan D5). A Look spans families, so it is not refused by name the way a template
+ * is: the layer goes on masked to the families the Look and the selection share, the cook skips
+ * the rows outside it, and the response names what was skipped. Nothing shared is a refusal
+ * (`LOOK_OUTSIDE_MASK`): a layer that asserts nothing would light the pad for nothing.
+ *
+ * The mask lands through the layer's own `propertyMask`, which `CueComposer` applies to the
+ * layer's **rows**. A Look's *effects* are not filtered by a layer mask today (a pre-existing
+ * property of the cook, not of the press), so an effect in a skipped family still runs; it is
+ * still named in [LookMaskResolution.Masked.skippedFamilies], which is the honest report.
+ */
+internal fun resolveLookMask(mask: Set<PropertyMaskGroup>?, look: LookToggleSource): LookMaskResolution {
+    if (mask == null) return LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
+    val inside = look.families.filterTo(LinkedHashSet()) { it in mask }
+    if (inside.isEmpty()) {
+        return LookMaskResolution.Refused(
+            "'${look.source.name}' has nothing in ${describeFamilies(mask)} — the selection is masked to it",
+            CODE_LOOK_OUTSIDE_MASK,
+        )
+    }
+    val skipped = look.families.filterTo(LinkedHashSet()) { it !in mask }
+    return LookMaskResolution.Masked(inside.toPropertyMask(), skipped.toMaskNames())
+}
+
+/** `Colour`, `Colour + Position` — the family names as an operator reads them, in declaration order. */
+internal fun describeFamilies(families: Set<PropertyMaskGroup>): String =
+    families.toMaskNames().joinToString(" + ") { it.lowercase().replaceFirstChar(Char::uppercase) }
+
 @Serializable
 internal data class ToggleLookResponse(
     /** `"applied"` or `"removed"`. */
     val action: String,
     val effectCount: Int,
+    /**
+     * The Look's families the selection's mask left out (`PropertyMaskGroup` names, declaration
+     * order) — the toast on the pressing window. Empty for an unmasked press, and on the off arm.
+     */
+    val skippedFamilies: List<String> = emptyList(),
 )
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -807,8 +897,17 @@ private fun createLookChildren(
  * family rather than guessing — the library would rather under-bank a broken Look than file it under
  * the wrong attribute.
  */
-private fun DaoLook.derivedFamilies(state: State): List<String> {
-    val fixtures = state.show.fixtures
+private fun DaoLook.derivedFamilies(state: State): List<String> =
+    derivedFamilyGroups(state.show.fixtures).map { it.name }
+
+/**
+ * Which attribute families this Look touches, in declaration order: its rows' properties resolved
+ * against the live patch ([maskGroupForProperty]) and its effects' declared categories. Read by
+ * `toSummaryDto` for the library's family banking and by [toggleSource] for the press's mask
+ * rule, so the family a Look is banked under is the family a masked press honours. Must be
+ * called inside a transaction.
+ */
+internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGroup> {
     val families = LinkedHashSet<PropertyMaskGroup>()
 
     for (row in rows) {
@@ -829,7 +928,7 @@ private fun DaoLook.derivedFamilies(state: State): List<String> {
     for (effect in effects) {
         familyForEffectCategory(effect.category)?.let { families.add(it) }
     }
-    return PropertyMaskGroup.entries.filter { it in families }.map { it.name }
+    return PropertyMaskGroup.entries.filterTo(LinkedHashSet()) { it in families }
 }
 
 /**

@@ -21,6 +21,9 @@ import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.maskAllows
+import uk.me.cormack.lighting7.fx.TemplateSnapshot
 import uk.me.cormack.lighting7.fx.TemplateIntent
 import uk.me.cormack.lighting7.fx.TemplateProperty
 import uk.me.cormack.lighting7.fx.TemplateResolver
@@ -53,6 +56,23 @@ import uk.me.cormack.lighting7.models.asDuration
 
 /** Error code the client keys the "this template is still applied somewhere" flow off. */
 internal const val CODE_TEMPLATE_IN_USE = "TEMPLATE_IN_USE"
+
+/**
+ * 400 code: the selection is masked to families the template's own is not in (multi-screen plan
+ * D5). Every door — click, ⌥click, pad, button — refuses by this name rather than landing a layer
+ * the cook would skip whole, which is the same dead-pad reading `TEMPLATE_NEEDS_SELECTION` refuses.
+ */
+internal const val CODE_TEMPLATE_OUTSIDE_MASK = "TEMPLATE_OUTSIDE_MASK"
+
+/** The refusal's text, shared by every door so a button's log line and a pad's toast agree. */
+internal fun templateOutsideMaskMessage(name: String, family: PropertyMaskGroup?, mask: Set<PropertyMaskGroup>): String {
+    val masked = describeFamilies(mask)
+    return if (family == null) {
+        "'$name' names no known attribute, so it cannot land on a selection masked to $masked"
+    } else {
+        "'$name' is a ${describeFamilies(setOf(family))} template, and the selection is masked to $masked"
+    }
+}
 
 private const val TEMPLATE_NOT_FOUND = "Template not found"
 
@@ -348,6 +368,12 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<ApplyTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ApplyTemplateRequest>()
+            val families = try {
+                parseMaskGroups(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
             val snapshot = transaction(state.database) {
                 DaoTemplate.findById(resource.templateId)
                     ?.takeIf { it.project.id == project.id }
@@ -357,14 +383,20 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
                 return@withCurrentProject
             }
-            val outcome = applyTemplateToProgrammer(
-                state,
-                project.id.value,
-                snapshot,
-                request.targets.map { CueTargetDto(it.type, it.key) },
-                request.fadeMs ?: snapshot.fadeDurationMs ?: 0,
-            )
-            call.respond(outcome)
+            when (
+                val outcome = applyTemplateToProgrammer(
+                    state,
+                    project.id.value,
+                    snapshot,
+                    request.targets.map { CueTargetDto(it.type, it.key) },
+                    request.fadeMs ?: snapshot.fadeDurationMs ?: 0,
+                    families,
+                )
+            ) {
+                is ApplyTemplateOutcome.Applied -> call.respond(outcome.response)
+                is ApplyTemplateOutcome.Refused ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
+            }
         }
     }
 
@@ -372,6 +404,12 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     post<ToggleTemplateResource> { resource ->
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ToggleTemplateRequest>()
+            val families = try {
+                parseMaskGroups(request.families)
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
+                return@withCurrentProject
+            }
             // Source *and* mask in one transaction: the mask is derived by the same [familyOf]
             // `toDto` uses for `family`, so the layer cannot be masked to something the template
             // list never showed. Deriving it here rather than trusting `request.propertyMask` is
@@ -390,18 +428,30 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                     ?.takeIf { it.project.id == project.id }
                     ?.let { template ->
                         LayerSource.template(template.id.value, template.uuid, template.name) to
-                            template.familyOf()?.name
+                            template.familyOf()
                     }
             }
             if (found == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(TEMPLATE_NOT_FOUND))
                 return@withCurrentProject
             }
-            val (source, derivedMask) = found
+            val (source, family) = found
+            val targets = request.targets.map { CueTargetDto(it.type, it.key) }
+            // A template is one family, so under a mask it either lands whole or not at all: the
+            // selection's mask refuses it by name rather than adding a layer the cook skips. On
+            // the *on* arm only — an off press comes off under any mask (`pressWouldRelease`).
+            if (families != null && !maskAllows(families, family) && !pressWouldRelease(state, source.uuid, targets)) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(templateOutsideMaskMessage(source.name, family, families), code = CODE_TEMPLATE_OUTSIDE_MASK),
+                )
+                return@withCurrentProject
+            }
+            val derivedMask = family?.name
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
                     source = source,
-                    targets = request.targets.map { CueTargetDto(it.type, it.key) },
+                    targets = targets,
                     propertyMask = derivedMask,
                 )
                 // The ⌥click / hold door of the press log — the **on** arm only. A second press
@@ -591,6 +641,12 @@ internal data class TemplateTargetDto(val type: String, val key: String)
 internal data class ApplyTemplateRequest(
     val targets: List<TemplateTargetDto> = emptyList(),
     val fadeMs: Long? = null,
+    /**
+     * The selection's attribute mask (`PropertyMaskGroup` names); absent is every attribute, an
+     * unknown name is 400. A template whose family is outside it is refused
+     * (`TEMPLATE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
+     */
+    val families: List<String>? = null,
 )
 
 @Serializable
@@ -630,6 +686,8 @@ internal data class ToggleTemplateRequest(
      * that disagree show up in [ToggleTemplateResponse.propertyMask] instead of silently on the rig.
      */
     val propertyMask: String? = null,
+    /** The selection's attribute mask, as on [ApplyTemplateRequest.families]; same refusal. */
+    val families: List<String>? = null,
 )
 
 @Serializable
@@ -1202,9 +1260,22 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
     // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
     // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
     // this function safe to call whatever the caller has already read.
-    rows.sortedBy { it.sortOrder }
-        .firstNotNullOfOrNull { TemplateProperty.ofOrNull(it.propertyName)?.family }
-        ?: effect?.let { familyForEffectCategory(it.category) }
+    templateFamily(rows.sortedBy { it.sortOrder }.map { it.propertyName }, effect?.category)
+
+/**
+ * [familyOf] for the registry's cached read — the click door (`applyTemplateToProgrammer`) holds a
+ * [TemplateSnapshot], not a row. Same derivation, so a click and a ⌥click of one template test a
+ * mask against the same family — with one exception: the snapshot holds only rows whose target
+ * parses (`loadTemplateSnapshot` drops a corrupt one), so the two answers can differ for a template
+ * whose lowest-ordered row is corrupt, and only for a row the click door would refuse to apply anyway.
+ */
+internal fun TemplateSnapshot.familyOf(): PropertyMaskGroup? =
+    templateFamily(rows.map { it.propertyName }, effect?.category)
+
+/** The one derivation behind both `familyOf`s: the first row with a known property, else the effect's category. */
+private fun templateFamily(propertyNamesInOrder: List<String>, effectCategory: String?): PropertyMaskGroup? =
+    propertyNamesInOrder.firstNotNullOfOrNull { TemplateProperty.ofOrNull(it)?.family }
+        ?: effectCategory?.let { familyForEffectCategory(it) }
 
 /**
  * The bundled emitters this template's rows name outright — `TemplateDto.requiredEmitters`.

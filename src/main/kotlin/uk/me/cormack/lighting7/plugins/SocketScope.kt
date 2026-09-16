@@ -45,6 +45,16 @@ class SocketScope(
      */
     val ownedLearnSessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
 
+    /**
+     * The name this connection's window last gave itself — what a `selection.*` write is stamped
+     * with as its `source` (multi-screen plan D7). **A session-1 stub**: until the windows registry
+     * lands (session 2, `SocketScope.window`), the only identity a window has is the `sourceName`
+     * it puts on a selection frame, remembered here so the next write from the same socket carries
+     * it too. Name-only by design — there is no id to claim, so nothing to impersonate.
+     */
+    @Volatile
+    var windowName: String? = null
+
     suspend fun send(message: OutMessage) {
         try {
             session.sendSerialized<OutMessage>(message)

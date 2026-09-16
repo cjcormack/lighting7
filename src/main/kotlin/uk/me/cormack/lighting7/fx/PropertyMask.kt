@@ -104,6 +104,29 @@ fun parseMaskGroups(raw: List<String>?): Set<PropertyMaskGroup>? {
     return if (groups.size == PropertyMaskGroup.entries.size) null else groups
 }
 
+/**
+ * The lenient twin of [parseMaskGroups], for a wire with no reply channel — the desk selection's
+ * `selection.set` frame. An unknown name is **dropped** rather than refused, as the client's
+ * `parsePropertyMask` drops one; a list that leaves nothing, or names every group, is no mask.
+ * Never used where a 400 is possible: dropping cannot widen a mask short of dropping everything,
+ * and a frame with no reply has nowhere to put a refusal.
+ */
+fun parseMaskGroupsLenient(raw: List<String>?): Set<PropertyMaskGroup>? {
+    if (raw.isNullOrEmpty()) return null
+    val groups = raw.mapNotNullTo(LinkedHashSet()) { token ->
+        val trimmed = token.trim()
+        PropertyMaskGroup.entries.firstOrNull { it.name.equals(trimmed, ignoreCase = true) }
+    }
+    return if (groups.isEmpty() || groups.size == PropertyMaskGroup.entries.size) null else groups
+}
+
+/** The wire spelling of a mask: the names in declaration order, so two masks compare as lists. */
+fun Set<PropertyMaskGroup>.toMaskNames(): List<String> =
+    PropertyMaskGroup.entries.filter { it in this }.map { it.name }
+
+/** The layer spelling of a mask — `"INTENSITY,COLOUR"`, what `CueComposer` parses back with [parseMaskGroups]. */
+fun Set<PropertyMaskGroup>.toPropertyMask(): String = toMaskNames().joinToString(",")
+
 /** True when [group] passes [mask]. A null mask passes everything; a null group never does. */
 fun maskAllows(mask: Set<PropertyMaskGroup>?, group: PropertyMaskGroup?): Boolean =
     mask == null || (group != null && group in mask)

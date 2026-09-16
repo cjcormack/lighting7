@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
@@ -31,10 +32,13 @@ import uk.me.cormack.lighting7.routes.BuskPressService
 import uk.me.cormack.lighting7.routes.familyOf
 import uk.me.cormack.lighting7.routes.isGenericTemplate
 import uk.me.cormack.lighting7.routes.LookTargetResolution
+import uk.me.cormack.lighting7.routes.pressWouldRelease
 import uk.me.cormack.lighting7.routes.resolveLookToggleTargets
 import uk.me.cormack.lighting7.routes.TemplatePressLog
+import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
 import uk.me.cormack.lighting7.routes.toggleSource
 import uk.me.cormack.lighting7.routes.toggleLocate
+import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 
@@ -339,7 +343,9 @@ class DefaultSurfaceActions(
     }
 
     override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
-        val targets = state.deskSelection.targets.value
+        // The selection's attribute mask is ignored here on purpose: the control names its own
+        // attribute, as a cell edit is not masked by a marquee elsewhere (multi-screen plan §3.3).
+        val targets = state.deskSelection.state.value.targets
         if (targets.isEmpty()) {
             logger.debug("Surface selection write of '{}' dropped: nothing selected", propertyName)
             return
@@ -351,15 +357,17 @@ class DefaultSurfaceActions(
 
     override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
         when (mode) {
-            BindingTarget.SelectMode.TOGGLE -> state.deskSelection.toggle(target)
-            BindingTarget.SelectMode.REPLACE -> state.deskSelection.set(listOf(target))
+            // A toggle adds a head under whatever mask is standing; a replace has no column axis
+            // to speak with, so it clears the mask by passing none (multi-screen plan D2).
+            BindingTarget.SelectMode.TOGGLE -> state.deskSelection.toggle(target, SelectionSource.SURFACE)
+            BindingTarget.SelectMode.REPLACE -> state.deskSelection.set(listOf(target), source = SelectionSource.SURFACE)
         }
     }
 
     override fun clearSelection() = state.deskSelection.clear()
 
     override fun locateSelection() {
-        val targets = state.deskSelection.targets.value.mapNotNull { TargetRef.ofOrNull(it.type, it.key) }
+        val targets = state.deskSelection.state.value.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) }
         if (targets.isEmpty()) {
             logger.debug("Surface locate dropped: nothing selected")
             return
@@ -406,7 +414,9 @@ class DefaultSurfaceActions(
      * A template onto the desk selection, through `toggle` with the template's own derived family
      * mask — the server derives it because which family a template layer belongs to is a fact about
      * the template, not about the press (the ⌥click rule, `CLAUDE.md` §The two apply gestures).
-     * Siblingless: a button is not in a bank.
+     * Siblingless: a button is not in a bank. Under the desk selection's attribute mask the same
+     * rule as every other door: a template whose family is outside it is refused by name, and the
+     * refusal is a log line because a button has no reply channel (multi-screen plan D5).
      */
     override fun pressTemplate(templateUuid: String) {
         val uuid = uuidOrNull(templateUuid) ?: run {
@@ -420,7 +430,7 @@ class DefaultSurfaceActions(
                 ?.let { t ->
                     Triple(
                         LayerSource.template(t.id.value, t.uuid, t.name),
-                        t.familyOf()?.name,
+                        t.familyOf(),
                         t.isGenericTemplate(),
                     )
                 }
@@ -430,13 +440,20 @@ class DefaultSurfaceActions(
             return
         }
         val (source, family, isGeneric) = press
-        val targets = state.deskSelection.targets.value
+        val selection = state.deskSelection.state.value
+        val targets = selection.targets
         if (isGeneric && targets.isEmpty()) {
             logger.debug("Surface pressTemplate of '{}' dropped: nothing selected", source.name)
             return
         }
+        val mask = selection.families
+        // The on arm only: an off press comes off under any mask (`pressWouldRelease`).
+        if (mask != null && !maskAllows(mask, family) && !pressWouldRelease(state, source.uuid, targets)) {
+            logger.warn("Surface pressTemplate dropped: {}", templateOutsideMaskMessage(source.name, family, mask))
+            return
+        }
         runCatching {
-            state.show.programmerLayerStack.toggle(source = source, targets = targets, propertyMask = family)
+            state.show.programmerLayerStack.toggle(source = source, targets = targets, propertyMask = family?.name)
         }.onSuccess { outcome ->
             // The hardware door of the press log — pressing from the desk's own buttons counts, or
             // the programmer's recents row would disagree with the surface the operator is using.
@@ -451,7 +468,9 @@ class DefaultSurfaceActions(
 
     /**
      * A busk pad, through [BuskPressService] — the same press the busk view makes, so the solo
-     * rules, the empty-selection refusals and the cue toggle cannot diverge between the two.
+     * rules, the empty-selection refusals, the mask rules and the cue toggle cannot diverge between
+     * the two. The desk selection's targets *and* mask go in together: the button acts on the desk
+     * fact, which is the pair a following window sends (multi-screen plan D4).
      */
     override fun pressPad(padUuid: String) {
         val uuid = uuidOrNull(padUuid) ?: run {
@@ -459,7 +478,8 @@ class DefaultSurfaceActions(
             return
         }
         val projectId = currentProjectId() ?: return
-        when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, state.deskSelection.targets.value)) {
+        val selection = state.deskSelection.state.value
+        when (val outcome = BuskPressService.pressByUuid(state, projectId, uuid, selection.targets, selection.families)) {
             is BuskPressService.Outcome.Pressed -> {}
             is BuskPressService.Outcome.Refused -> logger.warn("Surface pressPad dropped: {}", outcome.message)
             is BuskPressService.Outcome.TargetMissing -> logger.warn("Surface pressPad dropped: {}", outcome.message)

@@ -104,6 +104,28 @@ class PropertyMaskTest {
     }
 
     @Test
+    fun `the lenient parse drops an unknown name and reads nothing left as no mask`() {
+        // The `selection.set` frame's parser: no reply channel, so an unknown name is dropped as the
+        // client's `parsePropertyMask` drops one, never refused.
+        assertEquals(setOf(PropertyMaskGroup.COLOUR), parseMaskGroupsLenient(listOf("colour", "bogus")))
+        // Every name unknown leaves nothing, and nothing is every attribute — the same round trip
+        // the client makes (`parsePropertyMask([]) → serializePropertyMask → null`). The press doors
+        // never take this parser: they use the strict one above and answer 400.
+        assertNull(parseMaskGroupsLenient(listOf("GOBO")))
+        assertNull(parseMaskGroupsLenient(null))
+        assertNull(parseMaskGroupsLenient(emptyList()))
+        assertNull(parseMaskGroupsLenient(PropertyMaskGroup.entries.map { it.name }), "all four is no mask, as the strict parse reads it")
+    }
+
+    @Test
+    fun `the wire and layer spellings are the names in declaration order`() {
+        val mask = setOf(PropertyMaskGroup.COLOUR, PropertyMaskGroup.INTENSITY)
+        assertEquals(listOf("INTENSITY", "COLOUR"), mask.toMaskNames())
+        assertEquals("INTENSITY,COLOUR", mask.toPropertyMask())
+        assertEquals(mask, parseMaskGroups(mask.toPropertyMask().split(",")), "the layer spelling parses back")
+    }
+
+    @Test
     fun `maskAllows treats an unclassifiable property as out of mask`() {
         assertTrue(maskAllows(null, null), "no mask passes everything, even unresolvable rows")
         assertTrue(maskAllows(setOf(PropertyMaskGroup.COLOUR), PropertyMaskGroup.COLOUR))

@@ -254,8 +254,8 @@ Switching project is REST; the socket only reports it (`projectChanged`).
 
 | Message | Fields | Reply |
 |---|---|---|
-| `selection.set` | `targets: [{type, key}]` | none — `selection.state` broadcast |
-| `selection.toggle` | `target: {type, key}` | none — `selection.state` broadcast |
+| `selection.set` | `targets: [{type, key}]`, `families?: [String]`, `sourceName?: String` | none — `selection.state` broadcast |
+| `selection.toggle` | `target: {type, key}`, `sourceName?: String` | none — `selection.state` broadcast |
 | `selection.clear` | — | none — `selection.state` broadcast |
 
 The desk's one shared selection (`state/DeskSelection.kt`, `docs/lighting-composition-model.md`
@@ -263,6 +263,16 @@ The desk's one shared selection (`state/DeskSelection.kt`, `docs/lighting-compos
 toggling it off narrows the entries that covered it (`fx/TargetCoverage.kt`, the rule a busk press
 applies to a sibling layer). A write that changes nothing sends no frame. No resync request: the
 family is `StateFlow`-backed, so a subscription is the snapshot.
+
+**The attribute mask is part of the selection** (multi-screen plan D2): `set` replaces the whole
+fact — `families` absent or empty is every attribute, a name outside `PropertyMaskGroup` is
+dropped as the client's `parsePropertyMask` drops one — `toggle` edits the heads and keeps the
+mask, `clear` drops both, and a fixture reload's prune keeps both. **`source` is never in a
+payload**: the handler stamps it from the writing socket's own name (D7). This session that name is
+the frame's optional `sourceName`, remembered on the `SocketScope` so a later write from the same
+socket carries it without repeating it; session 2's windows registry replaces it with the announced
+identity. A socket that has never named itself stamps no source — the last mover is unknown, not
+the previous one. A MIDI write stamps `{kind: "surface"}`.
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -443,7 +453,7 @@ bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `Effect
 
 | Message | Payload | Cast |
 |---|---|---|
-| `selection.state` | `targets: [{type, key}]` | Connect snapshot + broadcast |
+| `selection.state` | `targets: [{type, key}]`, `families?: [String]` (absent = every attribute), `source?: {kind: "window" \| "surface", id?, name}` (absent = nobody since the last clear) | Connect snapshot + broadcast |
 
 ### Speed masters — `SpeedMasterSocket.kt`
 

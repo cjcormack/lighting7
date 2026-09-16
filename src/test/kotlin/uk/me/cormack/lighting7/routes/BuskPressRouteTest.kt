@@ -20,7 +20,10 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
+import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -56,13 +59,24 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         return resp.body<TemplateDto>().id
     }
 
-    private suspend fun HttpClient.createLook(name: String, vararg fixtureKeys: String, deferredEffect: Boolean = false): Int {
+    private suspend fun HttpClient.createLook(
+        name: String,
+        vararg fixtureKeys: String,
+        deferredEffect: Boolean = false,
+        /** Also a colour row per head, so the Look spans INTENSITY + COLOUR. */
+        withColour: Boolean = false,
+    ): Int {
         val resp = post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
                     name = name,
-                    rows = fixtureKeys.map { LookRowDto("fixture", it, "dimmer", "200") },
+                    rows = fixtureKeys.flatMap { key ->
+                        listOfNotNull(
+                            LookRowDto("fixture", key, "dimmer", "200"),
+                            if (withColour) LookRowDto("fixture", key, "rgbColour", "#ff0000") else null,
+                        )
+                    },
                     effects = if (deferredEffect) {
                         listOf(
                             LookEffectDto(
@@ -120,14 +134,22 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     private fun look(id: Int) = BuskLayoutPad(lookId = id)
     private fun cue(id: Int) = BuskLayoutPad(cueId = id)
 
-    private suspend fun HttpClient.pressRaw(padId: Int, vararg fixtureKeys: String): HttpResponse =
+    private suspend fun HttpClient.pressRaw(
+        padId: Int,
+        vararg fixtureKeys: String,
+        families: List<String>? = null,
+    ): HttpResponse =
         post("/api/rest/projects/$projectId/busk/pads/$padId/press") {
             contentType(ContentType.Application.Json)
-            setBody(BuskPressRequest(targets = fixtureKeys.map { CueTargetDto("fixture", it) }))
+            setBody(BuskPressRequest(targets = fixtureKeys.map { CueTargetDto("fixture", it) }, families = families))
         }
 
-    private suspend fun HttpClient.press(padId: Int, vararg fixtureKeys: String): BuskPressResponse {
-        val resp = pressRaw(padId, *fixtureKeys)
+    private suspend fun HttpClient.press(
+        padId: Int,
+        vararg fixtureKeys: String,
+        families: List<String>? = null,
+    ): BuskPressResponse {
+        val resp = pressRaw(padId, *fixtureKeys, families = families)
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         return resp.body()
     }
@@ -406,6 +428,169 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals(setOf("amber@hex-1", "amber@hex-2"), live())
     }
 
+    // ─── The selection's attribute mask (multi-screen plan D5) ──────────
+
+    @Test
+    fun `a template pad outside the selection's mask is refused by name, inside it lands as before`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val (pad) = client.bank("keys", solo = false, tpl(amber))
+
+        val refused = client.pressRaw(pad, "hex-1", families = listOf("INTENSITY"))
+        assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+        val error = refused.body<ErrorResponse>()
+        assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, error.code)
+        assertTrue("Colour" in error.error && "Intensity" in error.error, "names both families: ${error.error}")
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "nothing lands, so nothing lights the pad")
+
+        // Inside the mask the template's own family is the mask: the intersection is itself.
+        val on = client.press(pad, "hex-1", families = listOf("COLOUR", "INTENSITY"))
+        assertEquals("applied", on.action)
+        assertTrue(on.skippedFamilies.isEmpty(), "a template skips nothing — it is one family")
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+    }
+
+    @Test
+    fun `a Look pad under a mask lands masked to what they share and reports what it skipped`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.createLook("warm", "hex-1", withColour = true)
+        val (pad) = client.bank("looks", solo = false, look(warm))
+
+        val on = client.press(pad, "hex-1", families = listOf("COLOUR", "POSITION"))
+        assertEquals("applied", on.action)
+        assertEquals(listOf("INTENSITY"), on.skippedFamilies, "the dimmer rows are outside the mask")
+        assertEquals(setOf("warm@hex-1"), live())
+        assertEquals(
+            "COLOUR", state.show.programmerStore.layers.single().propertyMask,
+            "mask ∩ look.families — POSITION is in the mask but not in the Look, so it is not on the layer",
+        )
+
+        // Pressed again with no mask: coverage says on, so it comes off — the second press is
+        // still off, and an off press skips nothing.
+        val off = client.press(pad, "hex-1")
+        assertEquals("removed", off.action)
+        assertTrue(off.skippedFamilies.isEmpty())
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        // Unmasked, the layer is unmasked — today's press.
+        assertEquals("applied", client.press(pad, "hex-1").action)
+        assertNull(state.show.programmerStore.layers.single().propertyMask)
+    }
+
+    @Test
+    fun `a Look pad with nothing inside the mask is refused, and a cue pad ignores it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.createLook("warm", "hex-1")
+        val stackId = client.createStack("Main")
+        val cueId = client.createCue("Q1", stackId)
+        val (lookPad, cuePad) = client.bank("mixed", solo = false, look(warm), cue(cueId))
+
+        val refused = client.pressRaw(lookPad, "hex-1", families = listOf("COLOUR"))
+        assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+        assertEquals(CODE_LOOK_OUTSIDE_MASK, refused.body<ErrorResponse>().code)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "a layer asserting nothing would light the pad for nothing")
+
+        val cue = client.press(cuePad, "hex-1", families = listOf("COLOUR"))
+        assertEquals("CUE", cue.kind)
+        assertEquals("applied", cue.action, "a cue has no targets to be masked on")
+        assertEquals(cueId, client.activeCueId(stackId))
+    }
+
+    @Test
+    fun `an off press comes off under any mask — the mask is about what a press puts on`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val warm = client.createLook("warm", "hex-1")
+        val (amberPad, warmPad) = client.bank("keys", solo = false, tpl(amber), look(warm))
+
+        // Both lit unmasked, then a marquee elsewhere masks the selection to Position: the operator
+        // presses each lit pad to turn it off, and neither may read dead.
+        client.press(amberPad, "hex-1")
+        client.press(warmPad, "hex-1")
+        assertEquals(setOf("amber@hex-1", "warm@hex-1"), live())
+
+        val amberOff = client.press(amberPad, "hex-1", families = listOf("POSITION"))
+        assertEquals("removed", amberOff.action, "a lit Colour pad releases under a Position mask")
+        val warmOff = client.press(warmPad, "hex-1", families = listOf("POSITION"))
+        assertEquals("removed", warmOff.action, "a lit Intensity Look releases under a Position mask")
+        assertTrue(warmOff.skippedFamilies.isEmpty(), "an off press skips nothing")
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        // And now that nothing is lit, the same presses are on presses and the mask refuses them.
+        assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, client.pressRaw(amberPad, "hex-1", families = listOf("POSITION")).body<ErrorResponse>().code)
+        assertEquals(CODE_LOOK_OUTSIDE_MASK, client.pressRaw(warmPad, "hex-1", families = listOf("POSITION")).body<ErrorResponse>().code)
+    }
+
+    @Test
+    fun `a per-fixture template pressed with no targets releases under an excluding mask — the twin arm`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val focus = client.post("/api/rest/projects/$projectId/templates") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "focus", rows = listOf(TemplateRowDto("fixture", "hex-1", "position", "deg:12,-8"))))
+        }.body<TemplateDto>().id
+        val (pad) = client.bank("keys", solo = false, tpl(focus))
+
+        assertEquals("applied", client.press(pad).action)
+        assertEquals(setOf("focus@"), live(), "a per-fixture template's layer names no targets")
+        // No heads to compare coverage on: `toggle` finds its twin by identical (empty) targets,
+        // and so must the arm decided before the mask test.
+        assertEquals("removed", client.press(pad, families = listOf("COLOUR")).action)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, client.pressRaw(pad, families = listOf("COLOUR")).body<ErrorResponse>().code)
+    }
+
+    @Test
+    fun `pressWouldRelease agrees with toggle on both arms`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val uuid = java.util.UUID.fromString(client.templateUuid(amber))
+        val source = uk.me.cormack.lighting7.models.LayerSource.template(amber, uuid, "amber")
+        val stack = state.show.programmerLayerStack
+        val hex1 = listOf(CueTargetDto("fixture", "hex-1"))
+        val both = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))
+
+        // The guard: for every press, the helper's answer before the press is the arm `toggle`
+        // then takes. A change to toggle's comparison fails here rather than drifting in pressArm.kt.
+        fun check(targets: List<CueTargetDto>) {
+            val predicted = pressWouldRelease(state, uuid, targets)
+            val outcome = stack.toggle(source = source, targets = targets, propertyMask = "COLOUR")
+            assertEquals(predicted, outcome.action == "removed", "targets=$targets")
+        }
+        check(hex1)          // on
+        check(both)          // covered only partly → on (widens)
+        check(both)          // fully covered → off, both heads
+        check(hex1)          // on again
+        check(emptyList())   // no twin with empty targets → on
+        check(emptyList())   // twin → off
+        check(hex1)          // hex-1 still covered by the first layer → off
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+    }
+
+    @Test
+    fun `a family name outside the vocabulary is refused rather than widening the mask`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val (pad) = client.bank("keys", solo = false, tpl(amber))
+
+        val resp = client.pressRaw(pad, "hex-1", families = listOf("GOBO"))
+        assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+    }
+
     @Test
     fun `an unknown pad is 404`() = testApplication {
         mountTestApp(state)
@@ -474,6 +659,92 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         actions().pressTemplate(uuid)
         assertEquals(setOf("amber@hex-2"), live())
         assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask, "mask derived, not sent")
+    }
+
+    @Test
+    fun `pressTemplate honours the desk's mask, and a Sel property fader ignores it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val uuid = client.templateUuid(amber)
+
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(PropertyMaskGroup.INTENSITY))
+        actions().pressTemplate(uuid)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "a Colour template under an Intensity mask is dropped")
+
+        // The fader names its own attribute, so the mask does not touch it (§3.3).
+        actions().writeSelectionProperty("rgbColour", 127u, null)
+        assertTrue(state.show.programmerStore.size > 0, "the selection write landed under a mask it is outside")
+
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(PropertyMaskGroup.COLOUR))
+        actions().pressTemplate(uuid)
+        assertEquals(setOf("amber@hex-2"), live())
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+    }
+
+    @Test
+    fun `a surface press releases a lit record under an excluding mask`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val warm = client.createLook("warm", "hex-1")
+        val (warmPad) = client.bank("keys", solo = false, look(warm))
+        val uuid = client.templateUuid(amber)
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
+
+        actions().pressTemplate(uuid)
+        actions().pressPad(client.padUuid(warmPad))
+        assertEquals(setOf("amber@hex-1", "warm@hex-1"), live())
+
+        // A marquee on a screen masks the desk to Position; the buttons must still turn them off.
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(PropertyMaskGroup.POSITION))
+        actions().pressTemplate(uuid)
+        actions().pressPad(client.padUuid(warmPad))
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "both released under a mask that excludes them")
+
+        // Off, the same presses are on presses and are dropped by name.
+        actions().pressTemplate(uuid)
+        actions().pressPad(client.padUuid(warmPad))
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+    }
+
+    @Test
+    fun `pressPad passes the desk's mask through the same press`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.createLook("warm", "hex-1", withColour = true)
+        val amber = client.createTemplate("amber")
+        val (lookPad, amberPad) = client.bank("keys", solo = false, look(warm), tpl(amber))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(PropertyMaskGroup.INTENSITY))
+
+        actions().pressPad(client.padUuid(amberPad))
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "refused by name, logged — a button has no 400")
+
+        actions().pressPad(client.padUuid(lookPad))
+        assertEquals(setOf("warm@hex-1"), live())
+        assertEquals("INTENSITY", state.show.programmerStore.layers.single().propertyMask, "mask ∩ look.families")
+    }
+
+    @Test
+    fun `a surface select toggle keeps the desk's mask and a replace clears it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val colour = setOf(PropertyMaskGroup.COLOUR)
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), colour)
+
+        actions().selectTarget(CueTargetDto("fixture", "hex-2"), BindingTarget.SelectMode.TOGGLE)
+        assertEquals(colour, state.deskSelection.state.value.families, "a select button adds a head under the standing mask")
+        assertEquals(SelectionSource.SURFACE, state.deskSelection.state.value.source)
+
+        actions().selectTarget(CueTargetDto("fixture", "hex-2"), BindingTarget.SelectMode.REPLACE)
+        assertEquals(listOf(CueTargetDto("fixture", "hex-2")), state.deskSelection.state.value.targets)
+        assertNull(state.deskSelection.state.value.families, "a replace has no column axis to speak with")
+
+        actions().clearSelection()
+        assertNull(state.deskSelection.state.value.source)
     }
 
     @Test

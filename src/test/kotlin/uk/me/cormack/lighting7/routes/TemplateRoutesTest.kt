@@ -608,6 +608,68 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `click-apply and toggle refuse a template outside the selection's mask by name`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        val template = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+        val targets = listOf(TemplateTargetDto("fixture", "hex-1"))
+
+        // The click: refused before either arm, so nothing reaches the programmer.
+        val click = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = targets, families = listOf("INTENSITY", "POSITION")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, click.status, click.bodyAsText())
+        assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, click.body<ErrorResponse>().code)
+        assertEquals(0, state.show.programmerStore.size, "no literal landed")
+
+        // The ⌥click: the same refusal, the same code.
+        val hold = client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets, families = listOf("INTENSITY")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, hold.status, hold.bodyAsText())
+        assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, hold.body<ErrorResponse>().code)
+        assertTrue(state.show.programmerStore.layers.isEmpty(), "no layer either")
+
+        // Inside the mask, both doors are today's press.
+        val applied = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = targets, families = listOf("COLOUR")))
+        }
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        assertEquals(1, applied.body<ApplyTemplateResponse>().written)
+        val on = client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets, families = listOf("COLOUR")))
+        }.body<ToggleTemplateResponse>()
+        assertEquals("applied", on.action)
+        assertEquals("COLOUR", on.propertyMask, "the layer's mask is still the template's own family")
+
+        // The layer is on; a mask that excludes its family no longer stops the off press — the mask
+        // is about what a press puts on, and toggle's "already on" reading ignores it.
+        val off = client.post("${base()}/${template.id}/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleTemplateRequest(targets = targets, families = listOf("INTENSITY")))
+        }
+        assertEquals(HttpStatusCode.OK, off.status, off.bodyAsText())
+        assertEquals("removed", off.body<ToggleTemplateResponse>().action)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        // A name outside the vocabulary is 400 on both doors, as it is on Record.
+        val bad = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(ApplyTemplateRequest(targets = targets, families = listOf("GOBO")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+
+    @Test
     fun `applying to a head the template cannot reach reports it rather than failing`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedFixture(state, projectId, "hazer", "haze-1", 1)

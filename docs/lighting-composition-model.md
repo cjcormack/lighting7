@@ -416,6 +416,33 @@ cook answers that question; a coverage comparison must not guess at it. The exce
 that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
 and takes a sibling's off outright, there being nothing to narrow it to.
 
+**A press carries the selection's attribute mask, and lands through the layer's own
+`propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
+marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
+the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/templates/{id}/apply`,
+`/templates/{id}/toggle` and `/looks/{id}/toggle`; the MIDI `PressPad` and `PressTemplate` doors
+pass the desk's — `ApplyLook` reads no selection at all, so there is no mask for it to honour). Null
+is every
+attribute, today's press. Under a mask, by kind: a **template** is one family, so it either lands
+whole or not at all — family ∉ mask is refused by name, `TEMPLATE_OUTSIDE_MASK`, on every door,
+the same dead-pad reading as `TEMPLATE_NEEDS_SELECTION`; inside the mask its layer is masked to
+its own family exactly as before, the intersection being the family itself. A **Look** spans
+families, so its layer goes on with `propertyMask = mask ∩ look.families`, the cook skips the rows
+outside it, and the response names them (`skippedFamilies`) so the pressing window can toast
+*Position rows skipped* — nothing shared is `LOOK_OUTSIDE_MASK`. A **cue** ignores the mask: it has
+no targets to be masked on. A `Sel · property` fader ignores it too: the control names its own
+attribute, as a cell edit is not masked by a marquee elsewhere. **The mask is tested on the on arm
+only**: it is a fact about what a press puts on, so a press that is taking a record off comes off
+under any mask — a lit Intensity pad is still released while a Colour marquee stands, and a surface
+button never reads dead. Each door asks `pressWouldRelease` (`routes/pressArm.kt`), which reads
+`toggle`'s own "already on" answer off `appliedState` before the press, so the stack itself did not
+move. `ProgrammerLayerStack.toggle` already took `propertyMask`, and the "already on" comparison
+still reads coverage by targets, so a Look on the stack under a Colour mask pressed again unmasked
+comes **off** rather than widening; pressing twice still means off. One limit worth knowing: the cook applies a layer's
+`propertyMask` to its **rows**, not to its effects (a pre-existing property of the mask, not of the
+press), so a Look's *effect* in a skipped family still runs — it is still named in
+`skippedFamilies`, which is the honest report.
+
 > **The library has no order and no groups.** Templates and Looks list by name, and nothing but a
 > create assigns a position, because there is no position to assign. `template_groups`,
 > `templates.sort_order`, `looks.sort_order` and `POST /templates/reorder` all existed to give the
@@ -486,10 +513,11 @@ template names its own heads and lands on them.
 
 **A pad has a second door, and it is the same press.** A MIDI control surface can hold a
 `PressPad(padUuid)` binding, which runs the whole of the above through `BuskPressService` with the
-**desk selection** as the press's targets. The service exists precisely so the two cannot diverge:
-the solo rules, the empty-selection refusals and the cue toggle are the *pad's* behaviour, not the
-HTTP endpoint's. It answers an outcome rather than responding, because a MIDI press has nowhere to
-put a 400. See `docs/midi-control-surface-engineering.md` §"The busk press, from two doors".
+**desk selection** — its targets *and* its attribute mask — as the press's. The service exists
+precisely so the two cannot diverge: the solo rules, the empty-selection refusals, the mask rules
+and the cue toggle are the *pad's* behaviour, not the HTTP endpoint's. It answers an outcome
+rather than responding, because a MIDI press has nowhere to put a 400. See
+`docs/midi-control-surface-engineering.md` §"The busk press, from two doors".
 
 **Which page is showing is a desk fact, not a browser one.** `state/BuskPageState.kt` holds it —
 transient, project-scoped, `busk.pageState` / `busk.setPage` — so a hardware *next page* button and

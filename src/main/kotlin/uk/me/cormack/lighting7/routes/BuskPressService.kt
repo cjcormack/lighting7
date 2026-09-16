@@ -4,6 +4,8 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoBuskPad
@@ -30,18 +32,27 @@ internal object BuskPressService {
 
     /** What a press did, or why it did nothing. */
     sealed interface Outcome {
-        /** [kind] is `TEMPLATE`, `LOOK` or `CUE`; [action] is `"applied"` or `"removed"`. */
+        /**
+         * [kind] is `TEMPLATE`, `LOOK` or `CUE`; [action] is `"applied"` or `"removed"`.
+         * [skippedFamilies] is a Look's families the selection's mask left out (declaration
+         * order); empty for every other kind, an unmasked press, and the off arm.
+         */
         data class Pressed(
             val kind: String,
             val action: String,
             val effectCount: Int,
             val released: Int,
+            val skippedFamilies: List<String> = emptyList(),
         ) : Outcome
 
         /** The pad, its record or its page is gone — or the pad is malformed, which reads the same. */
         data object NotFound : Outcome
 
-        /** A press that could not be made: a generic template or a deferred-effect Look with nothing selected. */
+        /**
+         * A press that could not be made: a generic template or a deferred-effect Look with
+         * nothing selected, or a record the selection's mask leaves nothing of
+         * (`TEMPLATE_OUTSIDE_MASK` / `LOOK_OUTSIDE_MASK`).
+         */
         data class Refused(val message: String, val code: String?) : Outcome
 
         /** A target the press named does not resolve in the live patch. */
@@ -72,7 +83,7 @@ internal object BuskPressService {
             BuskPadKind.TEMPLATE -> pad.template!!.let { t ->
                 PressRecord.Template(
                     source = LayerSource.template(t.id.value, t.uuid, t.name),
-                    family = t.familyOf()?.name,
+                    family = t.familyOf(),
                     isGeneric = t.isGenericTemplate(),
                 )
             }
@@ -114,15 +125,24 @@ internal object BuskPressService {
     }
 
     /**
-     * Apply [plan] with [targets] as the press's selection.
+     * Apply [plan] with [targets] as the press's selection and [families] as its attribute mask.
      *
      * Runs outside any transaction: it touches the engine, not the database. [beatDivision] is the
      * screen's only extra — hardware has no way to send one — and is null for a surface press.
+     *
+     * [families] null is every attribute. Under a mask (multi-screen plan D5, table in §3.3): a
+     * **template** whose family is outside it is refused by name — a template's layer is already
+     * masked to its own family, so the intersection is the family itself or nothing; a **Look**
+     * lands masked to `mask ∩ look.families` and reports what it skipped, or is refused when
+     * nothing is inside ([resolveLookMask]); a **cue** ignores it, having no targets to be masked
+     * on. The mask rides the press rather than being read from the desk fact here (D4), because an
+     * unlinked window's targets are not the desk's and its mask should not be either.
      */
     fun apply(
         state: State,
         plan: PressPlan,
         targets: List<CueTargetDto>,
+        families: Set<PropertyMaskGroup>? = null,
         beatDivision: Double? = null,
     ): Outcome {
         val manager = state.show.cueStackManager
@@ -154,11 +174,30 @@ internal object BuskPressService {
                         is LookTargetResolution.Targets -> resolved.targets
                     }
                 }
+                // The mask is about what a press puts *on*; an off press comes off under any mask
+                // (`pressWouldRelease`). Decided here, on the same targets `toggle` will read.
+                val releasing = pressWouldRelease(state, record.source.uuid, pressTargets)
+                // The same dead-pad reading under a mask: a layer the cook would skip whole is
+                // refused rather than lit.
+                if (!releasing && record is PressRecord.Template && families != null && !maskAllows(families, record.family)) {
+                    return Outcome.Refused(
+                        templateOutsideMaskMessage(record.source.name, record.family, families),
+                        CODE_TEMPLATE_OUTSIDE_MASK,
+                    )
+                }
+                // A template's mask is its own family; a Look's is the selection's mask narrowed
+                // to what the Look has, or null when the press carries no mask or is an off press.
+                val lookMask = (record as? PressRecord.Look)?.takeUnless { releasing }?.let { look ->
+                    when (val resolved = resolveLookMask(families, look.look)) {
+                        is LookMaskResolution.Refused -> return Outcome.Refused(resolved.message, resolved.code)
+                        is LookMaskResolution.Masked -> resolved
+                    }
+                }
                 try {
                     val outcome = stack.toggle(
                         source = record.source,
                         targets = pressTargets,
-                        propertyMask = (record as? PressRecord.Template)?.family,
+                        propertyMask = (record as? PressRecord.Template)?.family?.name ?: lookMask?.propertyMask,
                         beatDivisionOverride = beatDivision,
                         releaseSiblings = plan.layerSiblings,
                     )
@@ -169,7 +208,15 @@ internal object BuskPressService {
                     if (record is PressRecord.Template && outcome.action == "applied") {
                         TemplatePressLog.record(state, plan.projectId, record.source.id)
                     }
-                    Outcome.Pressed(record.kind.name, outcome.action, outcome.effectCount, outcome.released + stopped)
+                    Outcome.Pressed(
+                        record.kind.name,
+                        outcome.action,
+                        outcome.effectCount,
+                        outcome.released + stopped,
+                        // Skips belong to the arm that put the layer on: an off press narrowed or
+                        // dropped a layer, and there was nothing to skip.
+                        skippedFamilies = if (outcome.action == "applied") lookMask?.skippedFamilies.orEmpty() else emptyList(),
+                    )
                 } catch (e: IllegalStateException) {
                     Outcome.TargetMissing(e.message ?: "Target not found")
                 }
@@ -201,8 +248,13 @@ internal object BuskPressService {
     }
 
     /** [plan] then [apply], for a caller with nothing to say between the two. */
-    fun pressByUuid(state: State, projectId: Int, padUuid: UUID, targets: List<CueTargetDto>): Outcome =
-        planByUuid(state, projectId, padUuid)?.let { apply(state, it, targets) } ?: Outcome.NotFound
+    fun pressByUuid(
+        state: State,
+        projectId: Int,
+        padUuid: UUID,
+        targets: List<CueTargetDto>,
+        families: Set<PropertyMaskGroup>? = null,
+    ): Outcome = planByUuid(state, projectId, padUuid)?.let { apply(state, it, targets, families) } ?: Outcome.NotFound
 }
 
 /** What the one transaction read about the pressed pad. */
@@ -228,7 +280,8 @@ internal sealed interface PressRecord {
         val kind: BuskPadKind
     }
 
-    data class Template(override val source: LayerSource, val family: String?, val isGeneric: Boolean) : Layer {
+    /** [family] is the template's own (`familyOf`), the mask its layer carries and the one a selection mask tests. */
+    data class Template(override val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean) : Layer {
         override val kind get() = BuskPadKind.TEMPLATE
     }
 

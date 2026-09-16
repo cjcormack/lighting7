@@ -441,6 +441,83 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.NotFound, missing.status)
     }
 
+    @Test
+    fun `toggling under the selection's mask lands the shared families and reports the rest`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+
+        // Dimmer rows and a deferred colour effect: the Look spans INTENSITY + COLOUR, and the
+        // COLOUR half is contributed by the effect alone.
+        val lookId = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = "Warm pulse",
+                    rows = listOf(LookRowDto("fixture", "hex-1", "dimmer", "200")),
+                    effects = listOf(
+                        LookEffectDto(
+                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            effectType = "ColourPulse", category = "colour", propertyName = "rgbColour",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        ),
+                    ),
+                ),
+            )
+        }.body<LookDetails>().id
+        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+
+        val on = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets, families = listOf("INTENSITY")))
+        }
+        assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
+        val applied = on.body<ToggleLookResponse>()
+        assertEquals("applied", applied.action)
+        assertEquals(listOf("COLOUR"), applied.skippedFamilies, "the effect's family is outside the mask")
+        assertEquals("INTENSITY", state.show.programmerStore.layers.single().propertyMask, "mask ∩ look.families")
+        // The documented limit (`resolveLookMask`): a layer mask filters rows, not effects, so the
+        // colour effect still spawns. Pinned so a cook that starts masking effects has to update it.
+        assertEquals(1, applied.effectCount)
+
+        // The off arm skips nothing — the busk door's rule, kept on this door too.
+        val off = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets, families = listOf("INTENSITY")))
+        }.body<ToggleLookResponse>()
+        assertEquals("removed", off.action)
+        assertTrue(off.skippedFamilies.isEmpty())
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        // Nothing shared is a refusal by name; a name outside the vocabulary is 400 as on Record.
+        val outside = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets, families = listOf("POSITION")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, outside.status, outside.bodyAsText())
+        assertEquals(CODE_LOOK_OUTSIDE_MASK, outside.body<ErrorResponse>().code)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        // But once it is on, the same excluding mask does not stop the off press.
+        client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets))
+        }
+        assertEquals(1, state.show.programmerStore.layers.size)
+        val offUnderMask = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets, families = listOf("POSITION")))
+        }
+        assertEquals(HttpStatusCode.OK, offUnderMask.status, offUnderMask.bodyAsText())
+        assertEquals("removed", offUnderMask.body<ToggleLookResponse>().action)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+        val bad = client.post("${base()}/$lookId/toggle") {
+            contentType(ContentType.Application.Json)
+            setBody(ToggleLookRequest(targets = targets, families = listOf("GOBO")))
+        }
+        assertEquals(HttpStatusCode.BadRequest, bad.status)
+    }
+
     private suspend fun io.ktor.client.HttpClient.createBoundLook(name: String, vararg fixtureKeys: String): Int =
         post(base()) {
             contentType(ContentType.Application.Json)

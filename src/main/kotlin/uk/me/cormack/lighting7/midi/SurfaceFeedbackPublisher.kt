@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -356,8 +358,10 @@ class SurfaceFeedbackPublisher(
         deskSelection?.let { selection ->
             // A StateFlow replays its current value on subscribe: the first collect is a
             // rebuild the start-up path has already done, and is harmless.
+            // Membership only: LEDs and rings read which heads are selected, never the
+            // attribute mask, so a mask-only change must not cost a full resync.
             jobs += scope.launch(CoroutineName("FeedbackPublisher-selection")) {
-                selection.targets.collect { rebuildAndResync() }
+                selection.state.map { it.targets }.distinctUntilChanged().collect { rebuildAndResync() }
             }
         }
         buskPageState?.let { pages ->
@@ -1033,7 +1037,7 @@ class SurfaceFeedbackPublisher(
         }
         RecordLedKind.COVERS_SELECTION -> {
             val uuid = record.layerUuid
-            val selected = deskSelection?.targets?.value.orEmpty()
+            val selected = deskSelection?.state?.value?.targets.orEmpty()
             if (uuid == null || selected.isEmpty()) false else {
                 val entry = applied.firstOrNull { it.source.uuid == uuid }
                 // "Covers every selected target" — the same fold `lookLayerPresence` makes in the
@@ -1056,7 +1060,7 @@ class SurfaceFeedbackPublisher(
 
     /** True when the selection is non-empty and every target in it is located. */
     private fun selectionLocated(located: Set<TargetRef>): Boolean {
-        val targets = deskSelection?.targets?.value.orEmpty()
+        val targets = deskSelection?.state?.value?.targets.orEmpty()
         if (targets.isEmpty()) return false
         return targets.all { TargetRef.ofOrNull(it.type, it.key)?.let { ref -> ref in located } ?: false }
     }
