@@ -87,6 +87,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
 | [`FU-WINDOWS-SHOW-OFFLINE`](#fu-windows-show-offline) | Trigger | Screens | a `windows.show` lost to a disconnected target matters |
 | [`FU-WINDOWS-RETIRE-SOURCENAME`](#fu-windows-retire-sourcename) | Blocked | Screens | lighting-react's multi-screen session 2 |
+| [`FU-WINDOWS-OWN-ROW-ID`](#fu-windows-own-row-id) | Trigger | Screens | a duplicated desk tab makes the chip attribute its twin's write to itself |
 | [`FU-LAUNCHER-SCREEN-POSITION`](#fu-launcher-screen-position) | Trigger | Screens | the two desk windows should remember which display each opens on |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -1347,6 +1348,35 @@ the `sourceName` assertions in `SelectionSocketTest`, `WindowsSocketTest` and
 in one adjacent repo (the WS doc's "normalize hard, no aliases").
 
 **Blocked on**: the lighting-react half of multi-screen session 2.
+
+### `FU-WINDOWS-OWN-ROW-ID`
+
+**A window infers its registry row instead of being told it** · Trigger · Multi-screen S2,
+2026-09-16
+
+`windows.state` lists every window by its socket-minted `id`, and `selection.state`'s `source.id`
+names one of those rows — but a window is never told which row is *its own*. It infers it by
+matching the client-minted `windowId` it holds in `sessionStorage` against the list.
+
+That inference is exact only while `windowId` really is unique per window. Two cases break it, and
+they are not equal. A `window.open`'d child **clones its parent's `sessionStorage`**, so *Open a
+window on… Display 2* produced twins on first use — multi-screen session 2.5 fixes that at the
+source by minting a fresh `windowId` whenever `?window=` is present at boot. What remains is
+right-click *Duplicate Tab* on a URL whose `?window=` was already stripped: operator-initiated,
+rare, and exactly what D9 says should happen — two rows, two windows.
+
+The residual damage is cosmetic and confined to self-identification: the desk chip reads *Desk*
+("I moved it") when the twin moved the selection, and the Screens sheet's *this window* marker
+may land on either row. Nothing mis-targets — `windows.show` / `.rename` / `.fullscreen` all
+address a specific row id and stay precise.
+
+The fix is server-side and small: the `windows.announce` handler unicasts the minted row id back
+to the announcing socket (a `windows.identity {id}` frame, or the same row echoed), and the client
+stores it instead of matching. It retires the inference rather than patching it, and it is the
+only way a twin can be distinguished at all — no client-side heuristic can separate two contexts
+that agree on everything the client can see.
+
+**Trigger**: an operator duplicates a desk tab and the chip attributes the twin's write to itself.
 
 ### `FU-LAUNCHER-SCREEN-POSITION`
 

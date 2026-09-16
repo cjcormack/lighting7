@@ -439,6 +439,7 @@ screen becomes a masked press on the other before any window has a name in a reg
 | --- | --- | --- | --- |
 | 1 — the mask and the chip | Fable 5.1 | high | Invariant-dense and silent: a `StateFlow` snapshot changing shape under five readers, the echo FIFO's identity widening, a press refused or masked across four doors that must agree. |
 | 2 — windows and full screen | Opus 5 | xhigh | A new registry family plus browser-API feature detection across three browsers; failures are visible but platform-specific. |
+| 2.5 — the inherited `windowId` | Opus 5 | high | Three lines, one sharp invariant: mint on the param, *not* on a reload. Small, but it sits on a storage lifetime nothing else in the app depends on. |
 | 3 — the hand | Opus 5 | xhigh | Four place targets over four existing mutations, eligibility shared with the busk drop rules, a timeout Job, and MIDI arms. |
 | 4 — the edge drag | Opus 5 | high | One gesture, two windows, a `BroadcastChannel`; the risk is the dnd-kit hand-off, not reasoning. |
 
@@ -502,6 +503,35 @@ screen becomes a masked press on the other before any window has a name in a reg
   items, the exit glyph in full screen); `fullscreen.test.ts` (lock called only when present);
   `navigation.test.ts` for the command shapes.
 - Desk check: `FU-MANUAL-MULTI-SCREEN-S2`.
+
+### Session 2.5 — the inherited `windowId` (lighting-react) — Opus 5, high
+
+Added after session 2's backend landed, from a gap in D9/D10 read together. **`sessionStorage` is
+cloned into a top-level context created from an existing one** — `window.open` without `noopener`,
+a `target=_blank` link — so the child of *Open a window on… Display 2* wakes up holding its
+parent's `windowId`. `?window=` overwrites the *name*, so the result is Screen 1 and Screen 2
+sharing one identity. Since a client resolves "my row" in `windows.state` by matching `windowId`
+(the socket-minted `id` is the desk's, and a window is never told its own), both match two rows,
+and the desk chip then reads *Desk* — "I moved it" — when the twin moved it. This is the designed
+route for opening the second desk screen, so it lands on first use rather than as an edge case.
+
+- lighting-react: `lib/windowIdentity.ts` mints a **fresh** `windowId` when `?window=` is present
+  at boot rather than keeping an inherited one — the param means "a deliberately-named new
+  window", which is exactly the signal that this context is not a continuation of the storage it
+  woke up with. The param is stripped at boot, so a reload carries none and keeps its id: that is
+  the invariant, and minting on reload is the regression. `noopener` on the Screens sheet's
+  `window.open`, unless the sheet needs the returned handle to place the child.
+- lighting7: nothing. `windows.show` / `.rename` / `.fullscreen` address a row id and were never
+  ambiguous; only self-identification was.
+- Tests. lighting-react: `windowIdentity.test.ts` (a boot with `?window=` *and* an existing
+  `windowId` mints a new one; a boot with no param keeps it; a reload after a `?window=` boot keeps
+  the id minted at that boot; two tabs differ); `ScreensSheet.test.tsx` (the open call carries
+  `noopener`, or the documented reason it does not).
+- Not fixed here: right-click *Duplicate Tab*, which clones the storage on a URL whose `?window=`
+  was already stripped. Operator-initiated, rare, and what D9 says should happen — two rows. The
+  residual damage is cosmetic and its real fix is backend-side (`FU-WINDOWS-OWN-ROW-ID`, §8).
+- Desk check: folded into `FU-MANUAL-MULTI-SCREEN-S2` — the *Open on Display 2* step gains "and
+  the two rows carry distinct `windowId`s".
 
 ### Session 3 — the hand (both repos) — Opus 5, xhigh
 
@@ -590,6 +620,10 @@ unmasked and a newer client pressing an older desk sends a field the server igno
   operator did not draw; the fix is one layer per family group, not cells on the wire.
 - `FU-WINDOWS-SHOW-OFFLINE` — Trigger: a `windows.show` lost to a disconnected target matters;
   the fix is a per-window `requestedView` in the registry the target reads on re-announce.
+- `FU-WINDOWS-OWN-ROW-ID` — Trigger: an operator duplicates a desk tab and the chip attributes the
+  twin's write to itself. A window infers its registry row by matching `windowId`, which session
+  2.5 makes reliable but not exact; the exact fix is the announce handler unicasting the minted
+  row id back to its own socket, so a window is *told* its identity instead of inferring it.
 - `FU-DESK-TLS` — Trigger: the iPad needs install, Keyboard Lock or Window Management; the desk
   would have to serve HTTPS with a certificate the iPad trusts. Recorded because D13 leans on it.
 - `FU-LAUNCHER-SCREEN-POSITION` — Trigger: the two desk windows should remember which display
