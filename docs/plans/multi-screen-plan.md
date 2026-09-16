@@ -480,13 +480,10 @@ screen becomes a masked press on the other before any window has a name in a reg
 
 ### Session 2 — windows, full screen and the Screens sheet (both repos) — Opus 5, xhigh
 
-- lighting7: `state/WindowRegistry.kt`, `plugins/WindowsSocket.kt` (`windows.announce` /
-  `.state` / `.show` / `.rename` / `.fullscreen`), registration in the machine band of `Sockets.kt`,
-  `SocketScope.window`, `source` stamped from it (retiring session 1's `sourceName`); the launcher's
-  two tray items (Windows builds only). Docs: `websocket-engineering.md` rows and a "Windows" family
-  under Connection lifecycle; `windows-updates.md` gains nothing — the shortcuts are a launcher
-  note in `docs/plans/completed/windows-distribution-plan.md`'s successor doc or a new
-  `docs/desk-screens.md` (the kiosk note lives there too).
+- ~~lighting7: `state/WindowRegistry.kt`, `plugins/WindowsSocket.kt`, the machine-band
+  registration, `SocketScope.window` and the `source` stamp, the two tray items, and
+  `docs/desk-screens.md`.~~ — d774fd9. `sourceName` is kept as the fallback until the
+  lighting-react half lands (`FU-WINDOWS-RETIRE-SOURCENAME`).
 - lighting-react: `lib/windowIdentity.ts` (`?window=` at boot, `sessionStorage`, the default
   name); `api/windowsApi.ts`; `store/windows.ts` — bridge form 1 (module scope) unless the sidebar
   reaches it, in which case form 2 from `main.tsx`; the announce on every `Status.OPEN` (an `open`
