@@ -1,6 +1,7 @@
 # Multi-screen desk — two screens and an iPad on one programmer
 
-> **Document status: PROPOSED 2026-09-15 — nothing has landed.** The visual design is checked in
+> **Document status: IN PROGRESS.** Session 1 landed 2026-09-16 — af3575a here, f8ce5f9 in
+> lighting-react; sessions 2–4 are open. Proposed 2026-09-15. The visual design is checked in
 > beside this plan at [`multi-screen-design/`](multi-screen-design/INDEX.md): nine generated
 > artboards (a survey of five consoles, the model, the three screens at one moment, the Screens
 > sheet, the hand, the three options). The live canvas at
@@ -443,7 +444,7 @@ screen becomes a masked press on the other before any window has a name in a reg
 
 **Reviews run on `/code-review-lite`** or a plain Opus 5 review after every session. `max` nowhere.
 
-### Session 1 — the mask and the desk chip (both repos) — Fable 5.1, high
+### ~~Session 1 — the mask and the desk chip (both repos) — Fable 5.1, high~~ — af3575a · f8ce5f9
 
 - lighting7: `DeskSelection.Snapshot` with `families` and `source` (§3.2); `SelectionSocket`
   frames; `SocketScope.window` stub (a name-only identity until session 2 — `selection.set` may

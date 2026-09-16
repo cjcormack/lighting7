@@ -23,7 +23,7 @@ Each `*.dc.html` is one artboard. Ignore the `<script src="./support.js">` line 
 **The artboards are generated.** [`gen.mjs`](gen.mjs) is the source: `node gen.mjs` in this
 directory rewrites every `.dc.html` and `canvas.json`. Change a value there rather than in an
 artboard, or they drift. The seeded canvas (`list-views-on-one-shell.html`, the editor plus the
-artboards, ~2.5 MB) is **not committed** — regenerate it with the design skill's `seed-canvas.mjs`
+artboards, ~2.5 MB) is **committed since 2026-09-16** (Chris's call) — never edit it by hand; regenerate it with the design skill's `seed-canvas.mjs`
 from these files, never by hand, and republish to the artifact URL above to update the live copy.
 
 Every artboard is **dark-only on purpose** — read at a desk in a blacked-out room. The six surface

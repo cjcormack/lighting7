@@ -10,6 +10,7 @@ as a one-line row.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running effect, second-tab agreement | Desk simplification S2a, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2B`](#fu-manual-desk-s2b) | the Run/Show merge's edit lock protects a running show, and off-playhead browsing is safe | Desk simplification S2b, 2026-08-23 |
@@ -53,6 +54,41 @@ as a one-line row.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-MULTI-SCREEN-S1`
+
+**What it proves**: *a marquee on one screen is a masked press on the other* — multi-screen plan
+§5 S1 / §9, backend af3575a and the lighting-react session-1 commit. The desk selection is one
+fact `{targets, families, source}`; a marquee publishes its rows and its attribute families with
+the window's name; every press carries the pair it acts on and the desk masks or refuses it on the
+**on** arm only; the desk chip reads whose selection each window is showing and flips follow/local
+per tab.
+
+**Test**: two browser windows on the desk and an iPad, all following. Steps marked *browser-checked*
+were run in the review of the frontend commit with two tabs of the desktop app's browser pane as
+the two screens (review of 2026-09-16 — project Experiment, tabs named `Window 5b55` and `Screen 2`; no colour+position Look existed there, so step 3 ran on *Lark 2*, intensity + colour, toasting *Intensity rows skipped*); the X-Touch and iPad halves are open.
+
+1. Marquee three Colour cells on Screen 1. Screen 2's band lights the three heads and shows a
+   Colour pill; the iPad's too; both chips read *Desk · from Screen 1*; Screen 1's reads *Desk*.
+   *Browser-checked*, both windows; the iPad half open.
+2. Press a colour template pad on Screen 2. The three cells on Screen 1 ring *You* and the colour
+   lands; nothing else moves. Press a position template pad: Screen 2 toasts the refusal by name
+   and the rig does not move. *Browser-checked* (Green landed on the three heads only; Fig 8 refused: *'Fig 8' is a Position template, and the selection is masked to Colour*).
+3. Press a Look holding colour and position rows: the colour lands, Screen 2 toasts *Position rows
+   skipped*, and `LookStack` on Screen 1 shows the layer badged Colour. *Browser-checked* with Lark 2; the second press came off with no toast. **Open**: a Look holding colour *and* position rows, so *Position rows skipped* is read.
+4. Tap a fourth head on the iPad's band: it joins under the Colour mask (Screen 1's marquee grows
+   a row, the pill stays Colour). Press the X-Touch select button for a group: same. *Browser-checked* for the band half (a fourth head tapped on Screen 2's band joined under the mask; Screen 1's selection grew a row, the pill stayed Colour). **Open**: the iPad tap and the X-Touch select button.
+5. Pick one head in the narrow-width picker: the mask clears (no pill anywhere). *Browser-checked* (Screen 2 at phone width; the pill cleared on both screens).
+6. Click Screen 2's chip → *This window*, dashed. Marquee on Screen 1: Screen 2's band does not
+   move. Press a pad on Screen 2: it lands on Screen 2's own heads. Record on Screen 2: the sheet
+   scopes on Screen 2's rows. Click the chip again: Screen 2 adopts the desk's selection. *Browser-checked* for unlink, the isolated marquee, the press landing on Screen 2's own head, and re-link adopting. **Open**: Record on Screen 2 scoping on Screen 2's rows.
+7. Reload Screen 2: it comes back following; the desk's selection and mask are intact. *Browser-checked*.
+
+One note for the iPad and X-Touch halves: a window's name this session is `?window=` on its launch
+URL or a minted `Window xxxx` in that tab's `sessionStorage`; the windows registry (session 2)
+replaces it. 20 minutes with an X-Touch.
 
 ---
 
