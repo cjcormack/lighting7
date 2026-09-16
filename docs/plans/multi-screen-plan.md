@@ -485,7 +485,7 @@ screen becomes a masked press on the other before any window has a name in a reg
   registration, `SocketScope.window` and the `source` stamp, the two tray items, and
   `docs/desk-screens.md`.~~ — d774fd9. `sourceName` is kept as the fallback until the
   lighting-react half lands (`FU-WINDOWS-RETIRE-SOURCENAME`).
-- lighting-react: `lib/windowIdentity.ts` (`?window=` at boot, `sessionStorage`, the default
+- ~~lighting-react: `lib/windowIdentity.ts` (`?window=` at boot, `sessionStorage`, the default
   name); `api/windowsApi.ts`; `store/windows.ts` — bridge form 1 (module scope) unless the sidebar
   reaches it, in which case form 2 from `main.tsx`; the announce on every `Status.OPEN` (an `open`
   branch that re-sends only that); `windows.show` handler with the guarded-sheet decline;
@@ -493,7 +493,10 @@ screen becomes a masked press on the other before any window has a name in a reg
   entries built the way `useTemplateFamilyNavItems` builds its four (a `useWindowCommands()` over
   the registry); `lib/fullscreen.ts` (request, feature-detected lock, the `fullscreenchange`
   listener, the return banner); `public/manifest.webmanifest`, `index.html` meta and link; *Open on
-  Display N* behind `'getScreenDetails' in window`.
+  Display N* behind `'getScreenDetails' in window`.~~ — cb26499b. `store/windows.ts` landed as
+  neither form 1 nor 2 but form 3 (a per-entry `queryFn`), with the announce and the command
+  handlers in a `Layout`-mounted hook because they need the router; the copied link uses the tab's
+  own origin (`FU-SCREENS-LAN-URL`).
 - Tests. lighting7: `WindowRegistryTest` (announce, re-announce replaces, removal on close, a
   duplicate `windowId` is two rows); `WindowsSocketTest` (snapshot on connect before any announce;
   `show` rebroadcast as-is; a selection write is stamped with the announcing window).

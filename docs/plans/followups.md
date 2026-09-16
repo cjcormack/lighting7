@@ -86,7 +86,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | second half only — `CueStackManager` lookups are still project-blind |
 | [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
 | [`FU-WINDOWS-SHOW-OFFLINE`](#fu-windows-show-offline) | Trigger | Screens | a `windows.show` lost to a disconnected target matters |
-| [`FU-WINDOWS-RETIRE-SOURCENAME`](#fu-windows-retire-sourcename) | Blocked | Screens | lighting-react's multi-screen session 2 |
+| [`FU-WINDOWS-RETIRE-SOURCENAME`](#fu-windows-retire-sourcename) | Ready | Screens | — |
+| [`FU-SCREENS-LAN-URL`](#fu-screens-lan-url) | Trigger | Screens | *Copy link for another device* on a desk tab open at `localhost` |
 | [`FU-WINDOWS-OWN-ROW-ID`](#fu-windows-own-row-id) | Trigger | Screens | a duplicated desk tab makes the chip attribute its twin's write to itself |
 | [`FU-LAUNCHER-SCREEN-POSITION`](#fu-launcher-screen-position) | Trigger | Screens | the two desk windows should remember which display each opens on |
 
@@ -1332,7 +1333,7 @@ on it.
 
 ### `FU-WINDOWS-RETIRE-SOURCENAME`
 
-**Retire `selection.set`/`.toggle`'s `sourceName` and `SocketScope.windowName`** · Blocked ·
+**Retire `selection.set`/`.toggle`'s `sourceName` and `SocketScope.windowName`** · Ready ·
 Multi-screen S2, 2026-09-16
 
 Session 1 shipped a name-only window identity so the desk chip could read *from Screen 1* before a
@@ -1347,7 +1348,26 @@ the `sourceName` assertions in `SelectionSocketTest`, `WindowsSocketTest` and
 `SocketMessageWireFormatTest`. One clean removal, no compatibility window — there is one client,
 in one adjacent repo (the WS doc's "normalize hard, no aliases").
 
-**Blocked on**: the lighting-react half of multi-screen session 2.
+**Unblocked 2026-09-16**: lighting-react's session 2 announces and sends no `sourceName` on any
+write. Ready to delete; nothing on the client side reads or writes the field.
+
+### `FU-SCREENS-LAN-URL`
+
+**A GET route for the desk's LAN address, so *Copy link for another device* can mint it** · Trigger ·
+Multi-screen S2 (lighting-react half), 2026-09-16
+
+The Screens sheet's *Copy link for another device* mints `<origin>/?window=<name>` from the tab's
+own `window.location.origin`. The desk's LAN-reachable addresses are computed server-side per call
+(`auth/ResetUrls.kt`'s `buildLanUrls` — the request's `Host`, else the mDNS name, else a site-local
+IPv4) and exposed only inside the device-login and password-reset responses, both of which mint a
+token as a side effect, so the sheet cannot ask for the address alone. A desk screen opened at
+`http://localhost:8413/` — which `docs/desk-screens.md` says it must be — therefore copies a link
+that names the desk to itself; the sheet says so under the button rather than guessing.
+
+Fix: a small authenticated `GET /auth/lan-urls` (or a field on `auth/status`) answering
+`buildLanUrls("/")`'s primary and alternates with no token; the sheet then mints the mDNS link and
+lists the alternates under it, as `DeviceLoginSection` does. Needs a desk restart, which is why it
+was not folded into the client session.
 
 ### `FU-WINDOWS-OWN-ROW-ID`
 

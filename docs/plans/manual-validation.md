@@ -6,17 +6,24 @@ engineering scope — each is 10–20 minutes end-to-end. Engineering follow-ups
 rather than fixing inline. Checks that have passed move to [Validated](#validated) at the bottom
 as a one-line row.
 
+A check whose **core case** has passed but whose extensions have not stays in the table below,
+with what closed and what is still unseen said in its row and a status block at the top of its
+section. It is not Validated — that word means the whole procedure ran — and it must not simply
+lose its row: a procedure listed in neither table is one nobody will find again.
+
 ## Outstanding
 
 | Item | What it proves | Origin |
 |---|---|---|
-| [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — **all steps open**: the backend half landed, the browser half is lighting-react's session 2 | Multi-screen S2, 2026-09-16 |
+| [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running effect, second-tab agreement | Desk simplification S2a, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2B`](#fu-manual-desk-s2b) | the Run/Show merge's edit lock protects a running show, and off-playhead browsing is safe | Desk simplification S2b, 2026-08-23 |
 | [`FU-MANUAL-DESK-S3`](#fu-manual-desk-s3) | one template resolves per head across three colour types, two tilt ranges and a white/amber policy | Desk simplification S3, 2026-08-23 |
 | [`FU-MANUAL-FX-TEMPLATE-COLOUR`](#fu-manual-fx-template-colour) | a running effect follows the template its parameter names | Palette removal, 2026-08-24 |
+| [`FU-MANUAL-PALETTE-TOURING`](#fu-manual-palette-touring) | a Look edit moves a live cue — **core case closed 2026-08-22**, three extensions still unseen | Programmer S4, 2026-08-14; re-scoped Looks S1, 2026-08-21 |
+| [`FU-MANUAL-LAYER-PRECEDENCE`](#fu-manual-layer-precedence) | layered intensity is later-wins, not HTP — **core case closed 2026-08-22**, the cross-cue, amount and blend-mode extensions still unseen | Looks S1, 2026-08-21 |
 | [`FU-MANUAL-EDITOR-INPROCESS`](#fu-manual-editor-inprocess) | in-process editor compiles don't stutter live output | KCS retire, 2026-08-18 |
 | [`FU-MANUAL-SPEED-MASTERS-RIG`](#fu-manual-speed-masters-rig) | two masters drive one show — **restart required first** | Programmer S5, 2026-08-14 |
 | [`FU-MANUAL-UPDATE-APPLY`](#fu-manual-update-apply) | the in-app update upgrades in place — now unblocked | Windows updates, 2026-08-17 |
@@ -35,6 +42,7 @@ as a one-line row.
 | [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROVENANCE-REFETCH`](#fu-manual-provenance-refetch) | a crossfade no longer drives a refetch storm, and a MIDI write mid-fade still lands in the grid | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-PROMPTBOOK-FADE`](#fu-manual-promptbook-fade) | a live cue's fade animates without re-rendering every other cue in the show | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
@@ -68,26 +76,41 @@ browser-platform features with three different support matrices, and the one rul
 of them is that a desk screen must be opened at `http://localhost:8413/` — see
 [`docs/desk-screens.md`](../desk-screens.md).
 
-**Test**: two browser windows on the desk and an iPad. **Every step is open**: this item is staged
-by the lighting7 half, which ships the registry and the tray items, but nothing below can be run
-until lighting-react's session 2 lands the announce, the Screens sheet, the user-menu items and
-the full-screen path. Do not start it before then.
+**Test**: two browser windows on the desk and an iPad. **Partly covered in review, 2026-09-16**,
+with two tabs of the Chromium preview pane as two windows against the live desk (lighting-react's
+session 2 commit — see its message). What that pass established, so the desk check need not repeat
+it: both tabs announce with distinct names and ids (`?window=Screen%202` names the second and is
+stripped); the Screens sheet on either lists both with *this window* on the right row; *Show Busk
+on <other>* navigates the other tab and its row updates, both ways; a guarded sheet declines and
+toasts; with the show running the move lands on `/show` **locked**; a rename from one tab changes
+the other's user-menu label and row and survives that tab's reload; a selection made in the
+renamed tab reaches the other's chip as *Desk · from <new name>* and follows a further rename with
+no new write, so the match is by id; the *Return to full screen* banner is raised by a reload of a
+flagged tab and by `{on:true}` from the other tab, and dismisses; ⌘K's *Screens* group lists the
+commands; closing a tab drops its row within seconds. **Not** established there: the entered
+full-screen state itself (the pane refuses `requestFullscreen`), so the exit glyph and Keyboard
+Lock are still the desk's — and everything below that needs a tray item, an iPad, a second
+display or Safari.
+
+Steps as they stand — the fragments marked *(review)* are done, the rest open:
 
 1. Launch both desk windows from the tray items: each announces as Screen 1 / Screen 2, chromeless,
    `http://localhost:8413/` (Chrome or Edge, whichever is installed). The Screens sheet on either
-   lists both plus the iPad once it opens the copied link.
+   lists both *(review: two tabs, both listed, `this window` on the right row)* plus the iPad once
+   it opens the copied link.
 2. From the iPad, *Show Busk on Screen 2*: Screen 2 navigates; the sheet's row updates. With a
    guarded sheet open on Screen 2, it declines and toasts. With the show running and Screen 2 on
-   `/show`, the move lands locked.
+   `/show`, the move lands locked. *(review: all three, tab to tab.)*
 3. *Full screen* from the user menu on the iPad: Safari goes full screen with its overlay button;
    swipe down exits; *Add to Home Screen* on the copied link opens standalone.
 4. On a desk window in a plain tab: *Full screen*, then Esc — with Keyboard Lock (Chrome), Esc
    clears the selection and the window stays full screen; reload → the *Return to full screen*
-   banner; one tap restores it.
+   banner *(review: the banner, from the flag and from `{on:true}`)*; one tap restores it.
 5. *Open Busk on Display 2* from Screen 1 (permission prompt on first use): a new window opens on
    the other display named Screen 2 and announces; the registry shows three desk windows.
 6. Rename the iPad from Screen 1: the iPad's chip and its `windows.state` row change; reload the
-   iPad: the name survives (it came from the URL).
+   iPad: the name survives (it came from the URL). *(review: tab to tab, including the reload and
+   the other chip's `Desk · from <new name>`.)*
 7. **Safari on the Mac.** *Full screen* from the menu: full screen; Esc leaves it (expected, no
    lock) and the selection is untouched. *Add to Dock* on `http://localhost:8413/?window=Screen%201`,
    then again with `Screen%202`: does Safari allow two, and does each launch carry its name? Green
@@ -96,7 +119,8 @@ the full-screen path. Do not start it before then.
 
 Two extras worth doing while the windows are open, because they are the registry's own invariants
 and no browser test covers them: **close** a desk window and watch its row leave the sheet on the
-other two (there is no heartbeat — the socket closing is the window closing), and **duplicate** a
+other two *(review: a closed tab's row left the other within seconds)* — there is no heartbeat, the
+socket closing is the window closing — and **duplicate** a
 tab, which copies its `sessionStorage` and so announces the same name: it must appear as a *second*
 row and be separately addressable (plan D9). 20–30 minutes.
 
