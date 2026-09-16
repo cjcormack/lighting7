@@ -17,10 +17,12 @@ import uk.me.cormack.lighting7.state.SelectionSource
  * `docs/websocket-engineering.md`); a client renders from the frame, never from its own echo.
  *
  * **`source` is stamped by the handler, never carried by the payload** (multi-screen plan D7).
- * A frame names no `source`; it may name a `sourceName`, which this session stands in for the
- * window identity the windows registry will announce in session 2 ([SocketScope.windowName]).
- * The handler remembers it on the socket, so a later write from the same socket is stamped with
- * the same name whether or not it repeats it.
+ * A frame names no `source`: the handler reads the socket's own announced window
+ * ([SocketScope.window], set by `windows.announce`) and stamps its name and row id. A socket that
+ * has not announced falls back to session 1's name-only stub — the `sourceName` a pre-registry
+ * client puts on the frame, remembered on the socket so a later write carries it without
+ * repeating it. Neither path lets a window claim to be another: the id is the socket's, minted
+ * server-side, and a `sourceName` carries none at all.
  */
 @Serializable
 sealed class SelectionInMessage : InMessage()
@@ -90,11 +92,20 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
 }
 
 /**
- * The mover to stamp: the socket's window name, refreshed by a frame that carries one. Null for
- * a socket that has never named itself — an unnamed mover is recorded as no mover, not as the
- * previous one, because the source is *who moved it last*.
+ * The mover to stamp.
+ *
+ * The announced window wins: its name *and* its row id, so the chip can say *from Screen 1* and a
+ * client can tell its own write from another window's. The id stamped is the registry row's
+ * socket-minted [uk.me.cormack.lighting7.state.WindowRegistry.Window.id], not the client-minted
+ * `windowId` D7's sketch names — `windowId` is not unique (a duplicated tab shares one, D9), and
+ * the unique id is the one `windows.show` addresses, so the two agree on what "that window" means.
+ *
+ * Failing that, session 1's `sourceName` stub, remembered on the socket. Null for a socket that
+ * has done neither — an unnamed mover is recorded as no mover, not as the previous one, because
+ * the source is *who moved it last*.
  */
 private fun SocketScope.selectionSource(sourceName: String?): SelectionSource? {
+    window?.let { return SelectionSource.window(it.name, it.id) }
     sourceName?.trim()?.takeIf { it.isNotEmpty() }?.let { windowName = it }
     return windowName?.let { SelectionSource.window(it) }
 }

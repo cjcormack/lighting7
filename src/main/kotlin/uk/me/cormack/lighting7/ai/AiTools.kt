@@ -344,7 +344,7 @@ class AiTools(private val state: State) {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
             ?: setOf(
                 "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
-                "templates", "cues", "cue_stacks", "cue_run", "programmer", "selection",
+                "templates", "cues", "cue_stacks", "cue_run", "programmer", "selection", "windows",
             )
 
         val result = buildJsonObject {
@@ -632,6 +632,24 @@ class AiTools(private val state: State) {
                             }
                         }
                     })
+                })
+            }
+            if ("windows" in include) {
+                // Every browser window signed in to the desk (state.WindowRegistry). Read-only,
+                // like `selection`: no tool on this surface moves a window, so the model reads it
+                // to say *which screen* something is on — and to read a `selection.source.id`
+                // back to a name, which is the one cross-reference between the two objects.
+                put("windows", buildJsonArray {
+                    for (window in state.windowRegistry.windows.value) {
+                        addJsonObject {
+                            put("id", window.id)
+                            put("name", window.name)
+                            put("view", window.view)
+                            put("fullscreen", window.fullscreen)
+                            put("followsDeskSelection", window.follows)
+                            put("user", window.user)
+                        }
+                    }
                 })
             }
         }

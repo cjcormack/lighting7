@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **102 message types**
-(40 inbound, 62 outbound) across twelve domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **118 message types**
+(47 inbound, 71 outbound) across fourteen domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -185,7 +185,8 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Family | File | In | Out | Handler | Subscriptions |
 |---|---|---|---|---|---|
 | Boot | `BootSocket.kt` | — | 1 | — | inline in `Sockets.kt` |
-| Broadcast | `BroadcastSocket.kt` | — | 15 | — | `setupBroadcastSubscriptions` |
+| Broadcast | `BroadcastSocket.kt` | — | 18 | — | `setupBroadcastSubscriptions` |
+| Busk page | `BuskSocket.kt` | 1 | 1 | `handleBusk` | `setupBuskSubscriptions` |
 | Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
 | Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
 | FX | `FxSocket.kt` | 5 | 2 | `handleFx` | `setupFxSubscriptions` |
@@ -194,8 +195,9 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
-| Speed masters | `SpeedMasterSocket.kt` | 4 | 3 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
-| Surfaces | `SurfaceSocket.kt` | 9 | 13 | `handleSurface` | `setupSurfaceSubscriptions` |
+| Speed masters | `SpeedMasterSocket.kt` | 4 | 4 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
+| Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
+| Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
 Four families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
 Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages are declared in
@@ -203,7 +205,7 @@ Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages ar
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (40)
+## Client → Server (47)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -274,6 +276,50 @@ socket carries it without repeating it; session 2's windows registry replaces it
 identity. A socket that has never named itself stamps no source — the last mover is unknown, not
 the previous one. A MIDI write stamps `{kind: "surface"}`.
 
+### Windows — `WindowsSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `windows.announce` | `windowId`, `name`, `view`, `fullscreen?` (default false), `follows?` (default true) | none — `windows.state` broadcast |
+| `windows.show` | `targetId`, `view` | none — rebroadcast as `windows.show` |
+| `windows.rename` | `targetId`, `name` | none — rebroadcast as `windows.rename` |
+| `windows.fullscreen` | `targetId`, `on` | none — rebroadcast as `windows.fullscreen` |
+
+The desk's registry of signed-in browser windows (`state/WindowRegistry.kt`, multi-screen plan
+§3.4), and the family that lets one screen move another.
+
+**A row is keyed by the socket, not by `windowId`.** `windowId` is the tab's own `sessionStorage`
+uuid — durable across a reload, but *copied* by a duplicated tab, so it is not unique; the row's
+`id` is minted server-side per connection (`SocketScope.id`) and that is what everything addresses.
+The row lives exactly as long as its socket: `announce` on the way in, removal in the connection's
+`finally`, so a closed window disappears with no heartbeat. `announce` is sent on **every** socket
+open and on every change — a route navigation, full screen, follow/local, a rename — and a
+re-announce replaces that socket's row in place rather than appending one.
+
+**The three commands are rebroadcast verbatim to every socket, sender included** (D11), the pattern
+`busk.layoutChanged {pageIds}` uses: a `targetId` that is not this window's matches nothing, so no
+handler needs a session lookup and the Screens sheet on every window sees the gesture. Nothing is
+written server-side by a `rename` — the *target* renames itself and re-announces. A command whose
+target is disconnected is simply lost, and that is legible: that window's `view` in `windows.state`
+does not move (`FU-WINDOWS-SHOW-OFFLINE`).
+
+The family is **machine-scoped**: registered in the pre-warm-up band of `Sockets.kt` beside
+`setupMachineSubscriptions`, and *not* cleared by `State`'s project collector, because a window
+outlives a project switch and its `view` carries the project id. A registry in the show band would
+announce nothing until the desk was warm, and the desk chip would read *Desk* for the wrong reason
+(plan §10). Nothing is persisted and nothing is a table, so `SyncCoverageTest` gains no row.
+
+### Busk page — `BuskSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `busk.setPage` | `pageId: Int` | none — `busk.pageState` broadcast |
+
+Which busk page the desk is showing (`state/BuskPageState.kt`) — a desk fact of `selection.*`'s
+shape, because a surface's *next page* button and a tab click are two ways of one gesture. A page
+id that is not the current project's is ignored. Not to be confused with `busk.layoutChanged`,
+which shares only the namespace: that one names pages whose **document** changed.
+
 ### Speed masters — `SpeedMasterSocket.kt`
 
 The desk's only WS tempo surface. A master is addressed by uuid, and `masterUuid` null/omitted
@@ -343,7 +389,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (62)
+## Server → Client (71)
 
 ### Boot — `BootSocket.kt`
 
@@ -454,6 +500,37 @@ bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `Effect
 | Message | Payload | Cast |
 |---|---|---|
 | `selection.state` | `targets: [{type, key}]`, `families?: [String]` (absent = every attribute), `source?: {kind: "window" \| "surface", id?, name}` (absent = nobody since the last clear) | Connect snapshot + broadcast |
+
+`source.id` is the **windows-registry row id** of the writing socket — the id `windows.show`
+addresses, not the client-minted `windowId`, which a duplicated tab shares. It is absent for a
+socket that has not announced and is naming itself with session 1's `sourceName` stub, and for a
+MIDI write.
+
+### Windows — `WindowsSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `windows.state` | `windows: [{id, windowId, name, view, fullscreen, follows, user?}]`, in announce order | Connect snapshot + broadcast |
+| `windows.show` | `targetId`, `view` | Broadcast, verbatim |
+| `windows.rename` | `targetId`, `name` | Broadcast, verbatim |
+| `windows.fullscreen` | `targetId`, `on` | Broadcast, verbatim |
+
+The three commands travel under the **same names** in both directions — they are rebroadcast as-is,
+and a second spelling would buy nothing. (`speedMasters.state` is the existing precedent for one
+name on both sides.) `windows.state` is `StateFlow`-backed, so the subscription is the snapshot and
+it arrives before this window has announced anything; `id` is the socket-minted row id and `user` is
+the authenticated caller's display name, both stamped server-side for the reason `selection.state`'s
+`source` is (D7) — a window cannot claim to be another window, or another operator.
+
+### Busk page — `BuskSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `busk.pageState` | `pageId: Int?` | Connect snapshot + broadcast |
+
+`null` is *the desk has not been pointed at a page*, deliberately not *the first page*: the busk
+view already resolves a `?page=` it cannot find against the list it fetched, so saying nothing
+leaves each client on its own fallback.
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -605,8 +682,9 @@ the picture and the desk disagree, the publisher is wrong, which is the bug wort
 
 1. Session-cookie auth check; unauthenticated sockets are accepted and then closed `4401`.
 2. `SocketScope` opened; the revocation stream is subscribed so a session revoked mid-boot closes.
-3. Machine-scoped subscriptions registered (`setupMachineSubscriptions`) — these predate the
-   warm-up gate because they read nothing off `state.show`.
+3. Machine-scoped subscriptions registered (`setupMachineSubscriptions`, then
+   `setupWindowsSubscriptions`) — these predate the warm-up gate because they read nothing off
+   `state.show`.
 4. `bootProgressState` sent, then streamed until `isShowReady`; a `FAILED` boot returns here.
 5. `SocketConnection` created and added to the global `connections` set.
 6. Each domain's `setupXxxSubscriptions` runs: the `FixturesChangeListener` is registered, live
@@ -630,6 +708,9 @@ for (frame in incoming) {
             is SurfaceInMessage -> handleSurface(scope, message)
             is ProgrammerInMessage -> handleProgrammer(scope, message)
             is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
+            is SelectionInMessage -> handleSelection(scope, message)
+            is WindowsInMessage -> handleWindows(scope, message)
+            is BuskInMessage -> handleBusk(scope, message)
             null -> System.err.println("WS /api: undeserializable frame ignored")
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { /* logged */ }
@@ -639,12 +720,29 @@ for (frame in incoming) {
 The per-message guard is load-bearing: one bad frame (unknown universe, stale fixture key,
 malformed payload) must not tear down the operator's whole socket.
 
+### Windows
+
+A window is a **connection-scoped fact**, and the only family whose rows are created and destroyed
+by the lifecycle above rather than by anything an operator does.
+
+- **On connect**, `setupWindowsSubscriptions` runs in the machine band (step 3), so `windows.state`
+  arrives while the client may still be showing the boot overlay — listing the *other* windows,
+  since this one has announced nothing yet.
+- **A client announces on every `open`**, which is the one kind of client-side `open` branch the
+  frontend's "where a WS bridge subscribes" rule allows: re-sending what the *server* forgot. The
+  registry keys by socket, so a reconnect is a new row and only the client knows what to put in it.
+  Note the announce is handled in the message loop, which is behind the warm-up gate — the machine
+  band buys the snapshot and the broadcast, not an earlier announce.
+- **On disconnect**, `windowRegistry.remove(scope.id)` runs in the same `finally` as the learn-session
+  cleanup. There is no heartbeat and no timeout: the socket closing *is* the window closing.
+
 ### On disconnect
 
 1. Connection removed from `connections`.
 2. `scope.cancelAll()` cancels every subscription and pending snapshot job.
 3. Learn sessions this connection owns are cancelled.
-4. The fixtures listener is unregistered from whatever `Fixtures` instance is current — the project
+4. This connection's windows-registry row is removed, if it announced one.
+5. The fixtures listener is unregistered from whatever `Fixtures` instance is current — the project
    may have switched mid-connection, which is why `setupBroadcastSubscriptions` returns a closure
    rather than the caller holding the instance.
 
@@ -748,6 +846,8 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/SelectionSocket.kt` | The desk selection: snapshot + broadcast, and the three writes |
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
+| `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |
+| `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the three commands (machine-scoped band) |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
 | `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
 | `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |
@@ -758,4 +858,6 @@ show-scoped goes after the gate. Then add the family to the tables above.
 - [Desk Accounts](desk-accounts.md) — the 4401 close path and live revocation
 - [FX System](fx-engineering.md) — what `fxState` and the `speedMasters.*` family describe
 - [Composition Model](lighting-composition-model.md) — what `provenanceState` is reporting on
+- [Desk Screens](desk-screens.md) — what the `windows.*` family is for: the two desk screens, the
+  `?window=` contract and the secure-context rule
 - [Cloud Sync](sync-engineering.md) — the `cloudSync*` lifecycle

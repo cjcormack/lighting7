@@ -41,10 +41,10 @@ class SocketConnection(val session: WebSocketServerSession) {
  *
  * That recipe describes the **show-scoped** band of subscriptions, which is registered after
  * the warm-up gate because it touches `state.show`. There is a second, **machine-scoped** band
- * — session revocation and `setupMachineSubscriptions` — registered *before* that gate, because
- * it needs nothing from the show and a change during warm-up would otherwise be lost rather
- * than delayed. A new domain belongs in the second band only if it reads nothing off
- * `state.show`; the comments at each site spell out why.
+ * — session revocation, `setupMachineSubscriptions` and `setupWindowsSubscriptions` — registered
+ * *before* that gate, because it needs nothing from the show and a change during warm-up would
+ * otherwise be lost rather than delayed. A new domain belongs in the second band only if it reads
+ * nothing off `state.show`; the comments at each site spell out why.
  */
 fun Application.configureSockets(state: State) {
     install(WebSockets) {
@@ -98,6 +98,19 @@ fun Application.configureSockets(state: State) {
             // subscribers yet.
             setupMachineSubscriptions(scope)
 
+            // The windows registry, in the same pre-warm-up band and for the same reason: it
+            // reads nothing off `state.show`, and a window is a fact about the machine — it
+            // outlives a project switch, so it is not cleared in State's project collector
+            // either (multi-screen plan §3.4). A client therefore has `windows.state` while it
+            // is still showing the boot overlay, and the Screens sheet can list a window whose
+            // desk is mid-warm-up rather than an empty registry that fills in later.
+            //
+            // Note what this does *not* buy: inbound frames are only read in the message loop
+            // below, which is behind the warm-up gate, so a client's own `windows.announce` is
+            // still handled only once the show is ready. The registration's job is the snapshot
+            // and the broadcast, not the announce.
+            setupWindowsSubscriptions(scope)
+
             // Server-first warm-up: the subscription setup below touches `state.show` and its
             // fixtures/FX engine, which aren't usable until `show.start()` completes. Stream boot
             // progress and hold setup until the show is ready (gating on `isShowReady`, mirroring
@@ -143,6 +156,7 @@ fun Application.configureSockets(state: State) {
                             is ProgrammerInMessage -> handleProgrammer(scope, message)
                             is SpeedMasterInMessage -> handleSpeedMasters(scope, message)
                             is SelectionInMessage -> handleSelection(scope, message)
+                            is WindowsInMessage -> handleWindows(scope, message)
                             is BuskInMessage -> handleBusk(scope, message)
                             null -> System.err.println("WS /api: undeserializable frame ignored")
                         }
@@ -157,6 +171,10 @@ fun Application.configureSockets(state: State) {
                 scope.cancelAll()
                 scope.ownedLearnSessions.toList().forEach { state.midiLearnSessionManager.cancel(it) }
                 scope.ownedLearnSessions.clear()
+                // A window's registry row lives exactly as long as its socket — that is what
+                // makes a closed window disappear from the Screens sheet without a heartbeat.
+                // A no-op for a connection that never announced.
+                state.windowRegistry.remove(scope.id)
                 unregisterBroadcastListener()
             }
         }

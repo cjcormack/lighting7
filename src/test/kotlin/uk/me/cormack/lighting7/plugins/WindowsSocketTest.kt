@@ -1,0 +1,224 @@
+package uk.me.cormack.lighting7.plugins
+
+import io.ktor.client.plugins.websocket.sendSerialized
+import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.server.testing.testApplication
+import org.junit.Test
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.state.SelectionSource
+import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.awaitOfType
+import uk.me.cormack.lighting7.testsupport.createWsClient
+import uk.me.cormack.lighting7.testsupport.mountTestApp
+import uk.me.cormack.lighting7.testsupport.seedMinimalProject
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * The `windows.*` family over a real socket: the connect snapshot arrives before any announce,
+ * an announce is one row keyed by the socket, the three commands are rebroadcast verbatim to
+ * every socket (D11), a closed socket takes its row with it, and a `selection.*` write is stamped
+ * from the announced window rather than from the payload (D7).
+ *
+ * Driven over a socket rather than against [uk.me.cormack.lighting7.state.WindowRegistry] for the
+ * reason `CueRunStateBroadcastTest` is: a message missing from the `OutMessage` polymorphic scope
+ * serializes fine in isolation and closes the socket in production.
+ */
+class WindowsSocketTest : RouteIntegrationTest() {
+
+    private val hex1 = CueTargetDto("fixture", "hex-1")
+    private val hex2 = CueTargetDto("fixture", "hex-2")
+
+    private fun announce(
+        windowId: String = "tab-1",
+        name: String = "Screen 1",
+        view: String = "/programmer",
+        fullscreen: Boolean = false,
+        follows: Boolean = true,
+    ) = WindowsAnnounceInMessage(windowId, name, view, fullscreen, follows)
+
+    @Test
+    fun `the connect snapshot arrives before any announce and lists the windows already signed in`() =
+        testApplication {
+            mountTestApp(state)
+            val screen1 = createWsClient()
+            val screen2 = createWsClient()
+
+            screen1.webSocket("/api") {
+                // Unasked, and empty: this socket has announced nothing and nobody else has either.
+                assertTrue(awaitOfType<WindowsStateOutMessage>().windows.isEmpty())
+
+                sendSerialized<InMessage>(announce(name = "Screen 1", view = "/programmer"))
+                val mine = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
+                assertEquals(listOf("Screen 1"), mine.windows.map { w -> w.name })
+                assertEquals("/programmer", mine.windows.single().view)
+
+                screen2.webSocket("/api") {
+                    // The second window's own snapshot already carries the first — a client
+                    // renders the sheet from the connect burst alone.
+                    val snapshot = awaitOfType<WindowsStateOutMessage>()
+                    assertEquals(listOf("Screen 1"), snapshot.windows.map { w -> w.name })
+
+                    sendSerialized<InMessage>(announce(windowId = "tab-2", name = "Screen 2", view = "/busk"))
+                    val both = awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }
+                    assertEquals(listOf("Screen 1", "Screen 2"), both.windows.map { w -> w.name })
+                }
+
+                // …and the first learns of both the arrival and the departure.
+                val gone = awaitOfType<WindowsStateOutMessage> { it.windows.size == 1 }
+                assertEquals(listOf("Screen 1"), gone.windows.map { w -> w.name })
+            }
+        }
+
+    @Test
+    fun `a re-announce replaces this socket's row rather than adding one`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<WindowsStateOutMessage>()
+            sendSerialized<InMessage>(announce(view = "/programmer"))
+            val first = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
+            val id = first.windows.single().id
+
+            sendSerialized<InMessage>(announce(view = "/busk", fullscreen = true, follows = false))
+            val moved = awaitOfType<WindowsStateOutMessage> { it.windows.singleOrNull()?.view == "/busk" }
+            val row = moved.windows.single()
+            assertEquals(id, row.id, "the row's id is the socket's, so it survives a re-announce")
+            assertTrue(row.fullscreen)
+            assertTrue(!row.follows, "an unlinked window reports it (§3.1)")
+        }
+    }
+
+    @Test
+    fun `show, rename and fullscreen are rebroadcast as-is to every socket, sender included`() =
+        testApplication {
+            mountTestApp(state)
+            val screen1 = createWsClient()
+            val screen2 = createWsClient()
+
+            screen1.webSocket("/api") {
+                awaitOfType<WindowsStateOutMessage>()
+                sendSerialized<InMessage>(announce(name = "Screen 1"))
+                val target = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single().id
+
+                screen2.webSocket("/api") {
+                    awaitOfType<WindowsStateOutMessage>()
+                    sendSerialized<InMessage>(announce(windowId = "tab-2", name = "Screen 2", view = "/busk"))
+                    awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }
+
+                    // Screen 2 moves Screen 1. No session lookup: the frame goes to everyone and
+                    // the window whose id it names is the one that acts.
+                    sendSerialized<InMessage>(WindowsShowInMessage(target, "/busk"))
+                    assertEquals(WindowsShowOutMessage(target, "/busk"), awaitOfType<WindowsShowOutMessage>())
+
+                    sendSerialized<InMessage>(WindowsRenameInMessage(target, "Front of house"))
+                    assertEquals(
+                        WindowsRenameOutMessage(target, "Front of house"),
+                        awaitOfType<WindowsRenameOutMessage>(),
+                        "the sender sees its own gesture — the Screens sheet on every window does",
+                    )
+
+                    sendSerialized<InMessage>(WindowsFullscreenInMessage(target, on = true))
+                    assertEquals(
+                        WindowsFullscreenOutMessage(target, on = true),
+                        awaitOfType<WindowsFullscreenOutMessage>(),
+                    )
+
+                    // A command naming nobody is not refused and not looked up — it is simply
+                    // broadcast and matches no window (D11).
+                    sendSerialized<InMessage>(WindowsShowInMessage("not-a-window", "/show"))
+                    assertEquals(
+                        WindowsShowOutMessage("not-a-window", "/show"),
+                        awaitOfType<WindowsShowOutMessage>(),
+                    )
+                }
+
+                // The target's own socket received all three, in order, and the registry never
+                // moved on its own: the rename is the target's job, on its next announce.
+                assertEquals(WindowsShowOutMessage(target, "/busk"), awaitOfType<WindowsShowOutMessage>())
+                assertEquals(
+                    WindowsRenameOutMessage(target, "Front of house"),
+                    awaitOfType<WindowsRenameOutMessage>(),
+                )
+                assertEquals(
+                    "Screen 1",
+                    state.windowRegistry.windows.value.first { it.id == target }.name,
+                    "a rename is the target window's job, on its next announce — the registry does not guess",
+                )
+            }
+        }
+
+    @Test
+    fun `a selection write is stamped with the announcing window's name and id`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<WindowsStateOutMessage>()
+            awaitOfType<SelectionStateOutMessage>()
+
+            sendSerialized<InMessage>(announce(name = "Screen 2"))
+            val row = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single()
+
+            sendSerialized<InMessage>(SelectionSetInMessage(listOf(hex1)))
+            val stamped = awaitOfType<SelectionStateOutMessage>()
+            assertEquals(SelectionSource.KIND_WINDOW, stamped.source?.kind)
+            assertEquals("Screen 2", stamped.source?.name)
+            assertEquals(row.id, stamped.source?.id, "the id is the registry row's, so the chip can match it")
+
+            // A payload `sourceName` does not override the announced identity — a window cannot
+            // claim to be another (D7).
+            sendSerialized<InMessage>(SelectionToggleInMessage(hex2, sourceName = "Screen 1"))
+            val second = awaitOfType<SelectionStateOutMessage>()
+            assertEquals("Screen 2", second.source?.name)
+            assertEquals(row.id, second.source?.id)
+        }
+    }
+
+    @Test
+    fun `a socket that never announced still stamps session 1's sourceName, with no id`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<SelectionStateOutMessage>()
+            sendSerialized<InMessage>(SelectionSetInMessage(listOf(hex1), sourceName = "Screen 1"))
+            val stamped = awaitOfType<SelectionStateOutMessage>()
+            assertEquals(SelectionSource.window("Screen 1"), stamped.source)
+            assertNull(stamped.source?.id, "the stub carries no id — there is no row to point at")
+        }
+    }
+
+    /**
+     * The machine-scoped half of §3.4, and the failure §10 names: a registry cleared with the
+     * project would leave every window unnamed after a switch, and the desk chip would read
+     * *Desk* because nobody could be named rather than because this window moved the selection.
+     * The selection beside it is the control — that one *is* project-scoped and does clear.
+     */
+    @Test
+    fun `a window outlives a project switch, where the selection does not`() = testApplication {
+        mountTestApp(state)
+        val otherProjectId = seedMinimalProject(state, projectName = "Second project", universe = 1)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<WindowsStateOutMessage>()
+            sendSerialized<InMessage>(announce(name = "Screen 1"))
+            awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
+
+            sendSerialized<InMessage>(SelectionSetInMessage(listOf(hex1)))
+            awaitOfType<SelectionStateOutMessage> { it.targets.isNotEmpty() }
+
+            state.projectManager.switchProject(otherProjectId)
+
+            val cleared = awaitOfType<SelectionStateOutMessage> { it.targets.isEmpty() }
+            assertTrue(cleared.targets.isEmpty(), "the selection names the old rig's heads and goes")
+            val survivor = state.windowRegistry.windows.value.singleOrNull()
+            assertNotNull(survivor, "the window is a fact about the machine, not about the project")
+            assertEquals("Screen 1", survivor.name)
+        }
+    }
+}

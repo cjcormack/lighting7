@@ -16,8 +16,11 @@ import uk.me.cormack.lighting7.show.Fixtures
  * or a control surface. It is the *last mover*, not a lock — a press never touches it, and a chip
  * reading "from Screen 1" an hour later is still true.
  *
- * [kind] is [KIND_WINDOW] or [KIND_SURFACE]. [id] is the window's socket-minted identity once
- * the windows registry exists (session 2); this session every window is name-only, so it is null.
+ * [kind] is [KIND_WINDOW] or [KIND_SURFACE]. [id] is the writing window's **registry row id**
+ * ([WindowRegistry.Window.id], socket-minted) — the id `windows.show` addresses, not the
+ * client-minted `windowId`, which a duplicated tab shares (plan D9), so the two agree on what
+ * "that window" means. It is null for a control surface, and for a socket that has not announced
+ * and is naming itself with session 1's `sourceName` stub (`FU-WINDOWS-RETIRE-SOURCENAME`).
  */
 @Serializable
 data class SelectionSource(

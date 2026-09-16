@@ -10,6 +10,7 @@ as a one-line row.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — **all steps open**: the backend half landed, the browser half is lighting-react's session 2 | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
 | [`FU-MANUAL-DESK-S2A`](#fu-manual-desk-s2a) | the programmer stack composes on a rig — live retune, a layer dragged under a running effect, second-tab agreement | Desk simplification S2a, 2026-08-23 |
@@ -54,6 +55,50 @@ as a one-line row.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-MULTI-SCREEN-S2`
+
+**What it proves**: *windows have names, and one moves another* — multi-screen plan §5 S2 / §9.
+The desk keeps a registry of every signed-in browser window, keyed by socket; a window announces
+itself on every open and every change; and `windows.show` / `.rename` / `.fullscreen` are
+broadcast so the named window acts. Full screen, installation and *Open on Display N* are
+browser-platform features with three different support matrices, and the one rule underneath all
+of them is that a desk screen must be opened at `http://localhost:8413/` — see
+[`docs/desk-screens.md`](../desk-screens.md).
+
+**Test**: two browser windows on the desk and an iPad. **Every step is open**: this item is staged
+by the lighting7 half, which ships the registry and the tray items, but nothing below can be run
+until lighting-react's session 2 lands the announce, the Screens sheet, the user-menu items and
+the full-screen path. Do not start it before then.
+
+1. Launch both desk windows from the tray items: each announces as Screen 1 / Screen 2, chromeless,
+   `http://localhost:8413/` (Chrome or Edge, whichever is installed). The Screens sheet on either
+   lists both plus the iPad once it opens the copied link.
+2. From the iPad, *Show Busk on Screen 2*: Screen 2 navigates; the sheet's row updates. With a
+   guarded sheet open on Screen 2, it declines and toasts. With the show running and Screen 2 on
+   `/show`, the move lands locked.
+3. *Full screen* from the user menu on the iPad: Safari goes full screen with its overlay button;
+   swipe down exits; *Add to Home Screen* on the copied link opens standalone.
+4. On a desk window in a plain tab: *Full screen*, then Esc — with Keyboard Lock (Chrome), Esc
+   clears the selection and the window stays full screen; reload → the *Return to full screen*
+   banner; one tap restores it.
+5. *Open Busk on Display 2* from Screen 1 (permission prompt on first use): a new window opens on
+   the other display named Screen 2 and announces; the registry shows three desk windows.
+6. Rename the iPad from Screen 1: the iPad's chip and its `windows.state` row change; reload the
+   iPad: the name survives (it came from the URL).
+7. **Safari on the Mac.** *Full screen* from the menu: full screen; Esc leaves it (expected, no
+   lock) and the selection is untouched. *Add to Dock* on `http://localhost:8413/?window=Screen%201`,
+   then again with `Screen%202`: does Safari allow two, and does each launch carry its name? Green
+   button on each: OS full screen, Esc clears the selection and stays full screen. The Screens
+   sheet shows no *Open on Display* row. Record the answers against `FU-LAUNCHER-SCREEN-POSITION`.
+
+Two extras worth doing while the windows are open, because they are the registry's own invariants
+and no browser test covers them: **close** a desk window and watch its row leave the sheet on the
+other two (there is no heartbeat — the socket closing is the window closing), and **duplicate** a
+tab, which copies its `sessionStorage` and so announces the same name: it must appear as a *second*
+row and be separately addressable (plan D9). 20–30 minutes.
 
 ---
 

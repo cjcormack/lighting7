@@ -616,6 +616,17 @@ class State(val config: ApplicationConfig) {
     }
 
     /**
+     * Every browser window signed in to this desk — what *Show Busk on Screen 2* addresses.
+     *
+     * State-scoped like [deskSelection], but **machine-scoped rather than project-scoped**: a
+     * window outlives a project switch (its `view` carries the project id), so it is deliberately
+     * absent from the `projectChangedFlow` collector below, and its subscription is registered in
+     * the machine band of `plugins/Sockets.kt`. See [WindowRegistry] and the multi-screen plan
+     * §3.4. Never persisted; rows live exactly as long as their sockets.
+     */
+    val windowRegistry: WindowRegistry by lazy { WindowRegistry() }
+
+    /**
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
      * ways of making one gesture, so there is one answer. State-scoped and transient like
      * [deskSelection]: cleared on project switch, reconciled when the layout changes, never

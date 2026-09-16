@@ -29,6 +29,17 @@ class SocketScope(
     /** The caller's session-token hash — what a live-revocation stream (Session 3) matches on. */
     val sessionTokenHash: String? get() = user?.sessionTokenHash
 
+    /**
+     * This connection's identity, minted here and stable for its whole life.
+     *
+     * It is the `id` of this socket's row in the windows registry, what a `windows.show` addresses
+     * and what a `selection.state` `source` carries. Minted server-side because the client-minted
+     * `windowId` is **not** unique: a duplicated tab copies its `sessionStorage` and announces the
+     * same one from a second socket (multi-screen plan D9), and two rows that cannot be told apart
+     * could not be addressed apart either.
+     */
+    val id: String = UUID.randomUUID().toString()
+
     private val jobs = mutableListOf<Job>()
 
     /**
@@ -46,11 +57,20 @@ class SocketScope(
     val ownedLearnSessions: MutableSet<String> = Collections.synchronizedSet(LinkedHashSet())
 
     /**
-     * The name this connection's window last gave itself — what a `selection.*` write is stamped
-     * with as its `source` (multi-screen plan D7). **A session-1 stub**: until the windows registry
-     * lands (session 2, `SocketScope.window`), the only identity a window has is the `sourceName`
-     * it puts on a selection frame, remembered here so the next write from the same socket carries
-     * it too. Name-only by design — there is no id to claim, so nothing to impersonate.
+     * The window this connection announced, or null until it does — what a `selection.*` write is
+     * stamped with as its `source` (multi-screen plan D7). Set by `windows.announce`'s handler and
+     * replaced on every re-announce, so a rename or a route change is reflected in the next stamp.
+     */
+    @Volatile
+    var window: uk.me.cormack.lighting7.state.WindowRegistry.Window? = null
+
+    /**
+     * Session 1's name-only stub, kept as the **fallback** for a socket that has not announced.
+     *
+     * A client that predates the windows registry names itself on the selection frame itself
+     * (`sourceName`), and it is remembered here so its later writes carry it without repeating it.
+     * [window] wins wherever both exist. Retire both with `FU-WINDOWS-RETIRE-SOURCENAME` once
+     * lighting-react's session 2 announces.
      */
     @Volatile
     var windowName: String? = null

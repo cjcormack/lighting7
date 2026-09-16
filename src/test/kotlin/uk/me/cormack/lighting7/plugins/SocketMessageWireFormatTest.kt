@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.midi.RingState
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.midi.SoftTakeoverStateMachine
 import uk.me.cormack.lighting7.state.SelectionSource
+import uk.me.cormack.lighting7.state.WindowRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -358,6 +359,66 @@ class SocketMessageWireFormatTest {
         val encodedChanged = json.encodeToString<OutMessage>(changed)
         assertTrue(encodedChanged.contains(""""type":"surfaceControls.changed""""))
         assertEquals(changed, assertIs<SurfaceControlsChangedOutMessage>(json.decodeFromString<OutMessage>(encodedChanged)))
+    }
+
+    // ─── Windows domain ─────────────────────────────────────────────────────
+
+    @Test
+    fun `windows domain — inbound messages route via WindowsInMessage`() {
+        val announce = json.decodeFromString<InMessage>(
+            """{"type":"windows.announce","windowId":"tab-1","name":"Screen 1","view":"/programmer"}""",
+        )
+        assertIs<WindowsInMessage>(announce)
+        val leaf = assertIs<WindowsAnnounceInMessage>(announce)
+        assertEquals("tab-1", leaf.windowId)
+        assertEquals("Screen 1", leaf.name)
+        assertEquals("/programmer", leaf.view)
+        assertTrue(!leaf.fullscreen, "a window is not full screen unless it says so")
+        assertTrue(leaf.follows, "and it follows the desk unless it says otherwise (D1)")
+
+        val show = json.decodeFromString<InMessage>("""{"type":"windows.show","targetId":"sock-b","view":"/busk"}""")
+        assertIs<WindowsInMessage>(show)
+        assertEquals("sock-b", assertIs<WindowsShowInMessage>(show).targetId)
+        assertEquals("/busk", assertIs<WindowsShowInMessage>(show).view)
+
+        val rename = json.decodeFromString<InMessage>("""{"type":"windows.rename","targetId":"sock-b","name":"Screen 2"}""")
+        assertEquals("Screen 2", assertIs<WindowsRenameInMessage>(rename).name)
+
+        val fullscreen = json.decodeFromString<InMessage>("""{"type":"windows.fullscreen","targetId":"sock-b","on":true}""")
+        assertTrue(assertIs<WindowsFullscreenInMessage>(fullscreen).on)
+    }
+
+    @Test
+    fun `windows domain — outbound messages round-trip with discriminator`() {
+        val state = WindowsStateOutMessage(
+            listOf(
+                WindowRegistry.Window("sock-a", "tab-1", "Screen 1", "/programmer", user = "Chris"),
+                WindowRegistry.Window("sock-b", "tab-2", "Screen 2", "/busk", fullscreen = true, follows = false),
+            ),
+        )
+        val encodedState = json.encodeToString<OutMessage>(state)
+        assertTrue(encodedState.contains(""""type":"windows.state""""), encodedState)
+        assertEquals(state, assertIs<WindowsStateOutMessage>(json.decodeFromString<OutMessage>(encodedState)))
+
+        // The three commands travel under the same names inbound and outbound: they are
+        // rebroadcast as-is, and a second spelling would buy nothing (D11).
+        val show = WindowsShowOutMessage("sock-b", "/busk")
+        val encodedShow = json.encodeToString<OutMessage>(show)
+        assertTrue(encodedShow.contains(""""type":"windows.show""""), encodedShow)
+        assertEquals(show, assertIs<WindowsShowOutMessage>(json.decodeFromString<OutMessage>(encodedShow)))
+
+        val rename = WindowsRenameOutMessage("sock-b", "Screen 2")
+        val encodedRename = json.encodeToString<OutMessage>(rename)
+        assertTrue(encodedRename.contains(""""type":"windows.rename""""), encodedRename)
+        assertEquals(rename, assertIs<WindowsRenameOutMessage>(json.decodeFromString<OutMessage>(encodedRename)))
+
+        val fullscreen = WindowsFullscreenOutMessage("sock-b", on = false)
+        val encodedFullscreen = json.encodeToString<OutMessage>(fullscreen)
+        assertTrue(encodedFullscreen.contains(""""type":"windows.fullscreen""""), encodedFullscreen)
+        assertEquals(
+            fullscreen,
+            assertIs<WindowsFullscreenOutMessage>(json.decodeFromString<OutMessage>(encodedFullscreen)),
+        )
     }
 
     // ─── Selection domain ───────────────────────────────────────────────────

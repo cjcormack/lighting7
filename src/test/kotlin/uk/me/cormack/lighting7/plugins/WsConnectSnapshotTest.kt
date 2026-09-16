@@ -47,6 +47,10 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         SurfaceBankStateOutMessage::class,
         SurfaceScalerStateOutMessage::class,
         SurfaceDevicesStateOutMessage::class,
+        // Registered in the machine band, before the warm-up gate — this is the guard that it
+        // stayed there. A windows registry in the show band would announce nothing until the
+        // desk was warm (multi-screen plan §10).
+        WindowsStateOutMessage::class,
     )
 
     @Test

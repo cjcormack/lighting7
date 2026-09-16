@@ -85,6 +85,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-PUSHRETRY-TEST-SEAM`](#fu-sync-pushretry-test-seam) | Trigger | Sync | `FU-SYNC-MERGE-ATOMICITY` is picked up |
 | [`FU-SYNC-BINDING-PAYLOAD-UUIDS`](#fu-sync-binding-payload-uuids) | Trigger | Sync | second half only — `CueStackManager` lookups are still project-blind |
 | [`FU-TEST-FX-BENCH-CI-GATE`](#fu-test-fx-bench-ci-gate) | Trigger | Test | a week of baseline numbers to judge variance |
+| [`FU-WINDOWS-SHOW-OFFLINE`](#fu-windows-show-offline) | Trigger | Screens | a `windows.show` lost to a disconnected target matters |
+| [`FU-WINDOWS-RETIRE-SOURCENAME`](#fu-windows-retire-sourcename) | Blocked | Screens | lighting-react's multi-screen session 2 |
+| [`FU-LAUNCHER-SCREEN-POSITION`](#fu-launcher-screen-position) | Trigger | Screens | the two desk windows should remember which display each opens on |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -1299,6 +1302,74 @@ Deferred deliberately: a second axis on the table for a third of what the OS key
 would arch-lock the jar in a way the `-windows-x64` filename only implies. If done, keep
 `win32-x86-64` **and** the x64 sqlite dll — `docs/windows-updates.md` notes x64-under-emulation on
 Windows-on-ARM as supported, and the readiness timeout override exists for it.
+
+---
+
+## Desk screens
+
+### `FU-WINDOWS-SHOW-OFFLINE`
+
+**A `windows.show` aimed at a disconnected window is lost** · Trigger · Multi-screen plan §8,
+2026-09-16
+
+`windows.show` / `.rename` / `.fullscreen` are broadcast verbatim to every socket and acted on by
+the window whose row id they name (plan D11) — no session lookup, so no handler has to know
+whether that window is connected. A command sent while its target is away therefore matches
+nobody and is gone.
+
+That is deliberate and it is *visible*: the target's `view` in `windows.state` does not move, so
+the Screens sheet shows the gesture did not land. It only bites once someone expects to line a
+screen up before waking it — "put Screen 2 on Busk" on a desk whose second screen is asleep.
+
+The fix is a per-window `requestedView` in the registry: `windows.show` writes it for an id it
+knows, whether or not that socket is live, and the target reads it on its next announce and
+navigates once. It needs a rule for staleness (a `requestedView` an hour old is not an
+instruction) and one for who clears it — most likely the target, in the same announce that acts
+on it.
+
+**Trigger**: a `windows.show` lost to a disconnected target actually matters to the operator.
+
+### `FU-WINDOWS-RETIRE-SOURCENAME`
+
+**Retire `selection.set`/`.toggle`'s `sourceName` and `SocketScope.windowName`** · Blocked ·
+Multi-screen S2, 2026-09-16
+
+Session 1 shipped a name-only window identity so the desk chip could read *from Screen 1* before a
+registry existed: `selection.set` and `selection.toggle` carry an optional `sourceName`, remembered
+on `SocketScope.windowName`. Session 2's `windows.announce` supersedes it — `SocketScope.window`
+wins wherever both exist, and only it carries an id.
+
+The stub stays until lighting-react's session 2 announces, because between the two commits the
+chip must keep working from the frontend that is deployed. When it lands: delete the two optional
+fields, `SocketScope.windowName`, and the fallback arm of `SelectionSocket.selectionSource`, then
+the `sourceName` assertions in `SelectionSocketTest`, `WindowsSocketTest` and
+`SocketMessageWireFormatTest`. One clean removal, no compatibility window — there is one client,
+in one adjacent repo (the WS doc's "normalize hard, no aliases").
+
+**Blocked on**: the lighting-react half of multi-screen session 2.
+
+### `FU-LAUNCHER-SCREEN-POSITION`
+
+**The two desk windows should remember which display each opens on** · Trigger · Multi-screen plan
+§8, 2026-09-16
+
+*Open Screen 1* / *Open Screen 2* spawn `msedge.exe --app=http://localhost:8413/?window=Screen%20N`
+(`launcher/DeskScreens.kt`) and let the browser place the window, so the operator drags one across
+after every cold start.
+
+Windows: add `--window-position=<x>,<y>` (and `--window-size`) from a layout the tray remembers —
+which needs somewhere to keep it (the launcher has no config file today) and a way to learn it,
+most plausibly from the window's own `screenX`/`screenY` reported back through the registry rather
+than from anything the launcher can see.
+
+Mac: the tray has no screen items at all, because Safari has no `--app=` and *Add to Dock* is the
+route. Desk check S2.7 answers the prerequisite — whether Safari will hold two Dock apps of one
+origin with two `?window=` start URLs, and whether it keeps the query on launch. If it does, the
+macOS tray can gain *Open Screen N* items that `open -b <bundle>` them; if not, the items stay
+omitted rather than half-built.
+
+**Trigger**: the drag-across after a cold start becomes an irritation, or S2.7 finds a stable
+Safari bundle name.
 
 ---
 
