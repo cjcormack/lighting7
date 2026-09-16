@@ -539,11 +539,11 @@ route for opening the second desk screen, so it lands on first use rather than a
 
 ### Session 3 — the hand (both repos) — Opus 5, xhigh
 
-- lighting7: `state/HandState.kt`, `plugins/HandSocket.kt`, the project collector clears it, the
+- ~~lighting7: `state/HandState.kt`, `plugins/HandSocket.kt`, the project collector clears it, the
   three list-changed listeners reconcile it, the timeout Job; `BindingTarget.PickUpPad` /
   `HandPlaceInBank` / `HandDrop` with `SurfaceActions` methods, router arms, `targetControlKind`
   arms and health arms. Docs: `websocket-engineering.md`; `lighting-composition-model.md` §"The
-  busk layout" gains "The hand".
+  busk layout" gains "The hand".~~ — 17140b3
 - lighting-react: `api/handApi.ts`, `store/hand.ts` (form 1); `components/hand/HandChip.tsx`
   (fixed at the bottom of `<main>` in `Layout.tsx`, drawn from `padFaceOf` over the frame's DTOs);
   `lib/handTargets.ts` (what each target kind can take — a slot refuses a template and a
@@ -552,14 +552,14 @@ route for opening the second desk screen, so it lands on first use rather than a
   cue-slot tiles, `LookStack`'s footer and `StackDetail`'s cue cards; *Pick up* in the pad's hold
   menu, the library rows, the template chip and the layer row; the Undo toast; `lib/surfaceDrop.ts`
   mirror.
-- Tests. lighting7: `HandStateTest` (replace, drop, timeout, reconcile on each list change, project
+- Tests. ~~lighting7: `HandStateTest` (replace, drop, timeout, reconcile on each list change, project
   switch); `HandSocketTest` (snapshot; `pickUp` resolves in this project only and stamps the
-  window); `SurfaceInputRouterTest` arms. lighting-react: `handTargets.test.ts` (the eligibility
+  window); `SurfaceInputRouterTest` arms.~~ — 17140b3 lighting-react: `handTargets.test.ts` (the eligibility
   table, pinned against `slotAssignmentFor`); `HandChip.test.tsx` (hookless ghost from the frame;
   × drops; Escape drops only when no editor is open — the `cellEditorIsOpen()` snapshot rule);
   `hand.test.ts` (place = mutation then drop, Undo inverse per kind); `BuskPad.test.tsx` (*Pick up*
   in the menu).
-- Desk check: `FU-MANUAL-MULTI-SCREEN-S3`.
+- ~~Desk check: `FU-MANUAL-MULTI-SCREEN-S3`.~~ — 17140b3
 
 ### Session 4 — the same-machine edge drag (lighting-react) — Opus 5, high
 
