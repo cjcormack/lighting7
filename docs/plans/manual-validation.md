@@ -107,7 +107,13 @@ Steps as they stand — the fragments marked *(review)* are done, the rest open:
    clears the selection and the window stays full screen; reload → the *Return to full screen*
    banner *(review: the banner, from the flag and from `{on:true}`)*; one tap restores it.
 5. *Open Busk on Display 2* from Screen 1 (permission prompt on first use): a new window opens on
-   the other display named Screen 2 and announces; the registry shows three desk windows.
+   the other display named Screen 2 and announces; the registry shows three desk windows, **and the
+   two rows carry distinct `windowId`s** — the Screens sheet badges *this window* on exactly one
+   row on each screen, and a selection made on the new window reads on Screen 1's chip as
+   *Desk · from Screen 2* rather than plain *Desk*. This is session 2.5's whole subject and the
+   check the preview pane could not run: it creates no child browsing context on any route
+   (`window.open` with or without `noopener`, a `target=_blank` click all navigate the current
+   tab), so whether this route clones `sessionStorage` at all is still unobserved.
 6. Rename the iPad from Screen 1: the iPad's chip and its `windows.state` row change; reload the
    iPad: the name survives (it came from the URL). *(review: tab to tab, including the reload and
    the other chip's `Desk · from <new name>`.)*

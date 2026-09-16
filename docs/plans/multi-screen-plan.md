@@ -507,7 +507,7 @@ screen becomes a masked press on the other before any window has a name in a reg
   `navigation.test.ts` for the command shapes.
 - Desk check: `FU-MANUAL-MULTI-SCREEN-S2`.
 
-### Session 2.5 — the inherited `windowId` (lighting-react) — Opus 5, high
+### ~~Session 2.5 — the inherited `windowId` (lighting-react) — Opus 5, high~~ — a72c24b
 
 Added after session 2's backend landed, from a gap in D9/D10 read together. **`sessionStorage` is
 cloned into a top-level context created from an existing one** — `window.open` without `noopener`,
@@ -518,23 +518,24 @@ sharing one identity. Since a client resolves "my row" in `windows.state` by mat
 and the desk chip then reads *Desk* — "I moved it" — when the twin moved it. This is the designed
 route for opening the second desk screen, so it lands on first use rather than as an edge case.
 
-- lighting-react: `lib/windowIdentity.ts` mints a **fresh** `windowId` when `?window=` is present
+- ~~lighting-react: `lib/windowIdentity.ts` mints a **fresh** `windowId` when `?window=` is present
   at boot rather than keeping an inherited one — the param means "a deliberately-named new
   window", which is exactly the signal that this context is not a continuation of the storage it
   woke up with. The param is stripped at boot, so a reload carries none and keeps its id: that is
   the invariant, and minting on reload is the regression. `noopener` on the Screens sheet's
-  `window.open`, unless the sheet needs the returned handle to place the child.
-- lighting7: nothing. `windows.show` / `.rename` / `.fullscreen` address a row id and were never
-  ambiguous; only self-identification was.
-- Tests. lighting-react: `windowIdentity.test.ts` (a boot with `?window=` *and* an existing
+  `window.open`, unless the sheet needs the returned handle to place the child.~~ — a72c24b. The
+  sheet does not need the handle; the `noopener` already there stayed.
+- ~~lighting7: nothing. `windows.show` / `.rename` / `.fullscreen` address a row id and were never
+  ambiguous; only self-identification was.~~ — nothing needed.
+- ~~Tests. lighting-react: `windowIdentity.test.ts` (a boot with `?window=` *and* an existing
   `windowId` mints a new one; a boot with no param keeps it; a reload after a `?window=` boot keeps
   the id minted at that boot; two tabs differ); `ScreensSheet.test.tsx` (the open call carries
-  `noopener`, or the documented reason it does not).
+  `noopener`, or the documented reason it does not).~~ — a72c24b.
 - Not fixed here: right-click *Duplicate Tab*, which clones the storage on a URL whose `?window=`
   was already stripped. Operator-initiated, rare, and what D9 says should happen — two rows. The
   residual damage is cosmetic and its real fix is backend-side (`FU-WINDOWS-OWN-ROW-ID`, §8).
-- Desk check: folded into `FU-MANUAL-MULTI-SCREEN-S2` — the *Open on Display 2* step gains "and
-  the two rows carry distinct `windowId`s".
+- ~~Desk check: folded into `FU-MANUAL-MULTI-SCREEN-S2` — the *Open on Display 2* step gains "and
+  the two rows carry distinct `windowId`s".~~ — done.
 
 ### Session 3 — the hand (both repos) — Opus 5, xhigh
 
