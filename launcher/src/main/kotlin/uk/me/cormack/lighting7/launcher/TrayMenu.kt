@@ -34,24 +34,19 @@ fun installTray(localUrl: String, lanUrl: String, logsDir: java.nio.file.Path, o
     val popup = PopupMenu()
 
     popup.add(MenuItem("Open").apply {
-        addActionListener {
-            runCatching { Desktop.getDesktop().browse(URI(localUrl)) }
-                .onFailure { println("Open failed: ${it.message}") }
-        }
+        addActionListener { guarded("Open") { Desktop.getDesktop().browse(URI(localUrl)) } }
     })
 
     desktopBrowser()?.let { browser ->
         for (screen in DeskScreens.SCREEN_NAMES) {
             popup.add(MenuItem("Open $screen").apply {
                 addActionListener {
-                    // The URL is built *inside* the guard, as the Open and View Logs items build
-                    // theirs: `screenUrl` has a `require`, and an argument expression evaluated
-                    // outside `runCatching` would reach the EDT as a raw stack trace in
-                    // launcher.log instead of this one friendly line.
-                    runCatching {
+                    // The URL is built *inside* the guard: `screenUrl` has a `require`, and an
+                    // argument expression evaluated outside would escape it.
+                    guarded("Open $screen") {
                         val url = DeskScreens.screenUrl(localUrl, screen)
                         ProcessBuilder(DeskScreens.command(browser, url)).start()
-                    }.onFailure { println("Open $screen failed: ${it.message}") }
+                    }
                 }
             })
         }
@@ -59,16 +54,16 @@ fun installTray(localUrl: String, lanUrl: String, logsDir: java.nio.file.Path, o
 
     popup.add(MenuItem("Copy LAN URL").apply {
         addActionListener {
-            val clipboard = Toolkit.getDefaultToolkit().systemClipboard
-            clipboard.setContents(StringSelection(lanUrl), null)
+            // Not defensive: a headless or locked session, or a desk with no reachable window
+            // server, really does make `systemClipboard` throw.
+            guarded("Copy LAN URL") {
+                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(lanUrl), null)
+            }
         }
     })
 
     popup.add(MenuItem("View Logs").apply {
-        addActionListener {
-            runCatching { Desktop.getDesktop().open(logsDir.toFile()) }
-                .onFailure { println("Open logs failed: ${it.message}") }
-        }
+        addActionListener { guarded("Open logs") { Desktop.getDesktop().open(logsDir.toFile()) } }
     })
 
     popup.addSeparator()
@@ -93,3 +88,13 @@ fun installTray(localUrl: String, lanUrl: String, logsDir: java.nio.file.Path, o
  */
 private fun desktopBrowser(): java.nio.file.Path? =
     if (DeskScreens.isWindows()) DeskScreens.findBrowser() else null
+
+/**
+ * Runs a tray menu action, logging (rather than propagating) any failure. Every item's action
+ * needs this: an `ActionListener` that throws reaches the EDT's default handler as a raw stack
+ * trace in launcher.log, which is a worse account of "the click did nothing" than one line
+ * naming the item.
+ */
+private fun guarded(label: String, action: () -> Unit) {
+    runCatching(action).onFailure { println("$label failed: ${it.message}") }
+}
