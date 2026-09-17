@@ -1,7 +1,21 @@
 # Multi-screen desk — two screens and an iPad on one programmer
 
-> **Document status: IN PROGRESS.** Session 1 landed 2026-09-16 — af3575a here, f8ce5f9 in
-> lighting-react; sessions 2–4 are open. Proposed 2026-09-15. The visual design is checked in
+> **Document status: RETIRED 2026-09-17 — every session is built and shipped.** Session 1
+> 2026-09-16 (af3575a here, f8ce5f9 in lighting-react); session 2 (cb26499b) and session 2.5
+> (a72c24b6 / a1217ef); session 3, the hand (17140b3 here, 5e261d1b in lighting-react); session 4,
+> the same-machine edge drag (614e03f6 in lighting-react, d2b530d here). §11's four open questions
+> were all answered 2026-09-15.
+>
+> **The desk checks of §9 are outstanding — none of the four has been run** — and they are promoted
+> on retirement to [`manual-validation.md`](../manual-validation.md) as
+> `FU-MANUAL-MULTI-SCREEN-S1`, `-S2`, `-S3` and `-S4`, which is the **authoritative wording**; each
+> entry records what a single window already proved in review and what genuinely needs two windows,
+> the X-Touch and the iPad. §8's follow-ups are trigger-gated and reached
+> [`followups.md`](../followups.md). Three limitations are accepted and documented where someone
+> would meet them: a duplicated tab clones its `sessionStorage` (`FU-WINDOWS-OWN-ROW-ID`), two
+> windows overlapping at an edge-drag release point place the record twice, and `screenToClient`'s
+> chrome heuristic is unmeasured on Safari. Nothing here is a work queue; read it for the reasoning
+> behind a change. Proposed 2026-09-15. The visual design is checked in
 > beside this plan at [`multi-screen-design/`](multi-screen-design/INDEX.md): nine generated
 > artboards (a survey of five consoles, the model, the three screens at one moment, the Screens
 > sheet, the hand, the three options). The live canvas at
@@ -562,7 +576,7 @@ route for opening the second desk screen, so it lands on first use rather than a
   × drops; Escape drops only when no editor is open — the `cellEditorIsOpen()` snapshot rule);
   `hand.test.ts` (place = mutation then drop, Undo inverse per kind); `BuskPad.test.tsx` (*Pick up*
   in the menu).~~ — 5e261d1b
-- ~~Desk check: `FU-MANUAL-MULTI-SCREEN-S3`.~~ — 17140b3
+- Desk check: `FU-MANUAL-MULTI-SCREEN-S3`.
 
 ### Session 4 — the same-machine edge drag (lighting-react) — Opus 5, high
 

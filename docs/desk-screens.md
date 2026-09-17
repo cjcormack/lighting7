@@ -18,7 +18,7 @@ following window still moves with it.
 This document is the operator-facing half: how a desk screen is opened, what names it, and the one
 platform rule that silently breaks the whole thing when it is got wrong. The wire is in
 [`websocket-engineering.md`](websocket-engineering.md) §"Windows"; the decisions and their reasons
-are in [`plans/multi-screen-plan.md`](plans/multi-screen-plan.md) §2–§3.
+are in [`plans/completed/multi-screen-plan.md`](plans/completed/multi-screen-plan.md) §2–§3.
 
 ## The one rule: open the desk screens at `http://localhost:8413/`
 
@@ -125,5 +125,5 @@ as a control in the Screens sheet.
 - [Composition Model](lighting-composition-model.md) — why the selection is one desk fact and not
   one per window
 - [Windows Updates](windows-updates.md) — the launcher these tray items live in
-- [`plans/multi-screen-plan.md`](plans/multi-screen-plan.md) — the decisions, the browser support
+- [`plans/completed/multi-screen-plan.md`](plans/completed/multi-screen-plan.md) — the decisions, the browser support
   matrix (§3.6) and the sessions
