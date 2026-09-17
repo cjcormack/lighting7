@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    .rail { width:288px; border:1px solid var(--bd); border-radius:10px; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; }
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .seg { display:flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; padding:0 6px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .row { display:flex; align-items:center; gap:8px; }
+    .k { width:52px; font-size:11px; color:var(--mfg); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; font-size:12px; font-weight:600; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .switch.on { background:var(--pri); } .switch.on::after { left:14px; background:oklch(0.21 0.006 285.885); }
+    /* preview strip */
+    .heads { display:flex; gap:6px; align-items:flex-end; height:120px; padding:8px; border:1px solid var(--bd); border-radius:10px; background:var(--card); }
+    .hd { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; height:100%; justify-content:flex-end; }
+    .hd .bar { width:100%; border-radius:4px 4px 2px 2px; }
+    .hd .nm { font-size:9px; color:var(--mfg); white-space:nowrap; }
+    .hd .v { font-size:9px; font-family:ui-monospace, Menlo, monospace; }
+    .curve { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+    .cv { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 4px; border:1px solid var(--bd); border-radius:8px; background:var(--card); }
+    .cv.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .cv svg { width:44px; height:22px; }
+    .cv span { font-size:10px; font-weight:600; color:var(--mfg); }
+    .cv.on span { color:var(--fg); }
+    table { border-collapse:collapse; width:100%; font-size:11px; line-height:1.4; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:7px 8px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    .kv { display:grid; grid-template-columns:132px 1fr; gap:3px 10px; font-size:11px; line-height:1.4; }
+    .kv .kk { color:var(--mfg); font-family: ui-monospace, Menlo, monospace; font-size:10.5px; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div>
+    <div class="h1">Spread: one gesture across a selection</div>
+    <p class="cap" style="margin-top:4px;">What every desk calls <b>fan</b>: a value at one end, a value at the other, the heads in between filled in by a curve. lighting7 already has the two halves &mdash; the sheet kit's <span class="mono">FanPopover</span> fans bytes over rows in the programmer, and the FX engine's <span class="mono">DistributionStrategy</span> orders heads for an effect. Spread is the busk view's gesture over both, <b>resolved on the desk</b>.</p>
+  </div>
+
+  <div style="display:flex; gap:20px; align-items:flex-start; flex:1; min-height:0;">
+    <!-- the sheet -->
+    <div class="rail" style="height:760px;">
+      <div class="tabs"><span>Speed</span><span>Colour</span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Spread</span><span class="fold"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+      <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px;">
+        <div style="font-size:11px; color:var(--mfg);">Spread over <b style="color:var(--fg); font-weight:600;">8 heads</b> &middot; Bar L, Bar R &middot; writes to Local</div>
+        <div class="seg"><span>Intensity</span><span class="on">Colour</span><span>Position</span><span>Zoom</span></div>
+        <div class="row"><span class="k">From</span><div class="field" style="flex:1;"><span style="width:14px; height:14px; border-radius:4px; background:#f5b342;"></span><span class="mono">#F5B342</span></div></div>
+        <div class="row"><span class="k">To</span><div class="field" style="flex:1;"><span style="width:14px; height:14px; border-radius:4px; background:#2456ff;"></span><span class="mono">#2456FF</span></div><span class="btn out" style="height:28px; padding:0 8px; font-size:11px;">Swap</span></div>
+        <div style="height:14px; border-radius:7px; background:linear-gradient(to right, #f5b342, #2456ff);"></div>
+        <div class="row" style="align-items:flex-start;"><span class="k" style="padding-top:4px;">Curve</span>
+          <div class="curve" style="flex:1;">
+            <div class="cv on"><svg viewBox="0 0 44 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20 42 2"/></svg><span>Line</span></div>
+            <div class="cv"><svg viewBox="0 0 44 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2 22 20 42 2"/></svg><span>Mirror</span></div>
+            <div class="cv"><svg viewBox="0 0 44 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20 22 2 42 20"/></svg><span>Arrow</span></div>
+            <div class="cv"><svg viewBox="0 0 44 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2h12M16 11h12M30 20h12"/></svg><span>Wings</span></div>
+          </div>
+        </div>
+        <div class="row"><span class="k">Order</span><div class="seg" style="flex:1;"><span class="on">Rig</span><span>Stage L&rarr;R</span><span>Centre</span><span>Random</span></div></div>
+        <div class="row"><span class="k">Parts</span><div class="seg" style="flex:1;"><span class="on">1</span><span>2</span><span>3</span><span>4</span><span>N&hellip;</span></div></div>
+        <div class="row"><span class="k">Over</span><div class="seg" style="flex:1;"><span>Heads</span><span class="on">Cells</span></div><span style="font-size:10px; color:var(--mfg);">16 cells</span></div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; padding-top:2px;"><span class="switch on"></span><span>Live &mdash; apply as I adjust</span></div>
+        <div class="heads">
+          <div class="hd"><span class="v">245</span><div class="bar" style="height:92%; background:#f5b342;"></div><span class="nm">L1</span></div>
+          <div class="hd"><span class="v">218</span><div class="bar" style="height:80%; background:#d9a052;"></div><span class="nm">L2</span></div>
+          <div class="hd"><span class="v">190</span><div class="bar" style="height:70%; background:#bc8c62;"></div><span class="nm">L3</span></div>
+          <div class="hd"><span class="v">163</span><div class="bar" style="height:60%; background:#9f7a73;"></div><span class="nm">L4</span></div>
+          <div class="hd"><span class="v">136</span><div class="bar" style="height:50%; background:#836784;"></div><span class="nm">R1</span></div>
+          <div class="hd"><span class="v">108</span><div class="bar" style="height:40%; background:#665394;"></div><span class="nm">R2</span></div>
+          <div class="hd"><span class="v">81</span><div class="bar" style="height:30%; background:#4941a5;"></div><span class="nm">R3</span></div>
+          <div class="hd"><span class="v">36</span><div class="bar" style="height:20%; background:#2456ff;"></div><span class="nm">R4</span></div>
+        </div>
+        <div style="font-size:10px; color:var(--mfg);">Preview in rig order, one bar per head (cells folded). Redrawn from the desk's answer, not computed here.</div>
+        <span style="flex:1;"></span>
+        <div style="display:flex; gap:6px;"><span class="btn out" style="flex:1;">Save as Look&hellip;</span><span class="btn pri" style="flex:1;">Apply</span></div>
+      </div>
+    </div>
+
+    <!-- right column -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:12px;">
+      <div class="note key">
+        <p><b>Resolved on the desk: <span class="mono">POST /programmer/spread</span>.</b> The client fan (<span class="mono">fanMath.ts</span>) lerps bytes over rows it can see; a busk selection is groups, fixtures and cells, and only the desk knows a group's member order, each head's range, which cells a fixture has and what a colour means on a head with amber. So the sheet sends the <i>intent</i> and the desk writes one literal per head into Local, answers what it wrote, and the preview strip draws that answer. Same rule as templates: the client never resolves.</p>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="note">
+          <p><b>Request</b></p>
+          <div class="kv" style="margin-top:6px;">
+            <span class="kk">targets</span><span><span class="mono">CueTarget[]</span> &mdash; the selection pair's targets, cells by element key</span>
+            <span class="kk">families</span><span>the selection's mask, as every press sends</span>
+            <span class="kk">property</span><span>one of the closed template vocabulary: dimmer, colour, pan/tilt, zoom&hellip;</span>
+            <span class="kk">from / to</span><span>two <span class="mono">TemplateIntent</span>s &mdash; a colour + policy, a percent, a position in degrees</span>
+            <span class="kk">curve</span><span><span class="mono">LINE &middot; MIRROR &middot; ARROW &middot; WINGS</span></span>
+            <span class="kk">order</span><span><span class="mono">DistributionStrategy</span>: LINEAR &middot; POSITIONAL &middot; CENTER_OUT &middot; RANDOM(seed)</span>
+            <span class="kk">parts</span><span>repeat the curve every N heads (Titan's <i>Split Fan into Parts</i>)</span>
+            <span class="kk">over</span><span><span class="mono">HEADS &middot; CELLS</span> &mdash; a multi-head fixture as one step or as its cells</span>
+            <span class="kk">fadeMs</span><span>the programmer fade, as every Local write</span>
+          </div>
+        </div>
+        <div class="note">
+          <p><b>Response and side effects</b></p>
+          <p style="margin-top:6px;"><span class="mono">written[] {target, propertyName, value}</span> in the order used, plus <span class="mono">skippedFamilies</span> and <span class="mono">skipped[] {target, reason}</span> for a head that lacks the property. Each write is an ordinary programmer entry &mdash; so it lands in <span class="mono">programmer.entryChanged</span> frames, Record captures it, Blind previews it, and <b>Save as Look&hellip;</b> is <span class="mono">record-look</span> over the selection, which is how a spread becomes a busk pad.</p>
+          <p style="margin-top:6px;"><b>Live</b> applies on every adjustment through <span class="mono">useLiveTempoPush</span>'s throttle (50&nbsp;ms floor, last value always lands), because a fan is judged by eye against the rig. Off, only Apply writes.</p>
+        </div>
+      </div>
+      <table>
+        <tr><th style="width:120px;">Desk</th><th>The gesture</th><th style="width:300px;">What lighting7 takes from it</th></tr>
+        <tr><td><b>Avolites Titan</b></td><td>Hold <b>Fan</b>, turn a wheel; <b>Curve</b> = Line &middot; Mirror &middot; Arrow &middot; Wings; <b>Split Fan into Parts</b> N; <b>Ignore Groups</b>.</td><td>The four curve names, verbatim &mdash; they are the clearest vocabulary in the field and each one is a picture.</td></tr>
+        <tr><td><b>grandMA3</b></td><td><b>Align</b> modes on the encoder bar (<span class="mono">&lt;</span> <span class="mono">&gt;</span> <span class="mono">&lt;&gt;</span> <span class="mono">&gt;&lt;</span>); order comes from the <b>selection grid</b> and <b>MAtricks</b> (Interleave, Blocks, Groups) rather than the fan itself.</td><td>Order is a property of the selection, not the fan: hence <i>Order</i> reads rig order by default and <i>Parts</i> is MAtricks' Blocks.</td></tr>
+        <tr><td><b>ChamSys MagicQ</b></td><td><b>FAN</b> button: positive turns fan apart, negative together; fan by <b>Parts</b> for multi-element heads; Execute-window palette timing fans <i>normal &middot; reverse &middot; in to out &middot; out to in &middot; random</i>.</td><td><i>Over: Heads / Cells</i> is MagicQ's Parts; the timing directions are <span class="mono">DistributionStrategy</span> names already.</td></tr>
+        <tr><td><b>Hog 4</b></td><td>Fan on the wheel; <b>Buddying</b> and <b>Grouping</b> set how many heads share a step; a compound fixture fans part-from-part unless buddying equals its part count.</td><td>The <i>Over</i> switch exists because Hog shows the trap: without it a cell fan is what you get whether you meant it or not.</td></tr>
+        <tr><td><b>ETC Eos</b></td><td><b>Fan</b> softkey on a range; <span class="mono">1 Thru 4 . Color Palette 1 Thru 4</span> maps palettes to cells across fixtures.</td><td>A colour spread across templates, not just hexes: From/To accept a template too (<span class="mono">tmpl:</span> resolved generically, as an FX colour is).</td></tr>
+      </table>
+      <div class="note">
+        <p><b>Not a template, on purpose.</b> A spread is a <i>result</i> &mdash; eight literals &mdash; and the library's rule is that a template stores one intent resolved per head. A &ldquo;spread template&rdquo; would need a second grammar (two intents plus a curve) and a resolver that knows the selection's order at cook time, which no template does. Saving the result as a <b>Look</b> keeps it recordable and pad-able without widening the template. Revisit only if operators keep re-spreading the same pair.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

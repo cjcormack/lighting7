@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.82 0.16 80 / 0.5); background:oklch(0.82 0.16 80 / 0.06); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:5px; height:60px; padding:0 12px; width:200px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); display:flex; }
+    .live i { display:block; height:100%; flex:1; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:18px; height:8px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .pip.hov { box-shadow:0 0 0 2px oklch(0.623 0.214 259.815 / 0.6); }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:999px; border:1px solid var(--bd); font-size:11px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.15); }
+    .chip.ghost { border-color:transparent; color:var(--mfg); }
+    .kbd { display:inline-block; padding:0 5px; border-radius:4px; border:1px solid var(--bd); background:var(--muted); font-size:10px; font-family:ui-monospace, Menlo, monospace; color:var(--fg); }
+    table { border-collapse:collapse; width:100%; font-size:11px; line-height:1.4; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:7px 8px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    .code { font-family: ui-monospace, Menlo, monospace; font-size:10.5px; line-height:1.5; color:var(--fg); background:oklch(0.274 0.006 286.033 / 0.3); border:1px solid var(--bd); border-radius:8px; padding:8px 10px; white-space:pre; }
+    .step { display:flex; gap:8px; align-items:flex-start; }
+    .step .n { width:18px; height:18px; border-radius:50%; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:10px; font-weight:700; display:grid; place-items:center; flex:0 0 auto; margin-top:1px; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div class="h1">Multi-head fixtures in a selection</div>
+    <p class="cap" style="margin-top:4px;">A bar with eight cells is one fixture to the patch and eight to the eye. Every desk answers &ldquo;which did you mean?&rdquo; somewhere: Eos on the command line (<span class="mono">1</span> vs <span class="mono">1.3</span>), MagicQ in a programmer-wide element mask, MA in MAtricks, Hog in buddying. lighting7's answer should be <b>on the tile</b>, because the busk view has no command line and a mode is state an operator forgets.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1.1fr 1fr; gap:16px; flex:1; min-height:0;">
+    <!-- left: the tile and gestures -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div class="note" style="display:flex; flex-direction:column; gap:10px;">
+        <p><b>The tile</b> &mdash; four states of one Bar L</p>
+        <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:10px;">
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">8</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="background:#f5b342;"></i><i style="background:#f5b342;"></i><i style="background:#2456ff;"></i><i style="background:#2456ff;"></i><i style="background:#f5b342;"></i><i style="background:#f5b342;"></i><i style="background:#2456ff;"></i><i style="background:#2456ff;"></i></div></div>
+            <span class="cap">Not selected. The live bar is per cell &mdash; the stage's own colour per element, read the way the mini-stage reads it.</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <div class="tile on"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">8</span></div><div class="pips"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span></div><div class="live"><i style="background:#f5b342;"></i></div></div>
+            <span class="cap"><b>Tap the tile</b>: the whole fixture, as today &mdash; <span class="mono">{type:'fixture', key:'bar-l'}</span>. Master and every cell, the desk's fan-out.</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <div class="tile some"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">4 of 8</span></div><div class="pips"><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span></div><div class="live"><i style="background:#f5b342;"></i></div></div>
+            <span class="cap"><b>Tap a pip</b>, or drag across pips: those cells &mdash; four targets, each <span class="mono">{type:'fixture', key:'bar-l.pixel-3'}</span>. The tile reads <i>some</i>.</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:5px;">
+            <div class="tile some"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">1&ndash;4</span></div><div class="pips"><span class="pip on"></span><span class="pip on"></span><span class="pip on"></span><span class="pip on hov"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="background:#f5b342;"></i></div></div>
+            <span class="cap"><b>Drag</b> from pip 1 to pip 4: a run. On touch the pips are 18&times;8 at rest and grow to 44px tall under a finger, the marquee's own trick.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="note" style="display:flex; flex-direction:column; gap:8px;">
+        <p><b>The Cells chip &mdash; a sub-selection over whatever is selected</b> (MAtricks, cut down to what a pad page needs)</p>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          <span class="chip on">All</span><span class="chip">Odd</span><span class="chip">Even</span><span class="chip">1st half</span><span class="chip">2nd half</span><span class="chip">Invert</span><span class="chip ghost">&middot;</span><span class="chip">&larr; Prev</span><span class="chip">Next &rarr;</span><span class="chip ghost">&middot;</span><span class="chip">Masters only</span>
+        </div>
+        <p>It rewrites the selection's <i>targets</i> and nothing else: <b>Odd</b> over Bar L and Bar R is eight cell targets; <b>Next</b> walks one cell (or one head, with no multi-head selected) along rig order, which is the chase-by-hand every busking operator does on a bar. <b>Masters only</b> is Eos's <span class="mono">Minus Cells</span> &mdash; the master's own channels (a bar's global dimmer, its macro) with no cell. Each is a plain <span class="mono">selection.set</span>, so it publishes to the desk and the other screen sees it; the chip is the band's, so it exists in Rig focus and in the folded strip.</p>
+      </div>
+
+      <div class="note key">
+        <p><b>The wire already has the shape.</b> An element's key is a complete address, never parsed (<span class="mono">rowModel.ts</span>'s rule), and <span class="mono">rowLocateTarget</span> already publishes an element row as <span class="mono">{type:'fixture', key: element.key}</span>. So a cell in the selection is <b>not a new target kind</b>; what is missing is on the other side of the press.</p>
+      </div>
+    </div>
+
+    <!-- right: what the press does, the gaps, the desks -->
+    <div style="display:flex; flex-direction:column; gap:12px; min-width:0;">
+      <div class="note warn" style="display:flex; flex-direction:column; gap:6px;">
+        <p><b>Three backend gaps stand between a cell target and a pad press, all already named in lighting7's follow-ups.</b></p>
+        <div class="step"><span class="n">1</span><p><span class="mono">FU-LOOK-ELEMENT-ROWS</span> &mdash; <span class="mono">DaoLookRows.elementKey</span> exists but <span class="mono">CueComposer.applyLayer</span> skips it, so a Look layer targeted at a cell asserts nothing. Prerequisite <span class="mono">PD-TEMPLATE-MULTIHEAD-CELL</span>: parent&rarr;element fan-out at cook.</p></div>
+        <div class="step"><span class="n">2</span><p><span class="mono">templateTargetsFor</span> refuses an element key because <span class="mono">/templates/{id}/apply</span> resolves keys against the patch. The resolver needs an element arm: resolve the parent, then the element's own property set.</p></div>
+        <div class="step"><span class="n">3</span><p><span class="mono">FU-FX-ELEMENT-BUNDLED-COLOUR</span> &mdash; elements never receive W/A/UV, so an amber template on <i>Odd</i> cells lands RGB only. Effects already have an element path (<span class="mono">elementMode</span> / <span class="mono">elementFilter</span>), which is the precedent.</p></div>
+        <p style="margin-top:2px;">Until those land the tile still draws its pips and the chip still narrows &mdash; and a press on cells is refused <b>by name</b> (<span class="mono">TARGET_CELLS_UNSUPPORTED</span>), the way a masked press is, rather than silently landing on the whole bar.</p>
+      </div>
+
+      <div class="note" style="display:flex; flex-direction:column; gap:6px;">
+        <p><b>Rules the tile states, so nothing else has to</b></p>
+        <p>&bull; <b>A group of multi-head fixtures presses whole heads.</b> The group tile is the group target; the desk expands members. Cells are reached by the chip <i>after</i> the group is selected (Odd over <i>Bars</i> = odd cells of both), which keeps the group target opaque and the chip the one place cells are minted.</p>
+        <p>&bull; <b>Coverage reads cells.</b> A template pad lit against a whole-bar selection reads <i>all</i>; against four cells it reads <i>all</i> too if the applied state names those cells, and <i>some</i> if the desk's applied state names the parent and only some cells are selected. <span class="mono">templateLayerPresence</span> folds the parent&rarr;cell relation, once, in <span class="mono">lookPresence.ts</span>.</p>
+        <p>&bull; <b>Spread's <i>Over: Cells</i> is where a cell becomes a step</b>, and it is a spread option rather than a selection option because the same eight-cell selection can want either.</p>
+        <p>&bull; <b>The rig tile chooses how cells show</b> (Rig board): pips on the tile by default, one tile per cell for a bar that is really eight lights, halves for a bar that is really two.</p>
+      </div>
+
+      <table>
+        <tr><th style="width:110px;">Desk</th><th>How a sub-fixture is addressed</th><th style="width:230px;">Taken</th></tr>
+        <tr><td><b>ETC Eos</b></td><td><span class="mono">1</span> is master + cells; <span class="mono">1.3</span> a cell; <span class="mono">1.0</span> / <span class="mono">Minus Cells</span> master only; a palette on <span class="mono">1 Thru 4</span> lands on every cell.</td><td>Whole-by-default; <i>Masters only</i>; the parent&rarr;cells fan-out at apply.</td></tr>
+        <tr><td><b>grandMA3</b></td><td>Sub-fixtures via the selection grid and MAtricks (Interleave &middot; Blocks &middot; Groups, Next/Prev); layout views can show sub-fixtures.</td><td>Odd/Even/halves, Next/Prev, and the rule that a sub-selection is a property of the selection.</td></tr>
+        <tr><td><b>ChamSys MagicQ</b></td><td>A programmer-wide element mask; <i>Odd / Even</i> and <i>N parts</i>; Fan by Parts across multi-element heads.</td><td>Parts &rarr; Spread's <i>Over</i>. The global mask is the thing to avoid: it is a mode.</td></tr>
+        <tr><td><b>Hog 4</b></td><td>Compound fixtures fan part-from-part; set <i>buddying</i> to the part count to fan head-from-head.</td><td>Named the trap that makes <i>Over: Heads</i> the default.</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

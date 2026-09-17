@@ -1,0 +1,67 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Cells.dc.html": { "h": 956, "title": "Multi-head fixtures in a selection", "w": 1440, "x": 3040, "y": 1076 },
+    "Focus.dc.html": { "h": 956, "title": "Focus, the split, two screens", "w": 1440, "x": 3040, "y": 0 },
+    "Ideas.dc.html": { "h": 956, "title": "Other ideas · and three declined", "w": 1440, "x": 3040, "y": 2152 },
+    "Main.dc.html": { "h": 956, "title": "Busk view · play, proposed", "w": 1440, "x": 0, "y": 0 },
+    "Model.dc.html": { "h": 1040, "title": "Model, wire, sessions", "w": 1440, "x": 1520, "y": 2152 },
+    "Rig.dc.html": { "h": 956, "title": "Building the rig · edit mode", "w": 1440, "x": 1520, "y": 0 },
+    "Screens.dc.html": { "h": 760, "title": "The Screens sheet · per-window options", "w": 1440, "x": 4560, "y": 0 },
+    "Sheets.dc.html": { "h": 956, "title": "The side sheet · Speed, Colour, fold", "w": 1440, "x": 0, "y": 1076 },
+    "Spread.dc.html": { "h": 956, "title": "Spread on a selection", "w": 1440, "x": 1520, "y": 1076 },
+    "Survey.dc.html": { "h": 956, "title": "Survey · MagicQ, MA3, Titan, Hog, Eos", "w": 1440, "x": 0, "y": 2152 },
+    "Phones.dc.html": { "h": 1440, "title": "Phones · portrait and landscape at 1:1", "w": 1440, "x": 0, "y": 3312 },
+    "Tablets.dc.html": { "h": 1120, "title": "Tablets · and the fold ladder", "w": 1440, "x": 1520, "y": 3312 }
+  },
+  "createdOnFiles": { "at": "2026-09-17T12:00:00Z", "v": 1 },
+  "designSystems": [],
+  "launch": { "view": "canvas" },
+  "notes": {
+    "how": {
+      "color": "gray",
+      "text": "How to read this. Top row is the proposal as screens, plus the Screens sheet at the far right; middle row is the three new controls at full size; third row is the evidence, the model and the extras; the fourth row is how it folds on phones and tablets. Everything is dark-only and in the busk view's own vocabulary on purpose — these are the intended pixels, not structure to copy.",
+      "w": 360, "x": 6160, "y": 1600
+    },
+    "q1": {
+      "color": "orange",
+      "text": "Open call 1 — the rig's home. Drawn as one rig per project (one selection surface for every screen). The alternative, a rig per page, is declined on the Ideas board; say so if the colour page really should show fewer targets than the position page.",
+      "w": 360, "x": 6160, "y": 0
+    },
+    "q2": {
+      "color": "orange",
+      "text": "Open call 2 — where Spread resolves. Drawn as POST /programmer/spread on the desk (group order, ranges, cells, emitters all live there). The cheap alternative is the client's fanMath over fixtures only, no groups and no cells — fine for a first cut, wrong the day a group is selected.",
+      "w": 360, "x": 6160, "y": 400
+    },
+    "q3": {
+      "color": "orange",
+      "text": "Open call 3 — cells before the backend can press them. Drawn as: pips draw and the chip narrows from session 1, and a press on a cell target is refused by name until the element arm lands. The alternative is to hide the pips until session 5, which loses the live-per-cell feedback that costs nothing.",
+      "w": 360, "x": 6160, "y": 800
+    },
+    "q4": {
+      "color": "orange",
+      "text": "Open call 4 — the split's unit. Drawn as whole rows (snap), because a half row of tiles is useless. If the band should instead be a free percentage, the handle is the same and only the clamp changes.",
+      "w": 360, "x": 6160, "y": 1200
+    },
+    "q5": {
+      "color": "orange",
+      "text": "Open call 5 — page on the Screens row. Drawn as settable (a remote set unlinks that window onto the page, as ?page= does). If that feels like reaching into another operator's window, make it read-only on the row and keep focus and sheet settable; the command shape does not change.",
+      "w": 360, "x": 4560, "y": 880
+    },
+    "t1": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "The busk view, further: a built rig, a window's focus, a tabbed sheet, spread, cells",
+      "w": 240, "x": 0, "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html", "Rig.dc.html", "Focus.dc.html", "Screens.dc.html",
+    "Sheets.dc.html", "Spread.dc.html", "Cells.dc.html",
+    "Survey.dc.html", "Model.dc.html", "Ideas.dc.html",
+    "Phones.dc.html", "Tablets.dc.html"
+  ],
+  "pages": [],
+  "title": "Busk View: Rig, Focus and Sheets"
+}

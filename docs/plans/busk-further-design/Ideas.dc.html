@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .grid { display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; }
+    .card { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px; display:flex; flex-direction:column; gap:6px; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .card h3 { margin:0; font-size:13px; font-weight:600; color:var(--fg); display:flex; align-items:center; gap:8px; }
+    .card b { color:var(--fg); font-weight:600; }
+    .card .foot { margin-top:auto; padding-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; white-space:nowrap; }
+    .tag.cheap { background:oklch(0.5 0.15 150 / 0.25); color:oklch(0.85 0.15 150); border:1px solid oklch(0.5 0.15 150 / 0.5); }
+    .tag.be { background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .tag.big { background:oklch(0.82 0.16 80 / 0.15); color:oklch(0.85 0.14 80); border:1px solid oklch(0.82 0.16 80 / 0.5); }
+    .tag.no { background:oklch(0.704 0.191 22.216 / 0.15); color:oklch(0.8 0.12 22); border:1px solid oklch(0.704 0.191 22.216 / 0.5); }
+    .card.no { opacity:0.8; border-style:dashed; }
+    .pad { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:40px; padding:0 12px; border-radius:10px; border:1px solid var(--bd); background:var(--bg); font-size:12px; font-weight:500; color:var(--fg); }
+    .pad svg { color:var(--mfg); }
+    .pad.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); color:var(--pri); }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div class="h1">Other ideas, and three things declined</div>
+    <p class="cap" style="margin-top:4px;">Each is one card because each can be taken or left on its own. The tag says what it costs: <b>cheap</b> is a client afternoon on what the six boards already build, <b>backend</b> touches lighting7, <b>bigger</b> is a session of its own.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Target pads in a bank</h3>
+      <div style="display:flex; gap:6px;"><span class="pad on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg>Movers</span><span class="pad"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg>Bars</span></div>
+      <p style="margin:0;">A fourth pad kind, <span class="mono">TARGET</span>: a group or fixture placed in a bank, whose press is <span class="mono">selection.toggle</span>. It is what MagicQ's execute grid and Eos's direct selects do, and it is what makes a <b>Pads-focus screen able to select at all</b>. A <b>solo</b> bank of target pads is a radio selection &mdash; one group at a time &mdash; which is the busking ask nobody has phrased yet.</p>
+      <div class="foot"><span class="tag be">backend</span><span class="tag cheap">then cheap</span></div>
+    </div>
+    <div class="card">
+      <h3>Special pads</h3>
+      <p style="margin:0;">MagicQ's <i>Special Functions</i>: <b>Next page</b>, <b>Prev page</b>, <b>Clear selection</b>, <b>Release bank</b> (take every sibling off), <b>Blind</b>. A fifth kind, <span class="mono">SPECIAL(fn)</span>, so a page can carry its own navigation for a touch screen with no keyboard and a MIDI surface with no page buttons. The MIDI targets already exist for four of the five; the pad is a face on them.</p>
+      <div class="foot"><span class="tag be">backend</span></div>
+    </div>
+    <div class="card">
+      <h3>Flash: hold is momentary</h3>
+      <p style="margin:0;"><span class="mono">FU-BUSK-MOMENTARY</span>, already recorded. A pad's <span class="mono">momentary</span> flag: press on pointer-down, release on pointer-up, drawn with a small lightning corner. Blinders and strobes are the whole case. The hook change lives in <span class="mono">useLongPress.ts</span>; the pad's hold menu moves to a right-click / two-finger hold on a momentary pad, since the hold is taken.</p>
+      <div class="foot"><span class="tag be">backend flag</span><span class="tag cheap">cheap</span></div>
+    </div>
+    <div class="card">
+      <h3>Hold a rig tile, drag for level</h3>
+      <p style="margin:0;">The speed card's hold-to-slide gesture, on intensity: hold a group tile and drag up or down to set its dimmer, <span class="mono">programmer.set</span> throttled through the same <span class="mono">useLiveTempoPush</span>. &ldquo;Grab the front wash and pull it down&rdquo; is the single most common busking hand movement and it has no gesture here. The tile's hold is free today &mdash; a target pad is a plain toggle.</p>
+      <div class="foot"><span class="tag cheap">cheap</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Live colour on every tile</h3>
+      <p style="margin:0;">Drawn on the Main board already: a 3px bar under each tile, per cell on a multi-head, from the same colour-source dispatch the mini-stage uses. It turns the rig into a magic sheet for free &mdash; the operator sees what each group is doing without looking up &mdash; and it is what makes <i>Pick</i> on the Colour tab honest.</p>
+      <div class="foot"><span class="tag cheap">cheap</span></div>
+    </div>
+    <div class="card">
+      <h3>Plot: the rig as the patch drew it</h3>
+      <p style="margin:0;"><i>Arrange: Plot</i> on the Rig board. The same tiles, placed by <span class="mono">stageX / stageY</span> from the patch, scaled to the band; groups in a strip above since they have no position. Drag selection as a lasso over the plot, the marquee's own machinery. No coordinates of its own &mdash; move a light on the stage view and the plot follows.</p>
+      <div class="foot"><span class="tag big">bigger</span></div>
+    </div>
+    <div class="card">
+      <h3>Save selection as group</h3>
+      <p style="margin:0;">A group <i>is</i> a saved selection, so the band's label row gains <i>Save as group&hellip;</i> beside Clear: name it, and it appears in the Rig palette and can be dropped on a row. Titan's Quick Record for groups. Cells included once session 5 lands, which is how &ldquo;odd cells of both bars&rdquo; becomes one tile.</p>
+      <div class="foot"><span class="tag cheap">cheap</span></div>
+    </div>
+    <div class="card">
+      <h3>Next / Prev on the surface</h3>
+      <p style="margin:0;">The Cells chip's <b>Next</b> and <b>Prev</b> as MIDI buttons (<span class="mono">SelectionNext</span> / <span class="mono">SelectionPrev</span>) &mdash; MA's MAtricks stepping on a hardware button. With a template pad lit, stepping the selection and re-pressing is a manual chase; with Spread live, stepping walks the fan. The X-Touch's two encoder buttons are the obvious home.</p>
+      <div class="foot"><span class="tag be">backend</span></div>
+    </div>
+
+    <div class="card">
+      <h3>The second colour hands over</h3>
+      <p style="margin:0;">On the Colour tab, <i>Second colour, spread across the selection</i> switches to the Spread tab with <b>From</b> set to the picked colour and <b>To</b> focused &mdash; one gesture from a colour to a fan. The reverse: Spread's From/To swatches open the picker inline. Two tabs, one picker component.</p>
+      <div class="foot"><span class="tag cheap">cheap</span></div>
+    </div>
+    <div class="card">
+      <h3>Focus from the hardware</h3>
+      <p style="margin:0;"><span class="mono">BuskFocusSet</span> and <span class="mono">BuskSheetToggle</span> as window-addressed MIDI targets: a binding names a window by its registry name, so one button on the desk flips Screen 2 between pads and rig. The Screens sheet's focus picker is the same command from the other end.</p>
+      <div class="foot"><span class="tag be">backend</span></div>
+    </div>
+    <div class="card no">
+      <h3>Declined: a rig per page</h3>
+      <p style="margin:0;">A page-scoped rig would give the colour screen and the position screen two different selection surfaces for one selection, which is exactly the two-screen flow going wrong. One rig per project; a page that wants fewer targets is a <b>row</b> the operator scrolls to, or a target pad in one of its banks.</p>
+      <div class="foot"><span class="tag no">declined</span></div>
+    </div>
+    <div class="card no">
+      <h3>Declined: free positioning and a second programmer</h3>
+      <p style="margin:0;">Free x/y on rig tiles repeats what busk-layout D2 rejected: a coordinate system nothing else reads. The plot uses the patch's. And a programmer per window (<span class="mono">FU-PROG-PER-USER</span>) stays out: the Colour and Spread tabs write to the one shared programmer, which is what lets Screen 1's picker and Screen 2's pads mean the same thing.</p>
+      <div class="foot"><span class="tag no">declined</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

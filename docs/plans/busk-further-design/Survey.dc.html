@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    table { border-collapse:collapse; width:100%; font-size:11px; line-height:1.45; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:8px 10px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:9px 10px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    td.d { font-weight:600; color:var(--fg); white-space:nowrap; }
+    .wrap { border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div class="h1">What the other desks do &mdash; for these six asks</div>
+    <p class="cap" style="margin-top:4px;">The earlier survey (look-groups) was about exclusivity. This one is about the selection surface, the window layout, fan, sub-fixtures and colour. Read down a column for the pattern; read across for where each desk puts the thing.</p>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <tr>
+        <th style="width:118px;">Desk</th>
+        <th>Selection surface</th>
+        <th>Layout, focus, screens</th>
+        <th>Fan / spread</th>
+        <th>Sub-fixtures</th>
+        <th style="width:190px;">Colour on the busk surface</th>
+      </tr>
+      <tr>
+        <td class="d">ChamSys MagicQ</td>
+        <td>Group and Head windows; the <b>Execute</b> grid holds groups, palettes, cues, cue stacks, macros and <i>Regions</i>, with <b>Sizing of Items</b> per grid.</td>
+        <td>Execute pages are designed in <i>View Design</i> and played in <i>View Execute</i>; a page can be assigned to a user; <b>Multi Windows</b> on external screens and the Execute window on an iOS/Android remote.</td>
+        <td><b>FAN</b> button: positive fans apart, negative together; fan by <b>Parts</b> for multi-element heads; palette timing in the Execute grid fans <i>normal &middot; reverse &middot; in to out &middot; out to in &middot; random</i>.</td>
+        <td>A programmer-wide element mask; <i>Odd / Even</i>; <i>N parts</i>; Elements-only groups.</td>
+        <td>A Colour Picker window, and <b>Attribute Encoders</b> placeable in the Execute grid itself.</td>
+      </tr>
+      <tr>
+        <td class="d">grandMA3</td>
+        <td>Fixture sheet, <b>selection grid</b>, and <b>layout views</b> &mdash; a &ldquo;digital magic sheet&rdquo; built from the grid, colour-coded and interactive, sub-fixtures included.</td>
+        <td>Views per screen, stored and recalled from view buttons; each display holds its own view; the selection grid and MAtricks are desk-wide facts.</td>
+        <td><b>Align</b> on the encoder bar (<span class="mono">&lt; &gt; &lt;&gt; &gt;&lt;</span>); order comes from the grid, not the fan; a fan needs no group.</td>
+        <td><b>MAtricks</b>: Interleave, Blocks, Groups, Wings, Next/Prev &mdash; a sub-selection carried by the selection; <i>down</i> in the grid lays sub-fixtures out.</td>
+        <td>Color picker as a window (hue/sat, swatches, gel library) writing the programmer directly.</td>
+      </tr>
+      <tr>
+        <td class="d">Avolites Titan</td>
+        <td>Fixtures and Groups <b>workspace windows</b>; a window for every feature, with <i>Quick Record</i>.</td>
+        <td><b>Workspaces</b>: save any arrangement of windows to a workspace button and recall it whole; per-screen layouts.</td>
+        <td>Hold <b>Fan</b>: <b>Curve</b> = Line &middot; Mirror &middot; Arrow &middot; Wings; <b>Split Fan into Parts</b>; <b>Ignore Groups</b>; disarms on a new selection.</td>
+        <td>Cells selectable in the Fixtures window; fan across cells or fixtures by Parts.</td>
+        <td>Colour picker window (HSI / RGB / CMY / gel), plus <b>Quick Palettes</b> on the wheels without a selection.</td>
+      </tr>
+      <tr>
+        <td class="d">Hog 4</td>
+        <td>Fixture window, groups on the directory; <b>Plots</b> as the graphical selection surface.</td>
+        <td>Views saved per screen and recalled from view buttons; up to several external displays.</td>
+        <td>Fan on the wheel; <b>Buddying</b> and <b>Grouping</b> set the step; a compound fixture fans part-from-part unless buddying = parts.</td>
+        <td>Compound fixtures with parts, addressed <span class="mono">201.1</span>; buddying is the cell-vs-head switch.</td>
+        <td>Colour picker window (HS / gel); <i>Live</i> mode.</td>
+      </tr>
+      <tr>
+        <td class="d">ETC Eos</td>
+        <td><b>Magic Sheets</b>: draw the rig, objects select channels, live feedback per object; direct selects for groups and palettes.</td>
+        <td>Snapshots recall a whole display arrangement; magic sheets per tab; multi-monitor by tab placement.</td>
+        <td><b>Fan</b> softkey over a range; <span class="mono">1 Thru 4 . Color Palette 1 Thru 4</span> maps palettes to cells.</td>
+        <td><b>Multicell</b>: <span class="mono">1</span> master + cells, <span class="mono">1.3</span> a cell, <span class="mono">Minus Cells</span> master only; magic sheets draw cells as sub-objects.</td>
+        <td>Colour picker tab (spectrum / gel / tint) writing live; <i>Color Path</i>.</td>
+      </tr>
+      <tr>
+        <td class="d">Lightkey / QLC+</td>
+        <td>Lightkey: a fixed <i>Live</i> view with a stage plan; QLC+: the Virtual Console is free-form, every widget hand-placed and sized.</td>
+        <td>QLC+ VC frames and pages; Lightkey a single window with collapsible panels.</td>
+        <td>Lightkey: a <i>fan</i> on some parameters; QLC+: none outside effects.</td>
+        <td>Lightkey: multi-head as heads in the plan; QLC+: heads as separate entities.</td>
+        <td>Lightkey's colour panel is always on screen beside the plan; QLC+ a colour widget.</td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+    <div class="note"><p><b>Selection surface.</b> Every serious desk has moved from a list to a <i>built</i> surface &mdash; MA layout views, Eos magic sheets, Hog plots, MagicQ execute regions. All four separate the surface from the library and let the operator arrange it. None of them fan out a group into a strip the way lighting7's band does today. Hence: the rig as a document (Rig board), rows first, plot as a rendering.</p></div>
+    <div class="note"><p><b>Layout and screens.</b> Titan's workspaces, MA's views, Eos's snapshots are all <i>per screen, recalled by a button</i>. lighting7 already has the windows registry and per-tab flags; focus is the missing one, and <span class="mono">FU-SCREENS-LAYOUTS</span> is the saved-arrangement half, which this proposal leaves where it is. Fan curves are Titan's vocabulary, because it is a set of pictures.</p></div>
+    <div class="note key"><p><b>Sub-fixtures.</b> Two camps again: a <i>mode</i> (MagicQ's element mask) or a <i>property of the selection</i> (Eos's <span class="mono">.n</span>, MA's MAtricks, Hog's buddying). The busk view is a touch surface with no command line, so the choice is made for it: on the tile, in the selection, never a mode. What none of them draw &mdash; and lighting7 can &mdash; is the cells' <b>live colour on the tile itself</b>, since every stage read already goes through one colour dispatch.</p></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

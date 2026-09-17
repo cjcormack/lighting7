@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* miniature screen */
+    .scr { border:1px solid var(--bd); border-radius:10px; background:var(--bg); overflow:hidden; display:flex; flex-direction:column; }
+    .scr .bar { height:14px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .scr .body { flex:1; display:flex; min-height:0; }
+    .scr .col { flex:1; display:flex; flex-direction:column; min-width:0; }
+    .band { padding:5px 6px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:3px; }
+    .band.fold { flex-direction:row; align-items:center; gap:6px; padding:0 6px; height:16px; }
+    .band.fold i { font-style:normal; font-size:7px; color:var(--mfg); white-space:nowrap; }
+    .tr { display:flex; gap:3px; }
+    .tl { height:12px; width:34px; border-radius:3px; border:1px solid var(--bd); background:var(--card); flex:0 0 auto; }
+    .tl.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.25); }
+    .tl.big { height:26px; width:70px; }
+    .strip { height:12px; border-bottom:1px solid var(--bd); display:flex; align-items:center; gap:3px; padding:0 6px; }
+    .strip.fold { height:16px; }
+    .strip i { font-style:normal; font-size:7px; color:var(--mfg); white-space:nowrap; }
+    .tab { height:7px; width:18px; border-radius:2px; background:var(--muted); }
+    .tab.on { background:var(--pri); }
+    .page { flex:1; padding:6px; display:grid; gap:5px; grid-template-columns:2fr 1fr; align-content:start; }
+    .bk { border:1px solid var(--bd); border-radius:5px; background:oklch(0.274 0.006 286.033 / 0.15); padding:4px; display:grid; grid-template-columns:repeat(auto-fill, minmax(22px, 1fr)); gap:3px; }
+    .pd { height:12px; border-radius:2px; border:1px solid var(--bd); background:var(--card); }
+    .pd.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.25); }
+    .sheet { width:26%; border-left:1px solid var(--bd); display:flex; flex-direction:column; }
+    .sheet.fold { width:12px; }
+    .sheet .tb { height:10px; border-bottom:1px solid var(--bd); display:flex; }
+    .sheet .tb i { flex:1; }
+    .sheet .tb i.on { border-bottom:1px solid var(--pri); }
+    .pick { margin:4px; height:34px; border-radius:3px; background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); }
+    .hue { margin:0 4px; height:4px; border-radius:2px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .card { margin:4px; height:22px; border-radius:3px; border:1px solid var(--bd); background:var(--card); }
+    .handle { display:flex; align-items:center; justify-content:center; height:8px; }
+    .handle::before { content:''; width:20px; height:2px; border-radius:1px; background:var(--mfg); }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .kv { display:grid; grid-template-columns:150px 1fr; gap:4px 12px; font-size:11px; line-height:1.4; }
+    .kv .k { color:var(--mfg); font-family: ui-monospace, Menlo, monospace; font-size:10.5px; }
+    .arrow { display:flex; align-items:center; gap:6px; font-size:10px; color:var(--mfg); }
+    .arrow::before, .arrow::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .kbd { display:inline-block; padding:0 5px; border-radius:4px; border:1px solid var(--bd); background:var(--muted); font-size:10px; font-family:ui-monospace, Menlo, monospace; color:var(--fg); }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div>
+    <div class="h1">Focus: one window shows what its screen is for</div>
+    <p class="cap" style="margin-top:4px;">Three shapes of one view. <b>Focus is a window fact</b> like the page's follow flag &mdash; per tab, in <span class="mono">sessionStorage</span>, launchable from the Screens sheet &mdash; and never the desk's: two screens at one desk are the whole reason it exists.</p>
+  </div>
+
+  <!-- three shapes -->
+  <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;">
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px;"><span class="lbl">Split</span><span class="cap">the default &middot; rig rows above, page below, the handle between</span></div>
+      <div class="scr" style="height:250px;">
+        <div class="bar"></div>
+        <div class="body">
+          <div class="col">
+            <div class="band"><div class="tr"><span class="tl on"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span></div><div class="tr"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span></div><div class="tr"><span class="tl on"></span><span class="tl"></span></div><div class="handle"></div></div>
+            <div class="strip"><span class="tab on"></span><span class="tab"></span><span class="tab"></span></div>
+            <div class="page"><div class="bk"><span class="pd on"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span></div></div>
+          </div>
+          <div class="sheet"><div class="tb"><i></i><i class="on"></i><i></i></div><div class="pick"></div><div class="hue"></div><div class="card"></div></div>
+        </div>
+      </div>
+      <p class="cap">What ships today, plus the handle. The band shows <b>1&hellip;N whole rows</b>; dragging past the last row is Rig focus, dragging to none is Pads focus &mdash; the segmented control and the handle are one setting.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px;"><span class="lbl">Pads</span><span class="cap">the page fills the body &middot; the rig folds to a 32px strip</span></div>
+      <div class="scr" style="height:250px;">
+        <div class="bar"></div>
+        <div class="body">
+          <div class="col">
+            <div class="band fold"><i>RIG</i><i style="color:var(--fg);">Front wash, Bar L &middot; 14</i><i style="border:1px solid var(--bd); border-radius:99px; padding:0 3px;">Colour</i><i style="border:1px solid var(--bd); border-radius:99px; padding:0 3px;">Targets: Desk</i><i style="margin-left:auto;">&#9662;</i></div>
+            <div class="strip"><span class="tab on"></span><span class="tab"></span><span class="tab"></span></div>
+            <div class="page" style="grid-template-columns:2fr 1fr 1fr;"><div class="bk"><span class="pd on"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk" style="grid-column:1 / -1;"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span></div></div>
+          </div>
+          <div class="sheet fold"><div class="tb"></div></div>
+        </div>
+      </div>
+      <p class="cap">The strip keeps what a press needs to be honest about: the selection summary, the family pill, the desk chip. It <b>cannot select</b> &mdash; that is the other screen's job, or a tap on the strip to unfold one row.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px;"><span class="lbl">Rig</span><span class="cap">every row, tiles at full size &middot; the page folds to its tab strip</span></div>
+      <div class="scr" style="height:250px;">
+        <div class="bar"></div>
+        <div class="body">
+          <div class="col">
+            <div class="band" style="flex:1; gap:6px; padding:8px;">
+              <i style="font-style:normal; font-size:7px; color:var(--mfg);">GROUPS</i><div class="tr"><span class="tl big on"></span><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span></div>
+              <i style="font-style:normal; font-size:7px; color:var(--mfg);">MOVERS</i><div class="tr"><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span></div>
+              <i style="font-style:normal; font-size:7px; color:var(--mfg);">BARS</i><div class="tr"><span class="tl big on"></span><span class="tl big"></span><span class="tl big"></span></div>
+              <i style="font-style:normal; font-size:7px; color:var(--mfg);">FLOOR</i><div class="tr"><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span><span class="tl big"></span></div>
+            </div>
+            <div class="strip fold"><i>PAGES</i><span class="tab on"></span><span class="tab"></span><span class="tab"></span><i style="margin-left:auto;">Colour &middot; 4 banks</i></div>
+          </div>
+          <div class="sheet"><div class="tb"><i></i><i class="on"></i><i></i></div><div class="pick"></div><div class="hue"></div><div class="card"></div></div>
+        </div>
+      </div>
+      <p class="cap">A selection surface with the side sheet beside it. With the Colour or Spread tab open this is a small <b>programmer for one attribute</b> &mdash; which is what a second screen at a busking desk usually is.</p>
+    </div>
+  </div>
+
+  <!-- two screens -->
+  <div style="display:grid; grid-template-columns:1fr 200px 1fr; gap:16px; align-items:stretch;">
+    <div class="note" style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><b style="font-size:12px;">Screen 1 &middot; &ldquo;Rig&rdquo;</b><span style="flex:1;"></span><span class="chip">Targets: Desk</span><span class="chip">Page: Desk</span></div>
+      <div class="scr" style="height:120px;"><div class="bar"></div><div class="body"><div class="col"><div class="band" style="flex:1; gap:4px;"><div class="tr"><span class="tl on"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span></div><div class="tr"><span class="tl"></span><span class="tl"></span><span class="tl"></span><span class="tl"></span></div><div class="tr"><span class="tl on"></span><span class="tl"></span></div></div><div class="strip fold"><i>PAGES</i><span class="tab on"></span><span class="tab"></span></div></div><div class="sheet"><div class="tb"><i></i><i class="on"></i><i></i></div><div class="pick" style="height:24px;"></div><div class="hue"></div></div></div></div>
+      <p class="cap">Focus <b>Rig</b>, Colour sheet open, following the desk for both selection and page. Selecting here moves the desk selection; the colour picker writes to it.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; justify-content:center; gap:10px; text-align:center;">
+      <div class="arrow">selection</div>
+      <div style="border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 8px; display:flex; flex-direction:column; gap:4px;"><span class="lbl">The desk</span><span style="font-size:11px;">targets &middot; families &middot; source</span><span style="font-size:11px;">showing page</span><span style="font-size:11px;">the hand</span></div>
+      <div class="arrow">presses</div>
+      <p class="cap">Nothing new crosses the wire for focus. Each window reads the same desk and shows the part of it its operator wants.</p>
+    </div>
+    <div class="note" style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><b style="font-size:12px;">Screen 2 &middot; &ldquo;Pads&rdquo;</b><span style="flex:1;"></span><span class="chip">Targets: Desk</span><span class="chip dash">Page: This window</span></div>
+      <div class="scr" style="height:120px;"><div class="bar"></div><div class="body"><div class="col"><div class="band fold"><i>RIG</i><i style="color:var(--fg);">Front wash, Bar L &middot; 14</i></div><div class="strip"><span class="tab"></span><span class="tab on"></span><span class="tab"></span></div><div class="page" style="grid-template-columns:1fr 1fr 1fr;"><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd"></span><span class="pd"></span><span class="pd"></span><span class="pd"></span></div><div class="bk"><span class="pd on"></span><span class="pd"></span><span class="pd"></span></div></div></div><div class="sheet fold"><div class="tb"></div></div></div></div>
+      <p class="cap">Focus <b>Pads</b>, sheet folded, page unlinked onto <i>Position</i>. Presses land on the selection Screen 1 made. Launched as <span class="mono">?window=Screen%202&amp;page=3&amp;focus=pads&amp;sheet=none</span>.</p>
+    </div>
+  </div>
+
+  <!-- the facts -->
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+    <div class="note">
+      <p><b>Per-window facts, all in <span class="mono">lib/buskWindow.ts</span> on <span class="mono">deskFollow.ts</span>'s model</b></p>
+      <div class="kv" style="margin-top:6px;">
+        <span class="k">busk.focus</span><span>split &middot; pads &middot; rig (default split)</span>
+        <span class="k">busk.rigRows</span><span>rows shown in split, 1&hellip;N; clamped to the rig's row count</span>
+        <span class="k">busk.sheet</span><span>speed &middot; colour &middot; spread (default speed)</span>
+        <span class="k">busk.sheetOpen</span><span>true &middot; false (default true at &ge; md)</span>
+      </div>
+      <p style="margin-top:6px;">Arrival params <span class="mono">?focus=</span> <span class="mono">?sheet=</span> are latched once per tab exactly as <span class="mono">?page=</span> is, and mirrored back with <span class="mono">replace</span>. A reload is never an arrival.</p>
+    </div>
+    <div class="note">
+      <p><b>Ways to change it</b></p>
+      <p style="margin-top:6px;">The <b>Focus</b> segmented control on the page strip; the band handle; the sheet's fold chevron and tabs. <b>&#8984;K</b>: <i>Focus pads</i> / <i>Focus rig</i> / <i>Split</i> and <i>Show &lt;view&gt; on &lt;window&gt;</i> gains a focus arm, built by <span class="mono">buildWindowCommands</span>. <b>Screens sheet</b>: a focus picker beside the view picker for busk rows, so &ldquo;make Screen 2 the pads&rdquo; is one click from Screen 1. <b>MIDI</b>: <span class="mono">BuskFocusSet</span> / <span class="mono">BuskSheetToggle</span> as window-addressed commands (<span class="mono">windows.focus</span>), the same shape as <span class="mono">windows.show</span>.</p>
+    </div>
+    <div class="note key">
+      <p><b>What focus must not do.</b> It never hides a state the operator could be surprised by: a lit pad in Pads focus still shows the selection it will press onto (the strip); a rig in Rig focus still names the page a MIDI press would reach (the strip). And it is <b>not</b> a second edit mode &mdash; <i>Edit layout</i> forces Split for its duration and restores the window's focus on Done, because a palette drag needs both regions on screen.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* scaled device: everything inside is drawn at 0.6 */
+    .dev { border-radius:18px; border:1px solid oklch(0.4 0.01 286); background:var(--bg); overflow:hidden; display:flex; flex-direction:column; flex:0 0 auto; position:relative; }
+    .hdr { height:29px; flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:0 8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:8px; font-weight:600; }
+    .sbar { height:29px; flex:0 0 auto; display:flex; align-items:center; gap:4px; padding:4px 6px; border-bottom:1px solid var(--bd); }
+    .sb { height:21px; padding:0 6px; border:1px solid var(--bd); border-radius:5px; background:var(--card); font-size:6.5px; font-weight:700; letter-spacing:0.05em; color:var(--mfg); display:flex; align-items:center; white-space:nowrap; }
+    .go { width:38px; height:21px; border-radius:5px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:8px; font-weight:700; display:grid; place-items:center; }
+    .beat { width:4px; height:4px; border-radius:50%; background:var(--green); }
+    .band { flex:0 0 auto; border-bottom:1px solid var(--bd); padding:6px 10px; display:flex; flex-direction:column; gap:5px; }
+    .lrow { display:flex; align-items:center; gap:5px; font-size:7px; }
+    .l { font-size:5.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .chip { display:inline-flex; align-items:center; height:12px; padding:0 5px; border-radius:99px; border:1px solid var(--bd); font-size:6px; white-space:nowrap; }
+    .rrow { display:flex; align-items:center; gap:5px; }
+    .rl { width:36px; flex:0 0 auto; font-size:5.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .tiles { display:flex; gap:5px; overflow:hidden; flex:1; }
+    .tile { position:relative; height:31px; min-width:89px; padding:0 7px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:8px; display:flex; flex-direction:column; justify-content:center; gap:2px; white-space:nowrap; flex:0 0 auto; overflow:hidden; }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:2px; }
+    .pip { width:7px; height:4px; border-radius:1px; background:var(--muted); }
+    .pip.on { background:var(--pri); }
+    .handle { display:flex; align-items:center; justify-content:center; gap:4px; height:8px; font-size:5.5px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--mfg); }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .pstrip { height:26px; flex:0 0 auto; display:flex; align-items:center; gap:5px; padding:0 10px; border-bottom:1px solid var(--bd); }
+    .ptab { height:15px; padding:0 6px; border-radius:4px; font-size:7px; font-weight:600; color:var(--mfg); display:flex; align-items:center; }
+    .ptab.on { background:var(--muted); color:var(--fg); }
+    .seg { display:inline-flex; gap:1px; border:1px solid var(--bd); background:var(--card); border-radius:5px; padding:1px; }
+    .seg span { height:14px; padding:0 5px; border-radius:4px; font-size:6.5px; font-weight:600; color:var(--mfg); display:flex; align-items:center; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .body { flex:1; min-height:0; overflow:hidden; padding:7px 10px; display:flex; flex-direction:column; gap:7px; }
+    .bank { display:flex; flex-direction:column; gap:5px; border-radius:6px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:6px; min-width:0; }
+    .bh { display:flex; align-items:center; gap:5px; font-size:7px; font-weight:600; }
+    .solo { display:inline-flex; align-items:center; height:10px; padding:0 4px; border-radius:99px; font-size:5.5px; font-weight:700; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(66px, 1fr)); gap:5px; }
+    .pad { position:relative; min-height:34px; padding:4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:8px; font-weight:500; display:flex; align-items:center; justify-content:center; gap:4px; text-align:center; }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); color:var(--pri); }
+    .sw { width:7px; height:7px; border-radius:2px; flex:0 0 auto; }
+    .cue { flex-direction:column; align-items:flex-start; font-family:ui-monospace, Menlo, monospace; font-size:8px; }
+    .cue i { font-style:normal; font-family:ui-sans-serif, system-ui, sans-serif; font-size:6.5px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); }
+    .rail { width:173px; flex:0 0 auto; border-left:1px solid var(--bd); display:flex; flex-direction:column; }
+    .rail.fold { width:26px; align-items:center; padding-top:6px; gap:9px; }
+    .tabs { height:24px; border-bottom:1px solid var(--bd); display:flex; }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; font-size:6.5px; font-weight:600; color:var(--mfg); border-bottom:1px solid transparent; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .x { flex:0 0 22px; border-left:1px solid var(--bd); }
+    .mc { margin:0 7px; border:1px solid var(--bd); border-radius:6px; background:var(--card); padding:6px 7px; display:flex; flex-direction:column; gap:4px; }
+    .tap { height:26px; display:grid; place-items:center; border:1px solid var(--bd); border-radius:5px; font-size:7px; font-weight:700; letter-spacing:0.08em; }
+    .ib { width:17px; height:17px; border-radius:5px; display:grid; place-items:center; color:var(--mfg); }
+    .ib.on { background:var(--muted); color:var(--fg); }
+    .ib svg { width:9px; height:9px; }
+    .callout { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); z-index:3; }
+    .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:inline-grid; place-items:center; flex:0 0 auto; vertical-align:middle; margin-right:4px; }
+    table { border-collapse:collapse; width:100%; font-size:11px; line-height:1.4; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:7px 9px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:7px 9px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    td.d { color:var(--fg); font-weight:600; white-space:nowrap; }
+    .wrap { border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:1120px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div>
+    <div class="h1">Tablets, and the fold ladder for every surface</div>
+    <p class="cap" style="margin-top:4px;">Both iPads drawn at 0.6. An iPad is above <span class="mono">md</span> in either rotation, so it gets the rail, the palette and edit mode &mdash; the one thing that changes with rotation is whether the rail is <b>open by default</b>, and that follows the page body's own 600px stacking rule rather than a new number.</p>
+  </div>
+
+  <div style="display:flex; gap:24px; align-items:flex-start;">
+    <!-- iPad portrait 820x1180 @0.6 = 492x708 -->
+    <div style="display:flex; flex-direction:column; gap:8px; width:492px; flex:0 0 492px; min-width:0;">
+      <span class="lbl">iPad portrait 820&times;1180 &middot; Split, 2 rows, rail folded by default</span>
+      <div class="dev" style="width:492px; height:708px;">
+        <div class="hdr"><span style="flex:1;">Main Show &middot; Busk</span></div>
+        <div class="sbar"><span class="sb">DBO</span><span style="flex:1; font-size:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Cue 12 &middot; Verse 2 &rarr; Next 13 &middot; Chorus</span><span class="sb" style="gap:3px;"><span class="beat"></span><span style="color:var(--fg);">120</span></span><span class="sb">Programmer &middot; 14</span><span class="sb">BACK</span><span class="go">GO</span></div>
+        <div style="display:flex; flex:1; min-height:0;">
+          <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+            <div class="band">
+              <div class="lrow"><span class="l">Rig</span><span>Front wash, Bar L &middot; 14</span><span class="chip">Colour</span><span class="chip">Targets: Desk</span><span class="chip">Cells: All</span><span style="flex:1;"></span><span class="chip">Spread&hellip;</span><span class="chip" style="border:none;">Locate</span><span class="chip" style="border:none;">Clear</span></div>
+              <div class="rrow"><span class="rl">Groups</span><div class="tiles"><div class="tile on"><span>Front wash &middot; 6</span><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div><div class="tile"><span>Movers &middot; 4</span><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div><div class="tile"><span>Blinders &middot; 4</span><div class="live"></div></div><div class="tile"><span>Sides &middot; 4</span><div class="live"><i style="width:30%; background:#c04bff;"></i></div></div><div class="tile"><span>Floor &middot; 6</span><div class="live"></div></div></div></div>
+              <div class="rrow"><span class="rl">Bars</span><div class="tiles"><div class="tile some"><span>Bar L &middot; 4 of 8</span><div class="pips"><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div><div class="tile"><span>Bar R &middot; 8</span><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div><div class="tile"><span>Pixel strip &middot; 16</span><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"></div></div></div></div>
+              <div class="handle">2 of 4 rows</div>
+            </div>
+            <div class="pstrip"><span class="l">Pages</span><span class="ptab on">Colour</span><span class="ptab">Position</span><span class="ptab">Beam</span><span class="ptab">Cues</span><span class="chip">Page: Desk</span><span style="flex:1;"></span><span class="l">Focus</span><div class="seg"><span class="on">Split</span><span>Pads</span><span>Rig</span></div><span class="chip">Edit layout</span></div>
+            <div class="body">
+              <div style="display:grid; grid-template-columns:8fr 4fr; gap:7px;">
+                <div class="bank"><div class="bh">Colours <span class="solo">Solo</span></div><div class="pads"><div class="pad all"><span class="sw" style="background:#f5b342;"></span>Warm Amber</div><div class="pad"><span class="sw" style="background:#2456ff;"></span>Deep Blue</div><div class="pad"><span class="sw" style="background:#ff2f4f;"></span>Red</div><div class="pad"><span class="sw" style="background:#7f00ff;"></span>UV wash</div><div class="pad"><span class="sw" style="background:#fff;"></span>Open white</div><div class="pad"><span class="sw" style="background:#ff8ac9;"></span>Pink</div><div class="pad"><span class="sw" style="background:#33d17a;"></span>Green</div><div class="pad"><span class="sw" style="background:#00c8ff;"></span>Cyan</div></div></div>
+                <div class="bank"><div class="bh">Effects</div><div class="pads"><div class="pad">Pulse</div><div class="pad">Rainbow</div><div class="pad">Strobe</div></div></div>
+              </div>
+              <div style="display:grid; grid-template-columns:6fr 6fr; gap:7px;">
+                <div class="bank"><div class="bh">Washes</div><div class="pads"><div class="pad">Ballyhoo</div><div class="pad">Stage wash</div><div class="pad">Sidelight</div><div class="pad">50%</div></div></div>
+                <div class="bank"><div class="bh">Song cues <span class="solo">Solo</span></div><div class="pads"><div class="pad cue live">12<i>Verse 2</i></div><div class="pad cue">13<i>Chorus</i></div><div class="pad cue">14<i>Bridge</i></div><div class="pad cue">S-1<i>Blackout</i></div></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="rail fold"><span class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></span><span class="beat"></span><span style="font-size:6.5px; font-weight:700;">120</span><span class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="ib on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg></span><span class="ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg></span></div>
+        </div>
+        <span class="callout" style="top:70px; right:34px;">1</span>
+        <span class="callout" style="top:190px; left:200px;">2</span>
+      </div>
+      <p class="cap"><span class="n">1</span><b>The rail is folded by default when opening it would stack the page.</b> 820 &minus; 288 &minus; gutters leaves ~500px of body, under the 600px the columns need, so a docked rail turns every row into one column. Folded, the body is ~744 and the page keeps its shares. Open it and the page stacks &mdash; allowed, and the fold chevron is one tap away. <span class="n">2</span>Two rows in Split by default; the handle goes to four.</p>
+    </div>
+
+    <!-- iPad landscape 1180x820 @0.6 = 708x492 -->
+    <div style="display:flex; flex-direction:column; gap:8px; flex:1; min-width:0;">
+      <span class="lbl">iPad landscape 1180&times;820 &middot; the desktop arrangement, rail open</span>
+      <div class="dev" style="width:708px; height:492px;">
+        <div class="hdr"><span style="flex:1;">Main Show &middot; Busk</span></div>
+        <div class="sbar"><span class="sb">DBO</span><span style="flex:1; font-size:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Cue 12 &middot; Verse 2 &rarr; Next 13 &middot; Chorus</span><span class="sb" style="gap:3px;"><span class="beat"></span><span style="color:var(--fg);">120</span></span><span class="sb">Programmer &middot; 14</span><span class="sb">BACK</span><span class="go">GO</span></div>
+        <div style="display:flex; flex:1; min-height:0;">
+          <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+            <div class="band">
+              <div class="lrow"><span class="l">Rig</span><span>Front wash, Bar L &middot; 14</span><span class="chip">Colour</span><span class="chip">Targets: Desk</span><span class="chip">Cells: All</span><span style="flex:1;"></span><span class="chip">Spread&hellip;</span><span class="chip" style="border:none;">Locate</span><span class="chip" style="border:none;">Highlight</span><span class="chip" style="border:none;">Clear</span></div>
+              <div class="rrow"><span class="rl">Groups</span><div class="tiles"><div class="tile on"><span>Front wash &middot; 6</span><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div><div class="tile"><span>Movers &middot; 4</span><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div><div class="tile"><span>Blinders &middot; 4</span><div class="live"></div></div><div class="tile"><span>Sides &middot; 4</span><div class="live"><i style="width:30%; background:#c04bff;"></i></div></div><div class="tile"><span>Floor &middot; 6</span><div class="live"></div></div></div></div>
+              <div class="rrow"><span class="rl">Bars</span><div class="tiles"><div class="tile some"><span>Bar L &middot; 4 of 8</span><div class="pips"><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div><div class="tile"><span>Bar R &middot; 8</span><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div></div></div>
+              <div class="handle">2 of 4 rows</div>
+            </div>
+            <div class="pstrip"><span class="l">Pages</span><span class="ptab on">Colour</span><span class="ptab">Position</span><span class="ptab">Beam</span><span class="ptab">Cues</span><span class="chip">Page: Desk</span><span style="flex:1;"></span><span class="l">Focus</span><div class="seg"><span class="on">Split</span><span>Pads</span><span>Rig</span></div><span class="chip">Edit layout</span></div>
+            <div class="body">
+              <div style="display:grid; grid-template-columns:8fr 4fr; gap:7px;">
+                <div class="bank"><div class="bh">Colours <span class="solo">Solo</span></div><div class="pads"><div class="pad all"><span class="sw" style="background:#f5b342;"></span>Warm Amber</div><div class="pad"><span class="sw" style="background:#2456ff;"></span>Deep Blue</div><div class="pad"><span class="sw" style="background:#ff2f4f;"></span>Red</div><div class="pad"><span class="sw" style="background:#7f00ff;"></span>UV wash</div><div class="pad"><span class="sw" style="background:#fff;"></span>Open white</div><div class="pad"><span class="sw" style="background:#ff8ac9;"></span>Pink</div></div></div>
+                <div class="bank"><div class="bh">Effects</div><div class="pads"><div class="pad">Pulse</div><div class="pad">Rainbow</div></div></div>
+              </div>
+              <div style="display:grid; grid-template-columns:6fr 6fr; gap:7px;">
+                <div class="bank"><div class="bh">Washes</div><div class="pads"><div class="pad">Ballyhoo</div><div class="pad">Stage wash</div><div class="pad">Sidelight</div></div></div>
+                <div class="bank"><div class="bh">Song cues <span class="solo">Solo</span></div><div class="pads"><div class="pad cue live">12<i>Verse 2</i></div><div class="pad cue">13<i>Chorus</i></div><div class="pad cue">14<i>Bridge</i></div></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="rail">
+            <div class="tabs"><span class="on">Speed</span><span>Colour</span><span>Spread</span><span class="x"></span></div>
+            <div style="padding:7px 0; display:flex; flex-direction:column; gap:6px;">
+              <div class="mc"><div style="display:flex; align-items:center; gap:4px; font-size:7px; font-weight:600;"><span class="beat"></span>Master 1</div><div style="font-size:18px; font-weight:700; line-height:1;">120</div><div class="tap">TAP</div></div>
+              <div class="mc"><div style="display:flex; align-items:center; gap:4px; font-size:7px; font-weight:600;"><span class="beat"></span>Colour<span style="flex:1;"></span>60</div><div style="display:flex; gap:2px;"><span class="tap" style="flex:1; height:18px;">&frac14;</span><span class="tap" style="flex:1; height:18px; background:var(--muted);">&frac12;</span><span class="tap" style="flex:1; height:18px;">1</span><span class="tap" style="flex:1; height:18px;">2</span></div></div>
+              <div class="mc"><div style="display:flex; align-items:center; gap:4px; font-size:7px; font-weight:600;"><span class="beat"></span>Movement<span style="flex:1;"></span>96</div></div>
+            </div>
+          </div>
+        </div>
+        <span class="callout" style="top:70px; right:170px;">3</span>
+      </div>
+      <p class="cap"><span class="n">3</span><b>Landscape is the desktop board at 82%.</b> 1180 &minus; 288 leaves 892 for the body, above the 600px rule, so the rail docks open and the page keeps its columns. Everything on the Main board holds: two rows, the handle, edit mode with the palette, the Cells chip. The only tablet-specific rule is touch: pips grow under a finger, the rig tile's hold is the level drag, the pad's hold is its menu.</p>
+      <div class="note key"><p><b>Two screens still work on an iPad.</b> Split View puts two Safari windows side by side at ~590 each &mdash; below <span class="mono">md</span>, so each behaves as a portrait phone: one on Rig focus, one on Pads focus, both following the desk. The per-tab facts are per Safari window, so this needs nothing the phone boards do not already have.</p></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <tr><th style="width:150px;">Surface</th><th style="width:118px;">Size</th><th>Rig band</th><th style="width:132px;">Focus default</th><th>Side sheet</th><th style="width:150px;">Page body</th><th style="width:96px;">Edit mode</th></tr>
+      <tr><td class="d">Desk screens, desktop</td><td>&ge; 1100 wide, &ge; 750 tall</td><td>Rows as built; 3 rows default; label row in full; handle</td><td>Split</td><td>Docked rail, open; fold to 44px</td><td>Columns keep shares</td><td>Yes</td></tr>
+      <tr><td class="d">iPad landscape</td><td>1024&ndash;1180 &times; 768&ndash;820</td><td>2 rows default; Highlight folds into the menu under 1100</td><td>Split</td><td>Docked rail, open</td><td>Columns keep shares</td><td>Yes</td></tr>
+      <tr><td class="d">iPad portrait</td><td>768&ndash;834 &times; 1024&ndash;1194</td><td>2 rows default</td><td>Split</td><td>Docked rail, <b>folded</b> (opening it stacks the page)</td><td>Shares while folded; stacks with the rail open</td><td>Yes</td></tr>
+      <tr><td class="d">Phone landscape</td><td>&ge; 640 wide, <b>&lt; 500 tall</b></td><td>1 row; rig and page strips merge into one 32px row</td><td>Pads</td><td><b>Overlay</b> side sheet, 288, compact layout</td><td>Stacks below 600 of body</td><td>No</td></tr>
+      <tr><td class="d">Phone portrait</td><td>&lt; 640 wide</td><td>1 row with a row chip; 48px tiles; verbs in a menu; Focus as glyphs</td><td>Split</td><td><b>Bottom sheet</b>, up to 66% tall, 36px fields</td><td>Single column</td><td>No</td></tr>
+    </table>
+  </div>
+  <p class="cap">The numbers are the app's existing ones: <span class="mono">sm</span> 640 (the sheet primitive's own), <span class="mono">md</span> 768 (rail, palette, edit), 600px of page body (column stacking), 500px of height (short: the cell editor's side sheet and the header's un-sticking), 750px of height (the colour editor's compact layout), 1100 and 800 (the selection bar's word and verb folds). No new breakpoint is introduced; the rig band and the side sheet ask the same questions the grid and the cell editor already ask, through <span class="mono">useCellEditorForm</span> and the container queries, so a surface can never get a form the rest of the app would not give it.</p>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* device */
+    .ph { border-radius:26px; border:1px solid oklch(0.4 0.01 286); background:var(--bg); overflow:hidden; display:flex; flex-direction:column; position:relative; flex:0 0 auto; }
+    .hdr { height:48px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 10px; background:var(--pri); color:oklch(0.21 0.006 285.885); }
+    .hdr .t { flex:1; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .hdr svg { color:oklch(0.21 0.006 285.885); }
+    .sbar { height:48px; flex:0 0 auto; display:flex; align-items:center; gap:6px; padding:6px 8px; border-bottom:1px solid var(--bd); }
+    .sbtn { display:flex; align-items:center; height:36px; padding:0 9px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:10px; font-weight:700; letter-spacing:0.06em; color:var(--mfg); white-space:nowrap; }
+    .gobtn { width:56px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:13px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .chip { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; flex:0 0 auto; }
+    .seg span { display:inline-flex; align-items:center; justify-content:center; gap:4px; height:24px; min-width:28px; padding:0 8px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:grid; place-items:center; color:var(--mfg); flex:0 0 auto; }
+    .ibtn.on { border-color:var(--pri); color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.12); }
+    /* rig */
+    .band { flex:0 0 auto; border-bottom:1px solid var(--bd); padding:8px 12px; display:flex; flex-direction:column; gap:8px; }
+    .lrow { display:flex; align-items:center; gap:8px; min-height:24px; }
+    .tiles { display:flex; gap:8px; overflow:hidden; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:48px; padding:0 12px; min-width:140px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:13px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:7px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .tile.w { flex:1; min-width:0; }
+    .cnt { font-size:10px; padding:1px 5px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .strip { height:32px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); font-size:11px; }
+    .rlbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    /* pages */
+    .pstrip { height:40px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .ptabs { display:flex; gap:2px; overflow:hidden; flex:1; min-width:0; }
+    .ptab { height:24px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); display:flex; align-items:center; white-space:nowrap; }
+    .ptab.on { background:var(--muted); color:var(--fg); }
+    .body { flex:1; min-height:0; overflow:hidden; padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:8px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:16px; }
+    .bankname { font-size:11px; font-weight:600; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:6px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after { content:''; position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:var(--pri); }
+    .padname { font-size:13px; font-weight:500; line-height:1.2; }
+    .pad.all .padname { color:var(--pri); }
+    .padrow { display:flex; align-items:center; gap:5px; }
+    .sw { width:11px; height:11px; border-radius:3px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .paddetail { font-size:10px; color:var(--mfg); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-size:12px; font-weight:700; }
+    .cue .cname { font-size:10px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    /* sheets */
+    .scrim { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+    .bsheet { position:absolute; left:0; right:0; bottom:0; border-top:1px solid var(--bd); border-radius:16px 16px 0 0; background:var(--bg); display:flex; flex-direction:column; }
+    .ssheet { position:absolute; top:0; right:0; bottom:0; width:288px; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; box-shadow:-12px 0 32px rgba(0,0,0,0.45); }
+    .grab { width:36px; height:4px; border-radius:2px; background:var(--muted); margin:8px auto 0; }
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); flex:0 0 auto; }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .x { flex:0 0 40px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:36px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:36px; padding:0 12px; border-radius:8px; font-size:12px; font-weight:600; white-space:nowrap; color:var(--fg); border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .callout { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); z-index:3; }
+    .colcap { display:flex; flex-direction:column; gap:6px; width:390px; flex:0 0 auto; min-width:0; }
+    .colcap .cap { font-size:11px; }
+    .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:inline-grid; place-items:center; flex:0 0 auto; vertical-align:middle; margin-right:4px; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:1440px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div>
+    <div class="h1">Phones: one region at a time, sheets instead of a rail</div>
+    <p class="cap" style="margin-top:4px;">Drawn at 1:1. The busk view folds on the numbers the rest of the app already folds on &mdash; <span class="mono">md</span> 768 takes the rail and edit mode, the page body stacks its columns below 600px, and a viewport under 500px tall is <b>short</b>, which beats narrow. The app header stays on live views, so a landscape phone has 297px under the ShowBar and every default below is chosen for that.</p>
+  </div>
+
+  <!-- portrait row -->
+  <div style="display:flex; gap:24px; align-items:flex-start;">
+    <!-- A: split -->
+    <div class="colcap">
+      <span class="lbl">iPhone portrait 390&times;844 &middot; Split, the default here</span>
+      <div class="ph" style="width:390px; height:844px;">
+        <div class="hdr"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="t">Main Show &middot; Busk</span><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
+        <div class="sbar"><span class="sbtn">DBO</span><div style="flex:1; min-width:0; font-size:11px; line-height:1.25;"><span class="lbl">Main Show</span><br><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">12 Verse 2 &rarr; 13 Chorus</span></div><span class="sbtn" style="gap:5px;"><span class="beat"></span><span class="mono num" style="color:var(--fg);">120</span></span><span class="sbtn">BACK</span><span class="gobtn">GO</span></div>
+        <div class="band">
+          <div class="lrow"><span class="lbl">Rig</span><span class="chip">Groups <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">Front wash &middot; 6</span><span class="pill">Colour</span><span class="chip">Cells: All</span><span class="ibtn" style="width:24px; height:24px; border:none; background:none;"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span></div>
+          <div class="tiles">
+            <div class="tile on"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Front wash</span><span class="cnt">6</span></div><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Movers</span><span class="cnt">4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Blinders</span></div><div class="live"><i style="width:0%;"></i></div></div>
+          </div>
+        </div>
+        <div class="pstrip">
+          <div class="ptabs"><span class="ptab on">Colour</span><span class="ptab">Position</span><span class="ptab">Beam</span><span class="ptab">Cues</span></div>
+          <div class="seg"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg></span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></span></div>
+          <span class="ibtn"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.4-10-8.4Z"/></svg></span>
+        </div>
+        <div class="body">
+          <div class="bank"><div class="bankh"><span class="bankname">Colours</span><span class="solotag">Solo</span></div><div class="pads">
+            <div class="pad all"><div class="padrow"><span class="sw" style="background:#f5b342;"></span><span class="padname">Warm Amber</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#2456ff;"></span><span class="padname">Deep Blue</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff2f4f;"></span><span class="padname">Red</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#7f00ff;"></span><span class="padname">UV wash</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#fff;"></span><span class="padname">Open white</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff8ac9;"></span><span class="padname">Pink</span></div></div>
+          </div></div>
+          <div class="bank"><div class="bankh"><span class="bankname">Effects</span></div><div class="pads">
+            <div class="pad"><div class="padrow"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Pulse</span></div><span class="paddetail">&frac12; &middot; M2</span></div>
+            <div class="pad"><div class="padrow"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Rainbow</span></div><span class="paddetail">1 &middot; M2</span></div>
+            <div class="pad"><div class="padrow"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Strobe</span></div><span class="paddetail">&frac14; &middot; M1</span></div>
+          </div></div>
+          <div class="bank"><div class="bankh"><span class="bankname">Song cues</span><span class="solotag">Solo</span></div><div class="pads">
+            <div class="pad cue live"><span class="cn">12</span><span class="cname">Verse 2</span></div>
+            <div class="pad cue"><span class="cn">13</span><span class="cname">Chorus</span></div>
+            <div class="pad cue"><span class="cn">14</span><span class="cname">Bridge</span></div>
+          </div></div>
+        </div>
+        <span class="callout" style="top:106px; left:52px;">1</span>
+        <span class="callout" style="top:204px; right:88px;">2</span>
+        <span class="callout" style="top:204px; right:8px;">3</span>
+      </div>
+      <p class="cap"><span class="n">1</span><b>Split shows one rig row</b>, chosen by the row chip; the tiles scroll sideways. A row is 48px tall here, the tap-target floor, and the label row folds to Rig &middot; row &middot; summary &middot; pill &middot; Cells with the verbs in a menu.</p>
+      <p class="cap"><span class="n">2</span><b>Focus is glyphs only</b> below 640 and still one control. <span class="n">3</span><b>The sheet is a button</b>, not a rail: it opens the Colour tab as a bottom sheet (next frame). Speed is already the ShowBar's chip below <span class="mono">md</span>.</p>
+    </div>
+
+    <!-- B: pads + colour bottom sheet -->
+    <div class="colcap">
+      <span class="lbl">iPhone portrait &middot; Pads focus, Colour open as a bottom sheet</span>
+      <div class="ph" style="width:390px; height:844px;">
+        <div class="hdr"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="t">Main Show &middot; Busk</span><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
+        <div class="sbar"><span class="sbtn">DBO</span><div style="flex:1; min-width:0; font-size:11px; line-height:1.25;"><span class="lbl">Main Show</span><br><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">12 Verse 2 &rarr; 13 Chorus</span></div><span class="sbtn" style="gap:5px;"><span class="beat"></span><span class="mono num" style="color:var(--fg);">120</span></span><span class="sbtn">BACK</span><span class="gobtn">GO</span></div>
+        <div class="strip"><span class="rlbl">Rig</span><span style="flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Front wash, Bar L &middot; 14</span><span class="pill">Colour</span><span class="chip">Targets: Desk</span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--mfg)"><path d="m6 9 6 6 6-6"/></svg></div>
+        <div class="pstrip">
+          <div class="ptabs"><span class="ptab on">Colour</span><span class="ptab">Position</span><span class="ptab">Beam</span><span class="ptab">Cues</span></div>
+          <div class="seg"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg></span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></span></div>
+          <span class="ibtn on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.4-10-8.4Z"/></svg></span>
+        </div>
+        <div class="body">
+          <div class="bank"><div class="bankh"><span class="bankname">Colours</span><span class="solotag">Solo</span></div><div class="pads">
+            <div class="pad all"><div class="padrow"><span class="sw" style="background:#f5b342;"></span><span class="padname">Warm Amber</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#2456ff;"></span><span class="padname">Deep Blue</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff2f4f;"></span><span class="padname">Red</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#7f00ff;"></span><span class="padname">UV wash</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#fff;"></span><span class="padname">Open white</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff8ac9;"></span><span class="padname">Pink</span></div></div>
+          </div></div>
+          <div class="bank"><div class="bankh"><span class="bankname">Effects</span></div><div class="pads">
+            <div class="pad"><span class="padname">Pulse</span></div><div class="pad"><span class="padname">Rainbow</span></div><div class="pad"><span class="padname">Strobe</span></div>
+          </div></div>
+        </div>
+        <div class="scrim" style="top:96px;"></div>
+        <div class="bsheet" style="height:560px;">
+          <div class="grab"></div>
+          <div class="tabs"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Speed</span><span class="on">Colour</span><span>Spread</span><span class="x"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+          <div style="flex:1; min-height:0; padding:12px 16px; display:flex; flex-direction:column; gap:10px;">
+            <div style="font-size:11px; color:var(--mfg);">Colour of <b style="color:var(--fg); font-weight:600;">14 heads</b> &middot; Local</div>
+            <div style="height:150px; border-radius:10px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); position:relative;"><span style="position:absolute; left:268px; top:26px; width:20px; height:20px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6);"></span></div>
+            <div style="height:16px; border-radius:8px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); position:relative;"><span style="position:absolute; left:26px; top:-3px; width:22px; height:22px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6);"></span></div>
+            <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:6px;"><div class="field mono" style="height:36px;">#F5B342</div><div class="field mono num" style="height:36px; justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">R</span>245</div><div class="field mono num" style="height:36px; justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">G</span>179</div><div class="field mono num" style="height:36px; justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">B</span>66</div></div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <div style="display:flex; align-items:center; gap:8px; font-size:11px;"><span style="width:40px; color:var(--mfg);">White</span><div class="slider"><i style="left:30%;"></i></div><span class="mono num" style="width:28px; text-align:right;">80</span></div>
+              <div style="display:flex; align-items:center; gap:8px; font-size:11px;"><span style="width:40px; color:var(--mfg);">Amber</span><div class="slider"><i style="left:62%;"></i></div><span class="mono num" style="width:28px; text-align:right;">160</span></div>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"><div class="swatch" style="background:#f5b342;">Warm Amber</div><div class="swatch" style="background:#2456ff;">Deep Blue</div><div class="swatch" style="background:#7f00ff;">UV wash</div><div class="swatch" style="background:#ff8ac9;">Pink</div></div>
+            <span style="flex:1;"></span>
+            <div style="display:flex; gap:8px;"><span class="btn" style="flex:1;">Save as template&hellip;</span><span class="btn">Pick</span></div>
+          </div>
+        </div>
+        <span class="callout" style="top:106px; left:52px;">4</span>
+        <span class="callout" style="top:296px; left:52px;">5</span>
+      </div>
+      <p class="cap"><span class="n">4</span><b>Pads focus folds the rig to a 32px strip</b> that still names the selection, the family and the desk chip &mdash; a tap unfolds Split. On a phone this is the busking mode: select on the strip's row, press pads.</p>
+      <p class="cap"><span class="n">5</span><b>The three tabs are one bottom sheet</b> at up to 66% of the height, the cell editor's own phone form: fields are 36px, the picker's thumb 20px, the emitter rows finger-tall. The keyboard's bite lifts it, as the editor sheet already does.</p>
+    </div>
+
+    <!-- C: rig focus -->
+    <div class="colcap">
+      <span class="lbl">iPhone portrait &middot; Rig focus, the picker for one thumb</span>
+      <div class="ph" style="width:390px; height:844px;">
+        <div class="hdr"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="t">Main Show &middot; Busk</span><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
+        <div class="sbar"><span class="sbtn">DBO</span><div style="flex:1; min-width:0; font-size:11px; line-height:1.25;"><span class="lbl">Main Show</span><br><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">12 Verse 2 &rarr; 13 Chorus</span></div><span class="sbtn" style="gap:5px;"><span class="beat"></span><span class="mono num" style="color:var(--fg);">120</span></span><span class="sbtn">BACK</span><span class="gobtn">GO</span></div>
+        <div class="band" style="flex:1; min-height:0; overflow:hidden; gap:10px;">
+          <div class="lrow"><span class="lbl">Rig</span><span style="font-size:11px; flex:1;">Front wash, Bar L &middot; 14</span><span class="pill">Colour</span><span class="chip">Cells: All</span><span class="ibtn" style="width:24px; height:24px; border:none; background:none;"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></span></div>
+          <div class="lrow" style="min-height:0;"><span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Targets: Desk</span><span style="flex:1;"></span><span class="chip">Spread&hellip;</span><span class="chip">Locate</span><span class="chip">Clear</span></div>
+          <span class="rlbl">Groups</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="tile w on"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Front wash</span><span class="cnt">6</span></div><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Movers</span><span class="cnt">4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Blinders</span><span class="cnt">4</span></div><div class="live"><i style="width:0%;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Sides</span><span class="cnt">4</span></div><div class="live"><i style="width:30%; background:#c04bff;"></i></div></div>
+          </div>
+          <span class="rlbl">Movers</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 1</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 2</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 3</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile w"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+          </div>
+          <span class="rlbl">Bars</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="tile w some" style="height:60px;"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">4 of 8</span></div><div class="pips"><span class="pip on" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip on" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip on" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip on" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+            <div class="tile w" style="height:60px;"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar R</span><span class="cnt">8</span></div><div class="pips"><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span><span class="pip" style="width:16px; height:9px;"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+          </div>
+          <span class="rlbl">Floor</span>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div class="tile w"><div class="t1"><span>Floor 1</span></div><div class="live"><i style="width:0%;"></i></div></div>
+            <div class="tile w"><div class="t1"><span>Floor 2</span></div><div class="live"><i style="width:0%;"></i></div></div>
+          </div>
+        </div>
+        <div class="strip" style="border-top:1px solid var(--bd); border-bottom:none; height:40px;"><span class="rlbl">Pages</span><span class="chip">Colour <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span><span style="flex:1; color:var(--mfg);">4 banks</span><div class="seg"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg></span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></span></div></div>
+        <span class="callout" style="top:106px; left:52px;">6</span>
+        <span class="callout" style="top:430px; left:52px;">7</span>
+        <span class="callout" style="bottom:12px; left:52px;">8</span>
+      </div>
+      <p class="cap"><span class="n">6</span><b>Rig focus stacks every row</b>, two tiles across, scrolling vertically &mdash; this replaces today's narrow-width target sheet, and it is the second screen a phone in a pocket makes for the desk. <span class="n">7</span>Pips are 16&times;9 here and grow to 44px tall under a finger, the marquee's touch rule.</p>
+      <p class="cap"><span class="n">8</span><b>The page folds to a 40px strip at the bottom</b>, page name and bank count, with the Focus control on it so one tap comes back. The Focus control is always on whichever strip is folded.</p>
+    </div>
+  </div>
+
+  <!-- landscape row -->
+  <div style="display:flex; gap:24px; align-items:flex-start;">
+    <div class="colcap" style="width:852px;">
+      <span class="lbl">iPhone landscape 852&times;393 &middot; Pads focus, Colour as a right-hand sheet</span>
+      <div class="ph" style="width:852px; height:393px; border-radius:22px;">
+        <div class="hdr"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="t">Main Show &middot; Busk</span><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
+        <div class="sbar"><span class="sbtn">DBO</span><div style="flex:1; min-width:0; font-size:11px; line-height:1.25;"><span class="lbl">Main Show</span><br><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block;">Cue 12 &middot; Verse 2 &rarr; Next 13 &middot; Chorus</span></div><span class="sbtn" style="gap:5px;"><span class="beat"></span><span class="mono num" style="color:var(--fg);">120</span></span><span class="chip" style="height:36px; border-radius:8px;">Programmer &middot; 14</span><span class="sbtn">BACK</span><span class="gobtn">GO</span></div>
+        <div class="strip"><span class="rlbl">Rig</span><span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Front wash, Bar L &middot; 14</span><span class="pill">Colour</span><span class="chip">Targets: Desk</span><span class="chip">Cells: All</span><span style="flex:1;"></span><span class="rlbl">Pages</span><div class="ptabs" style="flex:0 1 auto;"><span class="ptab on">Colour</span><span class="ptab">Position</span><span class="ptab">Beam</span></div><div class="seg"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg></span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></span></div><span class="ibtn on" style="width:26px; height:26px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.4-10-8.4Z"/></svg></span></div>
+        <div class="body" style="flex-direction:row; gap:10px;">
+          <div class="bank" style="flex:2;"><div class="bankh"><span class="bankname">Colours</span><span class="solotag">Solo</span></div><div class="pads">
+            <div class="pad all"><div class="padrow"><span class="sw" style="background:#f5b342;"></span><span class="padname">Warm Amber</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#2456ff;"></span><span class="padname">Deep Blue</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff2f4f;"></span><span class="padname">Red</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#7f00ff;"></span><span class="padname">UV wash</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#fff;"></span><span class="padname">Open white</span></div></div>
+            <div class="pad"><div class="padrow"><span class="sw" style="background:#ff8ac9;"></span><span class="padname">Pink</span></div></div>
+          </div></div>
+          <div class="bank" style="flex:1;"><div class="bankh"><span class="bankname">Effects</span></div><div class="pads">
+            <div class="pad"><span class="padname">Pulse</span></div><div class="pad"><span class="padname">Rainbow</span></div>
+          </div></div>
+        </div>
+        <div class="scrim" style="top:96px;"></div>
+        <div class="ssheet" style="top:96px;">
+          <div class="tabs"><span>Speed</span><span class="on">Colour</span><span>Spread</span><span class="x"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span></div>
+          <div style="flex:1; min-height:0; padding:10px 12px; display:grid; grid-template-columns:1fr 1fr; gap:8px; align-content:start;">
+            <div style="grid-column:1 / -1; font-size:11px; color:var(--mfg);">Colour of <b style="color:var(--fg); font-weight:600;">14 heads</b></div>
+            <div style="height:104px; border-radius:8px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%));"></div>
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <div style="height:12px; border-radius:6px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);"></div>
+              <div class="field mono" style="height:30px;">#F5B342</div>
+              <div style="display:flex; align-items:center; gap:6px; font-size:10px;"><span style="width:26px; color:var(--mfg);">W</span><div class="slider"><i style="left:30%;"></i></div></div>
+              <div style="display:flex; align-items:center; gap:6px; font-size:10px;"><span style="width:26px; color:var(--mfg);">A</span><div class="slider"><i style="left:62%;"></i></div></div>
+            </div>
+            <div style="grid-column:1 / -1; display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;"><div class="swatch" style="height:30px; background:#f5b342;"></div><div class="swatch" style="height:30px; background:#2456ff;"></div><div class="swatch" style="height:30px; background:#7f00ff;"></div><div class="swatch" style="height:30px; background:#ff8ac9;"></div></div>
+          </div>
+        </div>
+        <span class="callout" style="top:106px; left:52px;">9</span>
+        <span class="callout" style="top:106px; right:296px;">10</span>
+      </div>
+    </div>
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+      <p class="cap"><span class="n">9</span><b>Short beats narrow.</b> 852 is wider than <span class="mono">md</span>, so by width alone the rail would draw and the palette would be offered; by height there are 297px under the ShowBar. So the short fold wins: the rig strip and the page strip <b>merge into one 32px row</b>, Split shows one row of 48px tiles, and the defaults are Pads focus with the sheet folded. Edit mode is withheld here as it is below <span class="mono">md</span>: a palette drag needs both regions on screen and there is no room for both.</p>
+      <p class="cap"><span class="n">10</span><b>The sheet opens as a right-hand overlay</b>, 288 wide, the cell editor's own short-viewport form, with the Colour tab in its two-column <span class="mono">compact</span> layout (picker beside the fields). It overlays rather than docks because a docked 288px rail would leave 564px of body and a Colours bank four pads wide.</p>
+      <div class="note key"><p><b>One rule under all of it: the fold decides the form, the window decides the choice.</b> A phone never reads a rail and a desktop never reads a bottom sheet, but which tab is open, which focus is chosen and which page is showing are the same per-tab facts on every surface. Rotate a phone and the Colour tab it had open as a bottom sheet is the Colour tab open as a side sheet.</p></div>
+      <div class="note"><p><b>What is unchanged below <span class="mono">md</span>:</b> no palette, no <i>Edit layout</i>, play mode only; Speed reached through the ShowBar's chip as today; the page's columns stack below 600px of body. The narrow-width target sheet is replaced by Rig focus, which is the same list with rows and cells.</p></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1440}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

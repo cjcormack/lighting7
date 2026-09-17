@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+    /* the sheet */
+    .sheet { width:520px; border:1px solid var(--bd); border-radius:10px; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; box-shadow:0 20px 50px rgba(0,0,0,0.5); }
+    .sh { display:flex; align-items:center; gap:8px; padding:16px 16px 8px; }
+    .sh .t { font-size:16px; font-weight:600; }
+    .sh .x { margin-left:auto; color:var(--mfg); }
+    .row { display:flex; flex-direction:column; gap:8px; padding:12px 16px; border-top:1px solid var(--bd); }
+    .r1 { display:flex; align-items:center; gap:8px; }
+    .input { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; display:flex; align-items:center; gap:6px; white-space:nowrap; }
+    .sel svg { color:var(--mfg); }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .chip.me { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .opts { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding-left:2px; }
+    .ok { font-size:10px; color:var(--mfg); width:44px; flex:0 0 auto; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; justify-content:center; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+    .url { font-family: ui-monospace, Menlo, monospace; font-size:10.5px; color:var(--fg); background:oklch(0.274 0.006 286.033 / 0.3); border:1px solid var(--bd); border-radius:8px; padding:7px 10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .url .p { color:oklch(0.8 0.12 255); }
+    .dot { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .code { font-family: ui-monospace, Menlo, monospace; font-size:10.5px; line-height:1.5; color:var(--fg); background:oklch(0.141 0.005 285.823); border:1px solid var(--bd); border-radius:8px; padding:8px 10px; white-space:pre; overflow:hidden; }
+    .code .c { color:var(--mfg); }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .li { font-size:11px; line-height:1.45; color:var(--mfg); display:flex; gap:6px; }
+    .li b { color:var(--fg); font-weight:600; }
+    .li::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--mfg); flex:0 0 auto; margin-top:6px; }
+    .li.no::before { background:oklch(0.704 0.191 22.216); }
+    .li.yes::before { background:var(--green); }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:760px; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div class="h1">The Screens sheet: a window's setup from any window</div>
+    <p class="cap" style="margin-top:4px;">The sheet behind the profile menu already addresses every window by its registry row &mdash; rename, view, full screen. It is the natural home for the per-window facts this proposal adds, under one test: <b>can setting it from another screen lose something the operator at that window built?</b> If not, it goes on the row.</p>
+  </div>
+
+  <div style="display:flex; gap:20px; align-items:flex-start; flex:1; min-height:0;">
+    <!-- the sheet -->
+    <div class="sheet">
+      <div class="sh"><span class="t">Screens</span><span class="cap">3 windows on this desk</span><span class="x"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+
+      <div class="row">
+        <div class="r1">
+          <div class="input" style="width:150px;">Screen 1</div>
+          <span class="chip me">this window</span>
+          <span class="chip"><span class="dot"></span>Full screen</span>
+          <span style="flex:1;"></span>
+          <div class="sel">Busk<svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div class="opts">
+          <span class="ok">Focus</span><div class="seg"><span>Split</span><span>Pads</span><span class="on">Rig</span></div>
+          <span class="ok">Sheet</span><div class="seg"><span>None</span><span>Speed</span><span class="on">Colour</span><span>Spread</span></div>
+        </div>
+        <div class="opts">
+          <span class="ok">Page</span><div class="sel">Colour<svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div><span class="chip">follows the desk</span>
+          <span style="flex:1;"></span><span class="chip">Targets: follows the desk</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="r1">
+          <div class="input" style="width:150px;">Screen 2</div>
+          <span class="chip"><span class="dot"></span>Full screen</span>
+          <span style="flex:1;"></span>
+          <div class="sel">Busk<svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div class="opts">
+          <span class="ok">Focus</span><div class="seg"><span>Split</span><span class="on">Pads</span><span>Rig</span></div>
+          <span class="ok">Sheet</span><div class="seg"><span class="on">None</span><span>Speed</span><span>Colour</span><span>Spread</span></div>
+        </div>
+        <div class="opts">
+          <span class="ok">Page</span><div class="sel">Position<svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div><span class="chip dash">this window's</span>
+          <span style="flex:1;"></span><span class="chip">Targets: follows the desk</span>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="r1">
+          <div class="input" style="width:150px;">iPad</div>
+          <span class="chip">Tab</span>
+          <span style="flex:1;"></span>
+          <div class="sel">Prompt Book<svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div class="opts"><span class="cap">No options &mdash; the Prompt Book contributes none.</span></div>
+      </div>
+
+      <div class="row" style="gap:10px;">
+        <div class="r1"><span class="btn"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Open a window on&hellip; Display 2</span><span class="btn ghost">Layouts&hellip;</span></div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div class="r1"><span class="lbl">Copy link for Screen 2</span><span class="cap">carries its whole setup</span></div>
+          <div class="url">http://localhost:8413/?<span class="p">window=Screen%202</span>&amp;<span class="p">page=3</span>&amp;<span class="p">focus=pads</span>&amp;<span class="p">sheet=none</span></div>
+          <span class="cap">This tab is at <span class="mono">localhost</span>, so the link names the desk to itself; open it on the desk or replace the host.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- notes -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px;">
+      <div class="two">
+        <div class="note" style="display:flex; flex-direction:column; gap:5px;">
+          <p><b>On the row</b> &mdash; nothing is lost by a remote set</p>
+          <div class="li yes"><span><b>Focus.</b> Flipping Screen 2 to Pads from Screen 1 is the two-screen flow itself.</span></div>
+          <div class="li yes"><span><b>Sheet.</b> Same reasoning, same command.</span></div>
+          <div class="li yes"><span><b>Page</b>, for a busk row. A remote set <i>unlinks</i> that window onto the page, exactly as arriving with <span class="mono">?page=</span> does; the chip on that window says so.</span></div>
+          <div class="li yes"><span><b>The link.</b> Every fact on the row, in the URL the launcher already mints.</span></div>
+        </div>
+        <div class="note" style="display:flex; flex-direction:column; gap:5px;">
+          <p><b>Not on the row</b> &mdash; a remote set would decide for someone else</p>
+          <div class="li no"><span><b>Selection follow.</b> Unlinking snapshots what that window shows, a selection the sender cannot see. Shown as state, changed only on its own chip and &#8984;K, as now.</span></div>
+          <div class="li no"><span><b>The rig and the pad pages.</b> Project documents edited in place under <i>Edit layout</i>; the sheet is about windows.</span></div>
+          <div class="li no"><span><b>Rows in the split, edit mode.</b> The handle's and the page's; too fine to drive from elsewhere.</span></div>
+        </div>
+      </div>
+      <div class="note key">
+        <p><b>The sheet must not learn the word &ldquo;busk&rdquo;.</b> Each entry in <span class="mono">lib/windowViews.ts</span> gains an optional <span class="mono">options</span> descriptor, and a row renders whatever its <i>current</i> view contributes &mdash; today only Busk contributes anything. The write is one generic command, <span class="mono">windows.viewOptions {targetId, view, options}</span>, keyed and broadcast like <span class="mono">windows.show</span>; the named window applies it to its own tab facts and re-announces, so the sheet's rows come from the registry and never from a guess.</p>
+      </div>
+      <div class="code"><span class="c">// lib/windowViews.ts</span>
+{ id:'busk', label:'Busk', segment:'/busk',
+  options: [
+    { key:'focus', label:'Focus', kind:'enum',  values:['split','pads','rig'] },
+    { key:'sheet', label:'Sheet', kind:'enum',  values:['none','speed','colour','spread'] },
+    { key:'page',  label:'Page',  kind:'page' },   <span class="c">// resolved against the fetched page list</span>
+  ] }
+
+<span class="c">// the announce carries the current values, so a row can draw them:</span>
+windows.announce { windowId, name, view, fullscreen, follows, <span class="c">viewOptions?</span> }</div>
+      <div class="note">
+        <p><b>One wire trap, already recorded.</b> The desk's announce is deserialised with a bare Json &mdash; one extra key drops the whole frame silently. Adding <span class="mono">viewOptions</span> is a backend change first and a client change second, and <span class="mono">windowsApi.test.ts</span>'s pinned key set moves with it.</p>
+      </div>
+      <div class="note">
+        <p><b>This is where saved layouts start to earn their place.</b> With view, focus, sheet, page and full screen on every row, a <i>layout</i> is one row per window of exactly those five facts. The deferred <span class="mono">FU-SCREENS-LAYOUTS</span> stays deferred, but the <i>Layouts&hellip;</i> button is drawn here so the sheet is laid out for it, and its record is the announce's shape rather than a new one.</p>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

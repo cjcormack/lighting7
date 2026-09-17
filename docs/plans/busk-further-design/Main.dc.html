@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:956px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+  <!-- ShowBar -->
+  <div style="height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:6px 12px; border-bottom:1px solid var(--bd);">
+    <div style="display:flex; align-items:center; height:36px; padding:0 12px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:11px; font-weight:700; letter-spacing:0.08em; color:var(--mfg);">DBO</div>
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; padding:0 8px;">
+      <span class="lbl">Main Show</span>
+      <span style="font-size:13px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Cue 12 &middot; Verse 2 &nbsp;&rarr;&nbsp; Next 13 &middot; Chorus</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; height:36px; padding:0 10px; border:1px solid var(--bd); border-radius:8px; background:var(--card);">
+      <span class="beat"></span><span class="mono num" style="font-size:13px; font-weight:700;">120</span><span style="font-size:10px; color:var(--mfg);">M1</span>
+    </div>
+    <div class="chip pri" style="height:36px; border-radius:8px; font-size:11px;">Programmer &middot; 14</div>
+    <div style="display:flex; align-items:center; height:36px; padding:0 16px; border:1px solid var(--bd); border-radius:8px; background:var(--card); font-size:12px; font-weight:600;">BACK</div>
+    <div class="gobtn">GO</div>
+  </div>
+
+  <div style="display:flex; flex:1; min-height:0;">
+    <!-- LEFT COLUMN -->
+    <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+      <!-- RIG BAND -->
+      <div style="flex-shrink:0; padding:10px 16px 6px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:8px; position:relative;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="lbl">Rig</span>
+          <span style="font-size:11px; color:var(--fg);">Front wash, Bar L &middot; <span class="num">14 heads</span></span>
+          <span class="pill">Colour</span>
+          <span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Targets: Desk</span>
+          <span class="chip"><span style="color:var(--mfg);">Cells:</span> All <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          <span style="flex:1;"></span>
+          <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Spread&hellip;</span>
+          <span class="btn sm ghost">Locate</span>
+          <span class="btn sm ghost">Highlight</span>
+          <span class="btn sm ghost">Clear</span>
+        </div>
+        <div class="rrow">
+          <span class="rlbl">Groups</span>
+          <div class="tiles">
+            <div class="tile on"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Front wash</span><span class="cnt">6</span></div><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Movers</span><span class="cnt">4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Blinders</span><span class="cnt">4</span></div><div class="live"><i style="width:0%; background:#fff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Sides</span><span class="cnt">4</span></div><div class="live"><i style="width:30%; background:#c04bff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Floor</span><span class="cnt">6</span></div><div class="live"><i style="width:0%; background:#fff;"></i></div></div>
+          </div>
+        </div>
+        <div class="rrow">
+          <span class="rlbl">Movers</span>
+          <div class="tiles">
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 1</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 2</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 3</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Mover 4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+          </div>
+        </div>
+        <div class="rrow">
+          <span class="rlbl">Bars</span>
+          <div class="tiles">
+            <div class="tile some"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar L</span><span class="cnt">4 of 8</span></div><div class="pips"><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Bar R</span><span class="cnt">8</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Pixel strip</span><span class="cnt">16</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:0%; background:#fff;"></i></div></div>
+          </div>
+        </div>
+        <div class="handle"><svg class="ico12" viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="9" r="1.6"/><circle cx="16" cy="9" r="1.6"/><circle cx="8" cy="15" r="1.6"/><circle cx="16" cy="15" r="1.6"/></svg>3 of 4 rows</div>
+        <span class="callout" style="top:8px; left:46px;">1</span>
+        <span class="callout" style="top:8px; left:522px;">5</span>
+        <span class="callout" style="top:8px; left:610px;">6</span>
+        <span class="callout" style="top:170px; left:250px;">6</span>
+        <span class="callout" style="bottom:2px; left:600px;">3</span>
+      </div>
+
+      <!-- PAGE STRIP -->
+      <div style="height:44px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 16px; border-bottom:1px solid var(--bd); position:relative;">
+        <span class="lbl">Pages</span>
+        <div class="seg"><span class="on">Colour</span><span>Position</span><span>Beam</span><span>Cues</span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
+        <span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Page: Desk</span>
+        <span style="flex:1;"></span>
+        <span class="lbl">Focus</span>
+        <div class="seg"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg>Split</span><span>Pads</span><span>Rig</span></div>
+        <span class="btn sm out">Edit layout</span>
+        <span class="callout" style="top:12px; right:214px;">2</span>
+      </div>
+
+      <!-- PAGE BODY -->
+      <div style="flex:1; min-height:0; overflow:hidden; padding:12px 16px 16px; display:flex; flex-direction:column; gap:12px;">
+        <div style="display:grid; grid-template-columns:8fr 4fr; gap:12px;">
+          <div class="bank">
+            <div class="bankh"><span class="bankname">Colours</span><span class="solotag">Solo</span></div>
+            <div class="pads">
+              <div class="pad all"><div class="padrow"><span class="sw" style="background:#f5b342;"></span><span class="padname">Warm Amber</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#2456ff;"></span><span class="padname">Deep Blue</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ff2f4f;"></span><span class="padname">Red</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#7f00ff;"></span><span class="padname">UV wash</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ffffff;"></span><span class="padname">Open white</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ff8ac9;"></span><span class="padname">Pink</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#33d17a;"></span><span class="padname">Green</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#00c8ff;"></span><span class="padname">Cyan</span></div></div>
+            </div>
+          </div>
+          <div class="bank">
+            <div class="bankh"><span class="bankname">Effects</span></div>
+            <div class="pads">
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Colour Pulse</span></div><span class="paddetail">&frac12; &middot; M2</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Rainbow</span></div><span class="paddetail">1 &middot; M2</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Strobe</span></div><span class="paddetail">&frac14; &middot; M1</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:6fr 6fr; gap:12px;">
+          <div class="bank">
+            <div class="bankh"><span class="bankname">Washes</span></div>
+            <div class="pads">
+              <div class="pad some"><div class="padrow"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--pri)"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span class="padname">Ballyhoo</span></div><span class="paddetail">Look &middot; 2 fx</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mfg)"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span class="padname">Stage wash</span></div><span class="paddetail">Look</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--mfg)"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span class="padname">Sidelight</span></div><span class="paddetail">Look</span></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ffd27a;"></span><span class="padname">50%</span></div><span class="paddetail">Intensity</span></div>
+            </div>
+          </div>
+          <div class="bank">
+            <div class="bankh"><span class="bankname">Song cues</span><span class="solotag">Solo</span></div>
+            <div class="pads">
+              <div class="pad cue live"><span class="cn">12</span><span class="cname">Verse 2</span></div>
+              <div class="pad cue"><span class="cn">13</span><span class="cname">Chorus</span></div>
+              <div class="pad cue"><span class="cn">14</span><span class="cname">Bridge</span></div>
+              <div class="pad cue"><span class="cn">S-1</span><span class="cname">Blackout</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIDE SHEET -->
+    <div style="width:288px; flex-shrink:0; border-left:1px solid var(--bd); display:flex; flex-direction:column; position:relative;">
+      <div class="tabs">
+        <span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Speed</span>
+        <span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.4-10-8.4Z"/></svg>Colour</span>
+        <span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Spread</span>
+        <span class="fold"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span>
+      </div>
+      <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px;">
+        <div style="font-size:11px; color:var(--mfg);">Colour of <b style="color:var(--fg); font-weight:600;">14 heads</b> &middot; writes to Local</div>
+        <div style="height:150px; border-radius:10px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); position:relative;">
+          <span style="position:absolute; left:196px; top:26px; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6);"></span>
+        </div>
+        <div style="height:12px; border-radius:6px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); position:relative;"><span style="position:absolute; left:22px; top:-2px; width:16px; height:16px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6);"></span></div>
+        <div style="display:grid; grid-template-columns:1.4fr 1fr 1fr 1fr; gap:6px;">
+          <div class="field mono">#F5B342</div>
+          <div class="field mono num" style="justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">R</span>245</div>
+          <div class="field mono num" style="justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">G</span>179</div>
+          <div class="field mono num" style="justify-content:space-between;"><span style="color:var(--mfg); font-size:9px;">B</span>66</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; padding-top:2px;">
+          <div style="display:flex; align-items:center; gap:8px; font-size:11px;"><span style="width:38px; color:var(--mfg);">White</span><div class="slider"><i style="left:30%;"></i></div><span class="mono num" style="width:28px; text-align:right;">80</span></div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:11px;"><span style="width:38px; color:var(--mfg);">Amber</span><div class="slider"><i style="left:62%;"></i></div><span class="mono num" style="width:28px; text-align:right;">160</span></div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:11px;"><span style="width:38px; color:var(--mfg);">UV</span><div class="slider"><i style="left:0%;"></i></div><span class="mono num" style="width:28px; text-align:right;">0</span></div>
+          <div style="font-size:10px; color:var(--mfg);">Emitters on 6 of 14 heads &middot; the rest take RGB only</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px; padding-top:4px;">
+          <div style="display:flex; align-items:center; justify-content:space-between;"><span class="lbl">Recent</span><span style="font-size:10px; color:var(--mfg);">from templates</span></div>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:6px;">
+            <div class="swatch" style="background:#f5b342;">Warm Amber</div>
+            <div class="swatch" style="background:#2456ff;">Deep Blue</div>
+            <div class="swatch" style="background:#7f00ff;">UV wash</div>
+            <div class="swatch" style="background:#ff8ac9;">Pink</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; padding-top:2px;"><span class="switch"></span><span>Second colour, spread across the selection</span></div>
+        <span style="flex:1;"></span>
+        <div style="display:flex; gap:6px;">
+          <span class="btn out" style="flex:1; justify-content:center;">Save as template&hellip;</span>
+          <span class="btn out" style="flex:0 0 auto;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m3 21 9-9M13 5l6 6"/><path d="M14 4a2 2 0 0 1 3 0l3 3a2 2 0 0 1 0 3l-2 2-6-6 2-2Z"/></svg>Pick</span>
+        </div>
+      </div>
+      <span class="callout" style="top:10px; left:-10px;">4</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div><span class="n">1</span><span><b>The rig is built, not listed.</b> Named rows of the targets the operator chose, in their order; hidden fixtures are simply not on it. Empty rig = every group then every fixture, as today.</span></div>
+    <div><span class="n">2</span><span><b>Focus is this window's.</b> Split &middot; Pads &middot; Rig, per tab like the page chip, launchable as <span class="mono">?focus=</span>. Pads or Rig fills the body; the other folds to a strip.</span></div>
+    <div><span class="n">3</span><span><b>The split is in rows.</b> Drag the handle and the band shows 1&hellip;N whole rows; a half row of tiles is useless, so it snaps.</span></div>
+    <div><span class="n">4</span><span><b>One side sheet, three tabs, one fold.</b> Speed as today; Colour writes literals to the selection; Spread fans a value across it. Which tab and whether it is open is this window's.</span></div>
+    <div><span class="n">5</span><span><b>Spread&hellip; is a selection verb</b> beside Locate and Highlight: it opens the Spread tab pre-aimed at the selection.</span></div>
+    <div><span class="n">6</span><span><b>Cells are on the tile.</b> A multi-head fixture shows its cells; tap the tile for the whole, a pip for a cell. The Cells chip is the sub-selection: All &middot; Odd &middot; Even &middot; Next &middot; Prev.</span></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":956}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

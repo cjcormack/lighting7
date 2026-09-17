@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .col { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+    .col h3 { margin:0; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    .tag.new { background:oklch(0.623 0.214 259.815 / 0.18); color:oklch(0.8 0.12 255); border:1px solid oklch(0.623 0.214 259.815 / 0.5); }
+    .tag.same { background:var(--muted); color:var(--mfg); }
+    .tag.be { background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .code { font-family: ui-monospace, Menlo, monospace; font-size:10.5px; line-height:1.5; color:var(--fg); background:oklch(0.141 0.005 285.823); border:1px solid var(--bd); border-radius:8px; padding:8px 10px; white-space:pre; overflow:hidden; }
+    .code .c { color:var(--mfg); }
+    .item { display:block; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .item b { color:var(--fg); font-weight:600; }
+    .item .t { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px; }
+    .sess { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; }
+    .s { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:block; font-size:11px; line-height:1.4; color:var(--mfg); }
+    .s .n { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; color:var(--fg); margin-bottom:5px; }
+    .s .n i { width:20px; height:20px; border-radius:50%; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:11px; font-weight:700; font-style:normal; display:grid; place-items:center; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note b { color:var(--fg); font-weight:600; }
+  </style>
+</helmet>
+<div class="app" style="width:1440px; height:1040px; padding:24px 28px; display:flex; flex-direction:column; gap:14px; overflow:hidden;">
+  <div>
+    <div class="h1">What is stored where, and what is new on the wire</div>
+    <p class="cap" style="margin-top:4px;">Three homes, as the multi-screen plan drew them: a fact about the <b>project</b> lives on the desk; a fact about <b>this window</b> lives in its tab; a <b>press</b> carries the pair and the desk decides. Nothing here moves a fact between homes.</p>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1.15fr 0.9fr 1.05fr; gap:14px; flex:1; min-height:0;">
+    <!-- server -->
+    <div class="col">
+      <h3>On the desk, per project <span class="tag be">backend</span></h3>
+      <div class="code"><span class="c">-- the rig: two tables, hand-rolled cascades like buskLayout.kt</span>
+busk_rig_rows   (id, project, name, sort_order, uuid)
+busk_rig_tiles  (id, row, sort_order, uuid,
+                 group FK | patch FK | (patch FK + element_key),
+                 cell_mode  WHOLE | PIPS | PER_CELL | HALVES,
+                 label?)     <span class="c">CHECK busk_rig_tile_exactly_one_ref</span></div>
+      <div class="item"><div class="t"><b>GET / PUT /projects/{id}/busk/rig</b><span class="tag new">new</span></div>whole-document, D10's rule: one PUT per gesture, ids read once at commit, rows and tiles by address. An empty rig <b>is</b> today's band &mdash; every group then every fixture &mdash; so there is no migration and no first-open generator. <span class="mono">busk.rigChanged</span> is one keyed frame; a deleted group or patch takes its tiles off the rig server-side, as a deleted record takes pads off a page.</div>
+      <div class="item"><div class="t"><b>POST /programmer/spread</b><span class="tag new">new</span></div>targets + families + property + from/to intents + curve + order + parts + over + fadeMs &rarr; <span class="mono">written[]</span>. Resolves through <span class="mono">TemplateResolver</span> per head and writes Local entries; the client never lerps.</div>
+      <div class="item"><div class="t"><b>An element arm on the press routes</b><span class="tag be">FU-LOOK-ELEMENT-ROWS &middot; PD-TEMPLATE-MULTIHEAD-CELL</span></div><span class="mono">/templates/{id}/apply</span>, <span class="mono">/looks/{id}/toggle</span>, <span class="mono">/busk/pads/{id}/press</span> and <span class="mono">record-look</span> accept <span class="mono">{type:'fixture', key:&lt;elementKey&gt;}</span>; until they do, <span class="mono">TARGET_CELLS_UNSUPPORTED</span> by name.</div>
+      <div class="item"><div class="t"><b>windows.viewOptions {targetId, view, options}</b><span class="tag new">new command</span></div>the same keyed broadcast shape as <span class="mono">windows.show</span>; the named window applies <span class="mono">options</span> to its own tab facts for that view &mdash; for busk, <span class="mono">{focus?, sheet?, page?}</span>. Generic over the view so the Screens sheet never grows a busk-shaped arm (Screens board). MIDI: <span class="mono">BuskFocusSet</span>, <span class="mono">BuskSheetToggle</span> as BUTTON targets sending it; <span class="mono">SelectionNext</span> / <span class="mono">SelectionPrev</span> / <span class="mono">SelectionCells(mode)</span> as desk-selection writes.</div>
+      <div class="item"><div class="t"><b>Unchanged</b><span class="tag same">same</span></div>the page document and its PUT, the one press route, <span class="mono">selection.state</span>'s shape, <span class="mono">programmer.setColour</span>, the hand, page follow, the speed-master frames.</div>
+    </div>
+
+    <!-- window -->
+    <div class="col">
+      <h3>In this window, per tab <span class="tag new">client</span></h3>
+      <div class="code"><span class="c">// lib/buskWindow.ts — deskFollow.ts's model, sessionStorage</span>
+busk.focus      'split' | 'pads' | 'rig'      <span class="c">// default split</span>
+busk.rigRows    number                        <span class="c">// rows shown in split</span>
+busk.sheet      'speed' | 'colour' | 'spread' <span class="c">// default speed</span>
+busk.sheetOpen  boolean                       <span class="c">// default true ≥ md</span>
+
+<span class="c">// arrival, latched once per tab like ?page=</span>
+?focus=pads  ?sheet=none|speed|colour|spread</div>
+      <div class="item"><b>Why the tab and not the desk.</b> Two screens at one desk want two focuses; a desk fact would pin them together, which is the mistake page follow had to undo. Nothing about focus is a thing the desk's hardware moves.</div>
+      <div class="item"><b>Why not localStorage.</b> The two desk screens are two windows of one profile &mdash; <span class="mono">createSyncStore</span> took a <span class="mono">storage</span> parameter for exactly this.</div>
+      <div class="item"><b>Already there, untouched:</b> <span class="mono">desk.follow</span> / <span class="mono">desk.localSelection</span>, <span class="mono">busk.pageFollow</span> / <span class="mono">busk.localPage</span>, the window identity and name.</div>
+      <div class="item"><b>Edit mode</b> stays in the Redux slice (the cue-slot overlay reads it) and forces Split while on.</div>
+    </div>
+
+    <!-- client modules -->
+    <div class="col">
+      <h3>Where the code goes <span class="tag new">client</span></h3>
+      <div class="item"><b><span class="mono">lib/buskRig.ts</span></b> &mdash; the rig document model, sibling of <span class="mono">buskLayout.ts</span>: addresses (<span class="mono">rrow:{r}</span>, <span class="mono">rtile:{r}.{t}</span>), <span class="mono">applyDrop</span>, <span class="mono">normaliseRig</span> (drops an empty row), <span class="mono">toRigRequest</span>, <span class="mono">effectiveRig(rig, groups, fixtures)</span> which answers the show-all fallback so the band never has two render paths.</div>
+      <div class="item"><b><span class="mono">components/busking/RigBand.tsx</span></b> replaces <span class="mono">TargetBand</span>: rows of <span class="mono">RigTile</span>s, the handle, the folded strip, the Cells chip; <span class="mono">RigTile</span> draws pips and the live bar through <span class="mono">fixtureAppearance</span>'s colour dispatch. Edit mode joins the app's one <span class="mono">DndContext</span> through <span class="mono">useDndMonitor</span>, ids prefixed <span class="mono">rig-</span> so <span class="mono">parseBuskDragId</span> and the slot handler ignore them.</div>
+      <div class="item"><b><span class="mono">components/busking/SideSheet.tsx</span></b> hosts three bodies: <span class="mono">BuskSpeedRail</span> as it is, <span class="mono">ColourSheet</span> (over <span class="mono">ColourPickerPopover</span>'s content), <span class="mono">SpreadSheet</span>. The fold is its own 44px component.</div>
+      <div class="item"><b><span class="mono">LibraryPalette</span></b> gains a Rig tab; its rows drag with <span class="mono">rig-palette:</span> ids and <span class="mono">canLand</span> refuses them everywhere but a rig row.</div>
+      <div class="item"><b><span class="mono">lib/cellsSubSelection.ts</span></b> &mdash; pure: <span class="mono">(targets, fixtures, mode) &rarr; targets</span>, pinned by tests against Odd/Even/halves/Next/Prev/Masters.</div>
+      <div class="item"><b><span class="mono">lib/handTargets.ts</span></b> gains a <span class="mono">rig-row</span> place for a group or fixture held in the hand (a rig tile is a reference like a pad).</div>
+    </div>
+  </div>
+
+  <div class="sess">
+    <div class="s"><div class="n"><i>1</i>The rig</div>Backend tables + PUT + frame; <span class="mono">buskRig.ts</span>; <span class="mono">RigBand</span> in play; the Rig palette tab in edit. Cells drawn as pips (read-only feedback), no cell selection yet. <b>Ships the show-all fallback first</b>, so the band is bit-identical until someone builds a rig.</div>
+    <div class="s"><div class="n"><i>2</i>Focus and the fold</div>Client only: <span class="mono">buskWindow.ts</span>, the segmented control, the handle, the folded strips, the sheet fold and tabs (Speed only), <span class="mono">?focus= ?sheet=</span>, the &#8984;K arms, the Screens sheet's per-view options and the widened link. <span class="mono">windows.viewOptions</span> is a small backend add.</div>
+    <div class="s"><div class="n"><i>3</i>Colour</div>Client only: <span class="mono">ColourSheet</span> over <span class="mono">programmer.setColour</span>, Recent from the recents row, Pick from the stage source, Save as template through <span class="mono">from-programmer</span>. Below <span class="mono">md</span>, reachable from the narrow target sheet.</div>
+    <div class="s"><div class="n"><i>4</i>Spread</div><span class="mono">POST /programmer/spread</span> and the resolver's curve/order/parts; <span class="mono">SpreadSheet</span> with the preview strip fed from the response; <i>Spread&hellip;</i> on the band; Save as Look. The Colour tab's second-colour switch hands over to it.</div>
+    <div class="s"><div class="n"><i>5</i>Cells</div>The element arm on every press route and in coverage; pips become tappable; the Cells chip; <i>Over: Cells</i> on Spread; MIDI Next/Prev. The one session that is mostly backend, and the one to schedule against the rig checks.</div>
+  </div>
+
+  <div class="note key"><p><b>Order matters in one place:</b> 5 depends on 1 (pips) and 4 (Over); 2, 3 and 4 are independent of each other and of 1. If only one thing ships, ship 2 &mdash; it is client-only, it is what the two-screen desk is asking for, and it costs nothing on the wire.</p></div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
