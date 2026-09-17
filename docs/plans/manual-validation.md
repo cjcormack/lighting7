@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
+| [`FU-MANUAL-MULTI-SCREEN-S4`](#fu-manual-multi-screen-s4) | a record dragged off one screen's edge arrives on the next — the gesture is two windows by construction, so every step of it is the desk's; what one window proved is recorded in the entry | Multi-screen S4, 2026-09-17 |
 | [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the two-window half, the MIDI half, the timeout and two gestures fixed in review but never exercised; what one window proved is recorded in the entry | Multi-screen S3, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
@@ -104,6 +105,82 @@ the X-Touch for step 4.
    the desk. Worth seeing once so it is not reported as a bug later.
 
 10 minutes; step 3 is the one that matters.
+
+---
+
+## `FU-MANUAL-MULTI-SCREEN-S4`
+
+**What it proves**: *a record dragged off one screen's edge arrives on the next* — multi-screen plan
+§5 S4 / §3.5's last paragraph. The gesture ends in the **hand** rather than going around it: the
+source window hands the record in with `hand.pickUp`, cancels its own drag with a synthetic Escape,
+and posts only the release point on a `BroadcastChannel('desk-drag')`; whichever window is under
+that point claims it by hit-testing itself and **clicking** the `data-hand-target` under it. So what
+this really checks is that one drag becomes a pick-up plus a place, and that a release nobody claims
+loses nothing.
+
+**Test**: two browser windows side by side on two monitors of the desk machine (Windows,
+Chrome/Edge), same profile. **None of it can be covered in review**: the desktop app's preview pane
+creates no child browsing context on any route, so two *windows* are the desk's to produce, and this
+gesture has no one-window form at all.
+
+**What one window already proved** (in review, on 614e03f6): the bounds test against a
+two-monitor desktop written out as data, including a left-hand monitor's negative coordinates; the
+screen→client conversion; that the gesture **does not arm at all with no peer window listening**,
+and does once one answers the handshake; that leaving the bounds sends **exactly one** `hand.pickUp`
+and dispatches a `pointercancel` at the document and **no key event at all**, that re-entering and
+leaving again sends no second, and that a drag wholly inside sends nothing; that a pick-up which
+never left the browser leaves the drag alone and is retried once per crossing rather than per move;
+that a second pointer cannot move or end the first one's drag; that a cancelled pointer posts the
+last *move* point rather than its own; that a browser without `BroadcastChannel` opens no channel
+and changes nothing; and, driven from a second channel object in one page, the whole receiving path
+— a release over a target places, one naming a record the hand does not hold does not, one over
+nothing leaves the record held, one outside the viewport is not claimed, a record the hand moves on
+to mid-resolve is refused, a disabled tile is not clicked, and a window never claims its own
+release.
+
+1. **The gesture itself.** On Screen 1 open the busk view, *Edit layout*, and drag a library palette
+   row off the **right** edge. At the crossing the drag ends and the hand chip appears on **both**
+   screens; on Screen 2 every bank that can take the record lights. Let go over one of those bands:
+   the pad appends, the chip clears on both screens, and the Undo toast offers the inverse for ten
+   seconds. Repeat leftwards, from Screen 2 to Screen 1 — `edgeSideFor` answers `left` as readily as
+   `right`, and the left-hand monitor's negative coordinates are the half a wrong sign test would
+   quietly break.
+2. **A release nobody claims loses nothing.** Drag off the edge and let go over the desktop, or over
+   another application's window, or back inside Screen 1. The chip must **stay**, with no toast and
+   no error — the record is still in the hand and one tap on any lit band still places it. This is
+   the gesture's whole safety property; a chip that clears here is a lost record.
+3. **The Escape ladder is undisturbed.** After a hand-off, with the record held, press Escape on
+   Screen 2 with nothing else open: the hand drops, as it always did. Then repeat step 1 and watch
+   Screen 1's chip at the moment of the crossing — it must appear and **stay**, not appear and
+   vanish. The synthetic Escape that cancels dnd-kit is marked default-prevented precisely so it is
+   not read as the operator letting go, and this is the only place that can be seen.
+4. **The other three targets.** Drag a **cue** row off the edge onto Screen 2's empty **cue slot**
+   in the FX overlay; drag a **Look** or a **template** onto the programmer's layer stack band with
+   a selection standing there; and onto a cue's stack in `StackDetail`. The eligibility table is
+   `lib/handTargets.ts`'s and is unchanged, so a cue lighting a layer stack is a defect in that
+   table rather than in this gesture.
+5. **Ordinary drags are untouched.** Within one window, drag a palette row onto a bank, a pad
+   between banks, and a slot item between slots. No chip appears, nothing is picked up, and each
+   lands exactly as it did before. Then drag off the edge with the desk's **socket down**: the drag
+   must survive — it is not cancelled — and the only toast must be "that did not reach the rig".
+6. **The seam, if anything above misbehaves.** The channel is one browser instance and profile:
+   two profiles, a Chrome window beside a Safari one, or one window at `localhost` and one at the
+   LAN name share no channel. There the gesture **does not arm at all** — the drag completes in its
+   own window exactly as it always did, with no chip and no pick-up — which is step 5's behaviour
+   rather than step 2's. Check the addresses before reporting step 1.
+7. **Overlapping windows, if you ever arrange them that way.** Two windows *tiled* on two monitors
+   cannot both contain the release point, and that is the only arrangement this gesture is designed
+   for — but if two windows are stacked on one screen so that a point falls inside both, the record
+   is placed **twice**, by decision (there is no arbitration). Worth one look if you ever drag
+   between overlapping windows: two toasts is the expected reading, not a bug report.
+8. **Safari, if the Mac desk is in play.** `screenToClient`'s chrome heuristic is arithmetic that
+   was only ever measured on Chrome/Edge on Windows. Run step 1 between two Safari windows on the
+   Mac: it fails *safe* (a point a few pixels out misses the band and the record stays in the hand),
+   so the tell is a release that consistently lands nothing while the same gesture works in Chrome.
+
+15–20 minutes. If a place lands on the wrong heads, that is the desk selection's business rather
+than this gesture's — check `FU-MANUAL-MULTI-SCREEN-S1` first; if a band fails to appear at all,
+check `FU-MANUAL-MULTI-SCREEN-S3` first, since that is the hand's own affordance and not the drag's.
 
 ---
 

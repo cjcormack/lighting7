@@ -392,7 +392,10 @@ to Home Screen* on the copied link is the durable route and gives `standalone`.
   S2.7; the fallback if it does not is one Dock app opened twice, each window named in the
   Screens sheet for the life of that window (D10's undurable arm).
 - *Open on Display 2* is hidden (no `getScreenDetails`); the operator opens the second window by
-  hand and drags it across. Session 4's edge drag is unavailable and the hand is the route.
+  hand and drags it across. ~~Session 4's edge drag is unavailable and the hand is the route.~~ —
+  the shipped gate is `BroadcastChannel` alone, so the edge drag **is** available in Safari; see
+  session 4's finding below. The hand remains the route between the Mac and the iPad, and between
+  any two windows that are not the same browser and profile.
 - The launcher's macOS tray gains no `--app=` items — Safari has no such flag — but may gain
   *Open Screen N* items that `open` the Dock app when S2.7 finds a stable bundle name; otherwise
   they are omitted rather than half-built (`FU-LAUNCHER-SCREEN-POSITION` covers both platforms).
@@ -563,15 +566,47 @@ route for opening the second desk screen, so it lands on first use rather than a
 
 ### Session 4 — the same-machine edge drag (lighting-react) — Opus 5, high
 
-- Gated on `'getScreenDetails' in window` and a granted `window-management` permission; otherwise
+- ~~Gated on `'getScreenDetails' in window` and a granted `window-management` permission; otherwise
   nothing changes and the hand is the route. `DeskDndProvider` gains the `onDragMove` bounds test,
   the `hand.pickUp` + synthetic-Escape hand-off, and a `BroadcastChannel('desk-drag')` publisher;
   `components/dnd/edgeDrag.ts` is the pure half (bounds → left / right / none; a posted point →
   the droppable under it) so the hand-off is testable without two windows. The receiving window's
-  `HandChip` follows posted points and resolves the posted release through `lib/handTargets.ts`.
-- Tests: `edgeDrag.test.ts` (the pure half); `DeskDndProvider.test.tsx` (leaving the bounds sends
+  `HandChip` follows posted points and resolves the posted release through `lib/handTargets.ts`.~~
+  — 614e03f6
+- **Finding, and a deliberate divergence: the `window-management` gate is not built.** It is
+  stricter than the APIs the gesture uses. The bounds test reads `screenX / screenY / outerWidth /
+  outerHeight` and the pointer's own `screenX / screenY`, all of which already report virtual-desktop
+  coordinates and none of which is permissioned; `getScreenDetails` only *enumerates* the other
+  screens, which nothing here needs, because the channel is a broadcast and the neighbour claims the
+  release by hit-testing itself. `BroadcastChannel` is the only feature detection, which makes the
+  gesture work on Safari too. Two further departures: the receiving window draws **no following
+  ghost** — its chip and every eligible band are already lit the moment the hand fills, so a ghost
+  would be new UI over an affordance that is there (a `move` message and a frozen, hookless snapshot
+  are the additive second half if the rig says otherwise) — and a posted release is resolved by
+  **synthesising a click** on the `data-hand-target` element under it, rather than through a
+  registry, because `HandPlaceStrip` is already the button that holds the mutation, the *where*
+  string and the Undo.
+- **Second finding: the bounds test alone is not enough, and the gate that replaced the permission
+  is a presence handshake.** A window's outer edge is its visible content edge (the horizontal
+  chrome offset is 0 on every current desktop browser), so an ordinary palette drag that overshot a
+  windowed browser's edge was cancelled and pushed into the hand — a regression for single-monitor
+  use, found in review. Windows now say `hello` / `here` on the same channel and the hand-off arms
+  only while another is listening. That also makes the channel's real reach safe rather than a trap:
+  it is one browser instance and profile, so a Chrome window beside a Safari one — or `localhost`
+  beside the LAN name — simply never arms, instead of losing the drag. The cancel is a synthetic
+  `pointercancel` rather than the sketch's Escape (dnd-kit binds both to one `handleCancel`), which
+  keeps the gesture out of `HandChip`'s Escape ladder entirely, and the release names its record so
+  the receiving window can wait for the hand before clicking.
+- **Third finding, and an accepted limitation: two windows overlapping at the release point place
+  twice.** A claim message with a lowest-id tie-break was built for it and then deleted. It cannot
+  occur on the tiled two-monitor desk this is for — the release is one point, so both windows would
+  have to contain it — and it was a mitigation rather than a guarantee, since a claimant can only
+  wait so long before clicking and two windows whose target discovery differed by more than that
+  both placed anyway. It also produced a double-place bug of its own in review. If it ever matters,
+  the fix is arbitration that waits for an **acknowledgement** rather than for a timeout.
+- ~~Tests: `edgeDrag.test.ts` (the pure half); `DeskDndProvider.test.tsx` (leaving the bounds sends
   one pick-up and cancels the drag; a drag inside the bounds sends nothing; no permission → no
-  channel).
+  channel).~~ — 614e03f6
 - Desk check: `FU-MANUAL-MULTI-SCREEN-S4`.
 
 ### CLAUDE.md paragraphs each session owes (not written here)
