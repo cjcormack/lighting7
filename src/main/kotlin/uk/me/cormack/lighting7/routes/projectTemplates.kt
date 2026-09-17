@@ -9,6 +9,8 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -506,6 +508,7 @@ internal data class ToggleTemplateResource(val parent: ProjectTemplatesResource,
  * row can preview the actual value without a second fetch, which is what `LookLibrary`'s row does
  * with `preview`.
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 internal data class TemplateDto(
     val id: Int,
@@ -549,6 +552,7 @@ internal data class TemplateDto(
      * `whiteChannel` / `amberChannel` / `uvChannel`, so pairing them client-side costs one memo and
      * no round trip per patch change.
      */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val requiredEmitters: List<String> = emptyList(),
     /**
      * When this template was last **pressed** on this desk, as an ISO-8601 instant; null until it
@@ -566,6 +570,23 @@ internal data class TemplateDto(
      * `…:34Z` after `…:34.500Z`. See `models/timeColumns.kt`.
      */
     val lastPressedAt: String? = null,
+    /**
+     * The template's value rows — **empty for an effect template**, which holds one effect instead.
+     *
+     * `@EncodeDefault(ALWAYS)`, and it is load-bearing rather than tidiness. Both converters on this
+     * DTO's paths have `encodeDefaults = false` — the REST `json()` of `routes/router.kt`, as
+     * [buskPageCount] below already records, and the WS one — so an **empty** list is not serialised
+     * as `[]` but vanishes from the frame entirely. The client declares `rows` required and reads it
+     * without a guard, so an effect template arrived with `rows: undefined` and
+     * `templateRowsSwatch` threw on `rows.find`.
+     *
+     * That was not a cosmetic failure: this DTO rides `hand.state`, and lighting-react's `HandChip`
+     * is mounted in `Layout.tsx` and draws the held record through `padFaceOf` — so for as long as
+     * the desk held an effect template, **every route** in the client sat behind its error boundary.
+     * [requiredEmitters] above carries the annotation for the same reason; the client had already
+     * grown a defensive `?? []` for that one, which is the same bug caught one layer later.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val rows: List<TemplateRowDto> = emptyList(),
     /** The one effect an effect template holds; null for a value template. */
     val effect: TemplateEffectDto? = null,
