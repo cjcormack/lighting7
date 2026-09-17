@@ -7,6 +7,14 @@ all **desk facts** — one value, server-owned, broadcast to everyone (`state/De
 `docs/lighting-composition-model.md` §"Layer 2"). A window is a *viewport*, and the only things it
 owns are what it is looking at and how it is framed.
 
+**Two of those a window may decline to follow**, and the desk keeps holding them either way: the
+selection (`lib/deskFollow.ts` in the client) and, since 2026-09-16, the busk page
+(`lib/buskPageFollow.ts`). Each is a per-tab flag with a chip of its own, defaulting to follow, and
+they are deliberately independent — a second screen showing a *position* page while the first shows
+a *colour* page, both pressing onto the one selection, is the case the page half was added for. The
+desk fact does not change: a hardware *next page* button still moves `BuskPageState`, and every
+following window still moves with it.
+
 This document is the operator-facing half: how a desk screen is opened, what names it, and the one
 platform rule that silently breaks the whole thing when it is got wrong. The wire is in
 [`websocket-engineering.md`](websocket-engineering.md) §"Windows"; the decisions and their reasons

@@ -555,10 +555,15 @@ the record *exists*, never whether it still looks the way it did: an edit is not
 held face is frozen for the same reason a pad's is. A second pick-up **replaces**, and is not an
 error — the operator changed their mind, and there is no other gesture that means it.
 
-**Which page is showing is a desk fact, not a browser one.** `state/BuskPageState.kt` holds it —
-transient, project-scoped, `busk.pageState` / `busk.setPage` — so a hardware *next page* button and
-a tab click in the busk view are one gesture rather than two disagreeing ones. The client's `?page=`
-mirrors it. It is unrelated to `busk.layoutChanged`, which names pages whose *document* changed.
+**The desk holds a showing page, and a window chooses whether to be on it.**
+`state/BuskPageState.kt` holds it — transient, project-scoped, `busk.pageState` / `busk.setPage` —
+so a hardware *next page* button and a tab click in the busk view are one gesture rather than two
+disagreeing ones, and every *following* window moves with it. That it is one fact is the backend's
+whole part in this; whether to resolve against it is the client's, and since 2026-09-16 a window can
+hold a page of its own (`lib/buskPageFollow.ts`, a per-tab flag beside the selection's), so that two
+screens can show different pages while sharing one selection. Nothing here changed for that. The
+client's `?page=` mirrors whichever page its window is showing. It is unrelated to
+`busk.layoutChanged`, which names pages whose *document* changed.
 
 ### Applied state is resolved by the desk
 

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the whole of session 3, both halves; nothing in it can be covered in review | Multi-screen S3, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
@@ -64,6 +65,45 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-BUSK-PAGE-FOLLOW`
+
+**What it proves**: *two screens can show different busk pages while sharing one selection*. The
+desk still holds one showing page (`state/BuskPageState.kt`, unchanged by this work), but a window
+may decline to be on it — `lib/buskPageFollow.ts` in the client, a per-tab flag beside the
+selection's, with a chip of its own in the page strip. The flow it exists for is one sentence:
+select the heads once, tap a colour template on Screen 1's page, tap a position template on Screen
+2's page, and both land on the same heads.
+
+**Why it is here**: everything observable in *one* window was verified in review — both chips, the
+two flags staying independent, unlink keeping the page it was on, `?page=` on arrival, a desk page
+frame moving a following window and not a local one, and both reload paths. The desktop app's
+preview pane creates no child browsing context (proven three ways in multi-screen session 2.5), so
+the genuinely two-window behaviour could not be reached. That, and the X-Touch step, is all that is
+left.
+
+**Test**: two browser windows on the desk, both at `http://localhost:8413/` (not the LAN name), plus
+the X-Touch for step 4.
+
+1. Open the busk view on both screens. Both chips read `Page: Desk`. Click a page tab on Screen 1;
+   Screen 2 follows it. That is the desk fact still working, and it must not regress.
+2. On Screen 2, click its `Page: Desk` chip. It reads `Page: This window`, dashed, and **stays on
+   the page it was showing**. Now flip pages on Screen 1: Screen 2 does not move.
+3. **The headline.** With Screen 2 still local, make a fixture selection on either screen — both
+   `Targets:` chips still read `Desk`, so the selection is shared. Put a colour template on Screen
+   1's page and a position template on Screen 2's page, and press one on each. Both land on the same
+   heads. This is the whole feature; if only this step is run, run this one.
+4. Press the X-Touch's *next page* button. Screen 1 (following) moves; Screen 2 (local) does not.
+   Both are correct.
+5. Click Screen 2's chip back to `Page: Desk`. It adopts Screen 1's page at once, and sends nothing
+   of its own — Screen 1 must not move.
+6. Copy Screen 1's URL (it carries `?page=`) and open it in a third window. It arrives **local**, on
+   that page. That is deliberate and is the launcher's mechanism; one click on the chip joins it to
+   the desk. Worth seeing once so it is not reported as a bug later.
+
+10 minutes; step 3 is the one that matters.
 
 ---
 

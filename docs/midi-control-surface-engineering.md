@@ -599,7 +599,7 @@ can show. It is the one place in this class where the compiler is not the safety
 | Locate button | `LocateManager.toggle` (owner `locate`) | **Layer 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |
 | Apply Look / Press template | `ProgrammerLayerStack.toggle` | **Layer 2 (a programmer layer)** | The Look onto its own fixtures, the template onto the selection; the same `toggle` a busk pad makes |
 | Press pad | `BuskPressService` | **Layer 2, or Layer 4 for a cue pad** | The pad's whole plan — solo siblings included — through the one implementation `POST /busk/pads/{id}/press` also uses |
-| Busk page buttons | `State.buskPageState` | *(no layer — a screen position)* | Every client's busk view follows it |
+| Busk page buttons | `State.buskPageState` | *(no layer — a screen position)* | Moves the desk's page; every window *following* it moves too (a window may hold its own — `lib/buskPageFollow.ts`) |
 
 **A fader always writes the programmer.** Phase 6 added a second destination — when a cue-edit session was open for the project, `DefaultSurfaceActions.writeFixtureProperty` / `writeGroupProperty` routed to `cueEdit.setProperty` (the cue layer) instead, and `SurfaceFeedbackPublisher` drove the motor from the cue's Layer 4 value rather than the stage. Backend sweep item D1 retired the `cueEdit.*` family, so both halves are gone: one write destination, and feedback that always means the live composed DMX value. See [control-surface-plan.md](plans/completed/control-surface-plan.md) §Phase 6 for what the session-routing design was.
 
