@@ -537,28 +537,28 @@ route for opening the second desk screen, so it lands on first use rather than a
 - ~~Desk check: folded into `FU-MANUAL-MULTI-SCREEN-S2` — the *Open on Display 2* step gains "and
   the two rows carry distinct `windowId`s".~~ — done.
 
-### Session 3 — the hand (both repos) — Opus 5, xhigh
+### ~~Session 3 — the hand (both repos) — Opus 5, xhigh~~ — 17140b3 · 5e261d1b
 
 - ~~lighting7: `state/HandState.kt`, `plugins/HandSocket.kt`, the project collector clears it, the
   three list-changed listeners reconcile it, the timeout Job; `BindingTarget.PickUpPad` /
   `HandPlaceInBank` / `HandDrop` with `SurfaceActions` methods, router arms, `targetControlKind`
   arms and health arms. Docs: `websocket-engineering.md`; `lighting-composition-model.md` §"The
   busk layout" gains "The hand".~~ — 17140b3
-- lighting-react: `api/handApi.ts`, `store/hand.ts` (form 1); `components/hand/HandChip.tsx`
+- ~~lighting-react: `api/handApi.ts`, `store/hand.ts` (form 1); `components/hand/HandChip.tsx`
   (fixed at the bottom of `<main>` in `Layout.tsx`, drawn from `padFaceOf` over the frame's DTOs);
   `lib/handTargets.ts` (what each target kind can take — a slot refuses a template and a
   deferred-effect Look through `slotAssignmentFor`; a bank takes all three; the layer stack takes
   a Look or a template; a cue's stack takes a Look or a template); target rings on `BuskBank`, the
   cue-slot tiles, `LookStack`'s footer and `StackDetail`'s cue cards; *Pick up* in the pad's hold
   menu, the library rows, the template chip and the layer row; the Undo toast; `lib/surfaceDrop.ts`
-  mirror.
+  mirror.~~ — 5e261d1b (form **3**, not 1; rings are `data-hand-target` buttons, not droppables)
 - Tests. ~~lighting7: `HandStateTest` (replace, drop, timeout, reconcile on each list change, project
   switch); `HandSocketTest` (snapshot; `pickUp` resolves in this project only and stamps the
-  window); `SurfaceInputRouterTest` arms.~~ — 17140b3 lighting-react: `handTargets.test.ts` (the eligibility
+  window); `SurfaceInputRouterTest` arms.~~ — 17140b3 ~~lighting-react: `handTargets.test.ts` (the eligibility
   table, pinned against `slotAssignmentFor`); `HandChip.test.tsx` (hookless ghost from the frame;
   × drops; Escape drops only when no editor is open — the `cellEditorIsOpen()` snapshot rule);
   `hand.test.ts` (place = mutation then drop, Undo inverse per kind); `BuskPad.test.tsx` (*Pick up*
-  in the menu).
+  in the menu).~~ — 5e261d1b
 - ~~Desk check: `FU-MANUAL-MULTI-SCREEN-S3`.~~ — 17140b3
 
 ### Session 4 — the same-machine edge drag (lighting-react) — Opus 5, high

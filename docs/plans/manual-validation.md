@@ -77,11 +77,22 @@ frame — a place is the placing window's own existing mutation followed by `han
 check is really testing is that four different mutations all end with the hand empty and the record
 where it was dropped.
 
-**Test**: two browser windows on the desk, plus the X-Touch for steps 5–6. **Nothing here can be
-covered in review**, unlike `FU-MANUAL-MULTI-SCREEN-S2`, whose browser half a pair of preview-pane
-tabs could stand in for: the desktop app's preview pane creates no child browsing context on any
-route, so two *windows* — as opposed to two tabs of one — are genuinely the desk's to produce, and
-every step below needs the ghost visible on a screen that did not pick the item up.
+**Test**: two browser windows on the desk, plus the X-Touch for steps 5–6. **The two-window half
+cannot be covered in review**, unlike `FU-MANUAL-MULTI-SCREEN-S2`, whose browser half a pair of
+preview-pane tabs could stand in for: the desktop app's preview pane creates no child browsing
+context on any route, so two *windows* — as opposed to two tabs of one — are genuinely the desk's to
+produce, and every step that needs the ghost on a screen which did not pick the item up is the
+desk's.
+
+**What one window already proved** (2026-09-16, against the restarted desk on 5e261d1b): the wire
+arrives and the chip draws its frozen face from the frame alone; *Pick up* from a library row's menu
+and from a busk pad's hold menu, whose items are *Pick up* then *View*; the bank rings lighting for a
+template, a Look and a cue; a **bank place with Undo**, which removed the *appended* pad and left an
+identically-named one already at the front of that bank alone; **Escape's ladder** — claimed by a
+closing context menu, dropping only on a second press with nothing open; and the chip's ×. The
+eligibility table was confirmed live in both directions: a cue lit six banks and neither layer
+stack, a template lit the programmer's. What remains below is the genuinely two-window half, the
+MIDI half, the timeout, and the two gestures in step 6.
 
 1. **Pick up and place on a bank.** On Screen 1, hold a busk pad and choose *Pick up*; the chip
    appears at the bottom of `<main>` on **both** screens, with the record's name, swatch and detail
@@ -90,14 +101,22 @@ every step below needs the ghost visible on a screen that did not pick the item 
    at the end of that bank, the chip clears on both screens, and the Undo toast offers the inverse
    for ten seconds — take it once and confirm the pad goes.
 2. **The other three place targets**, each from the library row's *Pick up* rather than a pad:
-   a **cue slot** (a template and a deferred-effect Look must be refused, exactly as dragging one
-   there is refused today); the **programmer's layer stack** with a selection standing on Screen 2,
+   a **cue slot** — an **empty** one, which is a deliberate narrowing (a filled tile's press is
+   live), so a lit ring on a filled tile is a defect rather than a pass. Both busk targets **do**
+   offer themselves during *Edit layout*, drawn solid rather than dashed so they cannot be mistaken
+   for a drop slot; a band that fails to appear there is the gate having crept back. A template and
+   a deferred-effect Look must be refused at a slot, exactly as dragging one is refused today. Then
+   the
+   **programmer's layer stack** with a selection standing on Screen 2,
    which lands on the desk selection and masks a template to its own family; and a **cue's stack**
    from `StackDetail`. A cue in the hand may land only on a bank or a slot — the layer stack and a
    cue's stack must not light for one.
 3. **Every way of letting go.** The chip's ×; Escape with nothing else claiming it (and Escape while
-   a cell editor is open must reach the editor, not the hand); a second *Pick up*, which replaces
-   rather than erroring. Then the one that needs two screens: pick up on Screen 1, **place it**, and
+   a cell editor is open must reach the editor, not the hand — as must Escape while any dialog or
+   popover is open); a second *Pick up*, which replaces rather than erroring. Note that the
+   **programmer's layer place offers no Undo** and that is by decision (5e261d1b): `addLayer`
+   answers no id and the stack is shared, so an inverse would be guessing which layer to remove.
+   The other three places all offer one. Then the one that needs two screens: pick up on Screen 1, **place it**, and
    while the place is in flight pick up something else on Screen 2 — Screen 2's item must survive,
    because the placing window's drop names the record it placed. A bare drop would clear it, and
    that is the failure this step exists to catch.
@@ -111,14 +130,23 @@ every step below needs the ghost visible on a screen that did not pick the item 
    reading *from Control surface*. Press the second: the pad appends to that bank and the chip
    clears. Press *Place in bank* again with an empty hand — nothing happens, and nothing is logged
    as an error. Then delete the bank and check the binding reads **missing busk bank** in the
-   inspector rather than staying `Ok` — the backend answers `missingBank`, which is a **new
-   `AssignmentHealth` variant**, so if session 3b has not added its arm to lighting-react's
-   `healthDescriptor.ts` the row will read the generic unknown-variant message instead of that
-   sentence. Either reading proves the backend; only the specific one proves both halves.
-6. **The timeout.** Pick something up and leave it for five minutes without placing it: the chip
+   inspector rather than staying `Ok` — the backend answers `missingBank`, a **new
+   `AssignmentHealth` variant**. Its arm landed in lighting-react's `healthDescriptor.ts` in
+   5e261d1b, so the specific sentence is now the expected reading and the generic unknown-variant
+   line is a **failure**, not the tolerable outcome this step once allowed for.
+6. **Two gestures a single window cannot prove, both fixed in review and neither exercised.** On a
+   **touchscreen**, hold the programmer's template chip: it must add the tracking layer and **not**
+   open a pick-up menu. Radix's `ContextMenuTrigger` arms a ~700ms touch long-press of its own, and
+   the chip already owns a 500ms hold, so the first cut fired both; it is a `Popover` opened from
+   `onContextMenu` now, which arms nothing. Right-click on a mouse must still offer *Pick up*. Then,
+   with the desk **socket down** (pull the network, or stop the desk on a rig that is not live),
+   place onto the programmer's layer stack: the hand must **stay held** and the only toast must be
+   "that did not reach the rig". A success toast beside that error means the send verdict is being
+   discarded again.
+7. **The timeout.** Pick something up and leave it for five minutes without placing it: the chip
    clears itself on both screens. Worth pairing with a watch rather than guessing — the point is
    that nobody has to remember they are holding something.
-7. **A project switch while held.** Pick up a template, then switch project from either screen: the
+8. **A project switch while held.** Pick up a template, then switch project from either screen: the
    chip clears on both. The contrast is the Screens sheet beside it, which must **not** clear — a
    window outlives a project switch and the hand does not, and seeing the two behave differently in
    one gesture is the cheapest proof the scoping is right.
