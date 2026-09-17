@@ -10,7 +10,6 @@ import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.state.State
 
@@ -331,8 +330,10 @@ private fun createTargetFromRequest(
     state: State,
     outputType: FxOutputType?,
 ): FxTarget {
+    // `untypedGroupableFixture`, as `EffectSpawner.createFixtureTargetForCue` does: the two doors
+    // must build the same target for the same cell, and the factory's fallback reads its catalogue.
     val fixture = try {
-        state.show.fixtures.untypedFixture(request.fixtureKey) as? Fixture
+        state.show.fixtures.untypedGroupableFixture(request.fixtureKey)
     } catch (_: Exception) { null }
     return FxTargetFactory.forFixture(request.fixtureKey, request.propertyName, outputType, fixture)
 }

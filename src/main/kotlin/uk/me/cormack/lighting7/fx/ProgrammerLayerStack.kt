@@ -366,7 +366,9 @@ class ProgrammerLayerStack(
         // A press naming no targets has no coverage to compare; its own such layer is the answer.
         val twin = if (pressed.isEmpty()) own.firstOrNull { sameTargets(it.targets, targets) } else null
 
-        return if (twin != null || (pressed.isNotEmpty() && covered.containsAll(pressed))) {
+        // `covers`, not `containsAll`: a cell pressed under a layer on its parent is already on
+        // (busk-further plan D11). The rule is [TargetCoverage]'s; this only reads it.
+        return if (twin != null || (pressed.isNotEmpty() && pressed.all { targetCoverage.covers(covered, it) })) {
             if (twin != null) {
                 ToggleOutcome("removed", remove(twin.layerId).effectsRetracted)
             } else {
@@ -456,8 +458,10 @@ class ProgrammerLayerStack(
      *
      * Both directions of the group rule fall out of expanding once through [coverage]: a layer on
      * `{group: wash}` reports the wash *and* each of its heads, and a layer on one head reports
-     * that head and the wash as partial. Layers are folded by source, so two layers of one
-     * template on two selections answer as one record applied to both.
+     * that head and the wash as partial. Cells follow the parent↔cell rule of [TargetCoverage.covers]
+     * the same way: a layer on a bar reports the bar and each of its cells as ALL, a layer on some
+     * cells reports those cells and the bar as SOME. Layers are folded by source, so two layers of
+     * one template on two selections answer as one record applied to both.
      *
      * A layer with **empty** targets contributes nothing, the same blind spot [toggle] documents:
      * its source's own bound rows decide where it lands, and that is the cook's answer to give.
@@ -485,13 +489,36 @@ class ProgrammerLayerStack(
         return heads.values.map { (source, covered) ->
             val groupTargets = groups.mapNotNull { (name, members) ->
                 val hits = members.count { it in covered }
-                when (hits) {
-                    0 -> null
-                    members.size -> AppliedTarget(CueTargetDto("group", name), AppliedExtent.ALL)
+                // A member held only through some of its cells is partly covered: the group reads
+                // SOME, as the parent itself does below, never ALL — cells do not add up to the bar.
+                val partial = members.count { it !in covered && targetCoverage.cells(it).any { c -> c in covered } }
+                when {
+                    hits == members.size -> AppliedTarget(CueTargetDto("group", name), AppliedExtent.ALL)
+                    hits + partial == 0 -> null
                     else -> AppliedTarget(CueTargetDto("group", name), AppliedExtent.SOME)
                 }
             }
-            AppliedSource(source, covered.map { AppliedTarget(it, AppliedExtent.ALL) } + groupTargets)
+            // Cells, by the parent↔cell rule ([TargetCoverage.covers]): every cell of a covered
+            // parent reads ALL, so a cell selection under a whole-bar layer lights the pad; a
+            // parent not itself covered reads SOME while any of its cells is, and never ALL —
+            // however many cells are held, they do not add up to the bar.
+            val cellTargets = ArrayList<AppliedTarget>()
+            val partialParents = LinkedHashSet<CueTargetDto>()
+            for (head in covered) {
+                val cells = targetCoverage.cells(head)
+                if (cells.isNotEmpty()) {
+                    for (cell in cells) if (cell !in covered) cellTargets += AppliedTarget(cell, AppliedExtent.ALL)
+                    continue
+                }
+                // Not a parent: a cell (or a plain fixture). Its parent, if any, is partial.
+                val parent = targetCoverage.parentOf(head) ?: continue
+                if (parent !in covered) partialParents += parent
+            }
+            val parentTargets = partialParents.map { AppliedTarget(it, AppliedExtent.SOME) }
+            AppliedSource(
+                source,
+                covered.map { AppliedTarget(it, AppliedExtent.ALL) } + cellTargets + parentTargets + groupTargets,
+            )
         }
     }
 

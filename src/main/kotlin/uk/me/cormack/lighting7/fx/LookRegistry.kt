@@ -76,9 +76,10 @@ data class LookSnapshot(
 )
 
 /**
- * A snapshot flattened for per-fixture lookup: `fixtureKey → canonicalPropertyName → literal`.
+ * A snapshot flattened for per-target lookup: `targetKey → canonicalPropertyName → literal`.
  *
- * Element-scoped rows are skipped, because this map is fixture-shaped by construction. Group rows
+ * An element row lives under its **element key**, beside its parent's entry — a cell is a target of
+ * its own, and every reader resolves a key through `Fixtures.untypedGroupableFixture`. Group rows
  * are expanded to their members first, then fixture rows overwrite, which is the same
  * fixture-beats-group specificity [CueAssignmentResolver.applySpecificity] applies, resolved once
  * here instead of per read.
@@ -222,11 +223,14 @@ class LookRegistry(
         private const val MAX_FILL_ATTEMPTS = 3
 
         /**
-         * Flatten a snapshot's **whole-fixture** rows against the live patch. Group rows
-         * first, then fixture rows, so a fixture row wins. Unknown and empty groups contribute
-         * nothing — a Look that outlived a group simply drops those members' rows, with no
-         * [AssignmentHealth] diagnosis: a Look row cannot hold a reference, so there is nothing
-         * left to report as unresolved.
+         * Flatten a snapshot's rows against the live patch. Group rows first, then fixture rows,
+         * so a fixture row wins. Unknown and empty groups contribute nothing — a Look that outlived
+         * a group simply drops those members' rows, with no [AssignmentHealth] diagnosis: a Look
+         * row cannot hold a reference, so there is nothing left to report as unresolved.
+         *
+         * An **element row** is keyed by its element key, beside — not under — its parent: the map
+         * is `targetKey → rows`, and a cell is a target of its own (busk-further plan, session 1).
+         * `Fixtures.untypedGroupableFixture` resolves it for every reader of [ExpandedLook.byFixture].
          */
         internal fun expand(snapshot: LookSnapshot, fixtures: Fixtures): ExpandedLook {
             val byFixture = HashMap<String, MutableMap<String, String>>()
@@ -245,9 +249,8 @@ class LookRegistry(
                 for (member in members) put(member.key, entry.propertyName, entry.value)
             }
             for (entry in snapshot.rows) {
-                if (entry.elementKey != null) continue
-                val fixture = entry.target as? TargetRef.Fixture ?: continue
-                put(fixture.key, entry.propertyName, entry.value)
+                val key = entry.elementKey ?: (entry.target as? TargetRef.Fixture ?: continue).key
+                put(key, entry.propertyName, entry.value)
             }
 
             return ExpandedLook(snapshot, byFixture)

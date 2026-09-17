@@ -83,9 +83,11 @@ private const val CHECKLIST_SAMPLE_SIZE = 8
 internal fun changedSinceInclude(
     state: State,
     mask: Set<PropertyMaskGroup>?,
+    /** Keep cell entries — only a Look destination may ask; see [collectProgrammerEntries]. */
+    allowElements: Boolean = false,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
-    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = allowElements)
     val changed = entries.filter { entry ->
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
             // New since Include — the operator adding a fixture to the cue.

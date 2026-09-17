@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -1720,5 +1721,44 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             setBody(TemplateInput(effect = colourEffect(category = "hologram")))
         }
         assertEquals(HttpStatusCode.BadRequest, edited.status)
+    }
+
+    // ─── Cells (busk-further plan, session 1) ───────────────────────────
+
+    /**
+     * The pin for the click door: `templateApply` already resolved an element key through
+     * `Fixtures.untypedGroupableFixture`, and this keeps it that way.
+     */
+    @Test
+    fun `a colour template clicked on two cells changes only those cells`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-1", 1)
+        val client = jsonClient()
+        val template = client.post(base()) {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "amber-key", rows = listOf(colourRow())))
+        }.body<TemplateDto>()
+
+        val body = client.post("${base()}/${template.id}/apply") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ApplyTemplateRequest(
+                    targets = listOf(
+                        TemplateTargetDto("fixture", "bar-1.pixel-2"),
+                        TemplateTargetDto("fixture", "bar-1.pixel-5"),
+                    ),
+                ),
+            )
+        }.body<ApplyTemplateResponse>()
+
+        assertEquals(2, body.written, body.skipped.toString())
+        assertTrue(body.skipped.isEmpty(), body.skipped.toString())
+        val store = state.show.programmerStore
+        val onCell2 = store.get("bar-1.pixel-2", "rgbColour")?.value?.resolved
+        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour>(onCell2)
+        assertEquals(74u.toUByte(), onCell2.value.white, "extracted to the cell's own white emitter")
+        assertNotNull(store.get("bar-1.pixel-5", "rgbColour"))
+        assertNull(store.get("bar-1.pixel-3", "rgbColour"), "an unnamed cell is untouched")
+        assertNull(store.get("bar-1", "rgbColour"), "the parent is untouched")
     }
 }

@@ -8,6 +8,8 @@ import org.jetbrains.exposed.v1.dao.with
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Fixtures
@@ -254,22 +256,25 @@ internal fun buildStompOverlapFromAssignments(
  * on every wheel-only head in the rig. Exact-first is safe because no fixture declares both names.
  */
 internal fun fixtureCategoryFor(
-    fixture: Fixture,
+    fixture: GroupableFixture,
     propertyName: String,
 ): Pair<PropertyCategory, CompositionRule>? {
+    // The class catalogue rather than `Fixture.fixtureProperty`, so an element (a cell) answers
+    // from its own `@FixtureProperty` members — the cook composes a Look's element rows onto it.
+    val byName = FixturePropertyCatalogue.of(fixture::class).byName
     if (propertyName.equals("position", ignoreCase = true)) {
         // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
         // any override on the pan property is honoured.
-        val panProp = fixture.fixtureProperty("pan")
+        val panProp = byName["pan"]
         return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
     }
-    fixture.fixtureProperty(propertyName)?.let { return it.category to it.composition }
+    byName[propertyName]?.let { return it.category to it.composition }
     val canonical = canonicalPropertyName(propertyName)
     if (canonical.equals("position", ignoreCase = true)) {
-        val panProp = fixture.fixtureProperty("pan")
+        val panProp = byName["pan"]
         return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
     }
-    val prop = fixture.fixtureProperty(canonical) ?: return null
+    val prop = byName[canonical] ?: return null
     return prop.category to prop.composition
 }
 

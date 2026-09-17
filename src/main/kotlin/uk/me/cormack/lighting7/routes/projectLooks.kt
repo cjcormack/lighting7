@@ -912,8 +912,14 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGr
 
     for (row in rows) {
         val canonical = canonicalPropertyName(row.propertyName)
+        // An element row is classified against its cell, not its parent: a pixel bar's parent may
+        // declare no properties at all, and the family a cell's colour row belongs to is the cell's.
+        // The same reading `lookRowInRemit` takes, so recording and banking agree about one row.
+        val elementKey = row.elementKey
         val fixture = when (val target = row.target) {
-            is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.getOrNull()
+            is TargetRef.Fixture -> runCatching {
+                fixtures.untypedGroupableFixture(elementKey ?: target.key)
+            }.getOrNull()
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
                 ?.fixtures?.filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()?.firstOrNull()
             // A row with no target contributes no family. It cannot happen for data this version

@@ -416,6 +416,24 @@ cook answers that question; a coverage comparison must not guess at it. The exce
 that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
 and takes a sibling's off outright, there being nothing to narrow it to.
 
+**A cell is a target, and a parent covers its cells.** A multi-head fixture's element is pressed as
+an ordinary fixture-typed target whose key is its element key (`{type:'fixture', key:<elementKey>}`,
+the shape the programmer's element row already publishes), resolved only through
+`Fixtures.untypedGroupableFixture` and never parsed. Every press door lands on one: a template's
+generic rows fan over the pressed cells and resolve on each cell's own emitters, a Look records
+element rows from a cell selection (`targetKey` the parent, `elementKey` the cell) and composes them
+onto those cells, an effect template runs on the cell, and a colour's white / amber / UV half reaches
+the cell's bundled emitter. The one coverage question a cell raises has one answer, stated once in
+`TargetCoverage.covers` (busk-further plan D11): **a layer on the whole bar covers a press on its
+cells; a layer on cells never covers the whole bar**, however many cells it holds, because the parent
+has properties no cell does. So a cell press under a whole-bar layer reads *all* and comes off — the
+layer narrowed to the cells the press did not name, as a split group is narrowed to its unnamed
+members — while a whole-bar press over a cell layer adds, and subsumes the cells so that one layer of
+a record still covers a given head. `pressWouldRelease`, `ProgrammerLayerStack.toggle`,
+`TargetCoverage.narrow` and `appliedState` (which reports every cell of a covered parent as *all* and
+a partly covered parent as *some*) read that rule; the client keeps reading the desk's resolved
+applied state and carries no copy of it.
+
 **A press carries the selection's attribute mask, and lands through the layer's own
 `propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes

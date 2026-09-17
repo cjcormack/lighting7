@@ -25,12 +25,15 @@ import java.util.UUID
  * (whose `ALL` set is `toggle`'s `covered` plus group entries a pressed head can never be, since
  * [TargetCoverage.expand] has already replaced every resolvable group with its members); for a
  * press naming none, it is `toggle`'s twin — a layer of this record with the same (empty) targets.
+ * "Covering" is [TargetCoverage.covers], so a cell pressed under a layer on its parent reads as
+ * on, and a parent pressed over a layer on its cells does not — `PressArmCellsTest` guards that.
  * `BuskPressRouteTest` holds a guard asserting the two agree on both arms, so a change to `toggle`'s
  * comparison fails there rather than drifting here.
  */
 internal fun pressWouldRelease(state: State, sourceUuid: UUID, targets: List<CueTargetDto>): Boolean {
     val layers = state.show.programmerStore.layers
-    val pressed = TargetCoverage { state.show.fixtures }.expand(targets).toSet()
+    val coverage = TargetCoverage { state.show.fixtures }
+    val pressed = coverage.expand(targets).toSet()
     if (pressed.isEmpty()) {
         return layers.any { it.source.uuid == sourceUuid && sameTargets(it.targets, targets) }
     }
@@ -40,5 +43,7 @@ internal fun pressWouldRelease(state: State, sourceUuid: UUID, targets: List<Cue
         ?.filter { it.extent == AppliedExtent.ALL }
         ?.mapTo(HashSet()) { it.target }
         .orEmpty()
-    return covered.containsAll(pressed)
+    // `covers`, not `containsAll`: a cell pressed under a layer on its parent is covered by the
+    // parent (busk-further plan D11), and the rule lives in [TargetCoverage] alone.
+    return pressed.all { coverage.covers(covered, it) }
 }

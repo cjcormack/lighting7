@@ -11,15 +11,18 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fx.ElementFilter
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
@@ -83,6 +86,14 @@ internal data class LookRecordOutcome(
  * an inlined shape check, because that rejection *is* the non-recursion guarantee `FU-LOOK-NESTED`
  * depends on.
  *
+ * A collapsed row keyed by a **cell** — its `targetKey` is an element key, which is how the
+ * programmer holds one — is written as an element row: `targetKey` the parent, `elementKey` the
+ * cell (`DaoLookRows.elementKey`, the shape the sync export and the editor already carry).
+ * [elementParents] is that resolution, `elementKey → parentKey`, computed by the caller against
+ * the patch **before** the transaction so this stays a pure write; a key absent from it is a
+ * whole-fixture row. Rows are matched on all of `(targetType, targetKey, elementKey, property)`,
+ * so a cell's row and its parent's are two rows, as they are two targets.
+ *
  * Must be called inside a transaction.
  */
 internal fun writeRecordingIntoLook(
@@ -90,17 +101,47 @@ internal fun writeRecordingIntoLook(
     collapsed: CollapsedAssignments,
     mode: RecordMode,
     inRemit: (DaoLookRow) -> Boolean,
+    elementParents: Map<String, String> = emptyMap(),
 ): LookRecordOutcome {
     var written = 0
     var removed = 0
 
-    fun key(targetType: String, targetKey: String, propertyName: String) =
-        Triple(targetType, targetKey, canonicalPropertyName(propertyName))
+    data class RowKey(val targetType: String, val targetKey: String, val elementKey: String?, val propertyName: String)
+
+    fun key(targetType: String, targetKey: String, elementKey: String?, propertyName: String) =
+        RowKey(targetType, targetKey, elementKey, canonicalPropertyName(propertyName))
+
+    /** The stored shape of a collapsed row: its parent and cell when it names a cell. */
+    fun shape(row: CuePropertyAssignmentDto): Pair<String, String?> {
+        // Fixture rows only, the same guard [elementParentsOf] applies: a group whose name happened
+        // to equal an element key elsewhere in the recording must not be rewritten as a cell.
+        if (row.targetType != TargetRef.Fixture.TYPE) return row.targetKey to null
+        val parent = elementParents[row.targetKey] ?: return row.targetKey to null
+        return parent to row.targetKey
+    }
 
     // Sorted in memory rather than with `orderBy`: this iterates the referrer collection, and
     // Exposed refuses to order a SizedIterable once it has been loaded.
     val existing = look.rows.sortedBy { it.sortOrder }
-    val existingByKey = existing.associateBy { key(it.targetType, it.targetKey, it.propertyName) }
+    val existingByKey = existing.associateBy { key(it.targetType, it.targetKey, it.elementKey, it.propertyName) }
+
+    fun insert(row: CuePropertyAssignmentDto, sortOrder: Int) {
+        val (parentKey, cellKey) = shape(row)
+        DaoLookRow.new {
+            this.look = look
+            targetType = row.targetType
+            targetKey = parentKey
+            elementKey = cellKey
+            propertyName = canonicalPropertyName(row.propertyName)
+            value = row.value
+            this.sortOrder = sortOrder
+        }
+    }
+
+    fun keyOf(row: CuePropertyAssignmentDto): RowKey {
+        val (parentKey, cellKey) = shape(row)
+        return key(row.targetType, parentKey, cellKey, row.propertyName)
+    }
 
     when (mode) {
         RecordMode.CREATE, RecordMode.UPDATE_EXISTING -> {
@@ -111,14 +152,7 @@ internal fun writeRecordingIntoLook(
             }
             var nextSort = existing.filterNot(inRemit).maxOfOrNull { it.sortOrder }?.plus(1) ?: 0
             for (row in collapsed.rows) {
-                DaoLookRow.new {
-                    this.look = look
-                    targetType = row.targetType
-                    targetKey = row.targetKey
-                    propertyName = canonicalPropertyName(row.propertyName)
-                    value = row.value
-                    sortOrder = nextSort++
-                }
+                insert(row, nextSort++)
                 written++
             }
         }
@@ -126,18 +160,11 @@ internal fun writeRecordingIntoLook(
         RecordMode.MERGE -> {
             var nextSort = (existing.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for (row in collapsed.rows) {
-                val hit = existingByKey[key(row.targetType, row.targetKey, row.propertyName)]
+                val hit = existingByKey[keyOf(row)]
                 if (hit != null) {
                     hit.value = row.value
                 } else {
-                    DaoLookRow.new {
-                        this.look = look
-                        targetType = row.targetType
-                        targetKey = row.targetKey
-                        propertyName = canonicalPropertyName(row.propertyName)
-                        value = row.value
-                        sortOrder = nextSort++
-                    }
+                    insert(row, nextSort++)
                 }
                 written++
             }
@@ -145,7 +172,7 @@ internal fun writeRecordingIntoLook(
 
         RecordMode.REMOVE -> {
             for (row in collapsed.rows) {
-                existingByKey[key(row.targetType, row.targetKey, row.propertyName)]?.let {
+                existingByKey[keyOf(row)]?.let {
                     it.delete()
                     removed++
                 }
@@ -157,11 +184,29 @@ internal fun writeRecordingIntoLook(
 }
 
 /**
+ * `elementKey → parentKey` for every collapsed row whose target key resolves to a **cell**, against
+ * the live patch. Read by [writeRecordingIntoLook], which must not touch the patch itself.
+ */
+internal fun elementParentsOf(fixtures: Fixtures, collapsed: CollapsedAssignments): Map<String, String> {
+    val out = HashMap<String, String>()
+    for (row in collapsed.rows) {
+        if (row.targetType != TargetRef.Fixture.TYPE || row.targetKey in out) continue
+        val element = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull()
+            as? FixtureElement<*> ?: continue
+        out[row.targetKey] = element.parentFixture.key
+    }
+    return out
+}
+
+/**
  * Is a stored Look row inside the remit of a recording made with [mask] and [scope]?
  *
  * Null on either axis means unrestricted. A row whose target or property no longer resolves answers
  * **false** — "leave alone" — matching [maskGroupForRow]'s documented reading for the destructive
  * `UPDATE_EXISTING` pass: a row we cannot classify is a row we must not delete.
+ *
+ * An **element row** is in scope when the scope covers its cell — the cell itself, or its parent,
+ * by [TargetCoverage.covers] — and its mask group is read off the element's own properties.
  *
  * A row with **no target** is never in remit. Session 3 made a Look row always bound — the deferred
  * half became [uk.me.cormack.lighting7.models.DaoTemplates] — so this arm only ever sees a row left
@@ -173,15 +218,25 @@ internal fun lookRowInRemit(
     fixtures: Fixtures,
     mask: Set<PropertyMaskGroup>?,
     scope: Set<String>?,
-): (DaoLookRow) -> Boolean = { row ->
-    val target = row.target
-    if (target == null) {
-        false
-    } else if (!targetInScope(fixtures, target, scope)) {
-        false
-    } else {
-        val fixture = referenceFixtureOf(fixtures, target)
-        fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.propertyName))
+): (DaoLookRow) -> Boolean {
+    val coverage = TargetCoverage { fixtures }
+    val scopeTargets = scope?.mapTo(HashSet()) { CueTargetDto(TargetRef.Fixture.TYPE, it) }
+    return { row ->
+        val target = row.target
+        val elementKey = row.elementKey
+        if (target == null) {
+            false
+        } else if (elementKey != null) {
+            val inScope = scopeTargets == null ||
+                coverage.covers(scopeTargets, CueTargetDto(TargetRef.Fixture.TYPE, elementKey))
+            val element = runCatching { fixtures.untypedGroupableFixture(elementKey) }.getOrNull()
+            inScope && element != null && maskAllows(mask, maskGroupForProperty(element, row.propertyName))
+        } else if (!targetInScope(fixtures, target, scope)) {
+            false
+        } else {
+            val fixture = referenceFixtureOf(fixtures, target)
+            fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.propertyName))
+        }
     }
 }
 
@@ -303,9 +358,12 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             return@withCurrentProject
         }
 
-        val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope)
+        // `allowElements`: a Look has an element row, so a cell the operator edited is recorded as
+        // one rather than skipped — the only recording destination that may ask for this.
+        val (entries, skips) = collectProgrammerEntries(state, source, mask, targets = scope, allowElements = true)
         val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
         val inRemit = lookRowInRemit(state.show.fixtures, mask, scope)
+        val elementParents = elementParentsOf(state.show.fixtures, collapsed)
 
         // Resolved before the transaction, because it reads the engine rather than the DB — and
         // resolved by id rather than re-derived, so a chase that started between the operator
@@ -318,7 +376,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
                 this.name = request.name!!.trim()
                 this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
             }
-            val written = writeRecordingIntoLook(look, collapsed, mode, inRemit)
+            val written = writeRecordingIntoLook(look, collapsed, mode, inRemit, elementParents)
             writeLookEffects(look, bandEffects, mode)
             written
         }
@@ -493,13 +551,16 @@ internal fun updateIncludedLook(
         )
     }
 
-    val (changed, skips) = changedSinceInclude(state, mask)
+    // `allowElements`, as `record-look` asks: Include stages a Look's element rows, so a nudged
+    // cell has to be able to come back through Update as the element row it was.
+    val (changed, skips) = changedSinceInclude(state, mask, allowElements = true)
     val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures)
+    val elementParents = elementParentsOf(state.show.fixtures, collapsed)
 
     val outcome = transaction(state.database) {
         // MERGE never deletes, so the remit predicate is never consulted; passing "nothing is in
         // remit" states that rather than leaving a live predicate a later edit could start reading.
-        writeRecordingIntoLook(DaoLook.findById(lookId)!!, collapsed, RecordMode.MERGE) { false }
+        writeRecordingIntoLook(DaoLook.findById(lookId)!!, collapsed, RecordMode.MERGE, { false }, elementParents)
     }
     val republish = republishForLookEdit(state, outcome.lookUuid)
     state.show.fixtures.lookListChanged()

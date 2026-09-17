@@ -1795,10 +1795,13 @@ class FxEngine(
             )
         }
 
-        // Fixture effect
+        // Fixture effect — or an element (cell) effect: `untypedGroupableFixture` answers an
+        // element for an element key, so an effect template pressed on one cell paints that cell
+        // (busk-further plan, session 1). A cell that has the property is a DIRECT_FIXTURE; the
+        // multi-element branch below is for a parent that lacks it.
         val fixtureKey = effect.target.targetKey
         val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
+            fixtures.untypedGroupableFixture(fixtureKey)
         } catch (e: Exception) {
             throttle.log("missing-fixture-$fixtureKey", e) {
                 "FX engine: fixture '$fixtureKey' not found for effect ${effect.id}"

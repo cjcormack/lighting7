@@ -88,8 +88,10 @@ internal object EffectSpawner {
         state: State,
         outputType: FxOutputType?,
     ): FxTarget {
+        // `untypedGroupableFixture`, not the register-only `untypedFixture`: a cell's key resolves
+        // to its element, so the factory's fallback branch reads the cell's own catalogue.
         val fixture = try {
-            state.show.fixtures.untypedFixture(fixtureKey) as? Fixture
+            state.show.fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) { null }
         return FxTargetFactory.forFixture(fixtureKey, propertyName, outputType, fixture)
     }

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -626,7 +627,7 @@ internal object CueComposer {
 
     /** A single (fixture, property) contribution a layer wants to make, before blending. */
     private class Pending(
-        val fixture: Fixture,
+        val fixture: GroupableFixture,
         val propertyName: String,
         val rawValue: String,
         /** The group this contribution arrived through, or null when the row named the fixture. */
@@ -685,15 +686,6 @@ internal object CueComposer {
 
         val pending = ArrayList<Pending>()
         for (row in content.rows) {
-            // **Dropped, and nothing downstream picks them up** — `FU-LOOK-ELEMENT-ROWS`. The
-            // accumulator is keyed `(fixture, property)` and an element is not a fixture, so an
-            // element row cannot reach it; this is one of three places that drop one, beside
-            // `LookRegistry.expand`'s two loops, which serve Include. An earlier version of this
-            // comment claimed a "caller-side element path" handled them. There is none: this
-            // function has one caller, the cook loop above, and the pre-Looks composer had no
-            // element handling either. The path that does exist is the *effects* one
-            // (`elementMode` / `elementFilter`), which is a different mechanism.
-            if (row.elementKey != null) continue
             // A template row's intent is the row's, not the head's — parse it here and drop the
             // whole row if it is not one, rather than repeating the parse and the warning per head.
             val intent = if (content is LayerContent.OfTemplate) {
@@ -706,6 +698,23 @@ internal object CueComposer {
                 }
             } else {
                 null
+            }
+            val elementKey = row.elementKey
+            if (elementKey != null) {
+                // An **element row** — a Look's value for one cell of a multi-head fixture — composes
+                // onto that cell, keyed by its element key beside its parent's (`FU-LOOK-ELEMENT-ROWS`,
+                // closed by the busk-further plan's session 1). The layer's targets filter it by the
+                // parent↔cell rule: a layer on the whole bar carries its cells' rows, a layer on one
+                // cell carries that cell's alone.
+                if (layerFixtures != null && !layerTargets.covers(elementKey)) continue
+                val element = try {
+                    fixtures.untypedGroupableFixture(elementKey)
+                } catch (_: IllegalStateException) {
+                    logger.warn("cue {}: layer on '{}' — element '{}' missing — skipping", cueId, layer.source.name, elementKey)
+                    continue
+                }
+                pending.add(Pending(element, row.propertyName, row.value, null, row.fadeDurationMs, intent))
+                continue
             }
             val rowTarget = row.target
             if (rowTarget == null) {
@@ -730,7 +739,9 @@ internal object CueComposer {
                     expandTargets(fixtures, cueId, layer, listOf(rowTarget))
                 }
                 for (e in rowFixtures) {
-                    if (layerFixtures != null && e.fixture.key !in layerTargets.keys) continue
+                    // `covers`, not key membership: a bound row spelled as a cell target lands under a
+                    // layer on its parent exactly as an `elementKey` row does.
+                    if (layerFixtures != null && !layerTargets.covers(e.fixture.targetKey)) continue
                     pending.add(Pending(e.fixture, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
                 }
             }
@@ -746,7 +757,7 @@ internal object CueComposer {
             TemplateProperty.ofOrNull(it.propertyName)?.family == PropertyMaskGroup.COLOUR
         }
         val unmetColour: Map<String, String> = if (hasColourRow) {
-            pending.groupBy { it.fixture.key }.mapNotNull { (key, forFixture) ->
+            pending.groupBy { it.fixture.targetKey }.mapNotNull { (key, forFixture) ->
                 val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
                 val requirement =
                     TemplateResolver.unmetColourRequirement(forFixture.first().fixture, applicable)
@@ -770,7 +781,7 @@ internal object CueComposer {
         // [LookRegistry.expand] applies. `sortedBy` is stable, so row order survives within each
         // bucket.
         for (p in pending.sortedBy { if (it.isGroupOrigin) 0 else 1 }) {
-            val unmet = unmetColour[p.fixture.key]
+            val unmet = unmetColour[p.fixture.targetKey]
             if (unmet != null &&
                 TemplateProperty.ofOrNull(p.propertyName)?.family == PropertyMaskGroup.COLOUR
             ) {
@@ -779,7 +790,7 @@ internal object CueComposer {
                 // resolves-to panel that tells an operator, once, before saving.
                 logger.debug(
                     "cue {}: template '{}' — {} cannot serve its colour rows as a set ({})",
-                    cueId, layer.source.name, p.fixture.key, unmet,
+                    cueId, layer.source.name, p.fixture.targetKey, unmet,
                 )
                 continue
             }
@@ -800,7 +811,7 @@ internal object CueComposer {
                         // editor's "resolves to" panel is where an operator is told, before saving.
                         logger.debug(
                             "cue {}: template '{}' — {} cannot take {} ({})",
-                            cueId, layer.source.name, p.fixture.key, p.propertyName, resolution.note,
+                            cueId, layer.source.name, p.fixture.targetKey, p.propertyName, resolution.note,
                         )
                         continue
                     }
@@ -818,7 +829,7 @@ internal object CueComposer {
             if (categoryInfo == null) {
                 logger.warn(
                     "cue {}: {} '{}' — property '{}' not on '{}' — skipping",
-                    cueId, layer.source.kind, layer.source.name, p.propertyName, p.fixture.key,
+                    cueId, layer.source.kind, layer.source.name, p.propertyName, p.fixture.targetKey,
                 )
                 continue
             }
@@ -828,7 +839,7 @@ internal object CueComposer {
             if (incoming == null) {
                 logger.warn(
                     "cue {}: {} '{}' — invalid value '{}' for {}.{} — skipping",
-                    cueId, layer.source.kind, layer.source.name, p.rawValue, p.fixture.key, p.propertyName,
+                    cueId, layer.source.kind, layer.source.name, p.rawValue, p.fixture.targetKey, p.propertyName,
                 )
                 continue
             }
@@ -837,13 +848,13 @@ internal object CueComposer {
             // value on that key". The group alias goes in alongside the fixture key rather than
             // instead of it: within-cue suppression is checked per member (see
             // `FxEngine.processGroupEffect`), the cross-cue overlap on the effect's own target.
-            asserted.getOrPut(p.fixture.key) { HashSet() }.add(canonical)
+            asserted.getOrPut(p.fixture.targetKey) { HashSet() }.add(canonical)
             p.groupKey?.let { asserted.getOrPut(it) { HashSet() }.add(canonical) }
 
-            val key = Key(p.fixture.key, canonical)
+            val key = Key(p.fixture.targetKey, canonical)
             val below = acc[key]?.value
             acc[key] = Contribution(
-                targetKey = p.fixture.key,
+                targetKey = p.fixture.targetKey,
                 propertyName = canonical,
                 targetIsGroup = p.isGroupOrigin,
                 category = category,
@@ -864,7 +875,7 @@ internal object CueComposer {
      * Carries the group's *key* rather than the old boolean because the stomp overlap needs to name
      * it — an effect whose target is a group is matched on the group's own name.
      */
-    private class Expanded(val fixture: Fixture, val groupKey: String?)
+    private class Expanded(val fixture: GroupableFixture, val groupKey: String?)
 
     /**
      * A layer's own target set, expanded **once per layer** and shared by both halves of the cook.
@@ -907,13 +918,26 @@ internal object CueComposer {
         private var keysCache: Set<String>? = null
 
         /**
-         * [expanded] as a fixture-key set — the allowed-set for bound rows and the coverage set for
+         * [expanded] as a target-key set — the allowed-set for bound rows and the coverage set for
          * bound effects, which are the same question asked twice.
          */
         val keys: Set<String>
             get() = keysCache
-                ?: (expanded?.mapTo(HashSet()) { it.fixture.key } ?: emptySet<String>())
+                ?: (expanded?.mapTo(HashSet()) { it.fixture.targetKey } ?: emptySet<String>())
                     .also { keysCache = it }
+
+        private var coverageCache: TargetCoverage? = null
+
+        /**
+         * Does this layer's target set cover [key]? [keys] membership, or — for a cell — its parent's
+         * membership: the parent↔cell rule, read from [TargetCoverage.covers] rather than restated.
+         */
+        fun covers(key: String): Boolean {
+            if (key in keys) return true
+            val coverage = coverageCache ?: TargetCoverage { fixtures }.also { coverageCache = it }
+            val held = keys.mapTo(HashSet()) { CueTargetDto(TargetRef.Fixture.TYPE, it) }
+            return coverage.covers(held, CueTargetDto(TargetRef.Fixture.TYPE, key))
+        }
     }
 
     /**
@@ -944,8 +968,10 @@ internal object CueComposer {
                     for (member in members) out.add(Expanded(member, target.key))
                 }
                 is TargetRef.Fixture -> {
+                    // `untypedGroupableFixture`: a fixture-typed target whose key is an element key
+                    // is a cell, and a template's generic rows fan over it like any other head.
                     val fixture = try {
-                        fixtures.untypedFixture(target.key)
+                        fixtures.untypedGroupableFixture(target.key)
                     } catch (_: IllegalStateException) {
                         logger.warn("cue {}: layer on '{}' — fixture '{}' missing — skipping", cueId, layer.source.name, target.key)
                         continue
@@ -958,7 +984,8 @@ internal object CueComposer {
     }
 
     /**
-     * True when the layer covers [target] — by naming it, or by naming a group containing it.
+     * True when the layer covers [target] — by naming it, by naming a group containing it, or by
+     * naming the parent of a cell it is.
      *
      * [LayerTargets] is what makes this cheap: the layer's targets are expanded once for the whole
      * cook, and [LayerTargets.keys] is not built at all unless a bound effect actually reaches past
@@ -981,7 +1008,8 @@ internal object CueComposer {
                 ?: return false
         }
         if (targetKeys.isEmpty()) return false
-        return targetKeys.any { it in layerTargets.keys }
+        // Through `covers`, so a bound effect on a cell survives under a layer on its parent.
+        return targetKeys.any { layerTargets.covers(it) }
     }
 
     // ─── Blending ───────────────────────────────────────────────────────

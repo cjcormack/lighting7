@@ -139,7 +139,8 @@ class DeskSelection(fixtures: () -> Fixtures?) {
         if (selection.isEmpty()) return false
         val heads = coverageRule.expand(listOf(target))
         val selected = coverageRule.expand(selection).toSet()
-        return heads.all { it in selected }
+        // Per head through [TargetCoverage.covers], so a cell under a selected bar counts as in.
+        return heads.all { coverageRule.covers(selected, it) }
     }
 
     /**
@@ -157,7 +158,8 @@ class DeskSelection(fixtures: () -> Fixtures?) {
 
     private fun resolves(fixtures: Fixtures, target: CueTargetDto): Boolean =
         when (TargetRef.ofOrNull(target.type, target.key)) {
-            is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.isSuccess
+            // `untypedGroupableFixture`: a selected cell survives a reload as its parent does.
+            is TargetRef.Fixture -> runCatching { fixtures.untypedGroupableFixture(target.key) }.isSuccess
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.isSuccess
             null -> false
         }

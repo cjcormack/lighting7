@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
@@ -63,9 +64,10 @@ enum class RecordSource {
 /** Why a programmer entry didn't make it into the recording. Surfaced to the operator. */
 enum class RecordSkipReason {
     /**
-     * The entry is keyed by an element (`bar-1.head-0`). Cue assignments resolve fixture keys
-     * through `Fixtures.untypedFixture`, which doesn't see elements, so the row would be
-     * permanently dead. Lifting this needs an `element_key` column on cue assignments.
+     * The entry is keyed by an element (`bar-1.head-0`) and the destination has no element row:
+     * `CuePropertyAssignmentDto` carries no `elementKey`, so a cue row for a cell would be
+     * permanently dead. A **Look** does have one (`DaoLookRows.elementKey`), and `record-look`
+     * asks [collectProgrammerEntries] for elements, so this is never reported there.
      */
     ELEMENT_TARGET,
 
@@ -148,8 +150,18 @@ internal fun collectProgrammerEntries(
     state: State,
     source: RecordSource,
     mask: Set<PropertyMaskGroup>?,
-    /** Restrict to these fixture keys (groups already expanded). Null or empty = no restriction. */
+    /**
+     * Restrict to these target keys (groups already expanded; a cell's element key is its own
+     * entry). Null or empty = no restriction. A key is in scope when the scope **covers** it —
+     * [uk.me.cormack.lighting7.fx.TargetCoverage.covers] — so a cell is in scope under its parent.
+     */
     targets: Set<String>? = null,
+    /**
+     * Keep entries keyed by an element rather than skipping them as [RecordSkipReason.ELEMENT_TARGET].
+     * Only a destination with an element row may ask for this — `record-look` does; a cue or a
+     * template cannot hold one, so their recordings keep the skip.
+     */
+    allowElements: Boolean = false,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
     val fixtures = state.show.fixtures
@@ -158,6 +170,8 @@ internal fun collectProgrammerEntries(
     val skips = ArrayList<RecordSkip>()
 
     val scope = targets?.takeIf { it.isNotEmpty() }
+    val scopeTargets = scope?.mapTo(HashSet()) { CueTargetDto(TargetRef.Fixture.TYPE, it) }
+    val coverage = TargetCoverage { fixtures }
 
     fun accept(
         fixtureKey: String,
@@ -170,7 +184,7 @@ internal fun collectProgrammerEntries(
         val mapKey = fixtureKey to propertyName
         // Older than what already claimed this property — the newer write is what's on stage.
         if (seqs[mapKey]?.let { it >= seq } == true) return
-        if (scope != null && fixtureKey !in scope) {
+        if (scopeTargets != null && !coverage.covers(scopeTargets, CueTargetDto(TargetRef.Fixture.TYPE, fixtureKey))) {
             skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.OUT_OF_SCOPE)
             return
         }
@@ -180,7 +194,7 @@ internal fun collectProgrammerEntries(
             skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_FIXTURE)
             return
         }
-        if (fixture !is Fixture) {
+        if (fixture !is Fixture && !allowElements) {
             skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.ELEMENT_TARGET)
             return
         }
@@ -280,7 +294,11 @@ internal fun ProgrammerLayer.toCueLayerDto() = CueLayerDto(
 internal fun targetInScope(fixtures: Fixtures, target: TargetRef, scope: Set<String>?): Boolean {
     if (scope == null) return true
     return when (target) {
-        is TargetRef.Fixture -> target.key in scope
+        // Through `covers`: a cell is in scope under its parent, on every record path alike.
+        is TargetRef.Fixture -> TargetCoverage { fixtures }.covers(
+            scope.mapTo(HashSet()) { CueTargetDto(TargetRef.Fixture.TYPE, it) },
+            CueTargetDto(TargetRef.Fixture.TYPE, target.key),
+        )
         is TargetRef.Group -> {
             val members = try {
                 fixtures.untypedGroup(target.key).fixtures.filterIsInstance<Fixture>()

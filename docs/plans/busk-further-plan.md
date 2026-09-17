@@ -41,7 +41,10 @@ hand. The brief for this plan takes both further, on the busk view specifically:
   `elementKey`), `LookRegistry.expand` (two `continue`s), `lookRecord.kt` (writes no `elementKey`;
   expands through `expandTargetsToFixtureKeys`), `EffectSpawner.createFixtureTargetForCue`
   (`untypedFixture(key) as? Fixture`, register-only — an effect template on a cell resolves
-  nothing), and the bundled W/A/UV path (`FU-FX-ELEMENT-BUNDLED-COLOUR`). And nothing defines
+  nothing), and the bundled W/A/UV path (`FU-FX-ELEMENT-BUNDLED-COLOUR`). *Session 1 amendment:*
+  `expandTargetsToFixtureKeys` already kept an element key as its own row; the record drop was
+  `collectProgrammerEntries`' `ELEMENT_TARGET` skip, and `FxEngine.buildExpansion`'s fixture arm
+  (`untypedFixture`) was a further drop site for an effect on a cell. And nothing defines
   whether a whole-bar layer *covers* a cell press: `pressWouldRelease` compares expanded DTOs by
   equality, so a cell press under a whole-bar layer never reads as lit.
 
@@ -358,7 +361,7 @@ other. Every session ends with `npm run check` / `./gradlew test` green, its doc
 written, and its done-marker here (strikethrough plus commit hash, nothing more — the detail
 belongs in the commit message).
 
-### Session 1 — the element arm (lighting7) — Fable 5.1, high
+### Session 1 — the element arm (lighting7) — Fable 5.1, high — **landed**
 
 The prerequisite Chris chose to land first. Start from **one failing test per door** — a colour
 template on two cells, a Look recorded from two cells and toggled, an effect template on a cell,
@@ -376,10 +379,15 @@ each pass; the list below is where the review found the gaps, not a substitute f
   `routes/programmerLookInclude.kt:302`, already carries `elementKey`.)
 - **`routes/lookRecord.kt`**: `record-look` over a selection with element keys writes element rows
   — `expandTargetsToFixtureKeys` (`:297`) keeps an element key as its own row rather than folding
-  it into the parent.
+  it into the parent. *Session 1 amendment:* it already did; the drop was
+  `collectProgrammerEntries` skipping element entries as `ELEMENT_TARGET`, now lifted for
+  `record-look` alone (`allowElements`), with `writeRecordingIntoLook` writing `targetKey` the
+  parent and `elementKey` the cell.
 - **`fx/EffectSpawner.createFixtureTargetForCue`** (`:~92`): `untypedFixture(key) as? Fixture` is
   register-only; resolve through `untypedGroupableFixture` so an effect template on a cell targets
-  the element. Check `FxTargetFactory` for the same cast.
+  the element. Check `FxTargetFactory` for the same cast. *Session 1 amendment:* the engine's own
+  `buildExpansion` fixture arm had the same register-only lookup and is the site that made the
+  effect paint nothing; both now resolve through `untypedGroupableFixture`.
 - **`FU-FX-ELEMENT-BUNDLED-COLOUR`**: `FxTarget.applyValueToFixture` / `resetToFallback` /
   `composeProgrammerOver` / `isPropertyFullyParked` hand an element its bundled W/A/UV through
   `FixturePropertyCatalogue.of(element::class).bundledByCategory`.

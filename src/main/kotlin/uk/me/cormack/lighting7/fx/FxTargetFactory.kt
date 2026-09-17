@@ -1,7 +1,10 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
+import kotlin.reflect.KProperty1
 
 /**
  * The one place a client-supplied property *name* becomes an [FxTarget].
@@ -36,14 +39,14 @@ object FxTargetFactory {
      * @param fixtureKey the fixture's key
      * @param propertyName the client-supplied property name, in any case
      * @param outputType the effect's output type, when the caller knows it
-     * @param fixture the resolved fixture, or null when it can't be found — only the fallback
-     *   branch reads it, to tell a slider property from a setting
+     * @param fixture the resolved fixture **or element**, or null when it can't be found — only
+     *   the fallback branch reads it, to tell a slider property from a setting
      */
     fun forFixture(
         fixtureKey: String,
         propertyName: String,
         outputType: FxOutputType?,
-        fixture: Fixture?,
+        fixture: GroupableFixture?,
     ): FxTarget = resolve(FxTargetRef.fixture(fixtureKey), propertyName, outputType, fixture)
 
     /**
@@ -63,7 +66,7 @@ object FxTargetFactory {
         ref: FxTargetRef,
         propertyName: String,
         outputType: FxOutputType?,
-        fixture: Fixture?,
+        fixture: GroupableFixture?,
     ): FxTarget {
         val lower = propertyName.lowercase()
 
@@ -81,8 +84,11 @@ object FxTargetFactory {
             "colour", "color", "rgbcolour" -> ColourTarget(ref)
             "position" -> PositionTarget(ref)
             else -> {
-                val prop = fixture?.fixtureProperty(propertyName)
-                val propValue = prop?.classProperty?.call(fixture)
+                // Through the catalogue rather than `Fixture.fixtureProperty`, so an element's own
+                // `@FixtureProperty` members answer for a cell exactly as a fixture's do for it.
+                val prop = fixture?.let { FixturePropertyCatalogue.of(it::class).byName[propertyName] }
+                @Suppress("UNCHECKED_CAST")
+                val propValue = prop?.let { (it.classProperty as KProperty1<Any, *>).call(fixture) }
                 if (propValue is Slider) {
                     SliderTarget(ref, propertyName)
                 } else {

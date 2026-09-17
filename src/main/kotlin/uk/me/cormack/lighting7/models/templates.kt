@@ -158,10 +158,11 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
  * grammar and [uk.me.cormack.lighting7.fx.TemplateResolver] for the one implementation that turns
  * one into channels.
  *
- * There is deliberately **no `elementKey`**. Element-scoped rows compose nowhere
- * (`FU-LOOK-ELEMENT-ROWS`), and a template is a *rule*; a per-element rule is precisely the case
- * that has no composition at all. A per-element value belongs in a recorded Look, which names a
- * head and can therefore hold anything that head has.
+ * There is deliberately **no `elementKey`**. A template is a *rule*, and it reaches a cell the way
+ * it reaches any head: a cell is a target (`{type:'fixture', key:<elementKey>}`, busk-further plan
+ * D11), so a generic row fans over whichever cells the layer names. A per-element *value* belongs
+ * in a recorded Look, which names a head and can therefore hold anything that head has — its
+ * element rows compose since the busk-further plan's session 1 closed `FU-LOOK-ELEMENT-ROWS`.
  */
 object DaoTemplateRows : IntIdTable("template_rows") {
     val template = reference("template_id", DaoTemplates)

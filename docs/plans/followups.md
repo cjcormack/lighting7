@@ -20,7 +20,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
-| [`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour) | Ready | Perf | — |
+| ~~[`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour)~~ | Closed | Perf | closed 2026-09-17, session 1 of busk-further-plan |
 | [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
 | [`FU-FX-TICKFLOW-UNUSED`](#fu-fx-tickflow-unused) | Ready | Perf | — |
 | [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
@@ -55,7 +55,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
-| [`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows) | Ready | Look | — |
+| ~~[`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows)~~ | Closed | Look | closed 2026-09-17, session 1 of busk-further-plan |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
@@ -137,8 +137,10 @@ configuration check, not a contention one.*
 
 ### `FU-FX-ELEMENT-BUNDLED-COLOUR`
 
-**Elements never receive their bundled W/A/UV component** · Ready · found under sweep item C2,
-2026-08-24
+**Elements never receive their bundled W/A/UV component** · Closed · found under sweep item C2,
+2026-08-24; closed 2026-09-17, session 1 of busk-further-plan — `ColourTarget`'s four helpers now
+read the bundle off `FixturePropertyCatalogue.of(fixture::class).bundledByCategory` for a fixture and
+an element alike (`FxTargetBundledColourTest`)
 
 `ColourTarget` writes the extended components of an `ExtendedColour` through
 `applyExtendedChannel` / `setExtendedChannel`, both gated on `if (fixture is Fixture)`
@@ -820,7 +822,10 @@ show the shape it had.
 
 ### `FU-LOOK-ELEMENT-ROWS`
 
-**A Look's element row composes nowhere** · Ready · Looks-and-layers correction #10, 2026-08-22
+**A Look's element row composes nowhere** · Closed · Looks-and-layers correction #10, 2026-08-22;
+closed 2026-09-17, session 1 of busk-further-plan — `CueComposer.applyLayer` composes an element row
+onto its cell, `LookRegistry.expand` keys it by its element key, and `record-look` writes one from a
+cell selection (`CueComposerElementRowsTest`, `LookRegistryElementTest`, `LookRecordElementTest`)
 
 `DaoLookRows.elementKey` exists, the migration carries element rows across, and
 `RichProjectFixture` seeds one — but nothing consumes them. So a Look holding a per-element value

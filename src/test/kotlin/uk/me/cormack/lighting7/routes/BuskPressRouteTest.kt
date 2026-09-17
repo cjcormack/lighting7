@@ -787,4 +787,69 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         actions().buskPageSet("00000000-0000-4000-8000-000000000000")
         assertEquals(first.id, state.buskPageState.pageId.value)
     }
+
+    // ─── Cells (busk-further plan D11) ─────────────────────────────────
+
+    private fun cell(i: Int) = "bar-1.pixel-$i"
+
+    private fun seedBar() {
+        LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-1", 1)
+    }
+
+    /** A Look holding one colour row per named cell of `bar-1`. */
+    private suspend fun HttpClient.createCellLook(name: String, vararg cells: Int): Int {
+        val resp = post("/api/rest/projects/$projectId/looks") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateLookRequest(
+                    name = name,
+                    rows = cells.map { LookRowDto("fixture", "bar-1", "rgbColour", "#ff0000", elementKey = cell(it)) },
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
+        return resp.body<LookDetails>().id
+    }
+
+    @Test
+    fun `a cell press under a whole-bar Look layer reads lit and releases nothing`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        seedBar()
+        val client = jsonClient()
+        val cells = client.createCellLook("cells", 0, 1, 2, 3, 6)
+        val other = client.createLook("other", "hex-1")
+        val (pad, otherPad) = client.bank("solo", solo = true, look(cells), look(other))
+        assertEquals("applied", client.press(otherPad, "hex-1").action)
+
+        assertEquals("applied", client.press(pad, "bar-1").action)
+        assertEquals(setOf("cells@bar-1", "other@hex-1"), live())
+
+        val off = client.press(pad, cell(0), cell(1), cell(2), cell(3))
+        assertEquals("removed", off.action, "the whole bar covers four of its cells")
+        assertEquals(0, off.released, "an off press releases nothing")
+        assertEquals(
+            setOf("cells@" + (4 until 12).map { cell(it) }.sorted().joinToString("+"), "other@hex-1"),
+            live(),
+            "the layer is narrowed to the cells the press did not name; the sibling is untouched",
+        )
+    }
+
+    @Test
+    fun `a whole-bar press over a cell layer adds`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        seedBar()
+        val client = jsonClient()
+        val cells = client.createCellLook("cells", 0, 1, 2, 3, 6)
+        val (pad) = client.bank("keys", solo = false, look(cells))
+
+        assertEquals("applied", client.press(pad, cell(0), cell(1), cell(2), cell(3)).action)
+        assertEquals(setOf("cells@" + (0 until 4).map { cell(it) }.joinToString("+")), live())
+
+        val on = client.press(pad, "bar-1")
+        assertEquals("applied", on.action, "four cells do not cover the whole bar")
+        assertEquals(0, on.released)
+        assertEquals(setOf("cells@bar-1"), live(), "the bar subsumes its cells: one layer per head")
+    }
 }

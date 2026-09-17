@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -16,6 +17,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
+import kotlin.reflect.KProperty1
 
 /**
  * Reference to a fixture or group target.
@@ -362,13 +364,13 @@ data class ColourTarget(
         val newColour = applyRgbBlendMode(baseColour, output.color.color, blendMode)
         colour.value = newColour
 
-        // Apply extended channels (W/A/UV) to bundled slider properties
-        if (fixture is Fixture) {
-            val ext = output.color
-            applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode)
-            applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode)
-            applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode)
-        }
+        // Apply extended channels (W/A/UV) to bundled slider properties — on a fixture *or* an
+        // element: the bundle comes from the class catalogue, which both carry
+        // (`FU-FX-ELEMENT-BUNDLED-COLOUR`).
+        val ext = output.color
+        applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode)
+        applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode)
+        applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode)
     }
 
     override fun resetToFallback(fixture: GroupableFixture, fallback: FxOutput, fadeMs: Long) {
@@ -378,11 +380,9 @@ data class ColourTarget(
         if (fadeMs > 0) colour.fadeToColour(ext.color, fadeMs) else colour.value = ext.color
 
         // Apply extended channels (W/A/UV) to bundled slider properties using the fallback values.
-        if (fixture is Fixture) {
-            setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs)
-            setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs)
-            setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs)
-        }
+        setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs)
+        setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs)
+        setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs)
     }
 
     override fun composeProgrammerOver(
@@ -418,18 +418,9 @@ data class ColourTarget(
         val g = component(colourValue?.color?.green?.toUByte(), dmxColour?.greenSlider?.channelNo)
         val b = component(colourValue?.color?.blue?.toUByte(), dmxColour?.blueSlider?.channelNo)
 
-        var white: UByte? = null
-        var amber: UByte? = null
-        var uv: UByte? = null
-        if (fixture is Fixture) {
-            white = extendedComponent(fixture, PropertyCategory.WHITE, colourValue?.white, colourSeq, store)
-            amber = extendedComponent(fixture, PropertyCategory.AMBER, colourValue?.amber, colourSeq, store)
-            uv = extendedComponent(fixture, PropertyCategory.UV, colourValue?.uv, colourSeq, store)
-        } else {
-            white = colourValue?.white
-            amber = colourValue?.amber
-            uv = colourValue?.uv
-        }
+        val white = extendedComponent(fixture, PropertyCategory.WHITE, colourValue?.white, colourSeq, store)
+        val amber = extendedComponent(fixture, PropertyCategory.AMBER, colourValue?.amber, colourSeq, store)
+        val uv = extendedComponent(fixture, PropertyCategory.UV, colourValue?.uv, colourSeq, store)
 
         if (r == null && g == null && b == null && white == null && amber == null && uv == null) {
             return below
@@ -458,21 +449,21 @@ data class ColourTarget(
      * slider's sideband channel. Null when nothing in the programmer covers it.
      */
     private fun extendedComponent(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         category: PropertyCategory,
         entryComponent: UByte?,
         colourSeq: Long,
         store: ProgrammerStore,
     ): UByte? {
-        val prop = fixture.bundledProperty(category) ?: return entryComponent
+        val prop = bundledProperty(fixture, category) ?: return entryComponent
         var bestSeq = if (entryComponent != null) colourSeq else Long.MIN_VALUE
         var best = entryComponent
 
-        store.get(fixture.key, prop.name)?.let { slot ->
+        store.get(fixture.targetKey, prop.name)?.let { slot ->
             val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
         }
-        ((prop.classProperty.call(fixture) as? Slider) as? DmxSlider)?.let { dmx ->
+        ((bundledSlider(fixture, prop)) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
                 val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
@@ -491,36 +482,49 @@ data class ColourTarget(
         if (!parkManager.isParked(u, dmxColour.redSlider.channelNo)) return false
         if (!parkManager.isParked(u, dmxColour.greenSlider.channelNo)) return false
         if (!parkManager.isParked(u, dmxColour.blueSlider.channelNo)) return false
-        if (fixture is Fixture) {
-            if (!bundledChannelParked(fixture, PropertyCategory.WHITE, parkManager)) return false
-            if (!bundledChannelParked(fixture, PropertyCategory.AMBER, parkManager)) return false
-            if (!bundledChannelParked(fixture, PropertyCategory.UV, parkManager)) return false
-        }
+        if (!bundledChannelParked(fixture, PropertyCategory.WHITE, parkManager)) return false
+        if (!bundledChannelParked(fixture, PropertyCategory.AMBER, parkManager)) return false
+        if (!bundledChannelParked(fixture, PropertyCategory.UV, parkManager)) return false
         return true
     }
 
     /** True if the fixture has no bundled channel in this category, or the backing DMX channel is parked. */
     private fun bundledChannelParked(
-        fixture: Fixture,
+        fixture: GroupableFixture,
         category: PropertyCategory,
         parkManager: ParkManager,
     ): Boolean {
-        val prop = fixture.bundledProperty(category) ?: return true
-        val dmx = (prop.classProperty.call(fixture) as? Slider) as? DmxSlider ?: return true
+        val prop = bundledProperty(fixture, category) ?: return true
+        val dmx = bundledSlider(fixture, prop) as? DmxSlider ?: return true
         return parkManager.isParked(dmx.universe.universe, dmx.channelNo)
     }
 
-    private fun applyExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, blendMode: BlendMode) {
-        val prop = fixture.bundledProperty(category) ?: return
-        val slider = prop.classProperty.call(fixture) as? Slider ?: return
+    private fun applyExtendedChannel(fixture: GroupableFixture, category: PropertyCategory, value: UByte, blendMode: BlendMode) {
+        val prop = bundledProperty(fixture, category) ?: return
+        val slider = bundledSlider(fixture, prop) ?: return
         val base = slider.value ?: 0u
         slider.value = applySliderBlendMode(base, value, blendMode)
     }
 
-    private fun setExtendedChannel(fixture: Fixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
-        val prop = fixture.bundledProperty(category) ?: return
-        val slider = prop.classProperty.call(fixture) as? Slider ?: return
+    private fun setExtendedChannel(fixture: GroupableFixture, category: PropertyCategory, value: UByte, fadeMs: Long = 0) {
+        val prop = bundledProperty(fixture, category) ?: return
+        val slider = bundledSlider(fixture, prop) ?: return
         if (fadeMs > 0) slider.fadeToValue(value, fadeMs) else slider.value = value
+    }
+
+    /**
+     * The `bundleWithColour` slider for [category] on a fixture **or an element** — the class
+     * catalogue carries the bundle for both, which is what closed `FU-FX-ELEMENT-BUNDLED-COLOUR`:
+     * the four helpers above used to reach for `Fixture.bundledProperty` behind a `fixture is
+     * Fixture` gate, so a pixel's white was computed and then silently dropped.
+     */
+    private fun bundledProperty(fixture: GroupableFixture, category: PropertyCategory): Fixture.Property? =
+        FixturePropertyCatalogue.of(fixture::class).bundledByCategory[category]
+
+    /** [prop] read off [fixture] as a [Slider], or null. The receiver bound is advisory — see the catalogue. */
+    private fun bundledSlider(fixture: GroupableFixture, prop: Fixture.Property): Slider? {
+        @Suppress("UNCHECKED_CAST")
+        return runCatching { (prop.classProperty as KProperty1<Any, *>).call(fixture) }.getOrNull() as? Slider
     }
 
     private fun applyRgbBlendMode(base: Color, effect: Color, mode: BlendMode): Color {
