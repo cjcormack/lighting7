@@ -1,6 +1,9 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
-> **Document status: PROPOSAL, 2026-09-17 — no session started; reviewed once.** The visual
+> **Document status: IN PROGRESS, 2026-09-17 — sessions 1 and 2 (lighting7) landed, `b263ca5`
+> and `6e2cc72`; sessions 3–7 (lighting-react) not started.** Each landed session's heading in §5
+> carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
+> current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
 > [`busk-further-design/`](busk-further-design/INDEX.md) — twelve static artboards: the busk view
 > in play with the new rig band and side sheet, the rig in edit mode, focus and the two-screen
@@ -422,7 +425,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
   coverage sentences; close `FU-LOOK-ELEMENT-ROWS` and `FU-FX-ELEMENT-BUNDLED-COLOUR` in
   `followups.md` with the hash.
 
-### Session 2 — the rig, spread, the command and the targets (lighting7) — Fable 5.1, high — **landed**
+### Session 2 — the rig, spread, the command and the targets (lighting7) — Fable 5.1, high — **landed**, `6e2cc72`
 
 - `models/buskRig.kt` (§3.1) with a docblock recording D1–D3 and the no-cascade rule; register in
   `Schema.ALL_TABLES`.
