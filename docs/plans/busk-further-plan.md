@@ -361,7 +361,7 @@ other. Every session ends with `npm run check` / `./gradlew test` green, its doc
 written, and its done-marker here (strikethrough plus commit hash, nothing more — the detail
 belongs in the commit message).
 
-### Session 1 — the element arm (lighting7) — Fable 5.1, high — **landed**
+### Session 1 — the element arm (lighting7) — Fable 5.1, high — **landed**, `b263ca5`
 
 The prerequisite Chris chose to land first. Start from **one failing test per door** — a colour
 template on two cells, a Look recorded from two cells and toggled, an effect template on a cell,

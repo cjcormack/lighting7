@@ -20,7 +20,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
 | [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
-| ~~[`FU-FX-ELEMENT-BUNDLED-COLOUR`](#fu-fx-element-bundled-colour)~~ | Closed | Perf | closed 2026-09-17, session 1 of busk-further-plan |
 | [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
 | [`FU-FX-TICKFLOW-UNUSED`](#fu-fx-tickflow-unused) | Ready | Perf | — |
 | [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
@@ -55,7 +54,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
-| ~~[`FU-LOOK-ELEMENT-ROWS`](#fu-look-element-rows)~~ | Closed | Look | closed 2026-09-17, session 1 of busk-further-plan |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
@@ -134,34 +132,6 @@ enough that the tick windows overlap often (today's 50 Hz + ~120 Hz worst case d
 configuration check, not a contention one.*
 
 ---
-
-### `FU-FX-ELEMENT-BUNDLED-COLOUR`
-
-**Elements never receive their bundled W/A/UV component** · Closed · found under sweep item C2,
-2026-08-24; closed 2026-09-17, session 1 of busk-further-plan — `ColourTarget`'s four helpers now
-read the bundle off `FixturePropertyCatalogue.of(fixture::class).bundledByCategory` for a fixture and
-an element alike (`FxTargetBundledColourTest`)
-
-`ColourTarget` writes the extended components of an `ExtendedColour` through
-`applyExtendedChannel` / `setExtendedChannel`, both gated on `if (fixture is Fixture)`
-(`FxTarget.kt:379` in `applyValueToFixture`, `:399` in `resetToFallback`; the same gate is at
-`:442` in `composeProgrammerOver` and `:512` in `isPropertyFullyParked`). `FixtureElement` does
-**not** extend `Fixture`, so for any element the white / amber / uv half of a colour output is
-computed and then silently dropped.
-
-This is visible on real hardware: `LedLightbar12PixelFixture.RgbwPixel.white` is declared
-`@FixtureProperty(..., bundleWithColour = true)` (`:225`), so a colour effect or cue on a pixel
-group drives RGB and leaves the white emitter dark. `FxEngineBenchmark`'s chase rig has been
-running exactly this shape and discarding the white component on every tick.
-
-The fix is not simply widening the gate — the four helpers reach for `Fixture.bundledProperty`,
-and the element equivalent is `FixturePropertyCatalogue.of(element::class).bundledByCategory`,
-which now exists and is the same shape. Worth checking whether `isPropertyFullyParked`'s
-`bundledChannelParked` needs the same treatment for consistency.
-
-**Not** done under C2: that item was a performance change measured on allocation, and folding a
-behaviour fix into it would have made the numbers unattributable. Needs a test on element colour
-output before the wire behaviour changes — nothing currently asserts an element's white channel.
 
 ### `FU-TMPL-REWARM-BOUND`
 
@@ -819,53 +789,6 @@ that this item would want the same count again — was removed in `1788d7d` (lig
 `addb53b`) rather than carried speculatively. If this item lands, it needs a fresh field for "how
 many `ref:` rows did this record flatten", not a resurrection of the old one; the removal commits
 show the shape it had.
-
-### `FU-LOOK-ELEMENT-ROWS`
-
-**A Look's element row composes nowhere** · Closed · Looks-and-layers correction #10, 2026-08-22;
-closed 2026-09-17, session 1 of busk-further-plan — `CueComposer.applyLayer` composes an element row
-onto its cell, `LookRegistry.expand` keys it by its element key, and `record-look` writes one from a
-cell selection (`CueComposerElementRowsTest`, `LookRegistryElementTest`, `LookRecordElementTest`)
-
-`DaoLookRows.elementKey` exists, the migration carries element rows across, and
-`RichProjectFixture` seeds one — but nothing consumes them. So a Look holding a per-element value
-(one pixel of a bar, one head of a multi-head fixture) round-trips through the library, the sync
-export and the editor, and then contributes nothing.
-
-**Three drop sites, not one** (corrected 2026-09-10, while diagnosing
-[`PD-TEMPLATE-MULTIHEAD-CELL`](completed/programmer-desk-findings.md#pd-template-multihead-cell)):
-
-- `CueComposer.applyLayer` — `if (row.elementKey != null) continue`. The cue cook.
-- `LookRegistry.expand`, **twice** — its docblock says "whole-fixture rows" outright. This is the
-  **Include** path (`programmerLookInclude`) and `literalFor`, so an element row is invisible in
-  the *programmer* as well as in a cue. This entry originally missed it.
-- Not `buildCueAssignmentsForCue`, which this entry used to name. `CuePropertyAssignmentDto` has no
-  `elementKey` field at all, so a cue's own Layer 4 row cannot be element-scoped in the first place
-  — an unminted vocabulary rather than a missing branch, and a separate decision if anyone wants it.
-
-`models/templates.kt` deliberately omits `elementKey` citing this entry, and
-`PersistedFixtureReferenceValidator` already *has* an element branch — it validates against
-`elementGroupProperties` — so health reports `Ok` for a row that composes nowhere. The client knows:
-`LookRowStore.tsx` counts element rows to draw the notice.
-
-**Pre-existing, not a session-3 regression** — the same gap existed for palette entries. Cue *ad-hoc
-effects* do have an element path (`elementMode` / `elementFilter`), so the vocabulary exists; it is
-the static-row half that was never wired. `CueComposer`'s own comment claimed the effects path
-covered these rows too; it did not, and it has been corrected.
-
-**Prerequisite for the fan-out [`PD-TEMPLATE-MULTIHEAD-CELL`](completed/programmer-desk-findings.md#pd-template-multihead-cell)
-leaves behind** — that triage item is closed, and what it did not fix needs everything here *plus* a
-parent-to-element fan-out at resolution time. Containment, not equivalence: plan the two together,
-ship this one first — "a Look row on one pixel of Bar 1 composes" is a complete, desk-checkable
-outcome on its own, and starting the fan-out without it hits this wall half way.
-
-**Decide before implementing**: whether a deferred element row is even meaningful. An element key
-identifies a sub-part of a *specific* fixture geometry, so a deferred row carrying one is asking to
-be applied to whatever the layer targets — which may not have that element. The bound case is
-unambiguous and is probably the whole of it. Note that `PD-TEMPLATE-MULTIHEAD-CELL`'s fan-out is the
-**safe answer to the same question**: it derives element targets from each head at cook time rather
-than carrying one on the row, so the ambiguity never arises. That is an argument for designing the
-two together even though they ship apart.
 
 ### `FU-LOOK-STOMP-GRANULAR`
 
@@ -1958,6 +1881,13 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-09
 
+- `FU-LOOK-ELEMENT-ROWS` + `FU-FX-ELEMENT-BUNDLED-COLOUR` (`b263ca5`) — session 1 of the
+  busk-further plan, the element arm: a cell is a target on every press door. A Look's element row
+  composes onto its cell (`CueComposer.applyLayer`, `LookRegistry.expand` keyed by element key,
+  `record-look` and Update-back writing `targetKey` the parent + `elementKey` the cell), and
+  `ColourTarget`'s bundled W/A/UV helpers read the class catalogue for a fixture and an element
+  alike, so a pixel's white emitter receives its component. The parent↔cell coverage rule lives
+  once in `TargetCoverage.covers`.
 - `FU-MIDI-SELECTION-COLOUR-RED-ONLY` + `FU-MIDI-ENCODER-HUE` (`4829fd9`) — settled together, as
   the two items said they must be: a colour on a continuous control is a **hue**.
   `PropertyChannelResolver` owns both directions — `toPropertyValue` writes the new hue at the
