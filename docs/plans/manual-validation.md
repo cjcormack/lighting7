@@ -16,7 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
-| [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the whole of session 3, both halves; nothing in it can be covered in review | Multi-screen S3, 2026-09-16 |
+| [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the two-window half, the MIDI half, the timeout and two gestures fixed in review but never exercised; what one window proved is recorded in the entry | Multi-screen S3, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S2`](#fu-manual-multi-screen-s2) | windows have names, and one screen moves another — the two-tab browser half of steps 1, 2, 4 and 6 and the close-a-window extra were run in review; the tray launch, the iPad, Keyboard Lock, *Open on Display N*, Safari and the duplicated tab are the desk's | Multi-screen S2, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S1`](#fu-manual-multi-screen-s1) | a marquee on one screen is a masked press on the other — the X-Touch and iPad steps; the browser steps were run in review | Multi-screen S1, 2026-09-16 |
 | [`FU-MANUAL-DESK-S1`](#fu-manual-desk-s1) | the Programmer view, the show-bar ladder and drag-select survive a real desk | Desk simplification S1, 2026-08-23 |
