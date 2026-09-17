@@ -100,6 +100,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-SPECIAL-PAD`](#fu-busk-special-pad) | Trigger | Busk | an operator asks for Clear, Locate or Blind on the page |
 | [`FU-BUSK-TILE-LEVEL-DRAG`](#fu-busk-tile-level-drag) | Trigger | Busk | an operator reaches for a tile to set a level |
 | [`FU-BUSK-SAVE-AS-GROUP`](#fu-busk-save-as-group) | Trigger | Busk | a selection is rebuilt by hand a third time |
+| [`FU-BUSK-RIG-GROUP-ID`](#fu-busk-rig-group-id) | Ready | Busk | — |
+| [`FU-HAND-GROUP-KIND`](#fu-hand-group-kind) | Ready | Busk | — |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -650,6 +652,32 @@ On the Ideas board, out of scope by D17. Each has a MIDI target already (`ClearS
 same action — a `kind = SPECIAL` with a verb, no record and nothing to sweep.
 
 **Trigger**: an operator asks for Clear, Locate or Blind on the page.
+
+### `FU-BUSK-RIG-GROUP-ID`
+
+**The rig read embeds no group id** · Ready · Busk-further plan §3.2 session 3 amendment, 2026-09-17
+
+`GET /busk/rig` embeds `GroupSummaryDto` on a group tile, and that DTO carries no `id`; the PUT
+names every group tile by `groupId`, a kept tile as much as a new one. The client resolves the id
+through `FixturePatchDto.groups[].id` — the one place the desk publishes one — so a group with no
+patched member cannot be placed on the rig, and the Rig tab offers it as an unplaceable row saying
+so (`lighting-react` `e7b540a8`, `rigIdsFromPatches` / `RigRequestError`). The fix is one field:
+`id` on `GroupSummaryDto` (every list that embeds it gains it for free), or `groupId` on
+`BuskRigTileDto`; the client's `toRigRequest` then reads it ahead of the patch-list map and the
+refusal arm goes.
+
+### `FU-HAND-GROUP-KIND`
+
+**The hand cannot hold a group or fixture** · Ready · Busk-further plan §5 session 3 amendment, 2026-09-17
+
+`hand.pickUp {kind, id}` takes a `BuskPadKind` and `HandState.Held` requires a template, Look or
+cue summary, so a rig row — which is made of groups, fixtures and cells — is a hand target
+(`lib/handTargets.ts`'s `rig-row`, `e7b540a8`) that nothing held can land on. The strip is
+mounted on every row in edit mode and wired to the rig PUT and `hand.drop`; it never lights. To
+land it: a `GROUP` / `FIXTURE` kind on the hand with `GroupSummaryDto` / the rig's patch DTO as
+the embedded summary, `resolves` and `reconcile` arms for the two lists, a pick-up door on the
+Rig tab's rows and the `/groups` and `/fixtures` rows, then `canHandLand(…, 'rig-row')` and
+`RigBand.rigRecordOf` on the client. The frame shape does not otherwise change.
 
 ### `FU-BUSK-TILE-LEVEL-DRAG`
 

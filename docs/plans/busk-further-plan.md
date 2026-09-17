@@ -631,6 +631,10 @@ with the rig file optional on import (a v11 export has no rig and imports as emp
 - `FU-BUSK-SAVE-AS-GROUP` — *Save as group…* on the band.
 - `FU-WINDOWS-NAME-ADDRESSED-BINDING` — a MIDI target names a window by name; if D9's duplicate
   names ever matter, this is where to revisit.
+- `FU-BUSK-RIG-GROUP-ID` — *session 3*: `GroupSummaryDto` embeds no id, so the client names a
+  group tile through the patch list and a memberless group cannot be placed; one field to add.
+- `FU-HAND-GROUP-KIND` — *session 3*: the hand holds only a template, Look or cue, so the rig-row
+  target is wired but inert until the desk can hold a group or fixture.
 
 ## 9. Verification
 
@@ -644,6 +648,11 @@ Beyond the unit suites, the desk checks, in the order the sessions land:
 2. **Rig** (after session 3): an empty rig draws exactly today's band; build three rows on the
    desk, reload on the iPad — same rig; delete a group in the fixtures list — its tile is gone
    everywhere without a refresh; import a v11 export — an empty rig, no FK error.
+   *Session 3, 2026-09-17, browser pass at 800px on the dev desk:* the empty-rig fallback,
+   a tile press, the rows handle, the inert Cells / Spread…, edit mode with the Rig tab, one
+   palette drop minting a row through the PUT, PER_CELL and HALVES on a saved tile, and *Show
+   every target* were all seen; the iPad reload, the group delete's `busk.rigChanged` sweep and
+   the v11 import are **still to check at the desk**.
 3. **Focus and screens** (after session 4): Screen 1 Rig + Colour, Screen 2 Pads on Position; set
    Screen 2's focus and page from Screen 1's Screens sheet; copy the link, open it on the iPad —
    it arrives as drawn; rotate a phone with the Colour tab open — bottom sheet becomes side sheet.
