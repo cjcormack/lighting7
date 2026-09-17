@@ -1,7 +1,8 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
 > **Document status: IN PROGRESS, 2026-09-17 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; session 3 (lighting-react) landed, `e7b540a8`; sessions 4–7 not started.** Each landed session's heading in §5
+> and `6e2cc72`; sessions 3 and 4 (lighting-react) landed, `e7b540a8` and `51e9f8c1`;
+> sessions 5–7 not started.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -256,7 +257,11 @@ busk.sheet      'none' | 'speed' | 'colour' | 'spread'       // default: see the
 Defaults follow the surface (`Tablets` artboard's ladder): `sheet` defaults to `speed` where
 docking the rail leaves the page body ≥ 600px (desktop, iPad landscape) and to `none` where it
 would stack it (iPad portrait) or where the viewport is short; `focus` defaults to `pads` on a
-short viewport. The short and cramped queries are **duplicated per site by convention**
+short viewport. *Session 4 amendment:* the "leaves the page body ≥ 600px" test is answered by
+Tailwind's `lg` width query (1024), which partitions the ladder exactly, rather than by measuring
+the body — the default has to be answerable off the busk view, since the announce carries these
+values from `Layout`, where there is no body to measure; and `rigRows` takes a default of its own
+from the same ladder, three rows on a desk screen and two where cramped (750) or below `lg`. The short and cramped queries are **duplicated per site by convention**
 (`CellEditorSurface.tsx` keeps them private; `shortViewport.test.ts` pins every copy's source
 text), so `buskWindow.ts` carries its own copies and the test gains them. A default is only a
 default: once the window has chosen, the tab fact wins. `?focus=` and `?sheet=` are latched once
@@ -516,7 +521,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Docs: CLAUDE.md §"The busk layout" gains §"The rig"; `docs/stage-vis-engineering.md` notes the
   tile as a fourth reader of the colour dispatch.
 
-### Session 4 — focus, the split, the sheet, the Screens sheet (lighting-react) — Opus 5, high
+### Session 4 — focus, the split, the sheet, the Screens sheet (lighting-react) — Opus 5, high — **landed**, `51e9f8c1`
 
 - `lib/buskWindow.ts` (§3.4) on `createSyncStore({…, storage: sessionStorage})`; `?focus=` /
   `?sheet=` latched on `buskPageFollow.ts`'s model; `useBuskFocus`, `useBuskSheet`, the defaults
@@ -529,12 +534,17 @@ each pass; the list below is where the review found the gaps, not a substitute f
   the Colour and Spread tabs **hidden until their sessions land** (a tab with an empty state is a
   promise the desk cannot keep). Below `md` the sheet is a bottom sheet / side sheet through
   `useCellEditorForm`, opened from a button on the page strip, and carries no Speed tab (D7).
+  *Session 4 amendment:* with Speed excluded and Colour and Spread not landed, that sheet has no
+  tab to open onto, so `SideSheetOverlay` never opens and the strip's button is drawn inert with
+  the reason on its title; the `Phones` board's merged 32px strip on a short viewport is not built.
 - `lib/windowViews.ts`: `options` on the busk entry (D13, Sheet as one enum with `none`);
   `api/windowsApi.ts`: `viewOptions` on the announce (the pinned key set in `windowsApi.test.ts`
   becomes six keys plus `type`), `windows.viewOptions` in and out; `useWindowsBridge.ts` handles
   it for this window and the announce carries the current values from `buskWindow.ts` and
   `buskPageFollow.ts`; `ScreensSheet.tsx`'s `WindowRow` renders a row's view options from the
-  descriptor (Focus, Sheet, Page pickers for a busk row), and *Copy link* mints the whole setup;
+  descriptor (Focus, Sheet, Page pickers for a busk row), and *Copy link* mints the whole setup
+  (*session 4 amendment:* a **per-row** *Copy link for <name>*, `windowSetupUrl`, carrying that
+  row's announced page, focus and sheet; the new-window section's link is name-only as before);
   `navigation.ts` `buildWindowCommands` gains *Focus pads / rig / Split* for this window and a
   focus arm on *Show <view> on <window>*.
 - Tests: `buskWindow.test.ts` (defaults per surface, latch once, reload is not an arrival),
