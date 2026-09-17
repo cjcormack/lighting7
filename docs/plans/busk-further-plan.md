@@ -1,7 +1,7 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
 > **Document status: IN PROGRESS, 2026-09-17 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3–7 (lighting-react) not started.** Each landed session's heading in §5
+> and `6e2cc72`; session 3 (lighting-react) landed, `e7b540a8`; sessions 4–7 not started.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -217,7 +217,14 @@ pages already (`:243`) — the rig must be wiped before those two deletes or the
 elementKey?, cellMode, cellSplit?, label?}]}]}` with the group and patch **summaries embedded**
 (`GroupSummaryDto`, `FixturePatchDto`'s name/key/elements), so the band draws from one read.
 An empty `rows` is the show-all fallback, answered by the **client** (`effectiveRig`), not the
-server — the server stores what the operator built and nothing else.
+server — the server stores what the operator built and nothing else. *Session 3 amendment:*
+`GroupSummaryDto` carries **no id**, while the PUT names every group tile by `groupId` — a kept
+tile as much as a new one — so the client resolves a group through the patch list's
+`groups[].id` (`rigIdsFromPatches`) and refuses, by name, a group with no patched member before
+the PUT. Embedding the group's id on `BuskRigTileDto` (or on `GroupSummaryDto`) is the fix, and
+lighting7's to make; until then a memberless group cannot be placed on the rig. Also: an empty rig
+arrives as `{}` (the converters omit a defaulted empty list), so `rows`, `tiles` and a patch's
+`elements` are optional on the client.
 
 `busk.rigChanged` is one keyed broadcast frame with no payload (there is one rig, so no id to key
 on); `store/busk.ts` invalidates `BuskRig`, which joins `REST_TAG_TYPES` (`store/restApi.ts`) so the
@@ -462,7 +469,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
   (lighting-react) waits for session 7. Record `FU-SURFACE-SUBSELECT-LED`, and — since CLAUDE.md
   and the multi-screen plan cite it but `followups.md` has no entry — `FU-SCREENS-LAYOUTS`.
 
-### Session 3 — the rig band (lighting-react) — Opus 5, xhigh
+### Session 3 — the rig band (lighting-react) — Opus 5, xhigh — **landed**, `e7b540a8`
 
 - `api/buskRigApi.ts`, `store/busk.ts`: `useBuskRigQuery`, `useSaveBuskRigMutation`, the
   `BuskRig` tag **added to `REST_TAG_TYPES`** (`store/status.test.ts` pins the resync set), the
@@ -475,6 +482,9 @@ each pass; the list below is where the review found the gaps, not a substitute f
   empty rig), `toRigRequest`, `nextRowName`, and `effectiveRig(rig, groups, fixtures)` answering
   the show-all fallback so `RigBand` has one render path. `buskRig.test.ts` mirrors
   `buskLayout.test.ts` and pins the fallback's order against `BuskRigOrderTest`'s fixture.
+  *Session 3 amendment:* the fixture is **copied** to `src/lib/__fixtures__/rigOrder.fixture.json`
+  (a cross-repo import would tie the suite to a sibling checkout, and the app's tsconfig has no
+  Node types to read one with); re-copy it when `BuskRigOrderTest`'s fixture changes.
 - `components/busking/RigBand.tsx` replaces `TargetBand.tsx`: rows of `RigTile`, the label row
   as drawn (Cells chip and *Spread…* present but inert until sessions 7 and 6), the `n of N rows`
   handle (writes `busk.rigRows`; session 4 reads it — here it is drawn and clamps), the folded
@@ -490,7 +500,12 @@ each pass; the list below is where the review found the gaps, not a substitute f
   The tile menu with the four cell modes.
 - The hand: `lib/handTargets.ts` gains a `rig-row` kind beside `bank | slot | layer-stack |
   cue-stack` for a group or fixture held in the hand; `HandPlaceStrip` (`components/hand/HandTarget.tsx`)
-  on each row in edit mode (solid, per the hand's rule).
+  on each row in edit mode (solid, per the hand's rule). *Session 3 amendment:* **the hand cannot
+  hold a group or fixture** — `hand.pickUp {kind, id}` takes a `BuskPadKind` and `HandState.Held`
+  requires a template, Look or cue summary — so the `rig-row` kind answers false for every held
+  kind, the strip is mounted and wired (the rig PUT through the commit queue, then `hand.drop`)
+  and never lights, and `RigBand.rigRecordOf` is the one function to teach when the wire gains a
+  group kind. That wire change is lighting7's, and was not worked around client-side.
 - Deletes `TargetList.tsx`, `TargetListItem.tsx`, `TargetBand.tsx`, `TargetBand.test.tsx`, the
   left `Sheet` in `BuskingView.tsx` and `onOpenPicker` (D15); below `md` the band renders one row
   with a row chip (the phone board), and Rig focus arrives in session 4.
