@@ -29,6 +29,7 @@ import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.LocateManager
 import uk.me.cormack.lighting7.state.BuskPageState
 import uk.me.cormack.lighting7.state.DeskSelection
+import uk.me.cormack.lighting7.state.WindowRegistry
 import java.util.Collections
 import java.util.IdentityHashMap
 import java.util.UUID
@@ -138,6 +139,13 @@ class SurfaceFeedbackPublisher(
     private val programmerLayerStackProvider: (() -> ProgrammerLayerStack)? = null,
     /** The desk's showing busk page, for `BuskPageSet` LEDs. Null disables that arm. */
     private val buskPageState: BuskPageState? = null,
+    /**
+     * The desk's windows, for the **window-addressed** bindings' health (`BuskFocusSet` /
+     * `BuskSheetToggle`, busk-further plan D14). The health context reads the registry's names, but
+     * the context is only rebuilt on the fixture-change hooks — so without this collector a
+     * `missingWindow` binding stayed dead after its window arrived. Null disables it.
+     */
+    private val windowRegistry: WindowRegistry? = null,
     /**
      * A stack's live cue, for a `PressPad` on a **cue** pad — its ring is stack liveness, not the
      * layer stack, exactly as the busk view's cue pads read `useActiveCueIds` rather than the
@@ -362,6 +370,16 @@ class SurfaceFeedbackPublisher(
             // attribute mask, so a mask-only change must not cost a full resync.
             jobs += scope.launch(CoroutineName("FeedbackPublisher-selection")) {
                 selection.state.map { it.targets }.distinctUntilChanged().collect { rebuildAndResync() }
+            }
+        }
+        windowRegistry?.let { registry ->
+            jobs += scope.launch(CoroutineName("FeedbackPublisher-windows")) {
+                // By name set, not by row: a re-announce that moves a window's view is not a health
+                // event, and re-evaluating every binding for it would be a rebuild per navigation.
+                registry.windows
+                    .map { rows -> rows.mapTo(HashSet()) { it.name } }
+                    .distinctUntilChanged()
+                    .collect { bindingService.invalidateHealth(projectIdProvider()) }
             }
         }
         buskPageState?.let { pages ->

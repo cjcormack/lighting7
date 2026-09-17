@@ -82,6 +82,14 @@ interface FixturesChangeListener {
      * a bare signal because a gesture in edit mode saves the whole page it touched and nothing else.
      */
     fun buskLayoutChanged(pageIds: List<Int>) {}
+
+    /**
+     * The busk **rig** changed: a whole-document write, or a group or patch delete that took tiles
+     * off it. Payload-free — there is one rig per project (busk-further plan D1), so there is no id
+     * to key on; the client re-reads the one document. Not to be confused with [buskLayoutChanged],
+     * which names *pages*.
+     */
+    fun buskRigChanged() {}
     fun patchListChanged() {}
     fun riggingListChanged() {}
     fun stageRegionListChanged() {}
@@ -415,6 +423,12 @@ class Fixtures {
     fun buskLayoutChanged(pageIds: List<Int>) {
         changeListeners.forEach {
             it.buskLayoutChanged(pageIds)
+        }
+    }
+
+    fun buskRigChanged() {
+        changeListeners.forEach {
+            it.buskRigChanged()
         }
     }
 

@@ -583,6 +583,52 @@ screens can show different pages while sharing one selection. Nothing here chang
 client's `?page=` mirrors whichever page its window is showing. It is unrelated to
 `busk.layoutChanged`, which names pages whose *document* changed.
 
+### The rig
+
+The target band the busk view draws is a **rig** the operator builds, in the page's own shape
+(`docs/plans/busk-further-plan.md` D1–D3): rows of tiles, each tile a group, a fixture, or one cell
+of a multi-head fixture (`busk_rig_rows` → `busk_rig_tiles`, `models/buskRig.kt`), one rig per
+project, whole-document `PUT /busk/rig` with the page write's three refusals (`BUSK_RIG_INVALID` /
+`_IDENTITY` / `_REF`), tiles renumbered dense and answered with the ids the write minted. A tile is
+an **enrichment** of its group or patch, never a guard: a group or patch delete sweeps its tiles in
+the same transaction and fires `busk.rigChanged`, and the project delete and the importer's replace
+sweep the rig **before** the group and patch deletes the FKs would otherwise block.
+
+**An empty rig is today's band, and the fallback is the client's.** The server stores what the
+operator built and nothing else — an empty `rows` is answered as empty — and `effectiveRig` in the
+busk view draws every group then every fixture from the two lists it already holds. There is no
+first-open generator and no migration. The one thing the desk keeps that agrees with that fallback
+is the **rig order** (`state/BuskRigOrder.kt`): rows in order, tiles in order, a group as one step
+that places its members in member order, a multi-head tile as one step (`PIPS` / `WHOLE`), one step
+per cell (`PER_CELL`) or `cellSplit` contiguous runs (`HALVES`), a cell tile as that cell — and with
+no rig, every group then every fixture. It is what `selection.subselect`'s *Next* / *Prev* walk and
+what a spread's `LINEAR` order means, and `BuskRigOrderTest`'s fixture
+(`src/test/resources/busk/rigOrder.fixture.json`) is the file the client's mirror is pinned against.
+
+**A multi-head tile decides how it shows its cells** (D3), on the tile rather than in a mode:
+`cell_mode` is `PIPS` (the whole fixture, cells as pips that select individually — the default),
+`WHOLE`, `PER_CELL` or `HALVES(n)`; a tile dragged in as a single cell carries its `element_key`.
+Element keys stay opaque: the write boundary validates one against the live fixture's `elements`
+and refuses a split on a single-head fixture or beyond its cell count, and no reader parses a key.
+
+**The sub-selection is the desk's rule** (D12). `selection.subselect {mode}` rewrites the
+selection's targets — `ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `NEXT` ·
+`PREV` · `MASTERS` — over the rig order, counting **cells** where any selected fixture has them and
+heads where none does, so *Odd* on a group of bars is every other cell across the bars; *Next*
+steps the whole selection one step of the rig, a group as a group, one cell at a time when only
+cells are selected, wrapping. A MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev` button
+reaches the same `DeskSelection.subselect`, so the chip and the surface cannot disagree
+(`DeskSelectionSubselectTest`'s fixture is the client's pin).
+
+**A spread resolves on the desk** (D9, D10). `POST /programmer/spread` takes two intents, a curve
+(`LINE` · `MIRROR` · `ARROW` · `WINGS` — the last two mirrored fans meeting at the centre, *to* at
+each outer end), an order (a `DistributionStrategy` name, `LINEAR` being rig
+order), `parts` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
+intent's own space — Lab for a colour, degrees for a position, percent for a level — and resolves
+each head's literal through the same `TemplateResolver` a template click uses, writing one batched
+programmer write with owner `WEB`. So Record captures it, Blind previews it and Clear releases it:
+a spread is a result, not a template — *Save as Look…* is `record-look` over the selection.
+
 ### Applied state is resolved by the desk
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk

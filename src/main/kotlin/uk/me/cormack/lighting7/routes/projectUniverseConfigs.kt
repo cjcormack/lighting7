@@ -116,8 +116,8 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
     delete<ProjectUniverseConfigResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction false
-                if (config.project.id != project.id) return@transaction false
+                val config = DaoUniverseConfig.findById(resource.configId) ?: return@transaction null
+                if (config.project.id != project.id) return@transaction null
 
                 // Drop every machine-local override for this universe before the row goes
                 // away — overrides FK to the project, not the universe row, so they'd
@@ -125,20 +125,24 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                 Overrides.setUniverseAddress(project.id.value, config.uuid, null)
                 Overrides.setUniverseRefreshIntervalMs(project.id.value, config.uuid, null)
 
-                // Delete patches in this universe first
+                // Delete patches in this universe first — each one's busk rig tiles with it, the
+                // sweep the patch delete route makes (`DaoBuskRigTiles` has no cascade).
+                var sweptTiles = 0
                 config.fixturePatches.forEach { patch ->
+                    sweptTiles += deleteBuskRigTilesReferencing(patchId = patch.id.value)
                     DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
                         .forEach { it.delete() }
                     patch.delete()
                 }
                 config.delete()
-                true
+                sweptTiles
             }
 
-            if (!deleted) {
+            if (deleted == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Universe config not found"))
                 return@withProject
             }
+            if (deleted > 0) state.show.fixtures.buskRigChanged()
 
             // Reload controllers to remove the deleted universe
             if (state.isCurrentProject(project)) {

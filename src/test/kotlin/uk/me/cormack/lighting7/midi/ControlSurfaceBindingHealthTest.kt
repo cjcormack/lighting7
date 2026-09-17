@@ -36,12 +36,55 @@ class ControlSurfaceBindingHealthTest {
         fixtures: Fixtures = fixturesWithHex(listOf("hex-1", "hex-2")),
         validStackIds: Set<Int> = emptySet(),
         validCueIds: Set<Int> = emptySet(),
+        connectedWindowNames: Set<String> = emptySet(),
     ): BindingHealthEvaluator.Context = BindingHealthEvaluator.Context(
         fixtures = fixtures,
         validStackIds = validStackIds,
         validCueIds = validCueIds,
         deviceTypes = ControlSurfaceRegistry.allTypes,
+        connectedWindowNames = connectedWindowNames,
     )
+
+    /**
+     * The window-addressed targets (busk-further plan D14): dead while no connected window carries
+     * the name, alive the moment one does — through the same `invalidateHealth` the publisher's
+     * registry collector fires, so a binding made before its screen was opened recovers.
+     */
+    @Test
+    fun `a window-addressed binding is missingWindow until a window of that name connects`() {
+        var current: BindingHealthEvaluator.Context = context()
+        val service = ControlSurfaceBindingService(
+            database = FakeDatabase.instance,
+            healthContextProvider = { current },
+        )
+        service.seedCacheForTest(
+            projectId,
+            listOf(
+                binding(1, BindingTarget.BuskFocusSet("Screen 2", "rig")),
+                binding(2, BindingTarget.BuskSheetToggle("Screen 2")),
+                binding(3, BindingTarget.SelectionNext),
+                binding(4, BindingTarget.SelectionCells(uk.me.cormack.lighting7.state.SubselectMode.EVEN)),
+            ),
+        )
+        // The seed installs rows as given; the first evaluation is the one a load or a registry
+        // change runs.
+        service.invalidateHealth(projectId)
+        assertEquals(AssignmentHealth.MissingWindow("Screen 2"), service.get(projectId, 1)?.health)
+        assertEquals(AssignmentHealth.MissingWindow("Screen 2"), service.get(projectId, 2)?.health)
+        assertEquals(AssignmentHealth.Ok, service.get(projectId, 3)?.health, "selection stepping needs no window")
+        assertEquals(AssignmentHealth.Ok, service.get(projectId, 4)?.health)
+
+        // Screen 2 announces.
+        current = context(connectedWindowNames = setOf("Screen 1", "Screen 2"))
+        service.invalidateHealth(projectId)
+        assertEquals(AssignmentHealth.Ok, service.get(projectId, 1)?.health)
+        assertEquals(AssignmentHealth.Ok, service.get(projectId, 2)?.health)
+
+        // …and closes again.
+        current = context(connectedWindowNames = setOf("Screen 1"))
+        service.invalidateHealth(projectId)
+        assertEquals(AssignmentHealth.MissingWindow("Screen 2"), service.get(projectId, 1)?.health)
+    }
 
     private fun binding(
         id: Int,

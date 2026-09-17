@@ -400,7 +400,7 @@ class SocketMessageWireFormatTest {
         assertTrue(encodedState.contains(""""type":"windows.state""""), encodedState)
         assertEquals(state, assertIs<WindowsStateOutMessage>(json.decodeFromString<OutMessage>(encodedState)))
 
-        // The three commands travel under the same names inbound and outbound: they are
+        // The four commands travel under the same names inbound and outbound: they are
         // rebroadcast as-is, and a second spelling would buy nothing (D11).
         val show = WindowsShowOutMessage("sock-b", "/busk")
         val encodedShow = json.encodeToString<OutMessage>(show)

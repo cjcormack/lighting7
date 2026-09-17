@@ -51,6 +51,7 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val cueSlots by DaoCueSlot referrersOn DaoCueSlots.project
     /** The busk layout's pages. Order is `sortOrder`; callers sort in memory. See [DaoBuskPages]. */
     val buskPages by DaoBuskPage referrersOn DaoBuskPages.project
+    val buskRigRows by DaoBuskRigRow referrersOn DaoBuskRigRows.project
     val universeConfigs by DaoUniverseConfig referrersOn DaoUniverseConfigs.project
     val riggings by DaoRigging referrersOn DaoRiggings.project
     val stageRegions by DaoStageRegion referrersOn DaoStageRegions.project

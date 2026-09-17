@@ -41,6 +41,8 @@ import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
 import uk.me.cormack.lighting7.routes.toggleSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.state.SelectionSource
+import uk.me.cormack.lighting7.state.SubselectMode
+import uk.me.cormack.lighting7.state.WindowRegistry
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 
@@ -164,6 +166,21 @@ interface SurfaceActions {
 
     /** Show one named busk page. */
     fun buskPageSet(pageUuid: String)
+
+    /**
+     * Set the busk focus of every connected window named [windowName] through one
+     * `windows.viewOptions` per row (busk-further plan D14). No row is a logged no-op.
+     */
+    fun buskFocusSet(windowName: String, focus: String)
+
+    /** Fold or open the busk side sheet of every connected window named [windowName]. */
+    fun buskSheetToggle(windowName: String)
+
+    /** Step the whole desk selection one place along rig order — `+1` next, `−1` previous. */
+    fun selectionStep(delta: Int)
+
+    /** Rewrite the desk selection's targets by [mode] (`DeskSelection.subselect`). */
+    fun selectionCells(mode: SubselectMode)
 }
 
 /**
@@ -181,6 +198,11 @@ class DefaultSurfaceActions(
 
     companion object {
         private val logger = LoggerFactory.getLogger(DefaultSurfaceActions::class.java)
+
+        /** The busk view's option keys and the one verb, as the client's `buskWindow.ts` reads them. */
+        const val VIEW_OPTION_FOCUS = "focus"
+        const val VIEW_OPTION_SHEET = "sheet"
+        const val VIEW_OPTION_TOGGLE = "toggle"
     }
 
     private val fixtures: Fixtures get() = state.show.fixtures
@@ -583,6 +605,35 @@ class DefaultSurfaceActions(
             return
         }
         state.buskPageState.setByUuid(uuid)
+    }
+
+    override fun buskFocusSet(windowName: String, focus: String) =
+        viewOptionsToWindows(windowName, mapOf(VIEW_OPTION_FOCUS to focus))
+
+    override fun buskSheetToggle(windowName: String) =
+        viewOptionsToWindows(windowName, mapOf(VIEW_OPTION_SHEET to VIEW_OPTION_TOGGLE))
+
+    override fun selectionStep(delta: Int) =
+        state.deskSelection.subselect(if (delta >= 0) SubselectMode.NEXT else SubselectMode.PREV, SelectionSource.SURFACE)
+
+    override fun selectionCells(mode: SubselectMode) = state.deskSelection.subselect(mode, SelectionSource.SURFACE)
+
+    /**
+     * One `windows.viewOptions` to **every** connected row named [windowName] (duplicate names are
+     * two windows, multi-screen plan D9), each addressed by its own socket-minted id and carrying
+     * the **view that row announced**, so a window not on the busk view receives a frame for its
+     * own view with keys it does not contribute and ignores it. No row → log and no-op; the
+     * binding's `missingWindow` health has already said so.
+     */
+    private fun viewOptionsToWindows(windowName: String, options: Map<String, String>) {
+        val rows = state.windowRegistry.windows.value.filter { it.name == windowName }
+        if (rows.isEmpty()) {
+            logger.info("Surface window command dropped: no connected window named '{}'", windowName)
+            return
+        }
+        rows.forEach { row ->
+            state.windowRegistry.command(WindowRegistry.Command.ViewOptions(row.id, row.view, options))
+        }
     }
 
     override fun writeSpeedMasterBpm(

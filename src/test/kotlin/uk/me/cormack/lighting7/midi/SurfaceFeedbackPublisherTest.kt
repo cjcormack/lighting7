@@ -372,6 +372,10 @@ class SurfaceFeedbackPublisherTest {
                 override fun handDrop() {}
                 override fun buskPageStep(delta: Int) {}
                 override fun buskPageSet(pageUuid: String) {}
+                override fun buskFocusSet(windowName: String, focus: String) {}
+                override fun buskSheetToggle(windowName: String) {}
+                override fun selectionStep(delta: Int) {}
+                override fun selectionCells(mode: uk.me.cormack.lighting7.state.SubselectMode) {}
             }
             val router = SurfaceInputRouter(
                 deviceMatcher = h.matcher,

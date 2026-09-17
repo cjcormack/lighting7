@@ -92,6 +92,14 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCREENS-LAN-URL`](#fu-screens-lan-url) | Trigger | Screens | *Copy link for another device* on a desk tab open at `localhost` |
 | [`FU-WINDOWS-OWN-ROW-ID`](#fu-windows-own-row-id) | Trigger | Screens | a duplicated desk tab makes the chip attribute its twin's write to itself |
 | [`FU-LAUNCHER-SCREEN-POSITION`](#fu-launcher-screen-position) | Trigger | Screens | the two desk windows should remember which display each opens on |
+| [`FU-SCREENS-LAYOUTS`](#fu-screens-layouts) | Trigger | Screens | an operator asks to save and recall a whole arrangement of windows |
+| [`FU-WINDOWS-NAME-ADDRESSED-BINDING`](#fu-windows-name-addressed-binding) | Trigger | Screens | two windows of one name and a MIDI focus button that should reach only one |
+| [`FU-SURFACE-SUBSELECT-LED`](#fu-surface-subselect-led) | Trigger | MIDI | an operator asks which sub-selection is standing |
+| [`FU-BUSK-RIG-PLOT`](#fu-busk-rig-plot) | Trigger | Busk | a rig big enough that rows stop reading as the stage |
+| [`FU-BUSK-TARGET-PAD`](#fu-busk-target-pad) | Trigger | Busk | an operator wants a selection on a pad among the templates |
+| [`FU-BUSK-SPECIAL-PAD`](#fu-busk-special-pad) | Trigger | Busk | an operator asks for Clear, Locate or Blind on the page |
+| [`FU-BUSK-TILE-LEVEL-DRAG`](#fu-busk-tile-level-drag) | Trigger | Busk | an operator reaches for a tile to set a level |
+| [`FU-BUSK-SAVE-AS-GROUP`](#fu-busk-save-as-group) | Trigger | Busk | a selection is rebuilt by hand a third time |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -559,6 +567,19 @@ stale document the *normal* case rather than the racing one.
 
 ---
 
+### `FU-SURFACE-SUBSELECT-LED`
+
+**No LED for `SelectionCells`** · Trigger · Busk-further plan §3.6, 2026-09-17
+
+A sub-selection is a *rewrite* of the selection's targets, not a state the desk keeps: after *Odd*
+the desk holds the odd cells and nothing that says they were arrived at by *Odd*. So a
+`SelectionCells(ODD)` button has no fact to light from, and none of the five window and
+sub-selection targets carries an LED. Lighting one would need the desk to remember the last mode
+applied and clear it on every other write, which is a second fact about the selection for a
+button's sake.
+
+**Trigger**: an operator asks which sub-selection is standing.
+
 ### `FU-MIDI-RING-STYLE-MIXED`
 
 **`FAN` and `PAN` encoder rings have no mixed-state rendering of their own** · Trigger · MIDI
@@ -595,6 +616,62 @@ no longer resolves is dropped.
 **Trigger**: a conversation asks the AI to select fixtures by name rather than to act on them.
 
 ---
+
+### `FU-BUSK-RIG-PLOT`
+
+**Arrange the rig by stage position** · Trigger · Busk-further plan §8, 2026-09-17
+
+The rig is rows of tiles (busk-further plan D2), and the *Arrange: Plot* segment is drawn on the
+design's Ideas board: tiles placed from each patch's `stageX` / `stageY` so the band reads as the
+stage does. Declined for the plan because a coordinate system nothing else reads is a second model
+(the busk layout's D2, verbatim). If it lands, it is a *view* of the rig — a render mode over the
+same rows, the way the Stage view renders the same patches — never a stored position on a tile.
+
+**Trigger**: a rig big enough that rows stop reading as the stage.
+
+### `FU-BUSK-TARGET-PAD`
+
+**A selection on a busk pad** · Trigger · Busk-further plan §8, D17, 2026-09-17
+
+A fourth pad kind beside template, Look and cue: a saved target set, pressed to select. On the
+Ideas board, out of scope by D17. It would need a fourth arm on `busk_pads`' exactly-one CHECK, a
+`selection.set` on press instead of a `toggle` on the layer stack, and a face with no swatch. Note
+the rig's group tiles already cover most of the want; this is for a set that is not a group.
+
+**Trigger**: an operator wants a selection on a pad among the templates.
+
+### `FU-BUSK-SPECIAL-PAD`
+
+**Clear, Locate and Blind as pads** · Trigger · Busk-further plan §8, D17, 2026-09-17
+
+Desk verbs on the page: a pad that clears the programmer, locates the selection or flips Blind.
+On the Ideas board, out of scope by D17. Each has a MIDI target already (`ClearSelection`,
+`LocateSelection`; Blind through `programmer.setBlind`), so the pad is the screen door onto the
+same action — a `kind = SPECIAL` with a verb, no record and nothing to sweep.
+
+**Trigger**: an operator asks for Clear, Locate or Blind on the page.
+
+### `FU-BUSK-TILE-LEVEL-DRAG`
+
+**Hold a rig tile to drag its level** · Trigger · Busk-further plan §8, D17, 2026-09-17
+
+A press-and-hold on a rig tile that turns into a vertical drag setting the tile's dimmer — the
+gesture every touch desk has for a quick level without leaving the page. Out of scope by D17. It
+is a client gesture over `programmer.set` and needs the hold/drag disambiguation the pads'
+`FU-BUSK-MOMENTARY` also needs, so the two should land on one gesture recogniser.
+
+**Trigger**: an operator reaches for a tile to set a level.
+
+### `FU-BUSK-SAVE-AS-GROUP`
+
+**Save the selection as a group from the band** · Trigger · Busk-further plan §8, D17, 2026-09-17
+
+*Save as group…* on the rig band: the desk selection, in rig order, as a new `fixture_groups` row.
+Out of scope by D17. The route exists (`POST /patch-groups`); the work is the sheet, and a rule for
+a selection holding cells (a group holds patches, so cells would have to widen to their parents —
+`SubselectMode.ALL`'s rule).
+
+**Trigger**: a selection is rebuilt by hand a third time.
 
 ### `FU-SLOT-DROP-OVERLAY-HIDDEN`
 
@@ -1330,6 +1407,34 @@ Windows-on-ARM as supported, and the readiness timeout override exists for it.
 ---
 
 ## Desk screens
+
+### `FU-SCREENS-LAYOUTS`
+
+**Saved screen layouts** · Trigger · Multi-screen plan §8, 2026-09-16; entered 2026-09-17
+
+Cited by CLAUDE.md and the multi-screen plan since session 2 of that plan, never entered here. The
+Screens sheet shows every signed-in window with its view, follow flag and (since the busk-further
+plan) its per-view options, and every one of those is settable remotely — but only one window at
+a time. A *layout* would name a whole arrangement (Screen 1 on Busk in Rig focus, Screen 2 on
+Position pads, the iPad following) and recall it in one gesture. It needs a table (portable, with
+the sync decision made), a match rule between saved windows and connected ones (by name, the
+same rule the MIDI targets use — see `FU-WINDOWS-NAME-ADDRESSED-BINDING`), and a decision about a
+window the layout names that is not connected (`FU-WINDOWS-SHOW-OFFLINE`).
+
+**Trigger**: an operator asks to save and recall a whole arrangement of windows.
+
+### `FU-WINDOWS-NAME-ADDRESSED-BINDING`
+
+**A MIDI target names a window by name** · Trigger · Busk-further plan §8, D14, 2026-09-17
+
+`BuskFocusSet` and `BuskSheetToggle` name their window by registry name because a binding cannot
+hold a socket-minted row id. Duplicate names are allowed (multi-screen plan D9) and the press
+reaches every row of the name. That is right for a duplicated tab — the operator meant "that
+screen" — and wrong for two screens that happen to share a name. If it ever matters, the fix is
+a stable per-window identity a binding can carry (the client-minted `windowId`, which a
+duplicated tab also shares) or a rename prompt when a second window announces a taken name.
+
+**Trigger**: two windows of one name and a MIDI focus button that should reach only one.
 
 ### `FU-WINDOWS-SHOW-OFFLINE`
 

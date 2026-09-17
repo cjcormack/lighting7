@@ -48,6 +48,7 @@ import uk.me.cormack.lighting7.midi.SurfaceInputRouter
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.perf.MidiLatencyTracker
 import uk.me.cormack.lighting7.routes.buskPageContents
+import uk.me.cormack.lighting7.routes.readBuskRigSpec
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.show.Show
@@ -580,6 +581,9 @@ class State(val config: ApplicationConfig) {
             validPadUuids = snapshot.padUuids,
             validBankUuids = snapshot.bankUuids,
             validPageUuids = snapshot.pageUuids,
+            // The registry, not the database: a window-addressed binding is judged against who is
+            // connected *now*, and the publisher re-runs this on every registry change.
+            connectedWindowNames = windowRegistry.windows.value.mapTo(HashSet()) { it.name },
         )
     }
 
@@ -628,8 +632,20 @@ class State(val config: ApplicationConfig) {
      * [DeskSelection] and `docs/lighting-composition-model.md` §"Layer 2".
      */
     val deskSelection: DeskSelection by lazy {
-        DeskSelection { runCatching { show.fixtures }.getOrNull() }
+        DeskSelection(rigOrder = ::buskRigOrder) { runCatching { show.fixtures }.getOrNull() }
     }
+
+    /**
+     * The effective rig order for `selection.subselect` and a spread's `LINEAR` order
+     * (`state/BuskRigOrder.kt`), read fresh from the current project's rig tables at gesture time —
+     * a rig write is rare next to a press, and holding a cached copy would be one more thing to
+     * invalidate on `buskRigChanged`. Null before the show is up.
+     */
+    fun buskRigOrder(): BuskRigOrder? = runCatching {
+        val fixtures = show.fixtures
+        val spec = transaction(database) { readBuskRigSpec(projectManager.currentProject) }
+        BuskRigOrder(fixtures, spec)
+    }.getOrNull()
 
     /**
      * Every browser window signed in to this desk — what *Show Busk on Screen 2* addresses.
@@ -786,6 +802,7 @@ class State(val config: ApplicationConfig) {
             locateManagerProvider = { show.locateManager },
             programmerLayerStackProvider = { show.programmerLayerStack },
             buskPageState = buskPageState,
+            windowRegistry = windowRegistry,
             cueStackActiveCueIdProvider = { stackId ->
                 runCatching { show.cueStackManager.getActiveCueId(stackId) }.getOrNull()
             },

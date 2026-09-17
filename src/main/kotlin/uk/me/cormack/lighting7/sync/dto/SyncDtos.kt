@@ -26,6 +26,17 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v12: the busk rig (`docs/plans/busk-further-plan.md` §3.7). A new `buskRig/` folder — one
+    // document per **row** with its tiles nested, tiles naming a group or a patch by uuid and a
+    // cell by its element key — beside `buskPages/`. The plan's first draft said one `buskRig.json`
+    // at the top level; session 2 amended that, because `RecordHasher` treats every top-level file
+    // as metadata and a rig outside the record scan would never propagate through the three-way
+    // diff. `minReader` stays at **5**: the folder reads as empty when missing, so a v11 archive
+    // imports with an empty rig — which is today's band (D1). The writer's number moves for v10's
+    // reason: a rig changes what the band offers and what *Next* walks, so a v11 reader — which
+    // would import no rig and on its next wipe-then-export push write none back, deleting every
+    // peer's — must refuse the repo instead.
+    //
     // v11: control-surface binding payloads. No folder or field changes — `targetPayload` stays
     // an opaque string — but what it may *contain* grows in two ways. New `type` discriminators
     // (`selectionProperty`, `selectTarget`, `clearSelection`, `locateSelection`; more in later
@@ -108,7 +119,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 11,
+    val formatVersion: Int = 12,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -605,6 +616,39 @@ data class BuskPadJson(
     val templateUuid: String? = null,
     val lookUuid: String? = null,
     val cueUuid: String? = null,
+)
+
+/**
+ * A busk rig row (v12): its tiles nested, in `sortOrder`, the way a busk page carries its columns.
+ * One document per row so a drag on the band changes one file.
+ */
+@Serializable
+data class BuskRigRowJson(
+    val uuid: String,
+    val name: String,
+    val sortOrder: Int,
+    val tiles: List<BuskRigTileJson> = emptyList(),
+)
+
+/**
+ * A rig tile: an ordered reference to **exactly one** of a group or a patch, by uuid — the
+ * [BuskPadJson] pattern, two-armed — plus how a multi-head fixture shows its cells (busk-further plan
+ * D3). [elementKey] is the cell's own key for a tile that is one cell, carried verbatim: element
+ * keys are opaque, and the write boundary validates one against the live fixture on the next write.
+ * A tile whose group or patch the archive does not carry, or which names none or both, is
+ * **dropped with a warning** on import rather than aborting the pull: a tile is an enrichment of its
+ * record (a place on the band), not content, and a row that loses every tile goes with them.
+ */
+@Serializable
+data class BuskRigTileJson(
+    val uuid: String,
+    val sortOrder: Int,
+    val groupUuid: String? = null,
+    val patchUuid: String? = null,
+    val elementKey: String? = null,
+    val cellMode: String = "PIPS",
+    val cellSplit: Int? = null,
+    val label: String? = null,
 )
 
 /**

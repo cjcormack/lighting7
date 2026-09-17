@@ -83,6 +83,8 @@ fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json           # exactly one of cueUuid / lookUuid (lookUuid v10+)
 buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
                                # a pad names a template, Look or cue by uuid
+buskRig/{uuid}.json            # v12+: the busk rig — one document per row, tiles embedded inline;
+                               # a tile names a group or a patch by uuid and a cell by its element key
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
@@ -185,7 +187,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 11`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 12`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -220,6 +222,37 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 12 — the busk rig
+
+**v12 adds one folder.** `buskRig/{uuid}.json` is the busk view's target band as the operator
+built it (`docs/plans/busk-further-plan.md` §3.1–3.2, `docs/lighting-composition-model.md` §"The
+rig"): one document per **row** with its tiles nested, the way a page carries its columns, so a drag
+on the band changes one file. A tile names its group or patch by uuid as `groupUuid` / `patchUuid`,
+exactly one set — the `BuskPadJson` pattern, two-armed — plus `cellMode`, `cellSplit`, `label` and,
+for a tile that is one cell, its `elementKey`, carried **verbatim**: element keys are opaque, the
+write boundary validates one against the live fixture on the next write, and the importer cannot
+(the project being imported is not the live show).
+
+The plan's first draft put the rig in a single top-level `buskRig.json`. Session 2 amended that
+before writing it, because `RecordHasher` treats every top-level file as metadata and filters it
+out of the record scan: a rig outside `{table}/{uuid}.json` would export and import but never
+propagate through the three-way diff, so a rig built on one desk would silently never reach
+another. A record folder needs no special case anywhere — hashing, tombstones,
+`ExportUuidRemapper` and `SyncCoverageTest` all see it as they see `buskPages/`.
+
+`minReader` stays at **5**: a missing folder reads as an empty rig, which is today's band (D1), so
+every older archive imports untouched. The writer's number moves for v10's reason: a rig changes
+what the band offers and what *Next* walks, so a v11 reader — which would import no rig and on its
+next wipe-then-export push write none back, deleting every peer's — must refuse the repo instead.
+
+Three importer details. The rig imports **after** the patches and groups its tiles name, and the
+replace path sweeps the existing rig **before** it deletes the existing groups and patches — a tile
+is a plain FK onto both with no cascade, so the old order would block them. A tile whose group or
+patch the archive does not carry, or which names none or both, **warns and is dropped** while the
+row imports without it (the pad's posture: a tile is an enrichment of its record); a row left with
+no tiles is dropped too, because the write boundary refuses an empty row and one must never be read
+back. A `cellMode` the desk does not know falls back to `PIPS` rather than losing the tile.
 
 ### Version 11 — tolerant binding payloads, and uuids beside the ints
 

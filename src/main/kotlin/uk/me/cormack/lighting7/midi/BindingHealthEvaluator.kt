@@ -58,6 +58,10 @@ object BindingHealthEvaluator {
      * @param validBankUuids busk banks that exist — what a [BindingTarget.HandPlaceInBank] places
      *   onto. A bank, not a pad: the place appends, so what must exist is the container
      * @param validPageUuids busk pages that exist
+     * @param connectedWindowNames the registry names of every window signed in **now** — what a
+     *   [BindingTarget.BuskFocusSet] / [BindingTarget.BuskSheetToggle] is judged against. The one
+     *   input here that is not a database fact, which is why the publisher re-evaluates on every
+     *   registry change rather than only on the fixture hooks
      */
     data class Context(
         val fixtures: Fixtures,
@@ -75,6 +79,7 @@ object BindingHealthEvaluator {
         val validPadUuids: Set<UUID> = emptySet(),
         val validBankUuids: Set<UUID> = emptySet(),
         val validPageUuids: Set<UUID> = emptySet(),
+        val connectedWindowNames: Set<String> = emptySet(),
     )
 
     /**
@@ -160,6 +165,15 @@ object BindingHealthEvaluator {
         // has nowhere to move to — not a dead binding.
         BindingTarget.BuskPageNext -> AssignmentHealth.Ok
         BindingTarget.BuskPagePrev -> AssignmentHealth.Ok
+        // Window-addressed: dead while no connected window carries the name, alive the moment one
+        // announces. Transient, unlike every other arm — see `AssignmentHealth.MissingWindow`.
+        is BindingTarget.BuskFocusSet -> windowHealth(target.windowName, context)
+        is BindingTarget.BuskSheetToggle -> windowHealth(target.windowName, context)
+        // Selection-relative and rig-agnostic: an empty selection or an empty rig is a fact about
+        // this second, not about the binding — the `SelectionProperty` line.
+        BindingTarget.SelectionNext -> AssignmentHealth.Ok
+        BindingTarget.SelectionPrev -> AssignmentHealth.Ok
+        is BindingTarget.SelectionCells -> AssignmentHealth.Ok
         is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)
         is BindingTarget.SetBank -> {
             val profile = context.deviceTypes.firstOrNull { it.typeKey == target.deviceTypeKey }
@@ -207,6 +221,10 @@ object BindingHealthEvaluator {
                 else AssignmentHealth.MissingGroup(ref.key)
             null -> AssignmentHealth.MissingFixture(target.key)
         }
+
+    private fun windowHealth(windowName: String, context: Context): AssignmentHealth =
+        if (windowName in context.connectedWindowNames) AssignmentHealth.Ok
+        else AssignmentHealth.MissingWindow(windowName)
 
     private fun uuidOrNull(raw: String): UUID? = try {
         UUID.fromString(raw)

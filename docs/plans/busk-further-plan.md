@@ -204,7 +204,7 @@ ref (`BUSK_RIG_REF`), an id that is not the project's (`BUSK_RIG_IDENTITY`), a b
 that is not one of the patch's elements (validated against `elementGroupProperties` the way
 `PersistedFixtureReferenceValidator` does). Rows and tiles are renumbered dense on write.
 
-**Three delete paths sweep tiles**, each inside its own transaction, in the shape of
+**Three delete paths sweep tiles** (*session 2 amendment:* five, plus a rename — the universe-config delete cascades patches and the project delete both sweep too, and a patch **rename** sweeps that patch's cell tiles, because a stored element key embeds the parent's key and the desk never parses one, so it can only be checked against the live fixture, which after the rename has different keys), each inside its own transaction, in the shape of
 `deleteBuskPadsReferencing`: the group delete (`routes/projectPatchGroups.kt`), the patch delete
 (`routes/projectPatches.kt`), and **the project importer**, which deletes `fixtureGroups` and
 `fixturePatches` when replacing a project (`sync/ProjectImporter.kt:266-270`) and sweeps busk
@@ -275,7 +275,17 @@ Redux slice and forces Split while on.
   `programmer.entryChanged` frames, Record captures it, Blind previews it. A `tmpl:{uuid}` in
   `from`/`to` resolves the template's colour generically, as an FX colour reference does. Colour
   interpolation needs `TemplateResolver.mixColour`, which is private today; session 2 exposes the
-  Lab-space mix as `internal`.
+  Lab-space mix as `internal`. *Session 2 amendment:* `mixColour` is the per-head emitter split
+  and stays private; the session added a new `internal mixLab` (with its `fromLab` inverse) for
+  the interpolation, so the two stay separate. `parts` cuts the ordered heads into that many
+  contiguous fans, each its own *from → to* (Titan's reading), rather than repeating a continuous
+  curve — four heads in two parts is `0 · 1 · 0 · 1`; a property outside the mask answers 200
+  with `skippedFamilies` rather than a 400, the Look press's shape; and the four curves' maths,
+  which the plan never wrote down, is: `LINE` `t = x`, `MIRROR` `|2x − 1|` (centre at *from*),
+  `ARROW` `1 − |2x − 1|` (ends at *from*), and `WINGS` two mirrored complete fans meeting at the
+  centre (*to* at each outer end, *from* at the centre, an odd count's centre head in both wings) —
+  Titan's outward-from-centre reading, chosen by Chris on 2026-09-17 over the plan's first
+  "sampled twice and folded" draft.
 - **`selection.subselect {mode}`** (in, `plugins/SelectionSocket.kt`; client `api/selectionApi.ts`
   gains `subselect` beside `set` / `toggle` / `clear`, and `store/selection.ts` a
   `subselectDeskSelection`) — `mode ∈ ALL | ODD | EVEN | FIRST_HALF | SECOND_HALF | INVERT |
@@ -284,6 +294,9 @@ Redux slice and forces Split while on.
   `ODD`/`EVEN`/halves act over the selection's cells where a selected fixture has elements and
   over heads where none does; `MASTERS` drops every element key and keeps the parents;
   `NEXT`/`PREV` step the whole selection one place along rig order (a group steps as a group).
+  *Session 2 amendment:* `ALL` widens every selected cell to its whole fixture; `INVERT` takes the
+  rig as its universe at the selection's granularity; `NEXT`/`PREV` step at cell granularity when
+  every selected target is a cell, and from an empty selection land on the first / last step.
 
 ### 3.6 MIDI
 
@@ -291,7 +304,10 @@ Redux slice and forces Split while on.
 `BuskSheetToggle(windowName)`, `SelectionNext`, `SelectionPrev`, `SelectionCells(mode)`. The two
 window-addressed ones dispatch a `WindowRegistry.Command.ViewOptions` to **every** row of that
 name (D9 of the multi-screen plan accepts duplicate names); no row → log and no-op, health
-`missingWindow`. `BindingHealthEvaluator.Context` (built at `State.kt:567` from DB sets) gains
+`missingWindow`. *Session 2 amendment:* the command carries the **view that row announced** and
+`{focus: …}` or `{sheet: toggle}`, so a window not on the busk view receives a frame for its own
+view with a key it does not contribute and ignores it — the desk never learns the busk view's id.
+`BindingHealthEvaluator.Context` (built at `State.kt:567` from DB sets) gains
 `connectedWindowNames`, and `SurfaceFeedbackPublisher` gains a `WindowRegistry.windows` collector
 beside its `FixturesChangeListener` hooks so the health re-evaluates on connect and disconnect —
 without it a binding stays `missingWindow` after its window arrives. The three selection ones
@@ -307,9 +323,11 @@ is), *Next · Prev · Odd · Even · Masters* once on the Desk row.
 
 ### 3.7 Sync
 
-`formatVersion` 12 (current `SUPPORTED_FORMAT_VERSION = 11`, `sync/ProjectImporter.kt:113`; no bump
-in flight): `/buskRig.json` beside `/buskPages/`, rows with tiles inline, tiles referencing groups
-and patches by uuid and elements by key. `ProjectRoundTripTest` gains the rig — including the
+`formatVersion` 12 (was `SUPPORTED_FORMAT_VERSION = 11` in `sync/ProjectImporter.kt` before this
+session; bumped by session 2): `/buskRig.json` beside `/buskPages/`, rows with tiles inline, tiles referencing groups
+and patches by uuid and elements by key. *Session 2 amendment:* `buskRig/{rowUuid}.json`, one
+document per row, not one top-level file — `RecordHasher` filters every top-level file out of the
+record scan, so a single `buskRig.json` would never propagate through the three-way diff. `ProjectRoundTripTest` gains the rig — including the
 importer's wipe order (§3.2); `SyncCoverageTest` gains disposition rows for both tables;
 `MIN_SUPPORTED_FORMAT_VERSION` stays 5 and a v11 export imports as an empty rig.
 
@@ -404,7 +422,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
   coverage sentences; close `FU-LOOK-ELEMENT-ROWS` and `FU-FX-ELEMENT-BUNDLED-COLOUR` in
   `followups.md` with the hash.
 
-### Session 2 — the rig, spread, the command and the targets (lighting7) — Fable 5.1, high
+### Session 2 — the rig, spread, the command and the targets (lighting7) — Fable 5.1, high — **landed**
 
 - `models/buskRig.kt` (§3.1) with a docblock recording D1–D3 and the no-cascade rule; register in
   `Schema.ALL_TABLES`.

@@ -313,6 +313,13 @@ class SurfaceInputRouter(
             BindingTarget.BuskPageNext -> actions.buskPageStep(1)
             BindingTarget.BuskPagePrev -> actions.buskPageStep(-1)
             is BindingTarget.BuskPageSet -> actions.buskPageSet(target.pageUuid)
+            // A window by name and the sub-selection (busk-further plan D12, D14): each a hand-off
+            // to the same op the screen's frame reaches, so a button and a chip cannot diverge.
+            is BindingTarget.BuskFocusSet -> actions.buskFocusSet(target.windowName, target.focus)
+            is BindingTarget.BuskSheetToggle -> actions.buskSheetToggle(target.windowName)
+            BindingTarget.SelectionNext -> actions.selectionStep(1)
+            BindingTarget.SelectionPrev -> actions.selectionStep(-1)
+            is BindingTarget.SelectionCells -> actions.selectionCells(target.mode)
             is BindingTarget.SpeedMasterBpm -> logger.debug(
                 "Ignoring button press on binding {} → speed-master BPM (continuous target)",
                 binding.id,

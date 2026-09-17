@@ -564,6 +564,27 @@ object TemplateResolver {
 
     // ─── Colour maths ───────────────────────────────────────────────────────
 
+    /**
+     * The perceptual mix the spread interpolates colour through (busk-further plan §3.5): the point
+     * [t] of the way from [from] to [to] in **CIE Lab**, back in sRGB. Lab rather than RGB so the
+     * midpoint of two saturated colours is not a muddy grey, and rather than HSV so the hue does not
+     * take the long way round the wheel. `internal` for the spread route alone; the per-head emitter
+     * split still happens in [resolve], so what the rig receives is what a template of that hex would
+     * have given it.
+     */
+    internal fun mixLab(from: Color, to: Color, t: Double): Color {
+        val f = t.coerceIn(0.0, 1.0)
+        val a = toLab(from)
+        val b = toLab(to)
+        return fromLab(Lab(a.l + (b.l - a.l) * f, a.a + (b.a - a.a) * f, a.b + (b.b - a.b) * f))
+    }
+
+    /** `#RRGGBB` / `#RGB` → [Color], or null. Internal for the spread route's endpoint parsing. */
+    internal fun parseHexColour(raw: String): Color? = parseHex(raw)
+
+    /** A [Color] as the six-digit hex a [TemplateIntent.Colour] carries. */
+    internal fun toHex(colour: Color): String = String.format("#%02X%02X%02X", colour.red, colour.green, colour.blue)
+
     private fun parseHex(raw: String): Color? {
         val hex = raw.trim().removePrefix("#")
         return when (hex.length) {
@@ -599,6 +620,26 @@ object TemplateResolver {
         val fy = f(y)
         val fz = f(z)
         return Lab(116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+    }
+
+    /** CIE Lab (D65) → sRGB, the inverse of [toLab]; each channel clamped into `0..255`. */
+    private fun fromLab(lab: Lab): Color {
+        val fy = (lab.l + 16.0) / 116.0
+        val fx = fy + lab.a / 500.0
+        val fz = fy - lab.b / 200.0
+        fun inverse(t: Double): Double = if (t > 0.206893) t * t * t else (t - 16.0 / 116.0) / 7.787
+        val x = inverse(fx) * 0.95047
+        val y = inverse(fy)
+        val z = inverse(fz) * 1.08883
+        val r = x * 3.2406 + y * -1.5372 + z * -0.4986
+        val g = x * -0.9689 + y * 1.8758 + z * 0.0415
+        val b = x * 0.0557 + y * -0.2040 + z * 1.0570
+        fun gamma(c: Double): Int {
+            val clamped = c.coerceIn(0.0, 1.0)
+            val srgb = if (clamped <= 0.0031308) 12.92 * clamped else 1.055 * Math.pow(clamped, 1.0 / 2.4) - 0.055
+            return (srgb * 255.0).roundToInt().coerceIn(0, 255)
+        }
+        return Color(gamma(r), gamma(g), gamma(b))
     }
 
     private fun labDistance(a: Lab, b: Lab): Double =

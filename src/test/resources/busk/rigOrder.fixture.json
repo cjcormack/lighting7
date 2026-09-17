@@ -1,0 +1,1034 @@
+{
+ "_": "Pinned by BuskRigOrderTest (lighting7) and buskRig.test.ts (lighting-react): the effective rig order of state/BuskRigOrder.kt. Targets are CueTargetDto; a tile names a group or a fixture by key; cell keys are opaque and come from the fixture's elements.",
+ "fixtures": [
+  {
+   "key": "hex-1",
+   "type": "hex"
+  },
+  {
+   "key": "hex-2",
+   "type": "hex"
+  },
+  {
+   "key": "bar-1",
+   "type": "led-lightbar-12-pixel-48ch"
+  },
+  {
+   "key": "bar-2",
+   "type": "led-lightbar-12-pixel-48ch"
+  }
+ ],
+ "groups": [
+  {
+   "name": "front-wash",
+   "members": [
+    "hex-1",
+    "hex-2"
+   ]
+  },
+  {
+   "name": "bars",
+   "members": [
+    "bar-1",
+    "bar-2"
+   ]
+  }
+ ],
+ "rigs": {
+  "empty": [],
+  "built": [
+   {
+    "name": "Wash",
+    "tiles": [
+     {
+      "group": "front-wash"
+     },
+     {
+      "fixture": "hex-2",
+      "cellMode": "PIPS"
+     }
+    ]
+   },
+   {
+    "name": "Bars",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "cellMode": "HALVES",
+      "cellSplit": 5
+     },
+     {
+      "fixture": "bar-2",
+      "cellMode": "PER_CELL"
+     },
+     {
+      "fixture": "bar-1",
+      "elementKey": "bar-1.pixel-3",
+      "cellMode": "WHOLE"
+     },
+     {
+      "fixture": "gone",
+      "cellMode": "PIPS"
+     },
+     {
+      "group": "nope"
+     }
+    ]
+   }
+  ],
+  "cellFirst": [
+   {
+    "name": "Cells",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "elementKey": "bar-1.pixel-5"
+     }
+    ]
+   },
+   {
+    "name": "All",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "cellMode": "PIPS"
+     }
+    ]
+   }
+  ],
+  "groupOnly": [
+   {
+    "name": "Bars",
+    "tiles": [
+     {
+      "group": "bars"
+     }
+    ]
+   }
+  ]
+ },
+ "cases": [
+  {
+   "note": "an empty rig is every group then every fixture (D1); over cells a group is its members' units and a step is never repeated",
+   "rig": "empty",
+   "stepsHeads": [
+    [
+     {
+      "type": "group",
+      "key": "front-wash"
+     }
+    ],
+    [
+     {
+      "type": "group",
+      "key": "bars"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "hex-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "hex-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2"
+     }
+    ]
+   ],
+   "stepsCells": [
+    [
+     {
+      "type": "fixture",
+      "key": "hex-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "hex-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-11"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-11"
+     }
+    ]
+   ],
+   "sortInput": [
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "gone"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    }
+   ],
+   "sortOutput": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "gone"
+    }
+   ]
+  },
+  {
+   "note": "a built rig: a group is one step, HALVES is runs, PER_CELL is cells, a cell tile is that cell, unresolvable tiles are absent, a repeated step is dropped",
+   "rig": "built",
+   "stepsHeads": [
+    [
+     {
+      "type": "group",
+      "key": "front-wash"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "hex-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-0"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-1"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-4"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-6"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-8"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-10"
+     },
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-11"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-11"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     }
+    ]
+   ],
+   "stepsCells": [
+    [
+     {
+      "type": "fixture",
+      "key": "hex-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "hex-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-11"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-11"
+     }
+    ]
+   ],
+   "sortInput": [
+    {
+     "type": "fixture",
+     "key": "bar-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "sortOutput": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2"
+    }
+   ]
+  },
+  {
+   "note": "a cell tile before its parent places that cell first; the parent's other cells follow the parent",
+   "rig": "cellFirst",
+   "stepsHeads": [
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1"
+     }
+    ]
+   ],
+   "stepsCells": [
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-11"
+     }
+    ]
+   ],
+   "sortInput": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    }
+   ],
+   "sortOutput": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    }
+   ]
+  },
+  {
+   "note": "a group tile alone: one step over heads, every member cell over cells",
+   "rig": "groupOnly",
+   "stepsHeads": [
+    [
+     {
+      "type": "group",
+      "key": "bars"
+     }
+    ]
+   ],
+   "stepsCells": [
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-1.pixel-11"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-0"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-1"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-2"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-3"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-4"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-5"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-6"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-7"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-8"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-9"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-10"
+     }
+    ],
+    [
+     {
+      "type": "fixture",
+      "key": "bar-2.pixel-11"
+     }
+    ]
+   ],
+   "sortInput": [
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    }
+   ],
+   "sortOutput": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    }
+   ]
+  }
+ ]
+}

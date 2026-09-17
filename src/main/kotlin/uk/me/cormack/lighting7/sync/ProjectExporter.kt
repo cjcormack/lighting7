@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
+import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
@@ -23,6 +24,8 @@ import uk.me.cormack.lighting7.sync.dto.BuskBankJson
 import uk.me.cormack.lighting7.sync.dto.BuskColumnJson
 import uk.me.cormack.lighting7.sync.dto.BuskPadJson
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
+import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
+import uk.me.cormack.lighting7.sync.dto.BuskRigTileJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
@@ -74,6 +77,7 @@ import java.util.UUID
  * /fxDefinitions/{uuid}.json
  * /cueSlots/{uuid}.json           -- a cue, or (v10+) a Look
  * /buskPages/{uuid}.json           -- v10+: columns, banks and pads embedded inline
+ * /buskRig/{uuid}.json             -- v12+: one rig row per document, tiles embedded inline
  * /parkedChannels/{uuid}.json
  * /controlSurfaceBindings/{uuid}.json
  * /scripts/{uuid}.kts              -- raw script body for git-friendly diffs
@@ -280,6 +284,31 @@ class ProjectExporter(private val state: State) {
                         )
                     }
                 FixtureGroupJson(g.uuid.toString(), g.name, members)
+            }
+
+            count += writeAll(targetDir, "buskRig", project.buskRigRows.toList(), BuskRigRowJson.serializer(), { it.uuid }, liveKeys) { row ->
+                BuskRigRowJson(
+                    uuid = row.uuid.toString(),
+                    name = row.name,
+                    sortOrder = row.sortOrder,
+                    tiles = row.tiles
+                        .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
+                        // A malformed tile is absent everywhere else it is read; exporting it would
+                        // only hand the next importer the same row to drop.
+                        .filter { tile -> tile.kind != null || run { warnMalformedBuskRigTile { tile.uuid.toString() }; false } }
+                        .map { tile ->
+                            BuskRigTileJson(
+                                uuid = tile.uuid.toString(),
+                                sortOrder = tile.sortOrder,
+                                groupUuid = tile.group?.uuid?.toString(),
+                                patchUuid = tile.patch?.uuid?.toString(),
+                                elementKey = tile.elementKey,
+                                cellMode = tile.cellMode,
+                                cellSplit = tile.cellSplit,
+                                label = tile.label,
+                            )
+                        },
+                )
             }
 
             // FX presets and named palettes are no longer exported: v5 collapsed both into looks,

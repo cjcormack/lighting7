@@ -11,6 +11,10 @@ import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.BuskFlow
 import uk.me.cormack.lighting7.models.buskPadKind
+import uk.me.cormack.lighting7.models.buskRigTileKind
+import uk.me.cormack.lighting7.models.BuskRigCellMode
+import uk.me.cormack.lighting7.models.DaoBuskRigRow
+import uk.me.cormack.lighting7.models.DaoBuskRigTile
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
@@ -46,6 +50,7 @@ import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteBuskPage
+import uk.me.cormack.lighting7.routes.deleteBuskRig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
@@ -59,6 +64,7 @@ import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
+import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
@@ -85,6 +91,9 @@ import kotlin.io.path.isDirectory
 import java.time.Duration
 import uk.me.cormack.lighting7.models.asDuration
 
+// v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
+// (busk-further plan §3.7). MIN stays at 5: a missing folder reads as an empty rig.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -110,7 +119,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 11
+internal const val SUPPORTED_FORMAT_VERSION = 12
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -241,6 +250,9 @@ class ProjectImporter(private val state: State) {
             // Busk pages before the records their pads point at — a pad is a plain FK with no
             // cascade (`DaoBuskPads`), so it has to go first, and by hand: pads → banks → columns → page.
             project.buskPages.forEach { deleteBuskPage(it) }
+            // The rig too, and **before** the group and patch deletes below: a tile is a plain FK
+            // onto a group or a patch with no cascade (`DaoBuskRigTiles`), so it would block them.
+            deleteBuskRig(project)
             project.cues.forEach { cue ->
                 deleteCueChildren(cue)
                 cue.delete()
@@ -341,7 +353,9 @@ class ProjectImporter(private val state: State) {
         val riggingMap = importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
         val patchMap = importFixturePatches(sourceDir, project, universeMap, riggingMap)
-        importFixtureGroups(sourceDir, project, patchMap)
+        val groupMap = importFixtureGroups(sourceDir, project, patchMap)
+        // The rig after the groups and patches its tiles name (v12).
+        importBuskRig(sourceDir, project, groupMap, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project)
         val cueMap = importCues(sourceDir, project, cueStackMap)
         importCuePropertyAssignments(sourceDir, cueMap)
@@ -1030,6 +1044,67 @@ class ProjectImporter(private val state: State) {
                             this.uuid = UUID.fromString(d.uuid)
                         }
                     }
+                }
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * `buskRig/` (v12): one document per row, tiles nested. A tile whose group or patch the archive
+     * does not carry — or which names none or both — is **dropped with a warning** rather than
+     * aborting the pull, the busk pad's posture: a tile is an enrichment of its record, not content.
+     * A row left with no tiles is dropped too, because the write boundary refuses an empty row and
+     * one must never be read back. Stored sort orders are kept as written; the element key is
+     * carried verbatim (opaque; validated against the live fixture on the next write) and the cell
+     * mode only as far as the enum goes. A v11 archive has no folder and imports as an empty rig.
+     */
+    private fun importBuskRig(
+        dir: Path,
+        project: DaoProject,
+        groupMap: Map<UUID, DaoFixtureGroup>,
+        patchMap: Map<UUID, DaoFixturePatch>,
+    ) {
+        readDir(dir.resolve("buskRig")) { json ->
+            val r = canonicalDecode(BuskRigRowJson.serializer(), json)
+            val uuid = UUID.fromString(r.uuid)
+            val tiles = r.tiles.mapNotNull { t ->
+                if (buskRigTileKind(t.groupUuid, t.patchUuid) == null) {
+                    logger.warn("Busk rig tile {} on row {} names no record or both; dropping the tile", t.uuid, r.name)
+                    return@mapNotNull null
+                }
+                val group = t.groupUuid?.let { groupMap[UUID.fromString(it)] }
+                val patch = t.patchUuid?.let { patchMap[UUID.fromString(it)] }
+                if (group == null && patch == null) {
+                    logger.warn(
+                        "Busk rig tile {} on row {} names record {} which the archive does not carry; dropping the tile",
+                        t.uuid, r.name, t.groupUuid ?: t.patchUuid,
+                    )
+                    return@mapNotNull null
+                }
+                Triple(t, group, patch)
+            }
+            if (tiles.isEmpty()) {
+                logger.warn("Busk rig row {} ('{}') has no tiles left; dropping the row", r.uuid, r.name)
+                return@readDir uuid to Unit
+            }
+            val row = DaoBuskRigRow.new {
+                this.project = project
+                name = r.name
+                sortOrder = r.sortOrder
+                this.uuid = uuid
+            }
+            tiles.forEach { (t, group, patch) ->
+                DaoBuskRigTile.new {
+                    this.row = row
+                    sortOrder = t.sortOrder
+                    this.group = group
+                    this.patch = patch
+                    elementKey = t.elementKey
+                    cellMode = BuskRigCellMode.entries.firstOrNull { it.name == t.cellMode }?.name ?: BuskRigCellMode.PIPS.name
+                    cellSplit = t.cellSplit
+                    label = t.label
+                    this.uuid = UUID.fromString(t.uuid)
                 }
             }
             uuid to Unit

@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.state.WindowRegistry
 
 /**
  * The `windows.*` family: the desk's registry of signed-in browser windows
- * ([uk.me.cormack.lighting7.state.WindowRegistry]), and the three commands one window sends to
+ * ([uk.me.cormack.lighting7.state.WindowRegistry]), and the four commands one window sends to
  * move another (multi-screen plan §3.4).
  *
  * Reply convention 3, like `selection.*` and `busk.*`: nothing is answered directly. An announce
@@ -42,6 +42,13 @@ data class WindowsAnnounceInMessage(
     val view: String,
     val fullscreen: Boolean = false,
     val follows: Boolean = true,
+    /**
+     * The window's per-view options (busk-further plan §3.5) — for the busk view its focus, split
+     * rows and sheet tab. **Optional with a null default**, so a client that predates the field
+     * still announces: the socket `Json` is the bare default, and an absent optional lands as null.
+     * Carried back verbatim on `windows.state`.
+     */
+    val viewOptions: Map<String, String>? = null,
 ) : WindowsInMessage()
 
 /** Show [view] on the window whose row id is [targetId]. Rebroadcast as-is (D11). */
@@ -69,6 +76,20 @@ data class WindowsRenameInMessage(val targetId: String, val name: String) : Wind
 @SerialName("windows.fullscreen")
 data class WindowsFullscreenInMessage(val targetId: String, val on: Boolean) : WindowsInMessage()
 
+/**
+ * Set [options] on the window whose row id is [targetId], for [view] only (busk-further plan D13).
+ * Rebroadcast as-is: the target applies them to its own tab facts if it is showing [view] — a
+ * busk `focus` arriving at a window on the Prompt Book is ignored — and re-announces, which is how
+ * the registry learns the new options. The same frame the two window-addressed MIDI targets send.
+ */
+@Serializable
+@SerialName("windows.viewOptions")
+data class WindowsViewOptionsInMessage(
+    val targetId: String,
+    val view: String,
+    val options: Map<String, String>,
+) : WindowsInMessage()
+
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -84,7 +105,7 @@ sealed class WindowsOutMessage : OutMessage()
 data class WindowsStateOutMessage(val windows: List<WindowRegistry.Window>) : WindowsOutMessage()
 
 /**
- * The three commands, rebroadcast to every socket with the payload the sender wrote. They carry
+ * The four commands, rebroadcast to every socket with the payload the sender wrote. They carry
  * the inbound spelling deliberately — a client reads `targetId` against its own row id and
  * ignores everything else, so a second name for one gesture would buy nothing. (`speedMasters.state`
  * is the existing precedent for one name travelling in both directions.)
@@ -101,10 +122,19 @@ data class WindowsRenameOutMessage(val targetId: String, val name: String) : Win
 @SerialName("windows.fullscreen")
 data class WindowsFullscreenOutMessage(val targetId: String, val on: Boolean) : WindowsOutMessage()
 
+@Serializable
+@SerialName("windows.viewOptions")
+data class WindowsViewOptionsOutMessage(
+    val targetId: String,
+    val view: String,
+    val options: Map<String, String>,
+) : WindowsOutMessage()
+
 internal fun WindowRegistry.Command.toOutMessage(): WindowsOutMessage = when (this) {
     is WindowRegistry.Command.Show -> WindowsShowOutMessage(targetId, view)
     is WindowRegistry.Command.Rename -> WindowsRenameOutMessage(targetId, name)
     is WindowRegistry.Command.Fullscreen -> WindowsFullscreenOutMessage(targetId, on)
+    is WindowRegistry.Command.ViewOptions -> WindowsViewOptionsOutMessage(targetId, view, options)
 }
 
 // ─── Handler ────────────────────────────────────────────────────────────
@@ -121,6 +151,7 @@ fun handleWindows(scope: SocketScope, message: WindowsInMessage) {
                 fullscreen = message.fullscreen,
                 follows = message.follows,
                 user = scope.user?.displayName,
+                viewOptions = message.viewOptions,
             )
         }
         is WindowsShowInMessage ->
@@ -129,6 +160,8 @@ fun handleWindows(scope: SocketScope, message: WindowsInMessage) {
             registry.command(WindowRegistry.Command.Rename(message.targetId, message.name))
         is WindowsFullscreenInMessage ->
             registry.command(WindowRegistry.Command.Fullscreen(message.targetId, message.on))
+        is WindowsViewOptionsInMessage ->
+            registry.command(WindowRegistry.Command.ViewOptions(message.targetId, message.view, message.options))
     }
 }
 

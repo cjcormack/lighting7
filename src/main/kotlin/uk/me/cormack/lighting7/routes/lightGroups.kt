@@ -29,7 +29,7 @@ internal fun Route.routeApiRestGroups(state: State) {
             val groups = state.show.fixtures.groups.map { group ->
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                group.toDto(looks.compatibleIdsFor(capabilities))
+                group.toGroupSummaryDto(looks.compatibleIdsFor(capabilities))
             }
             call.respond(groups)
         }
@@ -259,7 +259,8 @@ data class DistributionStrategiesResponse(
 )
 
 // Helper functions
-private fun FixtureGroup<*>.toDto(compatibleLookIds: List<Int> = emptyList()): GroupSummaryDto {
+/** The group's summary — what the group list answers and what a busk rig tile embeds. */
+internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = emptyList()): GroupSummaryDto {
     return GroupSummaryDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)

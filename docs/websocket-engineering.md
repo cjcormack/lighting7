@@ -260,12 +260,18 @@ Switching project is REST; the socket only reports it (`projectChanged`).
 | `selection.set` | `targets: [{type, key}]`, `families?: [String]`, `sourceName?: String` | none — `selection.state` broadcast |
 | `selection.toggle` | `target: {type, key}`, `sourceName?: String` | none — `selection.state` broadcast |
 | `selection.clear` | — | none — `selection.state` broadcast |
+| `selection.subselect` | `mode: String` (`ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `NEXT` · `PREV` · `MASTERS`), `sourceName?: String` | none — `selection.state` broadcast; an unknown mode is dropped with a log line |
 
 The desk's one shared selection (`state/DeskSelection.kt`, `docs/lighting-composition-model.md`
 §"Layer 2"). `toggle` is head-by-head: a group all of whose members are selected is "in", and
 toggling it off narrows the entries that covered it (`fx/TargetCoverage.kt`, the rule a busk press
 applies to a sibling layer). A write that changes nothing sends no frame. No resync request: the
 family is `StateFlow`-backed, so a subscription is the snapshot.
+
+**`subselect` rewrites the targets over the rig order** (busk-further plan D12,
+`docs/lighting-composition-model.md` §"The rig"): the Cells chip and the `SelectionCells` /
+`SelectionNext` / `SelectionPrev` buttons share this one op, so *Next* walks the same rig on a
+button and on a screen. The mask is kept and `source` stamped as for any write.
 
 **The attribute mask is part of the selection** (multi-screen plan D2): `set` replaces the whole
 fact — `families` absent or empty is every attribute, a name outside `PropertyMaskGroup` is
@@ -281,10 +287,20 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 
 | Message | Fields | Reply |
 |---|---|---|
-| `windows.announce` | `windowId`, `name`, `view`, `fullscreen?` (default false), `follows?` (default true) | none — `windows.state` broadcast |
+| `windows.announce` | `windowId`, `name`, `view`, `fullscreen?` (default false), `follows?` (default true), `viewOptions?: {String: String}` (default absent) | none — `windows.state` broadcast |
 | `windows.show` | `targetId`, `view` | none — rebroadcast as `windows.show` |
 | `windows.rename` | `targetId`, `name` | none — rebroadcast as `windows.rename` |
 | `windows.fullscreen` | `targetId`, `on` | none — rebroadcast as `windows.fullscreen` |
+| `windows.viewOptions` | `targetId`, `view`, `options: {String: String}` | none — rebroadcast as `windows.viewOptions` |
+
+`viewOptions` is a window's **per-view options** — for the busk view its `focus`, `rigRows` and
+`sheet` (busk-further plan D13) — announced as a free `String → String` map and carried back on
+`windows.state` verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
+command sets them on one window **for that view only**: the target applies the options to its own
+tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how
+the registry learns them; nothing is written server-side. A client that predates the field omits it
+and still announces. The two window-addressed MIDI targets (`BuskFocusSet`, `BuskSheetToggle`) send
+this same frame to every connected row of a name, carrying the view that row announced.
 
 The desk's registry of signed-in browser windows (`state/WindowRegistry.kt`, multi-screen plan
 §3.4), and the family that lets one screen move another.
@@ -297,7 +313,7 @@ The row lives exactly as long as its socket: `announce` on the way in, removal i
 open and on every change — a route navigation, full screen, follow/local, a rename — and a
 re-announce replaces that socket's row in place rather than appending one.
 
-**The three commands are rebroadcast verbatim to every socket, sender included** (D11), the pattern
+**The four commands are rebroadcast verbatim to every socket, sender included** (D11), the pattern
 `busk.layoutChanged {pageIds}` uses: a `targetId` that is not this window's matches nothing, so no
 handler needs a session lookup and the Screens sheet on every window sees the gesture. Nothing is
 written server-side by a `rename` — the *target* renames itself and re-announces. A command whose
@@ -458,7 +474,8 @@ Outbound-only, and the only frame a client sees before the show-scoped families 
 
 Fired from the per-project `FixturesChangeListener`. Everything here except `showChanged`,
 `cueRunStateChanged`, `cuesRecomposed` and `busk.layoutChanged` is a **payload-free cache
-invalidation**: the client refetches over REST.
+invalidation**: the client refetches over REST (`busk.rigChanged` is dotted for the naming rule but
+payload-free, since one project has one rig).
 
 | Message | Payload | Meaning |
 |---|---|---|
@@ -469,6 +486,7 @@ invalidation**: the client refetches over REST.
 | `cueStackListChanged` | — | Cue-stack CRUD |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
 | `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a template / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
+| `busk.rigChanged` | — | The busk **rig** changed: a whole-document write, or a group / patch delete that took tiles off it. Payload-free because there is one rig per project (busk-further plan D1); the client re-reads `GET /busk/rig` |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
 | `stageRegionListChanged` | — | Stage-region CRUD |
@@ -564,12 +582,13 @@ MIDI write.
 
 | Message | Payload | Cast |
 |---|---|---|
-| `windows.state` | `windows: [{id, windowId, name, view, fullscreen, follows, user?}]`, in announce order | Connect snapshot + broadcast |
+| `windows.state` | `windows: [{id, windowId, name, view, fullscreen, follows, user?, viewOptions?}]`, in announce order | Connect snapshot + broadcast |
 | `windows.show` | `targetId`, `view` | Broadcast, verbatim |
 | `windows.rename` | `targetId`, `name` | Broadcast, verbatim |
 | `windows.fullscreen` | `targetId`, `on` | Broadcast, verbatim |
+| `windows.viewOptions` | `targetId`, `view`, `options` | Broadcast, verbatim |
 
-The three commands travel under the **same names** in both directions — they are rebroadcast as-is,
+The four commands travel under the **same names** in both directions — they are rebroadcast as-is,
 and a second spelling would buy nothing. (`speedMasters.state` is the existing precedent for one
 name on both sides.) `windows.state` is `StateFlow`-backed, so the subscription is the snapshot and
 it arrives before this window has announced anything; `id` is the socket-minted row id and `user` is
@@ -925,7 +944,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |
-| `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the three commands (machine-scoped band) |
+| `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the four commands (machine-scoped band) |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
 | `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
 | `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |

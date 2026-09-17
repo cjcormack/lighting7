@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.plugins
 import io.ktor.client.plugins.websocket.sendSerialized
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.server.testing.testApplication
+import io.ktor.websocket.Frame
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.SelectionSource
@@ -18,7 +19,7 @@ import kotlin.test.assertTrue
 
 /**
  * The `windows.*` family over a real socket: the connect snapshot arrives before any announce,
- * an announce is one row keyed by the socket, the three commands are rebroadcast verbatim to
+ * an announce is one row keyed by the socket, the four commands are rebroadcast verbatim to
  * every socket (D11), a closed socket takes its row with it, and a `selection.*` write is stamped
  * from the announced window rather than from the payload (D7).
  *
@@ -189,6 +190,61 @@ class WindowsSocketTest : RouteIntegrationTest() {
             val stamped = awaitOfType<SelectionStateOutMessage>()
             assertEquals(SelectionSource.window("Screen 1"), stamped.source)
             assertNull(stamped.source?.id, "the stub carries no id — there is no row to point at")
+        }
+    }
+
+    /**
+     * Busk-further plan D13: one generic command for a window's per-view options, rebroadcast like
+     * the other three; and the options a window announces come back on `windows.state` verbatim,
+     * so the Screens sheet reads them without learning the word busk.
+     */
+    @Test
+    fun `viewOptions is rebroadcast as-is and an announced options map comes back on state`() = testApplication {
+        mountTestApp(state)
+        val screen1 = createWsClient()
+        val screen2 = createWsClient()
+
+        screen1.webSocket("/api") {
+            awaitOfType<WindowsStateOutMessage>()
+            sendSerialized<InMessage>(announce(name = "Screen 1", view = "/busk").copy(viewOptions = mapOf("focus" to "rig", "sheet" to "colour")))
+            val row = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single()
+            assertEquals(mapOf("focus" to "rig", "sheet" to "colour"), row.viewOptions)
+
+            screen2.webSocket("/api") {
+                val snapshot = awaitOfType<WindowsStateOutMessage>()
+                assertEquals(mapOf("focus" to "rig", "sheet" to "colour"), snapshot.windows.single().viewOptions)
+
+                sendSerialized<InMessage>(WindowsViewOptionsInMessage(row.id, "/busk", mapOf("focus" to "pads")))
+                assertEquals(
+                    WindowsViewOptionsOutMessage(row.id, "/busk", mapOf("focus" to "pads")),
+                    awaitOfType<WindowsViewOptionsOutMessage>(),
+                )
+            }
+            assertEquals(
+                WindowsViewOptionsOutMessage(row.id, "/busk", mapOf("focus" to "pads")),
+                awaitOfType<WindowsViewOptionsOutMessage>(),
+                "the target's own socket receives it; the registry never writes options itself",
+            )
+            assertEquals(
+                mapOf("focus" to "rig", "sheet" to "colour"),
+                state.windowRegistry.windows.value.single().viewOptions,
+                "options move on the target's next announce, not on the command",
+            )
+        }
+    }
+
+    /** A client from before `viewOptions` existed omits the key entirely, and must still announce. */
+    @Test
+    fun `an old client that omits viewOptions still announces, with none recorded`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        client.webSocket("/api") {
+            awaitOfType<WindowsStateOutMessage>()
+            send(Frame.Text("""{"type":"windows.announce","windowId":"tab-1","name":"Screen 1","view":"/programmer"}"""))
+            val row = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single()
+            assertEquals("Screen 1", row.name)
+            assertNull(row.viewOptions)
         }
     }
 

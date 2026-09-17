@@ -24,6 +24,8 @@ val ALL_TABLES: List<Table> = listOf(
     DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
     DaoFixturePatches, DaoFixtureGroups, DaoFixtureGroupMembers,
+    // After the groups and patches their tiles reference.
+    DaoBuskRigRows, DaoBuskRigTiles,
     DaoParkedChannels, DaoFxDefinitions,
     DaoPromptBooks, DaoPromptBookAnchors, DaoPromptBookAnnotations,
     DaoControlSurfaceBindings,

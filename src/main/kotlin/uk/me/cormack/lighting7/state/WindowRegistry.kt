@@ -58,6 +58,14 @@ class WindowRegistry {
         val fullscreen: Boolean = false,
         val follows: Boolean = true,
         val user: String? = null,
+        /**
+         * The window's **per-view options** as it last announced them — for the busk view, its
+         * focus, split rows and sheet tab (busk-further plan D13). Free `String → String` so the
+         * registry never learns a view's vocabulary: each entry in the client's `windowViews.ts`
+         * says what its view contributes, and the Screens sheet renders whatever that is. Null from
+         * a client that predates the field; absent from the frame then, exactly as it was sent.
+         */
+        val viewOptions: Map<String, String>? = null,
     )
 
     /**
@@ -74,6 +82,19 @@ class WindowRegistry {
         data class Show(override val targetId: String, val view: String) : Command
         data class Rename(override val targetId: String, val name: String) : Command
         data class Fullscreen(override val targetId: String, val on: Boolean) : Command
+
+        /**
+         * Set [options] on the window whose row id is [targetId], **for [view] only** (busk-further
+         * plan D13): the target applies them to its own per-tab facts if it is showing that view
+         * and ignores the frame otherwise, then re-announces — so a busk `focus` arriving at a
+         * window on the Prompt Book changes nothing there. One generic command rather than one per
+         * option, so the registry, this file and the Screens sheet never learn the word *busk*.
+         */
+        data class ViewOptions(
+            override val targetId: String,
+            val view: String,
+            val options: Map<String, String>,
+        ) : Command
     }
 
     private val _windows = MutableStateFlow<List<Window>>(emptyList())
@@ -108,8 +129,9 @@ class WindowRegistry {
         fullscreen: Boolean,
         follows: Boolean,
         user: String?,
+        viewOptions: Map<String, String>? = null,
     ): Window {
-        val window = Window(socketId, windowId, name, view, fullscreen, follows, user)
+        val window = Window(socketId, windowId, name, view, fullscreen, follows, user, viewOptions)
         _windows.update { current ->
             val at = current.indexOfFirst { it.id == socketId }
             if (at < 0) current + window else current.toMutableList().also { it[at] = window }

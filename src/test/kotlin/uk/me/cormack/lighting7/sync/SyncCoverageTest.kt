@@ -10,6 +10,8 @@ import uk.me.cormack.lighting7.models.DaoBuskBanks
 import uk.me.cormack.lighting7.models.DaoBuskColumns
 import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.DaoBuskPages
+import uk.me.cormack.lighting7.models.DaoBuskRigRows
+import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
 import uk.me.cormack.lighting7.models.DaoCueLayers
@@ -145,6 +147,11 @@ class SyncCoverageTest {
         DaoBuskColumns to Disposition.Portable("buskPages", "columns"),
         DaoBuskBanks to Disposition.Portable("buskPages", "banks"),
         DaoBuskPads to Disposition.Portable("buskPages", "pads"),
+        // v12: one document per rig row, tiles inline — `buskRig/{rowUuid}.json`, a record folder
+        // like every other, because a top-level file is outside the record scan (busk-further plan
+        // §3.7, session 2 amendment).
+        DaoBuskRigRows to Disposition.Portable("buskRig"),
+        DaoBuskRigTiles to Disposition.Portable("buskRig", "tiles"),
         DaoParkedChannels to Disposition.Portable("parkedChannels"),
         DaoPromptBooks to Disposition.Portable("promptBooks"),
         DaoPromptBookAnchors to Disposition.Portable("promptBookAnchors"),

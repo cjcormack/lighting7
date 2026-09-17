@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.SpreadOver
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -69,7 +70,57 @@ data class SelectionSource(
  * compared. Every mutation is one [MutableStateFlow.update], so one socket frame; a mutation
  * that changes nothing emits nothing.
  */
-class DeskSelection(fixtures: () -> Fixtures?) {
+/**
+ * The ways `selection.subselect` rewrites the selection's **targets** (busk-further plan D12) — the
+ * Cells chip's face and menu, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
+ * button, sharing one rule on the desk. See [DeskSelection.subselect].
+ */
+@Serializable
+enum class SubselectMode {
+    /** Every selected cell widened to its whole fixture; heads and groups kept as written. */
+    ALL,
+
+    /** The 1st, 3rd, 5th … unit in rig order. */
+    ODD,
+
+    /** The 2nd, 4th, 6th … unit in rig order. */
+    EVEN,
+
+    /** The first half of the units (the larger half when odd). */
+    FIRST_HALF,
+
+    /** The rest. */
+    SECOND_HALF,
+
+    /** Every unit of the rig the selection does not cover, at the selection's granularity. */
+    INVERT,
+
+    /** The whole selection one step along rig order, wrapping; an empty selection lands on the first step. */
+    NEXT,
+
+    /** The whole selection one step back, wrapping; an empty selection lands on the last step. */
+    PREV,
+
+    /** Every cell dropped; the parents and groups that were written stay. */
+    MASTERS,
+    ;
+
+    companion object {
+        fun byName(name: String): SubselectMode? = entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
+    }
+}
+
+class DeskSelection(
+    /**
+     * The effective rig order (`BuskRigOrder`) for [subselect]'s *Next* / *Prev* and *Invert*, and
+     * for the order the odd / even / half modes count in. A provider, because the rig is read from
+     * the tables at gesture time and the fixtures are per show; null when there is no show yet,
+     * which makes the stepping modes no-ops and the others count in the order written. First so
+     * that [fixtures] stays the trailing lambda every existing caller passes.
+     */
+    private val rigOrder: () -> BuskRigOrder? = { null },
+    fixtures: () -> Fixtures?,
+) {
     private val fixturesProvider = fixtures
     private val coverageRule = TargetCoverage(fixtures)
 
@@ -128,6 +179,115 @@ class DeskSelection(fixtures: () -> Fixtures?) {
         }
         return selected
     }
+
+    /**
+     * Rewrite the selection's targets by [mode] (busk-further plan D12, §3.5). The mask is kept and
+     * [source] becomes the mover; a rewrite that changes nothing emits nothing.
+     *
+     * The **unit** the odd / even / half modes count is decided by what is selected: over the
+     * selection's **cells** where any selected head has elements (or is itself a cell), over heads
+     * where none does. Units are counted in rig order — a group's members in member order, a
+     * fixture's cells in element order — so *Odd* on a group of bars is every other cell across the
+     * bars, not every other bar. [SubselectMode.INVERT] takes the rig as its universe at that same
+     * granularity. [SubselectMode.NEXT] / [SubselectMode.PREV] step the whole selection one **step**
+     * of the rig (a group tile is one step, a `PER_CELL` tile one per cell, a `HALVES` tile one per
+     * half), at cell granularity when every selected target is a cell — so *Next* on one pip moves
+     * to the next pip — and wrapping at either end. Cells are read through `TargetCoverage`, never
+     * parsed.
+     */
+    fun subselect(mode: SubselectMode, source: SelectionSource? = null) {
+        // The rig read is a database transaction in production. Taken once, outside the atomic
+        // update — whose lambda re-runs on a lost compare-and-set — and only for the modes that
+        // count along the rig; `ALL` and `MASTERS` are pure rewrites of the written targets.
+        val order = if (mode.readsRig) rigOrder() else null
+        _state.update { current ->
+            val next = rewrite(current.targets, mode, order) ?: return@update current
+            if (next == current.targets) current else current.copy(targets = next, source = source)
+        }
+    }
+
+    private val SubselectMode.readsRig: Boolean
+        get() = this != SubselectMode.ALL && this != SubselectMode.MASTERS
+
+    /** The rewritten targets, or null when [mode] cannot act (no rig order for a stepping mode). */
+    private fun rewrite(targets: List<CueTargetDto>, mode: SubselectMode, order: BuskRigOrder?): List<CueTargetDto>? {
+        return when (mode) {
+            SubselectMode.ALL -> targets.map { coverageRule.parentOf(it) ?: it }.distinct()
+            SubselectMode.MASTERS -> targets.filter { coverageRule.parentOf(it) == null }
+            SubselectMode.ODD, SubselectMode.EVEN, SubselectMode.FIRST_HALF, SubselectMode.SECOND_HALF -> {
+                val units = units(targets, order)
+                val half = (units.size + 1) / 2
+                when (mode) {
+                    SubselectMode.ODD -> units.filterIndexed { i, _ -> i % 2 == 0 }
+                    SubselectMode.EVEN -> units.filterIndexed { i, _ -> i % 2 == 1 }
+                    SubselectMode.FIRST_HALF -> units.take(half)
+                    else -> units.drop(half)
+                }
+            }
+            SubselectMode.INVERT -> {
+                val cellular = isCellular(targets)
+                val universe = if (order != null) {
+                    order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS).flatten()
+                } else {
+                    fixturesProvider()?.fixtures?.map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }.orEmpty()
+                }
+                val selected = coverageRule.expand(targets).toSet()
+                unitsOf(coverageRule.expand(universe), cellular).filterNot { coverageRule.covers(selected, it) }
+            }
+            SubselectMode.NEXT, SubselectMode.PREV -> {
+                if (order == null) return null
+                val cellular = targets.isNotEmpty() && targets.all { coverageRule.parentOf(it) != null }
+                val steps = order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS)
+                if (steps.isEmpty()) return null
+                // A step is occupied when the selection covers every target on it — and not when a
+                // *larger* occupied step already covers it: with a group selected, its member's own
+                // tile is lit too, but the selection is one thing and steps as one thing.
+                val covered = steps.indices.filter { i -> steps[i].all { covers(targets, it) } }
+                // Each covered step expanded once, not once per pair: with everything selected this
+                // is every step of the band, and the pairwise test below is over all of them.
+                val expanded = covered.associateWith { coverageRule.expand(steps[it]).toSet() }
+                val occupied = covered.filter { i ->
+                    covered.none { j -> j != i && stepSubsumes(steps[j], expanded.getValue(j), steps[i], expanded.getValue(i)) }
+                }
+                val delta = if (mode == SubselectMode.NEXT) 1 else -1
+                val moved = if (occupied.isEmpty()) {
+                    listOf(if (mode == SubselectMode.NEXT) 0 else steps.lastIndex)
+                } else {
+                    occupied.map { (it + delta + steps.size) % steps.size }.sorted()
+                }
+                moved.flatMap { steps[it] }.distinct()
+            }
+        }
+    }
+
+    /**
+     * True when [outer] covers every target of [inner] and [inner] does not cover all of [outer];
+     * [outerHeads] / [innerHeads] are the two steps' expansions, computed once by the caller.
+     */
+    private fun stepSubsumes(
+        outer: List<CueTargetDto>,
+        outerHeads: Set<CueTargetDto>,
+        inner: List<CueTargetDto>,
+        innerHeads: Set<CueTargetDto>,
+    ): Boolean {
+        if (!inner.all { coverageRule.covers(outerHeads, it) }) return false
+        return !outer.all { coverageRule.covers(innerHeads, it) }
+    }
+
+    /** True when the selection is at cell granularity: any selected head has cells, or is one. */
+    private fun isCellular(targets: List<CueTargetDto>): Boolean =
+        coverageRule.expand(targets).any { coverageRule.parentOf(it) != null || coverageRule.cells(it).isNotEmpty() }
+
+    /** The selection's units in rig order: its heads, or their cells when [isCellular]. */
+    private fun units(targets: List<CueTargetDto>, order: BuskRigOrder?): List<CueTargetDto> {
+        val heads = coverageRule.expand(targets).distinct()
+        val ordered = order?.sort(heads) ?: heads
+        return unitsOf(ordered, isCellular(targets))
+    }
+
+    private fun unitsOf(heads: List<CueTargetDto>, cellular: Boolean): List<CueTargetDto> =
+        if (!cellular) heads.distinct()
+        else heads.flatMap { head -> coverageRule.cells(head).ifEmpty { listOf(head) } }.distinct()
 
     /** The selection with every group expanded to its member fixtures. */
     fun coverage(): List<CueTargetDto> = coverageRule.expand(_state.value.targets)

@@ -7,6 +7,10 @@ import uk.me.cormack.lighting7.fx.toMaskNames
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.DeskSelection
 import uk.me.cormack.lighting7.state.SelectionSource
+import uk.me.cormack.lighting7.state.SubselectMode
+import org.slf4j.LoggerFactory
+
+private val selectionLogger = LoggerFactory.getLogger("selectionSocket")
 
 // ─── Inbound ────────────────────────────────────────────────────────────
 
@@ -56,6 +60,19 @@ data class SelectionToggleInMessage(
 @SerialName("selection.clear")
 data object SelectionClearInMessage : SelectionInMessage()
 
+/**
+ * Rewrite the selection's targets by a [uk.me.cormack.lighting7.state.SubselectMode] name — the
+ * Cells chip and the `SelectionCells` / `SelectionNext` / `SelectionPrev` buttons, one rule on the
+ * desk (busk-further plan D12). The mask is kept; `source` is stamped as for any write. An unknown
+ * mode is dropped with a log line, as an unknown family name is.
+ */
+@Serializable
+@SerialName("selection.subselect")
+data class SelectionSubselectInMessage(
+    val mode: String,
+    val sourceName: String? = null,
+) : SelectionInMessage()
+
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -88,6 +105,14 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
         )
         is SelectionToggleInMessage -> selection.toggle(message.target, scope.selectionSource(message.sourceName))
         is SelectionClearInMessage -> selection.clear()
+        is SelectionSubselectInMessage -> {
+            val mode = SubselectMode.byName(message.mode)
+            if (mode == null) {
+                selectionLogger.warn("selection.subselect dropped: '{}' is not a mode", message.mode)
+            } else {
+                selection.subselect(mode, scope.selectionSource(message.sourceName))
+            }
+        }
     }
 }
 

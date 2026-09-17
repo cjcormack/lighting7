@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.fx.MasterClock
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.state.SubselectMode
 
 /**
  * What a bound [ControlDescriptor] drives when the user moves / presses it.
@@ -31,6 +32,10 @@ import uk.me.cormack.lighting7.models.CueTargetDto
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
  *   - **Busk pages** ([BuskPageNext], [BuskPagePrev], [BuskPageSet]) — move the desk's showing busk
  *     page (`state.BuskPageState`), which the busk view follows.
+ *   - **Windows and the sub-selection** ([BuskFocusSet], [BuskSheetToggle], [SelectionNext],
+ *     [SelectionPrev], [SelectionCells]) — a named desk window's busk focus and sheet through
+ *     `windows.viewOptions`, and the selection's targets through `DeskSelection.subselect`
+ *     (busk-further plan D12, D14).
  *
  * Cue and stack variants carry a **uuid beside the int id** ([FireCue.cueUuid],
  * [CueStackGo.stackUuid] …). The int is what the REST client sends and what `CueStackManager`
@@ -339,6 +344,55 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("buskPageSet")
     data class BuskPageSet(val pageUuid: String) : BindingTarget()
+
+    /**
+     * Set a desk window's busk **focus** — `split`, `pads` or `rig` — on button press (busk-further
+     * plan D14). The window is named by its **registry name**, since a binding cannot hold a
+     * socket-minted row id; the press sends one `windows.viewOptions {focus}` to **every** connected
+     * row of that name (duplicate names are allowed, multi-screen plan D9), and a name matching no
+     * connected window is a logged no-op with health `missingWindow`, re-evaluated as windows come
+     * and go. No LED: focus is that window's own tab fact, not a desk state.
+     */
+    @Serializable
+    @SerialName("buskFocusSet")
+    data class BuskFocusSet(val windowName: String, val focus: String) : BindingTarget() {
+        init {
+            require(focus in FOCUSES) { "BuskFocusSet focus must be one of $FOCUSES" }
+        }
+
+        companion object {
+            /** The three focus values the busk view has (busk-further plan §3.4). */
+            val FOCUSES: Set<String> = setOf("split", "pads", "rig")
+        }
+    }
+
+    /**
+     * Open or fold a desk window's busk **side sheet** on button press — `windows.viewOptions
+     * {sheet: toggle}` to every connected row named [windowName]; the window flips between its fold
+     * and its last tab. Addressed and judged exactly as [BuskFocusSet]. No LED.
+     */
+    @Serializable
+    @SerialName("buskSheetToggle")
+    data class BuskSheetToggle(val windowName: String) : BindingTarget()
+
+    /** Step the whole desk selection one place along rig order on press, wrapping (`SubselectMode.NEXT`). */
+    @Serializable
+    @SerialName("selectionNext")
+    data object SelectionNext : BindingTarget()
+
+    /** Step the whole desk selection one place back along rig order on press, wrapping (`SubselectMode.PREV`). */
+    @Serializable
+    @SerialName("selectionPrev")
+    data object SelectionPrev : BindingTarget()
+
+    /**
+     * Rewrite the desk selection's targets by [mode] on press — the Cells chip on a button, through
+     * the same `DeskSelection.subselect` the chip's `selection.subselect` frame reaches. A
+     * sub-selection is not a state the desk keeps, so there is no LED (`FU-SURFACE-SUBSELECT-LED`).
+     */
+    @Serializable
+    @SerialName("selectionCells")
+    data class SelectionCells(val mode: SubselectMode) : BindingTarget()
 
     /**
      * A persisted payload whose `type` this build does not know. Never constructed by a client

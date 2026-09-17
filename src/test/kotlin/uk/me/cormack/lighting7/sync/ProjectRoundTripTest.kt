@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
+import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
@@ -143,6 +144,101 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(CueSlotJson.serializer(), Files.readString(it)) }
         }
         assertEquals(1, slots.count { it.lookUuid != null }, "the Look slot travels")
+    }
+
+    /**
+     * v12: the rig travels as one document per row with its tiles nested, naming groups and patches
+     * by uuid and a cell by its key, every structural field written. The byte-for-byte test proves
+     * the importer keeps what the exporter writes; this pins what the exporter writes.
+     */
+    @Test
+    fun `the busk rig exports one document per row with every tile field written`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val rows = Files.list(exportDirA.resolve("buskRig")).use { stream ->
+            stream.toList().map { canonicalDecode(BuskRigRowJson.serializer(), Files.readString(it)) }
+        }.sortedBy { it.sortOrder }
+        assertEquals(listOf("Bars", "Wash"), rows.map { it.name })
+        assertEquals(listOf(0, 1), rows.map { it.sortOrder })
+        val bars = rows[0]
+        assertEquals(listOf("HALVES", "PER_CELL", "WHOLE"), bars.tiles.map { it.cellMode })
+        assertEquals(listOf(3, null, null), bars.tiles.map { it.cellSplit })
+        assertEquals(listOf(null, null, "bar-1.pixel-3"), bars.tiles.map { it.elementKey })
+        assertEquals(listOf(null, null, "Pixel 4"), bars.tiles.map { it.label })
+        assertTrue(bars.tiles.all { it.patchUuid != null && it.groupUuid == null })
+        val wash = rows[1]
+        assertEquals("Front", wash.tiles[0].label)
+        assertTrue(wash.tiles[0].groupUuid != null && wash.tiles[0].patchUuid == null, "a group tile names its group")
+        assertEquals("WHOLE", wash.tiles[1].cellMode)
+        val text = Files.readString(Files.list(exportDirA.resolve("buskRig")).use { it.findFirst().get() })
+        assertTrue(text.contains("\"sortOrder\": 0"), "a zero position is written, not omitted")
+    }
+
+    /**
+     * The importer's wipe order (busk-further plan §3.2): a rig tile is a plain FK onto a group or a
+     * patch with no cascade, so replacing a project must sweep the rig **before** it deletes the
+     * groups and patches — otherwise the FK blocks them. Proved by replacing a project that holds
+     * a rig with an archive that also holds one: the replace succeeds and the rig is the archive's.
+     */
+    @Test
+    fun `replacing a project sweeps its rig before its groups and patches, then imports the archive's`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        ProjectImporter(state).replaceFromWorkingTree(projectId, exportDirA)
+        ProjectExporter(state).export(projectId, exportDirB)
+        assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+        val rows = Files.list(exportDirB.resolve("buskRig")).use { it.toList() }
+        assertEquals(2, rows.size, "the rig came back from the archive, once")
+    }
+
+    /** A v11 archive has no `buskRig/`, and imports as an empty rig — today's band (D1). */
+    @Test
+    fun `an archive without a rig folder imports as an empty rig`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        exportDirA.resolve("buskRig").toFile().deleteRecursively()
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 12", "\"formatVersion\": 11"),
+        )
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        assertTrue(!Files.exists(exportDirB.resolve("buskRig")) || Files.list(exportDirB.resolve("buskRig")).use { it.count() } == 0L)
+    }
+
+    /**
+     * A tile naming a group or patch the archive does not carry is an enrichment that has lost its
+     * record, so the pull continues without it — the pad's posture — and a row left empty goes too.
+     */
+    @Test
+    fun `a rig tile naming a record the archive lacks is dropped and the rig survives`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val washFile = Files.list(exportDirA.resolve("buskRig")).use { stream ->
+            stream.toList().first { Files.readString(it).contains("\"name\": \"Wash\"") }
+        }
+        val original = Files.readString(washFile)
+        val corrupt = original.replaceFirst(
+            Regex("\"groupUuid\": \"[0-9a-f-]+\""),
+            "\"groupUuid\": \"00000000-0000-0000-0000-000000000000\"",
+        )
+        assertTrue(corrupt != original, "test sanity: the group tile was rewritten")
+        Files.writeString(washFile, corrupt)
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val rows = Files.list(exportDirB.resolve("buskRig")).use { stream ->
+            stream.toList().map { canonicalDecode(BuskRigRowJson.serializer(), Files.readString(it)) }
+        }
+        val wash = rows.single { it.name == "Wash" }
+        assertEquals(1, wash.tiles.size, "one tile fewer, nothing else lost")
+        assertEquals(3, rows.single { it.name == "Bars" }.tiles.size)
     }
 
     /**

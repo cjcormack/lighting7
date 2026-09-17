@@ -129,6 +129,16 @@ sealed class AssignmentHealth {
     data class MissingPage(val pageUuid: String) : AssignmentHealth()
 
     /**
+     * A `buskFocusSet` / `buskSheetToggle` binding names a desk **window** by its registry name and
+     * no connected window has it (busk-further plan D14). Control-surface-only, and unlike every
+     * other arm it is **transient**: it clears the moment a window of that name announces, which is
+     * why the health re-evaluates on every registry change rather than only on the fixture hooks.
+     */
+    @Serializable
+    @SerialName("missingWindow")
+    data class MissingWindow(val windowName: String) : AssignmentHealth()
+
+    /**
      * An `applyLook` binding names a Look that exists but has gained a **deferred effect**, so it
      * has no own targets to press onto and a button has no selection to supply. Refused at bind
      * time; this is the state a Look edited afterwards falls into. Control-surface-only.
@@ -173,5 +183,6 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingPad -> "missing busk pad ${health.padUuid}"
     is AssignmentHealth.MissingBank -> "missing busk bank ${health.bankUuid}"
     is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"
+    is AssignmentHealth.MissingWindow -> "no connected window named '${health.windowName}'"
     is AssignmentHealth.LookNeedsSelection -> "Look ${health.lookUuid} has a deferred effect and needs a selection"
 }

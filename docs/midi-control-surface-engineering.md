@@ -373,6 +373,10 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `HandDrop` | Button | `HandState.drop()`; a no-op on an empty hand. Addresses nothing, so it can never be dead. No LED |
 | `BuskPageNext` / `BuskPagePrev` | Button | `BuskPageState.step(±1)`, wrapping. Page-agnostic, so always healthy — a project with no pages simply has nowhere to step |
 | `BuskPageSet(pageUuid)` | Button | `BuskPageState.setByUuid`; LED lit while that page is the one showing |
+| `BuskFocusSet(windowName, focus)` | Button | One `windows.viewOptions {focus}` to **every** connected window named `windowName`, each addressed by its own row id and carrying the view that row announced; `focus ∈ split · pads · rig`, refused otherwise at construction. Health `missingWindow` while no connected window has the name, **re-evaluated on every registry change**. No LED — focus is that window's tab fact, not a desk state |
+| `BuskSheetToggle(windowName)` | Button | `windows.viewOptions {sheet: toggle}` to every connected window of that name; the window flips between its fold and its last tab. Addressed and judged as `BuskFocusSet`. No LED |
+| `SelectionNext` / `SelectionPrev` | Button | `DeskSelection.subselect(NEXT / PREV)`: the whole selection one step along the rig order, a group as a group, one cell when only cells are selected, wrapping. Always healthy. No LED |
+| `SelectionCells(mode)` | Button | `DeskSelection.subselect(mode)` — the Cells chip's rule (`ALL` · `ODD` · `EVEN` · `FIRST_HALF` · `SECOND_HALF` · `INVERT` · `MASTERS` and the two steps) on a button, one op with the chip's `selection.subselect`. Always healthy; a sub-selection is not a desk state, so no LED (`FU-SURFACE-SUBSELECT-LED`) |
 | `Unknown(targetType, rawPayload)` | — | Never dispatched: health `unknownTarget` gates it. Produced only by the tolerant row decode for a `type` this build does not know; re-encoded verbatim; refused by the create / PATCH routes |
 
 The cue and stack variants carry a **uuid beside the int** (`FireCue(cueId, cueUuid?)`,
@@ -390,6 +394,15 @@ behaviour**, which is the whole design rule (`docs/plans/completed/midi-surface-
 onto its own fixtures, a template always onto the selection, a pad always its own bank's plan. A
 button that meant different things depending on what was selected is what a fixed binding exists not
 to be.
+
+**A window-addressed target names its window by registry name**, not by row id, because a binding
+has to survive the socket that minted the id (busk-further plan D14). Duplicate names are allowed
+(multi-screen plan D9) and every row of the name receives the command; a name matching no connected
+window is a logged no-op at press time and `missingWindow` in health. That health is the one arm
+that is not a database fact, so `SurfaceFeedbackPublisher` collects `WindowRegistry.windows` (by
+name set) and re-runs `invalidateHealth` on every change — without it a binding made before its
+screen was opened stayed dead after the screen arrived. `FU-WINDOWS-NAME-ADDRESSED-BINDING` is the
+item for when duplicate names ever matter.
 
 ### Bind-time refusals
 
@@ -624,7 +637,9 @@ group expands to itself, so a stale entry stays comparable rather than vanishing
 
 The surface reaches it through three targets (`SelectionProperty`, `SelectTarget`,
 `ClearSelection`) plus `LocateSelection`, and — since the record variants — `PressTemplate` and
-`PressPad` too; the router stays selection-blind — every arm calls a `SurfaceActions` method and
+`PressPad` too, and since the busk-further plan `SelectionNext` / `SelectionPrev` /
+`SelectionCells`, which rewrite the selection's targets over the rig order through
+`DeskSelection.subselect` (`docs/lighting-composition-model.md` §"The rig"); the router stays selection-blind — every arm calls a `SurfaceActions` method and
 `DefaultSurfaceActions` reads `state.deskSelection`, which is what keeps `RecordingActions` a
 complete test double.
 

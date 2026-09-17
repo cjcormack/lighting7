@@ -937,6 +937,14 @@ private class RecordingActions : SurfaceActions {
     override fun handDrop() { calls += RecordedCall.HandDrop }
     override fun buskPageStep(delta: Int) { calls += RecordedCall.BuskPageStep(delta) }
     override fun buskPageSet(pageUuid: String) { calls += RecordedCall.BuskPageSet(pageUuid) }
+
+    val windowCommands = mutableListOf<String>()
+    val subselects = mutableListOf<uk.me.cormack.lighting7.state.SubselectMode>()
+    val selectionSteps = mutableListOf<Int>()
+    override fun buskFocusSet(windowName: String, focus: String) { windowCommands += "focus:$windowName:$focus" }
+    override fun buskSheetToggle(windowName: String) { windowCommands += "sheet:$windowName" }
+    override fun selectionStep(delta: Int) { selectionSteps += delta }
+    override fun selectionCells(mode: uk.me.cormack.lighting7.state.SubselectMode) { subselects += mode }
 }
 
 /** Recording fake of [SurfaceFeedbackHooks] for tests. */

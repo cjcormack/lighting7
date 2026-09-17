@@ -228,6 +228,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
             } else null
 
+            var sweptCellTiles = 0
             val result = transaction(state.database) {
                 val patch = DaoFixturePatch.findById(resource.patchId)
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
@@ -244,6 +245,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if (existing != null && existing.id != patch.id) {
                         return@transaction Pair<FixturePatchDto?, String?>(null, "Key '$newKey' already exists")
                     }
+                    // A cell tile on the busk rig stores an element key that embeds this key, and
+                    // the desk never parses one — so a rename sweeps the patch's cell tiles rather
+                    // than leaving keys the next rig write would refuse (`deleteBuskRigCellTilesOf`).
+                    if (newKey != patch.key) sweptCellTiles += deleteBuskRigCellTilesOf(patch.id.value)
                     patch.key = newKey
                 }
                 body["startChannel"].nullableInt()?.let { patch.startChannel = it }
@@ -318,6 +323,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 )
             }
             state.show.fixtures.patchListChanged()
+            if (sweptCellTiles > 0) state.show.fixtures.buskRigChanged()
 
             call.respond(patchDto!!)
         }
@@ -529,21 +535,26 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     delete<ProjectPatchResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val patch = DaoFixturePatch.findById(resource.patchId) ?: return@transaction false
-                if (patch.project.id != project.id) return@transaction false
+                val patch = DaoFixturePatch.findById(resource.patchId) ?: return@transaction null
+                if (patch.project.id != project.id) return@transaction null
+
+                // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
+                // FK has no cascade (`DaoBuskRigTiles`).
+                val sweptTiles = deleteBuskRigTilesReferencing(patchId = patch.id.value)
 
                 // Remove from any groups first
                 DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
                     .forEach { it.delete() }
 
                 patch.delete()
-                true
+                sweptTiles
             }
 
-            if (!deleted) {
+            if (deleted == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Patch not found"))
                 return@withProject
             }
+            if (deleted > 0) state.show.fixtures.buskRigChanged()
 
             if (state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)

@@ -121,7 +121,7 @@ as a control in the Screens sheet.
 ## Related documentation
 
 - [WebSocket Protocol](websocket-engineering.md) §"Windows" — the `windows.*` family: the registry,
-  the announce, and the three commands one screen sends another
+  the announce, and the four commands one screen sends another
 - [Composition Model](lighting-composition-model.md) — why the selection is one desk fact and not
   one per window
 - [Windows Updates](windows-updates.md) — the launcher these tray items live in

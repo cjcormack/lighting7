@@ -69,6 +69,11 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     BindingTarget.BuskPageNext,
     BindingTarget.BuskPagePrev,
     is BindingTarget.BuskPageSet,
+    is BindingTarget.BuskFocusSet,
+    is BindingTarget.BuskSheetToggle,
+    BindingTarget.SelectionNext,
+    BindingTarget.SelectionPrev,
+    is BindingTarget.SelectionCells,
         -> ControlKind.BUTTON
 
     is BindingTarget.Strip,

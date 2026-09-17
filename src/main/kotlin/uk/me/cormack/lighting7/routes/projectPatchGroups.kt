@@ -102,18 +102,22 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
     delete<ProjectPatchGroupResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val deleted = transaction(state.database) {
-                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction false
-                if (group.project.id != project.id) return@transaction false
+                val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
+                if (group.project.id != project.id) return@transaction null
+                // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
+                // FK has no cascade (`DaoBuskRigTiles`).
+                val sweptTiles = deleteBuskRigTilesReferencing(groupId = group.id.value)
                 // Remove all memberships (fixtures stay, just unlinked from group)
                 group.members.forEach { it.delete() }
                 group.delete()
-                true
+                sweptTiles
             }
 
-            if (!deleted) {
+            if (deleted == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Group not found"))
                 return@withProject
             }
+            if (deleted > 0) state.show.fixtures.buskRigChanged()
 
             if (state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)

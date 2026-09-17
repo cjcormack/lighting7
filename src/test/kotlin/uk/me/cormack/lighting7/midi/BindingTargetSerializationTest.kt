@@ -201,6 +201,30 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `the window and sub-selection variants round trip with their discriminators`() {
+        val cases = mapOf<String, BindingTarget>(
+            "buskFocusSet" to BindingTarget.BuskFocusSet("Screen 2", "rig"),
+            "buskSheetToggle" to BindingTarget.BuskSheetToggle("Screen 2"),
+            "selectionNext" to BindingTarget.SelectionNext,
+            "selectionPrev" to BindingTarget.SelectionPrev,
+            "selectionCells" to BindingTarget.SelectionCells(uk.me.cormack.lighting7.state.SubselectMode.ODD),
+        )
+        for ((type, target) in cases) {
+            val encoded = BindingTargetJson.encodeToString(target)
+            val tree = BindingTargetJson.parseToJsonElement(encoded) as JsonObject
+            assertEquals(type, tree["type"]?.jsonPrimitive?.content)
+            assertEquals(type, target.discriminator())
+            assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        }
+        assertEquals(
+            """{"type":"selectionCells","mode":"ODD"}""",
+            BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.SelectionCells(uk.me.cormack.lighting7.state.SubselectMode.ODD)),
+            "the mode travels by name, which is what the client's surfaceDrop.ts mirror writes",
+        )
+        assertFailsWith<IllegalArgumentException> { BindingTarget.BuskFocusSet("Screen 2", "sideways") }
+    }
+
+    @Test
     fun `Unknown names the type it was written with and re-encodes its bytes verbatim`() {
         val unknown = BindingTarget.Unknown(targetType = "fromTheFuture", rawPayload = """{"type":"fromTheFuture","x":1}""")
         assertEquals("fromTheFuture", unknown.discriminator())

@@ -8,6 +8,9 @@ import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.BuskFlow
+import uk.me.cormack.lighting7.models.BuskRigCellMode
+import uk.me.cormack.lighting7.models.DaoBuskRigRow
+import uk.me.cormack.lighting7.models.DaoBuskRigTile
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
 import uk.me.cormack.lighting7.models.DaoBuskPad
@@ -163,6 +166,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // stageHidden exists for (real DMX, not a stage object).
             if (i == 4) stageHidden = true
         }
+    }
+    // A multi-head bar (v12), so the busk rig below can hold a HALVES tile, a PER_CELL tile and a
+    // single-cell tile — none of which a hex can carry.
+    val bar = DaoFixturePatch.new {
+        this.project = project
+        universeConfig = u0
+        fixtureTypeKey = "led-lightbar-12-pixel-48ch"
+        key = "bar-1"; displayName = "Bar 1"; startChannel = 100; sortOrder = 5
     }
     val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }
     DaoFixtureGroupMember.new {
@@ -502,6 +513,18 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoBuskPad.new { bank = fxBank; sortOrder = 1; look = effectsLook }
     // The same template on a second pad — one record, two places.
     DaoBuskPad.new { bank = fxBank; sortOrder = 2; template = colourTemplate }
+
+    // The **busk rig** (v12): two rows, every tile shape — a group tile with a label, a WHOLE
+    // fixture tile, a HALVES tile with its split, a PER_CELL tile and a single-cell tile — and
+    // every field off-default (a non-zero row position, a non-PIPS mode, a split, a label, an
+    // element key) so a copier that drops one is caught rather than passing vacuously.
+    val wash = DaoBuskRigRow.new { this.project = project; name = "Wash"; sortOrder = 1 }
+    DaoBuskRigTile.new { row = wash; sortOrder = 0; group = groupA; label = "Front" }
+    DaoBuskRigTile.new { row = wash; sortOrder = 1; patch = patches[2]; cellMode = BuskRigCellMode.WHOLE.name }
+    val bars = DaoBuskRigRow.new { this.project = project; name = "Bars"; sortOrder = 0 }
+    DaoBuskRigTile.new { row = bars; sortOrder = 0; patch = bar; cellMode = BuskRigCellMode.HALVES.name; cellSplit = 3 }
+    DaoBuskRigTile.new { row = bars; sortOrder = 1; patch = bar; cellMode = BuskRigCellMode.PER_CELL.name }
+    DaoBuskRigTile.new { row = bars; sortOrder = 2; patch = bar; elementKey = "bar-1.pixel-3"; cellMode = BuskRigCellMode.WHOLE.name; label = "Pixel 4" }
 
     // prompt book with an anchor (FK-by-UUID to a cue) and two annotation kinds
     val promptBook = DaoPromptBook.new {

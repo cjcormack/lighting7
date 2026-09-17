@@ -98,6 +98,15 @@ data object CueSlotListChangedOutMessage : BroadcastOutMessage()
 @SerialName("busk.layoutChanged")
 data class BuskLayoutChangedOutMessage(val pageIds: List<Int>) : BroadcastOutMessage()
 
+/**
+ * The busk **rig** changed — a whole-document write, or a group or patch delete that took tiles off
+ * it. Keyed by name (dotted, per the naming rule) but **payload-free**: there is one rig per project
+ * (busk-further plan D1), so there is no id to carry and the client re-reads the one document.
+ */
+@Serializable
+@SerialName("busk.rigChanged")
+data object BuskRigChangedOutMessage : BroadcastOutMessage()
+
 @Serializable
 @SerialName("patchListChanged")
 data object PatchListChangedOutMessage : BroadcastOutMessage()
@@ -235,6 +244,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)
         override fun cueSlotListChanged() = fire(CueSlotListChangedOutMessage)
         override fun buskLayoutChanged(pageIds: List<Int>) = fire(BuskLayoutChangedOutMessage(pageIds))
+        override fun buskRigChanged() = fire(BuskRigChangedOutMessage)
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
