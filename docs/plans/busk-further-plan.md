@@ -718,6 +718,13 @@ Beyond the unit suites, the desk checks, in the order the sessions land:
    and two cells, Save as template, and the rig itself are **still to check at the desk**.
 5. **Spread** (after session 6): amber → blue across two bars, Line, Over Cells — sixteen steps;
    Over Heads — two; Mirror and Wings read as their pictures; Save as Look pads it.
+   *Session 6, 2026-09-18, browser pass on the dev desk (project 6):* amber → blue, Line, over a
+   par and the twelve-cell bar — Over Heads two steps with the bar skipped by name ("no colour",
+   its colour lives on its cells) and Over Cells thirteen, the bar folded into one twelve-segment
+   preview bar drawn only after the desk answered; a typed byte under Live sent a request without
+   Apply and moved the rig tile's live bar; the overlay at 852×393 carried Colour and Spread and
+   no Speed. **Still to check at the desk:** Mirror and Wings against their pictures, Random's
+   reshuffle, a `tmpl:` endpoint, and Save as Look padding the result.
 6. **Cells and MIDI** (after session 7): Odd on a group of bars; Next on the X-Touch steps one
    cell; a BuskFocusSet button flips Screen 2, and its health goes green when Screen 2 connects;
    a fader bound to it is refused at write.
