@@ -536,7 +536,8 @@ each pass; the list below is where the review found the gaps, not a substitute f
   `useCellEditorForm`, opened from a button on the page strip, and carries no Speed tab (D7).
   *Session 4 amendment:* with Speed excluded and Colour and Spread not landed, that sheet has no
   tab to open onto, so `SideSheetOverlay` never opens and the strip's button is drawn inert with
-  the reason on its title; the `Phones` board's merged 32px strip on a short viewport is not built.
+  the reason on its title; the `Phones` board's merged 32px strip on a short viewport is not built
+  (moved to session 5).
 - `lib/windowViews.ts`: `options` on the busk entry (D13, Sheet as one enum with `none`);
   `api/windowsApi.ts`: `viewOptions` on the announce (the pinned key set in `windowsApi.test.ts`
   becomes six keys plus `type`), `windows.viewOptions` in and out; `useWindowsBridge.ts` handles
@@ -572,9 +573,23 @@ each pass; the list below is where the review found the gaps, not a substitute f
   *mixed* shown when they disagree); *Save as template…* opens `NewTemplateFromSelectionSheet`
   with the sheet's targets; the *Second colour* switch opens the Spread tab with From set
   (session 6 wires the far end).
+- **The short-viewport fold** (`Phones` board, landscape phone, carried over from session 4
+  which did not build it): where the viewport is short (`max-height: 500px`) but at or above
+  `md`, *short beats narrow* — the rig strip and the page strip merge into **one 32px row**
+  (`Rig · summary · pill · Targets: Desk` on the left, the page tabs, page chip and Focus
+  glyphs on the right), Split shows one row of 48px tiles with the row chip as below `md`, the
+  side sheet **overlays** rather than docks (the fold and the docked rail are not drawn; the
+  sheet is `SideSheetOverlay`'s right-hand form, 288 wide, Colour in its compact layout), and
+  *Edit layout* is withheld as it is below `md`, since a palette drag needs both regions. The
+  defaults are already Pads and `none` from `buskWindow.ts`'s ladder; what changes is which
+  board `BuskingView` draws, so `isDesktop` gains a short arm read from the same duplicated
+  query (`shortViewport.test.ts` gains the site) rather than a new number.
 - Tests: `useLivePush.test.ts`, `ColourSheet.test.tsx` (per-target writes; emitters by union;
-  Pick; Recent is an apply; no write under an empty selection, toasts as the strip does).
-- Docs: CLAUDE.md §"Focus and the side sheet" gains the Colour paragraph (D8, verbatim rules).
+  Pick; Recent is an apply; no write under an empty selection, toasts as the strip does),
+  `BuskingView.test.tsx` (the short-viewport board: merged strip, overlay not docked, no *Edit
+  layout*), `shortViewport.test.ts`.
+- Docs: CLAUDE.md §"Focus and the side sheet" gains the Colour paragraph (D8, verbatim rules)
+  and the short-viewport board.
 
 ### Session 6 — the Spread tab (lighting-react) — Opus 5, high
 
