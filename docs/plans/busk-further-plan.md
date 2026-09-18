@@ -666,6 +666,13 @@ Beyond the unit suites, the desk checks, in the order the sessions land:
 3. **Focus and screens** (after session 4): Screen 1 Rig + Colour, Screen 2 Pads on Position; set
    Screen 2's focus and page from Screen 1's Screens sheet; copy the link, open it on the iPad —
    it arrives as drawn; rotate a phone with the Colour tab open — bottom sheet becomes side sheet.
+   *Session 4, 2026-09-18, browser pass on the dev desk (project 6):* the three shapes, the
+   handle's snaps, the fold and the docked sheet at 1440×900 and 820×1180, edit mode forcing
+   Split, the Screens sheet's Focus / Sheet / Page controls, a focus set from one tab landing in
+   a second tab launched at `?window=Screen%202&focus=pads&sheet=none`, the per-row Copy link,
+   the ⌘K focus arm as two frames, and a reload keeping the shape were all seen. **Deferred:**
+   the two real desk screens, the iPad arrival from a copied link and the phone rotation are
+   still to check at the desk — Chris is away from it for a while, and session 5 need not wait.
 4. **Colour** (after session 5): drag the picker with a group and two cells selected — the rig
    follows at stage cadence; Pick reads the current colour back; Save as template lands in the
    library and the recents row.
