@@ -1,8 +1,8 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
 > **Document status: IN PROGRESS, 2026-09-18 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3, 4 and 5 (lighting-react) landed, `e7b540a8`, `51e9f8c1` and session
-> 5's hash in a later docs commit; sessions 6 and 7 not started.** Each landed session's heading in §5
+> and `6e2cc72`; sessions 3, 4 and 5 (lighting-react) landed, `e7b540a8`, `51e9f8c1` and
+> `db9542cd`; sessions 6 and 7 not started.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -558,7 +558,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Docs: CLAUDE.md §"The busk layout" gains §"Focus and the side sheet"; §"Windows, full screen
   and the hand" gains the viewOptions paragraph and the announce key rule.
 
-### Session 5 — the Colour tab (lighting-react) — Sonnet 5, high — **landed**
+### Session 5 — the Colour tab (lighting-react) — Sonnet 5, high — **landed**, `db9542cd`
 
 - Extract `hooks/useLivePush.ts` from `BuskSpeedRail.tsx`'s private `useLiveTempoPush` — generic
   over the value: dedupe, the 50ms floor, a deferred value held and sent when the floor lifts, the
@@ -704,6 +704,11 @@ Beyond the unit suites, the desk checks, in the order the sessions land:
 4. **Colour** (after session 5): drag the picker with a group and two cells selected — the rig
    follows at stage cadence; Pick reads the current colour back; Save as template lands in the
    library and the recents row.
+   *Session 5, 2026-09-18, browser pass on the dev desk (project 6):* typed bytes reaching two
+   heads at the live push's cadence and echoing back on the rig tiles, Pick reading the rig
+   without writing and saying *mixed*, a Recent chip landing as an apply, the overlay on the short
+   board (852×393) and the merged 32px row were all seen; a real drag of the picker with a group
+   and two cells, Save as template, and the rig itself are **still to check at the desk**.
 5. **Spread** (after session 6): amber → blue across two bars, Line, Over Cells — sixteen steps;
    Over Heads — two; Mirror and Wings read as their pictures; Save as Look pads it.
 6. **Cells and MIDI** (after session 7): Odd on a group of bars; Next on the X-Touch steps one
