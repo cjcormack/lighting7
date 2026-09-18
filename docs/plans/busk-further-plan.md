@@ -1,8 +1,8 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
 > **Document status: IN PROGRESS, 2026-09-18 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3, 4 and 5 (lighting-react) landed, `e7b540a8`, `51e9f8c1` and
-> `db9542cd`; sessions 6 and 7 not started.** Each landed session's heading in §5
+> and `6e2cc72`; sessions 3, 4, 5 and 6 (lighting-react) landed, `e7b540a8`, `51e9f8c1`,
+> `db9542cd` and `aefcf5dd`; session 7 not started.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -604,7 +604,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Docs: CLAUDE.md §"Focus and the side sheet" gains the Colour paragraph (D8, verbatim rules)
   and the short-viewport board.
 
-### Session 6 — the Spread tab (lighting-react) — Opus 5, high
+### Session 6 — the Spread tab (lighting-react) — Opus 5, high — **landed**, `aefcf5dd`
 
 - `store/programmerOps.ts`: `useSpreadMutation` (REST, structured reply, the file's own rule; the
   WS ops live in `api/programmerWsApi.ts` and are not touched).
@@ -614,6 +614,13 @@ each pass; the list below is where the review found the gaps, not a substitute f
   enabled only when a selected fixture has elements), *Live* through `useLivePush`, the preview
   strip drawn from `written[]`, *Apply*, *Save as Look…* (opens `RecordLookSheet` over the
   selection). *Spread…* on the band opens the tab. `lib/spreadIntent.ts` serialises only.
+  *Session 6 amendment:* Order offers Rig · Reverse · Centre · Random (`LINEAR` · `REVERSE` ·
+  `CENTER_OUT` · `RANDOM`); the `Spread` artboard's *Stage L→R* is drawn disabled with the reason,
+  because the desk has no stage order — `SpreadPlan.positions` feeds `POSITIONAL` a head's index,
+  which is rig order under another name. *Save as Look…* needed a `targets` prop on
+  `RecordLookSheet`, whose only read was the programmer list's Redux scope, which a busk window
+  does not share. The *Second colour* hand-over travels as a seed through the sheet host's state
+  (`useSpreadSeed` in `SideSheet.tsx`), read once by the tab and then dropped.
 - Tests: `SpreadSheet.test.tsx` (request shape per family; Live throttles and the release lands;
   preview is the response, not a client lerp — assert no `fanMath` import; Over disabled without
   elements), `spreadIntent.test.ts`.
