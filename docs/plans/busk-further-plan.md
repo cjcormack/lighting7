@@ -1,8 +1,8 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
-> **Document status: IN PROGRESS, 2026-09-17 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3 and 4 (lighting-react) landed, `e7b540a8` and `51e9f8c1`;
-> sessions 5–7 not started.** Each landed session's heading in §5
+> **Document status: IN PROGRESS, 2026-09-18 — sessions 1 and 2 (lighting7) landed, `b263ca5`
+> and `6e2cc72`; sessions 3, 4 and 5 (lighting-react) landed, `e7b540a8`, `51e9f8c1` and session
+> 5's hash in a later docs commit; sessions 6 and 7 not started.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -112,7 +112,10 @@ The five open calls on the canvas and the seven scope questions were answered in
 - **D8 — The Colour tab writes literals to Local, and only that.** Every drag is
   `programmer.setColour` per selected target (`ProgrammerSocket.kt` takes `targetType` /
   `targetKey` through `TargetRef.ofOrNull`, group arm included) — what a template *click* and a
-  colour cell do. No layer arm (a picked colour has no library referent for a layer to follow);
+  colour cell do. *Session 5 amendment:* a group is one group write only where its members agree
+  on emitters; otherwise one write per member carrying `sourceGroup`, because `resolveColour` writes
+  a group colour verbatim per member and adds white only on a `WithWhite` head, so pure white as one
+  group write over a mixed group would black out its RGB members. No layer arm (a picked colour has no library referent for a layer to follow);
   *Save as template…* through `POST /templates/from-programmer` is the route to something
   trackable. The family mask is not consulted, as for any value write; the tab's header says what
   it is about to do and reads the family pill. *(Chris: literals only.)*
@@ -555,7 +558,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Docs: CLAUDE.md §"The busk layout" gains §"Focus and the side sheet"; §"Windows, full screen
   and the hand" gains the viewOptions paragraph and the announce key rule.
 
-### Session 5 — the Colour tab (lighting-react) — Sonnet 5, high
+### Session 5 — the Colour tab (lighting-react) — Sonnet 5, high — **landed**
 
 - Extract `hooks/useLivePush.ts` from `BuskSpeedRail.tsx`'s private `useLiveTempoPush` — generic
   over the value: dedupe, the 50ms floor, a deferred value held and sent when the floor lifts, the
@@ -564,15 +567,21 @@ each pass; the list below is where the review found the gaps, not a substitute f
   R/G/B, the emitter rows) hosted in the sheet rather than a popover — extract the body as
   `ColourPickerBody` if the popover cannot be hosted as is; `compact` under the cramped query.
   Emitter rows for the selection's union (`targetEmitters` from `rowModel.ts`) with the count of
-  heads that take them.
+  heads that take them. *Session 5 amendment:* the union is read off the colour descriptors alone
+  (`emitterHeadCounts` in `ColourSheet.tsx`), not `targetEmitters`, whose slider-in-an-emitter-
+  category arm serves the template offer — a `setColour` cannot drive that emitter, and a row for
+  it would be a slider that moves nothing.
 - Writes: `programmer.setColour` per selected target through `useLivePush`; *Recent* from
   `recentTemplates` (colour family), a tap is a template **apply** through `useTemplatePress`;
   *Pick* reads the selection's current colour — `FixtureAppearanceSource` is a render prop and
   cannot be read from a click handler, so the rig tiles' per-head leaves report their appearance
   into a small store (`lib/liveAppearance.ts`) that Pick reads (first head in rig order wins,
-  *mixed* shown when they disagree); *Save as template…* opens `NewTemplateFromSelectionSheet`
+  *mixed* shown when they disagree; *session 5 amendment:* the sheet mounts a hidden leaf per
+  selected head as well, since in Pads focus the tiles are folded away and a Pick that answered
+  nothing there would be the tab's own default state); *Save as template…* opens `NewTemplateFromSelectionSheet`
   with the sheet's targets; the *Second colour* switch opens the Spread tab with From set
-  (session 6 wires the far end).
+  (session 6 wires the far end; *session 5 amendment:* it ships inert behind an `onSpread` seam
+  on `ColourSheet`, disabled with the reason on its title until that tab lands).
 - **The short-viewport fold** (`Phones` board, landscape phone, carried over from session 4
   which did not build it): where the viewport is short (`max-height: 500px`) but at or above
   `md`, *short beats narrow* — the rig strip and the page strip merge into **one 32px row**
@@ -583,7 +592,11 @@ each pass; the list below is where the review found the gaps, not a substitute f
   *Edit layout* is withheld as it is below `md`, since a palette drag needs both regions. The
   defaults are already Pads and `none` from `buskWindow.ts`'s ladder; what changes is which
   board `BuskingView` draws, so `isDesktop` gains a short arm read from the same duplicated
-  query (`shortViewport.test.ts` gains the site) rather than a new number.
+  query (`shortViewport.test.ts` gains the site) rather than a new number. *Session 5
+  amendment:* the merged row is the rig strip's pieces in the page strip's `leading` slot while
+  the rig is folded (Pads focus); in Split the compact band carries them itself and the page's
+  row is the same 32px row holding only the page, and *Edit layout* is withheld through an
+  `editable` prop rather than a width class, since the short board is wider than `md`.
 - Tests: `useLivePush.test.ts`, `ColourSheet.test.tsx` (per-target writes; emitters by union;
   Pick; Recent is an apply; no write under an empty selection, toasts as the strip does),
   `BuskingView.test.tsx` (the short-viewport board: merged strip, overlay not docked, no *Edit
