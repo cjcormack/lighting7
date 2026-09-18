@@ -2,7 +2,7 @@
 
 > **Document status: IN PROGRESS, 2026-09-18 — sessions 1 and 2 (lighting7) landed, `b263ca5`
 > and `6e2cc72`; sessions 3, 4, 5 and 6 (lighting-react) landed, `e7b540a8`, `51e9f8c1`,
-> `db9542cd` and `aefcf5dd`; session 7 not started.** Each landed session's heading in §5
+> `db9542cd` and `aefcf5dd`; session 7 (lighting-react) landed, `c9af093f` — the plan is complete.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -148,7 +148,10 @@ The five open calls on the canvas and the seven scope questions were answered in
   and *Next* walks **rig order**, which lives on the desk now. An unlinked window mirrors the rule
   client-side (`lib/cellsSubSelection.ts`, pinned against the server's test fixtures the way
   `templateIntent.test.ts` pins its grammar) over the rig document and the groups' member lists it
-  already fetches; it is the same split `deskFollow.ts` already makes.
+  already fetches; it is the same split `deskFollow.ts` already makes. *Session 7 amendment:* the
+  client fetches no member list — `GroupSummaryDto` carries a count and no members — so the mirror
+  derives a group's members from each fixture's `groups` in fixture-list order, which agrees with
+  the desk's member order wherever a group was built in patch order.
 - **D13 — The Screens sheet gets per-view options, generically.** A busk row shows Focus, Sheet and
   Page beside the view picker; each entry in `lib/windowViews.ts` carries an optional `options`
   descriptor and the row renders whatever its current view contributes, so the sheet never learns
@@ -626,7 +629,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
   elements), `spreadIntent.test.ts`.
 - Docs: CLAUDE.md §"Focus and the side sheet" gains the Spread paragraph (D9, D10).
 
-### Session 7 — cells, the chip, the MIDI mirror (lighting-react) — Opus 5, xhigh
+### Session 7 — cells, the chip, the MIDI mirror (lighting-react) — Opus 5, xhigh — **landed**, `c9af093f`
 
 - `RigTile`: pips become tappable (a pip is `{type:'fixture', key: element.key}`; a drag across
   pips is a run; on `touch`/`pen` a pip grows to 44px under the finger, the marquee's arm rule);
@@ -728,6 +731,13 @@ Beyond the unit suites, the desk checks, in the order the sessions land:
 6. **Cells and MIDI** (after session 7): Odd on a group of bars; Next on the X-Touch steps one
    cell; a BuskFocusSet button flips Screen 2, and its health goes green when Screen 2 connects;
    a fader bound to it is refused at write.
+   *Session 7, 2026-09-18, browser pass on the dev desk (project 6) at 1440×900:* three pips on
+   the twelve-cell bar echoed three element keys and `3 of 12`; Odd · Even · Invert · Masters only
+   rewrote the desk's targets as the fixture predicts (Invert at cell granularity, `11 of 12`);
+   unlinked, the same presses moved the window's copy through the mirror with no frame sent;
+   a mouse run across four pips; Clear. **Still to check at the desk:** the surfaces page (no
+   MIDI device in the sandbox — the Desk-row and per-window chips and the fader refusal are
+   pinned by `SurfaceLibrary.test.tsx` / `surfaceDrop.test.ts`), and the X-Touch half above.
 
 ## 10. Scope honesty
 
