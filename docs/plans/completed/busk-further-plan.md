@@ -1,12 +1,8 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
-> **Document status: IN PROGRESS, 2026-09-19 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3–7 (lighting-react) landed, `e7b540a8`, `51e9f8c1`, `db9542cd`,
-> `aefcf5dd` and `c9af093f`. A reconciliation audit on 2026-09-19 compared both trees against
-> this plan and the twelve boards and found the build sound, with a short list of board items
-> never built, code contradicting its own docs, and stale record text; session 8 (§5) closes
-> them, its five calls are in §11's second block, and the plan moves to `completed/` when its
-> marker lands.** Each landed session's heading in §5
+> **Document status: DONE, 2026-09-19 — all eight sessions landed. Sessions 1 and 2 (lighting7),
+> `b263ca5` and `6e2cc72`; sessions 3–8 (lighting-react), `e7b540a8`, `51e9f8c1`, `db9542cd`,
+> `aefcf5dd`, `c9af093f` and `b8ad13b4`.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -401,7 +397,7 @@ A grep-able summary of the twelve artboards; the files are the authority for lay
   two-across), phone landscape (short beats narrow: strips merge, side-sheet overlay), iPad portrait
   (rail folded by default), iPad landscape (the desktop board), and the ladder.
 
-## 5. Implementation — seven sessions
+## 5. Implementation — eight sessions
 
 Backend first (D16). Sessions 1 and 2 are lighting7 only and leave nothing visible; 3–7 are
 lighting-react, each finding its routes in place. **The order is 3 → 4 → {5, 6} → 7**: 4 builds
@@ -671,7 +667,7 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Docs: CLAUDE.md §"The rig" gains the cells paragraph (D11, D12); `docs/midi-surface-engineering.md`
   gains the five targets and the window-by-name rule.
 
-### Session 8 — reconciliation (lighting-react, then this record) — **open**
+### Session 8 — reconciliation (lighting-react, then this record) — **landed**, `b8ad13b4`
 
 What the audit of 2026-09-19 found when both trees were read against §1–§5 and the twelve
 boards. The build is sound — backend sessions 1 and 2 match line for line, every earlier

@@ -623,11 +623,13 @@ no longer resolves is dropped.
 
 **Arrange the rig by stage position** · Trigger · Busk-further plan §8, 2026-09-17
 
-The rig is rows of tiles (busk-further plan D2), and the *Arrange: Plot* segment is drawn on the
-design's Ideas board: tiles placed from each patch's `stageX` / `stageY` so the band reads as the
-stage does. Declined for the plan because a coordinate system nothing else reads is a second model
-(the busk layout's D2, verbatim). If it lands, it is a *view* of the rig — a render mode over the
-same rows, the way the Stage view renders the same patches — never a stored position on a tile.
+The rig is rows of tiles (busk-further plan D2), and *Arrange: Plot* is the design's second
+arrangement: tiles placed from each patch's `stageX` / `stageY` so the band reads as the stage
+does. Declined for the plan because a coordinate system nothing else reads is a second model (the
+busk layout's D2, verbatim), and — *session 8 amendment* — **the segment itself is not drawn**
+either: a disabled segment reads as a control that is merely off, so nothing in the rig's edit
+mode hints at Plot. If it lands, it is a *view* of the rig — a render mode over the same rows, the
+way the Stage view renders the same patches — never a stored position on a tile.
 
 **Trigger**: a rig big enough that rows stop reading as the stage.
 

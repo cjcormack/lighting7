@@ -226,8 +226,8 @@ install refuse a v7 repo rather than silently write those fields back on its nex
 ### Version 12 — the busk rig
 
 **v12 adds one folder.** `buskRig/{uuid}.json` is the busk view's target band as the operator
-built it (`docs/plans/busk-further-plan.md` §3.1–3.2, `docs/lighting-composition-model.md` §"The
-rig"): one document per **row** with its tiles nested, the way a page carries its columns, so a drag
+built it (`docs/plans/completed/busk-further-plan.md` §3.1–3.2,
+`docs/lighting-composition-model.md` §"The rig"): one document per **row** with its tiles nested, the way a page carries its columns, so a drag
 on the band changes one file. A tile names its group or patch by uuid as `groupUuid` / `patchUuid`,
 exactly one set — the `BuskPadJson` pattern, two-armed — plus `cellMode`, `cellSplit`, `label` and,
 for a tile that is one cell, its `elementKey`, carried **verbatim**: element keys are opaque, the

@@ -26,16 +26,16 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
-    // v12: the busk rig (`docs/plans/busk-further-plan.md` §3.7). A new `buskRig/` folder — one
-    // document per **row** with its tiles nested, tiles naming a group or a patch by uuid and a
-    // cell by its element key — beside `buskPages/`. The plan's first draft said one `buskRig.json`
-    // at the top level; session 2 amended that, because `RecordHasher` treats every top-level file
-    // as metadata and a rig outside the record scan would never propagate through the three-way
-    // diff. `minReader` stays at **5**: the folder reads as empty when missing, so a v11 archive
-    // imports with an empty rig — which is today's band (D1). The writer's number moves for v10's
-    // reason: a rig changes what the band offers and what *Next* walks, so a v11 reader — which
-    // would import no rig and on its next wipe-then-export push write none back, deleting every
-    // peer's — must refuse the repo instead.
+    // v12: the busk rig (`docs/plans/completed/busk-further-plan.md` §3.7). A new `buskRig/`
+    // folder — one document per **row** with its tiles nested, tiles naming a group or a patch by
+    // uuid and a cell by its element key — beside `buskPages/`. The plan's first draft said one
+    // `buskRig.json` at the top level; session 2 amended that, because `RecordHasher` treats every
+    // top-level file as metadata and a rig outside the record scan would never propagate through
+    // the three-way diff. `minReader` stays at **5**: the folder reads as empty when missing, so a
+    // v11 archive imports with an empty rig — which is today's band (D1). The writer's number
+    // moves for v10's reason: a rig changes what the band offers and what *Next* walks, so a v11
+    // reader — which would import no rig and on its next wipe-then-export push write none back,
+    // deleting every peer's — must refuse the repo instead.
     //
     // v11: control-surface binding payloads. No folder or field changes — `targetPayload` stays
     // an opaque string — but what it may *contain* grows in two ways. New `type` discriminators

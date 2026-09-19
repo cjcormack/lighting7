@@ -5,12 +5,12 @@ Source: a Claude Design canvas authored 2026-09-17 against `lighting-react`'s sh
 360px `LibraryPalette`) and the look-groups record beside it. **Read them as the intended visual
 output, not as structure to copy**: there is no React here.
 
-This is a proposal with its calls made: nothing has landed. The brief was to take the busk view
-and the multi-screen work further — a configurable, positioned target band; focus on pads or on
-the selection; re-proportioning the two regions; a collapsible speed rail; a colour picker as an
-alternative sheet; spread over a selection; multi-head fixtures in selections — plus ideas, and a
-survey of other desks. Every open call was answered by Chris on 2026-09-17; the answers are in the
-plan's §2 and §11.
+All eight sessions of the plan beside these files landed, and that plan is the record of what was
+built. The brief was to take the busk view and the multi-screen work further — a configurable,
+positioned target band; focus on pads or on the selection; re-proportioning the two regions; a
+collapsible speed rail; a colour picker as an alternative sheet; spread over a selection;
+multi-head fixtures in selections — plus ideas, and a survey of other desks. Every open call was
+answered by Chris on 2026-09-17; the answers are in the plan's §2 and §11.
 
 The implementation plan lives at [`../busk-further-plan.md`](../busk-further-plan.md). Its §4 is
 a grep-able summary of what these files draw; where wording disagrees, the plan wins on behaviour
@@ -19,6 +19,23 @@ and these files win on layout and copy.
 The live, pannable version is at <https://claude.ai/artifact/FViMcdxsaKHautb7sWcmQ2> — private to
 Chris, so **treat these files as the authority** and the URL as a convenience if you happen to have
 access.
+
+## Superseded by the plan
+
+These boards are the record of what was *drawn*, so five of their answers were overtaken while the
+work was built and are not what shipped. Read the plan for each, and don't rebuild the board's
+older answer:
+
+- **`windows.focus`** (`Focus`) — focus is carried by the generic `windows.viewOptions` command,
+  not a command of its own.
+- **`TARGET_CELLS_UNSUPPORTED`** (`Model`, `Cells`) — never existed. The element arm landed first,
+  as session 1, so no door ever had to refuse a cell.
+- **`busk.sheetOpen`** (`Focus`, `Sheets`, `Model`) — one fact, `busk.sheet`, whose enum carries
+  `none`; there is no separate open flag.
+- **The Cells chip as `selection.set`** (`Cells`) — the chip is `selection.subselect`, which
+  rewrites the selection's targets over the rig order on the desk.
+- **The client-side parent→cell fold in `lookPresence.ts`** (`Cells`) — the coverage rule lives in
+  `TargetCoverage` on the desk, stated once, so the ring and `pressWouldRelease` cannot disagree.
 
 ## Format
 

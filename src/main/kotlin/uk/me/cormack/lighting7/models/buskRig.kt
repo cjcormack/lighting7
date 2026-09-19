@@ -15,9 +15,9 @@ import org.slf4j.LoggerFactory
  * The **busk rig**: the rows of tiles the busk view's target band draws, built by the operator.
  *
  * The target band used to be every group then every fixture, in one column-flow grid that scrolled
- * sideways. `docs/plans/busk-further-plan.md` makes it a document the operator builds (D1): rows of
- * tiles, each tile a group, a fixture, or one **cell** of a multi-head fixture. Three decisions
- * shape the two tables:
+ * sideways. `docs/plans/completed/busk-further-plan.md` makes it a document the operator builds
+ * (D1): rows of tiles, each tile a group, a fixture, or one **cell** of a multi-head fixture.
+ * Three decisions shape the two tables:
  *
  * - **D1 — one rig per project, and an empty rig is today's band.** Not per page: the two-screen
  *   flow this exists for is a colour page on one screen and a position page on the other, pressed

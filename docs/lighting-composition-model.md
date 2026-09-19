@@ -586,8 +586,8 @@ client's `?page=` mirrors whichever page its window is showing. It is unrelated 
 ### The rig
 
 The target band the busk view draws is a **rig** the operator builds, in the page's own shape
-(`docs/plans/busk-further-plan.md` D1–D3): rows of tiles, each tile a group, a fixture, or one cell
-of a multi-head fixture (`busk_rig_rows` → `busk_rig_tiles`, `models/buskRig.kt`), one rig per
+(`docs/plans/completed/busk-further-plan.md` D1–D3): rows of tiles, each tile a group, a fixture,
+or one cell of a multi-head fixture (`busk_rig_rows` → `busk_rig_tiles`, `models/buskRig.kt`), one rig per
 project, whole-document `PUT /busk/rig` with the page write's three refusals (`BUSK_RIG_INVALID` /
 `_IDENTITY` / `_REF`), tiles renumbered dense and answered with the ids the write minted. A tile is
 an **enrichment** of its group or patch, never a guard: a group or patch delete sweeps its tiles in
