@@ -1,8 +1,12 @@
 # Busk view, further — a built rig, a window's focus, a tabbed sheet, spread, cells
 
-> **Document status: IN PROGRESS, 2026-09-18 — sessions 1 and 2 (lighting7) landed, `b263ca5`
-> and `6e2cc72`; sessions 3, 4, 5 and 6 (lighting-react) landed, `e7b540a8`, `51e9f8c1`,
-> `db9542cd` and `aefcf5dd`; session 7 (lighting-react) landed, `c9af093f` — the plan is complete.** Each landed session's heading in §5
+> **Document status: IN PROGRESS, 2026-09-19 — sessions 1 and 2 (lighting7) landed, `b263ca5`
+> and `6e2cc72`; sessions 3–7 (lighting-react) landed, `e7b540a8`, `51e9f8c1`, `db9542cd`,
+> `aefcf5dd` and `c9af093f`. A reconciliation audit on 2026-09-19 compared both trees against
+> this plan and the twelve boards and found the build sound, with a short list of board items
+> never built, code contradicting its own docs, and stale record text; session 8 (§5) closes
+> them, its five calls are in §11's second block, and the plan moves to `completed/` when its
+> marker lands.** Each landed session's heading in §5
 > carries its hash, and a *session N amendment* beside any §3 sentence it proved wrong is the
 > current truth over the sentence it follows. The visual
 > design is settled and checked in beside this plan at
@@ -223,6 +227,8 @@ pages already (`:243`) — the rig must be wiped before those two deletes or the
 `GET /projects/{id}/busk/rig` answers `{rows: [{uuid, name, tiles: [{uuid, kind, group?, patch?,
 elementKey?, cellMode, cellSplit?, label?}]}]}` with the group and patch **summaries embedded**
 (`GroupSummaryDto`, `FixturePatchDto`'s name/key/elements), so the band draws from one read.
+*Session 8 amendment:* the patch half is a bespoke `BuskRigPatchDto(id, key, name, elements)`
+in `routes/projectBuskRig.kt`, not `FixturePatchDto`'s subset — the named fields plus `id`.
 An empty `rows` is the show-all fallback, answered by the **client** (`effectiveRig`), not the
 server — the server stores what the operator built and nothing else. *Session 3 amendment:*
 `GroupSummaryDto` carries **no id**, while the PUT names every group tile by `groupId` — a kept
@@ -367,7 +373,10 @@ A grep-able summary of the twelve artboards; the files are the authority for lay
 - **`Rig`** — edit mode: the band under the page's amber wash, row name fields, grips, crosses on
   tiles, a dashed drop slot, a *Drop a target* ghost tile, *+ Row*, *Arrange: Rows | Plot* (Plot
   drawn as a segment, out of scope), *Show every target*; a tile menu with the four cell modes; the
-  palette's **Rig** tab: search, All / Groups / Fixtures, every group and fixture once with *on rig*
+  palette's **Rig** tab (*session 8 amendment:* the *Arrange* segment is **not drawn** — a
+  disabled segment reads as a control that is merely off, the reasoning that made *Stage L→R* a
+  footnote, so Plot stays `FU-BUSK-RIG-PLOT` with no placeholder; and the menu's *Rename tile…*,
+  drawn on the board and carried by the `label` column, had no UI until session 8): search, All / Groups / Fixtures, every group and fixture once with *on rig*
   / *not on rig* / *hidden*, cells expanded under their fixture.
 - **`Focus`** — the three shapes as miniatures (Split, Pads with the rig folded to a 32px strip,
   Rig with the page folded to its tab strip); the two-screen flow (Screen 1 Rig + Colour, Screen 2
@@ -375,7 +384,9 @@ A grep-able summary of the twelve artboards; the files are the authority for lay
 - **`Screens`** — the Screens sheet with a busk row's Focus / Sheet / Page pickers (Sheet as one
   enum with `none`), an iPad row on the Prompt Book contributing nothing, *Copy link for Screen 2*
   minting `?window=Screen%202&page=3&focus=pads&sheet=none`, a *Layouts…* placeholder
-  (`FU-SCREENS-LAYOUTS`).
+  (`FU-SCREENS-LAYOUTS`; *session 8 amendment:* the placeholder is **not drawn**, for the
+  Arrange segment's reason — a dead button on a sheet used mid-show is worse than none; the
+  follow-up holds the idea).
 - **`Sheets`** — the 44px fold, the Speed tab unchanged, the Colour tab at full size, and the six
   rules (literals, reuse of `ColourPickerPopover`'s content, Recent, Pick, the mask, the window).
 - **`Spread`** — the Spread tab: family segment, From / To, the four curves as pictures, Order (Rig
@@ -455,7 +466,9 @@ each pass; the list below is where the review found the gaps, not a substitute f
   wiring) and gains `subselect(mode)`; `selection.subselect` in `plugins/SelectionSocket.kt`.
 - `routes/programmerSpread.kt`: `POST …/programmer/spread` (§3.5). The curve and order maths in
   `fx/SpreadPlan.kt` — pure over an ordered list of heads, `parts` repeating the curve, `over`
-  choosing heads or cells; `DistributionPlan.of(strategy, members)` for order; `TemplateResolver`
+  choosing heads or cells; `DistributionPlan.of(strategy, members)` for order (*session 8
+  amendment:* `SpreadPlan.positions` calls `order.offsets` directly and normalises to the max —
+  the same strategies, no `DistributionPlan`); `TemplateResolver`
   per head for the endpoints and the (now `internal`) Lab mix / linear interpolation between them,
   in the intent's own space (Lab for colour, degrees for position, percent for level).
 - `WindowRegistry.Command.ViewOptions`, `WindowsViewOptionsInMessage` / `OutMessage`
@@ -467,11 +480,14 @@ each pass; the list below is where the review found the gaps, not a substitute f
 - Sync v12 (§3.7).
 - Tests: `BuskRigRoutesTest` (shape, identity, dangling ref, empty row refused, halves bounds,
   element key validated, dense renumbering, the three sweeps), `BuskRigOrderTest`, `SpreadPlanTest`
-  (each curve at n = 1, 2, 3, 8; parts; over cells; reverse), `ProgrammerSpreadRouteTest` (a group
+  (each curve at n = 1, 2, 3, 8; parts; over cells; reverse — *session 8 amendment:* the
+  over-cells case lives in `ProgrammerSpreadRouteTest`, since `SpreadPlan` never sees a fixture), `ProgrammerSpreadRouteTest` (a group
   spreads in member order; a head lacking the property is skipped by name; `tmpl:` endpoints;
   `skippedFamilies`), `DeskSelectionSubselectTest` (every mode, with and without elements, Next
   wraps; its fixture is exported as JSON for the client mirror), `WindowsSocketTest` gains
-  viewOptions and an old-client announce without it, `BindingTargetSerializationTest` gains the
+  viewOptions and an old-client announce without it (*session 8 amendment:* the old-client
+  case has no named test; every other announce in the file omits the field, which covers it
+  incidentally), `BindingTargetSerializationTest` gains the
   five, `ControlSurfaceBindingHealthTest` gains `missingWindow` and its re-evaluation on connect,
   `ProjectRoundTripTest` gains the rig and the importer wipe order.
 - Docs: `docs/lighting-composition-model.md` §"The busk layout" gains §"The rig";
@@ -618,8 +634,11 @@ each pass; the list below is where the review found the gaps, not a substitute f
   strip drawn from `written[]`, *Apply*, *Save as Look…* (opens `RecordLookSheet` over the
   selection). *Spread…* on the band opens the tab. `lib/spreadIntent.ts` serialises only.
   *Session 6 amendment:* Order offers Rig · Reverse · Centre · Random (`LINEAR` · `REVERSE` ·
-  `CENTER_OUT` · `RANDOM`); the `Spread` artboard's *Stage L→R* is drawn disabled with the reason,
-  because the desk has no stage order — `SpreadPlan.positions` feeds `POSITIONAL` a head's index,
+  `CENTER_OUT` · `RANDOM`); the `Spread` artboard's *Stage L→R* is a **footnote under the row, not an
+  item in it** (*session 8 amendment:* this line first said "drawn disabled with the reason"; a
+  disabled item in the row wrapped at 288px and read as a control that was merely off, so the
+  built form is the footnote CLAUDE.md §Focus and the side sheet records), because the desk has
+  no stage order — `SpreadPlan.positions` feeds `POSITIONAL` a head's index,
   which is rig order under another name. *Save as Look…* needed a `targets` prop on
   `RecordLookSheet`, whose only read was the programmer list's Redux scope, which a busk window
   does not share. The *Second colour* hand-over travels as a seed through the sheet host's state
@@ -644,11 +663,65 @@ each pass; the list below is where the review found the gaps, not a substitute f
   JSON). *Over: Cells* on the Spread tab reads the same expansion.
 - MIDI mirror: `lib/surfaceDrop.ts` `targetControlKind` for the five; `targetUtils.describeTarget`
   arms; `healthDescriptor.ts` `missingWindow`; `api/surfacesApi.ts` `BindingHealth` variant;
-  `SurfaceLibrary.tsx` chips (§3.6); `SurfaceInspector` renders the window name and the mode.
+  `SurfaceLibrary.tsx` chips (§3.6; *session 8 amendment:* "under the Desk row" meant the Desk
+  *section* — the per-window Focus and Sheet rows sit in it, above the Desk row itself);
+  `SurfaceInspector` renders the window name and the mode.
 - Tests: `RigBand.test.tsx` gains pip gestures, `lookPresence.test.ts` gains cells,
   `cellsSubSelection.test.ts`, `surfaceDrop.test.ts`, `targetUtils.test.ts`, `SurfaceLibrary.test.tsx`.
 - Docs: CLAUDE.md §"The rig" gains the cells paragraph (D11, D12); `docs/midi-surface-engineering.md`
   gains the five targets and the window-by-name rule.
+
+### Session 8 — reconciliation (lighting-react, then this record) — **open**
+
+What the audit of 2026-09-19 found when both trees were read against §1–§5 and the twelve
+boards. The build is sound — backend sessions 1 and 2 match line for line, every earlier
+amendment names real code, the two test fixtures are byte-identical to their twins, the D15
+deletes are clean, all ten §8 follow-ups are entered — and what remains is three kinds of gap:
+board items never built, code contradicting its own docs, and stale record text. One session,
+two halves, the docs half **after** the code has landed so the record's last change is the one
+that says it is finished. The five calls it needed are answered in §11's second block; the
+session cites them rather than restating them.
+
+- **Code, by the calls in §11.** *Rename tile…* in the tile menu — a `NameField` writing
+  `label`; the column, the DTO field, `toRigRequest` and `expandTile` already carry it, so this
+  is the missing UI and nothing else. Rig focus below `md` stacks the rows **two tiles across,
+  scrolling vertically** (`Phones` note 6), where the build still scrolls each row sideways. The
+  folded page strip in Rig focus is the board's **40px** strip — page name, bank count, the Focus
+  control — not the full tab strip drawn folded.
+- **Code, no call needed** — each is code contradicting its own doc or this plan, so the code
+  moves: the Screens sheet's *Copy link* for a **following** row carries **no page** (CLAUDE.md
+  §Windows and the comment above the code both say so; the code writes the desk's page whenever
+  it is non-null, and the test pins only the unlinked row); `SideSheetFold`'s chevron unfolds
+  onto the **last open** tab through the memory `toggleBuskSheet` already reads, as its docblock
+  promises, not always onto Speed; the rows handle is drawn for a **one-row** rig (D6: 1…N —
+  the build hides it below two rows, leaving the segmented control as the only route); pips rest
+  at the board's **8px** (the code comment beside them already claims 18×8 while drawing 4);
+  *Second colour* is a plain button with a verb label, not a `role="switch"` that never reads
+  checked; a single-head preview bar carries the head name under the value, as `Spread` draws it;
+  `buskWindow.test.ts`'s "iPad in landscape" case is renamed for the 1024×768 it tests and a
+  1180×820 case pins **three** rows, the rule's answer for an 820-tall iPad, which the `Tablets`
+  ladder's "2 rows" never anticipated.
+- **Docs, after the code lands.** This file: header, done-marker, the move to `completed/`.
+  `busk-further-design/INDEX.md`: "nothing has landed" goes, and one *superseded by the plan*
+  line names `windows.focus` (`Focus`), `TARGET_CELLS_UNSUPPORTED` (`Model`, `Cells`),
+  `busk.sheetOpen` (`Focus`, `Sheets`, `Model`), the chip's `selection.set` and the client-side
+  coverage fold (`Cells`), so nobody rebuilds a board's older answer. lighting-react's
+  `docs/stage-vis-engineering.md` and CLAUDE.md count `ColourSheet`'s hidden leaf and renumber
+  the colour dispatch's readers (five mounting consumers). CLAUDE.md records the calls that stand
+  as built: Highlight **wraps** rather than folding into the menu at 1100 (seen on the desk at
+  800px); the Cells chip is **not** on the folded strip (`Focus` and `Phones` draw it without,
+  `Cells` with — the strip carries what a press must be honest about, and the chip is a write);
+  hex is a **read-out**, as the programmer's colour cell has none either; the Spread family
+  segment is Intensity · Colour · Position · **Beam** with a **Property** row beneath (the board
+  conflated family with property); the handle is hidden below `md`; an 820-tall iPad gets three
+  rows.
+- **Not in this session.** `FU-HAND-GROUP-KIND` and `FU-BUSK-RIG-GROUP-ID` — lighting7 wire
+  changes with entries of their own. The §9 desk checks — verification of shipped work, needing
+  the real screens and the X-Touch.
+- Tests: `ScreensSheet.test.tsx` (a following row with a non-null desk page mints no `page`),
+  `SideSheet.test.tsx` (the chevron opens the last tab), `RigBand.test.tsx` (the one-row handle;
+  two-across below `md`; rename writes `label`), `BuskingView.test.tsx` (the 40px folded strip),
+  `SpreadSheet.test.tsx` (bar labels), `buskWindow.test.ts` (the 1180×820 case).
 
 ## 6. Migration
 
@@ -673,7 +746,8 @@ with the rig file optional on import (a v11 export has no rig and imports as emp
 - `FU-SCREENS-LAYOUTS` — cited by CLAUDE.md and the multi-screen plan, never entered in
   `followups.md`; session 2 enters it.
 - `FU-SURFACE-SUBSELECT-LED` — a sub-selection is not a desk state, so its buttons have no LED.
-- `FU-BUSK-RIG-PLOT` — *Arrange: Plot* from the patch's stage coordinates; the segment is drawn.
+- `FU-BUSK-RIG-PLOT` — *Arrange: Plot* from the patch's stage coordinates. *Session 8
+  amendment:* the segment is **not** drawn (§4).
 - `FU-BUSK-TARGET-PAD` / `FU-BUSK-SPECIAL-PAD` — the two pad kinds from the Ideas board.
 - `FU-BUSK-TILE-LEVEL-DRAG` — hold a rig tile to drag its level.
 - `FU-BUSK-SAVE-AS-GROUP` — *Save as group…* on the band.
@@ -770,6 +844,20 @@ two-screen desk is asking for, and it needs 3's band to fold.
 One call made by the plan's author rather than asked, because it is tile-level detail: a
 multi-head tile keeps all four cell modes (D3). Say so if fewer are wanted before session 2 writes
 the enum.
+
+### Answered 2026-09-19 — the reconciliation audit's calls
+
+Five things the boards draw or the plan names that the build does not do. The audit recommended
+an answer for each and Chris adopted the set on 2026-09-19 for session 8; overrule one by editing
+its row before that session starts.
+
+| Call | Answer |
+| --- | --- |
+| *Rename tile…* — the `label` column has no UI | Build it. The plumbing exists end to end and the write boundary already validates the field; it is a `NameField` in the tile menu. |
+| The *Arrange: Rows / Plot* segment | Not drawn. A disabled segment reads as a control that is merely off — the reasoning that made *Stage L→R* a footnote. Plot stays `FU-BUSK-RIG-PLOT`. |
+| The *Layouts…* placeholder on the Screens sheet | Not drawn, same reason: a dead button on a sheet used mid-show is worse than none. `FU-SCREENS-LAYOUTS` holds the idea. |
+| Rig focus below `md` | Two tiles across, scrolling vertically, as `Phones` draws it. It is D15's replacement for the target sheet, and a sideways scroll per row on a phone defeats the point of a list. |
+| The folded page strip in Rig focus | The board's 40px strip — page name, bank count, the Focus control. Rig focus exists to give the band the height, and the full tab strip wraps on a phone and takes it back. |
 
 ## 12. What the review changed
 
