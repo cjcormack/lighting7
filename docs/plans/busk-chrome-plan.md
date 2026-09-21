@@ -237,7 +237,7 @@ Each runs under `/verified-ship`.
   §The rig (the one row, the folds), §The show-editing lock (the bar's hosts are two).
 - Done-marker here.
 
-### Session A.5 — the pad row, the chips, the two-row re-expansion (lighting-react) — Fable 5.1, high
+### ~~Session A.5 — the pad row, the chips, the two-row re-expansion (lighting-react) — Fable 5.1, high~~ — done, lighting-react `37ba7197`
 
 Chris's desk review of session A, 2026-09-21 (D17–D20). Amends session A; nothing on the wire.
 
