@@ -293,9 +293,11 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 | `windows.fullscreen` | `targetId`, `on` | none — rebroadcast as `windows.fullscreen` |
 | `windows.viewOptions` | `targetId`, `view`, `options: {String: String}` | none — rebroadcast as `windows.viewOptions` |
 
-`viewOptions` is a window's **per-view options** — for the busk view its `focus`, `rigRows` and
-`sheet` (busk-further plan D13) — announced as a free `String → String` map and carried back on
-`windows.state` verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
+`viewOptions` is a window's **per-view options** — for the busk view its `focus`, `rigRows`,
+`sheet` and page facts (busk-further plan D13), and under every live view `immersive` (`on` |
+`off`, busk-chrome plan D9: a window's fact, riding here because a top-level announce key would
+drop the frame) — announced as a free `String → String` map and carried back on `windows.state`
+verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how
 the registry learns them; nothing is written server-side. A client that predates the field omits it
