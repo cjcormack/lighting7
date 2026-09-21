@@ -12,7 +12,7 @@ and a third: other suggestions. Mid-review Chris added that the expand toggle sh
 for all four live views, not only Busk; the boards say so. The screenshot that prompted it was a 1122×768 window with 152px of
 chrome above the rig band (app header 48, ShowHeader 48, ShowBar 56) and the first pad at y≈450.
 
-**Status: approved 2026-09-21; nothing built yet.** The implementation plan is
+**Status: approved 2026-09-21; session A built the same day (lighting-react `aa4e4c54`).** The implementation plan is
 [`../busk-chrome-plan.md`](../busk-chrome-plan.md), and the live copy of these boards is at
 <https://claude.ai/artifact/DCgs8coqVqkFoSTXRF6AMg> — private to Chris, a convenience; the files
 here are the authority. Where a board and the plan will disagree, the plan wins on behaviour and these files on
@@ -50,6 +50,19 @@ shapes; the Cells control folds to its mode word, never a bare glyph; and below 
 row becomes two rows by design.
 
 **Three more things proposed, three decided by Chris, three declined, one open** — on `Model`.
+
+## Superseded
+
+- `Band.dc.html`'s **Pads rows** — the one row drawn in Pads with the Cells menu, the steps, Clear
+  and the desk chip — and the ladder's Pads rungs are superseded by the plan's **D17–D20**
+  (session A.5, from Chris's review of session A on the desk): in Pads the rig row is not drawn,
+  the pad row (`PADS`, the tabs at the rig controls' size, Spread · Locate · Highlight, the
+  summary, the pill, the Focus control) is the top row, and a chip is drawn only while unlinked.
+  The Split and Rig rows stand. Not redrawn here; the plan is the record.
+- `Band.dc.html`'s fold numbers (1020 · 1180 · 820 · 600) were the board's; the app's are
+  1100 · 1260 · 820 · 700 on the band's content box (session A's `RigBand.tsx` docblock).
+- `ShowTab.dc.html`'s phone overlay at 288: session A widened the right-hand form to the sheet's
+  320 floor so the runner's strip fits.
 
 ## Format
 

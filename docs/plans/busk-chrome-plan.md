@@ -1,6 +1,8 @@
 # The live views' chrome — the busk Show tab, immersive on all four, the one-row band, the 40px header
 
-> **Document status: APPROVED, 2026-09-21 — no session started.** The visual design is settled and
+> **Document status: APPROVED, 2026-09-21 — session A shipped the same day (lighting-react
+> `aa4e4c54`); session A.5 was added that evening from Chris's review of A on the desk and is not
+> started; session B is not started.** The visual design is settled and
 > checked in beside this plan at [`busk-chrome-design/`](busk-chrome-design/INDEX.md) — five static
 > artboards: the busk window with the ShowBar gone and the Show tab open, the same window immersive
 > with the vertical budget, the Show tab at full size, the rig band's one row in its three shapes
@@ -102,6 +104,42 @@ lighting7 gains no session and no schema, and the only lighting7 work is this re
 - **D16 — Declined: immersive folding the header, transport keys, denser pads.** Pad density stays
   `FU-BUSK-PAD-SIZE`.
 
+The four below were taken on 2026-09-21 from Chris's review of session A on the desk (1118×820,
+the sheet open on Show), and are session A.5's. They amend D13 for Pads and retire one of its
+reasons; they do not touch the wire or any desk state.
+
+- **D17 — In Pads the rig row is not drawn, and the pad row is the body's top row.** The rig row's
+  controls act on tiles: the Cells menu, Prev and Next narrow or move a selection made on them,
+  and Clear releases one — and in Pads there are none on screen, so in the shape that exists to
+  give the page the height, a full row of chrome was doing nothing. The use this view is built
+  for is a two-screen desk, the rig on one screen and the pads on the other, so a rig operation is
+  reached on the rig screen: Cells, the steps and Clear are **not** on the pad row. Spread, Locate
+  and Highlight **are** — they act on the rig and an operator expects them on both screens, and
+  Spread is arguably the pads' own — as icon verbs. So the pad row is: the `PADS` label, the page
+  tabs at the rig row's control size (28px, `text-xs`, the Focus control's own segmented look —
+  they were larger and rounder than everything beside them), the three verbs, the selection
+  summary in the gap (nothing else says it in Pads), the family pill while a mask is set, the
+  chips of D18, then the Focus control and *Edit layout* / *Done* right-anchored. No chevron
+  pill: the Focus control is on the row. In Split and Rig the rig row is as session A left it and
+  the pad row under the band is the page tabs and the page chip (D18) and nothing else; the
+  desk chip stays on the rig row. *(Chris.)*
+- **D18 — A chip is drawn only while its window is unlinked.** Both the desk chip and the page
+  chip: *Desk* is the resting state, and a pill saying so all night is noise. The *· from
+  <window>* readout goes with it — an operator at a two-screen desk knows which screen they are
+  selecting from. D13's "the chip sits at the same x in every shape" was the argument for the one
+  row being identical in Pads, and it is retired with the chip; D14's family pill stays, being the
+  mask and not a readout. *(Chris.)*
+- **D19 — The folds re-expand in two-row mode, and a chip folds progressively.** Below the floor
+  each row has its whole line, so the words the ladder took away come back while the line holds
+  them — the verbs' and *Edit layout*'s, the *Cells:* prefix, the Focus words — and fold again
+  below a second, measured rung; the app measures that ladder as it measured the first. A chip
+  gives up *· from <window>* first, then its subject (*Targets:* / *Page:*), then truncates,
+  each at a rung of the row it sits on, with its accessible name unchanged. *(Chris: the two-row
+  rows have the room; the chip has three steps.)*
+- **D20 — The `RIG` and `PADS` labels fold** to nothing at the narrow end of each row's ladder,
+  before the floor, to gain the width; the row's `data-` attribute is what a test reaches it by.
+  *(Chris.)*
+
 ## 3. The model
 
 ### 3.1 Per-window facts (client)
@@ -140,7 +178,14 @@ through the existing per-view apply, which now has an arm for the three views th
   Show glyph; the overlay sheet lists three tabs.
 - `components/busking/RigBand.tsx` / `RigStrip.tsx` — the one row (D13), the summary in the Pads
   gap, `data-focus` on the band, the re-measured folds and the two-row floor (D15); the Cells
-  control's mode-word fold.
+  control's mode-word fold. Session A.5: no Pads arm on the desk board (D17), the two-row
+  re-expansion (D19), the label fold (D20).
+- `components/busking/BuskPageStrip.tsx` — session A.5's **pad row** (D17): the label, the
+  resized tabs, the three verbs, the summary, the pill, the page chip when unlinked, the host's
+  Focus control and edit toggle in Pads; `BuskingView` hands the verbs' handlers and the selection
+  down as it hands the band's. `components/desk/FollowPill.tsx` / `DeskChip.tsx` /
+  `busking/BuskPageChip.tsx` — drawn only while unlinked (D18), and the progressive fold (D19)
+  through per-part classes the host supplies, the accessible name kept whole.
 - `components/ShowHeader.tsx` — 40px (`py-1`), the `ImmersiveToggle` after `actions`, the *Offline*
   chip, the drawer button below `md` while immersive.
 - `Layout.tsx` — one boolean, `immersive && isLiveViewPath(pathname)`, that skips the `<aside>`,
@@ -164,8 +209,8 @@ Pads and Split). `Model`: facts, wire, code map, leaves/stays, sessions, every s
 
 ## 5. Implementation — two sessions
 
-Both lighting-react. **A before B**: B's Screens-sheet segment reads the descriptor A does not
-touch, but B's `Layout` read wants A's header at 40 to have landed so the budget is measured once.
+All lighting-react. **A, then A.5, then B**: A.5 reshapes the rows B's `Layout` budget is
+measured against, and B's Screens-sheet segment reads the descriptor neither touches.
 Each session ends with `npm run check` green, its CLAUDE.md paragraph written, and its done-marker
 here (strikethrough plus commit hash, nothing more — the detail belongs in the commit message).
 Each runs under `/verified-ship`.
@@ -190,6 +235,43 @@ Each runs under `/verified-ship`.
   (unchanged behaviour through the lifted hook), `windowsApi.test.ts` (key set unchanged).
 - Docs: CLAUDE.md §Focus and the side sheet (the fourth tab, the fold's cue, the strip's fold),
   §The rig (the one row, the folds), §The show-editing lock (the bar's hosts are two).
+- Done-marker here.
+
+### Session A.5 — the pad row, the chips, the two-row re-expansion (lighting-react) — Fable 5.1, high
+
+Chris's desk review of session A, 2026-09-21 (D17–D20). Amends session A; nothing on the wire.
+
+- **The pad row** (D17): `BuskPageStrip` gains a `PADS` label, the tabs at the rig row's 28px
+  control size (the segmented look of `BuskFocusControl`: an `h-7 p-0.5` group of `h-6 px-2
+  text-xs` items), Spread · Locate · Highlight as icon verbs (the band's three, same handlers, same
+  `aria-label`s, handed down by `BuskingView`), the selection summary in the gap with its text on
+  the title, the family pill while a mask is set, and — in Pads only — the host's Focus control and
+  *Edit layout* / *Done* at its end. `RigBand` draws **no** `focus="pads"` arm on the desk board
+  any more: in Pads the body is the pad row, then the page. The chevron pill back to Split goes
+  with it. `RigStrip` / the short board's merged row are unchanged.
+- **Chips only while unlinked** (D18): `DeskChip` and `BuskPageChip` render nothing while
+  following; unlinked they draw the dashed *This window* pill as now. The desk chip stays on the
+  rig row (Split, Rig); the page chip on the pad row (every shape).
+- **Two-row re-expansion** (D19): the rig row's ladder gains a second, measured set of rungs for
+  below the 700 floor — the words return while the line holds them (measured in the app: the
+  verbs' worded group is 573px, the state group's worded set ~486) and fold again below that;
+  stacked `@min-[…]:@max-[…]:` container variants, so no rung depends on rule order. The pad row
+  has its own ladder, measured, with the same shape.
+- **Progressive chip** (D19): `FollowPill` takes a class per part — the *from* suffix, the subject
+  — and the hosts supply the rungs; `aria-label` carries the whole reading so the name a test or a
+  screen reader gets never changes with the width.
+- **Labels fold** (D20): `RIG` on the rig row and `PADS` on the pad row hide at a rung before the
+  floor; `data-rig-row` / `data-pad-row` are the handles.
+- Tests: `RigBand.test.tsx` (no Pads arm on the desk board; the desk chip absent while following,
+  present unlinked; the re-expansion classes are `@min-`/`@max-` pairs whose numbers order
+  correctly; the label's fold class), `BuskPageStrip.test.tsx` (new: the row's order in Pads and
+  in Split; the three verbs press the handlers; the summary only in Pads; the page chip only
+  unlinked; the tab sizing), `BuskingView.test.tsx` (Pads draws the pad row and no band; the
+  Focus control is on the pad row in Pads and on the band otherwise), `FollowPill.test.tsx` /
+  `DeskChip` cases (the accessible name is whole whatever the classes hide).
+- Docs: CLAUDE.md §Focus and the side sheet (Pads' shape), §The rig (the pad row, D18, D19, D20),
+  §One selection, two shapes (the chip's presence rule); `busk-chrome-design/INDEX.md`'s
+  *Superseded* line for `Band.dc.html`'s Pads rows.
 - Done-marker here.
 
 ### Session B — immersive on all four live views, the 40px header (lighting-react) — Fable 5.1, high
@@ -248,8 +330,15 @@ Beyond the unit suites, at the desk after each session:
 - **A.** On `/busk` at 1122×768: no bar; the sheet's Show tab shows the live cue and GO fires it;
   the fold shows the cue number; the band is one row and 32px shorter; Pads shows the summary in
   the gap and Split does not; the chip does not move between the three shapes; narrow the window
-  until the Cells control folds and confirm it reads its mode; below 600 the band is two rows. On
-  a phone the overlay sheet has Colour · Spread · Show.
+  until the Cells control folds and confirm it reads its mode; below 700 (measured; the board
+  said 600) the band is two rows. On a phone the overlay sheet has Colour · Spread · Show.
+  *Still owed at the desk after `aa4e4c54`: the green cue number on the fold was pinned by test
+  only, the preview could not drive it without GO on the dev rig.*
+- **A.5.** On the two-screen desk, one window in Pads and one in Split: the Pads window shows the
+  pad row and no rig row, with Spread · Locate · Highlight acting on the selection made on the
+  other screen; neither chip is drawn while both windows follow; unlink the page on one and its
+  page chip appears; narrow a Split window under the floor and the verbs' words come back on
+  their own line, then go again; the `RIG` label folds last before the floor.
 - **B.** Press the glyph on each of the four live views: the sidebar and header go and come back;
   navigate to the fixtures list and the app is drawn; return and it is not. Open a second window
   from the Screens sheet with *Copy link* from an immersive row and it arrives immersive. Set it
@@ -257,6 +346,13 @@ Beyond the unit suites, at the desk after each session:
   header. ⇧F and immersive together on Safari and Chrome.
 
 ## 10. Scope honesty
+
+Session A re-measured D15's thresholds in the app at 1100 / 1260 / 820 / 700 on the band's
+content box, widened the overlay's right-hand form to the sheet's 320 floor so the runner's strip
+fits, and lifted `useMakeStackLive` beside `useRunnerDisplay` because the tab's picker browses;
+its commit message and lighting-react's CLAUDE.md are the record. D17 then removed the Pads row
+D13 and D15 were partly written for, so `Band.dc.html`'s Pads rows and its ladder's Pads rungs are
+superseded by session A.5 rather than redrawn.
 
 The fold thresholds in D15 are measured on the boards' mockup and will be re-measured in the app;
 the rule (Pads folds its verbs first; Cells keeps its mode; two rows by design) is the decision,
@@ -267,9 +363,9 @@ not a reason to copy the component.
 ## 11. Open questions
 
 - **The family pill on the one row** (D14) — drawn kept, beside the chip, only while a mask is set.
-  One span to drop.
+  One span to drop. *Shipped kept in session A; D18 keeps it while dropping the chip.*
 - **The Show tab's cards** (D2) — drawn collapsed by default; the phone opens Current in Stage.
-  One default either way.
+  One default either way. *Shipped collapsed in session A.*
 
 Answered 2026-09-21 by Chris: immersive on all four live views (D7); the band's rows merged (D13);
 the ShowHeader at 40 (D12); two rows by design below 600 and the Cells control keeping its mode
