@@ -11,7 +11,9 @@ fix genuine overflows. The system in one paragraph: a 12px gutter on every row (
 included); every chrome row 40px holding 32px controls, so the inset is 4px everywhere; three
 control tiers by nesting — 32 for a control on a row, 28 for a control inside a control (Update and
 Revert in the source box, a template chip, `New`), 24 for a toggle item, 20 for a pill; the header
-48px at every height; 8px between controls on a row and 6px inside a control; row B's filter a
+48px at every height (**revised 2026-09-21** by the busk-chrome plan's D12, session B: the
+`ShowHeader` is a 40px chrome row like the rest, `CHROME_ROW_CLASS`'s `h-10 px-3` — the boards below still draw 48); 8px
+between controls on a row and 6px inside a control; row B's filter a
 field from 360px of row up, taking the row's slack before the spacer does; the key not drawn in
 layer scope; and below 600px of row the source box folding to `Q4 · Update · Revert` with the
 change count as an amber dot on Update, and the fade trigger keeping its value and losing its

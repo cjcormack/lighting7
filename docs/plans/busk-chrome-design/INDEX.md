@@ -12,7 +12,7 @@ and a third: other suggestions. Mid-review Chris added that the expand toggle sh
 for all four live views, not only Busk; the boards say so. The screenshot that prompted it was a 1122×768 window with 152px of
 chrome above the rig band (app header 48, ShowHeader 48, ShowBar 56) and the first pad at y≈450.
 
-**Status: approved 2026-09-21; session A built the same day (lighting-react `aa4e4c54`).** The implementation plan is
+**Status: approved 2026-09-21; all three sessions built the same day (lighting-react `aa4e4c54`, `37ba7197`, `aa4f2c24`).** The implementation plan is
 [`../busk-chrome-plan.md`](../busk-chrome-plan.md), and the live copy of these boards is at
 <https://claude.ai/artifact/DCgs8coqVqkFoSTXRF6AMg> — private to Chris, a convenience; the files
 here are the authority. Where a board and the plan will disagree, the plan wins on behaviour and these files on
@@ -63,6 +63,15 @@ row becomes two rows by design.
   1100 · 1260 · 820 · 700 on the band's content box (session A's `RigBand.tsx` docblock).
 - `ShowTab.dc.html`'s phone overlay at 288: session A widened the right-hand form to the sheet's
   320 floor so the runner's strip fits.
+- **Session B shipped four things the boards do not draw** (lighting-react `aa4f2c24`). The
+  `ShowHeader` takes the shell's `CHROME_ROW_CLASS` (`h-10 px-3`, 40 on the box with its border,
+  as `Immersive.dc.html` draws it) rather than the plan's literal `px-3 py-1`, which measured 41
+  in the browser. The four live routes' loading and not-found arms draw `ImmersiveEscape` — the
+  header's glyph on a chrome row — because they render no header and an immersive touch-only
+  window had no way back. `Model.dc.html`'s "theme, full screen and Screens… are ⌘K's" was not
+  true of theme: no command existed, so `lib/theme.ts` became a store and ⌘K gained *Switch to
+  dark/light mode*. And the palette withholds the four overview-panel toggles while the panels
+  are unmounted. The breadcrumb trail is single-line with a truncating project name.
 
 ## Format
 

@@ -102,6 +102,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-SAVE-AS-GROUP`](#fu-busk-save-as-group) | Trigger | Busk | a selection is rebuilt by hand a third time |
 | [`FU-BUSK-RIG-GROUP-ID`](#fu-busk-rig-group-id) | Ready | Busk | — |
 | [`FU-HAND-GROUP-KIND`](#fu-hand-group-kind) | Ready | Busk | — |
+| [`FU-SURFACE-IMMERSIVE-SET`](#fu-surface-immersive-set) | Trigger | MIDI | a desk button should expand a named window over the app |
+| [`FU-BUSK-SUMMARY-SPLIT`](#fu-busk-summary-split) | Trigger | Busk | the selection summary is missed in Split with the rows scrolled out of view |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -702,6 +704,28 @@ a selection holding cells (a group holds patches, so cells would have to widen t
 `SubselectMode.ALL`'s rule).
 
 **Trigger**: a selection is rebuilt by hand a third time.
+
+### `FU-SURFACE-IMMERSIVE-SET`
+
+**No MIDI target for a window's immersive fact** · Trigger · Busk-chrome plan §8, 2026-09-21
+
+`desk.immersive` (busk-chrome plan D7) is per window and client-side: the `ShowHeader` glyph, ⌘K,
+the Screens sheet's Chrome segment and `?immersive=on` at boot all set it without lighting7. An
+`ImmersiveSet(windowName, on)` target would be `BuskFocusSet`'s twin — addressed by registry name,
+judged by window health, delivered as `windows.viewOptions {immersive}` under whichever live view
+the window is on (D9: nothing new on the wire). Not built; the Screens sheet and ⌘K reach it.
+
+**Trigger**: a desk button should expand a named window over the app.
+
+### `FU-BUSK-SUMMARY-SPLIT`
+
+**The selection summary is drawn only in Pads** · Trigger · Busk-chrome plan §8, D13, 2026-09-21
+
+D13 dropped the summary from Split and Rig on the reasoning that the lit tiles say it; with the
+rows scrolled out of view in Split they do not. If it turns out to be missed, the fold strip's head
+count is the first place to look and the pad row's gap the second — not a third row on the band.
+
+**Trigger**: the selection summary is missed in Split with the rows scrolled out of view.
 
 ### `FU-SLOT-DROP-OVERLAY-HIDDEN`
 
