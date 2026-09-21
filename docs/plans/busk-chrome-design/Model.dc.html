@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+  </style>
+  <style>
+    .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; }
+    .box { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px 14px; display:flex; flex-direction:column; gap:8px; min-width:0; }
+    .box .t { font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .code { font-family:ui-monospace, Menlo, monospace; font-size:10.5px; line-height:1.5; color:var(--fg); background:oklch(0.17 0.005 286); border:1px solid var(--bd); border-radius:6px; padding:8px 10px; white-space:pre; overflow:hidden; }
+    .li { display:flex; gap:7px; font-size:11px; line-height:1.4; color:var(--mfg); }
+    .li b { color:var(--fg); font-weight:600; }
+    .li::before { content:''; width:5px; height:5px; border-radius:50%; background:var(--mfg); flex:0 0 auto; margin-top:6px; }
+    .idea { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; display:flex; flex-direction:column; gap:6px; }
+    .idea .t { font-size:12px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .idea.yes { border-color:oklch(0.62 0.17 145 / 0.5); }
+    .idea.no { border-color:oklch(0.5 0.15 25 / 0.5); }
+    .idea.ask { border-color:oklch(0.6 0.14 80 / 0.6); }
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1180px; display:flex; flex-direction:column; overflow:hidden; position:relative; padding:20px 24px; gap:16px;">
+  <div style="display:flex; align-items:baseline; gap:14px;">
+    <span class="h1">Model, wire, where the code goes &mdash; and the other suggestions</span>
+    <span class="cap">Two per-window facts change, nothing on the desk does, and no backend session is needed for either half. Three of the calls below were made by Chris on 2026-09-21; one is open.</span>
+  </div>
+
+  <div class="grid">
+    <div class="box">
+      <span class="t">In the window <span class="tag new">changed</span></span>
+      <div class="code">busk.sheet      'none'|'speed'|'colour'|'spread'|'show'
+busk.lastSheet  the tab the fold reopens onto — 'show' legal
+desk.immersive  'off'|'on'   ← new, sessionStorage, default off
+                one fact for all four live views, beside
+                desk.follow and desk.fullscreen, not busk.*
+?immersive=on   consumed at boot like ?window=, stripped</div>
+      <div class="li"><span><b>Per tab, never the desk's.</b> Same model as focus, rows and the sheet (<span class="mono">lib/buskWindow.ts</span>): <span class="mono">createSyncStore</span> over <span class="mono">sessionStorage</span>, <span class="mono">null</span> meaning <i>not chosen</i>, the reader resolving the default. Immersive's default is <span class="mono">'off'</span> on every surface &mdash; nothing about a screen's size says the app should vanish.</span></div>
+      <div class="li"><span><b>Applies on all four live views</b> (Chris, 2026-09-21). <span class="mono">Layout</span> reads <span class="mono">useImmersive()</span> together with <span class="mono">isLiveViewPath</span> (<span class="mono">lib/liveViews.ts</span>, the same predicate the sidebar's two-preference split uses), so a window on the fixtures list draws the app whatever the fact says &mdash; that list is navigated <i>from</i> the sidebar &mdash; and finds immersive waiting when it returns to any live view.</span></div>
+    </div>
+    <div class="box">
+      <span class="t">On the wire <span class="tag kept">no new frame</span></span>
+      <div class="code">windows.announce { …, viewOptions: {
+  immersive: 'on'|'off',       ← on every live view
+  focus, rigRows, sheet,
+  pageFollows, page?           ← busk only
+} }
+windows.viewOptions { targetId, view: 'show',
+  options: { immersive: 'on' } }  ← same command
+?window=Screen%202&page=3&focus=split
+  &sheet=show&immersive=on        ← Copy link</div>
+      <div class="li"><span><b>The registry never learns the word.</b> <span class="mono">viewOptions</span> is a free string map (busk-further D13), so <span class="mono">immersive</span> rides it the way <span class="mono">rigRows</span> did &mdash; no lighting7 change for the Screens sheet, &#8984;K or the setup link to set it. It cannot be a top-level announce key: the desk's Json is bare and one extra key drops the frame (<span class="mono">windowsApi.test.ts</span> pins the set). So the Programmer, Show and Prompt Book entries in <span class="mono">WINDOW_VIEWS</span> gain an <span class="mono">options</span> descriptor of one entry, and the Screens sheet draws a Chrome segment on every live-view row from it, generically. The Sheet segment gains <i>Show</i> from <span class="mono">LIVE_SHEET_TABS</span>.</span></div>
+      <div class="li"><span><b>MIDI, later if wanted.</b> An <span class="mono">ImmersiveSet(windowName, on)</span> target would be <span class="mono">BuskFocusSet</span>'s twin &mdash; addressed by registry name, judged by window health. Not proposed for this pass; <span class="mono">buskSheetToggle</span> already reaches the Show tab.</span></div>
+    </div>
+    <div class="box">
+      <span class="t">Where the code goes</span>
+      <div class="li"><span><b><span class="mono">routes/Busk.tsx</span></b> &mdash; drops <span class="mono">&lt;ShowBar&gt;</span>; keeps <span class="mono">useShowBarProps</span> for the transport and hands <span class="mono">showBarProps</span> to the view for the tab. <b><span class="mono">ShowHeader.tsx</span></b> draws <span class="mono">ImmersiveToggle</span> itself, after the host's <span class="mono">actions</span> and before the switcher, so all four views get it with no per-host wiring &mdash; and the offline chip beside it.</span></div>
+      <div class="li"><span><b><span class="mono">components/busking/ShowTab.tsx</span></b> &mdash; mounts <span class="mono">RunMobile</span> (with <span class="mono">ProgrammerIndicator</span> in its strip via a new <span class="mono">strip</span> slot) over a lifted <span class="mono">useRunnerDisplay(projectId, transport)</span> that <span class="mono">ShowPage</span> switches to as well.</span></div>
+      <div class="li"><span><b><span class="mono">SideSheet.tsx</span> / <span class="mono">SideSheetFold.tsx</span></b> &mdash; a fourth <span class="mono">TabSpec</span>; the strip folds tab words below 400px of sheet (<span class="mono">@container</span> on the strip); the fold draws the live cue under the Show glyph off <span class="mono">useShowTransport</span>'s server cursor.</span></div>
+      <div class="li"><span><b><span class="mono">Layout.tsx</span></b> &mdash; one boolean, <span class="mono">immersive &amp;&amp; isLiveViewPath</span>, that skips the <span class="mono">&lt;aside&gt;</span>, the <span class="mono">&lt;header&gt;</span>, the four overview panels and the sidebar's <span class="mono">marginLeft</span>. Banners, <span class="mono">HandChip</span>, the AI panel and <span class="mono">DeskDndProvider</span> are untouched. Below <span class="mono">md</span> the hamburger in that header is the only navigation, so the mobile drawer's <i>button</i> moves to the ShowHeader's left edge while immersive &mdash; the drawer itself is unchanged.</span></div>
+      <div class="li"><span><b><span class="mono">lib/immersive.ts</span>, <span class="mono">lib/windowViews.ts</span>, <span class="mono">lib/screens.ts</span>, <span class="mono">navigation.ts</span></b> &mdash; the store (with <span class="mono">?immersive=</span> consumed at boot beside <span class="mono">?window=</span>), the one-entry descriptor on the three other live views, the key on the setup URL, two &#8984;K commands (<i>Expand over the app</i> / <i>Show the app</i>, this window; and the per-window arm beside <i>Focus&hellip;</i>).</span></div>
+      <div class="li"><span><b><span class="mono">useShowBarProps</span>'s docblock</b> &mdash; "three live views that have one" becomes two; the busk view is the second exception after the programmer, and for the opposite reason: not too much chrome for the job, but the wrong shape of it.</span></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="box">
+      <span class="t">What leaves <span class="tag gone">gone</span></span>
+      <div class="li"><span><b>The ShowBar on the busk view</b>, on every board &mdash; desk, short and narrow. Show and the Prompt Book keep theirs; the programmer never had one.</span></div>
+      <div class="li"><span><b>The narrow board's reason for no Speed tab</b> in the overlay sheet was that the bar carried the chip. The Show tab's strip carries it now, so the overlay sheet is Colour &middot; Spread &middot; Show and still has no Speed tab.</span></div>
+    </div>
+    <div class="box">
+      <span class="t">What stays <span class="tag kept">kept</span></span>
+      <div class="li"><span><b>The ShowHeader</b> &mdash; at <b>40px</b> now (Chris, 2026-09-21), the shell's chrome-row height with 32px controls on a 4px inset, on all four live views; every element on it is about the show or the way out. It is the row immersive leaves standing; folding it too would take the switcher, and a window with no sidebar and no switcher has no way to another view but &#8984;K.</span></div>
+      <div class="li"><span><b>The page strip and the page</b> &mdash; untouched. The rig band's label row and controls row become <b>one row</b> (Band.dc.html; Chris, 2026-09-21): the summary is drawn only in Pads, in the gap before the Focus control.</span></div>
+      <div class="li"><span><b>Full screen</b> (&#8679;F, the user menu, the Screens sheet) &mdash; independent, composes. Immersive does not enter or leave full screen and full screen does not flip immersive.</span></div>
+    </div>
+    <div class="box">
+      <span class="t">Sessions</span>
+      <div class="li"><span><b>A &mdash; the Show tab and the one-row band</b> (lighting-react): the merged row in <span class="mono">RigBand</span> with the summary in the Pads gap and the two re-measured folds; lift <span class="mono">useRunnerDisplay</span>, the tab, the fold's cue number, the strip's fold-to-glyphs, drop the bar from <span class="mono">routes/Busk.tsx</span>, the overlay sheet's third tab, tests (<span class="mono">SideSheet</span>, <span class="mono">buskWindow</span>, <span class="mono">windowsApi</span> key set unchanged, <span class="mono">ScreensSheet</span> segment).</span></div>
+      <div class="li"><span><b>B &mdash; immersive and the 40px header</b> (lighting-react): the fact, the boot read, <span class="mono">ShowHeader</span> at 40, <span class="mono">Layout</span>'s read, the header glyph on <span class="mono">ShowHeader</span>, the offline chip, &#8984;K, the Screens row's segment on every live-view row and the setup link, tests (<span class="mono">Layout</span> hides both on each of the four live paths and on none other; the announce carries the key under every live view and the key set is otherwise unchanged; a reload keeps the fact).</span></div>
+      <div class="li"><span><b>Then this record</b>: the busk-further boards' <span class="mono">Main</span>, <span class="mono">Phones</span> and <span class="mono">Tablets</span> still draw the ShowBar &mdash; a line under their INDEX's <i>Superseded</i> pointing here, not a redraw. Backend: none; CLAUDE.md §"The show-editing lock" and §Focus and the side sheet gain a paragraph each.</span></div>
+    </div>
+  </div>
+
+  <span class="lbl" style="margin-top:4px;">Other suggestions &mdash; three proposed with the two asked for, one decided by Chris, three considered and declined, one to decide</span>
+  <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px;">
+    <div class="idea yes"><span class="t"><span class="tag new">proposed</span>The live cue on the fold</span><p class="cap">With the bar gone, a folded sheet says nothing about the show. The fold strip gains the live cue number in green under the Show glyph, so Colour open or the sheet folded still answers "what is on stage" at a glance. Nothing is computed client-side: it is the server cursor the bar already read.</p></div>
+    <div class="idea yes"><span class="t"><span class="tag new">proposed</span>Offline on the header, only when offline</span><p class="cap">The app header's Connected pill goes with the header. A red <i>Offline</i> chip on the ShowHeader, drawn only while the socket is down, keeps the one state that matters visible in immersive; a pill that reads Connected all night is exactly what immersive exists to remove.</p></div>
+    <div class="idea yes"><span class="t"><span class="tag new">proposed</span>Copy link carries the shape</span><p class="cap">The Screens sheet's per-row <i>Copy link</i> already mints <span class="mono">?window=&amp;page=&amp;focus=&amp;sheet=</span>; <span class="mono">immersive=</span> joins it, so a second desk screen launched from the sheet arrives with no app around it. The row's Chrome segment (<i>App &middot; Immersive</i>) sets it remotely like Focus does.</p></div>
+    <div class="idea yes"><span class="t"><span class="tag new">decided</span>The header at 40</span><p class="cap">Chris, 2026-09-21: try it. The ShowHeader becomes a 40px chrome row with the same 32px controls on a 4px inset (<span class="mono">px-3 py-1</span>), on all four live views; the programmer chrome doc's "48 at every height" is revised by this. Immersive busk is then 40px of chrome above the band.</p></div>
+    <div class="idea no"><span class="t"><span class="tag gone">declined</span>Fold the ShowHeader too</span><p class="cap">A "bare" rung with no header at all was considered. It takes the switcher, Stop, the live dot and the way back out with it; the way back would have to be a floating button over a live view, which the full-screen work already refused. 48px is the price of a window that can always leave.</p></div>
+    <div class="idea no"><span class="t"><span class="tag gone">declined</span>Transport keys while the Show tab is open</span><p class="cap">Space on a focused pad activates the pad; a key that also fired GO is two effects from one press on a live rig. Show binds them while locked because there nothing else takes Space. The footer, MIDI and the Show view are the routes.</p></div>
+    <div class="idea yes"><span class="t"><span class="tag new">decided</span>Immersive on all four live views</span><p class="cap">Drawn first as busk-only; Chris on 2026-09-21: build it for the Programmer, Show and the Prompt Book as well. So the fact is a <i>window</i> fact (<span class="mono">desk.immersive</span>), the glyph is the shared <span class="mono">ShowHeader</span>'s, and <span class="mono">Layout</span> reads <span class="mono">isLiveViewPath</span> &mdash; the boards above are updated to say so.</p></div>
+    <div class="idea yes"><span class="t"><span class="tag new">decided</span>The band's two rows become one</span><p class="cap">Chris, 2026-09-21: merge the label row into the controls row, dropping the summary where the tiles show it and keeping it in the gap in Pads. Band.dc.html draws the three shapes and the fold ladder; the family pill is kept beside the chip with its reason. Pad density stays <span class="mono">FU-BUSK-PAD-SIZE</span>.</p></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>

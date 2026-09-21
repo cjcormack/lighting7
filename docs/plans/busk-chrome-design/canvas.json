@@ -1,0 +1,96 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Main.dc.html": {
+      "h": 1000,
+      "title": "Busk view \u00b7 no ShowBar, the Show tab open",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Immersive.dc.html": {
+      "h": 1240,
+      "title": "Immersive \u00b7 and the vertical budget",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "ShowTab.dc.html": {
+      "h": 1000,
+      "title": "The Show tab \u00b7 320, 400, the fold, the phone",
+      "w": 1440,
+      "x": 0,
+      "y": 1120
+    },
+    "Model.dc.html": {
+      "h": 1180,
+      "title": "Model, wire, code, other suggestions",
+      "w": 1440,
+      "x": 1520,
+      "y": 1120
+    },
+    "Band.dc.html": {
+      "h": 2180,
+      "title": "The rig band's one row \u00b7 Split, Rig, Pads, and the folds",
+      "w": 1440,
+      "x": 3040,
+      "y": 1120
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-21T15:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "how": {
+      "color": "gray",
+      "text": "How to read this. Top row is the window twice \u2014 with the app drawn and with it hidden. Bottom row is the Show tab at full size and the model. Everything is dark-only and in the busk view's own vocabulary on purpose \u2014 these are the intended pixels, not structure to copy.",
+      "w": 360,
+      "x": 4560,
+      "y": 0
+    },
+    "q1": {
+      "color": "gray",
+      "text": "Answered 2026-09-21 \u2014 the ShowHeader at 40 (Chris: try it). Drawn at 40 on every board now: a chrome row with 32px controls on a 4px inset, all four live views.",
+      "w": 360,
+      "x": 4560,
+      "y": 400
+    },
+    "q2": {
+      "color": "orange",
+      "text": "Open call 2 \u2014 cards collapsed by default on the Show tab. Drawn collapsed (the rig band is the stage). If the Current card should open in Stage as the phone does, it is one default; the toggle is on the card either way.",
+      "w": 360,
+      "x": 4560,
+      "y": 800
+    },
+    "t1": {
+      "kind": "title1",
+      "maxW": 3000,
+      "text": "The live views' chrome: the busk Show tab, immersive on all four, the vertical budget",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "q3": {
+      "color": "orange",
+      "text": "Open call 3 \u2014 the family pill on the one row. Drawn kept, beside the desk chip: the mask is the one part of the selection the tiles cannot show. If the chip really is the only thing needed from the old label row, it is one span to drop.",
+      "w": 360,
+      "x": 4560,
+      "y": 1200
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Immersive.dc.html",
+    "ShowTab.dc.html",
+    "Band.dc.html",
+    "Model.dc.html"
+  ],
+  "pages": [],
+  "title": "Busk View: Chrome"
+}

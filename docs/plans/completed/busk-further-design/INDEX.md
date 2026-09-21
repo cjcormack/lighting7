@@ -70,6 +70,16 @@ disagree, this list wins:
 - **The Spread tab's preview strip is gone** — the rig is the preview — and its Wings glyph is drawn
   as two fans meeting at the centre so it is no longer Mirror's V (`Spread`).
 
+## Superseded by the busk-chrome record (2026-09-21)
+
+The boards still draw the **ShowBar** on the busk view (`Main`, `Phones`, `Tablets`), the rig band's
+**label row over its controls row** (`Main`, `Focus`, `Phones`), and the **ShowHeader at 48**. All
+three are overtaken by [`../../busk-chrome-plan.md`](../../busk-chrome-plan.md) and its boards in
+[`../../busk-chrome-design/`](../../busk-chrome-design/INDEX.md): the bar leaves the busk view for a
+Show tab on the side sheet, the band is one row, and the header is a 40px chrome row. Read those
+for the busk view's chrome; these boards stay the record of the rig, the sheet's three tabs, spread
+and cells.
+
 ## Format
 
 Each `*.dc.html` is one artboard. All twelve are **static mockups**: no `{{ hole }}` bindings and a

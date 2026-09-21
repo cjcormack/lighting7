@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+  </style>
+  <style>
+    .mini { border:1px solid var(--bd); border-radius:8px; overflow:hidden; background:var(--bg); display:flex; flex-direction:column; }
+    .mini .b { display:flex; align-items:center; padding:0 6px; font-size:8px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; flex-shrink:0; }
+    .mini .b.app { background:var(--pri); color:#fff; }
+    .mini .b.hdr { border-bottom:1px solid var(--bd); color:var(--mfg); }
+    .mini .b.bar { border-bottom:1px solid var(--bd); color:var(--mfg); background:oklch(0.25 0.06 25 / 0.35); }
+    .mini .b.band { border-bottom:1px solid var(--bd); color:var(--mfg); background:oklch(0.21 0.006 285.885); }
+    .mini .b.strip { border-bottom:1px solid var(--bd); color:var(--mfg); }
+    .mini .page { flex:1; display:grid; grid-template-columns:repeat(4, 1fr); gap:4px; padding:5px; align-content:start; }
+    .mini .page i { display:block; height:16px; border-radius:3px; border:1px solid var(--bd); background:var(--card); }
+    .mini .row { display:flex; flex:1; min-height:0; }
+    .mini .rail2 { width:14px; border-right:1px solid var(--bd); background:var(--bg); flex-shrink:0; }
+    .mini .sheet2 { width:38px; border-left:1px solid var(--bd); flex-shrink:0; background:oklch(0.21 0.006 285.885 / 0.4); }
+    .px { font-family:ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; }
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1240px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+  <!-- THE WINDOW, IMMERSIVE ON: no sidebar, no app header. The ShowHeader is the top row and carries the way back. -->
+  <div style="flex:1; min-height:0; display:flex; flex-direction:column;">
+    <div class="showhdr" style="position:relative;">
+      <div class="crumbs">Projects <span>&rsaquo;</span> Experiment <span class="active">active</span> <span>&rsaquo;</span> <b>Busk</b></div>
+      <span style="flex:1;"></span>
+      <span class="chip" style="border-color:oklch(0.55 0.2 25 / 0.6); color:oklch(0.8 0.12 25); display:none;">Offline</span>
+      <span class="ibtn on" title="Show the app again — the sidebar and the app header (this window)"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></span>
+      <div class="switcher">
+        <span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Programmer</span>
+        <span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg>Show</span>
+        <span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Prompt Book</span>
+        <span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg>Busk</span>
+      </div>
+      <span class="stopbtn"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>Stop</span>
+      <span class="dot"></span>
+      <span class="callout" style="top:4px; right:494px;">1</span>
+    </div>
+
+    <div style="display:flex; flex:1; min-height:0;">
+      <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+        <!-- RIG BAND, three lines now that there is room -->
+        <div style="flex-shrink:0; padding:8px 12px 6px; border-bottom:1px solid var(--bd); display:flex; flex-direction:column; gap:8px; position:relative;">
+          <div class="ctrlrow" ><span class="lbl">Rig</span><span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span style="color:var(--mfg);">Cells:</span> All <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span><span class="btn sm out" title="Previous along the rig"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></span><span class="btn sm out" title="Next along the rig"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span><span class="btn sm out" title="Spread&hellip;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Spread&hellip;</span><span class="btn sm out" title="Locate"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>Locate</span><span class="btn sm out" title="Highlight"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12"/></svg>Highlight</span><span class="btn sm out" title="Clear"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Clear</span><span style="width:4px; flex:0 0 auto;"></span><span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Targets: Desk</span><span style="flex:1;"></span><div class="seg"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg>Split</span><span class=""><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Pads</span><span class=""><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>Rig</span></div><span class="btn sm out">Edit layout</span></div>
+          <div class="rrow"><span class="rlbl">Groups</span><div class="tiles">
+            <div class="tile on"><div class="t1"><span>Front wash</span><span class="cnt">6</span></div><div class="live"><i style="width:80%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Movers</span><span class="cnt">4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Blinders</span><span class="cnt">4</span></div><div class="live"><i style="width:0%;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Sides</span><span class="cnt">4</span></div><div class="live"><i style="width:30%; background:#c04bff;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Floor</span><span class="cnt">6</span></div><div class="live"><i style="width:0%;"></i></div></div>
+          </div></div>
+          <div class="rrow"><span class="rlbl">Movers</span><div class="tiles">
+            <div class="tile"><div class="t1"><span>Mover 1</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Mover 2</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Mover 3</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Mover 4</span></div><div class="live"><i style="width:55%; background:#4f7cff;"></i></div></div>
+          </div></div>
+          <div class="rrow"><span class="rlbl">Bars</span><div class="tiles">
+            <div class="tile some"><div class="t1"><span>Bar L</span><span class="cnt">4 of 8</span></div><div class="pips"><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span><span class="pip on"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Bar R</span><span class="cnt">8</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:100%; background:#f5b342;"></i></div></div>
+            <div class="tile"><div class="t1"><span>Pixel strip</span><span class="cnt">16</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:0%;"></i></div></div>
+          </div></div>
+          <div class="handle"><span style="display:inline-block; width:48px; height:4px; border-radius:2px; background:var(--bd);"></span></div>
+        </div>
+        <div style="height:40px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd);">
+          <div class="seg"><span class="on">Colour</span><span>Position</span><span>Beam</span><span>Cues</span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
+          <span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Page: Desk</span>
+        </div>
+        <div style="flex:1; min-height:0; overflow:hidden; padding:12px; display:flex; flex-direction:column; gap:12px;">
+          <div style="display:grid; grid-template-columns:8fr 4fr; gap:12px;">
+            <div class="bank"><div class="bankh"><span class="bankname">Colours</span><span class="solotag">Solo</span></div><div class="pads">
+              <div class="pad all"><div class="padrow"><span class="sw" style="background:#f5b342;"></span><span class="padname">Warm Amber</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#2456ff;"></span><span class="padname">Deep Blue</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ff2f4f;"></span><span class="padname">Red</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#7f00ff;"></span><span class="padname">UV wash</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ffffff;"></span><span class="padname">Open white</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ff8ac9;"></span><span class="padname">Pink</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#33d17a;"></span><span class="padname">Green</span></div></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#00c8ff;"></span><span class="padname">Cyan</span></div></div>
+            </div></div>
+            <div class="bank"><div class="bankh"><span class="bankname">Effects</span></div><div class="pads">
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Colour Pulse</span></div><span class="paddetail">&frac12; &middot; M2</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Rainbow</span></div><span class="paddetail">1 &middot; M2</span></div>
+              <div class="pad"><div class="padrow"><svg class="ico14 wave" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg><span class="padname">Strobe</span></div><span class="paddetail">&frac14; &middot; M1</span></div>
+            </div></div>
+          </div>
+          <div style="display:grid; grid-template-columns:6fr 6fr; gap:12px;">
+            <div class="bank"><div class="bankh"><span class="bankname">Washes</span></div><div class="pads">
+              <div class="pad some"><div class="padrow"><span class="padname">Ballyhoo</span></div><span class="paddetail">Look &middot; 2 fx</span></div>
+              <div class="pad"><div class="padrow"><span class="padname">Stage wash</span></div><span class="paddetail">Look</span></div>
+              <div class="pad"><div class="padrow"><span class="padname">Sidelight</span></div><span class="paddetail">Look</span></div>
+              <div class="pad"><div class="padrow"><span class="sw" style="background:#ffd27a;"></span><span class="padname">50%</span></div><span class="paddetail">Intensity</span></div>
+            </div></div>
+            <div class="bank"><div class="bankh"><span class="bankname">Song cues</span><span class="solotag">Solo</span></div><div class="pads">
+              <div class="pad cue live"><span class="cn">12</span><span class="cname">Verse 2</span></div>
+              <div class="pad cue"><span class="cn">13</span><span class="cname">Chorus</span></div>
+              <div class="pad cue"><span class="cn">14</span><span class="cname">Bridge</span></div>
+              <div class="pad cue"><span class="cn">S-1</span><span class="cname">Blackout</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the sheet folded: the strip gains the live cue under the Show glyph -->
+      <div class="fold" style="position:relative;">
+        <div class="cell"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; padding-top:10px;"><span class="beat"></span><span class="mono num" style="font-size:11px; font-weight:600;">120</span></div>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:2px; padding-top:12px;">
+          <span class="g"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <span class="g"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.7-.7 1.7-1.7 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.7 1.7-1.7H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.4-10-8.4Z"/></svg></span>
+          <span class="g"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg></span>
+          <span class="g live"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg></span>
+          <span class="mono num" style="font-size:11px; font-weight:700; color:var(--green);">12</span>
+        </div>
+        <span style="flex:1;"></span>
+        <span style="width:12px; height:12px; border-radius:50%; background:#f5b342; margin-bottom:6px;"></span>
+        <span class="mono num" style="font-size:10px; color:var(--mfg); margin-bottom:10px;">14</span>
+        <span class="callout" style="top:172px; left:-10px;">2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- THE SAME GLYPH ON THE OTHER THREE HEADERS (Chris, 2026-09-21: all four live views) -->
+  <div style="flex-shrink:0; border-top:1px solid var(--bd); padding:10px 16px; display:flex; gap:16px; align-items:center; position:relative;">
+    <span class="lbl" style="width:120px; flex:0 0 auto;">The same glyph on all four headers</span>
+    <div class="showhdr" style="flex:1; height:40px; border:1px solid var(--bd); border-radius:8px; gap:8px; padding:0 8px;"><div class="crumbs" style="font-size:12px;">&hellip; <b>Programmer</b></div><span style="flex:1;"></span><span class="chip">Q4 &middot; 14</span><span class="ibtn on" style="width:28px; height:28px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></span><div class="switcher"><span class="on" style="height:24px; font-size:11px;">Programmer</span><span style="height:24px; font-size:11px;">&hellip;</span></div><span class="stopbtn" style="height:26px; font-size:11px;">Stop</span><span class="dot"></span></div>
+    <div class="showhdr" style="flex:1; height:40px; border:1px solid var(--bd); border-radius:8px; gap:8px; padding:0 8px;"><div class="crumbs" style="font-size:12px;">&hellip; <b>Show</b></div><span style="flex:1;"></span><span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Locked</span><span class="ibtn on" style="width:28px; height:28px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></span><div class="switcher"><span style="height:24px; font-size:11px;">&hellip;</span><span class="on" style="height:24px; font-size:11px;">Show</span><span style="height:24px; font-size:11px;">&hellip;</span></div><span class="stopbtn" style="height:26px; font-size:11px;">Stop</span><span class="dot"></span></div>
+    <div class="showhdr" style="flex:1; height:40px; border:1px solid var(--bd); border-radius:8px; gap:8px; padding:0 8px;"><div class="crumbs" style="font-size:12px;">&hellip; <b>Prompt Book</b></div><span style="flex:1;"></span><span class="ibtn on" style="width:28px; height:28px;"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg></span><div class="switcher"><span style="height:24px; font-size:11px;">&hellip;</span><span class="on" style="height:24px; font-size:11px;">Prompt Book</span><span style="height:24px; font-size:11px;">&hellip;</span></div><span class="stopbtn" style="height:26px; font-size:11px;">Stop</span><span class="dot"></span></div>
+  </div>
+
+  <!-- THE BUDGET: three states of one 1122×768 window, to scale (0.5) -->
+  <div style="flex-shrink:0; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); padding:12px 16px; display:flex; gap:16px; align-items:stretch; position:relative;">
+    <div style="width:250px; display:flex; flex-direction:column; gap:6px;">
+      <span class="h2">The vertical budget</span>
+      <p class="cap">One 1122&times;768 window (Chris's screenshot, 2026-09-21) in three states, drawn to scale. The number is <b>chrome above the rig band</b>; the band itself loses a further 32px to the merged row (Band.dc.html), drawn in the two right-hand columns. The rail's 64px come back sideways, which is one more pad per row on a 1122px screen.</p>
+      <p class="cap"><b>Immersive is a fact of this window</b>, beside the follow flag and full screen rather than beside focus: <span class="mono">desk.immersive</span> in <span class="mono">sessionStorage</span>, one value for all four live views, announced under whichever of them the window is on, set from the header glyph, &#8984;K, the Screens sheet, or <span class="mono">?immersive=on</span> at boot. It is not full screen and does not imply it &mdash; a windowed browser can be immersive and a full-screen one can show the app; the two compose, and the Screens sheet's <i>Copy link</i> carries it with the rest of the setup.</p>
+    </div>
+    <div style="flex:1; display:grid; grid-template-columns:repeat(3, 1fr); gap:16px;">
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="font-size:11px; font-weight:600;">Today <span class="tag gone" style="margin-left:6px;">152px</span></span>
+        <div class="mini" style="height:330px;">
+          <div class="b app" style="height:24px;">App header &middot; 48</div>
+          <div class="b hdr" style="height:24px;">ShowHeader &middot; 48</div>
+          <div class="b bar" style="height:28px;">ShowBar &middot; 56</div>
+          <div class="row"><div class="rail2"></div><div style="flex:1; display:flex; flex-direction:column;">
+            <div class="b band" style="height:100px;">Rig band &middot; 2 rows &middot; 200</div>
+            <div class="b strip" style="height:20px;">Page strip &middot; 40</div>
+            <div class="page"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div><div class="sheet2"></div></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="font-size:11px; font-weight:600;">ShowBar gone <span class="tag kept" style="margin-left:6px;">88px</span></span>
+        <div class="mini" style="height:330px;">
+          <div class="b app" style="height:24px;">App header &middot; 48</div>
+          <div class="b hdr" style="height:20px;">ShowHeader &middot; 40</div>
+          <div class="row"><div class="rail2"></div><div style="flex:1; display:flex; flex-direction:column;">
+            <div class="b band" style="height:84px;">Rig band &middot; 2 rows &middot; 168</div>
+            <div class="b strip" style="height:20px;">Page strip &middot; 40</div>
+            <div class="page"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div><div class="sheet2" style="width:80px;"></div></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <span style="font-size:11px; font-weight:600;">Immersive <span class="tag new" style="margin-left:6px;">40px</span></span>
+        <div class="mini" style="height:330px;">
+          <div class="b hdr" style="height:20px;">ShowHeader &middot; 40</div>
+          <div class="row"><div style="flex:1; display:flex; flex-direction:column;">
+            <div class="b band" style="height:110px;">Rig band &middot; 3 rows &middot; 220</div>
+            <div class="b strip" style="height:20px;">Page strip &middot; 40</div>
+            <div class="page" style="grid-template-columns:repeat(5, 1fr);"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          </div><div class="sheet2"></div></div>
+        </div>
+      </div>
+    </div>
+    <span class="callout" style="top:8px; left:-10px;">3</span>
+  </div>
+
+  <div class="legend">
+    <div><span class="n">1</span><span><b>One glyph, both ways.</b> The expand glyph on the ShowHeader &mdash; a 40px chrome row now, on all four live views &mdash; is the control and the readout: outward arrows with the app drawn, inward arrows lit while immersive. It hides the sidebar (not collapses &mdash; hides) and the app header, and with them the four overview panels, whose toggles live on that header; their visibility is untouched, so they come back on exit. Nothing else moves: the ShowHeader keeps the switcher, Stop and the dot, so a window with no sidebar still has every way out.</span></div>
+    <div><span class="n">2</span><span><b>What the header took with it comes back where it is read.</b> The blind report and the value count (<span class="mono">ProgrammerIndicator</span>) are on the Show tab's strip; the fold strip shows the <b>live cue number</b> under the Show glyph, green, so a folded sheet still says what is on stage. The connection pill is drawn on the ShowHeader only while the desk is <i>offline</i> &mdash; a chip that says Connected all night is the one thing immersive exists to remove. Theme, full screen and Screens&hellip; are &#8984;K's.</span></div>
+    <div><span class="n">3</span><span><b>Immersive is per window, on all four live views, and is not full screen</b> (Chris, 2026-09-21). A second desk screen launched from the Screens sheet arrives with it on (<span class="mono">?window=Screen%202&amp;immersive=on&amp;page=&hellip;</span>); the operator's main screen keeps the app. <span class="mono">Layout</span> reads the fact together with <span class="mono">isLiveViewPath</span>, so the Programmer, Show and the Prompt Book expand the same way from the same glyph on their shared header &mdash; and a window that leaves for the fixtures list gets the app back, since that list <i>is</i> navigated from the sidebar, and finds immersive waiting when it returns to any live view.</span></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>
