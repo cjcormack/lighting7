@@ -170,7 +170,7 @@ Each session ends with `npm run check` green, its CLAUDE.md paragraph written, a
 here (strikethrough plus commit hash, nothing more — the detail belongs in the commit message).
 Each runs under `/verified-ship`.
 
-### Session A — the Show tab and the one-row band (lighting-react) — Fable 5.1, high
+### ~~Session A — the Show tab and the one-row band (lighting-react) — Fable 5.1, high~~ — done, lighting-react `aa4e4c54`
 
 - Lift `useRunnerDisplay` out of `ShowPage` (the `activeCue` / `standbyCue` / `nextStack` /
   `completedCueIds` derivation) into `hooks/useRunnerDisplay.ts`; `ShowPage` calls it.
