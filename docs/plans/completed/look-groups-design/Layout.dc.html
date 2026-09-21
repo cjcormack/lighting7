@@ -159,12 +159,13 @@
 <div style="display:flex; flex-direction:column; gap:10px;">
   <div class="note" style="padding:8px 10px; display:flex; flex-direction:column; gap:6px;">
     <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); width:44px;">Width</span><div class="seg"><span>&frac14;</span><span>&frac13;</span><span class="on">&frac12;</span><span>&frac23;</span><span>&frac34;</span><span>Full</span></div></div>
-    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); width:44px;">Flow</span><div class="seg"><span class="on">Wrap</span><span>Column</span></div></div>
-    <div style="font-size:10px; color:var(--mfg);">Width belongs to the column; flow to the bank. Both live in the &#8943; menu and on the column gutter.</div>
+    <div style="display:flex; align-items:center; gap:8px;"><span style="font-size:11px; color:var(--mfg); width:44px;">Flow</span><div class="seg"><span class="on">Wrap</span><span>Column</span><span>Scroll</span></div></div>
+    <div style="font-size:10px; color:var(--mfg);">Width belongs to the column; flow to the bank. Both live in the &#8943; menu and on the column gutter. <i>Revised 2026-09-21:</i> a third flow, <b>Scroll</b> &mdash; one line of fixed-width pads scrolling sideways &mdash; and the busk view's rig rows carry the same width and flow, Scroll being their default.</div>
   </div>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
     <div><div class="mb"><div class="n" style="display:flex; gap:6px; align-items:center;">Wrap</div><div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:4px;"><div class="mp"></div><div class="mp"></div><div class="mp"></div><div class="mp"></div><div class="mp"></div><div class="mp"></div></div></div><div style="font-size:10px; color:var(--mfg); margin-top:4px;">Pads fill the bank's width and wrap. Wide column, horizontal; narrow column, two across.</div></div>
     <div><div class="mb"><div class="n" style="display:flex; gap:6px; align-items:center;">Column</div><div style="display:flex; flex-direction:column; gap:4px;"><div class="mp"></div><div class="mp"></div><div class="mp"></div><div class="mp"></div></div></div><div style="font-size:10px; color:var(--mfg); margin-top:4px;">One pad per line, whatever the width &mdash; a vertical list beside wrapping banks.</div></div>
+    <div><div class="mb"><div class="n" style="display:flex; gap:6px; align-items:center;">Scroll</div><div style="display:flex; gap:4px; overflow:hidden;"><div class="mp" style="flex:0 0 40px;"></div><div class="mp" style="flex:0 0 40px;"></div><div class="mp" style="flex:0 0 40px;"></div><div class="mp" style="flex:0 0 40px; opacity:.4;"></div></div></div><div style="font-size:10px; color:var(--mfg); margin-top:4px;">One line at the pad's own width, scrolling sideways &mdash; the rig row's flow, offered to banks too (2026-09-21).</div></div>
   </div>
 </div><p class="cap" style="margin-top:auto;">Widths are shares, not pixels, so a page drawn at desk width keeps its proportions on a smaller screen until the columns stack. Nothing is positioned by hand and nothing can overlap.</p></div>
   </div>

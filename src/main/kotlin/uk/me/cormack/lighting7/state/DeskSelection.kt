@@ -72,7 +72,7 @@ data class SelectionSource(
  */
 /**
  * The ways `selection.subselect` rewrites the selection's **targets** (busk-further plan D12) — the
- * Cells chip's face and menu, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
+ * Cells menu and its two step buttons, and a MIDI `SelectionCells` / `SelectionNext` / `SelectionPrev`
  * button, sharing one rule on the desk. See [DeskSelection.subselect].
  */
 @Serializable

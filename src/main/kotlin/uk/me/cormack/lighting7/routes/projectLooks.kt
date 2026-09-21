@@ -639,8 +639,8 @@ internal data class LookDto(
      * line the delete confirm shows before taking those pads with it. A hint, not a use: it does
      * not gate delete, [layerCount] alone still does.
      *
-     * **No default**, for [TemplateDto.buskPageCount]'s reason: `encodeDefaults = false` would keep
-     * a zero off the wire entirely.
+     * **No default**, for [TemplateDto.buskPageCount]'s reason: a converter that omits defaults would
+     * keep a zero off the wire, and a copier that forgets it should fail to compile.
      */
     val buskPageCount: Int,
 )

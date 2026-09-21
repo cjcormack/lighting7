@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
 import uk.me.cormack.lighting7.models.DaoBuskPad
 import uk.me.cormack.lighting7.models.DaoBuskPage
+import uk.me.cormack.lighting7.models.BUSK_WIDTHS
 import uk.me.cormack.lighting7.models.BuskFlow
 import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.models.buskRigTileKind
@@ -119,7 +120,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 12
+internal const val SUPPORTED_FORMAT_VERSION = 13
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1092,6 +1093,8 @@ class ProjectImporter(private val state: State) {
                 this.project = project
                 name = r.name
                 sortOrder = r.sortOrder
+                flow = BuskFlow.entries.firstOrNull { it.name == r.flow }?.name ?: BuskFlow.SCROLL.name
+                width = if (r.width in BUSK_WIDTHS) r.width else 12
                 this.uuid = uuid
             }
             tiles.forEach { (t, group, patch) ->

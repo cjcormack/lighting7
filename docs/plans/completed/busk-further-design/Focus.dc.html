@@ -91,10 +91,10 @@
           <div class="sheet"><div class="tb"><i></i><i class="on"></i><i></i></div><div class="pick"></div><div class="hue"></div><div class="card"></div></div>
         </div>
       </div>
-      <p class="cap">What ships today, plus the handle. The band shows <b>1&hellip;N whole rows</b>; dragging past the last row is Rig focus, dragging to none is Pads focus &mdash; the segmented control and the handle are one setting.</p>
+      <p class="cap">What ships today, plus the handle. The band shows <b>1&hellip;N whole rows</b>; dragging past the last row is Rig focus, dragging to none is Pads focus &mdash; the segmented control and the handle are one setting. <i>Revised 2026-09-21:</i> the handle is a bare drag grip with no count and no badge &mdash; the clip is the snap, the rows cut to nothing in the Pads region and every line shown in the Rig region while it is held &mdash; and a chevron pill is drawn in Pads and Rig focus as the press back to Split, in place of the strip's chevron. The segmented control and <i>Edit layout</i> sit on the band's <b>controls row</b>, under the label row, in every shape &mdash; Pads draws the band folded to those two rows and the grip &mdash; rather than on the page strip, where they moved with the fold.</p>
     </div>
     <div style="display:flex; flex-direction:column; gap:8px;">
-      <div style="display:flex; align-items:center; gap:8px;"><span class="lbl">Pads</span><span class="cap">the page fills the body &middot; the rig folds to a 32px strip</span></div>
+      <div style="display:flex; align-items:center; gap:8px;"><span class="lbl">Pads</span><span class="cap">the page fills the body &middot; the rig folds to a 36px strip</span></div>
       <div class="scr" style="height:250px;">
         <div class="bar"></div>
         <div class="body">
@@ -163,7 +163,7 @@
     </div>
     <div class="note">
       <p><b>Ways to change it</b></p>
-      <p style="margin-top:6px;">The <b>Focus</b> segmented control on the page strip; the band handle; the sheet's fold chevron and tabs. <b>&#8984;K</b>: <i>Focus pads</i> / <i>Focus rig</i> / <i>Split</i> and <i>Show &lt;view&gt; on &lt;window&gt;</i> gains a focus arm, built by <span class="mono">buildWindowCommands</span>. <b>Screens sheet</b>: a focus picker beside the view picker for busk rows, so &ldquo;make Screen 2 the pads&rdquo; is one click from Screen 1. <b>MIDI</b>: <span class="mono">BuskFocusSet</span> / <span class="mono">BuskSheetToggle</span> as window-addressed commands (<span class="mono">windows.focus</span>), the same shape as <span class="mono">windows.show</span>.</p>
+      <p style="margin-top:6px;">The <b>Focus</b> segmented control at the end of the rig band's controls row, in every shape (revised 2026-09-21 &mdash; it was on the page strip); the band handle; the sheet's fold chevron and tabs. <b>&#8984;K</b>: <i>Focus pads</i> / <i>Focus rig</i> / <i>Split</i> and <i>Show &lt;view&gt; on &lt;window&gt;</i> gains a focus arm, built by <span class="mono">buildWindowCommands</span>. <b>Screens sheet</b>: a focus picker beside the view picker for busk rows, so &ldquo;make Screen 2 the pads&rdquo; is one click from Screen 1. <b>MIDI</b>: <span class="mono">BuskFocusSet</span> / <span class="mono">BuskSheetToggle</span> as window-addressed commands (<span class="mono">windows.focus</span>), the same shape as <span class="mono">windows.show</span>.</p>
     </div>
     <div class="note key">
       <p><b>What focus must not do.</b> It never hides a state the operator could be surprised by: a lit pad in Pads focus still shows the selection it will press onto (the strip); a rig in Rig focus still names the page a MIDI press would reach (the strip). And it is <b>not</b> a second edit mode &mdash; <i>Edit layout</i> forces Split for its duration and restores the window's focus on Done, because a palette drag needs both regions on screen.</p>

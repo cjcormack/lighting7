@@ -291,6 +291,8 @@ class ProjectExporter(private val state: State) {
                     uuid = row.uuid.toString(),
                     name = row.name,
                     sortOrder = row.sortOrder,
+                    flow = row.flow,
+                    width = row.width,
                     tiles = row.tiles
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         // A malformed tile is absent everywhere else it is read; exporting it would

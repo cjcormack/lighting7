@@ -605,6 +605,18 @@ no rig, every group then every fixture. It is what `selection.subselect`'s *Next
 what a spread's `LINEAR` order means, and `BuskRigOrderTest`'s fixture
 (`src/test/resources/busk/rigOrder.fixture.json`) is the file the client's mirror is pinned against.
 
+**A row is laid out the way a bank is** (2026-09-21): `busk_rig_rows` carries a `flow` — the
+bank's `BuskFlow`, which gained `SCROLL` for the sideways-scrolling line every row was before it
+had a flow, and which is the row's default where a bank's is `WRAP` — and a `width` share in
+twelfths from `BUSK_WIDTHS`, so two half-width rows sit side by side on the band as two half-width
+columns do on a page. Both are validated by the rig write (`BUSK_RIG_INVALID`), travel through sync
+as fields of `BuskRigRowJson` with defaults an older archive decodes to (the writer is **v13** for
+this change, because `SCROLL` widens an existing field — `docs/sync-engineering.md`), and are stated explicitly
+on the REST frame (that converter encodes defaults); the client still reads an **absent** flow as
+`SCROLL` and an absent width as 12, so a desk that predates the two columns keeps working, and it
+sends them only where they differ from the defaults, since the desk's Json refuses a key it does
+not know.
+
 **A multi-head tile decides how it shows its cells** (D3), on the tile rather than in a mode:
 `cell_mode` is `PIPS` (the whole fixture, cells as pips that select individually — the default),
 `WHOLE`, `PER_CELL` or `HALVES(n)`; a tile dragged in as a single cell carries its `element_key`.

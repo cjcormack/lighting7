@@ -121,12 +121,19 @@
           <span style="font-size:11px; color:var(--fg);">Front wash, Bar L &middot; <span class="num">14 heads</span></span>
           <span class="pill">Colour</span>
           <span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Targets: Desk</span>
-          <span class="chip"><span style="color:var(--mfg);">Cells:</span> All <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span>
           <span style="flex:1;"></span>
+          <!-- Revised 2026-09-21: one Cells menu (the seven filters), two step buttons beside it -->
+          <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span style="color:var(--mfg);">Cells:</span> All <svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></span>
+          <span class="btn sm out" title="Previous along the rig"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></span>
+          <span class="btn sm out" title="Next along the rig"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span>
+          <!-- Revised 2026-09-21: every verb is the desk's outline button with its icon; the words fold to icons below 860px of band, the Cells and Focus labels below 680 -->
           <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Spread&hellip;</span>
-          <span class="btn sm ghost">Locate</span>
-          <span class="btn sm ghost">Highlight</span>
-          <span class="btn sm ghost">Clear</span>
+          <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>Locate</span>
+          <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z"/><path d="M6 6h12"/></svg>Highlight</span>
+          <span class="btn sm out"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>Clear</span>
+          <!-- Revised 2026-09-21: the controls row — the Focus control and Edit layout end it, in every shape -->
+          <div class="seg"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg>Split</span><span>Pads</span><span>Rig</span></div>
+          <span class="btn sm out">Edit layout</span>
         </div>
         <div class="rrow">
           <span class="rlbl">Groups</span>
@@ -155,7 +162,8 @@
             <div class="tile"><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Pixel strip</span><span class="cnt">16</span></div><div class="pips"><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span></div><div class="live"><i style="width:0%; background:#fff;"></i></div></div>
           </div>
         </div>
-        <div class="handle"><svg class="ico12" viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="9" r="1.6"/><circle cx="16" cy="9" r="1.6"/><circle cx="8" cy="15" r="1.6"/><circle cx="16" cy="15" r="1.6"/></svg>3 of 4 rows</div>
+        <!-- Revised 2026-09-21: a drag grip, not a "3 of 4 rows" caption with ± buttons; the count shows while it is held -->
+        <div class="handle" title="Drag to show more or fewer rows &mdash; snaps to whole rows"><span style="display:inline-block; width:48px; height:4px; border-radius:2px; background:var(--bd);"></span></div>
         <span class="callout" style="top:8px; left:46px;">1</span>
         <span class="callout" style="top:8px; left:522px;">5</span>
         <span class="callout" style="top:8px; left:610px;">6</span>
@@ -169,10 +177,8 @@
         <div class="seg"><span class="on">Colour</span><span>Position</span><span>Beam</span><span>Cues</span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></div>
         <span class="chip"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></svg>Page: Desk</span>
         <span style="flex:1;"></span>
-        <span class="lbl">Focus</span>
-        <div class="seg"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 11h18"/></svg>Split</span><span>Pads</span><span>Rig</span></div>
-        <span class="btn sm out">Edit layout</span>
-        <span class="callout" style="top:12px; right:214px;">2</span>
+        <!-- Revised 2026-09-21: the Focus control and Edit layout both left this strip for the rig band's controls row; the strip is tabs and the page chip only -->
+        <span class="callout" style="top:12px; right:24px;">2</span>
       </div>
 
       <!-- PAGE BODY -->
@@ -232,7 +238,7 @@
         <span class="fold"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg></span>
       </div>
       <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:10px; padding:12px;">
-        <div style="font-size:11px; color:var(--mfg);">Colour of <b style="color:var(--fg); font-weight:600;">14 heads</b> &middot; writes to Local</div>
+        <!-- Revised 2026-09-21: no heading; the tab strip names the tab and the band says what is selected -->
         <div style="height:150px; border-radius:10px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); position:relative;">
           <span style="position:absolute; left:196px; top:26px; width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6);"></span>
         </div>
@@ -271,11 +277,11 @@
 
   <div class="legend">
     <div><span class="n">1</span><span><b>The rig is built, not listed.</b> Named rows of the targets the operator chose, in their order; hidden fixtures are simply not on it. Empty rig = every group then every fixture, as today.</span></div>
-    <div><span class="n">2</span><span><b>Focus is this window's.</b> Split &middot; Pads &middot; Rig, per tab like the page chip, launchable as <span class="mono">?focus=</span>. Pads or Rig fills the body; the other folds to a strip.</span></div>
-    <div><span class="n">3</span><span><b>The split is in rows.</b> Drag the handle and the band shows 1&hellip;N whole rows; a half row of tiles is useless, so it snaps.</span></div>
+    <div><span class="n">2</span><span><b>Focus is this window's.</b> Split &middot; Pads &middot; Rig, per tab like the page chip, launchable as <span class="mono">?focus=</span>. Pads or Rig fills the body; the other folds to a strip. <i>Revised 2026-09-21:</i> the band has a <b>controls row</b> under its label row &mdash; the Cells menu and steps, the verbs, then the Focus control and <i>Edit layout</i> &mdash; the same row in every shape, Pads included (the band folded to its two rows and the grip); the page strip is tabs and the page chip only, so no control moves as the shape changes.</span></div>
+    <div><span class="n">3</span><span><b>The split is in rows.</b> Drag the handle and the band shows 1&hellip;N whole rows; a half row of tiles is useless, so it snaps &mdash; past the last row into Rig, above the first into Pads. <i>Revised 2026-09-21:</i> the handle is a bare grip with no count and no badge: while it is held the clip is the snap &mdash; the rows cut to nothing in the Pads region, every line shown in the Rig region &mdash; and in Pads and Rig a chevron pill sits where the grip would be, a press on it returning to Split. The rows carry a <b>width</b> share and a <b>flow</b> (Scroll &middot; Wrap &middot; Column) as banks do, so two half-width rows share a line and the handle counts lines.</span></div>
     <div><span class="n">4</span><span><b>One side sheet, three tabs, one fold.</b> Speed as today; Colour writes literals to the selection; Spread fans a value across it. Which tab and whether it is open is this window's.</span></div>
     <div><span class="n">5</span><span><b>Spread&hellip; is a selection verb</b> beside Locate and Highlight: it opens the Spread tab pre-aimed at the selection.</span></div>
-    <div><span class="n">6</span><span><b>Cells are on the tile.</b> A multi-head fixture shows its cells; tap the tile for the whole, a pip for a cell. The Cells chip is the sub-selection: All &middot; Odd &middot; Even &middot; Next &middot; Prev.</span></div>
+    <div><span class="n">6</span><span><b>Cells are on the tile.</b> A multi-head fixture shows its cells; tap the tile for the whole, a pip for a cell; a selected pip is the accent, solid. <i>Revised 2026-09-21:</i> the sub-selection is one <b>Cells menu</b> holding the seven filters (All &middot; Odd &middot; Even &middot; 1st half &middot; 2nd half &middot; Invert &middot; Masters only), and <b>Prev</b> / <b>Next</b> are two step buttons beside it &mdash; a step moves the selection where a filter narrows it. The summary folds cells into their parent: <i>Bar L &middot; 4 of 8</i>.</span></div>
   </div>
 </div>
 </x-dc>

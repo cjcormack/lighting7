@@ -162,6 +162,8 @@ class ProjectRoundTripTest {
         assertEquals(listOf("Bars", "Wash"), rows.map { it.name })
         assertEquals(listOf(0, 1), rows.map { it.sortOrder })
         val bars = rows[0]
+        assertEquals("WRAP" to 6, bars.flow to bars.width, "the row's layout travels")
+        assertEquals("SCROLL" to 12, rows[1].flow to rows[1].width, "a row with no layout of its own is the defaults")
         assertEquals(listOf("HALVES", "PER_CELL", "WHOLE"), bars.tiles.map { it.cellMode })
         assertEquals(listOf(3, null, null), bars.tiles.map { it.cellSplit })
         assertEquals(listOf(null, null, "bar-1.pixel-3"), bars.tiles.map { it.elementKey })
@@ -202,7 +204,7 @@ class ProjectRoundTripTest {
         exportDirA.resolve("buskRig").toFile().deleteRecursively()
         Files.writeString(
             exportDirA.resolve("formatVersion.json"),
-            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 12", "\"formatVersion\": 11"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 13", "\"formatVersion\": 11"),
         )
 
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)

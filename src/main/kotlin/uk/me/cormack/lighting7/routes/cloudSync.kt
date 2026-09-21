@@ -393,7 +393,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
                     ConflictSession.resolve(session, parsed)
                 }
                 if (manualGateError != null) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(manualGateError!!))
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(manualGateError))
                     return@withProject
                 }
                 call.respond(HttpStatusCode.NoContent)

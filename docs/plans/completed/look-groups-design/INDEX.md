@@ -52,3 +52,11 @@ Every artboard is **dark-only on purpose**.
 | `DirectionA.dc.html` | Alternative A — a separate `look_groups` mirroring template groups. Why it cannot express the brief's example. |
 | `DirectionB.dc.html`, `Library.dc.html` | Alternative B — one library group holding both kinds, with a derived home column; the busk view and the two library pages. The original recommendation, superseded by C. |
 | `DirectionC.dc.html` | Alternative C as first sketched, with its for/against notes. |
+
+## Revised 2026-09-21
+
+`BuskFlow` gained a third value, **`SCROLL`** — one line of fixed-width pads scrolling sideways —
+offered in a bank's `…` menu beside Wrap and Column, and the busk view's **rig rows** carry the same
+width share and flow (Scroll being a row's default). `Layout.dc.html` and `Flows.dc.html` were
+edited in place to say so, each edit marked `Revised 2026-09-21`; the design record for the rig
+itself is `../busk-further-design/`.

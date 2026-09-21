@@ -102,6 +102,8 @@
         <div class="rrow">
           <span class="grip"><svg class="ico12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span>
           <div class="input" style="width:110px;">Groups</div>
+          <!-- Revised 2026-09-21: the row's &#8943; menu &mdash; Row width &frac14;&hellip;Full, Flow: Scroll &middot; Wrap &middot; Column, Remove row -->
+          <span style="margin-left:auto; color:var(--mfg); font-size:14px; line-height:1;">&#8943;</span>
           <div class="tiles">
             <div class="tile"><span class="padx"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Front wash</span><span class="cnt">6</span></div></div>
             <div class="tile"><span class="padx"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></span><div class="t1"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg><span>Movers</span><span class="cnt">4</span></div></div>
@@ -204,6 +206,7 @@
     <div><span class="n">3</span><span><b>A multi-head tile decides how it shows its cells:</b> cells on the tile (default), whole only, one tile per cell, or split into halves. It is the rig's answer to Eos's <span class="mono">.0</span> vs <span class="mono">.n</span> &mdash; stated once, on the tile.</span></div>
     <div><span class="n">4</span><span><b>Plot is a second rendering, not a second model.</b> It places the same tiles by the patch's <span class="mono">stageX / stageY</span>; groups have no position and sit in a strip above. Free positioning is rejected for the reason busk-layout D2 rejected it.</span></div>
     <div><span class="n">5</span><span><b>The Rig tab is every target, once.</b> Rows are draggable, cells expand under their fixture, <i>on rig</i> says where it already sits, and a hidden patch (<span class="mono">stageHidden</span>) is dimmed rather than gone.</span></div>
+    <div><span class="n">6</span><span><b>Revised 2026-09-21.</b> A row carries the bank's two layout facts &mdash; a <b>width</b> share in twelfths and a <b>flow</b> (Scroll, the sideways line every row was, and the default &middot; Wrap &middot; Column) &mdash; from the &#8943; menu on its header, and the rows fill a twelve-track grid so two half-width rows share a line. A tile's cross and menu sit <b>inside</b> its top-right corner: hanging off the corners they were clipped by a scrolling row and overlapped the next tile's.</span></div>
   </div>
 </div>
 </x-dc>

@@ -573,10 +573,11 @@ internal data class TemplateDto(
     /**
      * The template's value rows — **empty for an effect template**, which holds one effect instead.
      *
-     * `@EncodeDefault(ALWAYS)`, and it is load-bearing rather than tidiness. Both converters on this
-     * DTO's paths have `encodeDefaults = false` — the REST `json()` of `routes/router.kt`, as
-     * [buskPageCount] below already records, and the WS one — so an **empty** list is not serialised
-     * as `[]` but vanishes from the frame entirely. The client declares `rows` required and reads it
+     * `@EncodeDefault(ALWAYS)`, and it is load-bearing rather than tidiness. The **WebSocket**
+     * converter this DTO also rides has `encodeDefaults = false` (the REST `json()` of
+     * `routes/router.kt` is Ktor's `DefaultJson`, which encodes defaults — `BuskRigRoutesTest` pins
+     * that; an earlier version of this comment had it backwards), so on a frame an **empty** list is
+     * not serialised as `[]` but vanishes entirely. The client declares `rows` required and reads it
      * without a guard, so an effect template arrived with `rows: undefined` and
      * `templateRowsSwatch` threw on `rows.find`.
      *
@@ -605,9 +606,10 @@ internal data class TemplateDto(
      * A hint, not a use: it does **not** gate delete, and [layerCount] alone still does
      * (busk-layout plan D3, "a pad is an enrichment, never content and never a guard").
      *
-     * **No default**, like [layerCount] beside it: the REST `Json` is the bare `json()` of
-     * `routes/router.kt`, so `encodeDefaults = false` — a defaulted zero would simply not be on the
-     * wire, and the client would read `undefined` where it declares a number.
+     * **No default**, like [layerCount] beside it: a converter that omits defaults (the WS one) would
+     * keep a defaulted zero off the wire, where the client declares a number — and with no default a
+     * copier that forgets the field fails to compile rather than silently sending nothing. (The REST
+     * `json()` itself encodes defaults; an earlier version of this comment said otherwise.)
      */
     val buskPageCount: Int,
 )

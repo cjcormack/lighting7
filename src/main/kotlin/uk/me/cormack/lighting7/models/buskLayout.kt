@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory
  *   route renumbers, not a table — and has a width share in twelfths ([BUSK_WIDTHS]: ¼ … full).
  *   Widths in a row need not sum to twelve; the client draws them as `fr` shares.
  * - A [DaoBuskBanks] bank stacks in its column top to bottom, has a name, is `solo` or stacking, and
- *   has a `flow`: pads wrap to the bank's width or run one per line ([BuskFlow]). Solo never
+ *   has a `flow`: pads wrap to the bank's width, run one per line or scroll sideways ([BuskFlow]). Solo never
  *   decides a bank's shape.
  * - A [DaoBuskPads] pad is an **ordered reference** to exactly one template, Look or cue (D3). One
  *   record may sit on several pads, on several pages.
@@ -111,10 +111,16 @@ class DaoBuskColumn(id: EntityID<Int>) : IntEntity(id) {
     val banks by DaoBuskBank referrersOn DaoBuskBanks.column
 }
 
-/** How a bank lays its pads out: wrapping to the bank's width, or one pad per line. */
+/**
+ * How a bank lays its pads out — and, since 2026-09-21, how a rig row lays its tiles out
+ * ([DaoBuskRigRows.flow]): wrapping to the box's width, one per line, or one line that scrolls
+ * sideways. `SCROLL` is what the rig's rows always did before they had a flow, so it is the row's
+ * default; a bank's stays `WRAP`.
+ */
 enum class BuskFlow {
     WRAP,
     COLUMN,
+    SCROLL,
 }
 
 object DaoBuskBanks : IntIdTable("busk_banks") {

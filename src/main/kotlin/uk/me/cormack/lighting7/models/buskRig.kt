@@ -28,7 +28,9 @@ import org.slf4j.LoggerFactory
  *   no migration and no first-open generator.
  * - **D2 — rows, not coordinates.** The busk layout's argument, verbatim: a coordinate system
  *   nothing else reads is a second model. A tile's place is its row and its `sort_order`; *Plot*
- *   from the patch's stage coordinates is `FU-BUSK-RIG-PLOT`, out of scope.
+ *   from the patch's stage coordinates is `FU-BUSK-RIG-PLOT`, out of scope. A row does carry the
+ *   bank's two layout facts since 2026-09-21 — a [BuskFlow] and a width share in twelfths — so a
+ *   row is laid out the way a bank is, without becoming a coordinate.
  * - **D3 — a multi-head tile decides how it shows its cells.** [DaoBuskRigTiles.cellMode] is one of
  *   [BuskRigCellMode]: `PIPS` (the whole fixture, cells drawn as pips that select individually),
  *   `WHOLE` (no pips), `PER_CELL` (one tile per cell, the fixture's own tile absent), `HALVES`
@@ -62,6 +64,23 @@ object DaoBuskRigRows : IntIdTable("busk_rig_rows") {
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 
+    /**
+     * How the row lays its tiles out — a [BuskFlow] name, the bank's own vocabulary plus `SCROLL`,
+     * which is what every row did before it had a flow and so is the default. Both columns landed
+     * 2026-09-21 with defaults, so `createMissingTablesAndColumns` adds them to a live database
+     * (`ALTER TABLE ADD COLUMN` with a default is what SQLite accepts) and every stored row reads
+     * back as it was drawn.
+     */
+    val flow = varchar("flow", 16).default(BuskFlow.SCROLL.name)
+
+    /**
+     * The row's width share in twelfths — one of [BUSK_WIDTHS], the bank column's vocabulary — so
+     * two half-width rows sit side by side on the band as two half-width columns do on a page.
+     * Rows fill a twelve-track grid in order; a row that does not fit beside the last starts a
+     * new line, and `12` (the default) is a whole line.
+     */
+    val width = integer("width").default(12)
+
     init {
         uniqueIndex(project, uuid)
     }
@@ -74,6 +93,8 @@ class DaoBuskRigRow(id: EntityID<Int>) : IntEntity(id) {
     var name by DaoBuskRigRows.name
     var sortOrder by DaoBuskRigRows.sortOrder
     var uuid by DaoBuskRigRows.uuid
+    var flow by DaoBuskRigRows.flow
+    var width by DaoBuskRigRows.width
 
     /** The tiles on this row. Order is `sortOrder`; callers sort in memory. */
     val tiles by DaoBuskRigTile referrersOn DaoBuskRigTiles.row

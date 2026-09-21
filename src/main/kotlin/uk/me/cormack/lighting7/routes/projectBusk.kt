@@ -310,7 +310,7 @@ internal data class BuskBankDto(
     val uuid: String,
     val name: String,
     val solo: Boolean,
-    /** `WRAP` or `COLUMN`. */
+    /** A `BuskFlow` name: `WRAP`, `COLUMN` or `SCROLL`. */
     val flow: String,
     val pads: List<BuskPadDto> = emptyList(),
 )

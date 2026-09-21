@@ -12,6 +12,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.group.SymmetricMode
+import uk.me.cormack.lighting7.models.BUSK_WIDTHS
+import uk.me.cormack.lighting7.models.BuskFlow
 import uk.me.cormack.lighting7.models.BuskRigCellMode
 import uk.me.cormack.lighting7.models.BuskRigTileKind
 import uk.me.cormack.lighting7.models.DaoBuskRigRow
@@ -25,7 +27,7 @@ import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
-/** 400 code: the rig document is malformed — an empty row, a blank name, a bad cell mode, a split out of range. */
+/** 400 code: the rig document is malformed — an empty row, a blank name, a bad flow or width, a bad cell mode, a split out of range. */
 internal const val CODE_BUSK_RIG_INVALID = "BUSK_RIG_INVALID"
 
 /** 400 code: the document names a row or tile id that is not this project's rig, or names one twice. */
@@ -46,8 +48,9 @@ internal const val CODE_BUSK_RIG_REF = "BUSK_RIG_REF"
  * `PUT /busk/rig` is the busk layout's D10 exactly: one PUT per gesture, the whole rig, rows and
  * tiles addressed by position, a row or tile with an id moved and rewritten, one without created,
  * one absent deleted, everything renumbered dense. It refuses as a whole — before touching a row —
- * with [CODE_BUSK_RIG_INVALID] (an empty row, a blank name, a `HALVES` with `cellSplit` below 2 or
- * above the fixture's cell count, a cell mode the desk does not know), [CODE_BUSK_RIG_IDENTITY]
+ * with [CODE_BUSK_RIG_INVALID] (an empty row, a blank name, a flow or width outside the bank's
+ * vocabulary, a `HALVES` with `cellSplit` below 2 or above the fixture's cell count, a cell mode
+ * the desk does not know), [CODE_BUSK_RIG_IDENTITY]
  * (an id not this project's, or named twice) or [CODE_BUSK_RIG_REF] (a dangling group or patch, an
  * element key that is not one of the patch's cells). It answers the rig as written, ids minted,
  * because the client's next gesture must carry them.
@@ -96,11 +99,21 @@ internal data class BuskRigResource(val projectId: String)
 @Serializable
 internal data class BuskRigDto(val rows: List<BuskRigRowDto> = emptyList())
 
+/**
+ * A row: its tiles, and the two layout facts a bank has (2026-09-21) — [flow], a [BuskFlow] name
+ * (`SCROLL` is a row's default, being what every row did before it had one), and [width], a share
+ * in twelfths from `BUSK_WIDTHS`, so rows sit side by side on the band as columns do on a page.
+ * Both default, so a request from a client that predates them decodes; the REST converter encodes
+ * defaults, so the read states them explicitly — and the client still reads an *absent* flow as
+ * `SCROLL` and an absent width as 12, for a desk that predates the fields.
+ */
 @Serializable
 internal data class BuskRigRowDto(
     val id: Int,
     val uuid: String,
     val name: String,
+    val flow: String = BuskFlow.SCROLL.name,
+    val width: Int = 12,
     val tiles: List<BuskRigTileDto> = emptyList(),
 )
 
@@ -149,6 +162,10 @@ internal data class BuskRigRequest(val rows: List<BuskRigRowInput> = emptyList()
 internal data class BuskRigRowInput(
     val rowId: Int? = null,
     val name: String,
+    /** A [BuskFlow] name; absent is `SCROLL`, the row's default. */
+    val flow: String = BuskFlow.SCROLL.name,
+    /** One of `BUSK_WIDTHS`; absent is 12, the whole line. */
+    val width: Int = 12,
     val tiles: List<BuskRigTileInput> = emptyList(),
 )
 
@@ -201,6 +218,10 @@ internal fun applyBuskRig(fixtures: Fixtures, project: DaoProject, request: Busk
         val where = "row ${rowIndex + 1}"
         if (row.name.isBlank()) return BuskRigOutcome.Invalid("Row ${rowIndex + 1} has a blank name")
         if (row.name.trim().length > NAME_MAX) return BuskRigOutcome.Invalid("Name of $where is longer than $NAME_MAX characters")
+        if (BuskFlow.entries.none { it.name == row.flow }) {
+            return BuskRigOutcome.Invalid("Flow '${row.flow}' on $where is not one of ${BuskFlow.entries.map { it.name }}")
+        }
+        if (row.width !in BUSK_WIDTHS) return BuskRigOutcome.Invalid("Width ${row.width} on $where is not one of ${BUSK_WIDTHS.sorted()}")
         if (row.tiles.isEmpty()) return BuskRigOutcome.Invalid("Row ${rowIndex + 1} ('${row.name.trim()}') has no tiles")
         row.tiles.forEachIndexed { tileIndex, tile ->
             val at = "$where, tile ${tileIndex + 1}"
@@ -300,6 +321,8 @@ internal fun applyBuskRig(fixtures: Fixtures, project: DaoProject, request: Busk
         }
         row.name = r.name.trim()
         row.sortOrder = rowIndex
+        row.flow = r.flow
+        row.width = r.width
         keptRows += row.id.value
         writes[rowIndex].forEachIndexed { tileIndex, w ->
             // Refs set inside the constructor for a new tile: the `busk_rig_tile_exactly_one_ref`
@@ -353,6 +376,10 @@ internal fun rigDto(fixtures: Fixtures, project: DaoProject): BuskRigDto {
                 id = row.id.value,
                 uuid = row.uuid.toString(),
                 name = row.name,
+                // A stored flow the desk does not know (a hand edit, an older archive) reads as the
+                // default rather than as a row the client cannot lay out.
+                flow = BuskFlow.entries.firstOrNull { it.name == row.flow }?.name ?: BuskFlow.SCROLL.name,
+                width = if (row.width in BUSK_WIDTHS) row.width else 12,
                 tiles = tilesByRow[row.id.value].orEmpty()
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .mapNotNull { it.toDto(fixtures) },

@@ -97,6 +97,14 @@ data class FormatVersionJson(
     // reads any more. Only the writer's version moves, which is what makes an older install refuse
     // a v7 repo rather than silently write those fields back on its next push.
     //
+    // v13: a rig row carries `flow` and `width` (the bank's two layout facts), and `BuskFlow` gains
+    // `SCROLL` for banks and rows alike. The two new fields default, so on their own this would be
+    // the `SpeedMasterJson` no-bump case — but `SCROLL` widens an **existing** field's value space:
+    // a v12 reader imports a `SCROLL` bank as `WRAP` (`ProjectImporter`'s fallback) and writes that
+    // back on its next push, which is `docs/sync-engineering.md`'s "degraded record" answer. Only
+    // the writer moves, so a v12 install refuses a v13 repo rather than re-flowing every peer's
+    // banks; `minReader` stays at **5**, since every earlier archive still decodes.
+    //
     // v6: templates become their own entity — a `templates/` folder, and `CueLayerJson.lookUuid`
     // becomes optional beside a new `templateUuid`. `minReader` stays at **5**, deliberately: a v5
     // repo has no `templates/` folder (the importer reads a missing directory as empty) and every
@@ -119,7 +127,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 12,
+    val formatVersion: Int = 13,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -591,7 +599,7 @@ data class BuskColumnJson(
     val banks: List<BuskBankJson> = emptyList(),
 )
 
-/** A bank in a column: `solo` releases siblings on a press; `flow` is `WRAP` or `COLUMN`. */
+/** A bank in a column: `solo` releases siblings on a press; `flow` is `WRAP`, `COLUMN` or `SCROLL`. */
 @Serializable
 data class BuskBankJson(
     val uuid: String,
@@ -627,6 +635,13 @@ data class BuskRigRowJson(
     val uuid: String,
     val name: String,
     val sortOrder: Int,
+    /**
+     * The row's layout (2026-09-21): a `BuskFlow` name and a width share in twelfths, the bank's
+     * two facts. Both default so an archive written before them decodes; the importer reads an
+     * unknown flow as `SCROLL` and a width outside `BUSK_WIDTHS` as 12, as the route's read does.
+     */
+    val flow: String = "SCROLL",
+    val width: Int = 12,
     val tiles: List<BuskRigTileJson> = emptyList(),
 )
 

@@ -37,6 +37,39 @@ older answer:
 - **The client-side parent→cell fold in `lookPresence.ts`** (`Cells`) — the coverage rule lives in
   `TargetCoverage` on the desk, stated once, so the ring and `pressWouldRelease` cannot disagree.
 
+## Revised 2026-09-21
+
+A desk pass on the shipped view changed what the boards drew in the ways below, and the boards were edited
+in place (each edit is marked `Revised 2026-09-21` in the markup). Where a board and this list
+disagree, this list wins:
+
+- **The rig band has a controls row under its label row, the same in every shape** — the Cells
+  menu and its steps, the verbs, then the Focus control and *Edit layout* / *Done* — in Split, Rig
+  and Pads (where the band is drawn without its rows, in place of the strip). The page strip is
+  tabs and the page chip only. Neither control moves as the shape changes (`Main`, `Focus`,
+  `Phones`; `Tablets`' strips lost their Focus / Edit chips and handle captions).
+- **The rows handle is a bare grip in Split** — a drag that snaps to whole lines and past both ends
+  into Rig and Pads, the **clip itself the snap** (the rows cut to nothing in the Pads region, every
+  line shown in the Rig region; no caption, no badge) — and **a chevron pill in Pads and Rig**, a
+  press on it returning to Split, in place of the strip's unfold chevron (`Main`, `Focus`).
+- **A rig row carries a width share and a flow** — the bank's two facts, plus `SCROLL` (the
+  sideways line every row was, and the row's default), which banks may take too — from the `…`
+  menu on its header; rows fill a twelve-track grid so two half-width rows share a line (`Rig`,
+  look-groups `Layout` / `Flows`).
+- **The Cells chip is one menu of the seven filters plus two step buttons** for Prev / Next: a step
+  moves the selection, a filter narrows it (`Main`, `Cells`).
+- **The label row's verbs are the desk's outline buttons with icons**, folding to icons before the
+  row wraps (`Main`).
+- **A selected pip is the accent, solid**; the selection summary folds cells into their parent
+  (`Bar L · 4 of 8`); a tile's edit controls sit inside its corner; a dark head draws no live bar
+  (`Main`, `Rig`, `Cells`).
+- **The three tabs draw no heading**: the tab strip names the tab and the band says what is
+  selected. The speed rail fills the sheet's width. The verbs are a **static footer** under the
+  tab's scroller, the save first, on both Colour and Spread; the Spread footer carries **Live**
+  beside **Apply**, which reads *Send again* while Live is on (`Sheets`, `Spread`).
+- **The Spread tab's preview strip is gone** — the rig is the preview — and its Wings glyph is drawn
+  as two fans meeting at the centre so it is no longer Mirror's V (`Spread`).
+
 ## Format
 
 Each `*.dc.html` is one artboard. All twelve are **static mockups**: no `{{ hole }}` bindings and a
@@ -50,7 +83,7 @@ Every artboard is **dark-only on purpose**, in the busk view's own vocabulary.
 
 | File | Draws |
 | --- | --- |
-| `Main.dc.html` | The busk view in play at 1440×900: the rig band as three named rows of tiles with live colour bars and pips, the label row with the Cells chip and *Spread…*, the rows handle; the page strip with the Focus control; the page as today; the side sheet with Speed · Colour · Spread tabs and the fold, Colour open. Six callouts. |
+| `Main.dc.html` | The busk view in play at 1440×900: the rig band as three named rows of tiles with live colour bars and pips, the label row (summary, pill, desk chip) and — since 2026-09-21 — the controls row (Cells menu and steps, the verbs, Focus, *Edit layout*), the rows handle; the page strip as tabs and the page chip; the page as today; the side sheet with Speed · Colour · Spread tabs and the fold, Colour open. Six callouts. |
 | `Rig.dc.html` | Edit mode: the band under the page's amber wash, row name fields, crosses, a drop slot, *+ Row*, *Arrange: Rows / Plot*, the tile's cell-mode menu, and the palette's **Rig** tab. |
 | `Focus.dc.html` | The three shapes (Split · Pads · Rig) as miniatures; the two-screen flow; the per-window facts and how they are set. |
 | `Screens.dc.html` | The Screens sheet with a busk row's Focus / Sheet / Page pickers, a row contributing no options, the widened *Copy link*, and the generic descriptor and command. |
@@ -60,7 +93,7 @@ Every artboard is **dark-only on purpose**, in the busk view's own vocabulary.
 | File | Draws |
 | --- | --- |
 | `Sheets.dc.html` | The 44px fold, the Speed tab unchanged, the Colour tab, and the six rules about what it writes. |
-| `Spread.dc.html` | The Spread tab (From / To, the four curves, Order, Parts, Over, Live, the preview strip), the request and response, and what each desk calls it. |
+| `Spread.dc.html` | The Spread tab (From / To, the four curves, Order, Parts, Over, Live, the preview strip (removed 2026-09-21 — the rig is the preview)), the request and response, and what each desk calls it. |
 | `Cells.dc.html` | A multi-head tile in four states, the Cells chip, the wire, the backend gaps (now session 1), the rules the tile states, and the desk comparison. |
 
 ## Row 3 · Evidence, model, extras

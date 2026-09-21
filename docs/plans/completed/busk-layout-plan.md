@@ -134,7 +134,7 @@ Four new tables, all portable show content (CLAUDE.md's decision tree, branch 2)
 | --- | --- | --- |
 | `busk_pages` | `project_id`, `name`, `sort_order`, `uuid` | `uniqueIndex(project, name)`, the template/Look identity rule |
 | `busk_columns` | `page_id`, `row`, `sort_order`, `width`, `uuid` | `width` is a share in twelfths (3, 4, 6, 8, 9, 12); `row` is a dense integer the layout route renumbers |
-| `busk_banks` | `column_id`, `sort_order`, `name`, `solo`, `flow`, `uuid` | `flow` ∈ `WRAP`, `COLUMN`; `name` may repeat across banks |
+| `busk_banks` | `column_id`, `sort_order`, `name`, `solo`, `flow`, `uuid` | `flow` ∈ `WRAP`, `COLUMN` (and `SCROLL` since 2026-09-21, shared with `busk_rig_rows`); `name` may repeat across banks |
 | `busk_pads` | `bank_id`, `sort_order`, `template_id?`, `look_id?`, `cue_id?`, `uuid` | exactly one FK set, validated in the route — the `DaoCueLayers` pattern, and for the same reason: SQLite enforces no cascade without a pragma, so the routes validate by hand |
 
 Deleting a template, Look or cue deletes its pads inside the same transaction the delete already

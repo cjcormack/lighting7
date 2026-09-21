@@ -517,11 +517,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // The **busk rig** (v12): two rows, every tile shape — a group tile with a label, a WHOLE
     // fixture tile, a HALVES tile with its split, a PER_CELL tile and a single-cell tile — and
     // every field off-default (a non-zero row position, a non-PIPS mode, a split, a label, an
-    // element key) so a copier that drops one is caught rather than passing vacuously.
+    // element key, and — on the Bars row — a non-default flow and width) so a copier that drops one
+    // is caught rather than passing vacuously.
     val wash = DaoBuskRigRow.new { this.project = project; name = "Wash"; sortOrder = 1 }
     DaoBuskRigTile.new { row = wash; sortOrder = 0; group = groupA; label = "Front" }
     DaoBuskRigTile.new { row = wash; sortOrder = 1; patch = patches[2]; cellMode = BuskRigCellMode.WHOLE.name }
-    val bars = DaoBuskRigRow.new { this.project = project; name = "Bars"; sortOrder = 0 }
+    val bars = DaoBuskRigRow.new { this.project = project; name = "Bars"; sortOrder = 0; flow = "WRAP"; width = 6 }
     DaoBuskRigTile.new { row = bars; sortOrder = 0; patch = bar; cellMode = BuskRigCellMode.HALVES.name; cellSplit = 3 }
     DaoBuskRigTile.new { row = bars; sortOrder = 1; patch = bar; cellMode = BuskRigCellMode.PER_CELL.name }
     DaoBuskRigTile.new { row = bars; sortOrder = 2; patch = bar; elementKey = "bar-1.pixel-3"; cellMode = BuskRigCellMode.WHOLE.name; label = "Pixel 4" }

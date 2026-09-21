@@ -84,7 +84,10 @@ cueSlots/{uuid}.json           # exactly one of cueUuid / lookUuid (lookUuid v10
 buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
                                # a pad names a template, Look or cue by uuid
 buskRig/{uuid}.json            # v12+: the busk rig — one document per row, tiles embedded inline;
-                               # a tile names a group or a patch by uuid and a cell by its element key
+                               # a tile names a group or a patch by uuid and a cell by its element key.
+                               # v13+: a row also carries `flow` (a BuskFlow name, default SCROLL)
+                               # and `width` (a share in twelfths, default 12) — the bank's two
+                               # layout facts; both default so a v12 archive decodes
 parkedChannels/{uuid}.json     # (universe, channel, value) — the channel's parked output
 controlSurfaceBindings/{uuid}.json
 scripts/{uuid}.kts             # raw Kotlin script body for git-friendly diffs
@@ -187,7 +190,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 12`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 13`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -202,6 +205,13 @@ routing/follow fields are the worked example: a null usage means "routes nothing
 handles a v8 master correctly by ignoring them. Where the answer is a **degraded record**, the
 writer must bump so the older install refuses the repo instead. Ask "would an older reader import
 this record wrong, and then write its mistake back?" rather than "is the field nullable?".
+
+**v13 is the worked example of a semantic change on an existing field.** The rig row's two new
+fields alone would have been the `SpeedMasterJson` case — absent is a valid state (every row was a
+whole scrolling line) — but the same change widened `BuskBankJson.flow` (and the row's) with
+`SCROLL`, and a v12 reader imports an unknown flow as `WRAP` and writes that back on its next
+wipe-then-export push, re-flowing the bank for every peer. That is the degraded-record answer, so
+the writer bumped; `minReader` stays at 5 because every earlier archive still decodes.
 
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`

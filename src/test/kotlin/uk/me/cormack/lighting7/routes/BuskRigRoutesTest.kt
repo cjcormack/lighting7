@@ -75,8 +75,8 @@ class BuskRigRoutesTest : RouteIntegrationTest() {
 
     private suspend fun HttpClient.readRig(): BuskRigDto = get(rig()).body()
 
-    private fun row(name: String, vararg tiles: BuskRigTileInput, rowId: Int? = null) =
-        BuskRigRowInput(rowId = rowId, name = name, tiles = tiles.toList())
+    private fun row(name: String, vararg tiles: BuskRigTileInput, rowId: Int? = null, flow: String = "SCROLL", width: Int = 12) =
+        BuskRigRowInput(rowId = rowId, name = name, flow = flow, width = width, tiles = tiles.toList())
 
     private fun group(id: Int, tileId: Int? = null, label: String? = null) =
         BuskRigTileInput(tileId = tileId, groupId = id, label = label)
@@ -134,6 +134,36 @@ class BuskRigRoutesTest : RouteIntegrationTest() {
         assertTrue(written.rows.flatMap { it.tiles }.all { it.id > 0 && it.uuid.isNotBlank() })
 
         assertEquals(written, client.readRig(), "the write answers exactly what a read answers")
+    }
+
+    /**
+     * The row's layout (2026-09-21): a flow and a width share, the bank's two facts, written, read
+     * back, and **stated explicitly on the REST frame at their defaults too** — the REST converter
+     * encodes defaults, unlike the socket's and sync's — so a client that also reads an *absent*
+     * flow as `SCROLL` and an absent width as 12 (for a desk that predates the fields) agrees with
+     * this desk either way.
+     */
+    @Test
+    fun `a row keeps its flow and width, and states the defaults on the frame`() = testApplication {
+        seedRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        val hex = patchId("hex-1")
+        val written = client.writeRig(
+            BuskRigRequest(
+                listOf(
+                    row("Left", fixture(hex), flow = "WRAP", width = 6),
+                    row("Right", fixture(hex), flow = "COLUMN", width = 6),
+                    row("Whole", fixture(hex)),
+                ),
+            ),
+        )
+        assertEquals(listOf("WRAP", "COLUMN", "SCROLL"), written.rows.map { it.flow })
+        assertEquals(listOf(6, 6, 12), written.rows.map { it.width })
+        assertEquals(written, client.readRig())
+        val text = client.get(rig()).bodyAsText().replace(" ", "")
+        assertTrue(text.contains("\"flow\":\"WRAP\"") && text.contains("\"width\":6"), text)
+        assertTrue(text.contains("\"flow\":\"SCROLL\"") && text.contains("\"width\":12"), "the defaults are stated, not omitted: $text")
     }
 
     @Test
@@ -220,6 +250,8 @@ class BuskRigRoutesTest : RouteIntegrationTest() {
         val cases = listOf(
             "empty row" to row("Empty"),
             "blank name" to row("   ", fixture(hex)),
+            "bad flow" to row("A", fixture(hex), flow = "GRID"),
+            "bad width" to row("A", fixture(hex), width = 5),
             "bad cell mode" to row("A", fixture(hex, cellMode = "SPLIT")),
             "both arms" to row("A", BuskRigTileInput(groupId = groupId("front-wash"), patchId = hex)),
             "no arm" to row("A", BuskRigTileInput()),
