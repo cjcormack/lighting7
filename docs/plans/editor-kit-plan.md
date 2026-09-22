@@ -1,6 +1,6 @@
 # One editor kit — Spread, the colour editor and the value editors across the programmer and the busk view
 
-> **Document status: IN PROGRESS — session 1 shipped 2026-09-22 (lighting-react `b12887ab`); sessions 2 and 3 not started.** The visual design is settled and
+> **Document status: IN PROGRESS — sessions 1 and 2 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`); session 3 not started.** The visual design is settled and
 > checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — five
 > generated artboards: today's two answers side by side, the Spread panel in every host, the colour
 > editor in five hosts, the value editors on one anatomy, and the model with every idea's verdict.
@@ -248,7 +248,7 @@ Sessions 1 and 2 are lighting-react only; session 3 is lighting7 first, then lig
   (`useLivePush`'s home).
 - Done-marker here.
 
-### Session 2 — the colour editor (lighting-react) — Fable 5.1, high
+### ~~Session 2 — the colour editor (lighting-react) — Fable 5.1, high~~ — lighting-react a976489e
 
 - `ColourEditor` (D10) from `ColourPickerBody` plus the tab's read-out line, Pick, Recent and
   footer; `emitterHeadCounts` and the hidden appearance leaves move in with it (D12), keyed on the
