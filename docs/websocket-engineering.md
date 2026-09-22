@@ -293,7 +293,7 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 | `windows.fullscreen` | `targetId`, `on` | none — rebroadcast as `windows.fullscreen` |
 | `windows.viewOptions` | `targetId`, `view`, `options: {String: String}` | none — rebroadcast as `windows.viewOptions` |
 
-`viewOptions` is a window's **per-view options** — for the busk view its `focus`, `rigRows`,
+`viewOptions` is a window's **per-view options** — for the busk view its `focus`,
 `sheet` and page facts (busk-further plan D13), and under every live view `immersive` (`on` |
 `off`, busk-chrome plan D9: a window's fact, riding here because a top-level announce key would
 drop the frame) — announced as a free `String → String` map and carried back on `windows.state`
