@@ -1,6 +1,6 @@
 # One editor kit — Spread, the colour editor and the value editors across the programmer and the busk view
 
-> **Document status: IN PROGRESS — sessions 1 and 2 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`); session 3 not started.** The visual design is settled and
+> **Document status: IN PROGRESS — sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 open.** The visual design is settled and
 > checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — five
 > generated artboards: today's two answers side by side, the Spread panel in every host, the colour
 > editor in five hosts, the value editors on one anatomy, and the model with every idea's verdict.
@@ -277,7 +277,7 @@ Sessions 1 and 2 are lighting-react only; session 3 is lighting7 first, then lig
   editor's now, so the count does not change but the sentence does).
 - Done-marker here.
 
-### Session 3 — Spread (lighting7, then lighting-react) — Fable 5.1, high
+### ~~Session 3 — Spread (lighting7, then lighting-react) — Fable 5.1, high~~ — lighting7 8fc8fcb · lighting-react 679bd1ae
 
 - **lighting7 first** (§3.2): `write` on `SpreadRequest`; `written[].value` as the literal;
   `ProgrammerSpreadRouteTest` gains the two cases. The route's docblock records both. Hot-reload

@@ -11,7 +11,7 @@ other inconsistencies, every value editor on the better design, shared component
 plus other ideas. The outcome asked for was these boards; the plan document follows once the designs
 are agreed.
 
-**Status: approved 2026-09-22 (Chris: "the designs look good"); sessions 1 and 2 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`), session 3 not started.** The
+**Status: approved 2026-09-22 (Chris: "the designs look good"); sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 open.** The
 implementation plan is [`../editor-kit-plan.md`](../editor-kit-plan.md); the seven calls on
 `Model.dc.html` stand as drawn and are recorded in its §11, the rail tabs still open. The live copy of these boards is at
 <https://claude.ai/artifact/UECPcKmhVPZ2FFhvxtTHMd> — private to Chris, a convenience; the files here are
