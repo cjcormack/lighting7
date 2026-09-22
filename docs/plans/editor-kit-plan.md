@@ -1,6 +1,6 @@
 # One editor kit — Spread, the colour editor and the value editors across the programmer and the busk view
 
-> **Document status: APPROVED, 2026-09-22 — no session started.** The visual design is settled and
+> **Document status: IN PROGRESS — session 1 shipped 2026-09-22 (lighting-react `b12887ab`); sessions 2 and 3 not started.** The visual design is settled and
 > checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — five
 > generated artboards: today's two answers side by side, the Spread panel in every host, the colour
 > editor in five hosts, the value editors on one anatomy, and the model with every idea's verdict.
@@ -390,6 +390,15 @@ for all of them rather than two units in one editor. `useSheet`'s cadence (D16) 
 argument rather than because 50 was tried; if a slider drag reads coarser after session 1, the
 floor is the one number to move. Session 3's `write` field must be **omitted** when true (§6), which
 the boards did not say.
+
+Session 1 left four things for sessions 2 and 3 to build on, each recorded in CLAUDE.md §The
+editor kit rather than here: `EditorLabelLine` is the label line as a fourth piece, popover-only;
+`EditorField` has an `onDraft` for a host that writes on Apply and must know the box is empty;
+`useSheet` runs the hook with the dedupe **off**, because a sheet cannot see the routes that move
+a value under it; and the programmer's cells take a per-column `CellBatch` rather than a count,
+which is what the Spread panel's popover host will read its targets' resolutions from. The seven
+editors' control labels are the column's name (the board drew *Level*) and the position read-out
+states both degree bounds — copy the boards' Colour and Spread panels should not inherit unread.
 
 ## 11. Open questions
 
