@@ -216,7 +216,7 @@ sessions.
 Each session is one commit per repository, gated by `npm run check`, with the done-marker here.
 Sessions 1 and 2 are lighting-react only; session 3 is lighting7 first, then lighting-react.
 
-### Session 1 — the kit (lighting-react) — Fable 5.1, high
+### ~~Session 1 — the kit (lighting-react) — Fable 5.1, high~~ — lighting-react b12887ab
 
 - Create `components/editor/` and move: `CellEditorSurface` → `EditorSurface` (with
   `useEditorForm`, `useEditorCramped`, `editorIsOpen`; `HandChip` and `useEscapeEditorSnapshot`
