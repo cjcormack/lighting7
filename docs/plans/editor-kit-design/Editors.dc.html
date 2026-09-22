@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --amber:oklch(0.828 0.189 84.429); --green:#4ade80; --red:oklch(0.704 0.191 22.216);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:13px; font-weight:700; letter-spacing:-0.005em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80); background:oklch(0.5 0.12 80 / 0.12); }
+    .note.bad { border-color:oklch(0.55 0.16 25); background:oklch(0.5 0.15 25 / 0.12); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note p + p { margin-top:5px; }
+    .note b { color:var(--fg); font-weight:600; }
+    .col { display:flex; flex-direction:column; gap:8px; min-width:0; flex:0 0 auto; }
+    .row { display:flex; align-items:center; gap:8px; min-width:0; }
+    .k { width:44px; font-size:11px; color:var(--mfg); flex:0 0 auto; }
+    /* panels */
+    .pop { border:1px solid var(--bd); border-radius:10px; background:var(--card); box-shadow:0 12px 40px rgba(0,0,0,0.6); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; }
+    .rail { border:1px solid var(--bd); border-radius:10px; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; }
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); flex:0 0 auto; }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 40px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .body { display:flex; flex-direction:column; gap:8px; padding:12px 14px; flex:1 1 auto; min-height:0; }
+    .foot { display:flex; align-items:center; gap:6px; border-top:1px solid var(--bd); padding:8px 12px; flex:0 0 auto; }
+    .readout { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--mfg); min-height:16px; }
+    .readout .sw { width:14px; height:14px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .seg { display:flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; min-width:0; }
+    .seg span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; padding:0 6px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .seg span.off { opacity:0.45; }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; white-space:nowrap; }
+    .field.focus { border-color:var(--pri); box-shadow:0 0 0 3px oklch(0.623 0.214 259.815 / 0.3); }
+    .field.sel { background:oklch(0.623 0.214 259.815 / 0.25); }
+    .field .u { color:var(--mfg); font-size:10px; margin-left:auto; }
+    .end { flex:1; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; gap:6px; font-size:12px; min-width:0; }
+    .end.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .end .w { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--mfg); }
+    .end .sw { width:14px; height:14px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); flex:0 0 auto; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:var(--pfg, oklch(0.21 0.006 285.885)); font-weight:600; }
+    .btn.ghost { color:var(--mfg); }
+    .btn.dim { opacity:0.5; }
+    .btn.h32 { height:32px; padding:0 12px; }
+    .btn.icon { width:28px; padding:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; min-width:0; }
+    .slider i { position:absolute; top:-5px; width:16px; height:16px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); margin-left:-8px; }
+    .slider b { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:var(--pri); }
+    .curve { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+    .cv { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 4px; border:1px solid var(--bd); border-radius:8px; background:var(--card); }
+    .cv.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .cv svg { width:44px; height:22px; }
+    .cv span { font-size:10px; font-weight:600; color:var(--mfg); }
+    .cv.on span { color:var(--fg); }
+    .picker { position:relative; border-radius:6px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); }
+    .picker .knob { position:absolute; width:20px; height:20px; margin:-10px 0 0 -10px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6); }
+    .hue { position:relative; height:12px; border-radius:6px; margin-top:16px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .hue .knob { position:absolute; top:-4px; width:20px; height:20px; margin-left:-10px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6); }
+    .nf { display:flex; align-items:center; gap:6px; }
+    .nf .l { width:16px; font-size:10px; font-weight:700; color:var(--mfg); }
+    .nf .field { flex:1; }
+    .em { display:flex; align-items:center; gap:8px; font-size:11px; }
+    .em .dot { width:8px; height:8px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .em .n { width:36px; display:flex; align-items:center; gap:5px; flex:0 0 auto; }
+    .em .v { width:34px; height:24px; padding:0 4px; font-size:11px; justify-content:flex-end; }
+    .em .c { width:36px; text-align:right; font-size:9px; color:var(--mfg); flex:0 0 auto; }
+    .chip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11.5px; white-space:nowrap; flex:0 0 auto; }
+    .chip .sw { width:12px; height:12px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); }
+    .pill { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; flex:0 0 auto; }
+    kbd { border-radius:4px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.5); padding:0 5px; font-size:9.5px; font-family:ui-monospace,Menlo,monospace; }
+    /* the programmer slice */
+    .rowc { height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); background:oklch(0.985 0 0 / 0.05); flex:0 0 auto; }
+    .rowc .cnt { font-size:12px; font-weight:600; white-space:nowrap; }
+    .rowc .dot { color:oklch(0.705 0.015 286.067 / 0.5); }
+    .vbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:6px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; font-weight:500; white-space:nowrap; flex:0 0 auto; }
+    .vbtn.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.15); }
+    .vbtn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+    .ghdr { height:30px; display:flex; border-bottom:1px solid var(--bd); background:var(--bg); flex:0 0 auto; }
+    .ghdr span { padding:0 8px; display:flex; align-items:center; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:var(--mfg); flex:0 0 auto; }
+    .grow { height:36px; display:flex; align-items:center; border-bottom:1px solid var(--bd); font-size:13px; flex:0 0 auto; background:var(--bg); }
+    .grow .nm { padding:0 8px; display:flex; align-items:center; gap:6px; height:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto; }
+    .grow.sel { background:oklch(0.985 0 0 / 0.06); box-shadow:inset 3px 0 0 var(--fg); }
+    .grow.sel .nm { font-weight:600; }
+    .cell { padding:2px 1px; height:100%; display:flex; flex:0 0 auto; }
+    .cell > span { flex:1; display:flex; align-items:center; gap:6px; padding:0 8px; border-radius:4px; font-size:12px; color:var(--mfg); }
+    .cell.you > span { box-shadow:inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .cell.mq > span { box-shadow:inset 0 0 0 1px var(--fg); background:oklch(0.985 0 0 / 0.08); }
+    .cell.open > span { box-shadow:inset 0 0 0 2px var(--pri); }
+    .cell .bar { position:relative; flex:1; height:6px; border-radius:999px; background:var(--muted); overflow:hidden; }
+    .cell .bar b { position:absolute; inset:0 auto 0 0; background:var(--pri); border-radius:999px; }
+    .cell .sw { width:16px; height:16px; border-radius:4px; border:1px solid var(--bd); flex:0 0 auto; }
+    .cell .xy { width:16px; height:16px; border-radius:3px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.5); position:relative; flex:0 0 auto; }
+    .cell .xy i { position:absolute; width:4px; height:4px; border-radius:50%; background:var(--pri); margin:-2px 0 0 -2px; }
+    .xypad { position:relative; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); background-image:linear-gradient(var(--bd) 1px, transparent 1px), linear-gradient(90deg, var(--bd) 1px, transparent 1px); background-size:25% 25%; }
+    .xypad i { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--pri); box-shadow:0 0 0 2px var(--bg); }
+    .list { display:flex; flex-direction:column; }
+    .list span { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; }
+    .list span.on { background:var(--muted); }
+    .list .sw { width:12px; height:12px; border-radius:3px; border:1px solid var(--bd); }
+    table { border-collapse:collapse; width:100%; table-layout:fixed; font-size:11px; line-height:1.4; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:6px 8px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    td.y { color:var(--fg); }
+    .kv { display:grid; grid-template-columns:150px 1fr; gap:3px 10px; font-size:11px; line-height:1.4; }
+    .kv .kk { color:var(--mfg); font-family: ui-monospace, Menlo, monospace; font-size:10.5px; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+    .tag.go { background:oklch(0.5 0.15 150 / 0.3); color:#86efac; }
+    .tag.ask { background:oklch(0.5 0.12 80 / 0.3); color:oklch(0.9 0.15 85); }
+    .tag.no { background:oklch(0.5 0.15 25 / 0.25); color:oklch(0.85 0.12 25); }
+    .tag.be { background:oklch(0.45 0.16 300 / 0.35); color:oklch(0.85 0.1 300); }
+    .scrim { position:absolute; inset:0; background:rgba(0,0,0,0.35); }
+    .cap9 { font-size:9.5px; color:var(--mfg); line-height:1.35; }
+</style>
+</helmet>
+<div class="app" style="width:1440px; height:1140px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div><div class="h1">The value editors on one anatomy</div><p class="cap" style="margin-top:4px; max-width:1180px;">Nothing here is a new gesture. The four programmer cells and the kit's three keep their editors and their keyboard; what changes is that every panel is built from the same five pieces the busk tabs are — a <b>label line</b> (heads · scope on the left, the column on the right), <b>9px uppercase labels</b> over <b>28px fields with the unit inside</b>, a <b>segmented row</b> for any choice of four or fewer, a <b>read-out</b> line, and a <b>static footer</b> where a panel writes on Apply rather than as it is edited. <span class="mono">components/editor/</span> exports each piece once and every host imports it.</p></div>
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col" style="width:300px;"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">The anatomy</span><span class="cap9">label line · labelled controls · read-out · footer (only where Apply exists)</span></div><div class="pop" style="width:300px; position:relative;"><div class="body" style="gap:10px;">
+    <div class="readout" style="outline:1px dashed oklch(0.6 0.14 80); outline-offset:3px;"><span>N heads · scope</span><span style="margin-left:auto;">the column</span></div>
+    <div class="col" style="gap:4px; outline:1px dashed var(--pri); outline-offset:4px;"><span class="lbl" style="">Label · 9px uppercase</span><div class="field " style="height:28px;"><span class="mono num">value</span><span class="u">unit</span></div></div>
+    <div class="col" style="gap:4px; outline:1px dashed var(--pri); outline-offset:4px;"><span class="lbl" style="">A choice of ≤ 4</span><div class="seg" style=""><span class="on">A</span><span class="">B</span><span class="">C</span><span class="">D</span></div></div>
+    <div class="readout" style="outline:1px dashed oklch(0.6 0.14 80); outline-offset:3px;"><span>read-out: what the desk holds, what was skipped</span></div>
+  </div><div class="foot" style="outline:1px dashed var(--green); outline-offset:-3px;"><span class="btn out" style=""><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2ZM17 21v-8H7v8M7 3v5h8"/></svg><span>Save…</span></span><span style="flex:1;"></span><span class="btn out" style=""><span>verb</span></span><span class="btn pri" style=""><span>Apply</span></span></div></div>
+      <div class="kv" style="margin-top:6px;"><span class="kk">EditorLabel</span><span><span class="mono">BuskLabel</span> moved and renamed — 9px, 700, uppercase, 0.08em, muted; a <span class="mono">&lt;div&gt;</span> so a test can walk up from it</span><span class="kk">EditorField</span><span>28px, radius 8, the unit as a trailing muted glyph; the draft rule (<span class="mono">useNumberFieldDraft</span>) built in</span><span class="kk">EditorReadout</span><span>the 10px line: the busk tab's emitter line, the level editor's byte, the address editor's landing lines (<span class="mono">LandingLines</span> becomes its multi-line arm)</span><span class="kk">EditorFooter</span><span>save slot · note · spacer · verbs; the Colour and Spread tabs' footer, generalised</span><span class="kk">EditorSurface</span><span><span class="mono">CellEditorSurface</span>, moved: the three forms, the double click, the anchor</span><span class="kk">padding</span><span><span class="mono">px-3.5</span> on any row holding a picker or a slider knob — the knob's half-width, the busk tabs' reason</span></div>
+    </div>
+    <div class="col" style="flex:1;">
+      <div class="row" style="align-items:flex-start; gap:16px; flex-wrap:wrap;">
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Level · the programmer</span><span class="cap9">the field in the cell's unit, %; the byte on the read-out</span></div><div class="pop" style="width:288px;"><div class="body"><div class="readout" style="margin-bottom:-2px;"><span>4 heads · Local</span><span style="margin-left:auto;">Dimmer</span></div><div class="col" style="gap:4px;"><span class="lbl" style="">Level</span><div class="row" style="gap:10px;"><div class="slider"><b style="width:80%"></b><i style="left:80%"></i></div><div class="field focus sel" style="width:72px;"><span class="mono num">80</span><span class="u">%</span></div></div></div><div class="readout"><span>204 of 255 · 0–255 on every head</span></div></div></div></div>
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Level · the DMX sheet</span><span class="cap9">bytes, because the sheet reads bytes — the same panel, its own unit</span></div><div class="pop" style="width:288px;"><div class="body"><div class="readout" style="margin-bottom:-2px;"><span>8 channels</span><span style="margin-left:auto;">u1 · 001–008</span></div><div class="col" style="gap:4px;"><span class="lbl" style="">Value</span><div class="row" style="gap:10px;"><div class="slider"><b style="width:80%"></b><i style="left:80%"></i></div><div class="field focus sel" style="width:72px;"><span class="mono num">204</span></div></div></div><div class="readout"><span>raw, 0–255 — the DMX sheet reads bytes</span></div></div></div></div>
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Position</span><span class="cap9">an XY pad beside Pan · Tilt — the cell's 16px thumbnail, at a size a finger can use</span></div><div class="pop" style="width:288px;"><div class="body"><div class="readout" style="margin-bottom:-2px;"><span>6 heads · Local</span><span style="margin-left:auto;">Position</span></div><div class="row" style="align-items:flex-start; gap:12px;"><div class="xypad" style="width:120px; height:120px; flex:0 0 auto;"><i style="left:50%; top:50%;"></i></div><div class="col" style="flex:1; gap:8px;"><div class="col" style="gap:4px;"><span class="lbl" style="">Pan</span><div class="field focus sel" style=""><span class="mono num">270</span><span class="u">°</span></div><div class="slider"><i style="left:50%"></i></div></div><div class="col" style="gap:4px;"><span class="lbl" style="">Tilt</span><div class="field " style=""><span class="mono num">135</span><span class="u">°</span></div><div class="slider"><i style="left:50%"></i></div></div></div></div><div class="readout"><span>128 · 128 on Mover 1 (540° · 270°)</span><span style="margin-left:auto;">2 heads differ</span></div></div></div></div>
+      </div>
+      <div class="row" style="align-items:flex-start; gap:16px; flex-wrap:wrap; margin-top:4px;">
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Setting</span><span class="cap9">unchanged but for the label line and the skip read-out</span></div><div class="pop" style="width:256px;"><div class="body" style="gap:6px;"><div class="readout" style="margin-bottom:-2px;"><span>4 heads · Local</span><span style="margin-left:auto;">Gobo</span></div><div class="field focus" style=""><span style="color:var(--mfg);">Type to filter</span></div><div class="list"><span class="on"><span class="sw" style="background:transparent;"></span>Open <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-left:auto; color:var(--pri);"><path d="M9 12l2 2 4-4"/></svg></span><span><span class="sw" style="background:transparent;"></span>Gobo 1 · Dots</span><span><span class="sw" style="background:transparent;"></span>Gobo 2 · Breakup</span><span><span class="sw" style="background:transparent;"></span>Gobo 3 · Stars</span></div><div class="readout"><span>2 heads have no gobo · skipped</span></div></div></div></div>
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Text · the cue sheet</span><span class="cap9">commit on Apply or ⏎, so it has a footer</span></div><div class="pop" style="width:288px;"><div class="body"><div class="readout" style="margin-bottom:-2px;"><span>4 cues</span><span style="margin-left:auto;">Notes</span></div><div class="col" style="gap:4px;"><span class="lbl" style="">Notes</span><div class="field focus" style=""><span>Blackout on the last beat</span></div></div></div><div class="foot"><span style="flex:1;"></span><span class="btn pri" style=""><span>Apply</span></span></div></div></div>
+        <div class="col"><div class="col" style="gap:2px; margin-bottom:2px;"><span class="lbl" style="font-size:10px;">Address · the patch list</span><span class="cap9">the landing lines are the read-out's multi-line arm; a collision is red and disables Apply</span></div><div class="pop" style="width:288px;"><div class="body"><div class="readout" style="margin-bottom:-2px;"><span>4 fixtures · visible order</span><span style="margin-left:auto;">Address</span></div><div class="col" style="gap:4px;"><span class="lbl" style="">From <span class="mono" style="text-transform:none; letter-spacing:0;">u1</span></span><div class="field focus sel" style=""><span class="mono num">41</span></div></div><div class="col" style="gap:2px;"><span class="cap9">Par 1 → 1-041</span><span class="cap9">Par 2 → 1-047</span><span class="cap9" style="color:var(--red);">Par 3 → 1-053 · collides with Mover 1</span><span class="cap9">Par 4 → 1-059</span></div></div><div class="foot"><span style="flex:1;"></span><span class="btn pri dim" style=""><span>Apply</span></span></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px 20px;">
+    <div class="col" style="gap:3px;"><span class="h2">The unit is the cell's</span><div class="note "><p>The programmer's dimmer cell reads <i>80%</i>, so its editor's field is a percent and the byte is the read-out; the DMX sheet reads <i>204</i>, so its field is the byte. Today both fields are bytes. One panel, the host names the unit (open call 3). Strobe, zoom, focus and iris are percents for the same reason; a template of them is a percent already.</p></div></div><div class="col" style="gap:3px;"><span class="h2">Position gets the pad</span><div class="note "><p>The cell draws a 16px pan/tilt thumbnail; the editor draws it at 120px beside the two rows, and a drag on it writes both. Degrees in the fields where the head annotates a range (every fixture does), bytes on the read-out. The Spread panel's position endpoints use the same two fields, so a spread and a set type the same thing.</p></div></div><div class="col" style="gap:3px;"><span class="h2">The label line replaces the count line</span><div class="note "><p><i>Applying to 4 targets</i> was drawn only for a batch; the label line is drawn always, says the scope as well (<i>Local</i>, or the Look's name in layer scope — which no editor says today), and names the column on the right where a bottom sheet's title used to. The sheets keep their title row; the label line is the popover's.</p></div></div><div class="col" style="gap:3px;"><span class="h2">The read-out says what was skipped</span><div class="note "><p>A commit over a batch where two heads lack the property already skips them silently at write time. The read-out says so: <i>2 heads have no gobo · skipped</i>. It is the same line the busk Colour tab uses for <i>the rest take RGB only</i>.</p></div></div><div class="col" style="gap:3px;"><span class="h2">Live is the cell editors' already</span><div class="note "><p>Every value editor writes as it is typed or dragged through the sheet's throttled commit; the busk tabs write through <span class="mono">useLivePush</span>. Same discipline (a floor, a dedupe, a release that always lands); the plan makes <span class="mono">useSheet</span>'s commit throttle that hook rather than a second copy.</p></div></div><div class="col" style="gap:3px;"><span class="h2">Widths</span><div class="note "><p>288 for level, position, text and address (the busk endpoint editors' 2 × 128 + a gutter, up from 256); 256 for the setting list; 352 for colour; 336 for Spread on the programmer, 320 docked. The sheets are as today. Not one number, because the content asks — the reason <span class="mono">wide</span> exists on the surface.</p></div></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1140}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

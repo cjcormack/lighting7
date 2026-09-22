@@ -1,0 +1,82 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Survey.dc.html": {
+      "title": "Today · Fan vs Spread, the two colour editors, the cell editors",
+      "w": 1440,
+      "h": 2730,
+      "x": 0,
+      "y": 0
+    },
+    "Spread.dc.html": {
+      "title": "Spread · one panel, every host",
+      "w": 1440,
+      "h": 1940,
+      "x": 1520,
+      "y": 0
+    },
+    "Colour.dc.html": {
+      "title": "Colour · one editor in five hosts",
+      "w": 1440,
+      "h": 1910,
+      "x": 3040,
+      "y": 0
+    },
+    "Editors.dc.html": {
+      "title": "The value editors · one anatomy",
+      "w": 1440,
+      "h": 1140,
+      "x": 4560,
+      "y": 0
+    },
+    "Model.dc.html": {
+      "title": "Model · code, rename, wire, ideas, open calls, sessions",
+      "w": 1440,
+      "h": 2010,
+      "x": 6080,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-22T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "t1": {
+      "kind": "title1",
+      "maxW": 3000,
+      "text": "One editor kit: Spread, the colour editor and the value editors across the programmer and the busk view",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "how": {
+      "color": "gray",
+      "text": "How to read this. Survey is today, side by side. Spread, Colour and Editors are the one answer, each drawn in every host. Model is where the code goes, the rename, the one wire change, ideas with verdicts, the seven open calls and the session split. Dark-only, the busk view's vocabulary — the intended pixels, not structure to copy.",
+      "w": 360,
+      "x": 0,
+      "y": -180
+    },
+    "q1": {
+      "color": "orange",
+      "text": "Open calls 1–7 are on Model. Each is drawn one way; the boards say which.",
+      "w": 360,
+      "x": 6080,
+      "y": -180
+    }
+  },
+  "order": [
+    "Survey.dc.html",
+    "Spread.dc.html",
+    "Colour.dc.html",
+    "Editors.dc.html",
+    "Model.dc.html"
+  ],
+  "pages": [],
+  "title": "Editor Kit"
+}

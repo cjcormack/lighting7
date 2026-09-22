@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --amber:oklch(0.828 0.189 84.429); --green:#4ade80; --red:oklch(0.704 0.191 22.216);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; }
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:13px; font-weight:700; letter-spacing:-0.005em; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80); background:oklch(0.5 0.12 80 / 0.12); }
+    .note.bad { border-color:oklch(0.55 0.16 25); background:oklch(0.5 0.15 25 / 0.12); }
+    .note p { margin:0; font-size:11px; line-height:1.45; color:var(--mfg); }
+    .note p + p { margin-top:5px; }
+    .note b { color:var(--fg); font-weight:600; }
+    .col { display:flex; flex-direction:column; gap:8px; min-width:0; flex:0 0 auto; }
+    .row { display:flex; align-items:center; gap:8px; min-width:0; }
+    .k { width:44px; font-size:11px; color:var(--mfg); flex:0 0 auto; }
+    /* panels */
+    .pop { border:1px solid var(--bd); border-radius:10px; background:var(--card); box-shadow:0 12px 40px rgba(0,0,0,0.6); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; }
+    .rail { border:1px solid var(--bd); border-radius:10px; background:var(--bg); display:flex; flex-direction:column; overflow:hidden; flex:0 0 auto; }
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); flex:0 0 auto; }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 40px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .body { display:flex; flex-direction:column; gap:8px; padding:12px 14px; flex:1 1 auto; min-height:0; }
+    .foot { display:flex; align-items:center; gap:6px; border-top:1px solid var(--bd); padding:8px 12px; flex:0 0 auto; }
+    .readout { display:flex; align-items:center; gap:8px; font-size:10px; color:var(--mfg); min-height:16px; }
+    .readout .sw { width:14px; height:14px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .seg { display:flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; min-width:0; }
+    .seg span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; padding:0 6px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .seg span.off { opacity:0.45; }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; white-space:nowrap; }
+    .field.focus { border-color:var(--pri); box-shadow:0 0 0 3px oklch(0.623 0.214 259.815 / 0.3); }
+    .field.sel { background:oklch(0.623 0.214 259.815 / 0.25); }
+    .field .u { color:var(--mfg); font-size:10px; margin-left:auto; }
+    .end { flex:1; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; gap:6px; font-size:12px; min-width:0; }
+    .end.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .end .w { font-size:10px; font-weight:700; text-transform:uppercase; color:var(--mfg); }
+    .end .sw { width:14px; height:14px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); flex:0 0 auto; }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.pri { background:var(--pri); color:var(--pfg, oklch(0.21 0.006 285.885)); font-weight:600; }
+    .btn.ghost { color:var(--mfg); }
+    .btn.dim { opacity:0.5; }
+    .btn.h32 { height:32px; padding:0 12px; }
+    .btn.icon { width:28px; padding:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; min-width:0; }
+    .slider i { position:absolute; top:-5px; width:16px; height:16px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); margin-left:-8px; }
+    .slider b { position:absolute; left:0; top:0; bottom:0; border-radius:3px; background:var(--pri); }
+    .curve { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; }
+    .cv { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 4px; border:1px solid var(--bd); border-radius:8px; background:var(--card); }
+    .cv.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .cv svg { width:44px; height:22px; }
+    .cv span { font-size:10px; font-weight:600; color:var(--mfg); }
+    .cv.on span { color:var(--fg); }
+    .picker { position:relative; border-radius:6px; border:1px solid var(--bd); background:linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(38 100% 50%)); }
+    .picker .knob { position:absolute; width:20px; height:20px; margin:-10px 0 0 -10px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6); }
+    .hue { position:relative; height:12px; border-radius:6px; margin-top:16px; background:linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+    .hue .knob { position:absolute; top:-4px; width:20px; height:20px; margin-left:-10px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,0.6); }
+    .nf { display:flex; align-items:center; gap:6px; }
+    .nf .l { width:16px; font-size:10px; font-weight:700; color:var(--mfg); }
+    .nf .field { flex:1; }
+    .em { display:flex; align-items:center; gap:8px; font-size:11px; }
+    .em .dot { width:8px; height:8px; border-radius:50%; border:1px solid var(--bd); flex:0 0 auto; }
+    .em .n { width:36px; display:flex; align-items:center; gap:5px; flex:0 0 auto; }
+    .em .v { width:34px; height:24px; padding:0 4px; font-size:11px; justify-content:flex-end; }
+    .em .c { width:36px; text-align:right; font-size:9px; color:var(--mfg); flex:0 0 auto; }
+    .chip { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11.5px; white-space:nowrap; flex:0 0 auto; }
+    .chip .sw { width:12px; height:12px; border-radius:3px; border:1px solid oklch(0.274 0.006 286.033 / 0.6); }
+    .pill { display:inline-flex; align-items:center; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; flex:0 0 auto; }
+    kbd { border-radius:4px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.5); padding:0 5px; font-size:9.5px; font-family:ui-monospace,Menlo,monospace; }
+    /* the programmer slice */
+    .rowc { height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); background:oklch(0.985 0 0 / 0.05); flex:0 0 auto; }
+    .rowc .cnt { font-size:12px; font-weight:600; white-space:nowrap; }
+    .rowc .dot { color:oklch(0.705 0.015 286.067 / 0.5); }
+    .vbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 10px; border-radius:6px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; font-weight:500; white-space:nowrap; flex:0 0 auto; }
+    .vbtn.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.15); }
+    .vbtn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+    .ghdr { height:30px; display:flex; border-bottom:1px solid var(--bd); background:var(--bg); flex:0 0 auto; }
+    .ghdr span { padding:0 8px; display:flex; align-items:center; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; color:var(--mfg); flex:0 0 auto; }
+    .grow { height:36px; display:flex; align-items:center; border-bottom:1px solid var(--bd); font-size:13px; flex:0 0 auto; background:var(--bg); }
+    .grow .nm { padding:0 8px; display:flex; align-items:center; gap:6px; height:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:0 0 auto; }
+    .grow.sel { background:oklch(0.985 0 0 / 0.06); box-shadow:inset 3px 0 0 var(--fg); }
+    .grow.sel .nm { font-weight:600; }
+    .cell { padding:2px 1px; height:100%; display:flex; flex:0 0 auto; }
+    .cell > span { flex:1; display:flex; align-items:center; gap:6px; padding:0 8px; border-radius:4px; font-size:12px; color:var(--mfg); }
+    .cell.you > span { box-shadow:inset 0 0 0 1px var(--pri); background:oklch(0.623 0.214 259.815 / 0.10); }
+    .cell.mq > span { box-shadow:inset 0 0 0 1px var(--fg); background:oklch(0.985 0 0 / 0.08); }
+    .cell.open > span { box-shadow:inset 0 0 0 2px var(--pri); }
+    .cell .bar { position:relative; flex:1; height:6px; border-radius:999px; background:var(--muted); overflow:hidden; }
+    .cell .bar b { position:absolute; inset:0 auto 0 0; background:var(--pri); border-radius:999px; }
+    .cell .sw { width:16px; height:16px; border-radius:4px; border:1px solid var(--bd); flex:0 0 auto; }
+    .cell .xy { width:16px; height:16px; border-radius:3px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.5); position:relative; flex:0 0 auto; }
+    .cell .xy i { position:absolute; width:4px; height:4px; border-radius:50%; background:var(--pri); margin:-2px 0 0 -2px; }
+    .xypad { position:relative; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); background-image:linear-gradient(var(--bd) 1px, transparent 1px), linear-gradient(90deg, var(--bd) 1px, transparent 1px); background-size:25% 25%; }
+    .xypad i { position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; border-radius:50%; background:var(--pri); box-shadow:0 0 0 2px var(--bg); }
+    .list { display:flex; flex-direction:column; }
+    .list span { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; }
+    .list span.on { background:var(--muted); }
+    .list .sw { width:12px; height:12px; border-radius:3px; border:1px solid var(--bd); }
+    table { border-collapse:collapse; width:100%; table-layout:fixed; font-size:11px; line-height:1.4; }
+    th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:6px 8px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    td { padding:6px 8px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    td b { color:var(--fg); font-weight:600; }
+    td.y { color:var(--fg); }
+    .kv { display:grid; grid-template-columns:150px 1fr; gap:3px 10px; font-size:11px; line-height:1.4; }
+    .kv .kk { color:var(--mfg); font-family: ui-monospace, Menlo, monospace; font-size:10.5px; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+    .tag.go { background:oklch(0.5 0.15 150 / 0.3); color:#86efac; }
+    .tag.ask { background:oklch(0.5 0.12 80 / 0.3); color:oklch(0.9 0.15 85); }
+    .tag.no { background:oklch(0.5 0.15 25 / 0.25); color:oklch(0.85 0.12 25); }
+    .tag.be { background:oklch(0.45 0.16 300 / 0.35); color:oklch(0.85 0.1 300); }
+    .scrim { position:absolute; inset:0; background:rgba(0,0,0,0.35); }
+    .cap9 { font-size:9.5px; color:var(--mfg); line-height:1.35; }
+</style>
+</helmet>
+<div class="app" style="width:1440px; height:2010px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  <div><div class="h1">Model: where the code goes, what is renamed, the one wire change, and what is open</div><p class="cap" style="margin-top:4px; max-width:1180px;">Nothing here changes a desk fact, a document or a selection. The wire gains one optional field on one route and one response field changes meaning. Everything else is the client folding two implementations of each editor into one module, <span class="mono">components/editor/</span>, that the programmer's sheets and the busk view's sheet both import.</p></div>
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col" style="flex:1.3;"><div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">Where the code goes</span><span style="flex:1; height:1px; background:var(--bd);"></span></div><table><tr><th style="width:34%;">Becomes</th><th style="width:30%;">From</th><th>Note</th></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/EditorSurface.tsx</td><td class="mono" style="font-size:10.5px;">sheet/cells/CellEditorSurface.tsx</td><td>moved; three forms, the double click, <span class="mono">wide</span>, the anchor — unchanged</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/EditorLabel.tsx</td><td class="mono" style="font-size:10.5px;">busking/BuskLabel.tsx</td><td>moved and renamed; the busk view imports it back</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/EditorField.tsx</td><td class="mono" style="font-size:10.5px;">the field in ValueFieldRow · SpreadSheet's NumberField · ChannelNumberInput</td><td>one 28px field with the unit and the draft rule; three fields become one</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/EditorReadout.tsx · EditorFooter.tsx</td><td class="mono" style="font-size:10.5px;">ColourSheet's read-out and footer · SpreadSheet's footer · sheet/cells/LandingLines.tsx</td><td>new, from the busk tabs</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/ValueFieldRow.tsx</td><td class="mono" style="font-size:10.5px;">sheet/cells/ValueFieldRow.tsx</td><td>moved; takes EditorField</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/ColourEditor.tsx</td><td class="mono" style="font-size:10.5px;">fixtures/ColourPickerBody.tsx + ColourSheet's read-out, Pick, Recent, footer</td><td>one body; <span class="mono">recent</span> · <span class="mono">footer</span> · <span class="mono">counts</span> are props the host fills</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/SpreadPanel.tsx</td><td class="mono" style="font-size:10.5px;">busking/SpreadSheet.tsx (the body) + sheet/FanPopover.tsx (the surface, the chooser, the keyboard)</td><td>one panel; plan kinds intent · raw · address · duration</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/spreadPlans.ts</td><td class="mono" style="font-size:10.5px;">sheet/fanMath.ts</td><td><span class="mono">fanValues</span> · <span class="mono">fanColours</span> deleted (the desk resolves); <span class="mono">fanAddresses</span> → <span class="mono">walkAddresses</span>, <span class="mono">fanDurations</span> → <span class="mono">spreadDurations</span></td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/useEditorKeyboard.ts</td><td class="mono" style="font-size:10.5px;">sheet/cells/useCellEditorKeyboard.ts</td><td>moved; unchanged</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">components/editor/useLivePush.ts</td><td class="mono" style="font-size:10.5px;">hooks/useLivePush.ts</td><td>moved beside its callers; <span class="mono">useSheet</span>'s commit throttle takes it</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">fixtures-list/SpreadPopover.tsx</td><td class="mono" style="font-size:10.5px;">fixtures-list/FanPopover.tsx</td><td>renamed; builds <span class="mono">intent</span> plans from the marquee, the scope arm, the target rule</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">patches/PatchSheet.tsx · runner/CueSheet.tsx · channels/DmxSheet.tsx</td><td class="mono" style="font-size:10.5px;">(their FanPopover instances)</td><td>take <span class="mono">SpreadPanel</span> with <span class="mono">address</span> · <span class="mono">duration</span> · <span class="mono">raw</span> plans; no behaviour change</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">busking/SpreadSheet.tsx · ColourSheet.tsx</td><td class="mono" style="font-size:10.5px;"></td><td>become thin hosts: the selection → targets, the hidden leaves for Pick, the seed hand-over, the docked frame</td></tr><tr><td class="mono" style="color:var(--fg); font-size:10.5px;">sheet/CellSelectionActions.tsx</td><td class="mono" style="font-size:10.5px;"></td><td><span class="mono">fan</span> slot → <span class="mono">spread</span>; the verb reads Spread with the wave glyph (the busk tab's), never the fan glyph</td></tr></table></div>
+    <div class="col" style="flex:0.8;"><div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">The rename</span><span style="flex:1; height:1px; background:var(--bd);"></span></div><table><tr><th>Today</th><th>Proposed</th></tr><tr><td class="mono" style="font-size:10.5px;">Fan (row C verb, aria-label)</td><td class="mono" style="color:var(--fg); font-size:10.5px;">Spread</td></tr><tr><td class="mono" style="font-size:10.5px;">FanPopover (sheet, fixtures-list)</td><td class="mono" style="color:var(--fg); font-size:10.5px;">SpreadPanel · SpreadPopover</td></tr><tr><td class="mono" style="font-size:10.5px;">FanPlan · FanColumn · fanColumnsForTargets</td><td class="mono" style="color:var(--fg); font-size:10.5px;">SpreadPlan · SpreadColumn · spreadColumnsForTargets</td></tr><tr><td class="mono" style="font-size:10.5px;">fanMath.ts</td><td class="mono" style="color:var(--fg); font-size:10.5px;">spreadPlans.ts</td></tr><tr><td class="mono" style="font-size:10.5px;">fan (the CellSelectionActions slot) · PHONE_FOLDED_CLASS use</td><td class="mono" style="color:var(--fg); font-size:10.5px;">spread</td></tr><tr><td class="mono" style="font-size:10.5px;">BuskLabel</td><td class="mono" style="color:var(--fg); font-size:10.5px;">EditorLabel</td></tr><tr><td class="mono" style="font-size:10.5px;">CellEditorSurface · useCellEditorKeyboard · useCellEditorOpen</td><td class="mono" style="color:var(--fg); font-size:10.5px;">EditorSurface · useEditorKeyboard · useEditorOpen</td></tr><tr><td class="mono" style="font-size:10.5px;">ColourPickerBody</td><td class="mono" style="color:var(--fg); font-size:10.5px;">ColourEditor</td></tr><tr><td class="mono" style="font-size:10.5px;">CLAUDE.md §Sheet kit "Fan"; docs/ mentions; the desk survey keeps "fan" as the other desks' word</td><td class="mono" style="color:var(--fg); font-size:10.5px;">Spread</td></tr></table>
+      <div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">The wire</span><span style="flex:1; height:1px; background:var(--bd);"></span></div>
+      <div class="note key"><p><b><span class="mono">POST /programmer/spread</span> gains <span class="mono">write: Boolean = true</span>.</b> False resolves and answers without writing — the focused-Look-layer arm, where the client lands the literals in the layer's draft. Nothing else on the route changes.</p><p><b><span class="mono">written[].value</span> becomes the head's literal</b> in the Look row grammar (<span class="mono">serializeLevel</span> / <span class="mono">serializeColour</span> / position), not the interpolated intent. Nothing on this side reads it today, so the change is free; the layer arm is its first reader.</p><p>No new frame, no new fact, no schema. The busk tabs' requests are unchanged.</p></div>
+    </div>
+  </div>
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col" style="flex:1.3;"><div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">Other ideas, each with a verdict</span><span style="flex:1; height:1px; background:var(--bd);"></span></div><table><tr><th style="width:26%;">Idea</th><th></th><th>Why</th><th style="width:20%;">Cost</th></tr><tr><td><b>Colour · Spread as tabs on the programmer rail</b></td><td><span class="tag ask">open</span></td><td>The rail and the busk sheet are one instrument in two views (CLAUDE.md §Focus and the side sheet); giving the rail a Colour and a Spread tab beside Layers · FX would make the docked form available on the programmer for a long busk over one marquee, with the popover as the quick form. Same components, a new host each.</td><td>medium — a tab strip on the rail header, two hosts, the marquee as the selection</td></tr><tr><td><b>The XY pad in the position editor</b></td><td><span class="tag go">drawn</span></td><td>Drawn on Editors. The cell already has the thumbnail; a 120px pad is the touch form of the two sliders.</td><td>small</td></tr><tr><td><b>The kit keyboard on the busk tabs</b></td><td><span class="tag go">drawn</span></td><td>Comes free from SpreadPanel and ColourEditor: comma steps From → To and R → G → B, Enter applies — the busk tabs had no keyboard convention at all.</td><td>free</td></tr><tr><td><b>Percent in the programmer's level editor</b></td><td><span class="tag ask">open</span></td><td>The cell reads 80%; the field says 204. Drawn as a percent with the byte on the read-out; the DMX sheet keeps bytes.</td><td>small — open call 3</td></tr><tr><td><b>A "spread again" or a recent-spreads row</b></td><td><span class="tag no">declined</span></td><td>The desk keeps no spread state; Send again resends the form as it stands, and a spread worth keeping is a Look. Declined.</td><td></td></tr><tr><td><b>Pick in the level and position editors</b></td><td><span class="tag no">declined</span></td><td>The editor opens at the live value already (the placeholder rule), and re-reads on reopen. Declined; Pick is the colour editor's because a colour is the one value a batch can disagree on invisibly.</td><td></td></tr><tr><td><b>Save as Look… in the programmer's Spread footer</b></td><td><span class="tag ask">open</span></td><td>Record is one row up. Drawn without; open call 1.</td><td>trivial either way</td></tr><tr><td><b>A Beam tab on the busk sheet (the setting editor on the busk view)</b></td><td><span class="tag no">declined</span></td><td>Out of scope: the busk view has no gobo or prism control by design (a template cannot carry a gobo). Not this plan.</td><td></td></tr><tr><td><b>`useLivePush` behind every cell commit</b></td><td><span class="tag go">drawn</span></td><td>The sheet's commit throttle and the busk tabs' push are two copies of one discipline. Fold the throttle into the hook.</td><td>small</td></tr><tr><td><b>Delete the six `react-colorful` mount sites' size rules</b></td><td><span class="tag go">drawn</span></td><td>With one ColourEditor there is one mount site; <span class="mono">index.css</span>'s 200px pin and the <span class="mono">.colour-picker-*</span> classes reduce to the fluid rule.</td><td>small, with the kit</td></tr></table></div>
+    <div class="col" style="flex:0.8;"><div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">Open — for Chris to call</span><span style="flex:1; height:1px; background:var(--bd);"></span></div><div class="col" style="gap:2px;"><span class="h2">1 · Save as Look… on the programmer's Spread</span><div class="note warn"><p>Drawn without it: Record is one row up. Adding it is one prop on the footer.</p></div></div><div class="col" style="gap:2px;"><span class="h2">2 · Recent chips in the desk colour popover</span><div class="note warn"><p>Drawn without: row C's strip is one row up. The phone sheet draws them, where the strip is folded.</p></div></div><div class="col" style="gap:2px;"><span class="h2">3 · Percent in the level editor</span><div class="note warn"><p>Drawn as %, byte on the read-out; the DMX sheet keeps bytes. Today both are bytes.</p></div></div><div class="col" style="gap:2px;"><span class="h2">4 · The Speed column</span><div class="note warn"><p>It is outside the template vocabulary, so the desk cannot spread it. Drawn: a <span class="mono">raw</span> plan kind keeps the client byte lerp for it alone. The alternative is to drop Spread on Speed.</p></div></div><div class="col" style="gap:2px;"><span class="h2">5 · Over: Heads as the programmer's default</span><div class="note warn"><p>Fan expanded a multi-head fixture into its cells always; Spread treats a fixture row as one head unless Over says Cells, as the busk tab does. A change in what a fixture-row marquee on a bar does.</p></div></div><div class="col" style="gap:2px;"><span class="h2">6 · The rail tabs (idea 1)</span><div class="note warn"><p>Now as a session 4, later, or never. The boards do not draw it.</p></div></div><div class="col" style="gap:2px;"><span class="h2">7 · Degrees in the position cell editor</span><div class="note warn"><p>Drawn in degrees (the Spread endpoints' unit); the cell keeps bytes. Needs each head's degree annotation read on this side, which <span class="mono">store/fixtures.ts</span> already carries for pan and tilt.</p></div></div></div>
+  </div>
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col" style="flex:1;"><div class="row" style="gap:10px;"><span class="lbl" style="font-size:10px;">Sessions, as first drawn</span><span style="flex:1; height:1px; background:var(--bd);"></span></div><div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px;"><div class="col" style="gap:3px;"><span class="h2">1 · The kit</span><div class="note "><p>Move and rename: <span class="mono">components/editor/</span> with EditorSurface, EditorLabel, EditorField, EditorReadout, EditorFooter, ValueFieldRow, the keyboard and open hooks, useLivePush. No behaviour change; every import site follows. The four programmer cells and the kit's three take the label line, the 28px field and the read-out (Editors board). Percent and the XY pad if calls 3 and 7 say so.</p></div><span class="cap9">lighting-react only</span></div><div class="col" style="gap:3px;"><span class="h2">2 · The colour editor</span><div class="note "><p>ColourEditor from ColourPickerBody + the busk tab's read-out, Pick, Recent, footer; the programmer's colour cell and the busk tab host it; the Spread endpoint hosts the picker half. <span class="mono">liveAppearance</span> reporting from the grid rows for Pick. The <span class="mono">react-colorful</span> size rules reduce to the fluid rule.</p></div><span class="cap9">lighting-react only</span></div><div class="col" style="gap:3px;"><span class="h2">3 · Spread</span><div class="note "><p>SpreadPanel from SpreadSheet + FanPopover; the programmer's SpreadPopover builds intent plans from the marquee with the target rule and the scope arm; the patch list, cue sheet and DMX sheet take the panel with their own kinds; <span class="mono">fanValues</span> / <span class="mono">fanColours</span> deleted; the rename lands everywhere including CLAUDE.md. Backend: <span class="mono">write: false</span> on the spread route and <span class="mono">written[].value</span> as the literal.</p></div><span class="cap9">lighting-react + one lighting7 route change</span></div><div class="col" style="gap:3px;"><span class="h2">4 · The rail tabs (if called)</span><div class="note "><p>Colour and Spread as tabs on the programmer rail, docked hosts of the two components over the marquee.</p></div><span class="cap9">lighting-react only</span></div></div>
+    <div class="note "><p><b>What does not move.</b> The programmer's cell selection, the marquee, the scope band, the four cells' triggers and their placeholder rule; the busk view's selection, its rig band, the Speed and Show tabs; the sheet kit's columns and writers; every route but the one above. The busk view stays the design authority for anything the boards do not draw: where a board and the shipped busk tab disagree on a measurement, the busk tab wins.</p><p><b>What the desk survey adds</b> is already in <span class="mono">completed/busk-further-design/Spread.dc.html</span> (Titan · grandMA3 · MagicQ · Hog 4 · Eos on fan) and <span class="mono">sheet-views-design/Spec.dc.html</span> (the cell contract); nothing here re-surveys them. The one new reading: every desk surveyed has <i>one</i> fan, reached from its programmer, and the busk view's tab is that fan docked — which is the whole argument for one component.</p></div></div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":2010}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
