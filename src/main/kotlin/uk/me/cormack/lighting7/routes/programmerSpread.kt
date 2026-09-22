@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.SpreadCurve
@@ -58,6 +59,21 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * `HEADS` treats each fixture as one step. A `tmpl:{uuid}` endpoint resolves the template's generic
  * colour, as an FX colour reference does. The selection's attribute mask is honoured the way a
  * Look's press honours it: a property outside it writes nothing and answers `skippedFamilies`.
+ *
+ * **Two things changed for the programmer's own Spread (editor-kit plan §3.2, D6).** `write` on
+ * the request, default true: `false` runs everything above — the mask, the target expansion, the
+ * order, the fractions, the per-head resolve, the skips — and stops short of the batched write, so
+ * the desk *answers without writing*. That is the focused-Look-layer arm: the client lands each
+ * answered literal in the layer's draft, which coalesces and PUTs as every layer-scope edit does;
+ * the desk does not write into the Look itself, because `PUT /looks/{id}` republishes every cue
+ * layering it. And `written[].value` is each head's **literal** — [CueAssignmentResolver.PropertyValue.serialize],
+ * the grammar Look rows and programmer entries already use (`"0".."255"`, `"#rrggbb;w128"`,
+ * `"pan,tilt"`) — rather than the interpolated intent it carried before, so that arm has something
+ * a Look row can hold. Nothing else read the field. A client on an older desk can tell the two
+ * apart by parsing: an intent string is not a programmer value. The one literal a Look row *cannot*
+ * hold — a colour-wheel slot, a `Setting` under a COLOUR property — is skipped by name under
+ * `write = false` rather than answered. And the curve is spread over the heads that can take the
+ * property, found first; a head that cannot is skipped and consumes no position on it.
  */
 internal fun Route.routeApiRestProgrammerSpread(state: State) {
     post<ProgrammerSpreadResource> { resource ->
@@ -101,6 +117,14 @@ internal data class SpreadRequest(
     val fadeMs: Long? = null,
     /** For `order = RANDOM`. */
     val seed: Int = 0,
+    /**
+     * Write the resolved literals into the programmer (true, the busk tab and Local) or only
+     * resolve and answer them (false, a focused Look layer — the client lands them in the layer's
+     * draft). A defaulted field, so a request that omits it is byte for byte the request the busk
+     * tab has always sent; the client omits it whenever it is true, because this Json refuses an
+     * unknown key and a desk mid-upgrade would otherwise 400 every Local spread.
+     */
+    val write: Boolean = true,
 )
 
 @Serializable
@@ -111,7 +135,11 @@ internal data class SpreadResponse(
     val skippedFamilies: List<String> = emptyList(),
 )
 
-/** One head's literal: the head, the property it actually landed on, and the intent it was given. */
+/**
+ * One head's literal: the head, the property it actually landed on, and the **value it got** —
+ * [CueAssignmentResolver.PropertyValue.serialize]'s form, never the intent. The focused-Look-layer
+ * arm (`write = false`) is its reader, and a Look row holds a literal.
+ */
 @Serializable
 internal data class SpreadWriteDto(val target: CueTargetDto, val propertyName: String, val value: String)
 
@@ -175,10 +203,29 @@ internal fun spreadIntoProgrammer(
     }
 
     // Rig order first (LINEAR); the strategy then says where along the curve each sits.
-    val ordered = state.buskRigOrder()
+    val rigOrdered = state.buskRigOrder()
         ?.sort(heads.keys.map { CueTargetDto(TargetRef.Fixture.TYPE, it) })
         ?.map { heads.getValue(it.key) }
         ?: heads.values.toList()
+    // **Two passes: the heads that can take the property are found first, and the curve is spread
+    // over those alone** (editor-kit session 3 review). A head that resolves nothing — a par in a
+    // Position spread, a dimmer-only head in a Colour one — is skipped by name, as before; what
+    // changed is that it no longer *consumes a position on the curve*: a marquee on the programmer
+    // is geometric and sweeps such heads up with the rest, so two RGB heads among eight rows landed
+    // at `0` and `1/7` and *to* never reached the rig. Support is a property of the head and the
+    // shape, not of the fraction, so it is asked with `from`.
+    val ordered = rigOrdered.filter { head ->
+        val probe = TemplateResolver.resolve(head, property.propertyName, from)
+        if (probe.value == null) {
+            skipped += SpreadSkipDto(
+                CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey),
+                (probe.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported",
+            )
+            false
+        } else {
+            true
+        }
+    }
     val fractions = SpreadPlan.fractions(ordered.size, order, curve, request.parts)
     val hints = groupHintsForTargets(fixtures, request.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
 
@@ -193,14 +240,26 @@ internal fun spreadIntoProgrammer(
             skipped += SpreadSkipDto(target, (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
             return@forEachIndexed
         }
+        // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under a property in
+        // the COLOUR category, and a Look row cannot hold that: the cook re-reads a COLOUR row
+        // through the colour parser, which turns "37" into white. The write arm passes the typed
+        // value through and is right; the answer-only arm would hand the client a literal it must
+        // not land, so under `write = false` such a head is skipped by name instead. (The
+        // programmer's own colour-wheel cell edit in layer scope has the same gap —
+        // `FU-LOOK-COLOUR-WHEEL-ROW`.)
+        if (!request.write && property == TemplateProperty.COLOUR && value is CueAssignmentResolver.PropertyValue.Setting) {
+            skipped += SpreadSkipDto(target, "colour wheel — a Look row cannot hold a wheel slot")
+            return@forEachIndexed
+        }
         val parentKey = (head as? FixtureElement<*>)?.parentFixture?.key
         writes += ProgrammerWriter.PropertyWrite(
             head, resolution.propertyName, value,
             sourceGroup = hints[head.targetKey] ?: parentKey?.let { hints[it] },
         )
-        written += SpreadWriteDto(target, resolution.propertyName, intent.serialize())
+        written += SpreadWriteDto(target, resolution.propertyName, value.serialize())
     }
-    if (writes.isNotEmpty()) {
+    // `write = false` answers what *would* land and lands nothing — the Look-layer arm.
+    if (request.write && writes.isNotEmpty()) {
         state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = request.fadeMs ?: 0)
     }
     return SpreadOutcome.Done(SpreadResponse(written, skipped))
