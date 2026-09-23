@@ -177,7 +177,7 @@ selection mark in Split, ⌘K) and **Model** (wire, code, sessions, the eight de
 Each session ends with its checks green, its CLAUDE.md or engineering-doc paragraphs written, and
 its done-marker here.
 
-### Session 1 — `windows.follow` (lighting7)
+### ~~Session 1 — `windows.follow` (lighting7)~~ — done, lighting7 `3f4fb5b`
 
 - The frame, the command, the handler, the test (§3.3).
 - `docs/websocket-engineering.md`.
