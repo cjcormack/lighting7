@@ -74,7 +74,7 @@ disagree, this list wins:
 
 The boards still draw the **ShowBar** on the busk view (`Main`, `Phones`, `Tablets`), the rig band's
 **label row over its controls row** (`Main`, `Focus`, `Phones`), and the **ShowHeader at 48**. All
-three are overtaken by [`../../busk-chrome-plan.md`](../../busk-chrome-plan.md) and its boards in
+three are overtaken by [`../busk-chrome-plan.md`](../busk-chrome-plan.md) and its boards in
 [`../../busk-chrome-design/`](../../busk-chrome-design/INDEX.md): the bar leaves the busk view for a
 Show tab on the side sheet, the band is one row, and the header is a 40px chrome row. Read those
 for the busk view's chrome; these boards stay the record of the rig, the sheet's three tabs, spread

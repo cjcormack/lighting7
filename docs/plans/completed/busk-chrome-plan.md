@@ -2,9 +2,12 @@
 
 > **Document status: APPROVED, 2026-09-21 — session A shipped the same day (lighting-react
 > `aa4e4c54`); session A.5 was added that evening from Chris's review of A on the desk and shipped
-> (`37ba7197`); session B shipped 2026-09-21 (`aa4f2c24`) — all three sessions are done.** The
+> (`37ba7197`); session B shipped 2026-09-21 (`aa4f2c24`) — all three sessions are done. Closed
+2026-09-23 and moved to `completed/` (lighting-react `09960e8f` took the last two nits); the §9
+desk checks the preview pane could not reach are
+[`FU-MANUAL-BUSK-CHROME`](../manual-validation.md#fu-manual-busk-chrome).** The
 > visual design is settled and
-> checked in beside this plan at [`busk-chrome-design/`](busk-chrome-design/INDEX.md) — five static
+> checked in beside this plan at [`busk-chrome-design/`](../busk-chrome-design/INDEX.md) — five static
 > artboards: the busk window with the ShowBar gone and the Show tab open, the same window immersive
 > with the vertical budget, the Show tab at full size, the rig band's one row in its three shapes
 > with the fold ladder, and the model with every suggestion's verdict. The live copy at
@@ -367,6 +370,10 @@ not a reason to copy the component.
   One span to drop. *Shipped kept in session A; D18 keeps it while dropping the chip.*
 - **The Show tab's cards** (D2) — drawn collapsed by default; the phone opens Current in Stage.
   One default either way. *Shipped collapsed in session A.*
+
+Answered 2026-09-23 by Chris, at close: D18 leaves ⌘K's *Stop following the desk selection in this
+window* as the only way out of following on a window — a touch-only screen cannot unlink its
+selection — and that is accepted as it is; no second door is owed.
 
 Answered 2026-09-21 by Chris: immersive on all four live views (D7); the band's rows merged (D13);
 the ShowHeader at 40 (D12); two rows by design below 600 and the Cells control keeping its mode

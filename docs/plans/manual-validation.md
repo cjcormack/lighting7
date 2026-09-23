@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S4`](#fu-manual-multi-screen-s4) | a record dragged off one screen's edge arrives on the next — the gesture is two windows by construction, so every step of it is the desk's; what one window proved is recorded in the entry | Multi-screen S4, 2026-09-17 |
 | [`FU-MANUAL-MULTI-SCREEN-S3`](#fu-manual-multi-screen-s3) | a record picked up on one screen lands on the other — the two-window half, the MIDI half, the timeout and two gestures fixed in review but never exercised; what one window proved is recorded in the entry | Multi-screen S3, 2026-09-16 |
@@ -69,6 +70,60 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-BUSK-CHROME`
+
+**What it proves**: *the busk view runs a show from its side sheet, and any live view can shed the
+app around it*. Three sessions of [`completed/busk-chrome-plan.md`](completed/busk-chrome-plan.md):
+A took the `ShowBar` off the busk view in favour of a **Show** tab in the side sheet and merged the
+rig band into one row (lighting-react `aa4e4c54`); A.5 made the pad row the top row in Pads, drew
+the desk and page chips only while unlinked, and let the words return below the two-row floor
+(`37ba7197`); B made **immersive** a per-window fact on all four live views and the `ShowHeader` a
+40px chrome row (`aa4f2c24`). The blind pill and the Show glyph's dot followed (`89328ffa`).
+
+**Why it is here**: each session was verified in the preview pane, one window at a time. Four
+things could not be reached there. The fold's green cue number needs a GO on the dev rig. A.5 is a
+two-screen layout by design. The pane refuses `requestFullscreen` even from a real click, and page
+JS cannot drop the socket, so full screen and the *Offline* chip are pinned by unit tests only.
+Everything is Chromium in the pane, and Safari is the desk browser. This entry is the plan's §9,
+narrowed to what the pane could not do.
+
+**Test**: the two desk screens at `http://localhost:8413/` (not the LAN name), one in Safari and
+one in Chrome for step 6, and a stack you can GO without harm.
+
+1. **A — the Show tab.** On `/busk` at about 1122×768 there is no bar under the header. Open the
+   sheet's **Show** tab: it shows the live cue, and **GO** in its footer fires the next one. Fold
+   the sheet: the Show glyph on the fold carries the live cue number in green, an em-dash with
+   nothing on stage. *This number is the one part of A pinned by test only.* Toggle Blind on the
+   programmer: the band shows an amber `BLIND` pill, and the Show glyph an amber dot, on the tab
+   strip and on the fold.
+2. **A — the band.** The band is one row in Split and Rig. Narrow the window: the verbs lose their
+   words first, then the *Cells:* prefix and the Focus words, and the Cells control keeps its mode
+   word (*All*, *Odd*…) throughout. The `RIG` label goes last, and below about 540px of band the
+   row breaks into two at the one place, the verbs on the first line. On a phone the overlay sheet
+   offers Colour · Spread · Show.
+3. **A.5 — the two-screen pair.** Screen 1 in **Pads**, Screen 2 in **Split**. Screen 1 draws the
+   pad row (`PADS`, the tabs, Spread · Locate · Highlight, the summary) and **no rig row**. Select
+   heads on Screen 2's tiles: Screen 1's summary names them, and its Locate and Highlight act on
+   them. Neither screen draws a chip while both follow.
+4. **A.5 — the chips.** Unlink Screen 2's page (its Screens row's Page picker, or ⌘K). Its
+   `Page: This window` chip appears on the pad row, and a press on it follows the desk again. The
+   same for the selection, through ⌘K's *Stop following the desk selection in this window*.
+5. **B — immersive.** On each of Programmer, Show, Prompt Book and Busk, press the expand glyph at
+   the end of the header: the sidebar and app header go, and come back on a second press. With
+   immersive on, open the fixtures list from ⌘K: the app is drawn. Return to a live view: it is
+   immersive again. Set immersive on the *other* screen from its Screens row (*Chrome · Immersive*)
+   and from ⌘K (*Show <view> on <window> · Immersive*). From an immersive row, *Copy link* and open
+   it in a new window: it arrives immersive.
+6. **B — full screen and offline.** ⇧F on an immersive window, in Safari and in Chrome: full
+   screen and immersive compose, and leaving one leaves the other alone. On Chrome Esc should reach
+   the page rather than leaving full screen; on Safari it leaves, quietly. With the rig safe, take
+   the desk away from a window (stop the desk, or drop the network on the iPad) while it is
+   immersive: a red *Offline* chip appears on the header, and goes when the socket returns.
+
+20 minutes; steps 1, 3 and 6 are the ones review could not reach.
+
+---
+
 ## `FU-MANUAL-BUSK-PAGE-FOLLOW`
 
 **What it proves**: *two screens can show different busk pages while sharing one selection*. The
@@ -88,18 +143,20 @@ left.
 **Test**: two browser windows on the desk, both at `http://localhost:8413/` (not the LAN name), plus
 the X-Touch for step 4.
 
-1. Open the busk view on both screens. Both chips read `Page: Desk`. Click a page tab on Screen 1;
-   Screen 2 follows it. That is the desk fact still working, and it must not regress.
-2. On Screen 2, click its `Page: Desk` chip. It reads `Page: This window`, dashed, and **stays on
-   the page it was showing**. Now flip pages on Screen 1: Screen 2 does not move.
-3. **The headline.** With Screen 2 still local, make a fixture selection on either screen — both
-   `Targets:` chips still read `Desk`, so the selection is shared. Put a colour template on Screen
-   1's page and a position template on Screen 2's page, and press one on each. Both land on the same
-   heads. This is the whole feature; if only this step is run, run this one.
+1. Open the busk view on both screens. Neither draws a page chip: following is the resting state
+   (busk-chrome D18). Click a page tab on Screen 1; Screen 2 follows it. That is the desk fact
+   still working, and it must not regress.
+2. Unlink Screen 2's page: on its Screens row, pick the page it is already showing. Its dashed
+   `Page: This window` chip appears, and it **stays on that page**. Now flip pages on Screen 1:
+   Screen 2 does not move.
+3. **The headline.** With Screen 2 still local, make a fixture selection on either screen. Neither
+   screen draws a `Targets:` chip, so both still follow the desk selection and it is shared. Put a
+   colour template on Screen 1's page and a position template on Screen 2's page, and press one on
+   each. Both land on the same heads. This is the whole feature; if only this step is run, run this one.
 4. Press the X-Touch's *next page* button. Screen 1 (following) moves; Screen 2 (local) does not.
    Both are correct.
-5. Click Screen 2's chip back to `Page: Desk`. It adopts Screen 1's page at once, and sends nothing
-   of its own — Screen 1 must not move.
+5. Press Screen 2's `Page: This window` chip. The chip goes, and the window adopts Screen 1's page
+   at once and sends nothing of its own — Screen 1 must not move.
 6. Copy Screen 1's URL (it carries `?page=`) and open it in a third window. It arrives **local**, on
    that page. That is deliberate and is the launcher's mechanism; one click on the chip joins it to
    the desk. Worth seeing once so it is not reported as a bug later.

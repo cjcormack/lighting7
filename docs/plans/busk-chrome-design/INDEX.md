@@ -13,7 +13,7 @@ for all four live views, not only Busk; the boards say so. The screenshot that p
 chrome above the rig band (app header 48, ShowHeader 48, ShowBar 56) and the first pad at y≈450.
 
 **Status: approved 2026-09-21; all three sessions built the same day (lighting-react `aa4e4c54`, `37ba7197`, `aa4f2c24`).** The implementation plan is
-[`../busk-chrome-plan.md`](../busk-chrome-plan.md), and the live copy of these boards is at
+[`../completed/busk-chrome-plan.md`](../completed/busk-chrome-plan.md), and the live copy of these boards is at
 <https://claude.ai/artifact/DCgs8coqVqkFoSTXRF6AMg> — private to Chris, a convenience; the files
 here are the authority. Where a board and the plan will disagree, the plan wins on behaviour and these files on
 layout and copy, as with every record in this directory.
