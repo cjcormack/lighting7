@@ -185,7 +185,7 @@ its done-marker here.
   sending `windows.follow` gets its frame dropped (the Json is bare), so session 2 must not ship
   before a restarted desk.
 
-### Session 2 — the selection (lighting-react)
+### ~~Session 2 — the selection (lighting-react)~~ — done, lighting-react `f01eda67`
 
 - `followIsForced`, the D3 relink and toast, the `windows.follow` handler and its refusal.
 - The Screens row's Selection segment; ⌘K's per-window arm and the withheld *Stop following*.

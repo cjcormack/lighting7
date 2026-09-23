@@ -9,8 +9,12 @@ owns are what it is looking at and how it is framed.
 
 **Two of those a window may decline to follow**, and the desk keeps holding them either way: the
 selection (`lib/deskFollow.ts` in the client) and, since 2026-09-16, the busk page
-(`lib/buskPageFollow.ts`). Each is a per-tab flag with a chip of its own, defaulting to follow, and
-they are deliberately independent — a second screen showing a *position* page while the first shows
+(`lib/buskPageFollow.ts`). Each is a per-tab flag defaulting to follow. The page has a chip of its
+own, drawn while unlinked. The selection is marked either way: a small link badge while it follows,
+the dashed *This window* chip while it does not. It can be set from any window's Screens sheet
+(`windows.follow`). It can only be declined where the window both selects and acts, which is busk
+Split and the Programmer; Rig and Pads focus always follow ([`plans/desk-follow-plan.md`](plans/desk-follow-plan.md)
+D1–D4, D8). The two flags are deliberately independent — a second screen showing a *position* page while the first shows
 a *colour* page, both pressing onto the one selection, is the case the page half was added for. The
 desk fact does not change: a hardware *next page* button still moves `BuskPageState`, and every
 following window still moves with it.
