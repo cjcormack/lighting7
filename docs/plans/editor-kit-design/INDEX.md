@@ -12,9 +12,9 @@ other inconsistencies, every value editor on the better design, shared component
 plus other ideas. The outcome asked for was these boards; the plan document follows once the designs
 are agreed.
 
-**Status: approved 2026-09-22 (Chris: "the designs look good"); sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 open.** The
-implementation plan is [`../editor-kit-plan.md`](../editor-kit-plan.md); the seven calls on
-`Model.dc.html` stand as drawn and are recorded in its §11, the rail tabs still open. The live copy of these boards is at
+**Status: approved 2026-09-22 (Chris: "the designs look good"); sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 shipped 2026-09-23 (lighting-react `53b0c57b`), calls 8–12 as drawn — plan complete.** The
+implementation plan is [`../completed/editor-kit-plan.md`](../completed/editor-kit-plan.md); the seven calls on
+`Model.dc.html` stand as drawn and are recorded in its §11, the rail tabs' five with them. The live copy of these boards is at
 <https://claude.ai/artifact/UECPcKmhVPZ2FFhvxtTHMd> — private to Chris, a convenience; the files here are
 the authority.
 Where a board and the plan will disagree, the plan wins on behaviour and these files on layout and
@@ -86,4 +86,4 @@ canvas scaffolding; open a file in a browser and it renders standalone.
 | `Colour.dc.html` | The colour editor open from the colour cell at 352; the busk tab, the phone bottom sheet, the short-viewport side sheet, and the Spread endpoint picker; the pieces-by-host table. |
 | `Editors.dc.html` | The anatomy with its five pieces named; Level (programmer, %), Level (DMX sheet, bytes), Position with the XY pad, Setting, Text and Address on it; six rules. |
 | `Model.dc.html` | Where the code goes (fourteen moves), the rename table, the wire (one flag, one response field), ten ideas with verdicts, the seven open calls, and four sessions. |
-| `RailTabs.dc.html` | **Drawn 2026-09-23, after sessions 1–3 shipped: call 6 drawn out.** The programmer rail with a tab strip for its header — Stack (Layers · FX) · Colour · Spread — the Colour tab docked at 300 over a 4 × Colour marquee beside the grid; the Spread tab on a Position marquee with Live on, the Stack tab as today, the empty state, the collapsed strip with a glyph per tab; what each grid gesture does while a tab is open; the scope per tab; where the code goes (the marquee published through a context, two hosts, one plan hook shared with the popover); calls 8–12 and six declined alternatives. Session 4 waits on it. |
+| `RailTabs.dc.html` | **Drawn 2026-09-23, after sessions 1–3 shipped: call 6 drawn out.** The programmer rail with a tab strip for its header — Stack (Layers · FX) · Colour · Spread — the Colour tab docked at 300 over a 4 × Colour marquee beside the grid; the Spread tab on a Position marquee with Live on, the Stack tab as today, the empty state, the collapsed strip with a glyph per tab; what each grid gesture does while a tab is open; the scope per tab; where the code goes (the marquee published through a context, two hosts, one plan hook shared with the popover); calls 8–12 and six declined alternatives. Shipped as session 4 (lighting-react `53b0c57b`). |

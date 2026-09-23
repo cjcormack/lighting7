@@ -1,7 +1,7 @@
 # One editor kit — Spread, the colour editor and the value editors across the programmer and the busk view
 
-> **Document status: IN PROGRESS — sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 drawn 2026-09-23 (`RailTabs.dc.html`), awaiting calls 8–12.** The visual design is settled and
-> checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — six
+> **Document status: DONE — sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 shipped 2026-09-23 (lighting-react `53b0c57b`), calls 8–12 as drawn.** The visual design is settled and
+> checked in beside this plan at [`editor-kit-design/`](../editor-kit-design/INDEX.md) — six
 > generated artboards: today's two answers side by side, the Spread panel in every host, the colour
 > editor in five hosts, the value editors on one anatomy, the model with every idea's verdict, and
 > the rail tabs (session 4, drawn after sessions 1–3 shipped).
@@ -321,9 +321,9 @@ Sessions 1 and 2 are lighting-react only; session 3 is lighting7 first, then lig
   sheet's Spread paragraph becomes the host's.
 - Done-marker here.
 
-### Session 4 — Colour · Spread as tabs on the programmer rail (lighting-react) — if called
+### ~~Session 4 — Colour · Spread as tabs on the programmer rail (lighting-react) — if called~~ — lighting-react 53b0c57b
 
-Drawn 2026-09-23 on [`RailTabs.dc.html`](editor-kit-design/RailTabs.dc.html), after sessions 1–3
+Drawn 2026-09-23 on [`RailTabs.dc.html`](../editor-kit-design/RailTabs.dc.html), after sessions 1–3
 shipped, and **waiting on calls 8–12** (§11). The board is the layout and copy authority; this
 section is the behaviour. Both pieces are docked-capable already — `ColourEditor`'s `docked` frame
 (session 2) and `SpreadPanel`'s `docked` host (session 3) — so the session is a tab strip, two
@@ -475,7 +475,7 @@ recorded here as one line to flip:
   which restates it as call 8 and adds four of its own; session 4 waits on all five.
 - **7 · Degrees in the position cell editor** — drawn in degrees (D14).
 
-The rail-tabs board's calls, each drawn one way (§5 session 4 has the reasons):
+The rail-tabs board's calls, each drawn one way (§5 session 4 has the reasons) — all five called as drawn 2026-09-23:
 
 - **8 · Whether at all** — what it buys is a long busk over one marquee with the grid uncovered;
   what it costs is a strip on the rail header, the marquee published outside the list, and a third
