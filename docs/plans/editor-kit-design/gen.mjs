@@ -44,6 +44,10 @@ const P = {
   play: 'M6 4v16l14-8Z',
   target: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 5a5 5 0 1 0 0 10 5 5 0 0 0 0-10Zm0 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z',
   book: 'M4 5.5A2.5 2.5 0 0 1 6.5 3H20v18H6.5A2.5 2.5 0 0 0 4 18.5ZM12 7v10',
+  panel: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM15 3v18',
+  chevL: 'm15 18-6-6 6-6',
+  sort: 'M3 6h18M7 12h10M11 18h2',
+  updown: 'm7 3-4 4 4 4M3 7h14M17 21l4-4-4-4M21 17H7',
 }
 const ico = (name, size = 14, style = '') =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;${style}"><path d="${P[name]}"/></svg>`
@@ -192,7 +196,7 @@ class Component extends DCLogic {
 </html>`
 
 // Board heights, measured in a browser after each layout change (the `.app` scrollHeight at 1440).
-const H = { Survey: 2730, Spread: 1940, Colour: 1910, Editors: 1140, Model: 2010 }
+const H = { Survey: 2730, Spread: 1940, Colour: 1910, Editors: 1140, Model: 2010, RailTabs: 3040 }
 
 // ---- primitives ---------------------------------------------------------------------------------
 const seg = (items, on, extra = '') => `<div class="seg" style="${extra}">${items.map((t) => `<span class="${t === on ? 'on' : ''}${typeof t === 'object' ? ' off' : ''}">${typeof t === 'object' ? t.t : t}</span>`).join('')}</div>`
@@ -235,7 +239,7 @@ function emitterRows({ rows, counts = null, compact = false }) {
  * The colour editor, proposed: one body in every host.
  * host: 'popover' | 'docked' | 'endpoint' | 'sheet'
  */
-function colourEditor({ width = 352, compact = false, recent = false, footer = true, counts = true, heads = '14 heads', mixed = false, hex = '#F5B342', seedR = false, host = 'popover', hostLine = null, pickerH = 200 }) {
+function colourEditor({ width = 352, compact = false, recent = false, footer = true, counts = true, heads = '14 heads', mixed = false, hex = '#F5B342', seedR = false, host = 'popover', hostLine = null, pickerH = 200, tabs = null, iconVerbs = false }) {
   const rows = [['W', 80, 31, '6 of 14'], ['A', 160, 63, '4 of 14'], ['UV', 0, 0, '2 of 14']]
   const pickerRow = `<div class="row" style="align-items:flex-start; gap:12px; ${compact ? 'flex:1; min-width:16rem;' : ''}"><div class="col" style="flex:1; min-width:0; gap:0;">${pickerSquare({ h: compact ? 176 : pickerH })}</div>${rgbFields({ seedR })}</div>`
   const body = compact
@@ -246,10 +250,10 @@ function colourEditor({ width = 352, compact = false, recent = false, footer = t
     ? `<div class="col" style="gap:6px; border-top:1px solid var(--bd); padding-top:8px;">${lbl('Recent from templates')}<div class="row" style="gap:6px; flex-wrap:wrap;">${[['Warm Amber', '#f5b342'], ['Deep Blue', '#2456ff'], ['UV wash', '#7f00ff'], ['Pink', '#ff8ac9']].map(([n, c]) => `<span class="chip"><span class="sw" style="background:${c};"></span>${n}</span>`).join('')}</div></div>`
     : ''
   const foot = footer
-    ? `<div class="foot">${btn('Save as template…', 'out', 'save')}<span style="flex:1;"></span>${btn('Pick', 'out', 'pipette')}${btn('Spread…', 'out', 'wave')}</div>`
+    ? `<div class="foot">${btn('Save as template…', 'out', 'save')}<span style="flex:1;"></span>${iconVerbs ? btn(null, 'out icon', 'pipette') + btn(null, 'out icon', 'wave') : btn('Pick', 'out', 'pipette') + btn('Spread…', 'out', 'wave')}</div>`
     : ''
   const head = hostLine ? `<div class="readout" style="margin-bottom:2px;">${hostLine}</div>` : ''
-  return `<div class="${host === 'docked' ? 'rail' : 'pop'}" style="width:${width}px;">${host === 'docked' ? `<div class="tabs"><span>${ico('clock', 12)}Speed</span><span class="on">${ico('palette', 12)}Colour</span><span>${ico('wave', 12)}Spread</span><span>${ico('play', 12)}Show</span><span class="fold">${ico('chevR', 14)}</span></div>` : ''}<div class="body" style="gap:8px;">${head}${body}${readout}${recentRow}</div>${foot}</div>`
+  return `<div class="${host === 'docked' ? 'rail' : 'pop'}" style="width:${width}px;">${host === 'docked' ? tabs ?? `<div class="tabs"><span>${ico('clock', 12)}Speed</span><span class="on">${ico('palette', 12)}Colour</span><span>${ico('wave', 12)}Spread</span><span>${ico('play', 12)}Show</span><span class="fold">${ico('chevR', 14)}</span></div>` : ''}<div class="body" style="gap:8px;">${head}${body}${readout}${recentRow}</div>${foot}</div>`
 }
 
 // ---- the spread panel (one drawing; every host) ---------------------------------------------------
@@ -271,7 +275,7 @@ function endpoints({ kind = 'colour', editing = 'from', from = '#F5B342', to = '
 function spreadPanel({
   host = 'popover', width = 320, family = 'Colour', property = null, properties = null, kind = 'colour', editing = 'from',
   from, to, fromT = null, toT = null, curve = 'Line', order = 'Rig', parts = '1', over = 'Heads', cells = null, overOff = false,
-  live = false, save = null, applyLabel = 'Apply', footerNote = null, picker = true, templateRow = true, headLine = null, compact = false,
+  live = false, save = null, applyLabel = 'Apply', footerNote = null, picker = true, templateRow = true, headLine = null, compact = false, tabs: tabsOverride = null,
 }) {
   const fams = seg(['Intensity', 'Colour', 'Position', 'Beam'], family)
   const props = properties ? seg(properties, property) : ''
@@ -282,7 +286,7 @@ function spreadPanel({
   const orderRow = `<div class="col" style="gap:4px;">${lbl('Order')}${seg(['Rig', 'Reverse', 'Centre', 'Random'], order)}<span class="cap9">Stage L→R: not on the desk yet</span></div>`
   const partsOver = `<div class="row" style="gap:12px; align-items:flex-end;"><div class="col" style="gap:4px; flex:1;">${lbl('Parts')}<div class="row" style="gap:4px;">${seg(['1', '2', '3', '4'], parts, 'flex:1;')}${field(`<span class="mono num">${parts}</span>`, 'width:48px; height:28px;')}</div></div><div class="col" style="gap:4px;">${lbl('Over')}${seg(['Heads', overOff ? { t: 'Cells' } : `Cells${cells ? ` <span class="mono num" style="color:var(--mfg); font-weight:500;">${cells}</span>` : ''}`], over)}</div></div>`
   const foot = `<div class="foot">${save ? btn(save, 'out', 'save') : ''}${footerNote ? `<span class="cap9" style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${footerNote}</span>` : ''}<span style="flex:1;"></span>${liveBtn(live)}${btn(live ? 'Send again' : applyLabel, live ? 'out' : 'pri')}</div>`
-  const tabs = host === 'docked' ? `<div class="tabs"><span>${ico('clock', 12)}Speed</span><span>${ico('palette', 12)}Colour</span><span class="on">${ico('wave', 12)}Spread</span><span>${ico('play', 12)}Show</span><span class="fold">${ico('chevR', 14)}</span></div>` : ''
+  const tabs = host === 'docked' ? tabsOverride ?? `<div class="tabs"><span>${ico('clock', 12)}Speed</span><span>${ico('palette', 12)}Colour</span><span class="on">${ico('wave', 12)}Spread</span><span>${ico('play', 12)}Show</span><span class="fold">${ico('chevR', 14)}</span></div>` : ''
   const head = headLine ? `<div class="readout" style="margin-bottom:-2px;">${headLine}</div>` : ''
   return `<div class="${host === 'docked' ? 'rail' : 'pop'}" style="width:${width}px;">${tabs}<div class="body">${head}${fams}${props}${ends}${colourBody}<div class="col" style="gap:4px;">${lbl('Curve')}${curveRow(curve, compact)}</div>${orderRow}${partsOver}</div>${foot}</div>`
 }
@@ -691,6 +695,130 @@ ${TAIL(w, h)}`
   return { w, h, title: 'Model · code, rename, wire, ideas, open calls, sessions' }
 }
 
+// =====================================================================================================
+// Board 6 · RailTabs — Colour · Spread as tabs on the programmer rail (session 4, if called)
+// =====================================================================================================
+function railTabsBoard() {
+  const w = 1440, h = H.RailTabs
+  const RAIL = 300
+  const cnt = (n) => `<span class="mono" style="font-size:9px; background:var(--muted); border-radius:999px; padding:0 5px; line-height:1.5;">${n}</span>`
+  // The rail's header as a tab strip. The busk sheet's D3 fold at the rail's own width: below 400
+  // only the open tab keeps its word, and the Stack tab's words are the two counts' — the strip's
+  // glyph-and-count pairs, which the collapsed rail already draws.
+  const railTabs = (on, { words = false } = {}) => {
+    const tab = (id, inner, open) => `<span class="${open ? 'on' : ''}" style="${open || words ? 'flex:1 1 auto; padding:0 10px;' : 'flex:0 0 auto; padding:0 10px;'}">${inner}</span>`
+    const stack = tab('stack', `${ico('layers', 12)}${on === 'stack' || words ? 'Layers' : ''} ${cnt(3)}<span style="width:4px;"></span><span style="color:oklch(0.7 0.18 293);">${ico('wave', 12)}</span>${on === 'stack' || words ? '<span style="color:oklch(0.7 0.18 293);">FX</span>' : ''} ${cnt(2)}`, on === 'stack')
+    const colour = tab('colour', `${ico('palette', 12)}${on === 'colour' || words ? 'Colour' : ''}`, on === 'colour')
+    const spread = tab('spread', `${ico('wave', 12)}${on === 'spread' || words ? 'Spread' : ''}`, on === 'spread')
+    return `<div class="tabs">${stack}${colour}${spread}<span class="fold" style="flex:0 0 32px; border-left:0; color:var(--mfg);">${ico('panel', 13)}</span><span class="fold">${ico('chevR', 14)}</span></div>`
+  }
+  const bare = (html, width, extra = '') => html.replace('class="rail"', 'class="x"').replace(new RegExp(`style="width:${width}px;"`), `style="width:${width}px; display:flex; flex-direction:column; flex:0 0 auto; border-left:1px solid var(--bd); background:var(--bg); min-height:0; ${extra}"`)
+  // The Stack tab: the rail's body as it is today, under the strip instead of the two labels.
+  const layerRow = (n, name, fam, tmpl = false) => `<div class="row" style="gap:6px; height:28px; padding:0 6px; border:1px solid var(--bd); border-radius:6px; background:var(--card); font-size:11px;"><span class="mono" style="font-size:9px; color:var(--mfg); width:12px;">${n}</span>${ico(tmpl ? 'palette' : 'layers', 12, 'color:var(--mfg);')}<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span><span class="pill" style="height:16px; font-size:9px; padding:0 6px;">${fam}</span>${ico('sort', 12, 'color:var(--mfg);')}</div>`
+  const fxRow = (name, tempo, prop, target) => `<div class="col" style="gap:2px; padding:5px 6px; border:1px solid var(--bd); border-radius:6px; background:var(--card); font-size:11px;"><div class="row" style="gap:6px;"><span style="color:oklch(0.7 0.18 293);">${ico('wave', 12)}</span><span style="flex:1; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${name}</span><span class="cap9">${tempo}</span><span class="cap9">⋯</span></div><div class="row" style="gap:6px;"><span class="cap9">${prop}</span><span class="cap9">·</span><span class="cap9">${target}</span><span class="cap9" style="margin-left:auto;">Local</span></div></div>`
+  const stackBody = `<div class="body" style="gap:6px; padding:8px 10px;">
+    <div class="row" style="gap:6px;">${lbl('Values', 'color:var(--pri);')}<span class="cap9">top wins</span></div>
+    <div class="row" style="gap:6px; height:28px; padding:0 6px; border:1px dashed var(--bd); border-radius:6px; font-size:11px;"><span style="flex:1;">Local values</span><span class="cap9">12 set</span></div>
+    ${layerRow(2, 'Warm Wash', 'Colour')}${layerRow(1, 'Spot centre', 'Position', true)}${layerRow(0, 'House half', 'Intensity')}
+    <div class="row" style="gap:6px; margin:4px -10px 0; padding:5px 10px; border-top:1px solid oklch(0.45 0.1 60); border-bottom:1px solid oklch(0.45 0.1 60); background:oklch(0.4 0.1 60 / 0.25);">${ico('updown', 12, 'color:var(--amber);')}${lbl('Values above beat effects below', 'color:var(--amber); letter-spacing:0.06em;')}</div>
+    <div class="row" style="gap:6px; padding-top:2px;">${lbl('Effects', 'color:oklch(0.7 0.18 293);')}</div>
+    ${fxRow('Colour Pulse', '½ · M2', 'Colour', 'Front wash')}${fxRow('Slow Circle', '2 · M1', 'Position', 'Mover 1')}
+    <div class="row" style="gap:6px; margin-top:auto; padding-top:6px; font-size:11px; color:var(--mfg);">${ico('chevR', 13)}Per-fixture FX</div>
+  </div><div class="foot" style="gap:6px; padding:8px 10px;">${btn('Look', 'out', 'plus', 'flex:1; height:28px;')}${btn('Template', 'out', 'plus', 'flex:1; height:28px;')}${btn('Effect', 'out', 'plus', 'flex:1; height:28px;')}</div>`
+  const stackRail = (words = false) => `<div class="rail" style="width:${RAIL}px; height:560px;">${railTabs('stack', { words })}${stackBody}</div>`
+  // The Colour tab, docked: the busk tab's body under the rail's strip, with the label line and no Recent.
+  // Pick and Spread… fold to their glyphs, as the busk tab's footer does below `FOOTER_WORDS` (340): the rail is narrower than that at every width.
+  const colourTab = (width = RAIL, hostLine = '<span>4 heads · Local</span><span style="margin-left:auto;">Colour</span>') => colourEditor({ host: 'docked', width, recent: false, footer: true, counts: true, seedR: true, pickerH: 176, hostLine, tabs: railTabs('colour'), iconVerbs: true })
+  const emptyTab = `<div class="rail" style="width:${RAIL}px; height:560px;">${railTabs('colour')}<div class="body" style="align-items:center; justify-content:center; text-align:center; gap:6px; padding:24px;">${ico('marquee', 22, 'color:var(--mfg);')}<span style="font-size:12px; font-weight:600;">Nothing selected</span><span class="cap9" style="max-width:200px;">Drag over Colour cells, or select rows. The tab writes to what row C names, and follows it as it changes.</span></div><div class="foot">${btn('Save as template…', 'out dim', 'save')}<span style="flex:1;"></span>${btn(null, 'out icon dim', 'pipette')}${btn(null, 'out icon dim', 'wave')}</div></div>`
+  const spreadTab = spreadPanel({ host: 'docked', width: RAIL, family: 'Position', kind: 'position', from: [250, 120], to: [290, 150], curve: 'Mirror', order: 'Rig', parts: '2', over: 'Heads', overOff: true, live: true, headLine: '<span>6 heads · Local</span><span style="margin-left:auto;">Position</span>', tabs: railTabs('spread') }).replace(`style="width:${RAIL}px;"`, `style="width:${RAIL}px; height:560px;"`)
+  // The collapsed strip: the two counts, then one glyph per tab, then +.
+  const stripCell = (inner, t = '') => `<div class="col" style="align-items:center; justify-content:center; gap:1px; height:40px; width:40px; color:var(--mfg);">${inner}${t ? `<span class="mono" style="font-size:8px; line-height:1;">${t}</span>` : ''}</div>`
+  const strip = `<div class="col" style="width:40px; height:560px; border:1px solid var(--bd); border-radius:10px; background:var(--card); gap:0; align-items:center; overflow:hidden;">${stripCell(ico('chevL', 14))}${stripCell(ico('layers', 14), '3')}${stripCell(`<span style="color:oklch(0.7 0.18 293);">${ico('wave', 14)}</span>`, '2')}<span style="width:24px; height:1px; background:var(--bd); margin:4px 0;"></span>${stripCell(ico('palette', 14))}${stripCell(ico('wave', 14))}<span style="flex:1;"></span>${stripCell(ico('plus', 14))}</div>`
+  // The hero: row C over the grid with a 4 × Colour marquee, the rail docked at 300 with the Colour tab open.
+  const nameW = 170, colW = 118
+  const gridW = nameW + colW * 5
+  const hero = `<div style="width:${gridW + RAIL}px; height:${40 + 30 + 36 * 18}px; border:1px solid var(--bd); border-radius:8px; overflow:hidden; display:flex; flex:0 0 auto;">
+    <div class="col" style="gap:0; width:${gridW}px;">${rowC({ verb: 'Spread', words: false })}${gridSlice({ nameW, colW, rows: RIG_ROWS, marqueeCol: 'Colour' })}</div>
+    ${bare(colourTab(), RAIL, 'height:100%;')}
+  </div>`
+  const gestures = [
+    ['A drag, a click, ⌘A, ↑/↓ — the marquee moves', 'The tab re-targets: its label line, batch and emitter union follow row C, the way the busk tab follows the desk selection. Nothing closes.', 'as today'],
+    ['Double click, Set, ⏎ or a typed digit on a <b>Colour</b> cell', '<b>Lands in the tab</b> — R focused and the character seeded — and no popover opens. The tab is that column\'s editor while it is open; two colour editors over one marquee would be the double the kit refuses.', 'the popover'],
+    ['The same on a Dimmer, Position or Gobo cell', 'The popover, as today. The tab claims its own column only.', 'the popover'],
+    ['<b>Spread</b> on row C, with the Spread tab open', 'Focuses the tab (From). With the Colour tab open instead, the popover opens as today — a tab claims its own verb only.', 'the popover'],
+    ['<b>Spread…</b> in the Colour tab\'s footer', 'Opens the Spread tab with From set to the colour\'s RGB — the busk hand-over, <span class="mono">useSpreadSeed</span>\'s shape, one seed the tab drops once read.', 'the popover at Spread'],
+    ['Deselect · Escape with nothing open · a scope switch', 'The tab draws its empty state (Deselect), or re-targets to the rows the marquee dropped to (scope switch). A docked panel takes no Escape — the rail\'s rule already.', 'the popover closes'],
+    ['The chevron · the strip\'s glyph · the mode toggle', 'Collapse and expand are the rail\'s; a press on the strip\'s palette or wave glyph expands the rail <b>onto that tab</b>, the way its two counts open it on a band. Overlay mode floats the rail with the tab it holds.', 'Layers · FX only'],
+  ]
+  const scopes = [
+    ['Local', 'Writes as the cell does: every drag is <span class="mono">setColour</span> per target through the Colour column\'s writer, the sheet\'s throttled commit.', 'Sends; lands in Local. Live and Apply / Send again.'],
+    ['Output', 'Read-only, as the cell\'s trigger is: the picker, fields and rows drawn disabled, the label line reading <i>Output · read-only</i>, the footer\'s Pick still live (a read).', 'Disabled with the popover\'s reason.'],
+    ['A focused Look layer', 'Into the layer\'s draft through the same writer arm the cell uses (<span class="mono">LookRowStore.setValue</span>, 400 ms coalesced). Save as template… stays: it records from the selection, not the scope.', '<span class="mono">write: false</span>; the literals land in the draft — session 3\'s arm, unchanged.'],
+    ['A focused template layer', 'Refused with the cell\'s words; the tab stays open, disabled.', 'Refused with the popover\'s words.'],
+  ]
+  const code = [
+    ['programmer/ProgrammerWorkspace.tsx', '`railTab: \'stack\' | \'colour\' | \'spread\'` beside `collapsed` in the arm — **not persisted**: every arrival rests on Stack, because a rail that opens on a picker for a marquee that does not exist yet is a panel saying nothing. `openTab(tab)` expands a collapsed rail as `expand` does.'],
+    ['programmer/ProgrammerRail.tsx', '`RailHeader` becomes `RailTabs` — the strip, the mode toggle, the chevron, on the same 40px chrome row — with `tabWordClass`\'s fold at the rail\'s own `@container` (open tab keeps its word; the Stack tab\'s words fold to the strip\'s glyph-and-count pairs). `RailBody` + `RailFooter` are the Stack tab. `RailStrip` gains two glyph cells (`onTab`).'],
+    ['programmer/RailColourTab.tsx', 'The docked host of `ColourEditor`: targets from the marquee\'s Colour batch through `colourTargetsOf` (the cell\'s rule, so the two cannot count heads two ways), writes through `commitToCells` over the Colour column, `pickOnTargets` on every change of heads, `onSpread` → `openTab(\'spread\')` with the seed. `docked`, `recent` off, `footer` on, the label line as `labelLine`.'],
+    ['programmer/RailSpreadTab.tsx', 'The docked host of `SpreadPanel`: plans from the marquee through `useMarqueeSpreadPlans`, lifted out of `SpreadPopover` so the popover and the tab build one plan list; `desk` on; the scope arm as the popover\'s.'],
+    ['fixtures-list/FixturesListContainer.tsx', '**Publishes the marquee** — `marqueeBatches`, `columnTargets`, the scope\'s `cellKeyboardPermission` and `scopeLabel` — through a `MarqueeContext` provided by `ProgrammerPage` above both the grid and the rail. The cells stay local state (`useCellSelection`\'s reason stands); the two plain lists provide nothing, and the rail reads null there. The open-gesture claim is one branch in `keyboardOpen`\'s consumer: a Colour open with the Colour tab open focuses the tab.'],
+    ['Tests', '`RailTabs.test.tsx` pins the fold as an ordering; `RailColourTab.test.tsx` pins its targets equal to `ColourCell`\'s over one batch and the four scope arms; `FixturesListContainer.test.tsx` gains the claimed open (Colour → the tab, Dimmer → the popover); `ProgrammerPage.test.tsx` keeps `gridMounts` across a tab change.'],
+  ]
+  const calls = [
+    ['8 · Whether at all (call 6, restated)', 'What it buys: a long busk over one marquee with no popover covering the grid, the busk tab\'s shape on the desk\'s other live view. What it costs: a strip on the rail header, the marquee published outside the list, and a third place a colour can be edited from. Drawn; the boards recommend asking.'],
+    ['9 · A tab claims its column\'s open gesture', 'Drawn: with the Colour tab open, ⏎ / Set / a double click on a Colour cell land in the tab. The alternative — the popover opens over the tab — draws two editors of one marquee at once.'],
+    ['10 · Resting on Stack', 'Drawn: not persisted, every arrival on Layers · FX. The alternative is a desk preference like `collapsed`; it would open a picker on an empty marquee at every visit.'],
+    ['11 · The label line in the tab', 'Drawn with (<i>4 heads · Local</i>): row C says the count and the scope band the scope, but the tab is a column away from both. The busk tab draws none, since the band is one row up.'],
+    ['12 · The rail\'s floor with a tab open', 'Drawn at 260, the rail\'s own, with the compact curve row below 300. The alternative lifts the floor to 300 while a tab is open — the busk sheet raised its own to 320 for its header, not its tabs.'],
+  ]
+  const declined = [
+    ['A second tab row under LAYERS · FX', '40px of rail height spent saying the counts twice; the busk sheet puts its strip on its one chrome row, and so does this.'],
+    ['Recent chips in the tab', 'The tab exists only in the docked arm, where row C\'s strip is on the same screen — D11 answers it with no new rule.'],
+    ['The tabs in the overlay arm (704–1200)', 'The overlay closes on the next pointer down outside it (`onPointerDownCapture`), which a picker over the grid needs to survive. Docked only; the overlay strip carries no tab glyphs and the popover is the form there.'],
+    ['The tabs on the phone\'s bottom sheet', 'The cell\'s own bottom sheet is that form already, with Recent drawn. The handle opens the stack.'],
+    ['A Speed tab, a Show tab', 'The Speed Masters overview panel is every view\'s; the programmer has no transport by decision (§ShowBar).'],
+    ['A `viewOptions` key · a MIDI target', 'No two-screen flow needs the rail\'s tab moved from elsewhere. Add the key the day one does; the announce\'s key set is pinned.'],
+  ]
+  const html = `${HEAD}
+<div class="app" style="width:${w}px; height:${h}px; padding:24px 28px; display:flex; flex-direction:column; gap:16px; overflow:hidden;">
+  ${title('The rail tabs: Colour and Spread docked on the programmer (session 4, if called)', 'The rail and the busk sheet are one instrument in two views, and both pieces are docked-capable already — <span class="mono">ColourEditor</span>\'s <span class="mono">docked</span> frame and <span class="mono">SpreadPanel</span>\'s <span class="mono">docked</span> host shipped in sessions 2 and 3. What session 4 adds is a <b>tab strip on the rail\'s header</b> — <b>Stack</b> (Layers · FX, as today) · <b>Colour</b> · <b>Spread</b> — and two hosts that read the <b>marquee</b> as the busk tabs read the desk selection. The popover stays the quick form; the tab is the long busk over one marquee, with the grid uncovered. Nothing here changes a desk fact or the wire.')}
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col">${frameLabel('The desk board · a 4 × Colour marquee, the rail docked at 300 with the Colour tab open', 'the rail\'s header is the tab strip; the open tab keeps its word, the others their glyphs; the counts stay on the Stack tab')}${hero}</div>
+    <div class="col" style="flex:1; gap:10px; min-width:0;">
+      ${note('<b>The strip is the header.</b> <span class="mono">LAYERS n · FX n</span> becomes the Stack tab\'s face, on the same 40px chrome row as today with the mode toggle and the chevron after it. Below 400px of rail — which is every width the rail has, 260 to 480 — only the open tab keeps its word (the busk sheet\'s D3 fold, <span class="mono">tabWordClass</span>), and the Stack tab\'s words fold to the glyph-and-count pairs the collapsed strip already draws. So <i>Layers 3 · FX 2</i> is never lost: it is a face when open and two badges when not.', 'key')}
+      ${note('<b>The tab reads the marquee</b> the way the busk tab reads the desk selection: the Colour cells\' heads (<span class="mono">colourTargetsOf</span>, the cell\'s own rule), or with rows selected and no cells, the rows\' heads that take colour. The label line says <i>4 heads · Local</i> because the tab is a column away from row C and the scope band, where a popover sits on the cell. With nothing selected it draws its empty state and stays open.')}
+      ${note('<b>No Recent.</b> Row C\'s strip is on this screen whenever the tab is — the tab is offered in the docked arm only — so D11 answers it without a new rule. The footer is the busk tab\'s: <b>Save as template…</b> over the marquee\'s heads, <b>Pick</b> off the hidden leaves, <b>Spread…</b> handing the colour to the Spread tab.')}
+      ${note('<b>A tab claims its own column\'s open gesture.</b> With the Colour tab open, ⏎, Set, a typed digit and a double click on a Colour cell land in the tab — R focused, the character seeded — rather than opening a second colour editor over the first. Every other column opens its popover as today. Open call 9.')}
+      ${note('<b>Every arrival rests on Stack</b> (call 10): the fact is not persisted, since a rail that opened on a picker for a marquee that is not there yet would be a panel saying nothing. Collapse, expand, overlay and the resize handle are untouched; a press on the strip\'s palette or wave glyph expands the rail onto that tab.')}
+      ${note('<b>Docked only.</b> The 704–1200 overlay shuts on the next pointer down outside it, and a picker over the grid needs to survive a press on the grid; the phone\'s bottom sheet is the cell\'s own form already. In both, the popover is the form and the strip carries no tab glyphs.', 'warn')}
+    </div>
+  </div>
+  ${sec('The other three faces of the rail')}
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col">${frameLabel('Spread · a 6 × Position marquee, Live on', 'the panel as the busk tab draws it, at the rail\'s 300; the position pair is two rows, the sheet\'s reason')}${spreadTab}</div>
+    <div class="col">${frameLabel('Stack · Layers 3 · FX 2 — the rail as it is today', 'the two labels are the open tab\'s face; the body and footer are unchanged')}${stackRail()}</div>
+    <div class="col">${frameLabel('Colour · nothing selected', 'the empty state; the tab stays open and follows the next marquee')}${emptyTab}</div>
+    <div class="col">${frameLabel('Collapsed', 'the strip: counts, then a glyph per tab, then +')}${strip}</div>
+  </div>
+  <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px 20px;">
+    ${note('<b>The Spread tab is <span class="mono">SpreadPopover</span> docked</b>: the family segment answered by the marquee and drawn checked, the Property row where the family holds more than one, Over: Heads, Live off by default on the programmer (D7), Apply always sending. The plans come from one hook the popover and the tab share, so the two cannot build different targets. The scope arm is session 3\'s — a focused Look layer sends <span class="mono">write: false</span> and lands the literals in the draft.')}
+    ${note('<b>The Stack tab is the rail as shipped</b> — Values · top wins, the Local row, the dense layer rows, the amber boundary, the effects, Per-fixture FX, and the footer\'s three adds. The only change on it is the header row above.')}
+    ${note('<b>Width.</b> 300 by default, 260 to 480 by the shared handle, in <span class="mono">localStorage</span> as today. The colour editor is fluid from 260 (the R/G/B column is 80, the picker takes the rest); the Spread panel takes the compact curve row below 300. The floor is not raised for the tabs (call 12): the busk sheet lifted its own to 320 for its four worded tabs, and this strip folds to glyphs.')}
+  </div>
+  ${sec('What a gesture does while a tab is open')}
+  <table style="max-width:1384px;"><tr><th style="width:26%;">Gesture</th><th>With the Colour or Spread tab open</th><th style="width:16%;">Today (Stack)</th></tr>${gestures.map(([g, a, t]) => `<tr><td class="y">${g}</td><td>${a}</td><td>${t}</td></tr>`).join('')}</table>
+  <div class="row" style="align-items:flex-start; gap:20px;">
+    <div class="col" style="flex:1;">${sec('The scope, per tab')}<table><tr><th style="width:20%;">Scope</th><th>Colour tab</th><th style="width:34%;">Spread tab</th></tr>${scopes.map(([s, c, p]) => `<tr><td class="y"><b>${s}</b></td><td>${c}</td><td>${p}</td></tr>`).join('')}</table>
+      ${sec('Where the code goes')}<table><tr><th style="width:26%;">File</th><th>What</th></tr>${code.map(([f, w2]) => `<tr><td class="mono" style="color:var(--fg); font-size:10.5px;">${f}</td><td>${w2.replace(/`([^`]+)`/g, '<span class="mono">$1</span>').replace(/\\*\\*([^*]+)\\*\\*/g, '<b>$1</b>')}</td></tr>`).join('')}</table></div>
+    <div class="col" style="width:420px;">${sec('Open — for Chris to call')}${calls.map(([h2, p]) => `<div class="col" style="gap:2px;"><span class="h2">${h2}</span>${note(p.replace(/`([^`]+)`/g, '<span class="mono">$1</span>'), 'warn')}</div>`).join('')}
+      ${sec('Declined')}<table><tr><th style="width:40%;">Not drawn</th><th>Why</th></tr>${declined.map(([a, b]) => `<tr><td class="y">${a}</td><td>${b.replace(/`([^`]+)`/g, '<span class="mono">$1</span>')}</td></tr>`).join('')}</table></div>
+  </div>
+</div>
+${TAIL(w, h)}`
+  writeFileSync('RailTabs.dc.html', html)
+  return { w, h, title: 'The rail tabs · Colour and Spread docked on the programmer' }
+}
+
 // ---- run ----------------------------------------------------------------------------------------
 const boards = {}
 boards.Survey = surveyBoard()
@@ -698,10 +826,11 @@ boards.Spread = spreadBoard()
 boards.Colour = colourBoard()
 boards.Editors = editorsBoard()
 boards.Model = modelBoard()
+boards.RailTabs = railTabsBoard()
 
 // ---- canvas.json (the busk-chrome record's v3 shape) ---------------------------------------------
 const GAPX = 80, GAPY = 120
-const order = ['Survey', 'Spread', 'Colour', 'Editors', 'Model']
+const order = ['Survey', 'Spread', 'Colour', 'Editors', 'Model', 'RailTabs']
 const pos = {}
 let x = 0
 for (const k of order) { pos[k] = { x, y: 0 }; x += boards[k].w + GAPX }
@@ -716,6 +845,7 @@ const canvas = {
     t1: { kind: 'title1', maxW: 3000, text: 'One editor kit: Spread, the colour editor and the value editors across the programmer and the busk view', w: 240, x: 0, y: -300 },
     how: { color: 'gray', text: 'How to read this. Survey is today, side by side. Spread, Colour and Editors are the one answer, each drawn in every host. Model is where the code goes, the rename, the one wire change, ideas with verdicts, the seven open calls and the session split. Dark-only, the busk view\'s vocabulary — the intended pixels, not structure to copy.', w: 360, x: 0, y: -180 },
     q1: { color: 'orange', text: 'Open calls 1–7 are on Model. Each is drawn one way; the boards say which.', w: 360, x: pos.Model.x, y: -180 },
+    q2: { color: 'orange', text: 'RailTabs, drawn 2026-09-23 after sessions 1–3 shipped: call 6 (the rail tabs) drawn out, with calls 8–12 of its own. Session 4 waits on it.', w: 360, x: pos.RailTabs.x, y: -180 },
   },
   order: order.map((k) => `${k}.dc.html`),
   pages: [],
@@ -750,9 +880,9 @@ const artifact = `<title>Editor Kit Boards</title>
   .intro b { color:var(--fg); }
   ${CSS}
 </style>
-<nav><span class="t">Editor kit · design boards · 2026-09-22</span>${order.map((k) => `<a href="#${k.toLowerCase()}">${k}</a>`).join('')}<span class="z">Zoom <button data-z="fit" aria-pressed="true">Fit</button><button data-z="0.5">50%</button><button data-z="0.75">75%</button><button data-z="1">100%</button></span></nav>
+<nav><span class="t">Editor kit · design boards · 2026-09-22 · RailTabs 2026-09-23</span>${order.map((k) => `<a href="#${k.toLowerCase()}">${k}</a>`).join('')}<span class="z">Zoom <button data-z="fit" aria-pressed="true">Fit</button><button data-z="0.5">50%</button><button data-z="0.75">75%</button><button data-z="1">100%</button></span></nav>
 <main>
-  <p class="intro"><b>One editor kit for the programmer and the busk view.</b> Five boards: <b>Survey</b> is today, side by side; <b>Spread</b>, <b>Colour</b> and <b>Editors</b> draw the one answer in every host; <b>Model</b> is where the code goes, the rename, the one wire change, ideas with verdicts, the seven open calls and the session split. The checked-in files in <code>lighting7/docs/plans/editor-kit-design/</code> are the authority; this page is the same boards on one scroll. Dark-only, by design.</p>
+  <p class="intro"><b>One editor kit for the programmer and the busk view.</b> Five boards: <b>Survey</b> is today, side by side; <b>Spread</b>, <b>Colour</b> and <b>Editors</b> draw the one answer in every host; <b>Model</b> is where the code goes, the rename, the one wire change, ideas with verdicts, the seven open calls and the session split. <b>RailTabs</b>, drawn after sessions 1–3 shipped, is call 6 drawn out — Colour and Spread as tabs on the programmer rail, session 4 if called — with five calls of its own. The checked-in files in <code>lighting7/docs/plans/editor-kit-design/</code> are the authority; this page is the same boards on one scroll. Dark-only, by design.</p>
   ${order.map((k) => `<section id="${k.toLowerCase()}"><h2>${k} — ${boards[k].title}</h2><div class="frame" data-w="${boards[k].w}" data-h="${boards[k].h}"><div class="scale">${boardBody(`${k}.dc.html`)}</div></div></section>`).join('')}
 </main>
 <script>

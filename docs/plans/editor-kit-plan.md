@@ -1,9 +1,10 @@
 # One editor kit — Spread, the colour editor and the value editors across the programmer and the busk view
 
-> **Document status: IN PROGRESS — sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 open.** The visual design is settled and
-> checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — five
+> **Document status: IN PROGRESS — sessions 1–3 shipped 2026-09-22 (lighting-react `b12887ab`, `a976489e`, `679bd1ae`; lighting7 `8fc8fcb`); session 4 drawn 2026-09-23 (`RailTabs.dc.html`), awaiting calls 8–12.** The visual design is settled and
+> checked in beside this plan at [`editor-kit-design/`](editor-kit-design/INDEX.md) — six
 > generated artboards: today's two answers side by side, the Spread panel in every host, the colour
-> editor in five hosts, the value editors on one anatomy, and the model with every idea's verdict.
+> editor in five hosts, the value editors on one anatomy, the model with every idea's verdict, and
+> the rail tabs (session 4, drawn after sessions 1–3 shipped).
 > The live copy at <https://claude.ai/artifact/UECPcKmhVPZ2FFhvxtTHMd> is a convenience, private to
 > Chris; the checked-in files are the authority. This document is the engineering half: the model,
 > the decisions and their reasons, and the session split. Where wording here and the artboards
@@ -322,9 +323,69 @@ Sessions 1 and 2 are lighting-react only; session 3 is lighting7 first, then lig
 
 ### Session 4 — Colour · Spread as tabs on the programmer rail (lighting-react) — if called
 
-Open (§11). `ProgrammerRail` gains a tab strip beside its `LAYERS n · FX n` header and two docked
-hosts of `ColourEditor` and `SpreadPanel` over the marquee, the busk sheet's shape; the popover
-stays the quick form. Not drawn on the boards; a board first if it is called.
+Drawn 2026-09-23 on [`RailTabs.dc.html`](editor-kit-design/RailTabs.dc.html), after sessions 1–3
+shipped, and **waiting on calls 8–12** (§11). The board is the layout and copy authority; this
+section is the behaviour. Both pieces are docked-capable already — `ColourEditor`'s `docked` frame
+(session 2) and `SpreadPanel`'s `docked` host (session 3) — so the session is a tab strip, two
+hosts, and the marquee published outside the list.
+
+**The strip is the header.** `RailHeader`'s `LAYERS n · FX n` becomes `RailTabs` — **Stack**
+(Layers · FX, the rail as it is) · **Colour** · **Spread** — on the same 40px chrome row, the mode
+toggle and the chevron after it. The busk sheet's D3 fold at the rail's own `@container`
+(`tabWordClass`): below 400px only the open tab keeps its word, which is every width the rail has
+(260–480), and the Stack tab's words fold to the strip's glyph-and-count pairs the collapsed rail
+already draws — so *Layers 3 · FX 2* is a face when open and two badges when not. A second tab row
+under the header is declined: 40px of rail spent saying the counts twice.
+
+**The tab reads the marquee** the way the busk tab reads the desk selection. `useCellSelection` is
+local state in `FixturesListContainer`, not Redux (its docblock's reason stands), so the container
+**publishes** `marqueeBatches`, `columnTargets`, the scope's `cellKeyboardPermission` and
+`scopeLabel` through a `MarqueeContext` provided by `ProgrammerPage` above both the grid and the
+rail; the two plain lists provide nothing and the rail reads null there. The Colour tab's targets
+are the Colour batch through `colourTargetsOf` — the cell's own rule, pinned equal in the test —
+or, with rows selected and no cells, the rows' heads that take colour; the Spread tab's plans come
+from `useMarqueeSpreadPlans`, lifted out of `SpreadPopover` so the popover and the tab build one
+plan list. Each tab draws the label line (*4 heads · Local*): it is a column away from row C and
+the scope band, where a popover sits on the cell. With nothing selected the tab draws its empty
+state and stays open. **No Recent**: the tab is offered in the docked arm only, where row C's
+strip is on the same screen, so D11 answers it with no new rule.
+
+**A tab claims its own column's open gesture** (call 9, drawn yes): with the Colour tab open, ⏎,
+Set, a typed digit and a double click on a Colour cell land in the tab — R focused, the character
+seeded — and no popover opens; every other column opens its popover as today. With the Spread tab
+open, row C's Spread focuses the tab (From); the Colour tab's *Spread…* opens the Spread tab with
+From seeded, `useSpreadSeed`'s shape. Deselect draws the empty state; a scope switch re-targets
+to the rows the marquee dropped to; a docked panel takes no Escape (the rail's rule). A press on
+the collapsed strip's palette or wave glyph expands the rail onto that tab.
+
+**Scope, per tab** — the popover's arms, nothing new: Local writes as the cell does (the Colour
+column's writer, the sheet's throttled commit; Spread sends and lands in Local); Output is
+read-only (the picker, fields and rows disabled, Pick still live; Spread disabled with the
+popover's reason); a focused Look layer writes into the draft through the cell's writer arm, and
+Spread sends `write: false` (session 3's arm); a focused template layer refuses with the cell's
+words, the tab staying open and disabled.
+
+**Docked only, resting on Stack.** The 704–1200 overlay arm closes on the next pointer down
+outside it (`ProgrammerWorkspace`'s `onPointerDownCapture`), which a picker over the grid needs to
+survive, so the overlay strip carries no tab glyphs and the popover is the form there; the phone's
+bottom sheet is the cell's own form already. `railTab: 'stack' | 'colour' | 'spread'` sits beside
+`collapsed` in `RailArm` and is **not persisted** (call 10): every arrival rests on Stack, since a
+rail opening on a picker for a marquee that is not there yet is a panel saying nothing. The rail's
+floor stays 260 (call 12): the colour editor is fluid from 260, and the Spread panel takes its
+compact curve row below 300. No `viewOptions` key and no MIDI target: no two-screen flow moves the
+rail's tab from elsewhere, and the announce's key set is pinned.
+
+**Files**: `ProgrammerWorkspace.tsx` (`railTab`, `openTab`, forced to Stack off the docked arm);
+`ProgrammerRail.tsx` (`RailTabs` for `RailHeader`; `RailBody` + `RailFooter` as the Stack tab; two
+`RailStrip` cells); new `programmer/RailColourTab.tsx` and `RailSpreadTab.tsx`;
+`FixturesListContainer.tsx` (the context, and the one branch in `keyboardOpen`'s consumer for the
+claimed open); `fixtures-list/SpreadPopover.tsx` (the plan builder lifted to a hook). Tests:
+`RailTabs.test.tsx` pins the fold as an ordering; `RailColourTab.test.tsx` pins its targets equal
+to `ColourCell`'s over one batch and the four scope arms; `FixturesListContainer.test.tsx` gains
+the claimed open (Colour → the tab, Dimmer → the popover); `ProgrammerPage.test.tsx` keeps
+`gridMounts` across a tab change. Docs: CLAUDE.md §The programmer's scoped grid (the chrome
+paragraph: the header row is a tab strip) and §Focus and the side sheet (the two panels' shared
+chrome gains the strip), the board's INDEX.md status line, the done-marker here.
 
 ## 6. Migration
 
@@ -348,7 +409,7 @@ toast naming the desk version rather than landing an intent in a Look row.
 
 ## 8. Follow-ups to record
 
-- `FU-EDITOR-RAIL-TABS` — session 4, if called.
+- `FU-EDITOR-RAIL-TABS` — session 4, drawn 2026-09-23, if called (§11 calls 8–12).
 - `FU-SPREAD-RAW-SPEED` — the `raw` kind exists for one column; if Speed ever gains a template
   property or is dropped from Spread, `rawValues` goes with it.
 - `FU-SPREAD-DURATION-CURVES` — the cue sheet's duration kind draws the four curves client-side
@@ -410,6 +471,20 @@ recorded here as one line to flip:
 - **3 · Percent in the programmer's level editor** — drawn as % (D13); the DMX sheet keeps bytes.
 - **4 · The Speed column** — drawn as `raw` (D15).
 - **5 · Over: Heads as the programmer's default** — drawn as Heads (D5).
-- **6 · Colour · Spread as tabs on the programmer rail** — *genuinely open*: not drawn; session 4
-  waits on it.
+- **6 · Colour · Spread as tabs on the programmer rail** — drawn 2026-09-23 on `RailTabs.dc.html`,
+  which restates it as call 8 and adds four of its own; session 4 waits on all five.
 - **7 · Degrees in the position cell editor** — drawn in degrees (D14).
+
+The rail-tabs board's calls, each drawn one way (§5 session 4 has the reasons):
+
+- **8 · Whether at all** — what it buys is a long busk over one marquee with the grid uncovered;
+  what it costs is a strip on the rail header, the marquee published outside the list, and a third
+  place a colour can be edited from. Drawn; the boards recommend asking.
+- **9 · A tab claims its own column's open gesture** — drawn yes: ⏎ / Set / a double click on a
+  Colour cell land in the open Colour tab. The alternative draws two editors of one marquee.
+- **10 · Resting on Stack** — drawn not persisted. The alternative is a desk preference like
+  `collapsed`, which would open a picker on an empty marquee at every visit.
+- **11 · The label line in the tab** — drawn with (*4 heads · Local*). The busk tab draws none,
+  since its band is one row up.
+- **12 · The rail's floor with a tab open** — drawn at 260, the compact curve row below 300. The
+  alternative lifts the floor to 300 while a tab is open.

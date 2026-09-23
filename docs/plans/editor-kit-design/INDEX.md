@@ -1,7 +1,8 @@
 # One editor kit — design record
 
 Source: five boards drawn 2026-09-22 against `lighting-react`'s shipped busk view (`7fc7bf84`) and
-programmer, in the busk-further record's dark vocabulary (`completed/busk-further-design/`). **Read
+programmer, in the busk-further record's dark vocabulary (`completed/busk-further-design/`), plus a
+sixth (`RailTabs`) drawn 2026-09-23 against the shipped kit (`679bd1ae`) for the one call left open. **Read
 them as the intended visual output, not as structure to copy**: there is no React here.
 
 The brief, from Chris on 2026-09-22: the busk view's recent work — the **Spread** tab, the
@@ -65,7 +66,7 @@ three above that the boards recommend asking about is Colour · Spread as tabs o
 3. **Percent in the programmer's level editor.** Drawn as %, byte on the read-out; the DMX sheet keeps bytes.
 4. **The Speed column.** Outside the template vocabulary. Drawn: a `raw` plan kind keeps the client byte lerp for it alone.
 5. **Over: Heads as the programmer's default.** Fan expanded a bar into its cells always; Spread follows the busk tab.
-6. **The rail tabs.** Colour · Spread as tabs on the programmer rail — now as a session 4, later, or never.
+6. **The rail tabs.** Colour · Spread as tabs on the programmer rail — now as a session 4, later, or never. Drawn on `RailTabs.dc.html` (2026-09-23), which restates it as call 8 and adds four of its own: 9. a tab claims its own column's open gesture (drawn: yes); 10. the tab rests on Stack on every arrival, not persisted (drawn); 11. the label line in the tab (drawn with); 12. the rail's floor stays 260 with a tab open (drawn).
 7. **Degrees in the position cell editor.** Drawn in degrees; the cell keeps bytes.
 
 ## Format
@@ -85,3 +86,4 @@ canvas scaffolding; open a file in a browser and it renders standalone.
 | `Colour.dc.html` | The colour editor open from the colour cell at 352; the busk tab, the phone bottom sheet, the short-viewport side sheet, and the Spread endpoint picker; the pieces-by-host table. |
 | `Editors.dc.html` | The anatomy with its five pieces named; Level (programmer, %), Level (DMX sheet, bytes), Position with the XY pad, Setting, Text and Address on it; six rules. |
 | `Model.dc.html` | Where the code goes (fourteen moves), the rename table, the wire (one flag, one response field), ten ideas with verdicts, the seven open calls, and four sessions. |
+| `RailTabs.dc.html` | **Drawn 2026-09-23, after sessions 1–3 shipped: call 6 drawn out.** The programmer rail with a tab strip for its header — Stack (Layers · FX) · Colour · Spread — the Colour tab docked at 300 over a 4 × Colour marquee beside the grid; the Spread tab on a Position marquee with Live on, the Stack tab as today, the empty state, the collapsed strip with a glyph per tab; what each grid gesture does while a tab is open; the scope per tab; where the code goes (the marquee published through a context, two hosts, one plan hook shared with the popover); calls 8–12 and six declined alternatives. Session 4 waits on it. |
