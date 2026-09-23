@@ -10,7 +10,8 @@ a window in Rig focus with its own selection selects for nobody, but it is more 
 Two questions to answer: what is the use case for following, or not following, the busk page? And
 should follow be settable from the Screens (windows) sheet? Plus: how do other desks do it?
 
-**Status: approved 2026-09-23 — all eight calls answered by Chris the same day; nothing built.** The
+**Status: built 2026-09-23 — all eight calls answered by Chris the same day, all three sessions
+shipped; a ninth call (the badge is the toggle, plan D11) was added after session 3.** The
 implementation plan is [`../desk-follow-plan.md`](../desk-follow-plan.md). The live copy of these
 boards is at <https://claude.ai/artifact/5XfWNSgipBMMnb4GPBF2ph> — private to Chris, a convenience;
 the files here are the authority. Where a board and the plan disagree, the plan wins on behaviour and
@@ -20,13 +21,15 @@ these files on layout and copy.
 
 **A window's own selection is offered only where it can both select and act** — busk Split and the
 Programmer. Rig and Pads always follow; entering either while local drops the local selection and
-toasts. Selection follow is set from the Screens row (a new `windows.follow` command), ⌘K and the
-chip, and while following a small link badge sits beside the family pill.
+toasts. Selection follow is set from the chip itself — a small link badge beside the family pill
+while following, which presses to leave, and the dashed chip while local, which presses back — and,
+for another window, from the Screens row (a new `windows.follow` command) and ⌘K.
 
 **The desk page stays a paging group** — the consoles' universal shape — named *Paged with the
 desk · Own page* and settable both ways from the Screens row by applying the `pageFollows` view
 option windows already announce. While paged with the desk a window shows a link badge beside its
-tabs, naming any other window paged with it.
+tabs, naming any other window paged with it; pressing it keeps the page on show as the window's own,
+and the *Page: Own* chip that replaces it presses back.
 
 ## The boards
 
@@ -37,7 +40,7 @@ tabs, naming any other window paged with it.
 | `Selection.dc.html` | The select/act table per surface, the rule, the relink toast, what it does to D18. |
 | `Pages.dc.html` | What the desk page is for, the paging group today and proposed, the link badge's three states, the scenarios. |
 | `Screens.dc.html` | The Screens sheet with the Page and Selection segments, the selection mark in Split, ⌘K. |
-| `Model.dc.html` | The wire, the client, the sessions, and the eight decisions as answered. |
+| `Model.dc.html` | The wire, the client, the sessions, and the nine decisions as answered. |
 
 ## Superseded by the plan
 

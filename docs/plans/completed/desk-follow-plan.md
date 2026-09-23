@@ -1,6 +1,7 @@
 # Following the desk — where a window's own selection means something, the paging group, and a mark while linked
 
-> **Document status: DONE, 2026-09-23 — all three sessions shipped.** The design is checked in beside this
+> **Document status: DONE, 2026-09-23 — all three sessions shipped; D11 (the badge is the toggle)
+> added the same day after Chris tried session 3 — done, lighting-react `3ae75831`.** The design is checked in beside this
 > plan at [`desk-follow-design/`](desk-follow-design/INDEX.md): six static artboards covering an
 > overview, a survey of six consoles, where a local selection means something, what following the
 > page is for, the controls, and the model with every decision. The live copy at
@@ -88,13 +89,15 @@ exactly what every console does.
   for the page, with a badge rather than the old full chip. *(Chris, decision 4: "always show when
   we're linked, even if it is just a small badge".)* The co-paged windows come from `windows.state`:
   rows on `busk` whose `viewOptions.pageFollows` is not `'false'`, other than this window's own.
+  *The badge is also a press — see D11.*
 - **D8 — A window following the desk selection always says so: a link badge beside the family
   pill.** Glyph only at every width, hover *Following the desk selection*, on the rig row (Split,
   Rig), the pad row (Pads — which always follows now, so always the badge), the compact rig strip
   and the short board's merged row, and the Programmer's row C. While local, the dashed *Targets:
   This window* chip takes its place and presses back, as today. D18 revisited for the selection as
   D7 does for the page. *(Chris, decision 8.)* `DeskChip` and `BuskPageChip` render the badge while
-  linked instead of nothing; one `LinkBadge` component draws both so they cannot drift.
+  linked instead of nothing; one `LinkBadge` component draws both so they cannot drift. *The badge
+  is also a press — see D11.*
 - **D9 — The words.** Page: *Paged with the desk · Own page* on the Screens segment, *Page: Own* on
   the chip (it was *Page: This window*). Short forms on narrow rows — *With desk · Own* on the
   segment, *Own* on the chip — each at a rung measured into its row's ladder, like every other word
@@ -104,6 +107,18 @@ exactly what every console does.
   nothing here blocks it. A MIDI **`SelectionFollowSet(windowName, on)`** target — `BuskFocusSet`'s
   twin; the Screens sheet on another window covers the touch-only case. Both recorded as follow-ups
   (§8). *(Chris, decisions 5 and 6.)*
+- **D11 — The badge is the toggle, both ways.** Revises D7 and D8's "a mark, never a control".
+  Trying session 3 at the desk, the chip on the row was what Chris reached for, and the Screens
+  sheet was the wrong primary door: it exists to set *another* window. So each badge is a button
+  while linked. The selection's press takes the desk's selection as this window's own
+  (`unlinkFromDeskNow`, ⌘K's gesture). The page's press keeps the page on show as this window's own
+  (`unlinkBuskPage` over the strip's active page). The dashed chip that replaces it presses back, as
+  before, so one control flips the two modes. It is `aria-pressed` (pressed = linked, the pill's
+  convention) and the mark's exact box, so no ladder moves. **Where the window cannot leave, it
+  stays a mark:** the selection in Rig and Pads focus always follows (D2), so there the badge is
+  `role="img"` with the reason on its hover (*… — Pads focus always follows*), not a press that D3
+  would undo at once. The Screens row and ⌘K are unchanged, for other windows. *(Chris, decision 9,
+  2026-09-23.)*
 
 ## 3. The model
 
@@ -237,6 +252,11 @@ Beyond the unit suites, at the desk after sessions 2 and 3:
   to their short forms.
 - **Rows C and the rig row** at the widths their ladders were measured at: the badge never moves a
   control.
+- **The badge toggles (D11).** On Screen 1 in Split, press the selection badge: *Targets: This
+  window* appears, and its press relinks. Press the page badge: *Page: Own* appears on the page
+  that was showing, and its press pages with the desk again. In Pads and Rig focus the selection
+  badge does not press, and its hover says why. The Programmer's row C badge unlinks and relinks the
+  same way.
 
 ## 10. Scope honesty
 
