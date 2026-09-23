@@ -9,15 +9,19 @@ owns are what it is looking at and how it is framed.
 
 **Two of those a window may decline to follow**, and the desk keeps holding them either way: the
 selection (`lib/deskFollow.ts` in the client) and, since 2026-09-16, the busk page
-(`lib/buskPageFollow.ts`). Each is a per-tab flag defaulting to follow. The page has a chip of its
-own, drawn while unlinked. The selection is marked either way: a small link badge while it follows,
-the dashed *This window* chip while it does not. It can be set from any window's Screens sheet
-(`windows.follow`). It can only be declined where the window both selects and acts, which is busk
-Split and the Programmer; Rig and Pads focus always follow ([`plans/desk-follow-plan.md`](plans/desk-follow-plan.md)
-D1–D4, D8). The two flags are deliberately independent — a second screen showing a *position* page while the first shows
+(`lib/buskPageFollow.ts`). Each is a per-tab flag defaulting to follow, and each is marked either
+way: a small link badge while it follows, a dashed chip while it does not — *This window* for the
+selection, *Page: Own* for the page. Both can be set from any window's Screens sheet: the selection
+with `windows.follow`, the page with the row's *Page · Paged with the desk | Own page* segment. The
+page is a **paging group** — every window paged with the desk, and the MIDI page buttons, page
+together — so its badge names the other windows in the group, and a tab click on one pages them all.
+The selection can only be declined where the window both selects and acts, which is busk Split and
+the Programmer; Rig and Pads focus always follow
+([`plans/completed/desk-follow-plan.md`](plans/completed/desk-follow-plan.md) D1–D9). The two flags
+are deliberately independent — a second screen showing a *position* page while the first shows
 a *colour* page, both pressing onto the one selection, is the case the page half was added for. The
 desk fact does not change: a hardware *next page* button still moves `BuskPageState`, and every
-following window still moves with it.
+window paged with the desk still moves with it.
 
 This document is the operator-facing half: how a desk screen is opened, what names it, and the one
 platform rule that silently breaks the whole thing when it is got wrong. The wire is in

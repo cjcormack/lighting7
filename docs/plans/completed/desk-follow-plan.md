@@ -1,6 +1,6 @@
 # Following the desk — where a window's own selection means something, the paging group, and a mark while linked
 
-> **Document status: APPROVED, 2026-09-23 — nothing built.** The design is checked in beside this
+> **Document status: DONE, 2026-09-23 — all three sessions shipped.** The design is checked in beside this
 > plan at [`desk-follow-design/`](desk-follow-design/INDEX.md): six static artboards covering an
 > overview, a survey of six consoles, where a local selection means something, what following the
 > page is for, the controls, and the model with every decision. The live copy at
@@ -193,7 +193,7 @@ its done-marker here.
   row C (D8); the ladders re-measured.
 - CLAUDE.md §One selection, two shapes, §The rig, §Windows.
 
-### Session 3 — the page (lighting-react)
+### ~~Session 3 — the page (lighting-react)~~ — done, lighting-react `7526b262`
 
 - `pageFollows` applied from `windows.viewOptions`; the Screens row's Page segment and the picker's
   two arms (D6).

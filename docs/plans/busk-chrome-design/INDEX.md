@@ -53,7 +53,7 @@ row becomes two rows by design.
 
 ## Superseded
 
-- **D18 is revisited by the desk-follow plan** ([`../desk-follow-plan.md`](../desk-follow-plan.md),
+- **D18 is revisited by the desk-follow plan** ([`../completed/desk-follow-plan.md`](../completed/desk-follow-plan.md),
   D7 and D8, 2026-09-23): a window linked to the desk now always shows a small link badge — beside
   the page tabs for the page, beside the family pill for the selection — and the chip replaces it
   while unlinked. The page chip reads *Page: Own*.
