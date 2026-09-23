@@ -258,7 +258,7 @@ Each session ends with `npm run check` / the gradle suite green, its CLAUDE.md o
 paragraphs written, a browser pass on the dev desk at a desk width and the 1180×820 iPad frame, and
 its done-marker here.
 
-### Session 0 — the template copy route (lighting7)
+### ~~Session 0 — the template copy route (lighting7)~~ — done, lighting7 `1f16441`
 
 - The route, its DTOs and resource in `routes/projectTemplates.kt`; `CopyTemplateOutcome` on
   `CopyLookOutcome`'s model (§3.3).
