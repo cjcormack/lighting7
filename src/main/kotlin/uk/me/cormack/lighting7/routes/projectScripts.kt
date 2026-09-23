@@ -217,10 +217,13 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                 return@transaction null to "A script with name '$scriptName' already exists in target project"
             }
 
-            // Create new script in target project
+            // Create new script in target project. The type is copied explicitly: the column
+            // defaults to GENERAL, and a copy that fell back to it would compile against the wrong
+            // base class — an FX_DEFINITION copy silently registering no effects.
             val newScript = DaoScript.new {
                 name = scriptName
                 script = sourceScript.script
+                scriptType = sourceScript.scriptType
                 project = targetProject
             }
 

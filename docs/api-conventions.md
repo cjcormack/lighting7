@@ -84,6 +84,12 @@ mutation**:
   retune the clock. Patching a rig you are not currently running is a real workflow and this is
   what keeps it working.
 
+**The copy routes are the ungated exception inside the first group.** `POST …/{id}/copy` on cues,
+looks, templates and scripts resolves its *source* with `withProject` (or `resolveProject`), not
+`withCurrentProject`: copying out of a library that is not the live show is the point of *Copy
+to…*, and the write only inserts rows into the target — nothing is applied to the running show, so
+there is nothing to half-perform. The target is any project, current or not.
+
 Note that "persisted project data" here is a *routing* claim, not a sync one: AI conversation
 history is scoped to a project and stored, but `SyncCoverageTest` classifies it `Excluded` and it
 never leaves the desk. Which URL a table hangs off and whether it is portable are separate

@@ -344,6 +344,17 @@ positional colour list either — and now nothing does, because that grammar is 
 parameter names a colour template rather than indexing a list, so a template *is* the named colour
 instead of being one more scope that holds several.
 
+**Both records copy through one route shape**: `POST /projects/{id}/looks/{lookId}/copy` and
+`POST /projects/{id}/templates/{templateId}/copy`, each `{targetProjectId, newName?}` — the same
+project under a new name is *Duplicate*, another project is *Copy to…*, and a name taken in the
+target is a 409. The source is `withProject`, so a library that is not the live show can be copied
+out of. A copy is a new entity (fresh uuids on the record and every child row; a template's
+`lastPressedAt` starts null), but what its rows and effects *name* travels verbatim: a fixture key,
+a speed-master uuid, a `tmpl:` colour reference. Into another project that can land a row that
+reads as unhealthy there, or an effect on a master that is not there and so runs on master 1 —
+the trade both routes make rather than guessing which of the target's records was meant. Neither
+re-validates contents, which already crossed the write boundary once.
+
 ### A press is recorded, so the desk knows what you reach for
 
 `DaoTemplates.last_pressed_at` is stamped on every press that **applies** a template, and the

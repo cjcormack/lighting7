@@ -470,6 +470,109 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
         }
     }
 
+    // POST /projects/{id}/templates/{templateId}/copy
+    //
+    // Duplicate (the same project, a new name) and Copy to… (another project) in one route —
+    // `copyLook`'s shape, renamed (library-sheets plan D10). `withProject`, not
+    // `withCurrentProject`, on the source: copying *out of* another project's library is the point.
+    //
+    // The copy is a new entity: a fresh template uuid and fresh child uuids, because reusing the
+    // source's would make sync treat the two as one record. `lastPressedAt` starts null — a press
+    // history belongs to the template that was pressed, and a copy has not been.
+    //
+    // Per-fixture row keys, the effect's speed master uuids and any `tmpl:{uuid}` colour parameter
+    // are copied **as they are**, the same trade `copyLook` makes. Into another project that can
+    // leave a key that is not patched there (the row reads as unhealthy, exactly as after a
+    // repatch), a master that does not exist there (it resolves to master 1, the documented
+    // meaning of an unknown master) or a colour reference to the source project's template.
+    // Rewriting any of them would be guessing at which of the target's records was meant.
+    //
+    // No `validateTemplateContents`: the source's contents already crossed the write boundary (or
+    // arrived through an import, which writes verbatim by design), and the copy is the same
+    // contents under a new uuid. Re-validating would refuse to copy a template the source project
+    // can still press — an import-landed category this build's registry lacks, say — which helps
+    // nobody. The one rule that turns on identity, a `tmpl:` parameter naming the template's own
+    // uuid, cannot newly fire: the copy's uuid is fresh.
+    post<CopyTemplateResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val request = call.receive<CopyTemplateRequest>()
+            val result = transaction(state.database) {
+                val source = DaoTemplate.findById(resource.templateId)
+                    ?: return@transaction CopyTemplateOutcome.NotFound(TEMPLATE_NOT_FOUND)
+                if (source.project.id != project.id) {
+                    return@transaction CopyTemplateOutcome.NotFound(TEMPLATE_NOT_FOUND)
+                }
+                val target = state.resolveProject(request.targetProjectId.toString())
+                    ?: return@transaction CopyTemplateOutcome.NotFound("Target project not found")
+                val newName = request.newName?.trim()?.takeIf { it.isNotEmpty() } ?: source.name
+                val clash = DaoTemplate.find {
+                    (DaoTemplates.project eq target.id) and (DaoTemplates.name eq newName)
+                }.firstOrNull()
+                if (clash != null) return@transaction CopyTemplateOutcome.NameTaken(newName)
+                val copy = DaoTemplate.new {
+                    this.project = target
+                    this.name = newName
+                    this.notes = source.notes
+                    this.fadeDuration = source.fadeDuration
+                }
+                for (row in source.rows.orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)) {
+                    DaoTemplateRow.new {
+                        template = copy
+                        targetType = row.targetType
+                        targetKey = row.targetKey
+                        propertyName = row.propertyName
+                        value = row.value
+                        sortOrder = row.sortOrder
+                    }
+                }
+                // At most one (`DaoTemplateEffects`' unique index), iterated like the delete path
+                // iterates it.
+                for (effect in source.effects) {
+                    DaoTemplateEffect.new {
+                        template = copy
+                        effectType = effect.effectType
+                        category = effect.category
+                        propertyName = effect.propertyName
+                        beatDivision = effect.beatDivision
+                        blendMode = effect.blendMode
+                        distribution = effect.distribution
+                        phaseOffset = effect.phaseOffset
+                        elementMode = effect.elementMode
+                        elementFilter = effect.elementFilter
+                        stepTiming = effect.stepTiming
+                        parameters = effect.parameters
+                        speedMasterUuid = effect.speedMasterUuid
+                        rateSpeedMasterUuid = effect.rateSpeedMasterUuid
+                    }
+                }
+                CopyTemplateOutcome.Copied(
+                    CopyTemplateResponse(
+                        templateId = copy.id.value,
+                        templateName = copy.name,
+                        targetProjectId = target.id.value,
+                        targetProjectName = target.name,
+                        message = "Copied '${source.name}' to '${target.name}' as '${copy.name}'",
+                    )
+                )
+            }
+            when (result) {
+                is CopyTemplateOutcome.NotFound ->
+                    call.respond(HttpStatusCode.NotFound, ErrorResponse(result.message))
+                is CopyTemplateOutcome.NameTaken -> call.respond(
+                    HttpStatusCode.Conflict,
+                    ErrorResponse("A template named '${result.name}' already exists in the target project"),
+                )
+                is CopyTemplateOutcome.Copied -> {
+                    // After the commit, unconditionally, as `copyLook` does: the frame carries no
+                    // project, so a window showing the *target's* library refreshes too, and the
+                    // current show's template cache only loses snapshots it can re-read.
+                    state.show.fixtures.templateListChanged()
+                    call.respond(result.response)
+                }
+            }
+        }
+    }
+
 }
 
 // ─── Resources ──────────────────────────────────────────────────────────
@@ -496,6 +599,9 @@ internal data class ApplyTemplateResource(val parent: ProjectTemplatesResource, 
 
 @Resource("/{templateId}/toggle")
 internal data class ToggleTemplateResource(val parent: ProjectTemplatesResource, val templateId: Int)
+
+@Resource("/{templateId}/copy")
+internal data class CopyTemplateResource(val parent: ProjectTemplatesResource, val templateId: Int)
 
 // ─── DTOs ───────────────────────────────────────────────────────────────
 
@@ -657,6 +763,19 @@ internal data class TemplateInUseResponse(
     val runningCount: Int = 0,
 )
 
+/** `copyLook`'s request, renamed. A blank or absent [newName] keeps the source's name. */
+@Serializable
+internal data class CopyTemplateRequest(val targetProjectId: Int, val newName: String? = null)
+
+@Serializable
+internal data class CopyTemplateResponse(
+    val templateId: Int,
+    val templateName: String,
+    val targetProjectId: Int,
+    val targetProjectName: String,
+    val message: String,
+)
+
 @Serializable
 internal data class TemplateTargetDto(val type: String, val key: String)
 
@@ -793,6 +912,16 @@ private sealed interface TemplateDeleteOutcome {
      * pages that lost a pad so it can say so.
      */
     data class Deleted(val uuid: java.util.UUID, val pageIds: Set<Int>) : TemplateDeleteOutcome
+}
+
+/**
+ * `CopyLookOutcome` plus a [NotFound] that says *which* thing was missing — the source template or
+ * the target project — where the Look route answers "Look not found" for both.
+ */
+private sealed interface CopyTemplateOutcome {
+    data class NotFound(val message: String) : CopyTemplateOutcome
+    data class NameTaken(val name: String) : CopyTemplateOutcome
+    data class Copied(val response: CopyTemplateResponse) : CopyTemplateOutcome
 }
 
 // ─── Validation ─────────────────────────────────────────────────────────
