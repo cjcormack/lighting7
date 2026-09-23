@@ -117,6 +117,7 @@ class WindowRegistryTest {
         registry.command(WindowRegistry.Command.Show("sock-b", "/projects/1/busk"))
         registry.command(WindowRegistry.Command.Rename("sock-b", "Screen 2"))
         registry.command(WindowRegistry.Command.Fullscreen("sock-b", on = true))
+        registry.command(WindowRegistry.Command.Follow("sock-b", on = false))
         yield()
         job.cancel()
 
@@ -125,9 +126,10 @@ class WindowRegistryTest {
                 WindowRegistry.Command.Show("sock-b", "/projects/1/busk"),
                 WindowRegistry.Command.Rename("sock-b", "Screen 2"),
                 WindowRegistry.Command.Fullscreen("sock-b", on = true),
+                WindowRegistry.Command.Follow("sock-b", on = false),
             ),
             collected,
-            "the three commands arrive in order, and the one sent before the subscription does not",
+            "the four commands arrive in order, and the one sent before the subscription does not",
         )
         assertTrue(registry.commands.replayCache.isEmpty(), "commands are gestures, never replayed")
     }

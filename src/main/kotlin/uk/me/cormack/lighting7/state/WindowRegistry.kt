@@ -84,6 +84,13 @@ class WindowRegistry {
         data class Fullscreen(override val targetId: String, val on: Boolean) : Command
 
         /**
+         * Link the target to the desk selection ([on]) or unlink it (desk-follow plan D4). Like
+         * [Rename], the registry learns the result only from the target's next announce of
+         * [Window.follows] — never from this command.
+         */
+        data class Follow(override val targetId: String, val on: Boolean) : Command
+
+        /**
          * Set [options] on the window whose row id is [targetId], **for [view] only** (busk-further
          * plan D13): the target applies them to its own per-tab facts if it is showing that view
          * and ignores the frame otherwise, then re-announces — so a busk `focus` arriving at a

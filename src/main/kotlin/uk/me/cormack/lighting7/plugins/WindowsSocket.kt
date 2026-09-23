@@ -8,8 +8,8 @@ import uk.me.cormack.lighting7.state.WindowRegistry
 
 /**
  * The `windows.*` family: the desk's registry of signed-in browser windows
- * ([uk.me.cormack.lighting7.state.WindowRegistry]), and the four commands one window sends to
- * move another (multi-screen plan §3.4).
+ * ([uk.me.cormack.lighting7.state.WindowRegistry]), and the five commands one window sends to
+ * move another (multi-screen plan §3.4; `windows.follow` is the desk-follow plan's D4).
  *
  * Reply convention 3, like `selection.*` and `busk.*`: nothing is answered directly. An announce
  * lands and the `windows.state` broadcast carries the new list to every client including this
@@ -77,6 +77,19 @@ data class WindowsRenameInMessage(val targetId: String, val name: String) : Wind
 data class WindowsFullscreenInMessage(val targetId: String, val on: Boolean) : WindowsInMessage()
 
 /**
+ * Link the window whose row id is [targetId] to the desk selection ([on]) or give it its own
+ * (desk-follow plan D4). Rebroadcast as-is, `windows.fullscreen`'s exact shape: the *target*
+ * applies it and re-announces `follows`, which is how the registry learns the change, as for a
+ * rename — nothing is written here. The target also **refuses** an `on: false` its own rule
+ * forbids (a busk window in Rig or Pads focus), and re-announces so a stale Screens row corrects
+ * itself; that refusal is the client's, because only the target knows its focus. Not a
+ * `windows.viewOptions` entry: follow belongs to the window, not to one of its views.
+ */
+@Serializable
+@SerialName("windows.follow")
+data class WindowsFollowInMessage(val targetId: String, val on: Boolean) : WindowsInMessage()
+
+/**
  * Set [options] on the window whose row id is [targetId], for [view] only (busk-further plan D13).
  * Rebroadcast as-is: the target applies them to its own tab facts if it is showing [view] — a
  * busk `focus` arriving at a window on the Prompt Book is ignored — and re-announces, which is how
@@ -105,7 +118,7 @@ sealed class WindowsOutMessage : OutMessage()
 data class WindowsStateOutMessage(val windows: List<WindowRegistry.Window>) : WindowsOutMessage()
 
 /**
- * The four commands, rebroadcast to every socket with the payload the sender wrote. They carry
+ * The five commands, rebroadcast to every socket with the payload the sender wrote. They carry
  * the inbound spelling deliberately — a client reads `targetId` against its own row id and
  * ignores everything else, so a second name for one gesture would buy nothing. (`speedMasters.state`
  * is the existing precedent for one name travelling in both directions.)
@@ -123,6 +136,10 @@ data class WindowsRenameOutMessage(val targetId: String, val name: String) : Win
 data class WindowsFullscreenOutMessage(val targetId: String, val on: Boolean) : WindowsOutMessage()
 
 @Serializable
+@SerialName("windows.follow")
+data class WindowsFollowOutMessage(val targetId: String, val on: Boolean) : WindowsOutMessage()
+
+@Serializable
 @SerialName("windows.viewOptions")
 data class WindowsViewOptionsOutMessage(
     val targetId: String,
@@ -134,6 +151,7 @@ internal fun WindowRegistry.Command.toOutMessage(): WindowsOutMessage = when (th
     is WindowRegistry.Command.Show -> WindowsShowOutMessage(targetId, view)
     is WindowRegistry.Command.Rename -> WindowsRenameOutMessage(targetId, name)
     is WindowRegistry.Command.Fullscreen -> WindowsFullscreenOutMessage(targetId, on)
+    is WindowRegistry.Command.Follow -> WindowsFollowOutMessage(targetId, on)
     is WindowRegistry.Command.ViewOptions -> WindowsViewOptionsOutMessage(targetId, view, options)
 }
 
@@ -160,6 +178,8 @@ fun handleWindows(scope: SocketScope, message: WindowsInMessage) {
             registry.command(WindowRegistry.Command.Rename(message.targetId, message.name))
         is WindowsFullscreenInMessage ->
             registry.command(WindowRegistry.Command.Fullscreen(message.targetId, message.on))
+        is WindowsFollowInMessage ->
+            registry.command(WindowRegistry.Command.Follow(message.targetId, message.on))
         is WindowsViewOptionsInMessage ->
             registry.command(WindowRegistry.Command.ViewOptions(message.targetId, message.view, message.options))
     }

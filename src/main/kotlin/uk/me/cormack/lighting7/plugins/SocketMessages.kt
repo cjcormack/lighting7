@@ -14,6 +14,7 @@ import kotlinx.serialization.Serializable
  * for a change in another file — the new frame then fails with "not found in the polymorphic
  * scope" while every file compiles green. A content change to this file (or `--rerun-tasks`) is
  * the fix; a `touch` is not, because the compile is keyed on content, not on timestamps.
+ * (Last edited for exactly that reason when `windows.follow` was added.)
  */
 @Serializable
 sealed class InMessage

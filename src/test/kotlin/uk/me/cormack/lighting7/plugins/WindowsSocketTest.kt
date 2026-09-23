@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 
 /**
  * The `windows.*` family over a real socket: the connect snapshot arrives before any announce,
- * an announce is one row keyed by the socket, the four commands are rebroadcast verbatim to
+ * an announce is one row keyed by the socket, the five commands are rebroadcast verbatim to
  * every socket (D11), a closed socket takes its row with it, and a `selection.*` write is stamped
  * from the announced window rather than from the payload (D7).
  *
@@ -94,7 +94,7 @@ class WindowsSocketTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `show, rename and fullscreen are rebroadcast as-is to every socket, sender included`() =
+    fun `show, rename, fullscreen and follow are rebroadcast as-is to every socket, sender included`() =
         testApplication {
             mountTestApp(state)
             val screen1 = createWsClient()
@@ -128,6 +128,12 @@ class WindowsSocketTest : RouteIntegrationTest() {
                         awaitOfType<WindowsFullscreenOutMessage>(),
                     )
 
+                    sendSerialized<InMessage>(WindowsFollowInMessage(target, on = false))
+                    assertEquals(
+                        WindowsFollowOutMessage(target, on = false),
+                        awaitOfType<WindowsFollowOutMessage>(),
+                    )
+
                     // A command naming nobody is not refused and not looked up — it is simply
                     // broadcast and matches no window (D11).
                     sendSerialized<InMessage>(WindowsShowInMessage("not-a-window", "/show"))
@@ -137,17 +143,58 @@ class WindowsSocketTest : RouteIntegrationTest() {
                     )
                 }
 
-                // The target's own socket received all three, in order, and the registry never
-                // moved on its own: the rename is the target's job, on its next announce.
+                // The target's own socket received all four, in order, and the registry never
+                // moved on its own: a rename or a follow is the target's job, on its next announce.
                 assertEquals(WindowsShowOutMessage(target, "/busk"), awaitOfType<WindowsShowOutMessage>())
                 assertEquals(
                     WindowsRenameOutMessage(target, "Front of house"),
                     awaitOfType<WindowsRenameOutMessage>(),
                 )
+                assertEquals(WindowsFullscreenOutMessage(target, on = true), awaitOfType<WindowsFullscreenOutMessage>())
+                assertEquals(WindowsFollowOutMessage(target, on = false), awaitOfType<WindowsFollowOutMessage>())
+                val row = state.windowRegistry.windows.value.first { it.id == target }
                 assertEquals(
                     "Screen 1",
-                    state.windowRegistry.windows.value.first { it.id == target }.name,
+                    row.name,
                     "a rename is the target window's job, on its next announce — the registry does not guess",
+                )
+                assertTrue(row.follows, "and so is a follow: nothing is written until the target re-announces `follows`")
+            }
+        }
+
+    @Test
+    fun `a follow aimed at a disconnected window is lost exactly as a show is`() =
+        testApplication {
+            mountTestApp(state)
+            val screen1 = createWsClient()
+            val screen2 = createWsClient()
+
+            screen1.webSocket("/api") {
+                awaitOfType<WindowsStateOutMessage>()
+                sendSerialized<InMessage>(announce(name = "Screen 1"))
+                awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
+
+                lateinit var gone: String
+                screen2.webSocket("/api") {
+                    awaitOfType<WindowsStateOutMessage>()
+                    sendSerialized<InMessage>(announce(windowId = "tab-2", name = "Screen 2", view = "/busk"))
+                    gone = awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }.windows.last().id
+                }
+                // Screen 2's socket closed and took its row with it.
+                awaitOfType<WindowsStateOutMessage> { it.windows.size == 1 }
+
+                // Screen 1's Screens sheet still names the old row id. Neither command is refused
+                // or queued: each is rebroadcast, matches nobody, and the registry is unchanged —
+                // FU-WINDOWS-SHOW-OFFLINE's behaviour, shared by follow rather than a new one.
+                sendSerialized<InMessage>(WindowsShowInMessage(gone, "/show"))
+                assertEquals(WindowsShowOutMessage(gone, "/show"), awaitOfType<WindowsShowOutMessage>())
+                sendSerialized<InMessage>(WindowsFollowInMessage(gone, on = false))
+                assertEquals(WindowsFollowOutMessage(gone, on = false), awaitOfType<WindowsFollowOutMessage>())
+
+                assertEquals(
+                    listOf("Screen 1"),
+                    state.windowRegistry.windows.value.map { it.name },
+                    "a command to a disconnected window resurrects no row",
                 )
             }
         }

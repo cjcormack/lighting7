@@ -386,6 +386,10 @@ class SocketMessageWireFormatTest {
 
         val fullscreen = json.decodeFromString<InMessage>("""{"type":"windows.fullscreen","targetId":"sock-b","on":true}""")
         assertTrue(assertIs<WindowsFullscreenInMessage>(fullscreen).on)
+
+        val follow = json.decodeFromString<InMessage>("""{"type":"windows.follow","targetId":"sock-b","on":false}""")
+        assertIs<WindowsInMessage>(follow)
+        assertEquals(WindowsFollowInMessage("sock-b", on = false), assertIs<WindowsFollowInMessage>(follow))
     }
 
     @Test
@@ -400,7 +404,7 @@ class SocketMessageWireFormatTest {
         assertTrue(encodedState.contains(""""type":"windows.state""""), encodedState)
         assertEquals(state, assertIs<WindowsStateOutMessage>(json.decodeFromString<OutMessage>(encodedState)))
 
-        // The four commands travel under the same names inbound and outbound: they are
+        // The five commands travel under the same names inbound and outbound: they are
         // rebroadcast as-is, and a second spelling would buy nothing (D11).
         val show = WindowsShowOutMessage("sock-b", "/busk")
         val encodedShow = json.encodeToString<OutMessage>(show)
@@ -419,6 +423,11 @@ class SocketMessageWireFormatTest {
             fullscreen,
             assertIs<WindowsFullscreenOutMessage>(json.decodeFromString<OutMessage>(encodedFullscreen)),
         )
+
+        val follow = WindowsFollowOutMessage("sock-b", on = true)
+        val encodedFollow = json.encodeToString<OutMessage>(follow)
+        assertTrue(encodedFollow.contains(""""type":"windows.follow""""), encodedFollow)
+        assertEquals(follow, assertIs<WindowsFollowOutMessage>(json.decodeFromString<OutMessage>(encodedFollow)))
     }
 
     // ─── Selection domain ───────────────────────────────────────────────────

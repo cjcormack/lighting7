@@ -291,6 +291,7 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 | `windows.show` | `targetId`, `view` | none — rebroadcast as `windows.show` |
 | `windows.rename` | `targetId`, `name` | none — rebroadcast as `windows.rename` |
 | `windows.fullscreen` | `targetId`, `on` | none — rebroadcast as `windows.fullscreen` |
+| `windows.follow` | `targetId`, `on` | none — rebroadcast as `windows.follow` |
 | `windows.viewOptions` | `targetId`, `view`, `options: {String: String}` | none — rebroadcast as `windows.viewOptions` |
 
 `viewOptions` is a window's **per-view options** — for the busk view its `focus`,
@@ -304,6 +305,14 @@ the registry learns them; nothing is written server-side. A client that predates
 and still announces. The two window-addressed MIDI targets (`BuskFocusSet`, `BuskSheetToggle`) send
 this same frame to every connected row of a name, carrying the view that row announced.
 
+`windows.follow` links the target to the desk selection (`on: true`) or gives it its own
+(`on: false`) — the Screens sheet's *Selection · Desk | This window* segment (desk-follow plan D4).
+It has `windows.fullscreen`'s exact shape, and it is a command of its own rather than a
+`viewOptions` entry because follow belongs to the window, not to one of its views. The target
+applies it and re-announces `follows`; nothing is written server-side. The target may **refuse** an
+`on: false` its own rule forbids (a busk window in Rig or Pads focus) — that is the client's call,
+because only the target knows its focus — and re-announces anyway, so a stale row corrects itself.
+
 The desk's registry of signed-in browser windows (`state/WindowRegistry.kt`, multi-screen plan
 §3.4), and the family that lets one screen move another.
 
@@ -315,10 +324,10 @@ The row lives exactly as long as its socket: `announce` on the way in, removal i
 open and on every change — a route navigation, full screen, follow/local, a rename — and a
 re-announce replaces that socket's row in place rather than appending one.
 
-**The four commands are rebroadcast verbatim to every socket, sender included** (D11), the pattern
+**The five commands are rebroadcast verbatim to every socket, sender included** (D11), the pattern
 `busk.layoutChanged {pageIds}` uses: a `targetId` that is not this window's matches nothing, so no
 handler needs a session lookup and the Screens sheet on every window sees the gesture. Nothing is
-written server-side by a `rename` — the *target* renames itself and re-announces. A command whose
+written server-side by a `rename` or a `follow` — the *target* applies it and re-announces. A command whose
 target is disconnected is simply lost, and that is legible: that window's `view` in `windows.state`
 does not move (`FU-WINDOWS-SHOW-OFFLINE`).
 
@@ -588,9 +597,10 @@ MIDI write.
 | `windows.show` | `targetId`, `view` | Broadcast, verbatim |
 | `windows.rename` | `targetId`, `name` | Broadcast, verbatim |
 | `windows.fullscreen` | `targetId`, `on` | Broadcast, verbatim |
+| `windows.follow` | `targetId`, `on` | Broadcast, verbatim |
 | `windows.viewOptions` | `targetId`, `view`, `options` | Broadcast, verbatim |
 
-The four commands travel under the **same names** in both directions — they are rebroadcast as-is,
+The five commands travel under the **same names** in both directions — they are rebroadcast as-is,
 and a second spelling would buy nothing. (`speedMasters.state` is the existing precedent for one
 name on both sides.) `windows.state` is `StateFlow`-backed, so the subscription is the snapshot and
 it arrives before this window has announced anything; `id` is the socket-minted row id and `user` is
@@ -946,7 +956,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |
-| `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the four commands (machine-scoped band) |
+| `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the five commands (machine-scoped band) |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
 | `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
 | `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |
