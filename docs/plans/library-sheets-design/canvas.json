@@ -1,0 +1,135 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "FxLibrary.dc.html": {
+      "h": 820,
+      "title": "FX Library — categories as dividers, built-ins read-only",
+      "w": 1180,
+      "x": 0,
+      "y": 4180
+    },
+    "Kit.dc.html": {
+      "h": 1720,
+      "title": "Kit — the additions",
+      "w": 1240,
+      "x": 1320,
+      "y": 0
+    },
+    "Looks.dc.html": {
+      "h": 820,
+      "title": "Looks — three rows, the row verbs",
+      "w": 1180,
+      "x": 1260,
+      "y": 3040
+    },
+    "Main.dc.html": {
+      "h": 1960,
+      "title": "Main — today, the rules, the calls",
+      "w": 1240,
+      "x": 0,
+      "y": 0
+    },
+    "Model.dc.html": {
+      "h": 2720,
+      "title": "Model — columns, verbs, sessions",
+      "w": 1240,
+      "x": 2640,
+      "y": 0
+    },
+    "Scripts.dc.html": {
+      "h": 820,
+      "title": "Scripts — type chips, Compile over a selection",
+      "w": 1180,
+      "x": 1260,
+      "y": 4180
+    },
+    "SpeedMasters.dc.html": {
+      "h": 820,
+      "title": "Speed Masters — every column a desk fact",
+      "w": 1180,
+      "x": 0,
+      "y": 3040
+    },
+    "Templates.dc.html": {
+      "h": 820,
+      "title": "Templates — family chips, dividers, a Fade marquee",
+      "w": 1180,
+      "x": 2520,
+      "y": 3040
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-23T17:46:26Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "n-fx": {
+      "maxH": 160,
+      "text": "FX Library. Categories are dividers rather than collapsible headers; the chips narrow. Built-ins carry a lock and are read-only rows — Fork makes a custom copy (call 7). Warm Flicker is registered by a script, so it opens the script, not a definition sheet.",
+      "w": 1180,
+      "x": 0,
+      "y": 3990
+    },
+    "n-lk": {
+      "maxH": 160,
+      "text": "Looks. Three rows selected by dragging down the name column. Include and Pick up act on one Look, so they are disabled over three; Duplicate, Copy to… and Delete take the batch. Notes is the one editable value column — what a Look holds is recorded, and changed by Include.",
+      "w": 1180,
+      "x": 1260,
+      "y": 2850
+    },
+    "n-sc": {
+      "maxH": 160,
+      "text": "Scripts. The type sidebar becomes chips; the sheet is grouped by type. Four scripts selected, Compile: each result lands in its row’s Check column as it comes back (call 6). The Kotlin editor stays in its sheet — the pencil or ⏎ opens it.",
+      "w": 1180,
+      "x": 1260,
+      "y": 3990
+    },
+    "n-sm": {
+      "maxH": 160,
+      "text": "Speed Masters. ⏎ over the BPM of M3 and M5 opens one editor for both: 90 lands on both clocks now. M2 and M4 follow M1, so their BPM is a read-out (the ratio beside it) and Set skips them by name. Start is the stored boot tempo — a column of its own, so the two BPMs never share a cell. TAP stays in the row as a read-out button.",
+      "w": 1180,
+      "x": 0,
+      "y": 2850
+    },
+    "n-tp": {
+      "maxH": 160,
+      "text": "Templates. The family filter bar becomes row B’s chips; under All the sheet is grouped by family dividers. A marquee down Fade over Half, Amber and Deep Blue and ⏎: one editor, three fades. Effect templates have no fade and an editable Master instead. Value is editable on generic value templates (call 4).",
+      "w": 1180,
+      "x": 2520,
+      "y": 2850
+    },
+    "t-doc": {
+      "kind": "title1",
+      "maxW": 3800,
+      "text": "Library sheets — calls answered 2026-09-23",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "t-surf": {
+      "kind": "title1",
+      "maxW": 3600,
+      "text": "The five sheets, at the 1180×820 frame",
+      "w": 240,
+      "x": 0,
+      "y": 2740
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Kit.dc.html",
+    "Model.dc.html",
+    "SpeedMasters.dc.html",
+    "Looks.dc.html",
+    "Templates.dc.html",
+    "FxLibrary.dc.html",
+    "Scripts.dc.html"
+  ],
+  "pages": [],
+  "title": "Library sheets"
+}

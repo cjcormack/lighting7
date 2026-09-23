@@ -106,6 +106,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-SUMMARY-SPLIT`](#fu-busk-summary-split) | Trigger | Busk | the selection summary is missed in Split with the rows scrolled out of view |
 | [`FU-SELECTION-NAMED`](#fu-selection-named) | Trigger | Desk | a second operator works the desk from their own screen |
 | [`FU-SURFACE-SELECTION-FOLLOW-SET`](#fu-surface-selection-follow-set) | Trigger | MIDI | a desk button should take a named window off the desk selection, or put it back |
+| [`FU-SCRIPT-USED-BY`](#fu-script-used-by) | Trigger | FE | an operator needs to know which cues hook a script before editing or deleting it |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -751,6 +752,19 @@ window whose focus forces following (plan D2). Not built: the Screens sheet on a
 the touch-only case.
 
 **Trigger**: a desk button should take a named window off the desk selection, or put it back.
+
+### `FU-SCRIPT-USED-BY`
+
+**Scripts have no server-side "used by"** · Trigger · Library-sheets plan §8, 2026-09-23
+
+`ScriptDetails.usedByProperties` is always an empty list (`toScriptDetails`, `projectScripts.kt`),
+so the Scripts sheet's *Used by* column can say only what the client can derive: the effects an
+`FX_DEFINITION` script registers (from the FX library's `sourceDefinitionId`). An `FX_APPLICATION`
+script's cue hooks exist only on full cue details (`CueTriggerDetail.scriptId`), and no list query
+carries them. The fix is a server-computed list — the cues whose triggers name the script, and the
+effects it registers — on the script summary, which the column then reads for every type.
+
+**Trigger**: an operator needs to know which cues hook a script before editing or deleting it.
 
 ### `FU-SLOT-DROP-OVERLAY-HIDDEN`
 
