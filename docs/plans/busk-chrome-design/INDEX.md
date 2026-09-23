@@ -53,6 +53,10 @@ row becomes two rows by design.
 
 ## Superseded
 
+- **D18 is revisited by the desk-follow plan** ([`../desk-follow-plan.md`](../desk-follow-plan.md),
+  D7 and D8, 2026-09-23): a window linked to the desk now always shows a small link badge — beside
+  the page tabs for the page, beside the family pill for the selection — and the chip replaces it
+  while unlinked. The page chip reads *Page: Own*.
 - `Band.dc.html`'s **Pads rows** — the one row drawn in Pads with the Cells menu, the steps, Clear
   and the desk chip — and the ladder's Pads rungs are superseded by the plan's **D17–D20**
   (session A.5, from Chris's review of session A on the desk): in Pads the rig row is not drawn,

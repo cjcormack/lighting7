@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Model · wire, code, sessions, decisions</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body { margin: 0; }
+.app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.72 0.015 286.067); --bd:oklch(0.32 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --amber:oklch(0.828 0.189 84.429); --green:oklch(0.79 0.17 152); --red:oklch(0.704 0.191 22.216); --violet:oklch(0.72 0.16 300);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+.app * { box-sizing:border-box; }
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size:0.92em; }
+.lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+.h1 { font-size:26px; font-weight:700; letter-spacing:-0.015em; margin:0; }
+.h2 { font-size:15px; font-weight:700; letter-spacing:-0.005em; margin:0; }
+.h3 { font-size:13px; font-weight:700; margin:0; }
+.lede { font-size:14px; line-height:1.55; color:var(--mfg); margin:0; max-width:980px; }
+.lede b, .cap b, .note b, td b, li b { color:var(--fg); font-weight:600; }
+.cap { font-size:12px; line-height:1.5; color:var(--mfg); margin:0; }
+.note { border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+.note p { margin:0; font-size:12px; line-height:1.5; color:var(--mfg); }
+.note.key { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.note.warn { border-color:oklch(0.6 0.14 80); background:oklch(0.5 0.12 80 / 0.12); }
+.note.bad { border-color:oklch(0.58 0.16 25); background:oklch(0.5 0.15 25 / 0.12); }
+.note.good { border-color:oklch(0.55 0.13 152); background:oklch(0.5 0.12 152 / 0.12); }
+.col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.row { display:flex; gap:12px; min-width:0; }
+.grid2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+.grid3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+ol, ul { margin:0; padding-left:18px; }
+li { font-size:12px; line-height:1.55; color:var(--mfg); }
+li + li { margin-top:4px; }
+table { border-collapse:collapse; width:100%; font-size:12px; }
+th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--mfg); padding:8px 10px; border-bottom:1px solid var(--bd); vertical-align:bottom; }
+td { padding:9px 10px; border-bottom:1px solid var(--bd); vertical-align:top; line-height:1.45; color:var(--mfg); }
+td.name { color:var(--fg); font-weight:600; white-space:nowrap; }
+.yes { color:var(--green); font-weight:600; }
+.no { color:var(--red); font-weight:600; }
+.meh { color:var(--amber); font-weight:600; }
+.tag { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.04em; white-space:nowrap; }
+.tag.today { background:var(--muted); color:var(--mfg); }
+.tag.prop { background:oklch(0.623 0.214 259.815 / 0.22); color:oklch(0.83 0.1 259); }
+.tag.call { background:oklch(0.5 0.12 80 / 0.25); color:var(--amber); }
+.tag.goes { background:oklch(0.5 0.15 25 / 0.22); color:oklch(0.8 0.12 25); }
+.pill { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:14px; font-size:12px; font-weight:500; white-space:nowrap; border:1px solid var(--bd); background:var(--card); color:var(--fg); }
+.pill.local { border-style:dashed; border-color:var(--amber); color:var(--amber); background:transparent; }
+.pill .sub { color:var(--mfg); }
+.seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; height:28px; }
+.seg span { display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+.seg span.on { background:var(--muted); color:var(--fg); }
+.seg.dis { opacity:0.45; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-family:inherit; }
+.btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+.btn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+.field { height:32px; padding:0 10px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--fg); }
+.panel { border:1px solid var(--bd); border-radius:12px; background:var(--card); display:flex; flex-direction:column; overflow:hidden; }
+.panel .hd { display:flex; align-items:center; gap:8px; height:44px; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; font-weight:700; }
+.panel .bd { display:flex; flex-direction:column; gap:12px; padding:14px; }
+.wrow { border:1px solid var(--bd); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; background:var(--bg); }
+.wrow .top { display:flex; align-items:center; gap:8px; }
+.wrow .opts { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; font-size:11px; color:var(--mfg); }
+.wrow .opt { display:inline-flex; align-items:center; gap:6px; }
+.badge { font-size:10px; font-weight:600; color:var(--mfg); border:1px solid var(--bd); border-radius:6px; padding:1px 6px; }
+.flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.box { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; font-size:12px; line-height:1.45; color:var(--mfg); }
+.box b { color:var(--fg); }
+.box.desk { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.box.win { border-color:oklch(0.5 0.14 259); background:oklch(0.3 0.08 259 / 0.25); }
+.arrow { color:var(--mfg); font-size:18px; }
+.kbd { font-family:inherit; font-size:10px; border:1px solid var(--bd); border-bottom-width:2px; border-radius:4px; padding:0 4px; color:var(--mfg); }
+.toast { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px 14px; box-shadow:0 12px 40px rgba(0,0,0,0.5); font-size:13px; max-width:420px; }
+.toast .d { font-size:12px; color:var(--mfg); margin-top:2px; }
+.cmd { border:1px solid var(--bd); border-radius:12px; background:var(--card); overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.cmd .q { height:44px; display:flex; align-items:center; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; color:var(--fg); }
+.cmd .g { padding:8px 14px 4px; }
+.cmd .it { display:flex; align-items:center; gap:10px; height:36px; padding:0 14px; font-size:13px; color:var(--fg); }
+.cmd .it.hi { background:var(--muted); }
+.cmd .it .det { margin-left:auto; font-size:11px; color:var(--mfg); }
+.band { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--bd); border-radius:10px; background:var(--bg); font-size:12px; }
+.band .gap { flex:1; }
+.band .rl { font-size:9px; font-weight:700; letter-spacing:0.08em; color:var(--mfg); }
+.tile { display:inline-flex; flex-direction:column; justify-content:space-between; width:88px; height:52px; padding:6px 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:11px; font-weight:600; }
+.tile.on { border-color:var(--pri); box-shadow:0 0 0 1px var(--pri) inset; }
+.tile i { display:block; height:3px; border-radius:2px; background:var(--amber); }
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1400px; padding: 48px 56px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+<div class="col" style="gap:8px;">
+  <div class="lbl">Model</div>
+  <h1 class="h1">What changes, and what was decided</h1>
+  <p class="lede">Small on the wire: <b>one new windows command</b>. Everything else is client — a rule, two Screens segments, ⌘K arms and a window applying a view option it already announces.</p>
+</div>
+
+<div class="grid3">
+  <div class="col">
+    <div class="lbl">Wire · lighting7</div>
+    <div class="note">
+      <p><b><span class="mono">windows.follow {targetId, on}</span></b> — a fifth windows command, rebroadcast like <span class="mono">show</span> and <span class="mono">viewOptions</span>; the named window unlinks or relinks itself and re-announces. Not a view option: follow belongs to the window, not to a view, and a Programmer row has no busk options to carry it.</p>
+    </div>
+    <div class="note">
+      <p><b>Nothing for pages.</b> <span class="mono">pageFollows</span> already rides <span class="mono">viewOptions</span> both ways; the registry never learns the vocabulary.</p>
+    </div>
+    <div class="note">
+      <p><span class="tag call">Later</span> <span class="mono">SelectionFollowSet(windowName, on)</span> as a MIDI target — <span class="mono">BuskFocusSet</span>'s twin (call 6).</p>
+    </div>
+  </div>
+  <div class="col">
+    <div class="lbl">Client · lighting-react</div>
+    <div class="note">
+      <p><b><span class="mono">deskFollow.ts</span></b> gains the effective rule; <span class="mono">BuskingView</span> relinks on entering Rig or Pads and toasts; <span class="mono">useWindowsBridge</span> handles <span class="mono">windows.follow</span>.</p>
+    </div>
+    <div class="note">
+      <p><b><span class="mono">applyBuskViewOptions</span></b> applies <span class="mono">pageFollows</span> — <i>true</i> relinks the page, <i>false</i> keeps the window's current page as its own.</p>
+    </div>
+    <div class="note">
+      <p><b>Screens row</b>: the Selection and Page segments. <b>⌘K</b>: per-window follow and paging arms, withheld where refused. <b>Marks</b>: a link badge while linked, for the page (by the tabs) and the selection (by the family pill); <i>Page: Own</i> and <i>Targets: This window</i> while not.</p>
+    </div>
+    <div class="note">
+      <p><span class="tag goes">Goes</span> <i>Stop following…</i> in Rig and Pads; the <i>follows the desk / own selection / own page</i> captions; any desk chip on the pad row.</p>
+    </div>
+  </div>
+  <div class="col">
+    <div class="lbl">Sessions</div>
+    <div class="note">
+      <p><b>1 · lighting7</b> — <span class="mono">windows.follow</span>, its test, <span class="mono">websocket-engineering.md</span>. Small.</p>
+    </div>
+    <div class="note">
+      <p><b>2 · lighting-react</b> — the rule and the relink toast; the command's handler; both Screens segments; <span class="mono">pageFollows</span> applied; ⌘K; the chip's words; CLAUDE.md §The busk layout and §One selection, two shapes.</p>
+    </div>
+    <p class="cap">About one busk-chrome session of client work. Nothing to migrate: both flags stay per-tab <span class="mono">sessionStorage</span> with the same keys and defaults.</p>
+  </div>
+</div>
+
+<div class="col">
+  <div class="lbl">Decisions — answered by Chris, 2026-09-23</div>
+  <table>
+    <tr><th style="width:40px;">#</th><th style="width:430px;">Question</th><th style="width:260px;">Decided</th><th>Why</th></tr>
+    <tr><td class="name">1</td><td>Rig focus with the sheet's Colour · Spread open can act. Always follow anyway?</td><td class="yes">Always follow</td><td>Rig focus exists to be the selector for another screen. A second station that selects and colours without pads is what Split is for.</td></tr>
+    <tr><td class="name">2</td><td>Entering Rig or Pads while local: drop the local selection, or hold it until Split?</td><td class="yes">Drop it, and toast</td><td>A held selection needs a chip, in a focus that has none, to explain a selection nothing is using.</td></tr>
+    <tr><td class="name">3</td><td>Keep the desk page as a paging group, or make every window's page its own?</td><td class="yes">Keep the paging group</td><td>Every surveyed desk pages by group with a per-surface opt-out, and MIDI surfaces paging several screens together is the reason it exists.</td></tr>
+    <tr><td class="name">4</td><td>Mark on screen that a window is paged with the desk?</td><td class="yes">Yes — a link badge by the tabs, always while linked</td><td>A linked window always says so, even if only with a glyph, and names any other window paged with it. On an own page the <i>Page: Own</i> chip takes its place. Revisits D18 for the page: a small badge, not the old chip.</td></tr>
+    <tr><td class="name">5</td><td>Named selections for a second operator (Eos User ID, MA3 profiles)?</td><td class="yes">Later — a follow-up</td><td><i>Desk | This window</i> becomes <i>Desk | B | This window</i> without undoing anything here.</td></tr>
+    <tr><td class="name">6</td><td>A MIDI <span class="mono">SelectionFollowSet</span> target?</td><td class="yes">Later — a follow-up</td><td>The Screens sheet from another window covers the touch-only case.</td></tr>
+    <tr><td class="name">7</td><td>The page words?</td><td class="yes">Paged with the desk · Own page; chip <i>Page: Own</i></td><td>Kept, with a short form on narrow rows: <i>With desk · Own</i>, and the chip down to <i>Own</i> on the pad row's folds — measured into its ladder like every other word there.</td></tr>
+    <tr><td class="name">8</td><td>Mark the selection while following, as the page is?</td><td class="yes">Yes — a link badge by the family pill</td><td>A window always says which selection it is on. Glyph only, on the rig row, the pad row, the compact strip and row C; the dashed chip replaces it while local. Revisits D18 for the selection as decision 4 does for the page.</td></tr>
+  </table>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

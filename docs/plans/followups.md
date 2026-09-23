@@ -104,6 +104,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-HAND-GROUP-KIND`](#fu-hand-group-kind) | Ready | Busk | — |
 | [`FU-SURFACE-IMMERSIVE-SET`](#fu-surface-immersive-set) | Trigger | MIDI | a desk button should expand a named window over the app |
 | [`FU-BUSK-SUMMARY-SPLIT`](#fu-busk-summary-split) | Trigger | Busk | the selection summary is missed in Split with the rows scrolled out of view |
+| [`FU-SELECTION-NAMED`](#fu-selection-named) | Trigger | Desk | a second operator works the desk from their own screen |
+| [`FU-SURFACE-SELECTION-FOLLOW-SET`](#fu-surface-selection-follow-set) | Trigger | MIDI | a desk button should take a named window off the desk selection, or put it back |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -726,6 +728,29 @@ rows scrolled out of view in Split they do not. If it turns out to be missed, th
 count is the first place to look and the pad row's gap the second — not a third row on the band.
 
 **Trigger**: the selection summary is missed in Split with the rows scrolled out of view.
+
+### `FU-SELECTION-NAMED`
+
+**Named selections for a second operator** · Trigger · Desk-follow plan D10, 2026-09-23
+
+Today a window follows the one desk selection or holds its own (`lib/deskFollow.ts`). Every surveyed
+console separates selections by *identity* — Eos User ID, grandMA3 user profile, Titan user — so
+two devices on one identity share a selection. Here that would be a selection map on the desk keyed
+by name (*Desk | B | This window*), `windows.follow` becoming "join selection X", and a MIDI device
+choosing one too. Nothing in the desk-follow plan blocks it.
+
+**Trigger**: a second operator works the desk from their own screen.
+
+### `FU-SURFACE-SELECTION-FOLLOW-SET`
+
+**No MIDI target for a window's selection follow** · Trigger · Desk-follow plan D10, 2026-09-23
+
+`SelectionFollowSet(windowName, on)` would be `BuskFocusSet`'s twin: addressed by registry name,
+judged by window health, delivered as `windows.follow` to every row of that name — and refused by a
+window whose focus forces following (plan D2). Not built: the Screens sheet on another window covers
+the touch-only case.
+
+**Trigger**: a desk button should take a named window off the desk selection, or put it back.
 
 ### `FU-SLOT-DROP-OVERLAY-HIDDEN`
 

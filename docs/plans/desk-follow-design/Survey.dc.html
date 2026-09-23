@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Survey · how other desks share selection and pages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body { margin: 0; }
+.app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.72 0.015 286.067); --bd:oklch(0.32 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --amber:oklch(0.828 0.189 84.429); --green:oklch(0.79 0.17 152); --red:oklch(0.704 0.191 22.216); --violet:oklch(0.72 0.16 300);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+.app * { box-sizing:border-box; }
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size:0.92em; }
+.lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+.h1 { font-size:26px; font-weight:700; letter-spacing:-0.015em; margin:0; }
+.h2 { font-size:15px; font-weight:700; letter-spacing:-0.005em; margin:0; }
+.h3 { font-size:13px; font-weight:700; margin:0; }
+.lede { font-size:14px; line-height:1.55; color:var(--mfg); margin:0; max-width:980px; }
+.lede b, .cap b, .note b, td b, li b { color:var(--fg); font-weight:600; }
+.cap { font-size:12px; line-height:1.5; color:var(--mfg); margin:0; }
+.note { border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+.note p { margin:0; font-size:12px; line-height:1.5; color:var(--mfg); }
+.note.key { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.note.warn { border-color:oklch(0.6 0.14 80); background:oklch(0.5 0.12 80 / 0.12); }
+.note.bad { border-color:oklch(0.58 0.16 25); background:oklch(0.5 0.15 25 / 0.12); }
+.note.good { border-color:oklch(0.55 0.13 152); background:oklch(0.5 0.12 152 / 0.12); }
+.col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.row { display:flex; gap:12px; min-width:0; }
+.grid2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+.grid3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+ol, ul { margin:0; padding-left:18px; }
+li { font-size:12px; line-height:1.55; color:var(--mfg); }
+li + li { margin-top:4px; }
+table { border-collapse:collapse; width:100%; font-size:12px; }
+th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--mfg); padding:8px 10px; border-bottom:1px solid var(--bd); vertical-align:bottom; }
+td { padding:9px 10px; border-bottom:1px solid var(--bd); vertical-align:top; line-height:1.45; color:var(--mfg); }
+td.name { color:var(--fg); font-weight:600; white-space:nowrap; }
+.yes { color:var(--green); font-weight:600; }
+.no { color:var(--red); font-weight:600; }
+.meh { color:var(--amber); font-weight:600; }
+.tag { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.04em; white-space:nowrap; }
+.tag.today { background:var(--muted); color:var(--mfg); }
+.tag.prop { background:oklch(0.623 0.214 259.815 / 0.22); color:oklch(0.83 0.1 259); }
+.tag.call { background:oklch(0.5 0.12 80 / 0.25); color:var(--amber); }
+.tag.goes { background:oklch(0.5 0.15 25 / 0.22); color:oklch(0.8 0.12 25); }
+.pill { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:14px; font-size:12px; font-weight:500; white-space:nowrap; border:1px solid var(--bd); background:var(--card); color:var(--fg); }
+.pill.local { border-style:dashed; border-color:var(--amber); color:var(--amber); background:transparent; }
+.pill .sub { color:var(--mfg); }
+.seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; height:28px; }
+.seg span { display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+.seg span.on { background:var(--muted); color:var(--fg); }
+.seg.dis { opacity:0.45; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-family:inherit; }
+.btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+.btn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+.field { height:32px; padding:0 10px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--fg); }
+.panel { border:1px solid var(--bd); border-radius:12px; background:var(--card); display:flex; flex-direction:column; overflow:hidden; }
+.panel .hd { display:flex; align-items:center; gap:8px; height:44px; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; font-weight:700; }
+.panel .bd { display:flex; flex-direction:column; gap:12px; padding:14px; }
+.wrow { border:1px solid var(--bd); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; background:var(--bg); }
+.wrow .top { display:flex; align-items:center; gap:8px; }
+.wrow .opts { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; font-size:11px; color:var(--mfg); }
+.wrow .opt { display:inline-flex; align-items:center; gap:6px; }
+.badge { font-size:10px; font-weight:600; color:var(--mfg); border:1px solid var(--bd); border-radius:6px; padding:1px 6px; }
+.flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.box { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; font-size:12px; line-height:1.45; color:var(--mfg); }
+.box b { color:var(--fg); }
+.box.desk { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.box.win { border-color:oklch(0.5 0.14 259); background:oklch(0.3 0.08 259 / 0.25); }
+.arrow { color:var(--mfg); font-size:18px; }
+.kbd { font-family:inherit; font-size:10px; border:1px solid var(--bd); border-bottom-width:2px; border-radius:4px; padding:0 4px; color:var(--mfg); }
+.toast { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px 14px; box-shadow:0 12px 40px rgba(0,0,0,0.5); font-size:13px; max-width:420px; }
+.toast .d { font-size:12px; color:var(--mfg); margin-top:2px; }
+.cmd { border:1px solid var(--bd); border-radius:12px; background:var(--card); overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.cmd .q { height:44px; display:flex; align-items:center; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; color:var(--fg); }
+.cmd .g { padding:8px 14px 4px; }
+.cmd .it { display:flex; align-items:center; gap:10px; height:36px; padding:0 14px; font-size:13px; color:var(--fg); }
+.cmd .it.hi { background:var(--muted); }
+.cmd .it .det { margin-left:auto; font-size:11px; color:var(--mfg); }
+.band { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--bd); border-radius:10px; background:var(--bg); font-size:12px; }
+.band .gap { flex:1; }
+.band .rl { font-size:9px; font-weight:700; letter-spacing:0.08em; color:var(--mfg); }
+.tile { display:inline-flex; flex-direction:column; justify-content:space-between; width:88px; height:52px; padding:6px 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:11px; font-weight:600; }
+.tile.on { border-color:var(--pri); box-shadow:0 0 0 1px var(--pri) inset; }
+.tile i { display:block; height:3px; border-radius:2px; background:var(--amber); }
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1300px; padding: 48px 56px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+<div class="col" style="gap:8px;">
+  <div class="lbl">Survey · six desks, from their manuals</div>
+  <h1 class="h1">Nobody makes follow a window setting. Selection follows an identity; the page follows a group.</h1>
+  <p class="lede">What each desk shares between screens and stations, and where the switch lives. <span class="tag call">unverified</span> marks what the manuals did not settle; the sources are listed underneath.</p>
+</div>
+
+<table>
+  <tr><th style="width:120px;">Desk</th><th style="width:360px;">Selection shared by…</th><th style="width:420px;">Page shared by…</th><th>Per-window link · where the switch lives</th></tr>
+  <tr><td class="name">grandMA3</td><td><b>User profile.</b> It holds programmer, selection, selected sequence and current page; users on one profile share them. Log a station in as a different profile to separate.</td><td><b>User profile</b> — every screen of a user is on one page. The Playback window has a <i>Page</i> setting pointing it at a page. <span class="tag call">unverified</span> whether it can follow the current page.</td><td>Sheets have <b>Link Type: Fixed · Selected · LastGo</b>; a layout view follows the selected layout or a fixed one. In the window's title-bar settings.</td></tr>
+  <tr><td class="name">ETC Eos</td><td><b>User ID.</b> Devices on one ID share command line, selected channels, selected cue, live/blind. Default 1, set in Setup.</td><td><b>Paging groups.</b> Paging any bank in a group pages the whole group. Internal banks default to group 1, external wings to 2.</td><td>Fader-to-fader links only. In Setup › Device.</td></tr>
+  <tr><td class="name">Hog 4</td><td><b>Console</b> — each keeps its own programmer. <span class="tag call">unverified</span> any user or shared-editor model.</td><td><b>Console tracking</b>: consoles opt into tracking each other's page, master and playback state, keeping their own programmers.</td><td>None found.</td></tr>
+  <tr><td class="name">MagicQ</td><td><b>Console</b> by default; a slave opts in with <b>Sync Programmers</b>, switchable at any time. On overwrites its programmer; off keeps what it has. CTRL+INCLUDE copies once.</td><td><b>Playback sync</b> per slave (PB sync · multi control · Inhibit · Inhibit, sync on swap). The on-screen Playbacks window is paged <b>separately</b> from the hardware page; wing banks tie to a bank, or to themselves.</td><td>Setup › View Settings › Multi Console.</td></tr>
+  <tr><td class="name">Titan</td><td><b>User</b> — each user, remotes too, has a programmer. Same user and handle world mirror each other.</td><td><b>Handle world</b>, with a named option: <b>Follow World Page Change</b> — whether this user's page moves when another console on the world pages. Handles can be locked to every page.</td><td>Per-monitor window layouts, no link setting. Avo+User, Disk › Handle Worlds.</td></tr>
+  <tr><td class="name">Onyx</td><td><b>Everything</b> — X-Net mirrors the programmer between consoles.</td><td><b>Wing IDs</b>: each screen's playback view or surface follows the main bank by default, or takes its own ID to show a different bank.</td><td>Menu › Displays, <b>or</b> the Bank Selection pop-up on the view itself.</td></tr>
+</table>
+
+<div class="grid3">
+  <div class="note key">
+    <p><b>Selection: one shared, by default, everywhere.</b> Separating it is always an identity (another user, profile, console) or an explicit sync switch — MagicQ's <i>Sync Programmers</i> is the nearest thing to our <i>local</i>, and it is a rare, deliberate act, not a mode a screen falls into.</p>
+  </div>
+  <div class="note key">
+    <p><b>Page: shared by a group, with a per-surface opt-out.</b> Eos paging groups, Titan's <i>Follow World Page Change</i>, Onyx's Wing IDs and MagicQ's bank ties are all "page with the main, or on your own". That is our page-follow flag, and it is the norm — so the question is how it is <b>named and set</b>, not whether it exists.</p>
+  </div>
+  <div class="note key">
+    <p><b>Where the switch lives: both places.</b> On the view (MA3's title bar, Onyx's Bank Selection pop-up) and in a central display setup (Onyx Displays, MagicQ Multi Console, Eos Setup). Onyx does exactly the pairing proposed here: set it on the view, or from the Displays menu.</p>
+  </div>
+</div>
+
+<p class="cap" style="font-size:10px; line-height:1.6;">Sources: help.malighting.com grandMA3 2.3 — user_create, user, wvm_settings, executor · etcconnect.com Eos online help — Changing Fader Pages, Wing Paging Groups (snippet), User ID (summary; 404 on fetch), Ion manual p.302 · etcconnect.com Hog HTML — HogNet network §3.3.7 · secure.chamsys.co.uk MagicQ manual — networking_consoles, playback · manual.avolites.com — multi-user-operation, playback-controls, workspace-windows · support.obsidiancontrol.com Onyx manual — X-Net, Wing IDs.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

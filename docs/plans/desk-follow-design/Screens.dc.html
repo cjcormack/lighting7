@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Screens · the controls</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body { margin: 0; }
+.app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033); --mfg:oklch(0.72 0.015 286.067); --bd:oklch(0.32 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --amber:oklch(0.828 0.189 84.429); --green:oklch(0.79 0.17 152); --red:oklch(0.704 0.191 22.216); --violet:oklch(0.72 0.16 300);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+.app * { box-sizing:border-box; }
+.mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size:0.92em; }
+.lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+.h1 { font-size:26px; font-weight:700; letter-spacing:-0.015em; margin:0; }
+.h2 { font-size:15px; font-weight:700; letter-spacing:-0.005em; margin:0; }
+.h3 { font-size:13px; font-weight:700; margin:0; }
+.lede { font-size:14px; line-height:1.55; color:var(--mfg); margin:0; max-width:980px; }
+.lede b, .cap b, .note b, td b, li b { color:var(--fg); font-weight:600; }
+.cap { font-size:12px; line-height:1.5; color:var(--mfg); margin:0; }
+.note { border-radius:10px; border:1px solid var(--bd); background:var(--card); padding:12px 14px; display:flex; flex-direction:column; gap:6px; }
+.note p { margin:0; font-size:12px; line-height:1.5; color:var(--mfg); }
+.note.key { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.note.warn { border-color:oklch(0.6 0.14 80); background:oklch(0.5 0.12 80 / 0.12); }
+.note.bad { border-color:oklch(0.58 0.16 25); background:oklch(0.5 0.15 25 / 0.12); }
+.note.good { border-color:oklch(0.55 0.13 152); background:oklch(0.5 0.12 152 / 0.12); }
+.col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+.row { display:flex; gap:12px; min-width:0; }
+.grid2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+.grid3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+ol, ul { margin:0; padding-left:18px; }
+li { font-size:12px; line-height:1.55; color:var(--mfg); }
+li + li { margin-top:4px; }
+table { border-collapse:collapse; width:100%; font-size:12px; }
+th { text-align:left; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.07em; color:var(--mfg); padding:8px 10px; border-bottom:1px solid var(--bd); vertical-align:bottom; }
+td { padding:9px 10px; border-bottom:1px solid var(--bd); vertical-align:top; line-height:1.45; color:var(--mfg); }
+td.name { color:var(--fg); font-weight:600; white-space:nowrap; }
+.yes { color:var(--green); font-weight:600; }
+.no { color:var(--red); font-weight:600; }
+.meh { color:var(--amber); font-weight:600; }
+.tag { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:0.04em; white-space:nowrap; }
+.tag.today { background:var(--muted); color:var(--mfg); }
+.tag.prop { background:oklch(0.623 0.214 259.815 / 0.22); color:oklch(0.83 0.1 259); }
+.tag.call { background:oklch(0.5 0.12 80 / 0.25); color:var(--amber); }
+.tag.goes { background:oklch(0.5 0.15 25 / 0.22); color:oklch(0.8 0.12 25); }
+.pill { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:14px; font-size:12px; font-weight:500; white-space:nowrap; border:1px solid var(--bd); background:var(--card); color:var(--fg); }
+.pill.local { border-style:dashed; border-color:var(--amber); color:var(--amber); background:transparent; }
+.pill .sub { color:var(--mfg); }
+.seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; height:28px; }
+.seg span { display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); white-space:nowrap; }
+.seg span.on { background:var(--muted); color:var(--fg); }
+.seg.dis { opacity:0.45; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-family:inherit; }
+.btn.pri { background:var(--pri); border-color:var(--pri); color:oklch(0.21 0.006 285.885); font-weight:600; }
+.btn.ghost { border-color:transparent; background:transparent; color:var(--mfg); }
+.field { height:32px; padding:0 10px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:13px; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:var(--fg); }
+.panel { border:1px solid var(--bd); border-radius:12px; background:var(--card); display:flex; flex-direction:column; overflow:hidden; }
+.panel .hd { display:flex; align-items:center; gap:8px; height:44px; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; font-weight:700; }
+.panel .bd { display:flex; flex-direction:column; gap:12px; padding:14px; }
+.wrow { border:1px solid var(--bd); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; gap:8px; background:var(--bg); }
+.wrow .top { display:flex; align-items:center; gap:8px; }
+.wrow .opts { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; font-size:11px; color:var(--mfg); }
+.wrow .opt { display:inline-flex; align-items:center; gap:6px; }
+.badge { font-size:10px; font-weight:600; color:var(--mfg); border:1px solid var(--bd); border-radius:6px; padding:1px 6px; }
+.flow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.box { border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:10px 12px; font-size:12px; line-height:1.45; color:var(--mfg); }
+.box b { color:var(--fg); }
+.box.desk { border-color:oklch(0.5 0.16 300); background:oklch(0.27 0.09 302 / 0.28); }
+.box.win { border-color:oklch(0.5 0.14 259); background:oklch(0.3 0.08 259 / 0.25); }
+.arrow { color:var(--mfg); font-size:18px; }
+.kbd { font-family:inherit; font-size:10px; border:1px solid var(--bd); border-bottom-width:2px; border-radius:4px; padding:0 4px; color:var(--mfg); }
+.toast { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--bd); border-radius:10px; background:var(--card); padding:12px 14px; box-shadow:0 12px 40px rgba(0,0,0,0.5); font-size:13px; max-width:420px; }
+.toast .d { font-size:12px; color:var(--mfg); margin-top:2px; }
+.cmd { border:1px solid var(--bd); border-radius:12px; background:var(--card); overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.cmd .q { height:44px; display:flex; align-items:center; padding:0 14px; border-bottom:1px solid var(--bd); font-size:14px; color:var(--fg); }
+.cmd .g { padding:8px 14px 4px; }
+.cmd .it { display:flex; align-items:center; gap:10px; height:36px; padding:0 14px; font-size:13px; color:var(--fg); }
+.cmd .it.hi { background:var(--muted); }
+.cmd .it .det { margin-left:auto; font-size:11px; color:var(--mfg); }
+.band { display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border:1px solid var(--bd); border-radius:10px; background:var(--bg); font-size:12px; }
+.band .gap { flex:1; }
+.band .rl { font-size:9px; font-weight:700; letter-spacing:0.08em; color:var(--mfg); }
+.tile { display:inline-flex; flex-direction:column; justify-content:space-between; width:88px; height:52px; padding:6px 8px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:11px; font-weight:600; }
+.tile.on { border-color:var(--pri); box-shadow:0 0 0 1px var(--pri) inset; }
+.tile i { display:block; height:3px; border-radius:2px; background:var(--amber); }
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 960px; padding: 48px 56px; display: flex; flex-direction: column; gap: 24px; overflow: hidden;">
+<div class="col" style="gap:8px;">
+  <div class="lbl">The controls</div>
+  <h1 class="h1">Follow is set where windows are managed</h1>
+  <p class="lede">The Screens sheet already sets another window's view, focus, sheet, page and chrome. Selection follow is the one fact it only <b>reports</b>, which is what leaves a touch-only screen stranded. Proposed: a <b>Selection</b> segment on every Busk and Programmer row, written through a new <span class="mono">windows.follow</span> command.</p>
+</div>
+
+<div class="row" style="gap:32px; align-items:flex-start;">
+  <div class="panel" style="width:640px; flex:0 0 auto;">
+    <div class="hd">Screens <span style="flex:1"></span><span class="badge">3 windows</span></div>
+    <div class="bd">
+      <div class="wrow">
+        <div class="top"><span class="field" style="flex:1;">Screen 1</span><span class="badge">this window</span><span class="field">Busk ▾</span><button class="btn" type="button">Full screen</button></div>
+        <div class="opts">
+          <span class="opt">Focus <span class="seg"><span class="on">Split</span><span>Pads</span><span>Rig</span></span></span>
+          <span class="opt">Sheet <span class="seg"><span class="on">Speed</span><span>Colour</span><span>Spread</span><span>Show</span><span>—</span></span></span>
+          <span class="opt">Page <span class="seg"><span class="on">With the desk</span><span>Own</span></span> <span class="field" style="height:26px;font-size:12px;">Colour ▾</span></span>
+          <span class="opt">Selection <span class="seg"><span class="on">Desk</span><span>This window</span></span></span>
+        </div>
+      </div>
+      <div class="wrow">
+        <div class="top"><span class="field" style="flex:1;">Screen 2</span><span class="field">Busk ▾</span><button class="btn" type="button">Full screen</button></div>
+        <div class="opts">
+          <span class="opt">Focus <span class="seg"><span>Split</span><span class="on">Pads</span><span>Rig</span></span></span>
+          <span class="opt">Page <span class="seg"><span>With the desk</span><span class="on">Own</span></span> <span class="field" style="height:26px;font-size:12px;">Position ▾</span></span>
+          <span class="opt">Selection <span class="seg dis"><span class="on">Desk</span><span>This window</span></span> <span>Pads focus follows</span></span>
+        </div>
+      </div>
+      <div class="wrow">
+        <div class="top"><span class="field" style="flex:1;">iPad</span><span class="field">Programmer ▾</span></div>
+        <div class="opts">
+          <span class="opt">Chrome <span class="seg"><span class="on">App</span><span>Immersive</span></span></span>
+          <span class="opt">Selection <span class="seg"><span>Desk</span><span class="on">This window</span></span></span>
+        </div>
+      </div>
+      <p class="cap"><b>Page</b>: the segment replaces the <i>follows the desk / own page</i> caption and works both ways; the picker pages the group on a <i>With the desk</i> row and that window on an <i>Own</i> row. <b>Selection</b>: disabled with its reason in Rig and Pads, never hidden, so the row reads the same shape in every focus.</p>
+    </div>
+  </div>
+
+  <div class="col" style="flex:1; gap:20px;">
+    <div class="col" style="gap:8px;">
+      <div class="lbl">The selection mark, in Split — decision 8</div>
+      <div class="band"><span class="rl">RIG</span><span class="btn">Cells: All ▾</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">Spread</span><span class="btn">Locate</span><span class="btn">Clear</span><span class="pill" style="height:24px;">Colour</span><span class="badge" title="Following the desk selection">⛓</span><span class="gap"></span><span class="seg"><span class="on">Split</span><span>Pads</span><span>Rig</span></span></div>
+      <div class="band"><span class="rl">RIG</span><span class="btn">Cells: All ▾</span><span class="btn">‹</span><span class="btn">›</span><span class="btn">Spread</span><span class="btn">Locate</span><span class="btn">Clear</span><span class="pill local">Targets: <span>This window</span></span><span class="gap"></span><span class="seg"><span class="on">Split</span><span>Pads</span><span>Rig</span></span></div>
+      <p class="cap">Top: following — the link badge beside the family pill. Bottom: local — the dashed chip, whose press follows the desk again. In Pads and Rig only the badge is ever drawn, because those always follow.</p>
+    </div>
+    <div class="col" style="gap:8px;">
+      <div class="lbl">⌘K</div>
+      <div class="cmd">
+        <div class="q">follow</div>
+        <div class="g lbl">Screens</div>
+        <div class="it hi">Stop following the desk selection in this window <span class="det">Split</span></div>
+        <div class="it">Screen 2 · follow the desk selection <span class="det">own selection</span></div>
+        <div class="it">iPad · follow the desk selection <span class="det">own selection</span></div>
+      </div>
+      <p class="cap">The per-window arm is new and mirrors <i>Show &lt;view&gt; on &lt;window&gt;</i>. Paging gets the same pair per window: <i>Screen 2 · page with the desk</i> / <i>· own page</i>.</p>
+    </div>
+    <div class="col" style="gap:8px;">
+      <div class="lbl">MIDI — later</div>
+      <p class="cap"><span class="mono">SelectionFollowSet(windowName, on)</span>, <span class="mono">BuskFocusSet</span>'s twin. Not proposed now: a hardware door to a second station is a two-operator feature.</p>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
