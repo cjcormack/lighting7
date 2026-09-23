@@ -269,7 +269,7 @@ its done-marker here.
 - **Restart the desk** after it lands: a new route does not hot-swap. Session 2's Duplicate and
   Copy to… need it; sessions 1 and 3 do not.
 
-### Session 1 — the kit's library half, on Speed Masters (lighting-react)
+### ~~Session 1 — the kit's library half, on Speed Masters (lighting-react)~~ — done, lighting-react `042919f8`
 
 - Every piece in §3.1, the skipped-rows change to `useSheet` included — it changes what `write`
   receives on the three existing kit sheets too, so their tests are re-read against it (the cue
