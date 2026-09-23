@@ -58,6 +58,14 @@ The surface boards are drawn at **1180×820**, the list-shell record's iPad fram
 - **Template Value** mounts `TemplateEditor`'s own family controls and rows rules, lifted, not the
   editor kit's editors.
 
+## Corrected after the plan
+
+- **A cell with nothing to set is blank** (master 1's Follows, a follower's Start, a manual master's
+  Ratio, an effect template's Fade, a value template's Master). The boards drew a muted `·`; the
+  programmer draws such a cell blank, and Chris asked the library sheets to do what the programmer
+  does (2026-09-23, during session 1). `gen.mjs`'s `inertDash` is now empty and the Speed Masters and
+  Templates boards were regenerated.
+
 ## Regenerating
 
 `node gen.mjs` (Node LTS: `source ~/.nvm/nvm.sh && nvm use --lts`) rewrites every `.dc.html` and

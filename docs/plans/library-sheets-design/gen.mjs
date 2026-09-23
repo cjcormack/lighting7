@@ -419,7 +419,11 @@ const count = (n, icon = null, { zero = '—' } = {}) =>
   n === 0 ? `<span style="padding:0 8px; font-size:12px; color:oklch(0.705 0.015 286.067 / 0.45);">${zero}</span>` : `<span style="display:inline-flex; align-items:center; gap:5px; padding:0 8px; font-size:12px; color:${T.mfg}; font-variant-numeric:tabular-nums;">${icon ? ico(icon, 12) : ''}${n}</span>`
 const sw = (colour) => `<span style="width:14px; height:14px; border-radius:3px; background:${colour}; border:1px solid ${T.border}; flex:0 0 auto;"></span>`
 const swatches = (list) => `<span style="display:flex; gap:3px; padding:0 8px;">${list.map(sw).join('')}</span>`
-const inertDash = `<span style="flex:1; padding:0 8px; font-size:12px; color:oklch(0.705 0.015 286.067 / 0.35);">·</span>`
+// A cell with nothing to set (master 1's Follows, a follower's Start, a manual master's Ratio, an effect
+// template's Fade, a value template's Master) is **blank**, as the programmer draws a column a row resolves
+// nothing for (lighting-react `FixturesTable`) — no dot, no dash. The em-dash is the mark an empty but
+// *settable* cell wears; a second glyph for "nothing to set" read as a control that was merely unset.
+const inertDash = ''
 // The ReadOut button (lifted from CueSheet): a read-out whose display is a press.
 const readOutBtn = (label, { icon = null, dim = false } = {}) =>
   `<span style="display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; min-width:44px; margin:0 6px; padding:0 8px; border-radius:6px; border:1px solid ${T.border}; background:oklch(0.274 0.006 286.033 / 0.30); font-size:11px; font-weight:600; letter-spacing:0.04em; ${dim ? 'opacity:0.35;' : ''}">${icon ? ico(icon, 12) : ''}${label}</span>`
