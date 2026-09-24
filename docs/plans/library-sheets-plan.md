@@ -287,7 +287,7 @@ its done-marker here.
   unlinking are no longer the sheet's alone — the Follows column does both on this page, under the
   same rules (both halves or neither, never `bpm` beside them); the busk rail still only retunes.
 
-### Session 2 — Looks and Templates (lighting-react)
+### ~~Session 2 — Looks and Templates (lighting-react)~~ — done, lighting-react `dca9a1f9`
 
 - Both sheets on the kit (§3.2), with Value a read-out. `LookListRow`, `TemplateListRow` and both
   delete + in-use dialog pairs are deleted; `LookFamilyFilterBar` becomes `PartitionChips` (the
