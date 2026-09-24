@@ -303,7 +303,7 @@ its done-marker here.
   `CopyLookDialog`; now the scope's *Copy to…* does.
 - Needs session 0's restarted desk.
 
-### Session 3 — template values in the cell (lighting-react)
+### ~~Session 3 — template values in the cell (lighting-react)~~ — done, lighting-react `83243b2e`
 
 - Lift `FamilyControls` and its four family controls out of `TemplateEditor.tsx` into
   `components/templates/familyControls/` **together with the rows half**: `seedValues`
