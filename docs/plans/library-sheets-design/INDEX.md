@@ -10,7 +10,7 @@ and Channels sheets support. Then a multi-session plan in the usual style.
 
 **Status: all eight calls answered by Chris on 2026-09-23** (interactive); seven as drawn, the eighth
 — a template copy route in lighting7 rather than a client-side duplicate — redrawn the same day. The
-implementation plan is [`../library-sheets-plan.md`](../library-sheets-plan.md). The live copy of
+implementation plan is [`../completed/library-sheets-plan.md`](../completed/library-sheets-plan.md). The live copy of
 these boards is at <https://claude.ai/artifact/RFXrmBb8LGYJhsuYTgPh2F> — private to Chris, a
 convenience; the files here are the authority. Where a board and the plan disagree, the plan wins
 on behaviour and these files on layout and copy.
