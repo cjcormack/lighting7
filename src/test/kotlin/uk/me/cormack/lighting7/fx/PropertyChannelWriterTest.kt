@@ -5,6 +5,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripFixture
 import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.show.Fixtures
@@ -241,6 +242,53 @@ class PropertyChannelWriterTest {
         )
         val channels = PropertyChannelWriter.channelsFor(fx, "position")
         assertEquals(setOf(1, 2), channels.map { it.channel }.toSet())
+    }
+
+    // ─── propertyKeysByChannel (the channel-mapping frame's per-address keys) ─
+
+    private fun keysAt(
+        keys: Map<Pair<Int, Int>, List<CueAssignmentResolver.Key>>,
+        channel: Int,
+    ): Set<Pair<String, String>> =
+        keys[universe.universe to channel].orEmpty().map { it.targetKey to it.propertyName }.toSet()
+
+    @Test
+    fun `propertyKeysByChannel names a bundled emitter under both its slider and the colour`() {
+        // HexFixture: dimmer 1, R/G/B 2-4, amber 5, white 6, UV 7. `updateChannel` lifts an
+        // amber write to the `amber` slider; a cue colour lands on `rgbColour` — the DMX sheet
+        // has to ask about both to see either.
+        val keys = PropertyChannelWriter.propertyKeysByChannel(listOf(hex()))
+        assertEquals(setOf("hex-1" to "dimmer"), keysAt(keys, 1))
+        assertEquals(setOf("hex-1" to "rgbColour"), keysAt(keys, 2))
+        assertEquals(setOf("hex-1" to "amber", "hex-1" to "rgbColour"), keysAt(keys, 5))
+        assertEquals(setOf("hex-1" to "white", "hex-1" to "rgbColour"), keysAt(keys, 6))
+        assertEquals(setOf("hex-1" to "uv", "hex-1" to "rgbColour"), keysAt(keys, 7))
+    }
+
+    @Test
+    fun `propertyKeysByChannel names a pan axis under its slider and position`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(universe, "spot-1", "Spot 1", firstChannel = 1)
+        val keys = PropertyChannelWriter.propertyKeysByChannel(listOf(fx))
+        val pan = keysAt(keys, 1)
+        assertTrue("spot-1" to "position" in pan, "pan channel is half of position: $pan")
+        assertTrue(pan.any { it.second != "position" }, "and its own slider: $pan")
+    }
+
+    @Test
+    fun `propertyKeysByChannel reaches every element of a multi-head fixture`() {
+        // Mode48Ch: twelve RGBW pixels, 4 channels each. The white is a bundled slider the
+        // element descriptors omit — which is why the sheet's descriptor-built map missed it.
+        val bar = LedLightbar12PixelFixture.Mode48Ch(universe, "bar", "Bar", firstChannel = 1)
+        val keys = PropertyChannelWriter.propertyKeysByChannel(listOf(bar))
+        val pixel2 = bar.elements[2].elementKey
+        assertEquals(setOf(pixel2 to "rgbColour"), keysAt(keys, 9), "head 3 red")
+        assertEquals(setOf(pixel2 to "white", pixel2 to "rgbColour"), keysAt(keys, 12), "head 3 white")
+    }
+
+    @Test
+    fun `propertyKeysByChannel leaves an address no property covers out`() {
+        val keys = PropertyChannelWriter.propertyKeysByChannel(listOf(hex(firstChannel = 1)))
+        assertEquals(emptySet(), keysAt(keys, 100))
     }
 
     // ─── FixtureElement targeting (multi-element fixtures) ────────────────

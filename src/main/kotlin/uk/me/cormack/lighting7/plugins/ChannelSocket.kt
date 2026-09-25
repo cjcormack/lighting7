@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.plugins
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.dmx.DmxController
@@ -12,8 +13,11 @@ import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
+import java.lang.ref.WeakReference
+import java.util.concurrent.atomic.AtomicReference
 
 // ─── Inbound ────────────────────────────────────────────────────────────
 
@@ -65,11 +69,30 @@ data class UniversesStateOutMessage(
     val universes: List<Int>,
 ) : ChannelOutMessage()
 
+/** One `(target, property)` key that drives a DMX address — see [ChannelMappingEntry.properties]. */
+@Serializable
+data class ChannelPropertyKeyDto(
+    val targetKey: String,
+    val propertyName: String,
+)
+
 @Serializable
 data class ChannelMappingEntry(
     val fixtureKey: String,
     val fixtureName: String,
     val description: String,
+    /**
+     * Every property key whose channels include this address, from
+     * [PropertyChannelWriter.propertyKeysByChannel] — usually one, two where a bundled emitter
+     * or a pan/tilt axis is also part of `rgbColour` / `position`, and element keys on a
+     * multi-head fixture. The DMX sheet reads ownership through these, so it asks the desk's
+     * own property→channel lookup instead of re-deriving it from descriptors.
+     *
+     * `@EncodeDefault(ALWAYS)` because the WS `Json` drops defaults: an address no property
+     * covers must arrive as `[]`, not as the absent field an older desk sends.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val properties: List<ChannelPropertyKeyDto> = emptyList(),
 )
 
 @Serializable
@@ -228,16 +251,53 @@ internal fun buildChannelStateMessage(state: State): ChannelStateOutMessage {
 internal fun buildUniverseList(state: State): List<Int> =
     state.show.fixtures.controllers.map(DmxController::universe).map(Universe::universe).sortedBy { it }
 
-internal fun buildChannelMappingMessage(state: State): ChannelMappingStateOutMessage {
-    val mappings = state.show.fixtures.getChannelMappings()
-        .mapValues { (_, channels) ->
-            channels.mapValues { (_, mapping) ->
+internal fun buildChannelMappingMessage(state: State): ChannelMappingStateOutMessage =
+    buildChannelMappingMessage(state.show.fixtures)
+
+/**
+ * The last frame built, and the register and [Fixtures.structureVersion] it was built from. The
+ * register is held weakly so a project switch does not keep the old show's fixtures alive.
+ */
+private class CachedChannelMappings(
+    val fixtures: WeakReference<Fixtures>,
+    val version: Long,
+    val message: ChannelMappingStateOutMessage,
+)
+
+private val channelMappingCache = AtomicReference<CachedChannelMappings?>(null)
+
+/**
+ * The channel-mapping frame, **built once per register version** and shared.
+ *
+ * Every connected socket asks for this on connect and again on each `fixturesChanged`, and
+ * [PropertyChannelWriter.propertyKeysByChannel] is a reflective walk of every property of every
+ * fixture and head — so a patch edit with several desk screens open would repeat that walk once
+ * per socket. The frame depends only on the register, so it is cached against
+ * [Fixtures.structureVersion] and the [Fixtures] instance (a project switch builds a new one).
+ * A version bumped with nothing structural changed (`patchListChanged`) just rebuilds once.
+ *
+ * The fixtures and the mappings come from one [Fixtures.channelMappingSnapshot], so an address's
+ * `properties` and its fixture name cannot come from two different registers.
+ */
+internal fun buildChannelMappingMessage(fixtures: Fixtures): ChannelMappingStateOutMessage {
+    channelMappingCache.get()?.let { cached ->
+        if (cached.fixtures.get() === fixtures && cached.version == fixtures.structureVersion) return cached.message
+    }
+    val snapshot = fixtures.channelMappingSnapshot()
+    val keysByChannel = PropertyChannelWriter.propertyKeysByChannel(snapshot.fixtures)
+    val mappings = snapshot.mappings
+        .mapValues { (universe, channels) ->
+            channels.mapValues { (channel, mapping) ->
                 ChannelMappingEntry(
                     fixtureKey = mapping.fixtureKey,
                     fixtureName = mapping.fixtureName,
                     description = mapping.description,
+                    properties = keysByChannel[universe to channel].orEmpty()
+                        .map { ChannelPropertyKeyDto(it.targetKey, it.propertyName) },
                 )
             }
         }
-    return ChannelMappingStateOutMessage(mappings)
+    val message = ChannelMappingStateOutMessage(mappings)
+    channelMappingCache.set(CachedChannelMappings(WeakReference(fixtures), snapshot.version, message))
+    return message
 }

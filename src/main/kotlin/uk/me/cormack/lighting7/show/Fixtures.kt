@@ -336,12 +336,37 @@ class Fixtures {
      * Returns Map<universe, Map<channel, ChannelMapping>>
      */
     fun getChannelMappings(): Map<Int, Map<Int, ChannelMapping>> = registerLock.read {
+        channelMappingsByUniverse()
+    }
+
+    /**
+     * The fixture list and the channel mappings from **one** read of the register, stamped
+     * with the [structureVersion] they were read at — for a caller that joins the two, as the
+     * channel-mapping frame does (every address's `properties` comes from walking the fixtures,
+     * then lands on that address's mapping). Two separate reads could straddle a [register]
+     * and pair one register's keys with the other's mappings.
+     *
+     * The version is read under the lock, which is safe in either order: [register] bumps it
+     * inside the write lock, after the mutation, so no reader can see the two disagree.
+     */
+    fun channelMappingSnapshot(): ChannelMappingSnapshot = registerLock.read {
+        ChannelMappingSnapshot(structureVersion, fixtureRegister.values.toList(), channelMappingsByUniverse())
+    }
+
+    /** What [channelMappingSnapshot] read, and the [structureVersion] it was read at. */
+    data class ChannelMappingSnapshot(
+        val version: Long,
+        val fixtures: List<Fixture>,
+        val mappings: Map<Int, Map<Int, ChannelMapping>>,
+    )
+
+    /** Callers must hold [registerLock]. */
+    private fun channelMappingsByUniverse(): Map<Int, Map<Int, ChannelMapping>> =
         channelMappings.entries
             .groupBy { it.key.split(":")[0].toInt() }
             .mapValues { (_, entries) ->
                 entries.associate { it.key.split(":")[1].toInt() to it.value }
             }
-    }
 
     /**
      * Get a typed fixture group by name (untyped version).

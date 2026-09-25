@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -95,6 +96,43 @@ object PropertyChannelWriter {
             )
             else -> emptyList()
         }
+    }
+
+    /**
+     * Every property key whose channels include each DMX address, over [fixtures] and every
+     * element of the multi-head ones among them — [channelsFor] inverted, keyed by
+     * `(universe, channel)`.
+     *
+     * An address is routinely driven through **more than one** key, and that is the point of
+     * returning a list: a bundled amber is both its own `amber` slider and a component of
+     * `rgbColour`; a mover's pan axis is both its `pan` slider and half of `position`. Which one
+     * owns the address depends on which layer wrote it — `updateChannel` lifts to the slider,
+     * a cue colour lands on `rgbColour`, a cue position on `position` — so a reader asking
+     * "who owns this channel" has to ask about all of them. The channel-mapping frame carries
+     * this so the DMX sheet can ask, rather than rebuilding the lookup from descriptors that
+     * omit bundled emitters and name no element's white.
+     *
+     * Keys are in property-catalogue order per fixture, `position` last, deduplicated.
+     */
+    fun propertyKeysByChannel(
+        fixtures: Iterable<Fixture>,
+    ): Map<Pair<Int, Int>, List<CueAssignmentResolver.Key>> {
+        val byChannel = LinkedHashMap<Pair<Int, Int>, LinkedHashSet<CueAssignmentResolver.Key>>()
+        fun visit(target: GroupableFixture) {
+            val names = resolvedProperties(target).map { it.name } +
+                if (target is WithPosition) listOf("position") else emptyList()
+            for (name in names.distinct()) {
+                val key = CueAssignmentResolver.Key.fixture(target.targetKey, name)
+                for (write in channelsFor(target, name)) {
+                    byChannel.getOrPut(write.universe.universe to write.channel) { LinkedHashSet() }.add(key)
+                }
+            }
+        }
+        for (fixture in fixtures) {
+            visit(fixture)
+            if (fixture is MultiElementFixture<*>) fixture.elements.forEach { visit(it) }
+        }
+        return byChannel.mapValues { (_, keys) -> keys.toList() }
     }
 
     /**

@@ -552,7 +552,7 @@ listener has already queued a `transition = true` frame for.
 |---|---|---|
 | `channelState` | `channels: [{universe, id, currentLevel}]` | Connect snapshot (whole buffer, parked values overlaid), then per-change deltas |
 | `universesState` | `universes: [Int]` | Connect snapshot; on `controllersChanged` |
-| `channelMappingState` | `mappings: {universe: {channel: {fixtureKey, fixtureName, description}}}` | Connect snapshot; after `fixturesChanged` |
+| `channelMappingState` | `mappings: {universe: {channel: {fixtureKey, fixtureName, description, properties: [{targetKey, propertyName}]}}}` — `properties` is every key whose channels include the address (`PropertyChannelWriter.propertyKeysByChannel`), always sent (`[]` when nothing covers it); a desk older than the field omits it, and the DMX sheet then reads every address as baseline | Connect snapshot; after `fixturesChanged`. Built once per `Fixtures.structureVersion` and shared across sockets |
 
 ### Park — `ParkSocket.kt`
 
