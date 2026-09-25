@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Lock, LockOpen, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -24,11 +24,15 @@ import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import type { ChannelMappingEntry, ChannelPropertyKey } from '@/api/channelMappingApi'
 import type { ProgrammerChannelEntry, ProgrammerKeyState } from '@/api/programmerWsApi'
 
-/** The row head, 48px, and the floor a cell needs to hold `001 Front PAR` over a value. */
+/** The row head, 48px, and the floor a cell needs to hold an address, a name, a use and a value. */
 const ROW_HEAD_WIDTH = 48
 const MIN_CELL_WIDTH = 64
-/** The DMX sheet's cells carry two lines, so its rows are 44 rather than 36. */
-export const DMX_ROW_HEIGHT = 44
+/**
+ * The DMX sheet's cells carry three lines — the address beside the value, the fixture's name, the
+ * channel's use — so its rows are 56 rather than the kit's 36. Every size that depends on it (the
+ * virtualiser, the marquee's row bands, the row boxes) reads it off `SheetTable`'s `rowHeight`.
+ */
+export const DMX_ROW_HEIGHT = 56
 
 /**
  * **How many addresses a row holds, widest first** — sixteen on a desk, eight on a tablet, four on
@@ -230,30 +234,142 @@ function useChannelOwnership(
   }, [blind, keys, parked, sideband, states])
 }
 
-/** The face and the live value of one address, subscribed per cell. */
-const DmxCell = memo(function DmxCell({
-  universe,
-  channelNo,
-  mapping,
-  first,
-  tint,
-  parkedValue,
-  props,
-}: {
+/** An address as the sheet writes it everywhere — the row head, the face and the hover: `007`. */
+function formatAddress(channelNo: number): string {
+  return String(channelNo).padStart(3, '0')
+}
+
+/**
+ * **A long fixture name or use loses its beginning, not its end** — the end is the part that tells
+ * two apart: a fixture's number, a head's colour. The box is laid out right-to-left, so it
+ * overflows off its left edge, and aligned left so a short name still reads from the left like its
+ * neighbours. The text sits in an LTR isolate, or the bidi algorithm would move a trailing `)` or
+ * `.` to the front of an RTL line.
+ *
+ * **The cut edge fades rather than taking an ellipsis.** `text-overflow` cuts at a character, and
+ * where that character was a space the line began `… Lightbar` — a gap after the mark that read as
+ * a rendering fault. A fade has no first character to get wrong. It is drawn only on a line that
+ * actually overflows (`data-overflow`, kept by `LeadingCut`), or every short name would lose the
+ * start of its first letter.
+ *
+ * `TruncateStart` is the app's other start-clipped line (the cue numbers), and it is not reused
+ * here on purpose: it shortens the string on a canvas to what fits and draws an ellipsis, which is
+ * the character-exact cut this sheet chose the fade over — and it re-renders its own state per
+ * line, where this sheet draws ~400 of them.
+ */
+const LEADING_CUT_CLASS =
+  '[direction:rtl] overflow-hidden text-left data-[overflow=true]:[mask-image:linear-gradient(to_right,transparent,#000_12px)]'
+
+/** A face's two cut lines, merged once rather than per render — they are on every cell. */
+const NAME_LINE_CLASS = cn(
+  'block h-[11px] whitespace-nowrap text-[9.5px] leading-[11px] text-muted-foreground',
+  LEADING_CUT_CLASS,
+)
+const USE_LINE_CLASS = cn('block h-3 whitespace-nowrap text-[10px] leading-3 text-foreground/60', LEADING_CUT_CLASS)
+
+/**
+ * One `ResizeObserver` for every cut line on the sheet — a desk draws ~400 of them, and one observer
+ * with many targets batches its callbacks where one observer per line would not. That is also why
+ * this is not `useScrollEdges`, which asks the same `scrollWidth > clientWidth` question: it holds a
+ * state and an observer per element, the cost this avoids at this sheet's scale.
+ *
+ * Each line is watched twice: its **box**, which moves with the container and with the value beside
+ * it (`0` → `211`), and its **text** (the isolate, `inline-block` so it has a box to observe), which
+ * moves when the text, the font or the zoom does. Either answers the same question of the line.
+ */
+let overflowObserver: ResizeObserver | null = null
+function markOverflow(line: Element) {
+  if (line.scrollWidth > line.clientWidth) line.setAttribute('data-overflow', 'true')
+  else line.removeAttribute('data-overflow')
+}
+/** The observer's callback, on its own so a test can hand it entries. */
+export function markOverflowEntries(entries: readonly Pick<ResizeObserverEntry, 'target'>[]) {
+  for (const { target } of entries) {
+    const line = target.hasAttribute('data-leading-cut') ? target : target.parentElement
+    if (line) markOverflow(line)
+  }
+}
+function sharedOverflowObserver(): ResizeObserver | null {
+  if (overflowObserver || typeof ResizeObserver === 'undefined') return overflowObserver
+  overflowObserver = new ResizeObserver(markOverflowEntries)
+  return overflowObserver
+}
+/** Drops the shared observer, so the next line to mount builds one from the current global. For tests. */
+export function resetOverflowObserver() {
+  overflowObserver?.disconnect()
+  overflowObserver = null
+}
+
+/**
+ * Keeps `data-overflow` on the line while its text is wider than its box, and off it otherwise.
+ * Written straight to the DOM rather than through state: it is a styling hook the line alone reads,
+ * and a state per line would re-render ~400 cells on every container resize. A line whose node is
+ * recreated is a fresh mount, so this effect marks it again.
+ *
+ * `className` is one of the two merged constants above; nothing is merged here.
+ */
+function LeadingCut({ className, text }: { className: string; text: string | undefined }) {
+  const lineRef = useRef<HTMLSpanElement>(null)
+  const textRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    const line = lineRef.current
+    if (!line) return
+    // An empty line cannot overflow, so it is not watched — an unpatched address has two, and most
+    // of a universe is unpatched. It may have been overflowing a moment ago, so it is cleared.
+    if (!text) {
+      line.removeAttribute('data-overflow')
+      return
+    }
+    // Before paint, and not left to the observer: its first callback lands after the frame is
+    // drawn, so a long name would paint once cut hard and then fade.
+    markOverflow(line)
+    const observer = sharedOverflowObserver()
+    const inner = textRef.current
+    observer?.observe(line)
+    if (inner) observer?.observe(inner)
+    return () => {
+      observer?.unobserve(line)
+      if (inner) observer?.unobserve(inner)
+    }
+  }, [text])
+  return (
+    <span ref={lineRef} className={className} data-leading-cut>
+      {text ? (
+        <bdi ref={textRef} dir="ltr" className="inline-block">
+          {text}
+        </bdi>
+      ) : null}
+    </span>
+  )
+}
+
+/**
+ * What the face reads, and nothing else — `DmxCell` is memoised, and a field it never reads would
+ * still be compared on every render. The wrapper's own fields are `DmxCellWithOwnership`'s.
+ */
+interface DmxFaceProps {
   universe: number
   channelNo: number
   mapping: ChannelMappingEntry | undefined
-  first: boolean
-  tint: boolean
-  /** Read by the wrapper's ownership hook, not by the face. */
-  keys: readonly ChannelPropertyKey[]
-  /** Read by the wrapper's ownership hook, not by the face. */
-  sideband: ProgrammerChannelEntry | undefined
-  /** Read by the wrapper's ownership hook, not by the face. */
-  blind: boolean
   parkedValue: number | undefined
   props: Omit<React.ComponentProps<typeof LevelCell>, 'value' | 'face'>
-}) {
+}
+
+/**
+ * The face and the live value of one address, subscribed per cell: the address with the value in
+ * the top-right corner, then the fixture's name, then the channel's use. The value is the one large
+ * type and never shares its line with text that could be cut; the name repeats across the whole
+ * run, so it is the quietest line, and the use — what changes from cell to cell — a step louder. Every patched
+ * cell carries the name, so no cell of a run is drawn louder than another; a long name or use is
+ * cut at its beginning, fading in (`LeadingCut`), and the wrapper's hover says all of it.
+ *
+ * **The face paints no background.** The ownership ring is an inset `box-shadow` on the wrapper
+ * around this, and an element's own shadow paints beneath its children — so a background here
+ * covers the ring and its fill. The alternating footprint tint that used to sit here did exactly
+ * that: an owned address on a tinted run read as a fainter owner than the same state beside it.
+ * A fixture's footprint is the run edge the wrapper draws instead, in the gutter outside the ring.
+ */
+const DmxCell = memo(function DmxCell({ universe, channelNo, mapping, parkedValue, props }: DmxFaceProps) {
   const live = useChannelValue({ universe, channelNo })
   const parked = parkedValue !== undefined
   const shown = parked ? parkedValue : live
@@ -264,29 +380,25 @@ const DmxCell = memo(function DmxCell({
       label="Value"
       value={live}
       face={
-        <span
-          className={cn(
-            'flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden rounded px-1.5',
-            tint && 'bg-card/55',
-          )}
-        >
-          <span className="flex items-center gap-1 whitespace-nowrap text-[9.5px] leading-none text-muted-foreground">
-            <span className={cn('shrink-0 font-mono tabular-nums', first && 'font-semibold text-foreground')}>
-              {String(channelNo).padStart(3, '0')}
+        <span className="flex h-full w-full flex-col justify-center gap-0.5 overflow-hidden px-1.5">
+          {/* Every line is drawn filled or not, so an unpatched address's lines sit where its
+              neighbours' do. */}
+          <span className="flex items-baseline justify-between gap-1">
+            <span className="font-mono text-[9.5px] font-semibold leading-none tabular-nums text-foreground/75">
+              {formatAddress(channelNo)}
             </span>
-            <span className={cn('truncate', first && 'text-foreground')}>
-              {mapping ? (first ? mapping.fixtureName : mapping.description) : ''}
+            <span
+              className={cn(
+                'shrink-0 font-mono text-sm leading-none tabular-nums',
+                parked ? 'font-medium text-amber-600 dark:text-amber-400' : shown > 0 ? 'font-semibold' : 'text-muted-foreground',
+                !mapping && 'text-muted-foreground/40',
+              )}
+            >
+              {shown}
             </span>
           </span>
-          <span
-            className={cn(
-              'font-mono text-sm leading-none tabular-nums',
-              parked ? 'font-medium text-amber-600 dark:text-amber-400' : shown > 0 ? 'font-semibold' : 'text-muted-foreground',
-              !mapping && 'text-muted-foreground/40',
-            )}
-          >
-            {shown}
-          </span>
+          <LeadingCut className={NAME_LINE_CLASS} text={mapping?.fixtureName} />
+          <LeadingCut className={USE_LINE_CLASS} text={mapping?.description} />
         </span>
       }
     />
@@ -294,10 +406,10 @@ const DmxCell = memo(function DmxCell({
 })
 
 /**
- * The DMX sheet — one universe's 512 addresses as a 16-wide grid of 44px cells
- * (CLAUDE.md §Sheet kit): address and attribute on the first line, the raw 0–255 value on the
- * second, a fixture's footprint tinted as a run and named on its first cell, ownership rings as
- * the programmer's. Every cell is the same trigger: a marquee across `007`–`014` selects eight,
+ * The DMX sheet — one universe's 512 addresses as a 16-wide grid of 56px cells
+ * (CLAUDE.md §Sheet kit): the address with the raw 0–255 value in the top-right corner, the
+ * fixture's name, the channel's use, a run edge where each fixture's footprint
+ * begins, ownership rings as the programmer's. Every cell is the same trigger: a marquee across `007`–`014` selects eight,
  * and ⏎, a double click or typing opens one slider for all of them.
  *
  * The grid has no row axis — a press on the row head is a press on nothing — so the selection
@@ -339,23 +451,18 @@ export function DmxSheet({
     [columnCount],
   )
 
-  // A fixture's footprint is a run of consecutive addresses with one fixture key; its first cell
-  // carries the name, and alternate runs are tinted so the reading eye can tell them apart.
-  const runs = useMemo(() => {
-    const first = new Set<number>()
-    const tinted = new Set<number>()
+  // A fixture's footprint is a run of consecutive addresses with one fixture key. Every cell names
+  // its fixture, so what is left to mark is where one footprint ends and the next begins — two of
+  // one model side by side (a pair of pars at 001 and 013) read as one run without it.
+  const runStarts = useMemo(() => {
+    const starts = new Set<number>()
     let previous: string | undefined
-    let index = -1
     for (let n = 1; n <= 512; n++) {
       const key = mappings?.[n]?.fixtureKey
-      if (key && key !== previous) {
-        first.add(n)
-        index += 1
-      }
-      if (key && index % 2 === 0) tinted.add(n)
+      if (key && key !== previous) starts.add(n)
       previous = key
     }
-    return { first, tinted }
+    return starts
   }, [mappings])
 
   const write = useCallback(
@@ -386,8 +493,7 @@ export function DmxSheet({
               universe={universe}
               channelNo={channelNo}
               mapping={mappings?.[channelNo]}
-              first={runs.first.has(channelNo)}
-              tint={runs.tinted.has(channelNo)}
+              runStart={runStarts.has(channelNo)}
               keys={mappings?.[channelNo]?.properties ?? NO_KEYS}
               sideband={sideband.get(channelNo)}
               blind={blind}
@@ -405,7 +511,7 @@ export function DmxSheet({
           for (const row of rows) write(row.base + i, 0)
         },
       })),
-    [blind, columnKeys, mappings, parkValueMap, runs, sideband, universe, write],
+    [blind, columnKeys, mappings, parkValueMap, runStarts, sideband, universe, write],
   )
 
   const copy = useCallback(
@@ -576,7 +682,7 @@ export function DmxSheet({
           cellLabel={cellCount > 0 ? `${cellCount} channel${cellCount === 1 ? '' : 's'}` : null}
           cellTitle={
             selectedChannels.length > 0
-              ? `${universe}-${String(selectedChannels[0]).padStart(3, '0')} to ${universe}-${String(selectedChannels[selectedChannels.length - 1]).padStart(3, '0')} — edit once, applies to all`
+              ? `${universe}-${formatAddress(selectedChannels[0])} to ${universe}-${formatAddress(selectedChannels[selectedChannels.length - 1])} — edit once, applies to all`
               : undefined
           }
           family={cellCount > 0 ? 'Value' : null}
@@ -594,7 +700,7 @@ export function DmxSheet({
           width: `${ROW_HEAD_WIDTH}px`,
           render: (row) => (
             <span className="relative font-mono text-[11px] tabular-nums text-muted-foreground">
-              {String(row.base).padStart(3, '0')}
+              {formatAddress(row.base)}
             </span>
           ),
         }}
@@ -625,12 +731,51 @@ export function DmxSheet({
   )
 }
 
-/** A cell with its ownership ring read per address — a hook per cell, so it cannot live in the column closure. */
-function DmxCellWithOwnership(props: React.ComponentProps<typeof DmxCell>) {
-  const ownership = useChannelOwnership(props.keys, props.sideband, props.parkedValue !== undefined, props.blind)
+/**
+ * A cell with its ownership ring read per address — a hook per cell, so it cannot live in the
+ * column closure.
+ *
+ * The ring and its fill are the inner wrapper's, and nothing inside it paints a background (see
+ * `DmxCell`). The run edge is drawn *outside* the ring's box: the kit pads a gutterless cell 2px all
+ * round (`SheetColumn.gutter`), and the selection overlay is inset by the same 2px, so a 2px bar in
+ * that padding sits beside both rather than over either.
+ */
+function DmxCellWithOwnership({
+  runStart,
+  keys,
+  sideband,
+  blind,
+  ...face
+}: DmxFaceProps & {
+  /** The first address of a fixture's footprint — draws the run edge. */
+  runStart: boolean
+  /** Every property the desk says drives this address — read by the ownership hook. */
+  keys: readonly ChannelPropertyKey[]
+  sideband: ProgrammerChannelEntry | undefined
+  blind: boolean
+}) {
+  const { channelNo, mapping, parkedValue } = face
+  const ownership = useChannelOwnership(keys, sideband, parkedValue !== undefined, blind)
+  // Hover-only, and this wrapper is not memoised — so built once per change of what it names.
+  const title = useMemo(() => {
+    const address = formatAddress(channelNo)
+    const what = mapping ? [address, mapping.fixtureName, mapping.description].filter(Boolean).join(' · ') : `${address} · Unpatched`
+    return ownership.source !== 'baseline' ? `${what} — ${OWNERSHIP_LABELS[ownership.source]}` : what
+  }, [channelNo, mapping, ownership.source])
+  // The edge is a sibling of the ownership wrapper, not its child: the baseline dim is an opacity on
+  // that wrapper, and a footprint does not fade because nothing happens to be driving it.
   return (
-    <div className={cn('h-full', ownershipCellClass(ownership))} title={ownership.source !== 'baseline' ? OWNERSHIP_LABELS[ownership.source] : undefined}>
-      <DmxCell {...props} />
+    <div className="relative h-full" title={title}>
+      {runStart && (
+        <span
+          aria-hidden="true"
+          data-run-edge
+          className="pointer-events-none absolute inset-y-0.5 -left-0.5 w-0.5 rounded-full bg-muted-foreground/60"
+        />
+      )}
+      <div data-ownership className={cn('h-full', ownershipCellClass(ownership))}>
+        <DmxCell {...face} />
+      </div>
     </div>
   )
 }

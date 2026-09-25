@@ -25,7 +25,7 @@ import { useRevealCell } from './revealCell'
 import type { CellOpenRequest } from './useCellEditorRequests'
 import { batchLabelOf, type SheetCellProps, type SheetColumn, type SheetRow } from './sheetModel'
 
-/** Every row of every sheet is 36px, the DMX sheet's 44 — see `rowHeight`. */
+/** Every row of every sheet is 36px, the DMX sheet's 56 — see `rowHeight`. */
 export const SHEET_ROW_HEIGHT = 36
 import {
   SHEET_DIVIDER_CLASS,
@@ -79,7 +79,7 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
    * False is the DMX sheet, where every press is a cell press. Defaults to true.
    */
   selectsRows?: boolean
-  /** The height of every row, dividers included. 36 everywhere but the DMX sheet's 44. */
+  /** The height of every row, dividers included. 36 everywhere but the DMX sheet's 56. */
   rowHeight?: number
   /** Below this the table needs its columns' minimum widths; the sum of the tracks' floors. */
   minWidth?: string

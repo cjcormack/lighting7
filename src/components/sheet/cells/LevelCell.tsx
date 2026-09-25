@@ -10,7 +10,7 @@ import { useEditorOpen } from '../../editor/useEditorOpen'
 import type { SheetCellProps } from '../sheetModel'
 
 export interface LevelCellProps extends SheetCellProps<number> {
-  /** What the cell shows — the DMX sheet's two lines, a fill bar. */
+  /** What the cell shows — the DMX sheet's three lines, a fill bar. */
   face: ReactNode
   min?: number
   max?: number

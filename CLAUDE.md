@@ -2108,7 +2108,7 @@ but a cue's name, notes and fade are all one string, so each surface column name
 typed into Fade over a Fade→Follow marquee cannot switch auto-advance on. A read-out column hangs
 no `data-column-header`, so a marquee never selects it. `useSheet` is the container half — one selection in two shapes, the keyboard, the editor
 requests, the throttled commit, the batch count — and `SheetTable` the anatomy: 30px uppercase
-header, 36px rows (44 on the DMX sheet), a sticky first column with the 3px selection edge, the
+header, 36px rows (56 on the DMX sheet), a sticky first column with the 3px selection edge, the
 same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
 `data-grid-name-header`, `data-row-id`, `data-cell`). Four kit cells go through
 `EditorSurface`, so they get the three forms and the double click for free: `TextCell`
@@ -2326,9 +2326,10 @@ Three surface rules, each pinned by its test:
   `cells/LandingLines.tsx` until the editor kit — shared by the address editor and the Key column,
   rather than joined with `·` into a paragraph read at the worst moment.
 - **DMX sheet** (`DmxSheet.test.tsx`): `/projects/:id/channels/:universe/table`, sticky key
-  `channels.view`, a grid of 44px cells — address and attribute on line one (the fixture
-  name on the first cell of its footprint, the run tinted), the raw 0–255 value on line two,
-  ownership rings read through the desk's own keys for the address (below). No row axis: the row head
+  `channels.view`, a grid of 56px cells — the address with the raw 0–255 value in the top-right
+  corner, then the fixture's name, then the channel's use, on **every** patched cell alike (no
+  first-cell emphasis), a 2px run edge where each fixture's footprint begins, and ownership rings
+  read through the desk's own keys for the address (below). No row axis: the row head
   hangs no `data-grid-name-header`, so every press is a cell press, the arrows always walk the
   cells — `cellFlow: 'linear'`, so a plain ← / → wraps `016 → 017`, ↑ / ↓ are ± the row width in
   whichever arm is showing, the ends are `001` and `512`, and Shift grows a rectangle (↓ then →
@@ -2336,6 +2337,25 @@ Three surface rules, each pinned by its test:
   over every selected cell in address order (an address has no intent for the desk to resolve). Writes are `channels.update` per address; Clear is 0; Park /
   Unpark act on the selection; the desk being offline is the read-only scope; Unpark All keeps its
   confirm and there is no Edit/Done toggle. Raw 0–255 only, no level bar — left for later.
+
+  **A cell's face paints no background, and that is what keeps its ring honest.** The ownership
+  ring is an inset `box-shadow` on a wrapper around the face, and an element's own shadow paints
+  *beneath* its children — so a background on the face covers the ring and its fill. The alternating
+  footprint tint that sat there did exactly that: an owned address on a tinted run read as a fainter
+  owner than the same state beside it. The footprint is the run edge now, drawn in the 2px padding
+  outside both the ring and the selection overlay, and as a sibling of the ownership wrapper so the
+  baseline dim does not fade it. `DmxSheet.test.tsx` pins that nothing under the ring carries a
+  `bg-` class.
+
+  **A long name or use is cut at its beginning, and fades rather than taking an ellipsis** — the
+  end is what tells two apart (a fixture's number, a head's colour). The line is laid out right-to-left so it
+  overflows off its left edge, aligned left, around an LTR `<bdi>`; `text-overflow` cuts at a
+  character, and one landing on a space drew `… Lightbar`, so the edge is a mask instead, drawn only
+  while `data-overflow` says the line overflows. That flag is written to the DOM by one shared
+  `ResizeObserver` watching each line's box *and* its text (`inline-block`, so it has a box), never
+  through state — a state per line would re-render ~400 cells on a resize. The cell's hover carries
+  all of it (`025 · LED Lightbar 12 Pixel · Strobe — Programmer`). Fixture names, not keys: on a
+  desk that minted its keys from names they are no shorter.
 
   **A row is 16 addresses wide on a desk, 8 on a tablet and 4 on a phone** — `DMX_ROW_WIDTHS`, the
   widest arm whose `48 + 64 × n` the container can draw without scrolling sideways, measured by
@@ -2456,7 +2476,7 @@ is the file-by-file map; the five open calls are made on `Spec` under "Called �
 The rules the two files encode, each of which was a measured inconsistency before them: a list is a
 full-height column filling `<main>` — **no `Card`, no page scroll, the sheet is the only scroller**;
 a 12px gutter on every row; header 48, every other chrome row 40 with 32px controls, footer 22, sheet
-header 30 and rows 36 (44 on the DMX sheet); **three grounds** — the page (`<main>`'s `bg-muted/40`,
+header 30 and rows 36 (56 on the DMX sheet); **three grounds** — the page (`<main>`'s `bg-muted/40`,
 which every chrome row sits on with no ground of its own), the sheet (`bg-background` on the header
 row, the sticky column and the body alike, so a name column can never read darker than its cells)
 and a divider row (`bg-muted/30`); and **one line between neighbours** — a chrome row owns its

@@ -55,7 +55,7 @@ export const SHEET_HEADER_CELL_CLASS =
 /** The sticky first column's cell, header and row alike: opaque, on the sheet ground. */
 export const SHEET_STICKY_CELL_CLASS = 'sticky left-0 z-10 bg-background'
 
-/** A row: 36px (44 on the DMX sheet), one line under it, the selection wash or the hover. */
+/** A row: 36px (56 on the DMX sheet), one line under it, the selection wash or the hover. */
 export const SHEET_ROW_CLASS = 'group/row grid h-full border-b border-border text-sm'
 
 /** A divider row — Ungrouped, a separator. The one tinted row in a sheet. */
