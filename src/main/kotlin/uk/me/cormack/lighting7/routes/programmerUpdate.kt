@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
@@ -88,18 +89,36 @@ internal fun changedSinceInclude(
     // `allowElements`: both destinations can hold a cell — a cue as a cell-target row, a Look as
     // an element row — so a nudged head comes back through Update as the row it was included as.
     val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
-    val changed = entries.filter { entry ->
+    val changed = entries.filterTo(LinkedHashSet()) { entry ->
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
             // New since Include — the operator adding a fixture to the cue.
-            ?: return@filter true
+            ?: return@filterTo true
         // A plain value comparison since the `ref:` grammar retired. It used to also compare
         // reference *identity*, because a ref resolves to exactly the literal it was included as, so
         // a value-only test would write an untouched ref back and harden it. Nothing can hold a
         // reference now, and the surviving half of the mechanism — an INCLUDE slot outliving later
         // writes, so an untouched positional `"P1"` row stays `"P1"` — is unaffected.
-        included.resolved != entry.value
+        //
+        // Against the slot's own value, not the bundle-reconciled one: a cue whose colour row and
+        // emitter row disagree would otherwise read as changed the moment it was included, and
+        // Update would rewrite a row the operator never touched.
+        included.resolved != (entry.reconciledFrom ?: entry.value)
     }
-    return changed to skips
+    // An emitter an operator's newer colour overrode must go back too, carrying the colour's
+    // component — playback lets the emitter's own row win, so leaving it would play back the old W.
+    // "Its colour" is the bundle's own ([FixturePropertyCatalogue.Entry.colour]), not a colour macro.
+    val fixtures = state.show.fixtures
+    val colourChanged = changed.mapNotNullTo(HashSet()) { entry ->
+        val fixture = runCatching { fixtures.untypedGroupableFixture(entry.fixtureKey) }.getOrNull()
+            ?: return@mapNotNullTo null
+        entry.fixtureKey.takeIf { entry.propertyName == FixturePropertyCatalogue.of(fixture::class).colour?.name }
+    }
+    val overridden = entries.filter { entry ->
+        entry !in changed &&
+            entry.reconciledFrom is CueAssignmentResolver.PropertyValue.Slider &&
+            entry.fixtureKey in colourChanged
+    }
+    return (changed + overridden).let { set -> entries.filter { it in set } } to skips
 }
 
 /**

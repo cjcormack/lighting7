@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.dmx.Gear4MusicOrbit70Fixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.ImgStageLineWash42LedFixture
 import uk.me.cormack.lighting7.fixture.dmx.LaserworldCS1000RGBMk3Fixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fixture.dmx.Scantastic4Fixture
@@ -195,6 +197,20 @@ class FixturePropertyCatalogueTest {
             assertEquals(listOf("dimmer"), entries.first().all.map { it.name })
         } finally {
             pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `colour is the RGB colour, not a colour macro that is also COLOUR-category`() {
+        // The bundle's colour — whose ExtendedColour carries the emitters' W/A/UV — must not be a
+        // wheel/macro setting that merely shares the category, whatever order reflection yields.
+        for (klass in listOf(
+            ImgStageLineWash42LedFixture.Mode13Ch::class,
+            Gear4MusicOrbit70Fixture.Mode13Ch::class,
+            LedLightbar12PixelFixture.Mode12Ch::class,
+            HexFixture::class,
+        )) {
+            assertEquals("rgbColour", FixturePropertyCatalogue.of(klass).colour?.name, "$klass")
         }
     }
 }

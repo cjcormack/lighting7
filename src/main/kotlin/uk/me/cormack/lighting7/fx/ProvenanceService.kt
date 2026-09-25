@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.concurrent.atomic.AtomicBoolean
@@ -43,6 +45,27 @@ data class ProvenanceEntry(
      * polymorphic in session 3, and a field called `lookName` holding a template's name would
      * be a lie the compiler could not find.
      */
+    val layerSource: LayerSource? = null,
+    /**
+     * For a cue-won **colour** whose W / A / UV came from a bundled emitter's own row, one entry per
+     * such emitter, naming *its* winner — empty otherwise.
+     *
+     * Layer 4 lets an emitter's row replace the colour's copy of it
+     * (`CueAssignmentResolver.reconcileBundledEmitters`), so a colour can carry bytes from two
+     * contributors: RGB from the one [cueId] / [layerId] name, the emitter's component from
+     * another. One winner per key cannot say that, and "why is this fixture this colour?" would
+     * credit the colour's cue with a white it never asserted.
+     */
+    val bundled: List<BundledProvenance> = emptyList(),
+)
+
+/** One bundled emitter's contribution to a reconciled colour — see [ProvenanceEntry.bundled]. */
+data class BundledProvenance(
+    /** The emitter property (`white`, `amber`, `uv`) whose own row supplied the component. */
+    val propertyName: String,
+    val cueId: Int? = null,
+    val cueStackId: Int? = null,
+    val layerId: Int? = null,
     val layerSource: LayerSource? = null,
 )
 
@@ -281,6 +304,7 @@ class ProvenanceService internal constructor(
                         cueStackId = winningCueId?.let { cueStackIdFor(it) },
                         layerId = layer?.layerId,
                         layerSource = layer?.source,
+                        bundled = bundledProvenance(fixture, key, cueLayer),
                     )
                 }
                 else -> continue
@@ -289,6 +313,34 @@ class ProvenanceService internal constructor(
         }
         entries.sortWith(compareBy({ it.targetKey }, { it.propertyName }))
         return entries
+    }
+
+    /**
+     * The emitters whose own Layer 4 rows replaced components of [key]'s colour — exactly the pairs
+     * `CueAssignmentResolver.reconcileBundledEmitters` reconciled, found the same way: [key] is the
+     * bundle's colour on this class, and the emitter's key is composed beside it.
+     */
+    private fun bundledProvenance(
+        fixture: GroupableFixture,
+        key: CueAssignmentResolver.Key,
+        cueLayer: LayerResolver.CueLayerSnapshot,
+    ): List<BundledProvenance> {
+        if (bundleRoleOf(fixture, key.propertyName) != CueAssignmentResolver.BundleRole.COLOUR) return emptyList()
+        val composed = cueLayer.index[key.targetKey] ?: return emptyList()
+        val bundled = FixturePropertyCatalogue.of(fixture::class).bundledByCategory.values
+        return bundled.mapNotNull { emitter ->
+            if (composed[emitter.name] !is CueAssignmentResolver.PropertyValue.Slider) return@mapNotNull null
+            val emitterKey = CueAssignmentResolver.Key.fixture(key.targetKey, emitter.name)
+            val cueId = cueLayer.winners[emitterKey]
+            val layer = cueLayer.layerWinners[emitterKey]
+            BundledProvenance(
+                propertyName = emitter.name,
+                cueId = cueId,
+                cueStackId = cueId?.let { cueStackIdFor(it) },
+                layerId = layer?.layerId,
+                layerSource = layer?.source,
+            )
+        }
     }
 
     /**

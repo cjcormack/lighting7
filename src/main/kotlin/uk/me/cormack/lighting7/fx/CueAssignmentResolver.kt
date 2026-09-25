@@ -77,7 +77,22 @@ class CueAssignmentResolver {
          * once (see `FxEngine.publishCueLayerToControllers`).
          */
         val fadeDurationMs: Long? = null,
+        /**
+         * This row's part in a `bundleWithColour` bundle on [targetKey], or null for none:
+         * [BundleRole.COLOUR] for the fixture's RGB colour, whose [ExtendedColour] carries the
+         * emitters' W/A/UV, and [BundleRole.EMITTER] for a W/A/UV slider that shares its channel
+         * with that component. [compose] reads it to let an emitter's composed value replace the
+         * colour's copy (see [reconcileBundledEmitters]); nothing else does.
+         *
+         * Resolved from the class catalogue where the row is built (`buildCueAssignmentsForCue`,
+         * [CueComposer]), because the resolver never sees a fixture. A hand-built row leaves it
+         * null and so takes no part in the rule.
+         */
+        val bundleRole: BundleRole? = null,
     )
+
+    /** See [Assignment.bundleRole]. */
+    enum class BundleRole { COLOUR, EMITTER }
 
     /**
      * Typed property value carrying enough information for the composition rule to merge
@@ -222,7 +237,7 @@ class CueAssignmentResolver {
      * moveInDark armed set.
      *
      * Every input to all three is the row set alone — `targetIsGroup`, `category`,
-     * `compositionOverride`, `moveInDark`, and the asserted values — so a crossfade can cook
+     * `compositionOverride`, `moveInDark`, `bundleRole`, and the asserted values — so a crossfade can cook
      * once when the rows change and recompose per frame at new [FadeWeights]. See
      * [LayerResolver.reweightAssignments], which owns the cached instance and the invariant
      * that keeps it valid.
@@ -236,7 +251,16 @@ class CueAssignmentResolver {
     internal class CookedTarget(
         val targetKey: String,
         val properties: List<Bucket>,
+        /**
+         * This target's colour-and-emitters bundle, **only when it composes both halves** — null
+         * otherwise, which is every target but the few that hold both, so [compose]'s per-frame
+         * pass costs a null check. See [reconcileBundledEmitters].
+         */
+        val bundle: BundleBuckets? = null,
     )
+
+    /** The target's [BundleRole.COLOUR] property and its [BundleRole.EMITTER] buckets. */
+    internal class BundleBuckets(val colourProperty: String, val emitters: List<Bucket>)
 
     /** One (target, property)'s contributors and the rule that combines them. */
     internal class Bucket(
@@ -279,9 +303,32 @@ class CueAssignmentResolver {
                 }
                 buckets.add(Bucket(propertyName, effective, rule))
             }
-            if (buckets.isNotEmpty()) targets.add(CookedTarget(targetKey, buckets))
+            if (buckets.isNotEmpty()) targets.add(CookedTarget(targetKey, buckets, bundleOf(buckets)))
         }
         return Cook(targets, moveInDarkArmed)
+    }
+
+    /**
+     * The bundle [reconcileBundledEmitters] must apply for one target, or null when there is
+     * nothing to reconcile — no colour bucket, or no emitter bucket beside it.
+     */
+    private fun bundleOf(buckets: List<Bucket>): BundleBuckets? {
+        var emitters: ArrayList<Bucket>? = null
+        var colour: String? = null
+        for (bucket in buckets) {
+            val first = bucket.contributors.first()
+            when (first.bundleRole) {
+                BundleRole.COLOUR -> if (first.value is PropertyValue.Colour) colour = bucket.propertyName
+                BundleRole.EMITTER -> if (first.value is PropertyValue.Slider) {
+                    val list = emitters ?: ArrayList<Bucket>(3)
+                    list.add(bucket)
+                    emitters = list
+                }
+                null -> {}
+            }
+        }
+        val found = emitters
+        return if (colour != null && found != null) BundleBuckets(colour, found) else null
     }
 
     /**
@@ -307,9 +354,45 @@ class CueAssignmentResolver {
                         composeLtp(bucket.contributors, weights, cook.moveInDarkArmed) // defensive
                 }
             }
+            target.bundle?.let { reconcileBundledEmitters(composed, it) }
             out[target.targetKey] = composed
         }
         return out
+    }
+
+    /**
+     * **A bundled emitter's own slider beats the colour's copy of it.** A Hex's white channel is
+     * driven by two keys — `white`, and the W component of `rgbColour` — and the publish paths
+     * write both (`ColourTarget.resetToFallback` writes the bundled channels unconditionally), so
+     * without this the channel took whichever key happened to be published last. Here, where the
+     * target's keys are composed, the fixture's RGB colour has each bundled component replaced by
+     * its emitter's composed value, so the two keys carry one value and publish order cannot matter.
+     *
+     * The emitter wins **outright**: whichever cue, stack or layer each key came from, and however
+     * each composed (UV is HTP, colour LTP, so "whose contributor ranks higher" has no single
+     * answer for a blended bucket). It is the precedence `PropertyChannelWriter.coveringKeysByChannel`
+     * already uses — the single-channel property over the aggregate — so provenance, Record and
+     * the channel sheet all name the key whose value is on the channel.
+     *
+     * Done after composition, on the composed values, rather than in [cook]: a crossfading
+     * emitter must hand the colour its *blended* value frame by frame.
+     */
+    private fun reconcileBundledEmitters(
+        composed: HashMap<String, PropertyValue>,
+        bundle: BundleBuckets,
+    ) {
+        val value = composed[bundle.colourProperty] as? PropertyValue.Colour ?: return
+        var colour = value.value
+        for (bucket in bundle.emitters) {
+            val level = (composed[bucket.propertyName] as? PropertyValue.Slider)?.value ?: continue
+            colour = when (bucket.contributors.first().category) {
+                PropertyCategory.WHITE -> colour.copy(white = level)
+                PropertyCategory.AMBER -> colour.copy(amber = level)
+                PropertyCategory.UV -> colour.copy(uv = level)
+                else -> colour
+            }
+        }
+        if (colour != value.value) composed[bundle.colourProperty] = PropertyValue.Colour(colour)
     }
 
     /**

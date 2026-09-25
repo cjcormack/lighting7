@@ -737,7 +737,11 @@ either, and other tabs kept a stale layer list indefinitely.
 `ProvenanceEntryDto` carries `targetKey`, `propertyName`, `source`
 (`PARKED`|`PROGRAMMER`|`EFFECT`|`CUE`), `cueId?`, `cueStackId?`, `effectId?`, `layerId?` and
 `layerSource?` — the last two so the desk can answer "why is this fixture this colour?" by naming
-*Warm Wash* rather than *a cue*.
+*Warm Wash* rather than *a cue* — and `bundled` (omitted when empty): for a cue-won colour whose
+W / A / UV a bundled emitter's own row supplied, one `{propertyName, cueId?, cueStackId?, layerId?,
+layerSource?}` per emitter, because that colour's bytes came from two contributors (see
+[`lighting-composition-model.md`](lighting-composition-model.md) §"A bundled emitter's own row
+beats the colour's copy").
 
 `provenanceState` doubles as the client's cue to refetch `programmer.state` — it is the one
 broadcast that fires for a programmer write made by a MIDI surface, a locate, or another tab.

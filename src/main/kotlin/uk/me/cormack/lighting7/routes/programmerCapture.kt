@@ -115,6 +115,13 @@ data class RecordEntry(
     val value: CueAssignmentResolver.PropertyValue,
     val sourceGroup: String?,
     val maskGroup: PropertyMaskGroup?,
+    /**
+     * The programmer's own value for this key when [value] is not it — set only where
+     * `reconcileBundledEmitterEntries` rewrote a colour or an emitter to the on-stage value its
+     * bundle partner decided. Update reads it: "did the operator change this since Include?" is
+     * a question about the slot, not about a value derived from another key.
+     */
+    val reconciledFrom: CueAssignmentResolver.PropertyValue? = null,
 )
 
 /** Everything one Record source produced, ready to be written into a cue. */
@@ -257,7 +264,81 @@ internal fun collectProgrammerEntries(
         accept(key.targetKey, canonical, value, sourceGroup = null, seq = top.seq)
     }
 
+    reconcileBundledEmitterEntries(entries, seqs, fixtures)
     return entries.values.toList() to skips
+}
+
+/**
+ * Make a fixture's colour entry and its bundled W/A/UV emitter entries agree, on the value that is
+ * **on stage** — the newer of the two writes, a tie going to the emitter, which is exactly how
+ * `FxTarget.composeProgrammerOver` arbitrates the shared channel.
+ *
+ * Needed because playback does not arbitrate by recency: Layer 4 lets the emitter's own row win
+ * outright (`CueAssignmentResolver.reconcileBundledEmitters`). Record white 200 and then a colour
+ * carrying W 0, and the stage shows W 0 while a cue holding both rows as-was would play back 200.
+ * Writing the on-stage value into both rows is what makes the recording play back what was seen
+ * — and makes the cue read honestly in the editor, where the colour row otherwise shows a W the
+ * rig never had.
+ *
+ * Only the bundle's own colour takes part ([FixturePropertyCatalogue.Entry.colour]) — a colour
+ * macro is COLOUR-category too and carries no emitter. Every reader of [collectProgrammerEntries]
+ * gets this: Record, the stage snapshot overlay, and Update, which decides "changed since Include"
+ * on the slot's own value ([RecordEntry.reconciledFrom]) so an untouched pair is never rewritten,
+ * and writes a reconciled emitter back only when the colour that overrode it changed.
+ * Only pairs the recording holds *both* halves of are touched — the two share
+ * a mask group and a target, so the one way to hold half is a `TOUCHED` source that the other half
+ * was never touched under, and there the untouched half is not being recorded at all.
+ */
+private fun reconcileBundledEmitterEntries(
+    entries: LinkedHashMap<Pair<String, String>, RecordEntry>,
+    seqs: Map<Pair<String, String>, Long>,
+    fixtures: Fixtures,
+) {
+    for (fixtureKey in entries.keys.mapTo(LinkedHashSet()) { it.first }) {
+        val fixture = runCatching { fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull() ?: continue
+        val catalogue = FixturePropertyCatalogue.of(fixture::class)
+        if (catalogue.bundledByCategory.isEmpty()) continue
+        // The bundle's own colour only — a colour macro is COLOUR-category too, and is no part of it.
+        val colourKey = fixtureKey to (catalogue.colour?.name ?: continue)
+        val colourEntry = entries[colourKey] ?: continue
+        val original = (colourEntry.value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: continue
+        val colourSeq = seqs[colourKey] ?: continue
+        var colour = original
+        for ((category, property) in catalogue.bundledByCategory) {
+            val emitterKey = fixtureKey to property.name
+            val emitter = entries[emitterKey] ?: continue
+            val level = (emitter.value as? CueAssignmentResolver.PropertyValue.Slider)?.value ?: continue
+            val emitterSeq = seqs[emitterKey] ?: continue
+            val onStage = if (colourSeq > emitterSeq) {
+                when (category) {
+                    PropertyCategory.WHITE -> colour.white
+                    PropertyCategory.AMBER -> colour.amber
+                    PropertyCategory.UV -> colour.uv
+                    else -> continue
+                }
+            } else {
+                level
+            }
+            colour = when (category) {
+                PropertyCategory.WHITE -> colour.copy(white = onStage)
+                PropertyCategory.AMBER -> colour.copy(amber = onStage)
+                PropertyCategory.UV -> colour.copy(uv = onStage)
+                else -> colour
+            }
+            if (onStage != level) {
+                entries[emitterKey] = emitter.copy(
+                    value = CueAssignmentResolver.PropertyValue.Slider(onStage),
+                    reconciledFrom = emitter.value,
+                )
+            }
+        }
+        if (colour != original) {
+            entries[colourKey] = colourEntry.copy(
+                value = CueAssignmentResolver.PropertyValue.Colour(colour),
+                reconciledFrom = colourEntry.value,
+            )
+        }
+    }
 }
 
 /**

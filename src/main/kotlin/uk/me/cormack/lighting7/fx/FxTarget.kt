@@ -280,15 +280,21 @@ data class SliderTarget(
      * Colour entry on the fixture's colour property, extract the matching component with
      * the entry's write sequence — the property-level twin of the channel-level
      * composition ColourTarget performs in the other direction.
+     *
+     * From the class catalogue, so a **head** of a multi-head fixture answers too. It used to
+     * return null for anything not a [Fixture] — the half of `FU-FX-ELEMENT-BUNDLED-COLOUR` that
+     * `ColourTarget` closed and this reader didn't — so a head's white ignored a newer colour
+     * entry: its colour key put the colour's W on the channel and its white key put the older
+     * slider's back, and the channel took whichever was published last.
      */
     private fun bundledComponentFromColourEntry(
         fixture: GroupableFixture,
         store: ProgrammerStore,
     ): Pair<Long, UByte>? {
-        if (fixture !is Fixture) return null
-        val prop = fixture.fixtureProperty(propertyName) ?: return null
+        val catalogue = FixturePropertyCatalogue.of(fixture::class)
+        val prop = catalogue.byName[propertyName] ?: return null
         if (!prop.bundleWithColour) return null
-        val colourProp = fixture.colourProperty ?: return null
+        val colourProp = catalogue.colour ?: return null
         val slot = store.get(fixture.targetKey, colourProp.name) ?: return null
         val colour = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
         val component = when (prop.category) {
@@ -447,6 +453,13 @@ data class ColourTarget(
      * Resolve one bundled W/A/UV component by recency across: the Colour entry's component
      * ([entryComponent] at [colourSeq]), the bundled slider's own property entry, and the
      * slider's sideband channel. Null when nothing in the programmer covers it.
+     *
+     * **A tie goes to the slider's own entry**, as it does in [SliderTarget.composeProgrammerOver]
+     * (which reads its own entry first and takes the colour's copy only when strictly newer). Ties
+     * are real: a programmer layer stamps every slot it holds `LAYER_SEQ_BASE + index`, so a Look
+     * carrying both a colour row and a white row puts them at one seq — and with the two readers
+     * breaking it opposite ways, the W channel took whichever key was published last. The slider
+     * winning is the same rule Layer 4 applies (`CueAssignmentResolver.reconcileBundledEmitters`).
      */
     private fun extendedComponent(
         fixture: GroupableFixture,
@@ -461,7 +474,7 @@ data class ColourTarget(
 
         store.get(fixture.targetKey, prop.name)?.let { slot ->
             val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
-            if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
+            if (v != null && slot.seq >= bestSeq) { best = v; bestSeq = slot.seq }
         }
         ((bundledSlider(fixture, prop)) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->

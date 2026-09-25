@@ -136,6 +136,13 @@ class ProgrammerWriter internal constructor(
      * Returns one channel-write list per input entry (empty where the property didn't
      * resolve — nothing stored for that entry), in input order, so callers can record which
      * entries actually landed.
+     *
+     * **Stored with the `bundleWithColour` emitters last.** Each put takes the next write seq, so
+     * within one batch the input order would decide which of a colour row and its emitter's own
+     * row is "newer" — and so what `FxTarget.composeProgrammerOver` puts on the shared W/A/UV
+     * channel. One gesture is one contributor, and for one contributor the emitter's own row wins
+     * (`CueAssignmentResolver.reconcileBundledEmitters`), so Include of a cue or a template apply
+     * leaves the programmer showing what the cue plays back, whatever order its rows were in.
      */
     fun writeProperties(
         owner: ProgrammerOwner,
@@ -146,7 +153,12 @@ class ProgrammerWriter internal constructor(
     ): List<List<PropertyChannelResolver.ChannelWrite>> {
         val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
         val keys = HashSet<CueAssignmentResolver.Key>()
-        for ((index, channelWrites) in resolved.withIndex()) {
+        // A stable partition, and only when the batch holds an emitter at all — the common batch
+        // (a locate, a spread) holds none and keeps its own order at the cost of one scan.
+        val emitter = writes.map { bundleRoleOf(it.fixture, it.propertyName) == CueAssignmentResolver.BundleRole.EMITTER }
+        val order = if (emitter.none { it }) writes.indices else writes.indices.sortedBy { if (emitter[it]) 1 else 0 }
+        for (index in order) {
+            val channelWrites = resolved[index]
             if (channelWrites.isEmpty()) continue
             val write = writes[index]
             programmerStore.putValue(

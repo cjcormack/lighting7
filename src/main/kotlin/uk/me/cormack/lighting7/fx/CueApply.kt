@@ -279,6 +279,22 @@ internal fun fixtureCategoryFor(
 }
 
 /**
+ * [propertyName]'s part in [fixture]'s `bundleWithColour` bundle — the role
+ * [CueAssignmentResolver.Assignment.bundleRole] carries into composition. From the class catalogue,
+ * so an element (a head) answers from its own `@FixtureProperty` members. A class with no bundled
+ * emitter has no bundle, so its colour is not [CueAssignmentResolver.BundleRole.COLOUR] either.
+ */
+internal fun bundleRoleOf(fixture: GroupableFixture, propertyName: String): CueAssignmentResolver.BundleRole? {
+    val catalogue = FixturePropertyCatalogue.of(fixture::class)
+    if (catalogue.bundledByCategory.isEmpty()) return null
+    return when {
+        catalogue.byName[propertyName]?.bundleWithColour == true -> CueAssignmentResolver.BundleRole.EMITTER
+        propertyName == catalogue.colour?.name -> CueAssignmentResolver.BundleRole.COLOUR
+        else -> null
+    }
+}
+
+/**
  * Build the flat [CueAssignmentResolver.Assignment] list for a single cue's [propertyAssignments],
  * expanding group targets to per-member rows. Member rows produced by a group expansion carry
  * `targetIsGroup = true` so the resolver's specificity rule can drop them when the same cue
@@ -306,9 +322,9 @@ internal fun buildCueAssignmentsForCue(
         val canonical = canonicalPropertyName(assignment.propertyName)
         val target = assignment.target
 
-        // Resolve a reference fixture for category lookup and, for groups, the member keys.
-        // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
-        val memberKeys: List<String>
+        // Resolve a reference fixture for category lookup and, for groups, the members.
+        // members is empty iff the target is a Fixture — used below as the fanout discriminator.
+        val members: List<Fixture>
         val referenceFixture: GroupableFixture
         when (target) {
             is TargetRef.Group -> {
@@ -318,12 +334,11 @@ internal fun buildCueAssignmentsForCue(
                     logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
                     continue
                 }
-                val members = group.fixtures.filterIsInstance<Fixture>()
+                members = group.fixtures.filterIsInstance<Fixture>()
                 if (members.isEmpty()) {
                     logger.warn("cue {}: group '{}' has no Fixture members — skipping assignment", cueData.cueId, target.key)
                     continue
                 }
-                memberKeys = members.map { it.key }
                 referenceFixture = members.first()
             }
             is TargetRef.Fixture -> {
@@ -336,7 +351,7 @@ internal fun buildCueAssignmentsForCue(
                     logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
                     continue
                 }
-                memberKeys = emptyList()
+                members = emptyList()
             }
         }
 
@@ -344,6 +359,7 @@ internal fun buildCueAssignmentsForCue(
         // [CueAssignmentLayer.updateFadeWeights] at publish time, not baked into individual rows.
         fun row(
             key: String,
+            fixture: GroupableFixture,
             isGroup: Boolean,
             category: PropertyCategory,
             override: CompositionRule,
@@ -363,6 +379,9 @@ internal fun buildCueAssignmentsForCue(
             // exporter and the cue routes all carried it, and the one hop into the composition
             // layer did not — so a cue's local row snapped while a clicked template faded.
             fadeDurationMs = assignment.fadeDurationMs,
+            // Per member, not off the reference fixture: whether a slider shares its channel with the
+            // colour is a fact about each member's class, and a mixed group may disagree.
+            bundleRole = bundleRoleOf(fixture, canonical),
         )
 
         // Until session 4 a per-fixture branch sat here: a value of `ref:{uuid}` had to be resolved
@@ -379,13 +398,13 @@ internal fun buildCueAssignmentsForCue(
             continue
         }
 
-        if (memberKeys.isEmpty()) {
-            out.add(row(target.key, isGroup = false, category, override, parsed))
+        if (members.isEmpty()) {
+            out.add(row(target.key, referenceFixture, isGroup = false, category, override, parsed))
         } else {
             // Emit only per-member rows; the group-level key isn't a resolvable fixture at
             // publish time. Mark these as targetIsGroup=true so a direct fixture-level row
             // for the same member overrides via [CueAssignmentResolver.applySpecificity].
-            for (memberKey in memberKeys) out.add(row(memberKey, isGroup = true, category, override, parsed))
+            for (member in members) out.add(row(member.key, member, isGroup = true, category, override, parsed))
         }
     }
     return out

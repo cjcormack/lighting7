@@ -283,6 +283,67 @@ operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE`
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.
 
+### A bundled emitter's own row beats the colour's copy
+
+A `bundleWithColour` emitter — a Hex's white / amber / UV, a `LedLightbar12PixelFixture` head's
+white — is one channel driven by **two** keys: its own slider (`white`) and the matching component
+of the fixture's `rgbColour` `ExtendedColour`. Both keys are ordinary Layer 4 contributors, and both
+publish paths write the channel (`ColourTarget.resetToFallback` writes the bundled W/A/UV
+unconditionally), so without a rule the channel took whichever key was published last — map
+iteration order.
+
+**The rule: when Layer 4 composes both, the emitter's own value wins, outright.** Whichever cue,
+stack or layer each key came from, and however each composed. Outright rather than "the
+higher-ranked contributor wins" because the two keys do not compose under one rule — `UV` is HTP,
+colour LTP — so a blended bucket has no single rank to compare, the same reason
+`CueAssignmentResolver.fadeDurationsFor` snaps one. It is the precedence
+`PropertyChannelWriter.coveringKeysByChannel` already applies (the single-channel property over the
+aggregate), so provenance, Record and the channel sheet all name the key whose value is on the
+channel. The consequence to know: a later cue that wants the emitter off must assert it (`white 0`),
+not only a colour carrying `w0`.
+
+**Where it lives: `CueAssignmentResolver.compose`** (`reconcileBundledEmitters`). After a target's
+buckets compose, the colour's bundled components are replaced by their emitters' composed values, so both
+keys carry one value and publish order cannot matter. Compose rather than cook because it must see
+a crossfading emitter's *blended* value frame by frame; compose rather than transmit because every
+Layer 4 reader goes through it — the publish diff, the effect tick's reset baseline under a running
+colour effect, Clear and Blind (`publishCascadeForKeys`), provenance and preview compose — and a
+transmit-side skip could not tell a Layer 4 component from a programmer one in an already-merged
+fallback. A row learns its part from `Assignment.bundleRole` (`COLOUR` or `EMITTER`), read off the
+class catalogue where the row is built (`buildCueAssignmentsForCue`, `CueComposer`); `cook` notes
+the targets that hold both, so a crossfade frame pays nothing for the rest. The colour is the
+bundle's **own** — `FixturePropertyCatalogue.Entry.colour`, the COLOUR-category member typed as a
+`Colour` — never a colour macro or preset wheel that merely shares the category.
+
+A reconciled colour has two contributors, and **provenance names both**: the colour key's entry
+keeps its own winner for the RGB and lists each emitter that replaced a component under `bundled`
+(`ProvenanceEntry.bundled`, `ProvenanceEntryDto.bundled` on the wire), with that emitter's cue and
+layer. The Values grid counts each as a layer observation, so a colour whose white came from
+another layer reads as mixed rather than crediting the RGB's Look with it.
+
+What is residual: when the two rows carry different per-row fades, both land the same value but the
+channel's ramp time follows whichever key published last.
+
+**The programmer keeps recency** — the newer of the two writes is what is on stage — and meets the
+rule at its two edges:
+
+- **A tie goes to the emitter.** A programmer layer stamps every slot `LAYER_SEQ_BASE + index`, so a
+  Look carrying both rows puts them at one seq; `SliderTarget` and `ColourTarget.extendedComponent`
+  both break that tie for the emitter.
+- **One gesture is one contributor.** `ProgrammerWriter.writeProperties` stores a batch's emitters
+  after its colours, so Include of a cue (or a template apply) holding both leaves the emitter as
+  the newer write — the programmer shows what the cue plays back, whatever order its rows were in.
+
+**Record writes the on-stage value into both rows** (`reconcileBundledEmitterEntries` in
+`collectProgrammerEntries`). Playback does not arbitrate by recency, so white 200 followed by a
+colour carrying W 0 shows 0 on stage and would play back 200 if both rows were recorded as-was.
+Every reader of the entries gets it — Record, Update and the stage snapshot — and a recorded cue
+reads honestly in the editor as a result. Update keeps its "write back only what changed since
+Include" rule by judging change on the slot's own value (`RecordEntry.reconciledFrom`), so a cue
+whose rows disagree is not rewritten by an Update that did not touch them; and when the operator's
+newer colour overrode an included emitter, the emitter row goes back too, carrying the colour's
+component — otherwise the cue would play back the old W.
+
 ## Looks, templates and layers
 
 A **Look** is a named, reusable bundle of property values and effects over *named fixtures*. A

@@ -409,6 +409,23 @@ data class ProvenanceEntryDto(
      * template's name is a lie no compiler can catch.
      */
     val layerSource: LayerSourceDto? = null,
+    /**
+     * For a cue-won colour whose W / A / UV an emitter's own row supplied, that emitter's winner,
+     * one per emitter — so the colour is not credited with bytes another cue or layer asserted.
+     * Omitted when empty (the content converter does not encode defaults). See
+     * `ProvenanceEntry.bundled`.
+     */
+    val bundled: List<BundledProvenanceDto> = emptyList(),
+)
+
+/** One entry of [ProvenanceEntryDto.bundled]. */
+@Serializable
+data class BundledProvenanceDto(
+    val propertyName: String,
+    val cueId: Int? = null,
+    val cueStackId: Int? = null,
+    val layerId: Int? = null,
+    val layerSource: LayerSourceDto? = null,
 )
 
 /**
@@ -544,6 +561,15 @@ private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programm
                 effectId = it.effectId,
                 layerId = it.layerId,
                 layerSource = it.layerSource?.toDto(),
+                bundled = it.bundled.map { b ->
+                    BundledProvenanceDto(
+                        propertyName = b.propertyName,
+                        cueId = b.cueId,
+                        cueStackId = b.cueStackId,
+                        layerId = b.layerId,
+                        layerSource = b.layerSource?.toDto(),
+                    )
+                },
             )
         },
     )

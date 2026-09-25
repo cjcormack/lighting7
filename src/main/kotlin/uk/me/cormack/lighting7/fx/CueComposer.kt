@@ -183,6 +183,8 @@ internal object CueComposer {
          * [winner] already records that reading.
          */
         val fadeDurationMs: Long? = null,
+        /** See [CueAssignmentResolver.Assignment.bundleRole]. */
+        val bundleRole: CueAssignmentResolver.BundleRole? = null,
     )
 
     private data class Key(val targetKey: String, val propertyName: String)
@@ -383,6 +385,7 @@ internal object CueComposer {
                 // Pass-through, not null: the overlay must not silently discard a fade the caller
                 // put on its own row, the way it deliberately discards the layer attribution.
                 fadeDurationMs = row.fadeDurationMs,
+                bundleRole = row.bundleRole,
             )
         }
 
@@ -402,6 +405,7 @@ internal object CueComposer {
                 moveInDark = c.moveInDark,
                 layerWinner = c.winner,
                 fadeDurationMs = c.fadeDurationMs,
+                bundleRole = c.bundleRole,
             )
         }
         return FullCook(
@@ -865,6 +869,7 @@ internal object CueComposer {
                 // to "why is this fixture like this?".
                 winner = CookWinner(layerIndex, layer.layerId, layer.source),
                 fadeDurationMs = p.fadeDurationMs,
+                bundleRole = bundleRoleOf(p.fixture, canonical),
             )
         }
     }

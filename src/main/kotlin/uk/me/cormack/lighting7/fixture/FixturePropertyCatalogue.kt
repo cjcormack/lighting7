@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fixture
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
+import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
 
 /**
@@ -55,7 +56,17 @@ object FixturePropertyCatalogue {
         val byName: Map<String, Fixture.Property>,
         /** The `bundleWithColour` sliders indexed by category (WHITE / AMBER / UV). */
         val bundledByCategory: Map<PropertyCategory, Fixture.Property>,
-        /** The [PropertyCategory.COLOUR] property, if the class declares one. */
+        /**
+         * The class's **RGB colour** — the [PropertyCategory.COLOUR] member whose type is a
+         * [Colour][uk.me.cormack.lighting7.fixture.property.Colour], i.e. the one whose
+         * `ExtendedColour` carries the [bundledByCategory] emitters' W/A/UV. Null if the class
+         * declares none.
+         *
+         * Not merely the first COLOUR-category member: a colour macro or preset wheel is COLOUR
+         * too (`ImgStageLineWash42LedFixture.colourMacro`, the Orbit 70's static colour select),
+         * and `memberProperties` does not promise declaration order, so "first" could be the
+         * wheel — which carries no emitter component and is not what `ColourTarget` writes.
+         */
         val colour: Fixture.Property?,
         /** The class's `@FixtureType`. Null for element classes, which carry none. */
         val fixtureType: FixtureType?,
@@ -76,6 +87,10 @@ object FixturePropertyCatalogue {
     fun of(klass: KClass<*>): Entry =
         catalogues[klass] ?: catalogues.computeIfAbsent(klass) { build(it) }
 
+    private fun Fixture.Property.isColourValued(): Boolean =
+        (classProperty.returnType.classifier as? KClass<*>)
+            ?.isSubclassOf(uk.me.cormack.lighting7.fixture.property.Colour::class) == true
+
     private fun build(klass: KClass<*>): Entry {
         val all = klass.memberProperties.flatMap { classProperty ->
             @Suppress("UNCHECKED_CAST")
@@ -90,7 +105,7 @@ object FixturePropertyCatalogue {
             bundledByCategory = buildMap {
                 for (property in all) if (property.bundleWithColour) putIfAbsent(property.category, property)
             },
-            colour = all.firstOrNull { it.category == PropertyCategory.COLOUR },
+            colour = all.firstOrNull { it.category == PropertyCategory.COLOUR && it.isColourValued() },
             fixtureType = klass.annotations.filterIsInstance<FixtureType>().firstOrNull(),
         )
     }
