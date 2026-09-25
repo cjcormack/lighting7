@@ -16,6 +16,8 @@ import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
+import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
+import uk.me.cormack.lighting7.plugins.handleUpdateChannel
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -127,6 +129,63 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
         assertEquals("120", client.cueRows(cueId).getValue("hex-2"))
+    }
+
+    @Test
+    fun `Mode A writes a nudged head back to its cell-target row`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedBar()
+        // Head 3 (pixel-2) white is channel 12; head 4 (pixel-3) white is 16.
+        val cueId = createCue(
+            client, "cells",
+            rows = listOf(
+                assignment("fixture", "bar.pixel-2", "white", "100"),
+                assignment("fixture", "bar.pixel-3", "white", "50"),
+            ),
+        )
+
+        client.include(cueId)
+        busk(12, 255u)
+
+        val response: ProgrammerUpdateResponse = client.update(ProgrammerUpdateRequest(
+            projectId = projectId.toString(),
+        )).body()
+        assertEquals("A", response.mode)
+        assertTrue(response.skipped.isEmpty(), "a head is not skipped: ${response.skipped}")
+        assertEquals(1, response.results.single().assignmentsWritten, "only the nudged head")
+
+        val rows = client.cueRows(cueId)
+        assertEquals("255", rows.getValue("bar.pixel-2"))
+        assertEquals("50", rows.getValue("bar.pixel-3"), "the untouched head is left as it was")
+    }
+
+    @Test
+    fun `Mode B attributes a busked head to the cue under it and writes it back`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedBar()
+        val stack = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
+        val cueId = createCue(
+            client, "cells",
+            rows = listOf(assignment("fixture", "bar.pixel-2", "white", "100")),
+            stackId = stack,
+        )
+        client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
+        busk(12, 255u)
+
+        val checklist: ProgrammerUpdateResponse = client.update(ProgrammerUpdateRequest(
+            projectId = projectId.toString(),
+        )).body()
+        assertEquals("CHECKLIST", checklist.mode)
+        assertEquals(
+            listOf(cueId),
+            assertNotNull(checklist.checklist).stacks.flatMap { it.cues }.map { it.cueId },
+            "the head is an override of the cue underneath, not unattributed",
+        )
+
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString(), targets = listOf(cueId)))
+        assertEquals("255", client.cueRows(cueId).getValue("bar.pixel-2"))
     }
 
     @Test
@@ -469,4 +528,12 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
 
     private fun seedHex(key: String, startChannel: Int) =
         LocateTestSupport.seedHex(state, projectId, key, startChannel)
+
+    /** A `led-lightbar-12-pixel-48ch` keyed `bar` at channel 1 — twelve heads, four channels each. */
+    private fun seedBar() =
+        LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar", 1)
+
+    /** A raw channel write, the DMX sheet's Set. */
+    private fun busk(channel: Int, level: UByte) =
+        handleUpdateChannel(state, UpdateChannelInMessage(0, channel, level, fadeTime = 0))
 }

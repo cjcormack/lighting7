@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
@@ -40,6 +41,35 @@ class PersistedFixtureReferenceValidatorTest {
             PersistedFixtureReferenceValidator.validateTargetedReference(
                 fixtures, TargetRef.Fixture("hex-1"), "dimmer",
             ),
+        )
+    }
+
+    @Test
+    fun `a cell target is valid for a cue row, and still missing for a binding`() {
+        // A Mode48Ch bar keeps every channel on its heads. A cue may name one head
+        // (`allowElements`); a control-surface binding resolves through the register alone, so
+        // the same key must keep reading as a missing fixture there.
+        val fixtures = Fixtures()
+        fixtures.register {
+            addFixture(LedLightbar12PixelFixture.Mode48Ch(universe, "bar", "Bar", firstChannel = 1))
+        }
+        val cell = TargetRef.Fixture("bar.pixel-2")
+
+        assertEquals(
+            AssignmentHealth.Ok,
+            PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "white", allowElements = true),
+        )
+        assertEquals(
+            AssignmentHealth.Ok,
+            PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "colour", allowElements = true),
+            "the colour alias resolves on the head's own catalogue",
+        )
+        assertIs<AssignmentHealth.MissingProperty>(
+            PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "dimmer", allowElements = true),
+            "a head answers from its own properties — it has no dimmer",
+        )
+        assertIs<AssignmentHealth.MissingFixture>(
+            PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "white"),
         )
     }
 

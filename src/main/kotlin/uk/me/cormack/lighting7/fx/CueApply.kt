@@ -309,7 +309,7 @@ internal fun buildCueAssignmentsForCue(
         // Resolve a reference fixture for category lookup and, for groups, the member keys.
         // memberKeys is empty iff the target is a Fixture — used below as the fanout discriminator.
         val memberKeys: List<String>
-        val referenceFixture: Fixture
+        val referenceFixture: GroupableFixture
         when (target) {
             is TargetRef.Group -> {
                 val group = try {
@@ -327,8 +327,11 @@ internal fun buildCueAssignmentsForCue(
                 referenceFixture = members.first()
             }
             is TargetRef.Fixture -> {
+                // `untypedGroupableFixture`: a fixture-typed row whose key is an element key is a
+                // **cell-target row** — a head of a multi-head fixture, which Record writes when the
+                // programmer holds one. It resolves and composes like any other head.
                 referenceFixture = try {
-                    fixtures.untypedFixture(target.key)
+                    fixtures.untypedGroupableFixture(target.key)
                 } catch (_: IllegalStateException) {
                     logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
                     continue

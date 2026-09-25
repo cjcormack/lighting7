@@ -83,11 +83,11 @@ private const val CHECKLIST_SAMPLE_SIZE = 8
 internal fun changedSinceInclude(
     state: State,
     mask: Set<PropertyMaskGroup>?,
-    /** Keep cell entries — only a Look destination may ask; see [collectProgrammerEntries]. */
-    allowElements: Boolean = false,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
     val store = state.show.programmerStore
-    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = allowElements)
+    // `allowElements`: both destinations can hold a cell — a cue as a cell-target row, a Look as
+    // an element row — so a nudged head comes back through Update as the row it was included as.
+    val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     val changed = entries.filter { entry ->
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
             // New since Include — the operator adding a fixture to the cue.
@@ -122,7 +122,7 @@ internal fun buildUpdateChecklist(
     mask: Set<PropertyMaskGroup>?,
 ): ProgrammerUpdateChecklistDto {
     val engine = state.show.fxEngine
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     if (entries.isEmpty()) {
         return ProgrammerUpdateChecklistDto(emptyList(), emptyList(), 0)
     }
@@ -239,7 +239,7 @@ internal fun entriesUnderlyingCue(
     mask: Set<PropertyMaskGroup>?,
 ): List<RecordEntry> {
     val engine = state.show.fxEngine
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask)
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
     if (entries.isEmpty()) return emptyList()
     val byKey = entries.associateBy { CueAssignmentResolver.Key.fixture(it.fixtureKey, it.propertyName) }
     return engine.provenance.underlyingSources(byKey.keys)

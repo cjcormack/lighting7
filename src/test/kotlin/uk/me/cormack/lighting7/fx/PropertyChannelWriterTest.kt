@@ -291,6 +291,47 @@ class PropertyChannelWriterTest {
         assertEquals(emptySet(), keysAt(keys, 100))
     }
 
+    // ─── coveringKeysByChannel (the one key a raw write belongs to) ─────────
+
+    private fun coveringAt(
+        keys: Map<Pair<Int, Int>, CueAssignmentResolver.Key>,
+        channel: Int,
+    ): Pair<String, String>? = keys[universe.universe to channel]?.let { it.targetKey to it.propertyName }
+
+    @Test
+    fun `coveringKeysByChannel keeps the whole-fixture answers the old walk gave`() {
+        // Pinned against the walk this replaced: an R/G/B channel is the colour, but a bundled
+        // emitter with its own slider is that slider — the slider wins over the aggregate.
+        val keys = PropertyChannelWriter.coveringKeysByChannel(listOf(hex()))
+        assertEquals("hex-1" to "dimmer", coveringAt(keys, 1))
+        assertEquals("hex-1" to "rgbColour", coveringAt(keys, 2), "red")
+        assertEquals("hex-1" to "rgbColour", coveringAt(keys, 4), "blue")
+        assertEquals("hex-1" to "amber", coveringAt(keys, 5), "amber is its own slider, not rgbColour")
+        assertEquals("hex-1" to "white", coveringAt(keys, 6))
+        assertEquals("hex-1" to "uv", coveringAt(keys, 7))
+        assertEquals(null, coveringAt(keys, 100), "an address nothing covers has no key")
+    }
+
+    @Test
+    fun `coveringKeysByChannel names a pan axis by its slider, not position`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(universe, "spot-1", "Spot 1", firstChannel = 1)
+        val keys = PropertyChannelWriter.coveringKeysByChannel(listOf(fx))
+        assertEquals("spot-1" to "pan", coveringAt(keys, 1))
+        assertEquals("spot-1" to "tilt", coveringAt(keys, 2))
+    }
+
+    @Test
+    fun `coveringKeysByChannel reaches a head of a multi-head fixture`() {
+        // Mode48Ch: the parent declares no channel of its own; head 3 (pixel-2) is 9-12.
+        val bar = LedLightbar12PixelFixture.Mode48Ch(universe, "bar", "Bar", firstChannel = 1)
+        val keys = PropertyChannelWriter.coveringKeysByChannel(listOf(bar))
+        val pixel2 = bar.elements[2].elementKey
+        assertEquals(pixel2 to "rgbColour", coveringAt(keys, 9), "head 3 red")
+        assertEquals(pixel2 to "rgbColour", coveringAt(keys, 11), "head 3 blue")
+        assertEquals(pixel2 to "white", coveringAt(keys, 12), "head 3 white is the head's own slider")
+        assertEquals(bar.elements[11].elementKey to "white", coveringAt(keys, 48), "last head's white")
+    }
+
     // ─── FixtureElement targeting (multi-element fixtures) ────────────────
 
     @Test

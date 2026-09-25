@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -28,6 +29,7 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 import java.awt.Color
+import kotlin.reflect.KProperty1
 
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.routes.programmerCapture")
 
@@ -64,10 +66,11 @@ enum class RecordSource {
 /** Why a programmer entry didn't make it into the recording. Surfaced to the operator. */
 enum class RecordSkipReason {
     /**
-     * The entry is keyed by an element (`bar-1.head-0`) and the destination has no element row:
-     * `CuePropertyAssignmentDto` carries no `elementKey`, so a cue row for a cell would be
-     * permanently dead. A **Look** does have one (`DaoLookRows.elementKey`), and `record-look`
-     * asks [collectProgrammerEntries] for elements, so this is never reported there.
+     * The entry is keyed by an element (`bar-1.head-0`) and the destination cannot hold a cell:
+     * a **template** names no targets, so it has no row to put one in. A Look has an element row
+     * (`DaoLookRows.elementKey`) and a cue a cell-target row (`targetKey` the element key, which
+     * `buildCueAssignmentsForCue` resolves through `untypedGroupableFixture`), and both ask
+     * [collectProgrammerEntries] for elements, so this is never reported for either.
      */
     ELEMENT_TARGET,
 
@@ -158,8 +161,8 @@ internal fun collectProgrammerEntries(
     targets: Set<String>? = null,
     /**
      * Keep entries keyed by an element rather than skipping them as [RecordSkipReason.ELEMENT_TARGET].
-     * Only a destination with an element row may ask for this — `record-look` does; a cue or a
-     * template cannot hold one, so their recordings keep the skip.
+     * Only a destination that can hold a cell may ask for this — a Look (an element row) and a
+     * cue (a cell-target row) do; a template cannot, so its recording keeps the skip.
      */
     allowElements: Boolean = false,
 ): Pair<List<RecordEntry>, List<RecordSkip>> {
@@ -371,7 +374,9 @@ internal fun collectProgrammerRecording(
         )
     }
 
-    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope)
+    // `allowElements`: a head's entry is recorded as a cell-target row (`targetKey` the element
+    // key) — the shape `collapseRecordingToAssignments` already emits for it.
+    val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope, allowElements = true)
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
     val bandEffects = if (includeFx) {
@@ -541,7 +546,7 @@ internal fun readOutputPropertyValue(
             .resolveProperty(fixture, canonical)?.value
     ) {
         is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(
-            readOutputColour(state, fixture as? Fixture, raw, universe),
+            readOutputColour(state, fixture, raw, universe),
         )
         is DmxFixtureSetting<*> ->
             CueAssignmentResolver.PropertyValue.Setting(channelOutput(state, universe, raw.channelNo))
@@ -562,14 +567,19 @@ internal fun readOutputPropertyValue(
  */
 internal fun readOutputColour(
     state: State,
-    fixture: Fixture?,
+    fixture: GroupableFixture?,
     dmxColour: DmxColour,
     universe: Int,
 ): ExtendedColour {
+    // The class catalogue rather than `Fixture.bundledProperty`, so a head of a multi-head
+    // fixture reads its own bundled white: a head is no `Fixture`, and a cast that dropped it
+    // read that white as 0 — which a single-component colour write then put on the wire.
+    val bundledByCategory = fixture?.let { FixturePropertyCatalogue.of(it::class).bundledByCategory }
     fun bundled(category: PropertyCategory): UByte {
-        val prop = fixture?.bundledProperty(category) ?: return 0u
+        val prop = bundledByCategory?.get(category) ?: return 0u
         val dmx = try {
-            prop.classProperty.call(fixture) as? DmxSlider
+            @Suppress("UNCHECKED_CAST")
+            (prop.classProperty as KProperty1<Any, *>).call(fixture) as? DmxSlider
         } catch (_: Exception) {
             null
         } ?: return 0u

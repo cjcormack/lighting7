@@ -238,7 +238,8 @@ private fun programmerOverlayForSnapshot(state: State): ProgrammerOverlay {
     if (store.blind || (store.size == 0 && !store.hasSidebandEntries)) {
         return ProgrammerOverlay(emptyMap(), emptySet())
     }
-    val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null)
+    // `allowElements`: a head the programmer holds is on stage, and a cue can hold it.
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.ALL, mask = null, allowElements = true)
     val values = HashMap<CueAssignmentResolver.Key, CueAssignmentResolver.PropertyValue>(entries.size)
     val hints = LinkedHashSet<Pair<String, String>>()
     for (entry in entries) {
@@ -349,7 +350,7 @@ private fun DaoCuePropertyAssignment.toDtoWithHealth(
     // a row's value is always a literal, so there is no second reference to validate.
     return base.copy(
         health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, base.target, base.propertyName,
+            fixtures, base.target, base.propertyName, allowElements = true,
         ),
     )
 }
@@ -662,7 +663,7 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // so a stack GO'ing the same dead cue on every beat doesn't flood the logs.
     val deadRows = cueData.propertyAssignments.filter {
         PersistedFixtureReferenceValidator.validateTargetedReference(
-            state.show.fixtures, it.target, it.propertyName,
+            state.show.fixtures, it.target, it.propertyName, allowElements = true,
         ) != AssignmentHealth.Ok
     }
     if (deadRows.isNotEmpty()) {

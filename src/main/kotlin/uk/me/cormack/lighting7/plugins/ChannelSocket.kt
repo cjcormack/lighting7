@@ -6,9 +6,14 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.routes.readOutputColour
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.trait.WithAmber
+import uk.me.cormack.lighting7.fixture.trait.WithUv
+import uk.me.cormack.lighting7.fixture.trait.WithWhite
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
@@ -126,6 +131,9 @@ suspend fun handleChannel(scope: SocketScope, message: ChannelInMessage) {
  * - Colour sub-channels lift to the whole `rgbColour` property: the written component
  *   replaces its axis in the fixture's current output colour, deliberately freezing the
  *   sibling components into the programmer.
+ * - A channel on a **head** of a multi-head fixture lifts the same way, to that head's own
+ *   property under its element key — the covering lookup
+ *   ([uk.me.cormack.lighting7.fx.CascadePublisher.resolveChannelCoveringKey]) reaches elements.
  * - Position axes and channels with no backing property stay channel-shaped in the
  *   programmer's sideband — still above the layers below, still released by Clear.
  */
@@ -154,8 +162,10 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
         return
     }
 
+    // `untypedGroupableFixture`: the covering key is an element key when the channel is on a
+    // head of a multi-head fixture, and a head lifts exactly as a whole fixture does.
     val fixture = try {
-        show.fixtures.untypedFixture(key.targetKey)
+        show.fixtures.untypedGroupableFixture(key.targetKey)
     } catch (_: Exception) {
         engine.programmer.writeChannel(
             ProgrammerOwner.WEB, universe, channel, level, coveringKey = null, fadeMs = fade,
@@ -165,20 +175,14 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
 
     when (val raw = PropertyChannelWriter.resolveProperty(fixture, key.propertyName)?.value) {
         is DmxColour -> {
-            val current = currentExtendedColour(state, fixture.key, key.propertyName, raw, universe)
-            val replaced = when (channel) {
-                raw.redSlider.channelNo -> ExtendedColour(
-                    Color(level.toInt(), current.color.green, current.color.blue),
-                    current.white, current.amber, current.uv,
+            val current = currentExtendedColour(state, fixture, key.propertyName, raw, universe)
+            val replaced = replaceColourComponent(fixture, raw, current, channel, level)
+            if (replaced == null) {
+                // A channel of the colour that is none of its components — nothing to lift into.
+                engine.programmer.writeChannel(
+                    ProgrammerOwner.WEB, universe, channel, level, coveringKey = key, fadeMs = fade,
                 )
-                raw.greenSlider.channelNo -> ExtendedColour(
-                    Color(current.color.red, level.toInt(), current.color.blue),
-                    current.white, current.amber, current.uv,
-                )
-                else -> ExtendedColour(
-                    Color(current.color.red, current.color.green, level.toInt()),
-                    current.white, current.amber, current.uv,
-                )
+                return
             }
             engine.programmer.writeProperty(
                 ProgrammerOwner.WEB, fixture, key.propertyName,
@@ -200,12 +204,45 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
 }
 
 /**
+ * [current] with the component [channel] carries set to [level], or null when [channel] is not
+ * one of [dmxColour]'s components.
+ *
+ * Matched by channel for every component, bundled emitters included: the covering lookup names
+ * `rgbColour` for a bundled white / amber / UV only when the fixture declares no slider of its
+ * own for it (a declared one wins), and falling through to "must be blue" would write the level
+ * onto the wrong emitter.
+ */
+private fun replaceColourComponent(
+    fixture: GroupableFixture,
+    dmxColour: DmxColour,
+    current: ExtendedColour,
+    channel: Int,
+    level: UByte,
+): ExtendedColour? {
+    val c = current.color
+    fun bundled(slider: Slider?): Boolean = (slider as? DmxSlider)?.channelNo == channel
+    return when {
+        channel == dmxColour.redSlider.channelNo ->
+            current.copy(color = Color(level.toInt(), c.green, c.blue))
+        channel == dmxColour.greenSlider.channelNo ->
+            current.copy(color = Color(c.red, level.toInt(), c.blue))
+        channel == dmxColour.blueSlider.channelNo ->
+            current.copy(color = Color(c.red, c.green, level.toInt()))
+        bundled((fixture as? WithWhite)?.white) -> current.copy(white = level)
+        bundled((fixture as? WithAmber)?.amber) -> current.copy(amber = level)
+        bundled((fixture as? WithUv)?.uv) -> current.copy(uv = level)
+        else -> null
+    }
+}
+
+/**
  * The fixture's current output colour (RGB + bundled W/A/UV) read from the controller
- * buffer — the base a single-component `updateChannel` write replaces into.
+ * buffer — the base a single-component `updateChannel` write replaces into. [fixture] is a
+ * whole fixture or one head of a multi-head one.
  */
 private fun currentExtendedColour(
     state: State,
-    fixtureKey: String,
+    fixture: GroupableFixture,
     propertyName: String,
     dmxColour: DmxColour,
     universe: Int,
@@ -215,15 +252,10 @@ private fun currentExtendedColour(
     // sideband lifting ([readOutputColour]) so the two can't disagree about which channels
     // count as part of the colour; the entry preference is this path's own rule, because
     // Record has already applied its own precedence before it gets there.
-    (state.show.programmerStore.get(fixtureKey, propertyName)?.value?.resolved
+    (state.show.programmerStore.get(fixture.targetKey, propertyName)?.value?.resolved
         as? CueAssignmentResolver.PropertyValue.Colour)
         ?.let { return it.value }
 
-    val fixture = try {
-        state.show.fixtures.untypedFixture(fixtureKey)
-    } catch (_: Exception) {
-        null
-    }
     return readOutputColour(state, fixture, dmxColour, universe)
 }
 
@@ -269,10 +301,11 @@ private val channelMappingCache = AtomicReference<CachedChannelMappings?>(null)
 /**
  * The channel-mapping frame, **built once per register version** and shared.
  *
- * Every connected socket asks for this on connect and again on each `fixturesChanged`, and
- * [PropertyChannelWriter.propertyKeysByChannel] is a reflective walk of every property of every
- * fixture and head — so a patch edit with several desk screens open would repeat that walk once
- * per socket. The frame depends only on the register, so it is cached against
+ * Every connected socket asks for this on connect and again on each `fixturesChanged`. The
+ * per-address keys come from [PropertyChannelWriter.channelKeyIndex], itself cached per version and
+ * shared with the desk's covering lookup, so the reflective walk behind them runs once per patch
+ * edit; this cache saves re-assembling the frame per socket. The frame depends only on the
+ * register, so it is cached against
  * [Fixtures.structureVersion] and the [Fixtures] instance (a project switch builds a new one).
  * A version bumped with nothing structural changed (`patchListChanged`) just rebuilds once.
  *
@@ -284,7 +317,9 @@ internal fun buildChannelMappingMessage(fixtures: Fixtures): ChannelMappingState
         if (cached.fixtures.get() === fixtures && cached.version == fixtures.structureVersion) return cached.message
     }
     val snapshot = fixtures.channelMappingSnapshot()
-    val keysByChannel = PropertyChannelWriter.propertyKeysByChannel(snapshot.fixtures)
+    // The index for *this* snapshot's version, so every address's keys come from the same register
+    // as its mapping — and the walk behind it is shared with the desk's covering lookup.
+    val keysByChannel = PropertyChannelWriter.channelKeyIndex(fixtures, snapshot).propertyKeys
     val mappings = snapshot.mappings
         .mapValues { (universe, channels) ->
             channels.mapValues { (channel, mapping) ->

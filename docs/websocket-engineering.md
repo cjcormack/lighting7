@@ -225,6 +225,15 @@ sub-channel lifts to the whole `rgbColour` property (freezing the sibling compon
 axes and channels with no backing property stay channel-shaped in the programmer's sideband. All
 three are released by Clear.
 
+Which property a channel belongs to is `CascadePublisher.resolveChannelCoveringKey` — the one
+channel→property lookup, read from `PropertyChannelWriter.channelKeyIndex`: one walk of the register
+per `Fixtures.structureVersion`, shared with the `channelMappingState` frame's per-address
+`properties`. It reaches the **heads** of a multi-head fixture, so a head's channel
+lifts to that head's property under its element key exactly as a whole fixture's does. Where
+several keys drive an address, a single-channel property wins (a bundled amber is `amber`, a pan
+axis `pan`) and otherwise the aggregate spanning it (`rgbColour`, `position`). Record, Clear, Blind
+and provenance read a sideband slot through the same lookup.
+
 ### Park — `ParkSocket.kt`
 
 | Message | Fields | Effect |

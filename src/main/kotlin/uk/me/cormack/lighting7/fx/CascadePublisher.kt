@@ -263,53 +263,21 @@ class CascadePublisher internal constructor(
     }
 
     /**
-     * The (fixture, property) key whose channels include (universe, channel), or null when
-     * no property backs the channel. Walks the owning fixture's property catalogue plus the
-     * position axes — the same channel set [FxTarget.composeProgrammerOver]'s sideband
-     * lookups consult.
+     * The (fixture, property) key a raw write to (universe, channel) belongs to, or null when
+     * no property backs the channel. An element key on a multi-head fixture whose channels live
+     * on its heads — the channel-mapping register only knows the parent, so the old walk of the
+     * parent's own properties answered null for every head channel, and Record, Clear, Blind
+     * and provenance all treated the head as an address nothing covers.
+     *
+     * Read from [PropertyChannelWriter.channelKeyIndex], built once per
+     * [Fixtures.structureVersion] and shared with the channel-mapping frame's per-address keys —
+     * one walk, so the DMX sheet and the desk cannot disagree about which properties an address
+     * has, and [ProvenanceService.compute] (which asks once per sideband slot) pays a map lookup.
+     * [PropertyChannelWriter.coveringKeysByChannel] states which key wins where several drive one
+     * address.
      */
-    fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? {
-        val mappings = fixtures.getChannelMappings()
-        val fixtureKey = mappings[universe]?.get(channel)?.fixtureKey ?: return null
-        val fixture = try {
-            fixtures.untypedFixture(fixtureKey)
-        } catch (_: Exception) {
-            return null
-        }
-
-        for (prop in fixture.fixtureProperties) {
-            val value = try {
-                prop.classProperty.call(fixture)
-            } catch (_: Exception) {
-                continue
-            } ?: continue
-            when (value) {
-                is DmxSlider -> if (value.channelNo == channel) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-                is DmxFixtureSetting<*> -> if (value.channelNo == channel) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-                is DmxColour -> if (
-                    channel == value.redSlider.channelNo ||
-                    channel == value.greenSlider.channelNo ||
-                    channel == value.blueSlider.channelNo
-                ) {
-                    return CueAssignmentResolver.Key.fixture(fixture.key, prop.name)
-                }
-            }
-        }
-
-        val positionFixture = fixture as? WithPosition
-        if (positionFixture != null) {
-            val pan = positionFixture.pan as? DmxSlider
-            val tilt = positionFixture.tilt as? DmxSlider
-            if (pan?.channelNo == channel || tilt?.channelNo == channel) {
-                return CueAssignmentResolver.Key.fixture(fixture.key, "position")
-            }
-        }
-        return null
-    }
+    fun resolveChannelCoveringKey(universe: Int, channel: Int): CueAssignmentResolver.Key? =
+        PropertyChannelWriter.channelKeyIndex(fixtures).coveringKeys[universe to channel]
 
     /**
      * Is every DMX channel backing [target] on [fixture] parked?

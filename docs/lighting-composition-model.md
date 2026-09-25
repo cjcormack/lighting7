@@ -70,7 +70,8 @@ Every slot carries a sticky `touched` flag — never value-diffed. `true` marks 
 
 Raw channels with no property-level lift live in a parallel per-channel map with the same owner-slot semantics:
 
-- channels with **no backing property** (`updateChannel` on an unmapped channel),
+- channels with **no backing property** (`updateChannel` on an address no fixture or head
+  property covers),
 - **pan/tilt axes** written as raw channels (lifting one axis to a `position` entry would freeze the other axis too),
 - **every unpark hand-down** (inherently channel-shaped — lifting one channel would freeze its property's sibling channels).
 
@@ -136,8 +137,13 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
   rather than from composed state is the point: what you busked is what records.
 - **Sideband** — a slot whose channel a property covers is lifted into a property row; one with no
   backing property cannot be (cue assignments have no channel form) and is reported as a skip
-  rather than silently dropped. Element-keyed entries are skipped for the same reason: cue
-  assignments resolve fixture keys, not element keys.
+  rather than silently dropped. "Covers" is `CascadePublisher.resolveChannelCoveringKey`, which
+  reaches the heads of a multi-head fixture, so a head's channel lifts to that head's property.
+- **Cells** — an element-keyed entry (a head of a multi-head fixture) records as a **cell-target
+  row**: `targetType` fixture, `targetKey` the element key — the spelling a cell has as a press
+  target, and the one `buildCueAssignmentsForCue` resolves through `untypedGroupableFixture`. No
+  column is involved, so the sync layout is unchanged. Update writes cells back the same way; only
+  a template, which names no targets, still skips them as `ELEMENT_TARGET`.
 - **Group shape** — a `sourceGroup` hint only *nominates* a group row. It is emitted iff every
   member of the named group holds an entry for that property with an identical value. A stale or
   missing hint therefore degrades to per-fixture rows — verbose, never wrong.

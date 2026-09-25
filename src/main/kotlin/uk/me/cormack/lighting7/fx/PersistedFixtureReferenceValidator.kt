@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
@@ -20,14 +22,21 @@ object PersistedFixtureReferenceValidator {
      * [AssignmentHealth.Ok] iff the target exists and exposes [propertyName] as a known
      * annotated property (including the synthetic `"position"` compound and
      * `"colour"` / `"color"` → `rgbColour` aliases).
+     *
+     * [allowElements] lets a fixture-typed [target] name a **cell** — an element key of a
+     * multi-head fixture, validated against the head's own properties. A cue row may (a cell-target
+     * row, which `buildCueAssignmentsForCue` resolves); a control-surface binding may not, since
+     * the surface resolves its fixture through the register alone, and a binding reported healthy
+     * there would do nothing.
      */
     fun validateTargetedReference(
         fixtures: Fixtures,
         target: TargetRef,
         propertyName: String,
+        allowElements: Boolean = false,
     ): AssignmentHealth {
         val canonical = canonicalPropertyName(propertyName)
-        val referenceFixture: Fixture = when (target) {
+        val referenceFixture: GroupableFixture = when (target) {
             is TargetRef.Group -> {
                 val group = try {
                     fixtures.untypedGroup(target.key)
@@ -38,7 +47,7 @@ object PersistedFixtureReferenceValidator {
                     ?: return AssignmentHealth.MissingGroup(target.key)
             }
             is TargetRef.Fixture -> try {
-                fixtures.untypedFixture(target.key)
+                if (allowElements) fixtures.untypedGroupableFixture(target.key) else fixtures.untypedFixture(target.key)
             } catch (_: IllegalStateException) {
                 return AssignmentHealth.MissingFixture(target.key)
             }
@@ -83,11 +92,13 @@ object PersistedFixtureReferenceValidator {
         else AssignmentHealth.MissingProperty(fixtureTypeKey, propertyName)
     }
 
-    private fun fixtureSupportsProperty(fixture: Fixture, canonical: String): Boolean {
+    /** Against the class catalogue, so a head answers from its own `@FixtureProperty` members. */
+    private fun fixtureSupportsProperty(fixture: GroupableFixture, canonical: String): Boolean {
+        val byName = FixturePropertyCatalogue.of(fixture::class).byName
         if (canonical.equals("position", ignoreCase = true)) {
-            return fixture.fixtureProperty("pan") != null && fixture.fixtureProperty("tilt") != null
+            return byName["pan"] != null && byName["tilt"] != null
         }
-        return fixture.fixtureProperty(canonical) != null
+        return byName[canonical] != null
     }
 }
 

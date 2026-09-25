@@ -551,9 +551,9 @@ internal fun updateIncludedLook(
         )
     }
 
-    // `allowElements`, as `record-look` asks: Include stages a Look's element rows, so a nudged
-    // cell has to be able to come back through Update as the element row it was.
-    val (changed, skips) = changedSinceInclude(state, mask, allowElements = true)
+    // Cells included: Include stages a Look's element rows, so a nudged cell has to be able to
+    // come back through Update as the element row it was — `changedSinceInclude` keeps them.
+    val (changed, skips) = changedSinceInclude(state, mask)
     val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures)
     val elementParents = elementParentsOf(state.show.fixtures, collapsed)
 
