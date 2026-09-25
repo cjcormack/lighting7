@@ -706,8 +706,9 @@ function RailStrip({
   const overlay = useSidePanelMode() === 'overlay'
   return (
     <>
-      {/* The strip is only ever on screen while the body is not (`RailStripFrame`), so its
-          chevron always opens — there is no "close" state for it to carry any more, and with it
+      {/* The strip is only ever *visible* while the body is not (`RailStripFrame`) — under an open
+          overlay it stays in the row, `invisible`, only so its 40px does not reflow the grid — so
+          its chevron always opens: there is no "close" state for it to carry any more, and with it
           went the `aria-expanded` that told the two apart while both were up. */}
       {overlay ? (
         <Button

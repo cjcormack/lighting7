@@ -1131,6 +1131,14 @@ panel — one control in two shapes — which is what the busk sheet always did 
 not: it stood its 40px strip beside the open overlay at 704–1200. Reported from the desk, and the
 sheet's reading is the one kept, so the overlay is flush `right-0` rather than inset past a strip
 and the strip's chevron is open-only (its `aria-expanded` went with the state it distinguished).
+**But a floating panel keeps the strip's 40px in the row.** The overlay is absolute and takes no
+room, so a strip that left the flow as it opened handed its width to the view behind, which
+reflowed on every open and close — the thing floating is meant to avoid. The rail's strip goes
+`invisible` under an open overlay (push mode's narrow arm too), and the busk sheet draws an empty
+`w-10` spacer before its floating panel; the overlay covers either. **And both panels stand beside
+their view's menus, under nothing but the `ShowHeader`**: the programmer's row A is
+`ProgrammerWorkspace`'s `header`, drawn in the grid's column, as the rig band is in the busk
+view's — it was drawn above the workspace, which put the rail a row lower than the sheet.
 
 **Both panels animate their opening, and neither animates its closing** (`SIDE_PANEL_ENTER_CLASS`,
 `usePanelEnter`). The slide is the panel's **whole width**, bare `slide-in-from-right` as the

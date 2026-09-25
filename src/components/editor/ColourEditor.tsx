@@ -737,10 +737,15 @@ export function ColourEditor({
       <div ref={contentRef} onKeyDown={onKeyDown} data-colour-editor={compact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col">
         {leaves}
         {/* The tab's one scroller: the picker, its read-out, Recent. The picker row is padded to the
-            knob's half-width, since a scroller clips at its edge. */}
+            knob's half-width on **every** side a scroller clips — the knob is react-colorful's own
+            28px (its injected stylesheet lands after `index.css`, so the 20px rule there loses),
+            and at 0% it hangs 14px past the square. The top was `pt-3`, 2px short, so a knob at
+            the top of the square was cut by the tab strip above; `pt-4` is the half-width plus
+            the 2px its shadow reaches upward. The label line, where a host draws one, is spaced
+            by the same measure, or the knob would sit over its words. */}
         <div data-colour-editor-scroller className="min-h-0 flex-1 overflow-y-auto">
-          <div className={cn('px-3.5 pt-3', compact ? 'pb-2' : 'pb-3')}>
-            {labelLine != null && <div className="mb-2">{labelLine}</div>}
+          <div className={cn('px-3.5 pt-4', compact ? 'pb-2' : 'pb-3')}>
+            {labelLine != null && <div className="mb-4">{labelLine}</div>}
             {controls}
             {readout}
           </div>

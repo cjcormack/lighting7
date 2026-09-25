@@ -212,7 +212,19 @@ function useRailGeometry(): RailGeometry {
  * the release inside one task, and a ref assigned during render would commit the width from the
  * move *before* last.
  */
-export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: ReactNode }) {
+export function ProgrammerWorkspace({
+  header,
+  grid,
+  rail,
+}: {
+  /**
+   * The page's chrome above the grid — row A — drawn in the grid's column, so the rail sits beside
+   * it rather than under it. Null where there is none (the short viewport folds row A into row B).
+   */
+  header?: ReactNode
+  grid: ReactNode
+  rail: ReactNode
+}) {
   const [collapsed, setCollapsed] = usePersistentState<boolean>(COLLAPSED_KEY, false)
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -322,14 +334,23 @@ export function ProgrammerWorkspace({ grid, rail }: { grid: ReactNode; rail: Rea
             resizing && 'cursor-col-resize select-none',
           )}
         >
-          {/* Capture, not bubble: a press on a cell that stops propagation must still close the
-              overlay, and the press itself goes on to land. In the wide arm `overlayOpen` is only
-              ever stale-true, and clearing it there changes nothing on screen. */}
-          <div
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-            onPointerDownCapture={overlayOpen ? arm.closeOverlay : undefined}
-          >
-            {grid}
+          {/* The grid's column, and the page's own chrome above the grid in it: the rail stands
+              beside the view's menus and under nothing but the `ShowHeader`, as the busk sheet
+              stands beside the rig band. Row A was drawn above this whole row until the rail and
+              the sheet were made to agree, so the rail started a row lower than the sheet did. */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            {header}
+            {/* Capture, not bubble: a press on a cell that stops propagation must still close the
+                overlay, and the press itself goes on to land. In the wide arm `overlayOpen` is only
+                ever stale-true, and clearing it there changes nothing on screen. The header is
+                outside it on purpose: row A's verbs — Record, Clear, Blind — are presses about the
+                programmer the rail shows, and closing the rail under them was never the rule. */}
+            <div
+              className="flex min-h-0 min-w-0 flex-1 flex-col"
+              onPointerDownCapture={overlayOpen ? arm.closeOverlay : undefined}
+            >
+              {grid}
+            </div>
           </div>
           <RailArmContext.Provider value={arm}>
             <RailGeometryContext.Provider value={geometry}>{rail}</RailGeometryContext.Provider>
@@ -436,9 +457,17 @@ export function RailStripFrame({ children }: { children: ReactNode }) {
         // closed state of the panel, and the two are one control in two shapes. Reported from the
         // desk as the rail looking wrong beside it, and the sheet's reading is the one kept.
         // In push mode that is the `@max-[1200px]` arm; in overlay mode there is only one arm.
+        //
+        // **Under an open overlay the strip is `invisible`, never `hidden`.** The overlay is
+        // absolute, so it takes no room of its own; a strip taken out of the flow as it opened
+        // gave its 40px back to the grid, and every column beside it reflowed on each open and
+        // close — the one thing an overlay exists not to do. Invisible, the strip keeps its box
+        // (the overlay, flush `right-0` and wider than 40, covers it) and leaves the tab order and
+        // the accessibility tree as surely as `display: none` did. The docked arm stays `hidden`:
+        // there the body is in the flow and takes the room itself.
         overlay
-          ? arm.overlayOpen && 'hidden'
-          : [!arm.collapsed && '@min-[1200px]:hidden', arm.overlayOpen && '@max-[1200px]:hidden'],
+          ? arm.overlayOpen && 'invisible'
+          : [!arm.collapsed && '@min-[1200px]:hidden', arm.overlayOpen && '@max-[1200px]:invisible'],
         '@max-[704px]:hidden',
       )}
     >

@@ -5,6 +5,7 @@ import { LIVE_SHEET_TABS, getBuskSheet, resetBuskWindowStores, setBuskSheet } fr
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 import { SIDE_PANEL_BODY_CLASS, SIDE_PANEL_STRIP_CLASS } from '@/components/sheet/sidePanel'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
+import { resetSidePanelModeStore, setSidePanelMode } from '@/lib/sidePanelMode'
 import type { BuskingTarget } from './buskingTypes'
 
 /**
@@ -111,6 +112,7 @@ afterEach(() => {
   window.sessionStorage.clear()
   resetBuskWindowStores()
   resetEditorSurfaceMedia()
+  resetSidePanelModeStore()
   vi.unstubAllGlobals()
 })
 
@@ -316,6 +318,38 @@ describe('docked, on the desk board', () => {
     expect((document.querySelector('[data-side-sheet="speed"]') as HTMLElement).className).toContain(
       'animate-in',
     )
+  })
+
+  it('keeps the fold\u2019s 40px in the row while floating, so opening the sheet does not reflow the page', () => {
+    // The overlay is absolute and takes no room: swapping the fold for it alone gave the fold's
+    // width back to the page, and every bank beside it reflowed on each open and close.
+    setBuskSheet('colour')
+    setSidePanelMode('overlay')
+    const { rerender } = render(<SideSheet {...props} />)
+    const panel = document.querySelector('[data-side-sheet="colour"]') as HTMLElement
+    expect(panel).toHaveAttribute('data-sheet-mode', 'overlay')
+    const spacer = document.querySelector('[data-side-sheet-spacer]') as HTMLElement
+    expect(spacer).not.toBeNull()
+    // The fold's own width, in the flow, drawing nothing and read by nothing.
+    expect(spacer.className).toContain('w-10')
+    expect(spacer.className).toContain('shrink-0')
+    expect(spacer).toHaveAttribute('aria-hidden')
+    expect(spacer.childElementCount).toBe(0)
+    // It is not the fold: the fold and the panel are still never both drawn.
+    expect(document.querySelector('[data-side-sheet="none"]')).toBeNull()
+
+    // Pushed beside the page, the panel is in the flow itself and there is nothing to hold.
+    const tab = screen.getByTestId('colour-sheet')
+    setSidePanelMode('push')
+    rerender(<SideSheet {...props} />)
+    expect(document.querySelector('[data-side-sheet-spacer]')).toBeNull()
+    expect(document.querySelector('[data-side-sheet="colour"]')).toHaveAttribute('data-sheet-mode', 'push')
+    // The mode toggle is in the panel's own header, so flipping it must not remount the tab under
+    // the operator's hand.
+    expect(screen.getByTestId('colour-sheet')).toBe(tab)
+    setSidePanelMode('overlay')
+    rerender(<SideSheet {...props} />)
+    expect(screen.getByTestId('colour-sheet')).toBe(tab)
   })
 
   it('opens no narrower than its header needs, lifting a width stored below that floor', () => {

@@ -262,21 +262,6 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
 
   return (
     <ProgrammerScopeProvider>
-      {/* Row A: the noun and the verbs, on one 40px line. It declares the `@container` both
-          halves query — neither may declare its own, or each would measure itself instead of the
-          width it has to share (see `ProgrammerWorkspace`'s doc comment for that bug).
-
-          Under 500px of viewport height it is not drawn at all: the same two components go into
-          row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and the page's chrome
-          is one line rather than two. `null` in that arm rather than a hidden div, because the
-          components are mounted in the other place and two copies would be two of every query
-          behind them. */}
-      {!shortViewport && (
-        // The shell's chrome row, with the one ground any row has: row A keeps its `bg-card/50`
-        // wash by decision (list-shell-design, called 2026-09-15) — the verbs' own band.
-        <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
-      )}
-
       {/* The outer editor context stays `live` for the *rail* — its FX controls write the
           programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
           context derived from the scope. */}
@@ -296,6 +281,29 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           <FocusedTemplateLayerProvider projectId={projectId}>
             <EditorContextProvider value={{ kind: 'live' }}>
               <ProgrammerWorkspace
+                header={
+                  // Row A: the noun and the verbs, on one 40px line. It declares the `@container`
+                  // both halves query — neither may declare its own, or each would measure itself
+                  // instead of the width it has to share (see `ProgrammerWorkspace`'s doc comment
+                  // for that bug).
+                  //
+                  // **It is the workspace's header, in the grid's column**, so the rail stands
+                  // beside it and under nothing but the `ShowHeader` — the busk sheet's place
+                  // beside the rig band. It was drawn above the workspace, which put the rail a
+                  // row lower on this view than the sheet is on that one. Its fold ladder measures
+                  // the row it now has, which is the column less the rail, as the band's does.
+                  //
+                  // Under 500px of viewport height it is not drawn at all: the same two components
+                  // go into row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and
+                  // the page's chrome is one line rather than two. `null` in that arm rather than
+                  // a hidden div, because the components are mounted in the other place and two
+                  // copies would be two of every query behind them.
+                  //
+                  // The shell's chrome row, with the one ground any row has: row A keeps its
+                  // `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the
+                  // verbs' own band.
+                  shortViewport ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
+                }
                 grid={
                   <ProgrammerGrid
                     projectId={projectId}

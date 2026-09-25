@@ -177,7 +177,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
   if (open == null) {
     return <SideSheetFold projectId={projectId} selectedTargets={selectedTargets} tabs={tabs} liveCue={liveCueLabel(show)} />
   }
-  return (
+  const panel = (
     <DockedSideSheet openId={open.id} enter={enter} overlay={overlay}>
       {/* The strip's unpadded wrapper is the `@container`, so the tab words fold at 400px of
           sheet exactly (D3, `tabWordClass`) — on the padded row itself they would fold 24px early. */}
@@ -249,6 +249,22 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
         {open.id === 'show' && <ShowTab projectId={projectId} show={show} />}
       </div>
     </DockedSideSheet>
+  )
+  // **Overlay mode keeps the fold's 40px in the flow.** The panel is absolute and takes no room,
+  // so swapping the fold for it alone handed the fold's width back to the page — every bank beside
+  // it reflowed on each open and close, which is the one thing floating the sheet is meant to
+  // avoid. The spacer holds the room the fold held; the panel, flush `right-0` and wider than 40,
+  // covers it. It draws nothing, so the rule that the fold and the panel are never both on screen
+  // stands. The programmer rail does the same with its strip made `invisible` (`RailStripFrame`).
+  //
+  // One fragment in both modes, the spacer a conditional slot before the panel: returning the
+  // panel bare in push mode would move it between two parent shapes as the mode toggle in its own
+  // header is pressed, and React would remount the tab under the operator's hand.
+  return (
+    <>
+      {overlay && <div aria-hidden data-side-sheet-spacer className="hidden w-10 shrink-0 md:block" />}
+      {panel}
+    </>
   )
 }
 

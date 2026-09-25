@@ -301,14 +301,16 @@ describe('ProgrammerWorkspace', () => {
     // Push mode, docked arm: open body, strip hidden by the wide query.
     expect(body().className).not.toContain('@min-[1200px]:hidden')
     expect(strip().className).toContain('@min-[1200px]:hidden')
-    // Push mode, narrow arm: opening the overlay hides the strip for that arm too.
+    // Push mode, narrow arm: opening the overlay makes the strip invisible for that arm too —
+    // invisible and not hidden, so its 40px stays in the row and the grid does not reflow.
     fireEvent.click(screen.getByText('collapse'))
-    expect(strip().className).not.toContain('@max-[1200px]:hidden')
+    expect(strip().className).not.toContain('@max-[1200px]:invisible')
     fireEvent.click(screen.getByText('open'))
-    expect(strip().className).toContain('@max-[1200px]:hidden')
+    expect(strip().className).toContain('@max-[1200px]:invisible')
+    expect(strip().className).not.toContain('@max-[1200px]:hidden')
   })
 
-  it('takes one arm at every width in overlay mode, and hides the strip outright when open', () => {
+  it('takes one arm at every width in overlay mode, and keeps the strip\u2019s room when open', () => {
     setSidePanelMode('overlay')
     draw()
     // `collapsed` says nothing here: the only flag is `overlayOpen`, so nothing is mounted yet.
@@ -330,7 +332,42 @@ describe('ProgrammerWorkspace', () => {
     // every width in this mode the width on screen is the stored one.
     expect(panel.className).toContain('w-[var(--rail-w)]')
     expect(handle().className).not.toContain('@max-[1200px]:hidden')
-    expect(hiddenOutright(strip())).toBe(true)
+    // The strip is invisible under the open overlay, never taken out of the row: the overlay is
+    // absolute and takes no room, so a strip that left the flow as it opened handed its 40px to
+    // the grid and every column reflowed on each open and close.
+    expect(hiddenOutright(strip())).toBe(false)
+    expect(strip().className.split(' ')).toContain('invisible')
+
+    fireEvent.click(screen.getByText('close'))
+    expect(strip().className.split(' ')).not.toContain('invisible')
+  })
+
+  it('draws the header in the grid\u2019s column, beside the rail and outside the overlay\u2019s close', () => {
+    // The rail stands beside the view's menus and under nothing but the ShowHeader, as the busk
+    // sheet stands beside the rig band — so row A is the column's, not the page's.
+    render(
+      <ProgrammerWorkspace
+        header={<div data-testid="header">row A</div>}
+        grid={<div data-testid="grid">grid</div>}
+        rail={<TestRail />}
+      />,
+    )
+    const header = screen.getByTestId('header')
+    const column = header.parentElement as HTMLElement
+    expect(column.contains(screen.getByTestId('grid'))).toBe(true)
+    expect(column.contains(body())).toBe(false)
+    // The column and the rail are siblings in the one row.
+    expect(column.parentElement).toBe(body().parentElement)
+    // Before the grid, in the column's flow.
+    expect(column.firstElementChild).toBe(header)
+
+    // A press on row A is not a press on the grid: its verbs are about the programmer the rail
+    // shows, and closing the rail under them was never the rule.
+    fireEvent.click(screen.getByText('open'))
+    fireEvent.pointerDown(header)
+    expect(body().className).not.toContain('@max-[1200px]:hidden')
+    fireEvent.pointerDown(screen.getByTestId('grid'))
+    expect(body().className).toContain('@max-[1200px]:hidden')
   })
 
   it('renders the grid exactly once, and never inside the rail', () => {
