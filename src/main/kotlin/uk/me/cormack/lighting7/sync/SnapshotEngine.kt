@@ -89,7 +89,19 @@ class SnapshotEngine(private val state: State) {
                 }
                 exporter.writeTombstones(path, syncStateKeys - exportResult.liveKeys)
 
-                if (!JGitClient.stageAll(repo)) {
+                val stagedPaths = JGitClient.stageAllPaths(repo)
+                val staged = stagedPaths.isNotEmpty()
+                // A change confined to installs.json is this install registering itself (a
+                // new desk, or a renamed one) with nothing else to say. That is not worth a
+                // commit: every fresh install's first sync would otherwise push one, with no
+                // edit behind it. Put the file back — the registration rides along with the
+                // install's first real commit, which is the first commit it needs crediting
+                // for in the history view.
+                val registrationOnly = stagedPaths == setOf(INSTALLS_FILE)
+                if (registrationOnly) {
+                    JGitClient.restoreFromHead(repo, INSTALLS_FILE)
+                }
+                if (!staged || registrationOnly) {
                     return@withContext SnapshotResponse(
                         noChanges = true,
                         workingTreePath = path.toString(),
@@ -120,12 +132,15 @@ class SnapshotEngine(private val state: State) {
 
     private fun readKnownInstalls(path: java.nio.file.Path): Map<String, String> =
         runCatching {
-            canonicalDecode(InstallsJson.serializer(), Files.readString(path.resolve("installs.json"))).installs
+            canonicalDecode(InstallsJson.serializer(), Files.readString(path.resolve(INSTALLS_FILE))).installs
         }.getOrDefault(emptyMap())
 
     companion object {
         /** Domain for synthesised commit-author emails ({shortUuid}@{domain}). */
         const val INSTALL_EMAIL_DOMAIN = "lighting7.local"
+
+        /** The install registry, written by the exporter; see [snapshot]. */
+        const val INSTALLS_FILE = "installs.json"
     }
 }
 

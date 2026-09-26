@@ -63,7 +63,13 @@ object JGitClient {
      *
      * Returns `true` if the next commit would have non-empty content.
      */
-    fun stageAll(repo: Repository): Boolean {
+    fun stageAll(repo: Repository): Boolean = stageAllPaths(repo).isNotEmpty()
+
+    /**
+     * [stageAll], answering the paths staged against HEAD — added, changed or removed —
+     * from the same post-stage Status walk. On an unborn repo every path is "added".
+     */
+    fun stageAllPaths(repo: Repository): Set<String> {
         Git(repo).use { git ->
             val pre = git.status().call()
             git.add().addFilepattern(".").call()
@@ -73,9 +79,24 @@ object JGitClient {
                 rm.call()
             }
             val post = git.status().call()
-            return post.added.isNotEmpty()
-                || post.changed.isNotEmpty()
-                || post.removed.isNotEmpty()
+            return post.added + post.changed + post.removed
+        }
+    }
+
+    /**
+     * Put [path] back to its HEAD content in both the index and the working tree — the
+     * single-path `git checkout HEAD -- path`. Used to drop a staged change the caller has
+     * decided is not worth a commit. A path HEAD does not carry is unstaged and deleted,
+     * so the working tree is left clean either way.
+     */
+    fun restoreFromHead(repo: Repository, path: String) {
+        Git(repo).use { git ->
+            git.reset().setRef("HEAD").addPath(path).call()
+            if (readBlob(repo, "HEAD", path) == null) {
+                Files.deleteIfExists(repo.workTree.toPath().resolve(path))
+            } else {
+                git.checkout().setStartPoint("HEAD").addPath(path).call()
+            }
         }
     }
 
@@ -87,7 +108,15 @@ object JGitClient {
         }
     }
 
-    /** Create a commit with the given author identity. */
+    /**
+     * Create a commit with the given author identity.
+     *
+     * Never signed: these are the engine's commits, authored as the install rather than as a
+     * person, and JGit honours the machine user's `~/.gitconfig`. A desk whose owner signs
+     * their own commits (`commit.gpgsign = true`) would otherwise fail every snapshot — with
+     * SSH signing JGit has no signer at all ("No signer for ssh signatures") — or prompt for
+     * a key passphrase mid-show. [commitWithParents] makes the same call.
+     */
     fun commit(
         repo: Repository,
         authorName: String,
@@ -99,6 +128,7 @@ object JGitClient {
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .setMessage(message)
+                .setSign(false)
                 .call()
                 .toCommitInfo()
         }
@@ -130,6 +160,7 @@ object JGitClient {
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .setMessage(message)
+                .setSign(false)
                 .call()
                 .toCommitInfo()
         }

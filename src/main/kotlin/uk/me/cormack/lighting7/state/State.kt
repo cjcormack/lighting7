@@ -124,6 +124,16 @@ class State(val config: ApplicationConfig) {
         ?: appDataDir().resolve("sync")
 
     /**
+     * `sync.push` in `local.conf` (default `true`). `false` makes this install pull-only:
+     * a sync still snapshots, fetches, fast-forwards and merges, but never pushes — local
+     * commits stay in the working tree. Deliberately not in the UI or `example.local.conf`:
+     * it exists for throwaway installs (a cloud dev container importing a real show) that
+     * must never write to the show's repo. See `docs/sync-engineering.md` §"Pull-only
+     * installs".
+     */
+    val syncPushEnabled: Boolean = config.optionalBoolean("sync.push", default = true)
+
+    /**
      * Root directory for prompt-book script PDFs, stored content-addressed as
      * `{projectUuid}/{sha256}.pdf`. Defaults to `<appDataDir>/prompt-scripts` and is
      * overridable via `promptBooks.scriptStoreRoot` in `local.conf` (handy for tests).

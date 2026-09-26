@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.MissingCredentialsException
 import uk.me.cormack.lighting7.sync.auth.oauth.OAuthReauthRequiredException
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
+import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import java.nio.file.Files
 import java.nio.file.Path
@@ -320,6 +321,18 @@ class RemoteSyncEngine(
         message: String,
         attemptsRemaining: Int,
     ): SyncRunResult {
+        if (!state.syncPushEnabled) {
+            // Pull-only install: the commits stay local. sync_state is left where it is —
+            // it records what this install and the remote last agreed on, and nothing new
+            // has been agreed — and lastSyncedSha names the remote tip for the same reason.
+            val remoteSha = repo.resolve(remoteBranchRef(branch))?.name
+            return SyncRunResult(
+                SyncOutcome.NO_OP, pushed = 0, pulled = 0, replaced = 0,
+                headSha = remoteSha ?: headSha,
+                message = "$PUSH_DISABLED_PREFIX $ahead local commit(s) kept in the working tree.",
+                sessionId = null, conflictCount = 0,
+            )
+        }
         val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
         if (!pushIsRejected(pushed)) {
             ensurePushOk(pushed)
@@ -477,7 +490,14 @@ class RemoteSyncEngine(
         // PDF add/remove is part of the merge commit.
         reconcileAndHydratePromptScripts(projectId, workingTreePath, reconcile = true)
 
-        if (!JGitClient.stageAll(repo)) {
+        // The registry is unioned only into a merge that commits anyway: a merge whose sole
+        // difference from the remote would be this install's registration is exactly the
+        // registration-only commit SnapshotEngine refuses to make.
+        val mergeChanges = JGitClient.stageAll(repo)
+        if (mergeChanges && unionInstallRegistry(repo, workingTreePath, localSha, installUuid)) {
+            JGitClient.stageAll(repo)
+        }
+        if (!mergeChanges) {
             // No tree-level diff vs remote — equivalent to a fast-forward.
             val head = JGitClient.head(repo)?.sha ?: error("Auto-merge no-op: null HEAD")
             bootstrapSyncStateAtHead(projectId, repo, head)
@@ -501,6 +521,21 @@ class RemoteSyncEngine(
             extraParentSha = localSha,
         )
 
+        if (!state.syncPushEnabled) {
+            // Pull-only install: keep the merge commit locally. The DB is at the merged
+            // state, but the last point both sides agree on is the remote tip we merged, so
+            // that is what sync_state and lastSyncedSha record — the next three-way diff
+            // then still sees this install's own edits as local changes.
+            bootstrapSyncStateAtHead(projectId, repo, remoteSha)
+            return SyncRunResult(
+                outcome = SyncOutcome.MERGED,
+                pushed = 0, pulled = behind, replaced = 0,
+                headSha = remoteSha,
+                message = "Merged ${ahead + behind} commit(s). $PUSH_DISABLED_PREFIX the merge is kept in the working tree.",
+                sessionId = null, conflictCount = 0,
+            )
+        }
+
         val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
         if (pushIsRejected(pushed)) {
             return retryAfterPushReject(
@@ -522,6 +557,33 @@ class RemoteSyncEngine(
             message = "Merged ${ahead + behind} commit(s) and pushed.",
             sessionId = null, conflictCount = 0,
         )
+    }
+
+    /**
+     * The merge tree starts from the remote tip, whose `installs.json` predates any
+     * registration made on the local side — and [SnapshotEngine] never commits a registration
+     * on its own, so one dropped here would stay off the remote until this install's next
+     * non-merge commit, leaving its merged commits uncredited in the history view. Union the
+     * local side's registry back in: peers as the remote has them, this install as the local
+     * side names it (so a rename carried by the local commits survives the merge too).
+     * Returns whether it changed the file.
+     */
+    private fun unionInstallRegistry(repo: Repository, workingTreePath: Path, localSha: String, installUuid: UUID): Boolean {
+        val file = workingTreePath.resolve(SnapshotEngine.INSTALLS_FILE)
+        val local = JGitClient.readBlob(repo, localSha, SnapshotEngine.INSTALLS_FILE)
+            ?.let { runCatching { canonicalDecode(InstallsJson.serializer(), it).installs }.getOrNull() }
+            ?: return false
+        val remote = if (Files.exists(file)) {
+            runCatching { canonicalDecode(InstallsJson.serializer(), Files.readString(file)).installs }.getOrNull()
+                ?: return false
+        } else {
+            emptyMap()
+        }
+        val own = installUuid.toString()
+        val merged = local + remote + listOfNotNull(local[own]?.let { own to it })
+        if (merged == remote) return false
+        Files.writeString(file, canonicalEncode(InstallsJson.serializer(), InstallsJson(installs = merged)))
+        return true
     }
 
     private fun pushIsRejected(result: PushResult): Boolean = when (result.status) {
@@ -1036,6 +1098,9 @@ class RemoteSyncEngine(
         const val REMOTE_NAME = "origin"
         /** Cap on automatic retries when push is rejected by the remote. */
         const val MAX_PUSH_RETRIES = 3
+
+        /** Leads every result message of a sync whose push `sync.push = false` skipped. */
+        const val PUSH_DISABLED_PREFIX = "Push disabled on this install (sync.push = false):"
         private val logger = LoggerFactory.getLogger(RemoteSyncEngine::class.java)
     }
 }

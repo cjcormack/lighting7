@@ -42,6 +42,26 @@ class JGitClientTest {
     }
 
     @Test
+    fun `commit ignores a commit-signing config`() {
+        // The machine user's ~/.gitconfig reaches JGit. With SSH signing configured JGit has
+        // no signer and every snapshot used to fail; the engine's commits must never sign.
+        JGitClient.init(repoDir).use { repo ->
+            repo.config.apply {
+                setBoolean("commit", null, "gpgsign", true)
+                setString("gpg", null, "format", "ssh")
+                save()
+            }
+            Files.writeString(repoDir.resolve("hello.txt"), "world\n")
+            assertTrue(JGitClient.stageAll(repo))
+
+            val commit = JGitClient.commit(repo, "Test User", "test@lighting7.local", "Unsigned")
+
+            val raw = repo.newObjectReader().use { it.open(repo.resolve(commit.sha)).bytes }
+            assertTrue("gpgsig" !in String(raw), "engine commits must not carry a signature")
+        }
+    }
+
+    @Test
     fun `open returns null for a directory with no git dir`() {
         // repoDir exists but has no .git/
         assertNull(JGitClient.open(repoDir))
