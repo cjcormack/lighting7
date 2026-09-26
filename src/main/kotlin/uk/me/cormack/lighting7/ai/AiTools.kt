@@ -51,6 +51,15 @@ class AiTools(private val state: State) {
     )
 
     /**
+     * What the MCP server offers: every tool but `run_lighting_script`. The MCP surface adds a
+     * new actor — a model reading fixture names, cue notes and synced content it did not write —
+     * and a literal-script tool is the step that turns a prompt injection into code running as
+     * the desk process. Dropped by decision (see `docs/mcp-engineering.md` §"No script tool").
+     * [executeTool] would still run it, so the MCP layer dispatches only names in this list.
+     */
+    val mcpTools: List<AnthropicToolDef> = allTools.filter { it.name != runLightingScriptTool.name }
+
+    /**
      * Execute a tool by name and return a JSON result string.
      */
     suspend fun executeTool(name: String, input: JsonObject): ToolExecutionResult {
@@ -87,7 +96,9 @@ class AiTools(private val state: State) {
             ToolExecutionResult(
                 success = false,
                 description = "Error executing $name: ${e.message}",
-                result = """{"error": "${e.message?.replace("\"", "\\\"") ?: "Unknown error"}"}"""
+                // Built rather than interpolated: a message holding a backslash or a newline made
+                // the hand-escaped string invalid JSON.
+                result = buildJsonObject { put("error", e.message ?: "Unknown error") }.toString(),
             )
         }
     }

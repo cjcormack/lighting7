@@ -142,6 +142,25 @@ internal fun Route.routeApiRestAuth(state: State) {
         call.respond(HttpStatusCode.NoContent)
     }
 
+    // ─── Connected apps: the caller's own MCP OAuth grants ──────────────
+    //
+    // Any role, own grants only — the same shape as `/auth/sessions`. Revoking one here is the
+    // Profile sheet's Revoke button; it takes effect on the MCP listener's next request.
+
+    get<AuthConnectedAppsResource> {
+        val user = call.authenticatedUser
+        call.respond(state.mcpAuthService.grantsFor(user.userId))
+    }
+
+    delete<AuthConnectedAppResource> { resource ->
+        val user = call.authenticatedUser
+        if (state.mcpAuthService.revokeGrant(user.userId, resource.id)) {
+            call.respond(HttpStatusCode.NoContent)
+        } else {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("No such connected app"))
+        }
+    }
+
     // ─── QR password reset, redeemed on the locked-out user's phone ─────
     //
     // Auth-exempt by definition: whoever opens this has no session and cannot get one.
@@ -385,6 +404,12 @@ data object AuthProfileResource
 
 @Resource("/auth/sessions")
 data object AuthSessionsResource
+
+@Resource("/auth/connected-apps")
+data object AuthConnectedAppsResource
+
+@Resource("/auth/connected-apps/{id}")
+data class AuthConnectedAppResource(val id: Int)
 
 @Resource("/auth/reset/{token}")
 data class AuthResetResource(val token: String)

@@ -601,6 +601,12 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 - **DMX Hardware**: ArtNet protocol over network
 - **Philips Hue**: HTTP API via Ktor client
+- **MCP (Claude)**: a second listener (`mcp.port`, default `127.0.0.1:8414`) serving only MCP,
+  OAuth and its sign-in page, meant to sit behind a tunnel so claude.ai and the phone apps can
+  drive the desk. The desk is its own OAuth server; grants are machine-local and die with the
+  user's sessions. The tools are the AI chat's minus `run_lighting_script`, plus `describe_rig`.
+  Never mount anything else on that listener — the port split *is* the security boundary. See
+  [docs/mcp-engineering.md](docs/mcp-engineering.md)
 
 ## Engineering Documentation
 
@@ -614,6 +620,7 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
+- [MCP Server](docs/mcp-engineering.md) - The second listener, the desk as its own OAuth server (PKCE, rotating refresh tokens, lockout, revocation with sessions), the tunnel, and why the script tool is left out
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
 - [Composition Model](docs/lighting-composition-model.md) - The five layers, and §"Looks, templates and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, property) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A template holds a value *or* an effect" is the D7 reversal and the three rules that keep it narrow
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note

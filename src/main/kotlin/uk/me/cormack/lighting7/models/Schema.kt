@@ -36,4 +36,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoSyncLogEntries,
     DaoOAuthIdentities,
     DaoUsers, DaoUserSessions, DaoPasswordResetTokens,
+    // After DaoUsers, which a grant references.
+    DaoMcpOAuthClients, DaoMcpOAuthGrants,
 )

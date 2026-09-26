@@ -91,6 +91,16 @@ class State(val config: ApplicationConfig) {
         bcryptCost = config.optionalString("auth.bcryptCost")?.toIntOrNull() ?: DEFAULT_BCRYPT_COST,
     )
 
+    /** The `mcp { }` block: the MCP listener's port, bind address and public URL. */
+    val mcpConfig = uk.me.cormack.lighting7.mcp.McpConfig.from(config)
+
+    /**
+     * OAuth for the MCP listener. Eager, not lazy, and after [authService]: it registers for
+     * [AuthService]'s credential revocations in its constructor, and a revocation it missed
+     * (a password change before anything touched MCP) would leave a grant alive.
+     */
+    val mcpAuthService = uk.me.cormack.lighting7.mcp.McpAuthService(database, authService, mcpConfig)
+
     /**
      * Kotlin scripting host configuration shared by every scripting host in the app. Installs
      * the on-disk compiled-script cache (see [buildScriptingHostConfiguration]) so scripts are

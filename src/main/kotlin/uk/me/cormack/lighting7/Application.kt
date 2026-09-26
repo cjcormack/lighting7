@@ -8,6 +8,7 @@ import kotlin.system.exitProcess
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.auth.runBreakGlassIfRequested
+import uk.me.cormack.lighting7.mcp.startMcpServer
 import uk.me.cormack.lighting7.plugins.configureErrorHandling
 import uk.me.cormack.lighting7.plugins.configureHTTP
 import uk.me.cormack.lighting7.plugins.configureSockets
@@ -67,6 +68,13 @@ fun Application.module() {
     runBreakGlassIfRequested(state.authService, appDataDir())
     if (!state.authService.hasAnyUser) {
         log.warn("no users configured — the API is unauthenticated until an admin is created")
+    }
+
+    // The MCP listener: its own server on its own port, so the tunnel that carries it reaches
+    // nothing else. Its tool calls answer "still starting" until the show is ready, so it can
+    // come up before the show does.
+    startMcpServer(state)?.let { mcp ->
+        monitor.subscribe(ApplicationStopping) { mcp.stop(1_000, 2_000) }
     }
 
     val backgroundInit = state.config.optionalBoolean("show.backgroundInit", default = true)

@@ -306,6 +306,24 @@ class AuthService(
      */
     val revocations: SharedFlow<String> = _revocations.asSharedFlow()
 
+    private val credentialRevocationListeners = java.util.concurrent.CopyOnWriteArrayList<(Int) -> Unit>()
+
+    /**
+     * Called **synchronously** with a userId whenever that account's credentials move in a way
+     * that ends sessions: disable, delete, any password set, reset redemption, and "sign out
+     * everywhere else". The MCP OAuth grants hang off this (`McpAuthService`), so a grant dies
+     * on exactly the events a cookie does. Synchronous rather than a flow like [revocations]:
+     * a dropped frame there costs a socket that closes late, a dropped one here would leave a
+     * token alive on the internet after the account was disabled.
+     */
+    fun addCredentialRevocationListener(listener: (Int) -> Unit) {
+        credentialRevocationListeners += listener
+    }
+
+    private fun notifyCredentialsRevoked(userId: Int) {
+        credentialRevocationListeners.forEach { it(userId) }
+    }
+
     private val _userChanges = MutableSharedFlow<Int>(replay = 0, extraBufferCapacity = 64)
 
     /**
@@ -562,6 +580,7 @@ class AuthService(
         // that function's device-login cleanup — do it here, or a QR minted seconds before
         // the account was deleted would still resolve.
         cancelOutstandingDeviceLogins(userId, clock())
+        notifyCredentialsRevoked(userId)
         sessions.values.filter { it.userId == userId }.forEach {
             sessions.remove(it.tokenHash)
             _revocations.tryEmit(it.tokenHash)
@@ -605,7 +624,16 @@ class AuthService(
      * half was wrong. A disabled account authenticates first, then 403s — same
      * anti-enumeration reasoning.
      */
-    suspend fun login(username: String, password: String, userAgent: String?, clientIp: String?): Pair<AuthenticatedUser, String> {
+    suspend fun login(username: String, password: String, userAgent: String?, clientIp: String?): Pair<AuthenticatedUser, String> =
+        mintSession(verifyCredentials(username, password), userAgent, clientIp)
+
+    /**
+     * The password half of [login], with no session minted: the same throttle, the same
+     * constant-time miss, the same "disabled answers after the password" ordering. The MCP
+     * sign-in page (`mcp/McpAuthService.kt`) is its second caller — it grants an OAuth token
+     * rather than a cookie, and must not be a way round the throttle the login form has.
+     */
+    suspend fun verifyCredentials(username: String, password: String): UserRecord {
         val uname = normaliseUsername(username)
         val penalty = penaltyDelayMs(uname, nowMs())
         if (penalty > 0) delay(penalty)
@@ -627,7 +655,7 @@ class AuthService(
             throw AuthorizationException("This account is disabled")
         }
         clearLoginFailures(uname)
-        return mintSession(user, userAgent, clientIp)
+        return user
     }
 
     /**
@@ -728,6 +756,7 @@ class AuthService(
         // exchangeable QR on a screen would defeat the one button someone presses when they
         // think they have been compromised.
         cancelOutstandingDeviceLogins(userId, clock())
+        notifyCredentialsRevoked(userId)
         val doomed = sessions.values.filter { it.userId == userId && it.tokenHash != exceptTokenHash }
         if (doomed.isEmpty()) return
         val now = clock()

@@ -293,9 +293,24 @@ Other guards:
   truncates beyond that, so a longer password would validate against any input sharing its
   first 72 bytes.
 
+## Connected apps (MCP)
+
+Claude connects to the desk's MCP listener with OAuth, signing in on a page that listener
+serves with a desk account (`docs/mcp-engineering.md`). Each approval is a **grant** in
+`mcp_oauth_grants`: a hashed access token and a hashed rotating refresh token, acting as that
+user with that user's role. Grants are revoked by every event that revokes sessions — disable,
+delete, any password change, reset redemption and "sign out everywhere else" — through
+`AuthService`'s credential-revocation listener, which fires before `revokeAllSessionsFor`'s
+early return so a user with no browser sessions still loses their apps. The user sees them as
+**Connected apps** in Profile → Devices, each with Revoke. A desk with no accounts refuses the
+sign-in outright.
+
+The MCP sign-in page has a lockout (ten failures in fifteen minutes) on top of the login
+throttle, because it is the one sign-in on the internet. The LAN login keeps the throttle only.
+
 ## Cloud sync and support copies
 
-All three tables are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
+All three tables — and the two MCP OAuth tables — are `MachineLocal` in `SyncCoverageTest`: nothing here reaches a git
 remote, an export, or a clone. Session and reset tokens are stored hashed, so a SQLite
 file copied for diagnostics — or sitting next to a sync working tree — contains no
 redeemable credential. Device-login codes aren't in the database at all.
@@ -303,7 +318,7 @@ redeemable credential. Device-login codes aren't in the database at all.
 ## Not in v1
 
 HTTPS and `Secure` cookies (desks run plain LAN HTTP; the QR URL scheme would need
-revisiting), CSRF tokens, account lockout beyond the login throttle, 2FA, password complexity
+revisiting), CSRF tokens, account lockout beyond the login throttle (the MCP sign-in page has one; the LAN login does not), 2FA, password complexity
 beyond the length floor, per-user attribution of edits, an audit log, and per-message
 WebSocket authorisation.
 
