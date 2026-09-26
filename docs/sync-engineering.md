@@ -582,6 +582,16 @@ future cloud-sync attribution. Phase 1 wrote an empty stub; Phase 2 fills
 it. The importer treats `installs.json` as informational — it doesn't
 copy the foreign install's identity into the local install row.
 
+**A change confined to `installs.json` is not a commit.** Every snapshot
+unions the local install into the registry, so a new install's first snapshot
+of a project it pulled — and any install's snapshot after a rename — differs
+from HEAD in that file and nothing else. `SnapshotEngine` puts the file back
+to HEAD and reports no changes, so a desk that has edited nothing has nothing
+to push; the registration rides along with the install's first real commit,
+which is the first commit the history view needs to credit it for. Until
+then a sync from it is `NO_OP`. `SnapshotEngineTest` and `PullOnlySyncTest`
+pin both halves.
+
 The install row is machine-local; it never leaves the local SQLite DB.
 
 ## Project import semantics
@@ -858,6 +868,39 @@ serialise:
 10. **Hot-reload show** if the just-pulled project happens to be the active
     one — `ProjectManager.switchProject(currentId)` tears down + rebuilds the
     show so fixtures, cues, etc. reflect the new DB state immediately.
+
+### Pull-only installs
+
+`sync.push = false` in `local.conf` (default `true`) makes an install
+pull-only. It is read once at startup (`State.syncPushEnabled`) and is
+deliberately in neither the UI nor `example.local.conf`: it exists for
+throwaway installs — a cloud dev container that imports a real show — that
+must never write to the show's repo. Don't rely on read-only repo access for
+that instead: the cloud session's git proxy was seen letting a push through
+on a repo attached read-only.
+
+A pull-only sync runs the whole pipeline — snapshot, fetch, classify,
+fast-forward, three-way merge, conflict sessions — and skips only the push:
+
+| Relation | Pull-only outcome |
+|---|---|
+| `RemoteAbsent` / `LocalAhead(n)` | `NO_OP`, `pushed = 0`; the commits stay local |
+| `Diverged` (auto-merge, or applying a conflict session) | `MERGED`, `pushed = 0`; the merge commit stays local |
+| `Equal` / `RemoteAhead` | unchanged — nothing to push |
+
+The result's `message` starts with `RemoteSyncEngine.PUSH_DISABLED_PREFIX`.
+No new `SyncOutcome` was added, so the client needed no change; its
+`NO_OP` toast ("Already in sync") is the one place the UI undersells a
+skipped push, which is acceptable for a setting the UI never offers.
+
+**The bookkeeping records the remote tip, not the local commit.** A skipped
+push leaves `sync_state` where it was, and a local merge bootstraps it at the
+remote tip that was merged — the last point both sides actually agree on —
+with `lastSyncedSha` naming the same commit. Recording the local merge
+commit instead would make this install's own unpushed edits read as
+"unchanged locally" in the next three-way diff, so the remote's older value
+would win and the edit would be lost. `PullOnlySyncTest` pins that with a
+rename that must survive two remote advances.
 
 ### History classification → action
 
@@ -1161,6 +1204,14 @@ Both PAT and OAuth user-to-server tokens authenticate identically over
 HTTPS — the username is the literal placeholder `x-access-token`, the
 password is the token. `GitCredentials.forGitHubToken(...)` (formerly
 `forGitHubPat`) builds the JGit credentials provider for either source.
+
+**Engine commits are never signed.** JGit reads the machine user's
+`~/.gitconfig`, so a desk whose owner signs their own commits
+(`commit.gpgsign = true`) would otherwise sign snapshots and merges too — and
+with `gpg.format = ssh` JGit has no signer, so every snapshot failed with
+"No signer for ssh signatures". `JGitClient.commit` and `commitWithParents`
+call `setSign(false)`: these commits are authored as the install, not as a
+person.
 
 ### Error codes
 

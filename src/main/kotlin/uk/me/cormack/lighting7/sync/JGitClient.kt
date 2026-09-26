@@ -79,6 +79,29 @@ object JGitClient {
         }
     }
 
+    /**
+     * Paths staged against HEAD — added, changed or removed. Call after [stageAll]; on an
+     * unborn repo every path is "added".
+     */
+    fun stagedPaths(repo: Repository): Set<String> {
+        Git(repo).use { git ->
+            val status = git.status().call()
+            return status.added + status.changed + status.removed
+        }
+    }
+
+    /**
+     * Put [path] back to its HEAD content in both the index and the working tree — the
+     * single-path `git checkout HEAD -- path`. Used to drop a staged change the caller has
+     * decided is not worth a commit.
+     */
+    fun restoreFromHead(repo: Repository, path: String) {
+        Git(repo).use { git ->
+            git.reset().setRef("HEAD").addPath(path).call()
+            git.checkout().setStartPoint("HEAD").addPath(path).call()
+        }
+    }
+
     /** Returns true if `git status` would report any change vs HEAD. */
     fun isWorkingTreeDirty(repo: Repository): Boolean {
         Git(repo).use { git ->
@@ -87,7 +110,15 @@ object JGitClient {
         }
     }
 
-    /** Create a commit with the given author identity. */
+    /**
+     * Create a commit with the given author identity.
+     *
+     * Never signed: these are the engine's commits, authored as the install rather than as a
+     * person, and JGit honours the machine user's `~/.gitconfig`. A desk whose owner signs
+     * their own commits (`commit.gpgsign = true`) would otherwise fail every snapshot — with
+     * SSH signing JGit has no signer at all ("No signer for ssh signatures") — or prompt for
+     * a key passphrase mid-show. [commitWithParents] makes the same call.
+     */
     fun commit(
         repo: Repository,
         authorName: String,
@@ -99,6 +130,7 @@ object JGitClient {
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .setMessage(message)
+                .setSign(false)
                 .call()
                 .toCommitInfo()
         }
@@ -130,6 +162,7 @@ object JGitClient {
                 .setAuthor(authorName, authorEmail)
                 .setCommitter(authorName, authorEmail)
                 .setMessage(message)
+                .setSign(false)
                 .call()
                 .toCommitInfo()
         }

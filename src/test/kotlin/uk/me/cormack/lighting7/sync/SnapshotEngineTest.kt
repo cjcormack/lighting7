@@ -191,8 +191,7 @@ class SnapshotEngineTest {
         })
 
         // Inject a peer entry into installs.json the way a fetch+merge from another rig
-        // would. The installs.json file is checked-in, so we need to mimic the same shape
-        // (live registry + valid canonical JSON) and commit it.
+        // would: a peer's registration only ever arrives committed, so commit it here too.
         val peerUuid = "ffffeeee-dddd-cccc-bbbb-aaaa99998888"
         val peerName = "Touring Laptop"
         val installsFile = path.resolve("installs.json")
@@ -203,12 +202,16 @@ class SnapshotEngineTest {
             ).installs + (peerUuid to peerName),
         )
         Files.writeString(installsFile, canonicalEncode(uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(), merged))
+        JGitClient.open(path)!!.use { repo ->
+            JGitClient.stageAll(repo)
+            JGitClient.commit(repo, "Touring Laptop", "peer@lighting7.local", "peer registers")
+        }
 
         // Snapshot again — the wipe step should preserve the peer entry through the
-        // exporter's union path, so the next installs.json still carries it. The
-        // peer-injected installs.json by itself constitutes a tree-level diff so the
-        // snapshot will commit even without DB changes.
-        runBlocking { takeSnapshot(projectId, "after peer write") }
+        // exporter's union path, so the next installs.json still carries it and the
+        // snapshot finds nothing to commit.
+        val second = runBlocking { takeSnapshot(projectId, "after peer write") }
+        assertTrue(second.noChanges, "re-exporting a committed registry is not a change")
 
         val finalRegistry = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(),
@@ -221,6 +224,40 @@ class SnapshotEngineTest {
             DaoInstall.all().first().uuid.toString()
         }
         assertTrue(finalRegistry.containsKey(localInstall), "local install must remain in registry")
+    }
+
+    @Test
+    fun `a registry-only change is not a commit and rides along with the next real one`() {
+        val projectId = seedMinimalProject(state)
+        val first = runBlocking { takeSnapshot(projectId, null) }
+        val path = workingTree.pathFor(transaction(state.database) {
+            DaoProject.findById(projectId)!!.uuid
+        })
+        val installsFile = path.resolve("installs.json")
+        val committedRegistry = Files.readString(installsFile)
+
+        // Renaming the install changes installs.json and nothing else — the same shape as a
+        // new install's first snapshot of a project it pulled.
+        transaction(state.database) { DaoInstall.all().first().friendlyName = "Renamed Desk" }
+        val renamed = runBlocking { takeSnapshot(projectId, null) }
+
+        assertTrue(renamed.noChanges, "a registry-only change must not commit")
+        assertEquals(committedRegistry, Files.readString(installsFile), "installs.json is put back to HEAD")
+        JGitClient.open(path)!!.use { repo ->
+            assertEquals(first.commit!!.sha, JGitClient.head(repo)!!.sha)
+            assertFalse(JGitClient.isWorkingTreeDirty(repo), "the working tree is left clean")
+        }
+
+        // A real edit commits, and the registration goes with it.
+        transaction(state.database) { DaoProject.findById(projectId)!!.description = "edited" }
+        val edited = runBlocking { takeSnapshot(projectId, null) }
+
+        assertFalse(edited.noChanges)
+        val registry = canonicalDecode(
+            uk.me.cormack.lighting7.sync.dto.InstallsJson.serializer(),
+            Files.readString(installsFile),
+        ).installs
+        assertEquals("Renamed Desk", registry.values.single())
     }
 
     /**

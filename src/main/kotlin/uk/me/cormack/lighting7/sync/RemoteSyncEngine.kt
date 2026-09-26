@@ -320,6 +320,18 @@ class RemoteSyncEngine(
         message: String,
         attemptsRemaining: Int,
     ): SyncRunResult {
+        if (!state.syncPushEnabled) {
+            // Pull-only install: the commits stay local. sync_state is left where it is —
+            // it records what this install and the remote last agreed on, and nothing new
+            // has been agreed — and lastSyncedSha names the remote tip for the same reason.
+            val remoteSha = repo.resolve(remoteBranchRef(branch))?.name
+            return SyncRunResult(
+                SyncOutcome.NO_OP, pushed = 0, pulled = 0, replaced = 0,
+                headSha = remoteSha ?: headSha,
+                message = "$PUSH_DISABLED_PREFIX $ahead local commit(s) kept in the working tree.",
+                sessionId = null, conflictCount = 0,
+            )
+        }
         val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
         if (!pushIsRejected(pushed)) {
             ensurePushOk(pushed)
@@ -500,6 +512,21 @@ class RemoteSyncEngine(
             repo, installFriendlyName, authorEmail, message,
             extraParentSha = localSha,
         )
+
+        if (!state.syncPushEnabled) {
+            // Pull-only install: keep the merge commit locally. The DB is at the merged
+            // state, but the last point both sides agree on is the remote tip we merged, so
+            // that is what sync_state and lastSyncedSha record — the next three-way diff
+            // then still sees this install's own edits as local changes.
+            bootstrapSyncStateAtHead(projectId, repo, remoteSha)
+            return SyncRunResult(
+                outcome = SyncOutcome.MERGED,
+                pushed = 0, pulled = behind, replaced = 0,
+                headSha = remoteSha,
+                message = "Merged ${ahead + behind} commit(s). $PUSH_DISABLED_PREFIX the merge is kept in the working tree.",
+                sessionId = null, conflictCount = 0,
+            )
+        }
 
         val pushed = JGitClient.push(repo, REMOTE_NAME, branch, credentials, force = false)
         if (pushIsRejected(pushed)) {
@@ -1036,6 +1063,9 @@ class RemoteSyncEngine(
         const val REMOTE_NAME = "origin"
         /** Cap on automatic retries when push is rejected by the remote. */
         const val MAX_PUSH_RETRIES = 3
+
+        /** Leads every result message of a sync whose push `sync.push = false` skipped. */
+        const val PUSH_DISABLED_PREFIX = "Push disabled on this install (sync.push = false):"
         private val logger = LoggerFactory.getLogger(RemoteSyncEngine::class.java)
     }
 }
