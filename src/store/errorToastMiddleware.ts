@@ -110,6 +110,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'cancelUpdateDownload', // src/components/updates/UpdatePanel.tsx
   'applyUpdate', // src/components/updates/ApplyUpdateDialog.tsx
   'setUpdateSettings', // src/components/updates/UpdatePanel.tsx
+  // Remote access renders a refused save (`REMOTE_ACCESS_INVALID` — a bad domain, no accounts yet)
+  // beside the form, and a rejected enable is the switch staying off.
+  'saveTunnelSettings', // src/components/remoteAccess/RemoteAccessPanel.tsx
 
 
   // Call site raises its own toast.error()

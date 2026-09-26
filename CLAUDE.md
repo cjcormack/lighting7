@@ -4359,6 +4359,28 @@ mechanics live in `lighting7/docs/windows-updates.md`.
   `confirmVersion`, so a tab left open across a newer check can't apply something its owner never
   saw — the backend 409s on a mismatch.
 
+### Remote access
+
+The **Remote access** tab in `InstallSettings` (`components/remoteAccess/RemoteAccessPanel.tsx`),
+backed by `store/remoteAccess.ts` and `api/remoteAccessWsApi.ts`: the desk's own ngrok tunnel,
+which puts the **whole desk** on the internet at the operator's ngrok domain. Admin only — the tab
+trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, and the desk sends
+`tunnel.state` to admin sockets alone. Backend contract in `lighting7/docs/mcp-engineering.md`
+§"Remote access" and §"Remote hardening".
+
+- **The authtoken is write-only.** `GET /install/tunnel` answers `hasAuthtoken` and never the
+  token, so the field is always empty (a password input) and says whether one is stored.
+- **Turning it on asks; turning it off does not.** The switch opens a dialog saying the whole
+  desk becomes reachable to anyone with a desk password; only its confirm sends `enabled: true`.
+- **Saving a changed domain asks**, because the domain is the OAuth issuer and every Claude
+  connector added under the old one has to be re-added. A first domain saves without asking, and
+  so does any domain while `mcp.publicUrl` overrides it (then it is not the issuer).
+- **`tunnel.state` carries its payload**, like `updateStateChanged`: the bridge patches the cached
+  settings' `state` and never refetches, and the PUT writes its response into the cache
+  (`upsertQueryData`). `saveTunnelSettings` is in `SILENT_ENDPOINTS` — the panel renders a refusal
+  (`REMOTE_ACCESS_INVALID`: a bad domain, no desk accounts) itself.
+- **No free-plan warning**, by decision (Chris, 2026-09-26): ngrok's quotas are not pre-empted.
+
 ## API Communication
 
 The app maintains a persistent WebSocket connection to the backend for:

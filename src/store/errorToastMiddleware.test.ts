@@ -128,6 +128,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./passwordReset'),
       import('./deviceLogin'),
       import('./updates'),
+      import('./remoteAccess'),
       // The three WebSocket-backed mutations, injected from these two modules.
       import('./park'),
       import('./channels'),
