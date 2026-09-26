@@ -76,15 +76,21 @@ account and presses **Sign in and allow**, and the client holds a token from the
 
 - **Registration** is open (clients register themselves), but a redirect URI must be on the
   allowlist: `https://claude.ai/api/mcp/auth_callback`, the same on `claude.com`, `http`
-  loopback on any port, and `mcp.extraRedirectUris`. Clients are capped at 200; ones older than
-  a day with no grant are pruned. An unknown client or unlisted redirect gets an error **page**,
+  loopback on any port, and `mcp.extraRedirectUris`. Clients are capped at 1000; ones older than
+  a day with no grant are pruned, and a full table evicts the oldest client with no grant and no
+  sign-in in progress rather than refusing. Sign-ins in progress are capped at 1000 the same way,
+  oldest evicted. Refusing at a cap would let anyone on the internet keep claude.ai out with a
+  few hundred junk requests; evicting means a flood has to outpace a real sign-in. A rate limit
+  at the tunnel is still the real defence against a sustained flood. An unknown client or unlisted redirect gets an error **page**,
   never a redirect, so the endpoint can't be used to bounce a browser anywhere.
 - **PKCE S256 only**; `plain` and a missing challenge are refused. The RFC 8707 `resource`
   parameter, when sent, must name this server (`<publicUrl>/mcp` or `<publicUrl>`).
 - **Sign-in** is the desk's own: `AuthService.verifyCredentials`, the same throttle, dummy
   verify and disabled check the login uses. On top of it, this page only has a **lockout** — ten
   failures in fifteen minutes and it answers 429 until the window passes. It is on this page
-  alone because this page is the one on the internet; the LAN login keeps its throttle only, so a
+  alone because this page is the one on the internet. The failure table is bounded by dropping
+  expired windows and then keys that name no account, never a real account's failures, so junk
+  usernames cannot reset a real lockout; the LAN login keeps its throttle only, so a
   stranger hammering the tunnel cannot lock the crew out of the desk.
 - **The consent page** is server-rendered HTML with no script, `X-Frame-Options: DENY`,
   `frame-ancestors 'none'`, `no-store` and `no-referrer`. It posts a form, which is the one place
@@ -94,7 +100,9 @@ account and presses **Sign in and allow**, and the client holds a token from the
 - **Codes** live one minute, in memory, hashed, and are single-use: a code presented a second
   time is refused.
 - **Tokens** are opaque: a one-hour access token and a thirty-day refresh token, stored as SHA-256
-  hashes in `mcp_oauth_grants` and cached in memory. Refresh **rotates** both. Presenting the
+  hashes in `mcp_oauth_grants` and cached in memory. A new or rotated grant is cached first and
+  then checked against the table and a per-user revocation counter, so a revocation that lands
+  mid-exchange or mid-refresh cannot leave a live token behind it. Refresh **rotates** both. Presenting the
   previous refresh token again is taken as theft and revokes the whole grant.
 - **A desk with no accounts refuses** (`GET /oauth/authorize` is 403 and `/mcp` has no one to
   authenticate as). A bootstrap-open desk is unauthenticated on the LAN by design; that must not

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.mcp
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -91,6 +92,13 @@ class McpProtocol(private val state: State) {
             }
         } catch (e: InvalidParams) {
             error(id, INVALID_PARAMS, e.message ?: "Invalid params")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // The listener has no error-page handler, so an escape here would reach the client as
+            // a bare 500 with no JSON-RPC body to tell it what happened.
+            log.warn("MCP {} failed", method, e)
+            error(id, INTERNAL_ERROR, "Internal error: ${e.message ?: e::class.simpleName}")
         }
     }
 
@@ -137,7 +145,18 @@ class McpProtocol(private val state: State) {
         }
 
         log.info("MCP tool {} called by {}", name, user.username)
-        if (name == DESCRIBE_RIG) return toolResult(briefing.describeRig(), isError = false)
+        if (name == DESCRIBE_RIG) {
+            // The other tools catch their own failures and answer isError; this one reads the
+            // whole show, which can change under it (a project switch mid-read).
+            return try {
+                toolResult(briefing.describeRig(), isError = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log.warn("describe_rig failed", e)
+                toolResult("Could not describe the rig: ${e.message ?: e::class.simpleName}", isError = true)
+            }
+        }
 
         val outcome = tools.executeTool(name, arguments)
         return toolResult(outcome.result, isError = !outcome.success)
@@ -178,6 +197,7 @@ class McpProtocol(private val state: State) {
         const val INVALID_REQUEST = -32600
         const val METHOD_NOT_FOUND = -32601
         const val INVALID_PARAMS = -32602
+        const val INTERNAL_ERROR = -32603
 
         private fun result(id: JsonElement, result: JsonObject) = buildJsonObject {
             put("jsonrpc", "2.0")

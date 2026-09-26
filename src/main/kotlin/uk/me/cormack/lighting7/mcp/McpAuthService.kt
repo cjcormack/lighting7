@@ -116,12 +116,26 @@ class McpAuthService(
         val redirectUri: String,
         val codeChallenge: String,
         val expiresAt: Instant,
+        /** The user's [revocationGeneration] when the code was minted; see [publish]. */
+        val generation: Long,
     )
 
     /** Live access tokens by hash. The DB row is the truth; this is the read path. */
     private val grants = ConcurrentHashMap<String, GrantRecord>()
     private val pending = ConcurrentHashMap<String, McpPendingAuthorization>()
+
+    /** [pending]'s ids oldest first, for eviction; ids already gone are skipped when polled. */
+    private val pendingOrder = java.util.concurrent.ConcurrentLinkedQueue<String>()
     private val codes = ConcurrentHashMap<String, IssuedCode>()
+
+    /**
+     * Bumped per user by [revokeAllFor] before it touches the table. A grant minted or rotated
+     * while a revocation is in flight compares its snapshot in [publish], so it cannot slip into
+     * the cache after the sweep has already run.
+     */
+    private val revocationGenerations = ConcurrentHashMap<Int, AtomicLong>()
+
+    private fun revocationGeneration(userId: Int): Long = revocationGenerations[userId]?.get() ?: 0L
 
     init {
         val now = clock()
@@ -151,7 +165,7 @@ class McpAuthService(
         val now = clock()
         transaction(database) {
             pruneUnusedClients(now)
-            if (DaoMcpOAuthClient.count() >= MAX_CLIENTS) {
+            if (DaoMcpOAuthClient.count() >= MAX_CLIENTS && !evictOldestUnusedClient()) {
                 throw McpOAuthError("invalid_client_metadata", "Too many registered clients on this desk")
             }
             DaoMcpOAuthClient.new {
@@ -182,11 +196,29 @@ class McpAuthService(
     /** Registration is open to the internet, so clients that never got a grant don't live forever. */
     private fun pruneUnusedClients(now: Instant) {
         val cutoff = now - Duration.ofDays(1)
-        val used = DaoMcpOAuthGrant.all().map { it.clientId }.toSet()
+        val used = clientsInUse()
         DaoMcpOAuthClient.find { DaoMcpOAuthClients.createdAt lessEq cutoff }
             .filter { it.clientId !in used }
             .forEach { it.delete() }
     }
+
+    /**
+     * Make room when the table is full: the oldest client with no grant and no sign-in in
+     * progress goes. Refusing instead would let anyone on the internet fill the table with 200
+     * junk registrations and keep claude.ai out for a day; evicting means a flood has to outpace
+     * a real sign-in to disturb it.
+     */
+    private fun evictOldestUnusedClient(): Boolean {
+        val used = clientsInUse()
+        val victim = DaoMcpOAuthClient.all()
+            .filter { it.clientId !in used }
+            .minByOrNull { it.createdAt } ?: return false
+        victim.delete()
+        return true
+    }
+
+    private fun clientsInUse(): Set<String> =
+        DaoMcpOAuthGrant.all().map { it.clientId }.toSet() + pending.values.map { it.client.clientId }
 
     // ─── Authorization ─────────────────────────────────────────────────
 
@@ -210,7 +242,13 @@ class McpAuthService(
         checkResource(resource)
         val now = clock()
         pending.values.removeIf { it.expiresAt <= now }
-        if (pending.size >= MAX_PENDING) throw McpOAuthError("temporarily_unavailable", "Too many sign-ins in progress")
+        // Starting a sign-in needs no credentials, so a full table evicts the oldest rather than
+        // refusing: refusal would let a flood lock every real sign-in out for [pendingTtl].
+        while (pending.size >= MAX_PENDING) {
+            val oldest = pendingOrder.poll() ?: break
+            pending.remove(oldest)
+        }
+        pendingOrder.removeIf { !pending.containsKey(it) }
         val request = McpPendingAuthorization(
             id = SessionTokens.newResetToken(),
             client = client,
@@ -220,6 +258,7 @@ class McpAuthService(
             expiresAt = now + pendingTtl,
         )
         pending[request.id] = request
+        pendingOrder.add(request.id)
         return request
     }
 
@@ -238,6 +277,7 @@ class McpAuthService(
         val raw = SessionTokens.newToken()
         codes[SessionTokens.sha256Hex(raw)] = IssuedCode(
             userId, request.client, request.redirectUri, request.codeChallenge, now + codeTtl,
+            revocationGeneration(userId),
         )
         completeAuthorization(request.id)
         return raw
@@ -264,7 +304,7 @@ class McpAuthService(
     }
 
     fun recordSignInFailure(username: String) {
-        if (signInFailures.size >= 1_000) signInFailures.clear()
+        if (signInFailures.size >= MAX_LOCKOUT_KEYS) pruneSignInFailures()
         val window = signInFailures.computeIfAbsent(lockoutKey(username)) { ArrayDeque() }
         synchronized(window) { window.addLast(clock()) }
     }
@@ -274,6 +314,21 @@ class McpAuthService(
     }
 
     private fun lockoutKey(username: String) = username.trim().lowercase().take(64)
+
+    /**
+     * Keep the table bounded without ever forgetting a real account's failures: expired windows
+     * go first, then keys naming no account. Clearing everything (as this once did) let a guesser
+     * reset a real username's lockout by spraying junk usernames in between guesses. Real keys are
+     * bounded by the number of accounts, so the table cannot grow without limit.
+     */
+    private fun pruneSignInFailures() {
+        val cutoff = clock() - SIGN_IN_LOCKOUT_WINDOW
+        signInFailures.entries.removeIf { (_, window) ->
+            synchronized(window) { window.isEmpty() || window.last() <= cutoff }
+        }
+        if (signInFailures.size < MAX_LOCKOUT_KEYS) return
+        signInFailures.keys.removeIf { authService.findUserByUsername(it) == null }
+    }
 
     // ─── Token endpoint ────────────────────────────────────────────────
 
@@ -300,7 +355,7 @@ class McpAuthService(
         checkResource(resource)
         val user = authService.findUser(issued.userId)
         if (user == null || user.disabled) throw McpOAuthError("invalid_grant", "The account is no longer active")
-        return createGrant(issued.userId, issued.client)
+        return createGrant(issued.userId, issued.client, issued.generation)
     }
 
     fun refresh(refreshToken: String?, clientId: String?, resource: String?): McpTokenResponse {
@@ -308,6 +363,7 @@ class McpAuthService(
         checkResource(resource)
         val hash = SessionTokens.sha256Hex(refreshToken)
         val now = clock()
+        val generations = revocationGenerations.mapValues { it.value.get() }
         val access = SessionTokens.newToken()
         val refresh = SessionTokens.newToken()
         val outcome = transaction(database) {
@@ -342,7 +398,9 @@ class McpAuthService(
             }
             is RefreshOutcome.Rotated -> {
                 grants.remove(outcome.oldAccessHash)
-                grants[outcome.record.accessHash] = outcome.record
+                if (!publish(outcome.record, generations[outcome.record.userId] ?: 0L)) {
+                    throw McpOAuthError("invalid_grant", "This connection was revoked")
+                }
             }
         }
         return McpTokenResponse(accessToken = access, expiresIn = accessTtl.seconds, refreshToken = refresh)
@@ -354,7 +412,7 @@ class McpAuthService(
         data class Rotated(val oldAccessHash: String, val record: GrantRecord) : RefreshOutcome
     }
 
-    private fun createGrant(userId: Int, client: McpOAuthClient): McpTokenResponse {
+    private fun createGrant(userId: Int, client: McpOAuthClient, generation: Long): McpTokenResponse {
         val access = SessionTokens.newToken()
         val refresh = SessionTokens.newToken()
         val now = clock()
@@ -371,8 +429,28 @@ class McpAuthService(
                 this.lastUsedAt = now
             }.toRecord()
         }
-        grants[record.accessHash] = record
+        if (!publish(record, generation)) throw McpOAuthError("invalid_grant", "The account's access was revoked")
         return McpTokenResponse(accessToken = access, expiresIn = accessTtl.seconds, refreshToken = refresh)
+    }
+
+    /**
+     * Put a freshly minted or rotated grant into the cache, unless a revocation raced it. Cache
+     * first, then check: a revocation writes the table before it sweeps the cache, so either the
+     * check below sees its write (or its [revocationGeneration] bump) and backs the grant out, or
+     * its sweep runs after the put and removes it. Checking first and caching after would leave a
+     * window where the sweep has already passed. [generation] is the user's count as it stood
+     * before the grant was minted — at code issue for a new grant, before the transaction for a
+     * refresh — which catches a revocation that ran entirely before a new row existed to revoke.
+     */
+    private fun publish(record: GrantRecord, generation: Long): Boolean {
+        grants[record.accessHash] = record
+        val revoked = transaction(database) {
+            val row = DaoMcpOAuthGrant.findById(record.id) ?: return@transaction true
+            if (row.revokedAt == null && revocationGeneration(record.userId) != generation) row.revokedAt = clock()
+            row.revokedAt != null
+        }
+        if (revoked) grants.remove(record.accessHash)
+        return !revoked
     }
 
     /**
@@ -452,6 +530,8 @@ class McpAuthService(
     }
 
     fun revokeAllFor(userId: Int) {
+        // Before the table, so a grant being minted right now sees it in [publish].
+        revocationGenerations.computeIfAbsent(userId) { AtomicLong() }.incrementAndGet()
         val now = clock()
         transaction(database) {
             DaoMcpOAuthGrants.update({
@@ -477,8 +557,9 @@ class McpAuthService(
             "https://claude.com/api/mcp/auth_callback",
         )
         private val LOOPBACK_HOSTS = setOf("localhost", "127.0.0.1", "[::1]")
-        private const val MAX_CLIENTS = 200L
-        private const val MAX_PENDING = 200
+        private const val MAX_CLIENTS = 1_000L
+        private const val MAX_PENDING = 1_000
+        private const val MAX_LOCKOUT_KEYS = 1_000
         const val SIGN_IN_LOCKOUT_FAILURES = 10
         val SIGN_IN_LOCKOUT_WINDOW: Duration = Duration.ofMinutes(15)
         private const val LAST_USED_WRITE_INTERVAL_MS = 10L * 60 * 1000

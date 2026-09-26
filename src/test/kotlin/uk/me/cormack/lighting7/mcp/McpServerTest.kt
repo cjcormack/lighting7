@@ -284,6 +284,37 @@ class McpServerTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `spraying junk usernames does not reset a real account's lockout`() = testApplication {
+        mountMcp()
+        seedUser(state, "alice")
+        val auth = state.mcpAuthService
+        repeat(McpAuthService.SIGN_IN_LOCKOUT_FAILURES - 1) { auth.recordSignInFailure("alice") }
+        repeat(1_200) { auth.recordSignInFailure("junk-$it") }
+        auth.recordSignInFailure("alice")
+        assertTrue(auth.signInLockedOut("alice"))
+    }
+
+    @Test
+    fun `a flood of sign-ins or registrations evicts the oldest rather than refusing`() = testApplication {
+        mountMcp()
+        seedUser(state, "alice")
+        val auth = state.mcpAuthService
+        val client = auth.registerClient(listOf(callback), "Claude")
+        val begin = {
+            auth.beginAuthorization(client, callback, null, "code", McpAuthService.s256(verifier), "S256", null)
+        }
+        val first = begin()
+        repeat(1_000) { begin() }
+        assertEquals(null, auth.pendingAuthorization(first.id))
+        assertNotNull(auth.pendingAuthorization(begin().id))
+
+        repeat(1_000) { auth.registerClient(listOf(callback), "junk") }
+        // The client with a sign-in in progress survives the flood, and a new one still registers.
+        assertNotNull(auth.findClient(client.clientId))
+        assertNotNull(auth.findClient(auth.registerClient(listOf(callback), "Claude").clientId))
+    }
+
+    @Test
     fun `deny sends access_denied back to the client`() = testApplication {
         mountMcp()
         seedUser(state, "alice")
