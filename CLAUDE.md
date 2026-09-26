@@ -45,6 +45,20 @@ anything it didn't put there, so don't hand-place files in it.
 2. Optionally set `database.path` — empty uses `<appDataDir>/lighting7.db`
 3. Set project name
 
+### Cloud sessions
+
+In a Claude Code cloud container, `scripts/cloud-session.sh [owner/repo …]` does the whole
+stand-up: installs JDK 24 (the image has 21 and the network policy blocks foojay), writes a
+pull-only `local.conf` into the data dir (`~/lighting7-data`), starts `./gradlew run` in the
+background, creates an `admin` / `lighting7-dev` account, and imports each show repo through
+cloud sync. Attach a show repo to the session before importing it — the session's git proxy
+supplies the credentials, so the stored token is a placeholder. The script's header has the
+details; `sync.push = false` is in `docs/sync-engineering.md` §"Pull-only installs".
+
+Run Gradle there under `LC_ALL=C.UTF-8`: the image's locale is POSIX, and `compileTestKotlin`
+then fails with an internal compiler error writing class files named after test names that
+contain "—". The script exports it; a bare `./gradlew test` needs it too.
+
 ### Never stop or kill Gradle daemons
 
 **The desk is usually running as `./gradlew run` in the operator's own terminal —
