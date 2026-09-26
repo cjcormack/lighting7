@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -59,6 +60,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // POST /fx/definitions - Create a new FX definition
     post<FxDefinitionsResource> {
+        call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
 
@@ -120,6 +122,12 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         // conflict with the *stored* outputType (or the reverse) — and the mutations happen
         // inside that transaction, so validating there would have already written the row this
         // rejects.
+        val storedScript = transaction(state.database) {
+            state.fxDefinitionInCurrentProject(resource.definitionId)?.script
+        }
+        // A rename or a parameter edit changes no code; only a new script counts as authoring
+        // one (remote scripts gate).
+        if (request.script != null && request.script != storedScript) call.requireScriptAccess(state)
         val stored = transaction(state.database) {
             state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?.let { it.outputType to it.compatibleProperties }
@@ -201,6 +209,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // POST /fx/definitions/compile - Standalone compile check (no ID needed)
     post<FxDefinitionCompileCheckResource> {
+        call.requireScriptAccess(state)
         val request = call.receive<CompileFxDefinitionRequest>()
         val effectMode = EffectMode.valueOf(request.effectMode)
 
@@ -213,6 +222,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // POST /fx/definitions/{id}/compile - Compile check
     post<FxDefinitionCompileResource> { resource ->
+        call.requireScriptAccess(state)
         val request = call.receive<CompileFxDefinitionRequest>()
         val effectMode = EffectMode.valueOf(request.effectMode)
 
@@ -225,6 +235,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
     // POST /fx/definitions/{id}/test - Compile, register, and test
     post<FxDefinitionTestResource> { resource ->
+        call.requireScriptAccess(state)
         val definition = transaction(state.database) {
             state.fxDefinitionInCurrentProject(resource.definitionId)
         }

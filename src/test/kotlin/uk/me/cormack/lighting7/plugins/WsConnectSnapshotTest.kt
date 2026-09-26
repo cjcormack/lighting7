@@ -54,6 +54,8 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // The hand, in the show band beside the selection. Empty on a fresh desk, which is exactly
         // the case a replay-1 SharedFlow would have nothing to say about.
         HandStateOutMessage::class,
+        // Remote access, machine band, admin sockets only — and a zero-user desk's socket is one.
+        TunnelStateOutMessage::class,
     )
 
     @Test

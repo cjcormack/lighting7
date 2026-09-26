@@ -306,7 +306,13 @@ early return so a user with no browser sessions still loses their apps. The user
 sign-in outright.
 
 The MCP sign-in page has a lockout (ten failures in fifteen minutes) on top of the login
-throttle, because it is the one sign-in on the internet. The LAN login keeps the throttle only.
+throttle, because it is on the internet. Since Remote access, so is the desk login when it arrives
+on the public listener: a remote `POST /auth/login` shares that lockout and answers 429
+`SIGN_IN_LOCKED`, and its session cookie is `Secure`. The LAN login keeps the throttle only, so a
+stranger on the internet cannot lock the crew out at the desk. The QR reset and device-login flows
+are 404 on the public listener whatever the peer address — a tunnel's requests arrive from
+loopback, which the peer check would otherwise take as the LAN. See `docs/mcp-engineering.md`
+§"Remote hardening".
 
 ## Cloud sync and support copies
 
@@ -317,8 +323,9 @@ redeemable credential. Device-login codes aren't in the database at all.
 
 ## Not in v1
 
-HTTPS and `Secure` cookies (desks run plain LAN HTTP; the QR URL scheme would need
-revisiting), CSRF tokens, account lockout beyond the login throttle (the MCP sign-in page has one; the LAN login does not), 2FA, password complexity
+HTTPS and `Secure` cookies on the LAN (desks run plain LAN HTTP; the QR URL scheme would need
+revisiting — the public listener has both), CSRF tokens (the public listener has an Origin check),
+account lockout on the LAN login (the MCP sign-in page and a remote desk login have one), 2FA, password complexity
 beyond the length floor, per-user attribution of edits, an audit log, and per-message
 WebSocket authorisation.
 

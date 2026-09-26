@@ -41,9 +41,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The MCP listener end to end: OAuth discovery, registration, the sign-in page, the token
- * endpoint, and JSON-RPC over `/mcp` — mounted as [mcpModule] on its own test application,
- * exactly as production mounts it on its own server.
+ * MCP end to end: OAuth discovery, registration, the sign-in page, the token endpoint, and
+ * JSON-RPC over `/mcp` — mounted as [publicModule] on its own test application, exactly as
+ * production mounts the public listener on its own server. Remote hardening is
+ * `RemoteHardeningTest`'s.
  */
 class McpServerTest : RouteIntegrationTest() {
 
@@ -52,7 +53,7 @@ class McpServerTest : RouteIntegrationTest() {
 
     private fun ApplicationTestBuilder.mountMcp() {
         environment { config = testAppConfig() }
-        application { mcpModule(state) }
+        application { publicModule(state) }
     }
 
     private fun ApplicationTestBuilder.rawClient(): HttpClient = createClient { followRedirects = false }
@@ -133,11 +134,23 @@ class McpServerTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the listener serves nothing of the desk's own API`() = testApplication {
+    fun `the public listener serves the desk's own API too`() = testApplication {
         mountMcp()
         seedUser(state, "alice")
-        assertEquals(HttpStatusCode.NotFound, rawClient().get("/api/rest/projects").status)
-        assertEquals(HttpStatusCode.NotFound, rawClient().get("/api/rest/auth/status").status)
+        // Gated like the LAN port: no cookie, no API.
+        assertEquals(HttpStatusCode.Unauthorized, rawClient().get("/api/rest/projects").status)
+        assertEquals(HttpStatusCode.OK, rawClient().get("/api/rest/auth/status").status)
+    }
+
+    @Test
+    fun `a saved ngrok domain becomes the issuer without a restart`() = testApplication {
+        mountMcp()
+        seedUser(state, "alice")
+        state.remoteAccess.update(domain = "desk.ngrok-free.app", hasAnyUser = true)
+        val server = rawClient().get("/.well-known/oauth-authorization-server").json()
+        assertEquals("https://desk.ngrok-free.app", server["issuer"]!!.jsonPrimitive.content)
+        val resource = rawClient().get("/.well-known/oauth-protected-resource/mcp").json()
+        assertEquals("https://desk.ngrok-free.app/mcp", resource["resource"]!!.jsonPrimitive.content)
     }
 
     @Test

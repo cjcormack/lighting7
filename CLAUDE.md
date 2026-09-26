@@ -351,6 +351,9 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
 - `GET /api/rest/fx/library` - Available effect types
 
+### Remote Access Endpoints
+- `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
+
 ### Cue Stack Run Endpoints
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/standby` - Arm the next GO (`{cueId}`; null disarms). "Next" is server-owned — see `docs/cue-stacks-engineering.md` §"Standby"
 - `POST /api/rest/projects/{id}/cue-stacks/{stackId}/preview` - Compose a cue without firing it (`{cueId?}`, null → the effective next). Layer 4 only; see §"Preview compose"
@@ -412,6 +415,7 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `selection.state` / `selection.set` / `selection.toggle` / `selection.clear` - The desk's one shared selection (`state/DeskSelection.kt`): what a selection-relative surface control and a busk press act on. `StateFlow`-backed, so the subscription is the connect snapshot; writes reply nothing (a no-op write sends no frame). `toggle` is head-by-head: a group all of whose members are selected is "in", and toggling it off narrows the entries that covered it. The frame is the whole fact — `targets`, `families` (the attribute mask, absent = every attribute) and `source` (who moved it last, `{kind: window | surface, id?, name}`): `set` replaces all of it, `toggle` keeps the mask, `clear` drops both (multi-screen plan D2). `source` is stamped by the handler from the socket's own announced window (`SocketScope.window`, set by `windows.announce`) and is never read from a payload; `source.id` is that window's **registry row id** — the one `windows.show` addresses, not the client-minted `windowId` a duplicated tab shares. A socket that has not announced falls back to session 1's `sourceName` stub, remembered on the `SocketScope` and carrying no id (`FU-WINDOWS-RETIRE-SOURCENAME`)
 - `surfaceEncoderBank.state` / `surfaceEncoderBank.set` - Which attribute each device's **strip encoders** drive (`deviceTypeKey → propertyName`, default `dimmer`). One frame type — it is a `StateFlow`, so the subscription is snapshot and broadcast both. A *strip* is one binding row whose `controlId` is a profile-declared strip id: `ControlSurfaceBindingService.resolve` answers the control's own binding across both bank levels first, then derives the strip's to the role that control plays (fader → dimmer, select → `SelectTarget(TOGGLE)`, encoder → the encoder bank's property, flash → `Flash`). See `docs/midi-control-surface-engineering.md` §"Strips" and §"Encoder bank"
 - `surfaceControls.state` / `surfaceControls.changed` - Per-device control state as the hardware was told it (`value`, `physical`, `touched`, `led`, `ring`), from `ControlStateTracker`: a whole-device `.state` on connect and after every full resync, conflated `.changed` deltas at most every 50 ms per device. The Surfaces view draws exactly this and never recomputes from DMX
+- `tunnel.state` - Remote access's live status (`off | installing | starting | online | error | no-binary`, with download progress, the URL, ngrok's `ERR_NGROK_…` code and whether it is retrying). Machine-scoped, **admin sockets only** (a zero-user desk's socket counts), snapshot on connect; the frame carries the state, so the client patches rather than refetches
 - `cueRunStateChanged` - A cue stack's live cue, armed next, and fade timing. One frame per transition from `CueStackManager` (so REST, the MIDI surface and auto-advance all report), plus a snapshot on connect; clients animate the fade locally from `fadeElapsedMs`
 
 ## Database
@@ -601,11 +605,17 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 - **DMX Hardware**: ArtNet protocol over network
 - **Philips Hue**: HTTP API via Ktor client
-- **MCP (Claude)**: a second listener (`mcp.port`, default `127.0.0.1:8414`) serving only MCP,
-  OAuth and its sign-in page, meant to sit behind a tunnel so claude.ai and the phone apps can
-  drive the desk. The desk is its own OAuth server; grants are machine-local and die with the
-  user's sessions. The tools are the AI chat's minus `run_lighting_script`, plus `describe_rig`.
-  Never mount anything else on that listener — the port split *is* the security boundary. See
+- **MCP (Claude) and Remote access**: a second, **public listener** (`mcp.port`, default
+  `127.0.0.1:8414`) serving the whole desk (UI, REST, WS) plus MCP, OAuth and its sign-in page. It
+  is what a tunnel points at — the desk's own supervised ngrok (Install settings → Remote access,
+  the agent downloaded on first enable, never bundled: ngrok's licence) or one the operator runs,
+  named by `mcp.publicUrl`. The desk is its own OAuth server; grants are machine-local and die with
+  the user's sessions. The tools are the AI chat's minus `run_lighting_script`, plus
+  `describe_rig`. **The port split is the security boundary**: everything on that listener is
+  remote, decided by port and never by a forwarded header, and `installRemoteHardening` applies
+  there — no remote bootstrap, a sign-in lockout, `Secure` cookies, an Origin check, no QR flows,
+  scripts refused unless an admin allows them. Anything mounted on it is reachable from the
+  internet, and a script-capable route must call `requireScriptAccess`. See
   [docs/mcp-engineering.md](docs/mcp-engineering.md)
 
 ## Engineering Documentation
@@ -620,7 +630,7 @@ For deeper technical details, see the docs in `docs/`:
 - [WebSocket Protocol](docs/websocket-engineering.md) - Real-time client communication, message types, update flow
 - [FX System](docs/fx-engineering.md) - Tempo-synchronized effects, Master Clock, effect types, blend modes
 - [Fixture Groups](docs/groups-engineering.md) - Type-safe groups, distribution strategies, multi-element fixtures
-- [MCP Server](docs/mcp-engineering.md) - The second listener, the desk as its own OAuth server (PKCE, rotating refresh tokens, lockout, revocation with sessions), the tunnel, and why the script tool is left out
+- [MCP Server](docs/mcp-engineering.md) - The public listener that carries the whole desk plus MCP, Remote access (the ngrok agent the desk downloads and supervises, and the domain as OAuth issuer), the remote hardening applied by port, the desk as its own OAuth server (PKCE, rotating refresh tokens, lockout, revocation with sessions), and why the script tool is left out
 - [Cloud Sync](docs/sync-engineering.md) - Canonical JSON, UUID identity, machine-local overrides, per-project JGit working tree + snapshot flow, three-way diff + conflict sessions, GitHub OAuth + PAT auth (Phases 1–5 of the cloud-sync plan)
 - [Composition Model](docs/lighting-composition-model.md) - The five layers, and §"Looks, templates and layers" for the cook step: a cue's ordered layers plus its local rows flatten to one contributor per (fixture, property) before the resolver, which is what makes within-cue precedence one rule for every attribute. Its §"A template holds a value *or* an effect" is the D7 reversal and the three rules that keep it narrow
 - [Desk Screens](docs/desk-screens.md) - The two desk screens: the launcher's tray items, the `?window=` naming contract, why a desk screen must be opened at `http://localhost:8413/` (installation, Keyboard Lock and Window Management are all secure-context), and kiosk mode as a note

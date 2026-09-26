@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
 import uk.me.cormack.lighting7.auth.PasswordPolicyException
+import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.routes.ErrorResponse
 
 private val logger = LoggerFactory.getLogger("error-handling")
@@ -90,6 +91,12 @@ fun Application.configureErrorHandling() {
         exception<AuthorizationException> { call, cause ->
             logger.warn("Forbidden request on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Not permitted", "forbidden"))
+        }
+        // A script request through the tunnel while Remote access's "allow scripts" is off
+        // (`mcp/RemoteRequests.kt`). Expected, so WARN; the code lets the UI say why.
+        exception<RemoteScriptsDisabledException> { call, cause ->
+            logger.warn("Refused remote script request on {}", call.request.local.uri)
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Scripts are turned off for remote access", "REMOTE_SCRIPTS_DISABLED"))
         }
         exception<PasswordPolicyException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Password rejected"))

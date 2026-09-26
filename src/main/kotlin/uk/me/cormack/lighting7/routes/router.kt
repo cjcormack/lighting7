@@ -66,6 +66,7 @@ fun Application.configureRouting(state: State) {
                     routeApiRestControlSurfaceTypes(state)
                     routeApiRestPerf(state)
                     routeApiRestInstall(state)
+                    routeApiRestInstallTunnel(state)
                     routeApiRestUpdate(state)
 
                     // Admin territory: user management and password resets (Session 3), the
@@ -110,6 +111,9 @@ fun Application.configureRouting(state: State) {
 private fun isWarmupExempt(path: String): Boolean =
     path == "/api/rest/status" ||
         path == "/api/rest/install" ||
+        // Remote access reads nothing off the show, and a desk whose show failed to boot is one
+        // you may want to reach from outside to fix.
+        path.startsWith("/api/rest/install/") ||
         path.startsWith("/api/rest/auth/") ||
         path.startsWith("/api/rest/oauth/") ||
         path.startsWith("/api/rest/cloud-sync/") ||

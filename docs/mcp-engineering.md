@@ -5,15 +5,21 @@ claude.ai connector, in Claude Code, or in the desktop app — can drive the lig
 tools the in-app AI chat has. The decisions behind the shape below are recorded in the project's
 `decisions/mcp-auth-and-scripts.md`; this doc is how it is built.
 
-## Two listeners
+## The public listener
 
 The MCP server is **not** on port 8413. `mcp/McpServerModule.kt` starts a second, separate Netty
-server (`startMcpServer`, called from `Application.module` and stopped on `ApplicationStopping`)
-that serves exactly:
+server — the **public listener** (`startPublicListener`, called from `Application.module` and
+stopped on `ApplicationStopping`) — whose application is `publicModule`:
+
+```kotlin
+installRemoteHardening(state)   // mcp/RemoteRequests.kt: every call here is remote
+moduleWithState(state)          // the whole desk: UI, REST, WebSocket
+mcpModule(state)                // MCP, OAuth and the sign-in page
+```
 
 | Path | What |
 |------|------|
-| `GET /` | A one-line "this is a lighting desk's MCP endpoint" |
+| everything on 8413 | The desk itself — the UI, `/api/rest/…`, the `/api` WebSocket — under remote hardening |
 | `GET /.well-known/oauth-protected-resource[/mcp]` | RFC 9728 metadata |
 | `GET /.well-known/oauth-authorization-server[/mcp]` | RFC 8414 metadata |
 | `POST /oauth/register` | RFC 7591 dynamic client registration |
@@ -22,13 +28,21 @@ that serves exactly:
 | `POST /oauth/revoke` | RFC 7009 |
 | `POST /mcp` | The MCP endpoint (streamable HTTP, JSON responses) |
 
-Nothing else. The UI, REST, the WebSocket, scripts and Swagger stay on 8413, which is LAN-only.
-That split is the security boundary: a tunnel that points at the MCP port cannot reach the desk's
-API even if every check below it were wrong. `McpServerTest` pins that `/api/rest/…` is a 404 on
-this listener.
+It carried only the MCP half until Remote access (`decisions/mcp-tunnel-ngrok.md`, Chris,
+2026-09-26: "if we do one, I'd like us to do the other"). The **port split is still the security
+boundary**, but it now draws a different line: not "what can be reached" but "what counts as
+remote". Everything that arrives on this listener is remote — the tunnel points only at it, and
+LAN users keep 8413 — so the desk knows for certain which requests came from outside **by port,
+never by a forwarded header**, which anyone can spoof. `installRemoteHardening` marks each call
+(`ApplicationCall.isRemote`) in the `Setup` phase and refuses what remote may not reach; see
+§"Remote hardening". **Anything mounted on this listener is reachable from the internet**, so a
+new route is a remote route whether or not its author thought about it.
 
-It binds `127.0.0.1:8414` by default, because the expected way in is a tunnel running on the
-desk machine. If it fails to bind, it logs and the desk carries on without it.
+It binds `127.0.0.1:8414` by default, because the tunnel agent runs on the desk machine; a tunnel
+request therefore arrives from loopback, which is why no check here may read the peer address as
+"on the LAN" (`requireLanPeer` answers 404 on this listener). If it fails to bind, it logs, the
+desk carries on without it, and Remote access reports the failure rather than starting a tunnel
+to nowhere.
 
 ### Config (`local.conf`, machine-local)
 
@@ -37,30 +51,115 @@ mcp {
     enabled = true
     host = "127.0.0.1"
     port = 8414
-    # The URL clients reach the listener at, through the tunnel. Goes into the OAuth metadata
-    # and the 401 challenge, so it must be exactly what the client typed (no trailing /mcp).
-    publicUrl = "https://desk.example.ts.net"
+    # A tunnel you run yourself (Tailscale Funnel, Cloudflare): its HTTPS base, no trailing /mcp.
+    # When set it wins over Remote access's ngrok domain as the OAuth issuer.
+    publicUrl = ""
     # Extra OAuth redirect URIs to accept, comma separated. claude.ai / claude.com and http
     # loopback (Claude Code, the desktop app) are already allowed.
     extraRedirectUris = ""
+    tunnel {
+        # Defaults for Remote access until it is first saved from the desk. The authtoken is not
+        # here: it only ever goes into the CredentialStore, from the Remote access tab.
+        enabled = false
+        domain = ""
+        # Run this ngrok binary instead of downloading the pinned one (dev, or an unpinned platform).
+        ngrokPath = ""
+    }
 }
 ```
 
-`publicUrl` is per machine, never synced: it names this desk's tunnel. With it unset the desk
-advertises `http://localhost:8414`, which is right for Claude Code on the desk machine and wrong
-for anything else.
+**The public URL is a provider, read per request** (`RemoteAccessService.publicUrl()`):
+`mcp.publicUrl` if set → else `https://<Remote access domain>` → else `http://localhost:<port>`
+(right for Claude Code on the desk machine, wrong for anything else). It is the OAuth issuer, the
+metadata, the 401 challenge and the `resource` check, so saving a domain takes effect without a
+restart — and **changing the domain changes the issuer**: every connector added under the old
+address has to be removed and added again. The Remote access tab asks before saving one.
 
-## Exposing it
+## Remote access (the ngrok tunnel)
+
+`mcp/tunnel/`. The desk runs the tunnel itself, so phone control works from a fresh install with
+nothing else to set up. What the operator does: sign up at ngrok, copy the authtoken and the free
+static domain, paste both into **Install settings → Remote access** (admin), and turn it on. The
+tab then reads *Online · https://<domain>* and shows `https://<domain>/mcp` with Copy.
+
+- **The agent is downloaded on first enable, never bundled.** ngrok's agent licence allows
+  distribution only where *we* hold the account, and every desk uses the operator's own. So
+  `NgrokInstaller` fetches the pinned build (`NgrokDistribution`: version and SHA-256 per
+  platform — darwin amd64/arm64, windows amd64/arm64, linux amd64) from ngrok's CDN into
+  `appDataDir()/ngrok/`, verifies the checksum before anything is kept, and extracts only the
+  agent. A platform with no pinned build (Linux on ARM, say) gets `NoBinary`, whose message names
+  `mcp.tunnel.ngrokPath`. Bumping ngrok means editing that table from checksums read off ngrok's
+  own download page, never from a mirror.
+- **`NgrokTunnel` supervises it.** It writes `ngrok.yml` (mode 600; the token and URLs quoted as
+  JSON strings so no value can break out of its scalar) naming one endpoint,
+  `https://<domain>` → `http://127.0.0.1:<mcp.port>`, and runs `ngrok start --all --config …`
+  with JSON logs on stdout, parsed for the started event and `ERR_NGROK_*` codes
+  (`parseLogLine`, `friendlyMessage`). A crash restarts with backoff (1 s → 60 s); an auth,
+  domain or config error does **not**, because only the operator can fix it. It starts only after
+  the public listener has bound (`onListenerStarted`).
+- **Only an agent this desk started is ever killed.** A PID file records the process and its
+  command; the next start kills that PID only if it is still running *our* agent path, so a
+  reused PID is left alone (see CLAUDE.md on never killing processes you did not start). On
+  Windows the agent is also put in a Job Object with kill-on-close, so it dies with the desk
+  however the desk dies. An orphan matters because it keeps holding the domain.
+- **State** is a `StateFlow<TunnelState>` — `Off | Installing(read, total) | Starting | Online(url)
+  | Error(code, message, retrying) | NoBinary(message)` — streamed to admin sockets as the
+  machine-scoped `tunnel.state` frame, the connect snapshot included.
+- **Settings are machine-local.** The authtoken is in the `CredentialStore` (`ngrok:authtoken`,
+  the keychain or its encrypted-file fallback, beside the GitHub tokens) and is **write-only**:
+  no answer ever carries it, only `hasAuthtoken`. Enabled, domain and allow-scripts are the one
+  row of `remote_access_settings` (`models/remoteAccess.kt`, `MachineLocal` in
+  `SyncCoverageTest`, never exported). `local.conf`'s `mcp.tunnel.*` seeds them until the first
+  save, after which the row wins.
+- **API**: `GET` / `PUT /api/rest/install/tunnel` (`routes/installTunnel.kt`), admin only. Every
+  `PUT` field is optional; an empty `authtoken` or `domain` clears it, and clearing either turns
+  remote access off. Turning it on is refused (`REMOTE_ACCESS_INVALID`) with no desk accounts, no
+  domain or no token.
+- **No plan warning.** ngrok's free plan (1 GB and 20,000 requests a month, a one-time browser
+  interstitial) is not pre-empted (Chris, 2026-09-26): we react only if a quota problem is seen.
+
+## Remote hardening
+
+`mcp/RemoteRequests.kt` and the call sites that read `isRemote`. On by default, not configurable
+except for scripts:
+
+- **A desk with no accounts is closed remotely.** Bootstrap-open is a LAN convenience; from
+  outside, `/api…` answers 403 `REMOTE_NEEDS_ACCOUNT`, so nobody on the internet can create the
+  first admin.
+- **Sign-in lockout.** The desk login (`POST /auth/login`) takes the MCP sign-in page's lockout —
+  ten failures in fifteen minutes, then 429 `SIGN_IN_LOCKED` — on remote requests only, sharing
+  that failure table. The LAN login keeps its throttle only, so a stranger hammering the tunnel
+  cannot lock the crew out at the desk.
+- **`Secure` session cookies** on this listener (the tunnel terminates HTTPS); none on the LAN,
+  where there is no HTTPS.
+- **Origin.** A state-changing request (any non-safe method) or a WebSocket upgrade outside
+  `/mcp`, `/oauth/` and `/.well-known/` must carry no `Origin` or one naming the public origin or
+  this listener's localhost; anything else is 403 `REMOTE_ORIGIN_REFUSED`. That is the WebSocket's
+  CSRF guard too, since a browser attaches cookies to a cross-site upgrade.
+- **Not reachable remotely at all (404):** the QR password-reset and device-login flows (both lean
+  on "the phone is on the desk's LAN"), `requireLanPeer`, and the API docs (`/api.json`,
+  `/openapi`).
+- **Scripts are refused remotely unless an admin allows them** (Remote access → *Allow scripts
+  over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
+  (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
+  script, changing a saved script's text or type (a rename is fine), the same for FX definitions,
+  the whole `/script-editor` service, and the AI chat's `run_lighting_script` (the chat is given
+  the MCP tool list and a prompt without the script API instead). MCP never has the script tool,
+  whatever this says.
+
+**Residual risks, known and accepted:** a remote *admin* can still bring scripts in by importing a
+project or pulling a cloud-sync repo, which the gate does not cover — an admin account is trusted
+with the desk. The `tunnel.state` frame's admin check uses the role resolved when the socket
+connected, so a demoted admin keeps receiving it until they reconnect (their REST calls are
+refused at once). And a remote guesser can lock an account out *remotely* for fifteen minutes;
+the LAN login is unaffected.
+
+## Adding a connector
 
 A claude.ai connector (which is how iPhone and iPad reach it) is called from Anthropic's servers,
-so the listener must be reachable from the internet over HTTPS. Either of:
-
-- **Tailscale Funnel**: `tailscale funnel --bg 8414`, then `publicUrl` is the
-  `https://<machine>.<tailnet>.ts.net` it prints.
-- **Cloudflare Tunnel**: `cloudflared tunnel --url http://localhost:8414` (or a named tunnel with
-  a stable hostname), then `publicUrl` is that hostname.
-
-Then add it:
+so the listener must be reachable from the internet over HTTPS: Remote access, above, or a tunnel
+of your own — **Tailscale Funnel** (`tailscale funnel --bg 8414`) or **Cloudflare Tunnel**
+(`cloudflared tunnel --url http://localhost:8414`) — with `mcp.publicUrl` set to its URL. Then:
 
 - claude.ai → Settings → Connectors → Add custom connector → `<publicUrl>/mcp`. It then appears
   on the phone and iPad apps for that account.
@@ -86,16 +185,17 @@ account and presses **Sign in and allow**, and the client holds a token from the
 - **PKCE S256 only**; `plain` and a missing challenge are refused. The RFC 8707 `resource`
   parameter, when sent, must name this server (`<publicUrl>/mcp` or `<publicUrl>`).
 - **Sign-in** is the desk's own: `AuthService.verifyCredentials`, the same throttle, dummy
-  verify and disabled check the login uses. On top of it, this page only has a **lockout** — ten
-  failures in fifteen minutes and it answers 429 until the window passes. It is on this page
-  alone because this page is the one on the internet. The failure table is bounded by dropping
+  verify and disabled check the login uses. On top of it, this page has a **lockout** — ten
+  failures in fifteen minutes and it answers 429 until the window passes — because this page is
+  on the internet. The failure table is bounded by dropping
   expired windows and then keys that name no account, never a real account's failures, so junk
-  usernames cannot reset a real lockout; the LAN login keeps its throttle only, so a
-  stranger hammering the tunnel cannot lock the crew out of the desk.
+  usernames cannot reset a real lockout. The desk login shares it for remote requests (§"Remote
+  hardening"); the LAN login keeps its throttle only, so a stranger hammering the tunnel cannot
+  lock the crew out of the desk.
 - **The consent page** is server-rendered HTML with no script, `X-Frame-Options: DENY`,
   `frame-ancestors 'none'`, `no-store` and `no-referrer`. It posts a form, which is the one place
   the desk takes a form body. That does not reopen the CSRF hole `docs/desk-accounts.md`
-  describes: this listener has no cookies, the POST carries the password itself, and the
+  describes: the page reads no cookie, the POST carries the password itself, and the
   `request_id` it names is single-use and bound to an allowlisted redirect.
 - **Codes** live one minute, in memory, hashed, and are single-use: a code presented a second
   time is refused.
@@ -154,8 +254,15 @@ answers `isError` with "still starting". `describe_rig` and `get_current_state` 
 
 ## Tests
 
-`src/test/kotlin/.../mcp/McpServerTest.kt` mounts `mcpModule` directly and runs the whole
+`src/test/kotlin/.../mcp/McpServerTest.kt` mounts `publicModule` and runs the whole
 connect: discovery, registration, sign-in, code exchange, `initialize`, `tools/list`, a real tool
 call reaching the master clock, refresh rotation and reuse, the redirect allowlist, the lockout,
 deny, a bootstrap desk, revocation on disable and password change, and the Connected apps REST
-pair. Nothing is tested against the real claude.ai.
+pair, plus that the public listener serves the desk's own API and that a saved domain becomes
+the issuer without a restart. `RemoteHardeningTest` covers §"Remote hardening" item by item and
+the tunnel settings route (the token never comes back, admin only). `mcp/tunnel/` drives the
+supervisor against a **fake `ngrok`** — a shell script printing the real agent's JSON log lines —
+through online, crash-and-restart, a bad token (not retried), a plain-text error and the orphan
+sweep (POSIX only); the installer against hand-built zip and tgz archives, including a checksum
+mismatch; and `RemoteAccessService` end to end with the fake agent. Nothing is tested against the
+real claude.ai or the real ngrok.

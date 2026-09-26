@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.auth.AuthenticationException
+import uk.me.cormack.lighting7.mcp.isRemote
 import io.ktor.http.Cookie
 import io.ktor.http.CookieEncoding
 import io.ktor.http.HttpStatusCode
@@ -73,12 +75,27 @@ internal fun Route.routeApiRestAuth(state: State) {
 
     post<AuthLoginResource> {
         val request = call.receive<LoginRequest>()
-        val (user, rawToken) = state.authService.login(
-            request.username,
-            request.password,
-            call.request.userAgent(),
-            call.request.origin.remoteHost,
-        )
+        // Through the tunnel every caller shares one loopback address, so a per-IP throttle
+        // would lock out everyone at once; a per-username lockout (10 failures in 15 minutes,
+        // shared with the MCP sign-in page) is what stands between a guesser and a password.
+        // It never applies on the LAN, so a remote guesser cannot lock the operator out of the desk.
+        val remote = call.isRemote
+        if (remote && state.mcpAuthService.signInLockedOut(request.username)) {
+            call.respond(HttpStatusCode.TooManyRequests, ErrorResponse("Too many failed sign-ins. Try again later.", "SIGN_IN_LOCKED"))
+            return@post
+        }
+        val (user, rawToken) = try {
+            state.authService.login(
+                request.username,
+                request.password,
+                call.request.userAgent(),
+                call.request.origin.remoteHost,
+            )
+        } catch (e: AuthenticationException) {
+            if (remote) state.mcpAuthService.recordSignInFailure(request.username)
+            throw e
+        }
+        if (remote) state.mcpAuthService.clearSignInFailures(request.username)
         call.respondAuthenticated(user, rawToken)
     }
 
@@ -372,6 +389,12 @@ private fun ApplicationCall.deviceLoginThrottleKey() = "device-login-ip:${reques
  * Returns null (and has already responded) when the peer is refused.
  */
 private suspend fun ApplicationCall.requireLanPeer(): Unit? {
+    // The tunnel's requests arrive from loopback, which the address test below would admit.
+    // The public listener's own gate already refuses these paths; this is the second lock.
+    if (isRemote) {
+        respond(HttpStatusCode.NotFound, ErrorResponse("Unknown sign-in code"))
+        return null
+    }
     val remote = request.origin.remoteAddress
     val address = runCatching { InetAddress.getByName(remote) }.getOrNull()
     val onLan = address != null &&
@@ -529,7 +552,11 @@ private suspend fun ApplicationCall.respondAuthenticated(user: AuthenticatedUser
     respond(AuthStatusDto(setupRequired = false, authenticated = true, user = user.toDto()))
 }
 
-/** Cookie shape per the oauth.kt precedent; `secure = false` because desks run plain LAN HTTP. */
+/**
+ * Cookie shape per the oauth.kt precedent. `Secure` only on the public listener: the LAN is plain
+ * HTTP, where a Secure cookie would never be sent back, while through the tunnel it is HTTPS and
+ * the cookie must never travel any other way.
+ */
 private fun ApplicationCall.setSessionCookie(rawToken: String) {
     response.cookies.append(
         Cookie(
@@ -538,7 +565,7 @@ private fun ApplicationCall.setSessionCookie(rawToken: String) {
             maxAge = SESSION_COOKIE_MAX_AGE_SECONDS,
             path = "/",
             httpOnly = true,
-            secure = false,
+            secure = isRemote,
             extensions = mapOf("SameSite" to "Lax"),
             encoding = CookieEncoding.URI_ENCODING,
         ),

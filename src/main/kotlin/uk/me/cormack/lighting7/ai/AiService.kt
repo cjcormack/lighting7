@@ -41,9 +41,13 @@ class AiService(
      * If [conversationId] is null, a new conversation is created.
      * The conversation is persisted after each exchange.
      *
+     * [allowScripts] false withholds `run_lighting_script` — offered to the model and executed
+     * alike — for a remote caller while Remote access's "allow scripts" is off
+     * (`docs/mcp-engineering.md` §"Remote hardening").
+     *
      * @return The AI response including the conversation ID for continuation.
      */
-    suspend fun chat(conversationId: Int?, userMessage: String): AiChatResponse {
+    suspend fun chat(conversationId: Int?, userMessage: String, allowScripts: Boolean = true): AiChatResponse {
         val now = nowUtc()
 
         // Load or create conversation. Chat is a live-runtime surface — it drives whatever
@@ -109,9 +113,9 @@ class AiService(
             }
 
             val request = AnthropicRequest(
-                system = buildSystemPrompt(),
+                system = buildSystemPrompt(allowScripts),
                 messages = anthropicMessages.toList(),
-                tools = tools.allTools,
+                tools = if (allowScripts) tools.allTools else tools.mcpTools,
             )
 
             val response = client.createMessage(request)
@@ -144,7 +148,17 @@ class AiService(
             // Execute each tool call
             val toolResults = mutableListOf<ToolResultBlock>()
             for (toolUse in toolUseBlocks) {
-                val result = tools.executeTool(toolUse.name, toolUse.input)
+                // Not offered is not enough: a model can still name a tool it was once given
+                // earlier in the same conversation.
+                val result = if (!allowScripts && toolUse.name == runLightingScriptTool.name) {
+                    ToolExecutionResult(
+                        success = false,
+                        description = "Scripts are turned off for remote access",
+                        result = "run_lighting_script is not available: this desk is being used remotely and scripts are turned off for remote access.",
+                    )
+                } else {
+                    tools.executeTool(toolUse.name, toolUse.input)
+                }
                 actions.add(AiAction(
                     tool = toolUse.name,
                     description = result.description,
@@ -270,14 +284,14 @@ class AiService(
 
     // ─── System Prompt Construction ────────────────────────────────────────
 
-    private fun buildSystemPrompt(): String {
+    private fun buildSystemPrompt(allowScripts: Boolean): String {
         val sb = StringBuilder()
         sb.appendLine("You are Lux, an AI lighting designer assistant for a DMX lighting controller.")
         sb.appendLine("You control lights by calling tools. Always explain what you're doing to the user.")
         sb.appendLine()
         sb.append(briefing.describeRig())
-        sb.append(briefing.fixtureTypeApi())
-        sb.append(briefing.keyConcepts(scriptTool = true))
+        if (allowScripts) sb.append(briefing.fixtureTypeApi())
+        sb.append(briefing.keyConcepts(scriptTool = allowScripts))
         return sb.toString()
     }
 

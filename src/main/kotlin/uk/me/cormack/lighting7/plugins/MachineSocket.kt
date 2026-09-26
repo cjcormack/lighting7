@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.plugins
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.routes.toDto
 
 // ─── Outbound (no inbound) ──────────────────────────────────────────────
 //
@@ -84,6 +85,17 @@ data class UpdateStateChangedOutMessage(
     val totalBytes: Long? = null,
 ) : MachineOutMessage()
 
+/**
+ * Remote access's live status (`RemoteAccessService.state`): the snapshot on connect, then every
+ * change — download progress, online, errors. Admin sockets only (and bootstrap-open ones), like
+ * the route it mirrors. `StateFlow`-backed, so ticks conflate rather than queue.
+ */
+@Serializable
+@SerialName("tunnel.state")
+data class TunnelStateOutMessage(
+    val state: uk.me.cormack.lighting7.routes.TunnelStateDto,
+) : MachineOutMessage()
+
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupMachineSubscriptions(scope: SocketScope) {
@@ -108,4 +120,13 @@ fun setupMachineSubscriptions(scope: SocketScope) {
     }
 
     scope.subscribe(scope.state.machineEventsFlow) { message -> scope.send(message) }
+
+    // The role is the one resolved at upgrade; a socket re-roled since keeps what it had until it
+    // reconnects. Nothing in the frame is secret — the token never leaves the credential store.
+    val user = scope.user
+    if (user == null || user.role == uk.me.cormack.lighting7.models.UserRole.ADMIN) {
+        scope.subscribe(scope.state.remoteAccess.state) { tunnel ->
+            scope.send(TunnelStateOutMessage(tunnel.toDto()))
+        }
+    }
 }

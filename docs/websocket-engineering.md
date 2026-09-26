@@ -673,6 +673,7 @@ Machine-scoped, so registered in the pre-warm-up band and unaffected by project 
 | `ownAccountChanged` | — | Only sockets belonging to the changed account (and bootstrap-open sockets) |
 | `installChanged` | — | Every socket |
 | `updateStateChanged` | `phase`, `availability`, `latestVersion?`, `downloadedBytes`, `totalBytes?` | Every socket |
+| `tunnel.state` | `state`: `status`, `url?`, `code?`, `message?`, `retrying`, `downloadedBytes?`, `totalBytes?` | Admin sockets only (and bootstrap-open ones), snapshot on connect |
 
 The account frames are payload-free **deliberately, not just by convention**: sockets are open to
 operators while `/api/rest/users` is admin-only, so a body here would leak exactly what that gate
@@ -684,6 +685,13 @@ the convention: for an installer download the frame *is* the progress, and a bar
 changed" at 2 Hz would mean an HTTP round-trip per tick for a several-hundred-megabyte transfer.
 It carries no user data. Disabling and deleting an account are felt through a different mechanism
 entirely — they revoke sessions, and the socket closes 4401.
+
+`tunnel.state` is the second payload-carrying frame, for the same reason — the first enable
+downloads the ngrok agent and the frame is the progress — and it is the only one **sent to admins
+alone**: it names the desk's public address and ngrok's own errors, and every route behind it
+(`/install/tunnel`) is admin only. The role is the one resolved when the socket connected, so a
+demoted admin keeps receiving it until they reconnect; their REST calls are refused at once.
+`StateFlow`-backed, so the subscription is the connect snapshot (`WsConnectSnapshotTest` guards it).
 
 ### Cloud sync — `CloudSyncSocket.kt`
 
@@ -961,7 +969,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-effect state and the four FX writes |
-| `plugins/MachineSocket.kt` | Accounts, install row, update state (machine-scoped band) |
+| `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |
 | `plugins/ProjectSocket.kt` | Current project and switch events |

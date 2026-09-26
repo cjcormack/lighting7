@@ -1,6 +1,7 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -42,6 +43,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
     // POST /{projectId}/scripts - Create new script (current project only)
     post<ProjectScriptsResource> { resource ->
+        call.requireScriptAccess(state)
         withCurrentProject(
             state,
             resource.projectId,
@@ -102,6 +104,13 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
                     return@transaction null
                 }
 
+                // A rename sends the whole row back unchanged, so only a change to the code or
+                // to what kind of script it is counts as authoring one (remote scripts gate).
+                val newType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
+                if (newScriptData.script != script.script || newType != script.scriptType) {
+                    call.requireScriptAccess(state)
+                }
+
                 script.name = newScriptData.name
                 script.script = newScriptData.script
                 script.scriptType = try { ScriptType.valueOf(newScriptData.scriptType) } catch (_: Exception) { ScriptType.GENERAL }
@@ -150,6 +159,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
     // POST /{projectId}/scripts/compile - Compile literal script (current project only)
     post<ProjectScriptCompileResource> { resource ->
+        call.requireScriptAccess(state)
         withCurrentProject(
             state,
             resource.parent.projectId,
@@ -167,6 +177,7 @@ internal fun Route.routeApiRestProjectScripts(state: State) {
 
     // POST /{projectId}/scripts/run - Run literal script (current project only)
     post<ProjectScriptRunResource> { resource ->
+        call.requireScriptAccess(state)
         withCurrentProject(
             state,
             resource.parent.projectId,

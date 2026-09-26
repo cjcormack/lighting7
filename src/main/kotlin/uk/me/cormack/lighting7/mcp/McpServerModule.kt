@@ -7,11 +7,9 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.Parameters
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.application.install
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
-import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.request.header
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.request.receiveText
@@ -23,7 +21,6 @@ import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
-import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.Json
@@ -36,6 +33,7 @@ import kotlinx.serialization.json.add
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
+import uk.me.cormack.lighting7.moduleWithState
 import uk.me.cormack.lighting7.state.State
 import java.net.URI
 
@@ -44,63 +42,79 @@ private val log = LoggerFactory.getLogger("McpServer")
 private val mcpJson = Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }
 
 /**
- * Start the MCP listener: a separate Netty server on `mcp.host:mcp.port`, serving [mcpModule]
- * and nothing else. Called from `Application.module()` — production only; tests mount
- * [mcpModule] on a test application directly.
+ * Start the desk's **public listener**: a second Netty server on `mcp.host:mcp.port` serving
+ * [publicModule] — the whole desk plus MCP and OAuth — with every request on it treated as
+ * remote. It is what the ngrok tunnel points at. Called from `Application.module()` — production
+ * only; tests mount [publicModule] on a test application directly.
+ *
+ * Tells Remote access whether it bound, since the tunnel has nothing to forward to otherwise.
  */
-fun startMcpServer(state: State): EmbeddedServer<*, *>? {
+fun startPublicListener(state: State): EmbeddedServer<*, *>? {
     val config = state.mcpConfig
-    if (!config.enabled) return null
+    if (!config.enabled) {
+        state.remoteAccess.onListenerStarted("it is turned off (mcp.enabled = false in local.conf)")
+        return null
+    }
     return runCatching {
-        embeddedServer(Netty, port = config.port, host = config.host) { mcpModule(state) }.start(wait = false)
+        embeddedServer(Netty, port = config.port, host = config.host) { publicModule(state) }.start(wait = false)
     }.onSuccess {
-        log.info("MCP listener on {}:{} (public URL {})", config.host, config.port, config.publicUrl)
+        log.info("Public listener on {}:{} (public URL {})", config.host, config.port, state.remoteAccess.publicUrl())
+        state.remoteAccess.onListenerStarted()
     }.onFailure {
-        // A busy port must not take the desk down with it: the MCP surface is an extra.
-        log.error("MCP listener failed to start on {}:{}: {}", config.host, config.port, it.message)
+        // A busy port must not take the desk down with it: remote access is an extra.
+        log.error("Public listener failed to start on {}:{}: {}", config.host, config.port, it.message)
+        state.remoteAccess.onListenerStarted(it.message ?: it.javaClass.simpleName)
     }.getOrNull()
 }
 
 /**
- * Everything the tunnel may reach, and nothing more: the MCP endpoint, OAuth discovery, client
- * registration, the sign-in page and the token endpoint. No SPA, no REST API, no WebSocket, no
- * script editor — those stay on the LAN port, which is the point of a second listener
- * (`docs/mcp-engineering.md` §"Two listeners").
+ * The public listener's application: [installRemoteHardening] first, so every request is marked
+ * remote before anything else sees it, then the desk exactly as the LAN port serves it, then the
+ * MCP and OAuth routes. See `docs/mcp-engineering.md` §"The public listener".
+ */
+fun Application.publicModule(state: State) {
+    installRemoteHardening(state)
+    moduleWithState(state)
+    mcpModule(state)
+}
+
+/**
+ * MCP and its OAuth server: discovery, registration, the sign-in page, the token endpoint and
+ * `/mcp`. Every URL in them is built per request from `RemoteAccessService.publicUrl()`, so a new
+ * ngrok domain takes effect without a restart. Responds through [mcpJson] explicitly rather than
+ * through ContentNegotiation, because on the public listener the desk's own converter is installed.
  */
 fun Application.mcpModule(state: State) {
-    val config = state.mcpConfig
     val auth = state.mcpAuthService
     val protocol = McpProtocol(state)
-    val resourceMetadataUrl = "${config.publicUrl}/.well-known/oauth-protected-resource/mcp"
-
-    install(ContentNegotiation) { json(mcpJson) }
+    val publicUrl = { state.remoteAccess.publicUrl() }
 
     routing {
-        get("/") {
-            call.respondText("lighting7 MCP server. Add ${config.resourceUrl} as a connector in Claude.")
-        }
-
         // ─── Discovery ─────────────────────────────────────────────────
 
-        val protectedResource = ProtectedResourceMetadata(
-            resource = config.resourceUrl,
-            authorizationServers = listOf(config.publicUrl),
-            scopesSupported = listOf(MCP_SCOPE),
-            resourceName = "lighting7 desk",
-        )
-        get("/.well-known/oauth-protected-resource") { call.respond(protectedResource) }
-        get("/.well-known/oauth-protected-resource/mcp") { call.respond(protectedResource) }
+        fun protectedResource() = publicUrl().let { base ->
+            ProtectedResourceMetadata(
+                resource = "$base/mcp",
+                authorizationServers = listOf(base),
+                scopesSupported = listOf(MCP_SCOPE),
+                resourceName = "lighting7 desk",
+            )
+        }
+        get("/.well-known/oauth-protected-resource") { call.respondJson(protectedResource()) }
+        get("/.well-known/oauth-protected-resource/mcp") { call.respondJson(protectedResource()) }
 
-        val serverMetadata = AuthorizationServerMetadata(
-            issuer = config.publicUrl,
-            authorizationEndpoint = "${config.publicUrl}/oauth/authorize",
-            tokenEndpoint = "${config.publicUrl}/oauth/token",
-            registrationEndpoint = "${config.publicUrl}/oauth/register",
-            revocationEndpoint = "${config.publicUrl}/oauth/revoke",
-            scopesSupported = listOf(MCP_SCOPE),
-        )
-        get("/.well-known/oauth-authorization-server") { call.respond(serverMetadata) }
-        get("/.well-known/oauth-authorization-server/mcp") { call.respond(serverMetadata) }
+        fun serverMetadata() = publicUrl().let { base ->
+            AuthorizationServerMetadata(
+                issuer = base,
+                authorizationEndpoint = "$base/oauth/authorize",
+                tokenEndpoint = "$base/oauth/token",
+                registrationEndpoint = "$base/oauth/register",
+                revocationEndpoint = "$base/oauth/revoke",
+                scopesSupported = listOf(MCP_SCOPE),
+            )
+        }
+        get("/.well-known/oauth-authorization-server") { call.respondJson(serverMetadata()) }
+        get("/.well-known/oauth-authorization-server/mcp") { call.respondJson(serverMetadata()) }
 
         // ─── Registration (RFC 7591) ───────────────────────────────────
 
@@ -113,14 +127,14 @@ fun Application.mcpModule(state: State) {
             try {
                 val client = auth.registerClient(request.redirectUris, request.clientName)
                 call.response.header(HttpHeaders.CacheControl, "no-store")
-                call.respond(
-                    HttpStatusCode.Created,
+                call.respondJson(
                     ClientRegistrationResponse(
                         clientId = client.clientId,
                         clientIdIssuedAt = System.currentTimeMillis() / 1000,
                         clientName = client.clientName,
                         redirectUris = client.redirectUris,
                     ),
+                    HttpStatusCode.Created,
                 )
             } catch (e: McpOAuthError) {
                 call.oauthError(e)
@@ -167,10 +181,10 @@ fun Application.mcpModule(state: State) {
                     resource = p["resource"],
                 )
             } catch (e: McpOAuthError) {
-                call.respondRedirect(errorRedirect(redirectUri, e.error, e.description, p["state"], config.publicUrl))
+                call.respondRedirect(errorRedirect(redirectUri, e.error, e.description, p["state"], publicUrl()))
                 return@get
             }
-            call.respondPage(HttpStatusCode.OK, McpSignInPage.signIn(request.id, client.clientName, deskName(config)))
+            call.respondPage(HttpStatusCode.OK, McpSignInPage.signIn(request.id, client.clientName, deskName(publicUrl())))
         }
 
         post("/oauth/authorize") {
@@ -189,14 +203,14 @@ fun Application.mcpModule(state: State) {
             if (form["action"] != "allow") {
                 auth.completeAuthorization(request.id)
                 call.respondRedirect(
-                    errorRedirect(request.redirectUri, "access_denied", "The desk user denied access", request.state, config.publicUrl),
+                    errorRedirect(request.redirectUri, "access_denied", "The desk user denied access", request.state, publicUrl()),
                 )
                 return@post
             }
             val username = form["username"].orEmpty()
             val password = form["password"].orEmpty()
             val again = { message: String ->
-                McpSignInPage.signIn(request.id, request.client.clientName, deskName(config), message, username)
+                McpSignInPage.signIn(request.id, request.client.clientName, deskName(publicUrl()), message, username)
             }
             if (auth.signInLockedOut(username)) {
                 call.respondPage(HttpStatusCode.TooManyRequests, again("Too many failed sign-ins. Try again later."))
@@ -218,7 +232,7 @@ fun Application.mcpModule(state: State) {
             val target = URLBuilder(request.redirectUri).apply {
                 parameters.append("code", code)
                 request.state?.let { parameters.append("state", it) }
-                parameters.append("iss", config.publicUrl)
+                parameters.append("iss", publicUrl())
             }.buildString()
             call.respondRedirect(target)
         }
@@ -240,7 +254,7 @@ fun Application.mcpModule(state: State) {
                     else -> throw McpOAuthError("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
                 }
                 call.response.header(HttpHeaders.CacheControl, "no-store")
-                call.respond(tokens)
+                call.respondJson(tokens)
             } catch (e: McpOAuthError) {
                 call.oauthError(e)
             }
@@ -254,8 +268,8 @@ fun Application.mcpModule(state: State) {
         // ─── MCP (streamable HTTP, JSON responses) ─────────────────────
 
         post("/mcp") {
-            if (!originAllowed(call.request.header(HttpHeaders.Origin), config)) {
-                call.respond(HttpStatusCode.Forbidden, McpProtocol.error(JsonNull, McpProtocol.INVALID_REQUEST, "Origin not allowed"))
+            if (!originAllowed(call.request.header(HttpHeaders.Origin), publicUrl())) {
+                call.respondText(McpProtocol.error(JsonNull, McpProtocol.INVALID_REQUEST, "Origin not allowed").toString(), ContentType.Application.Json, HttpStatusCode.Forbidden)
                 return@post
             }
             val bearer = call.request.header(HttpHeaders.Authorization)
@@ -266,13 +280,13 @@ fun Application.mcpModule(state: State) {
                 val error = if (bearer == null) "" else ", error=\"invalid_token\""
                 call.response.header(
                     HttpHeaders.WWWAuthenticate,
-                    "Bearer resource_metadata=\"$resourceMetadataUrl\"$error",
+                    "Bearer resource_metadata=\"${publicUrl()}/.well-known/oauth-protected-resource/mcp\"$error",
                 )
-                call.respond(HttpStatusCode.Unauthorized, McpProtocol.error(JsonNull, McpProtocol.INVALID_REQUEST, "Unauthorized"))
+                call.respondText(McpProtocol.error(JsonNull, McpProtocol.INVALID_REQUEST, "Unauthorized").toString(), ContentType.Application.Json, HttpStatusCode.Unauthorized)
                 return@post
             }
             val message = runCatching { mcpJson.parseToJsonElement(call.receiveText()) }.getOrElse {
-                call.respond(HttpStatusCode.BadRequest, McpProtocol.error(JsonNull, McpProtocol.PARSE_ERROR, "Parse error"))
+                call.respondText(McpProtocol.error(JsonNull, McpProtocol.PARSE_ERROR, "Parse error").toString(), ContentType.Application.Json, HttpStatusCode.BadRequest)
                 return@post
             }
             val response = protocol.handle(message, user)
@@ -296,27 +310,22 @@ fun Application.mcpModule(state: State) {
 }
 
 /** What the sign-in page calls the desk: the public host the operator connected to. */
-private fun deskName(config: McpConfig): String =
-    runCatching { URI(config.publicUrl).host }.getOrNull() ?: "this desk"
+private fun deskName(publicUrl: String): String =
+    runCatching { URI(publicUrl).host }.getOrNull() ?: "this desk"
 
 /**
  * The MCP spec requires validating `Origin` against DNS rebinding. Server-side clients (claude.ai's
  * connector backend, Claude Code) send none; a browser always does, and only this listener's own
  * origin, claude.ai and loopback are accepted from one.
  */
-internal fun originAllowed(origin: String?, config: McpConfig): Boolean {
+internal fun originAllowed(origin: String?, publicUrl: String): Boolean {
     if (origin == null) return true
     val o = origin.trimEnd('/')
-    if (o == originOf(config.publicUrl)) return true
+    if (o == originOf(publicUrl)) return true
     if (o == "https://claude.ai" || o == "https://claude.com") return true
     val host = runCatching { URI(o).host }.getOrNull() ?: return false
     return host == "localhost" || host == "127.0.0.1" || host == "[::1]"
 }
-
-private fun originOf(url: String): String? = runCatching {
-    val u = URI(url)
-    if (u.port == -1) "${u.scheme}://${u.host}" else "${u.scheme}://${u.host}:${u.port}"
-}.getOrNull()
 
 private fun errorRedirect(redirectUri: String, error: String, description: String, state: String?, issuer: String): String =
     URLBuilder(redirectUri).apply {
@@ -338,7 +347,11 @@ private suspend fun ApplicationCall.respondPage(status: HttpStatusCode, html: St
 
 private suspend fun ApplicationCall.oauthError(e: McpOAuthError) {
     response.header(HttpHeaders.CacheControl, "no-store")
-    respond(HttpStatusCode.BadRequest, OAuthErrorResponse(e.error, e.description))
+    respondJson(OAuthErrorResponse(e.error, e.description), HttpStatusCode.BadRequest)
+}
+
+private suspend inline fun <reified T> ApplicationCall.respondJson(value: T, status: HttpStatusCode = HttpStatusCode.OK) {
+    respondText(mcpJson.encodeToString(value), ContentType.Application.Json, status)
 }
 
 @Serializable

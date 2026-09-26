@@ -99,7 +99,25 @@ class State(val config: ApplicationConfig) {
      * [AuthService]'s credential revocations in its constructor, and a revocation it missed
      * (a password change before anything touched MCP) would leave a grant alive.
      */
-    val mcpAuthService = uk.me.cormack.lighting7.mcp.McpAuthService(database, authService, mcpConfig)
+    val mcpAuthService = uk.me.cormack.lighting7.mcp.McpAuthService(
+        database, authService, mcpConfig, publicUrl = { remoteAccess.publicUrl() },
+    )
+
+    /**
+     * Remote access: the ngrok tunnel to the public listener, its machine-local settings and the
+     * desk's public URL. Lazy, like [updateService], so the many tests that build a `State`
+     * never construct a supervisor; [shutdown] checks the delegate for the same reason.
+     */
+    private val remoteAccessDelegate = lazy {
+        uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService(
+            database = database,
+            mcpConfig = mcpConfig,
+            credentialStore = { credentialStore },
+            workDir = appDataDir().resolve("ngrok"),
+        )
+    }
+
+    val remoteAccess: uk.me.cormack.lighting7.mcp.tunnel.RemoteAccessService by remoteAccessDelegate
 
     /**
      * Kotlin scripting host configuration shared by every scripting host in the app. Installs
@@ -972,6 +990,7 @@ class State(val config: ApplicationConfig) {
         // Via the delegate, not the property: reading `updateService` here would construct the
         // service purely to close it, on every test that builds a State and shuts it down.
         if (updateServiceDelegate.isInitialized()) runCatching { updateService.close() }
+        if (remoteAccessDelegate.isInitialized()) runCatching { remoteAccess.close() }
 
         runCatching { projectManager.show.close() }
 

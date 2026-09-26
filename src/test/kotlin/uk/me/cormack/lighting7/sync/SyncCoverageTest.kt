@@ -54,6 +54,7 @@ import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.DaoUserSessions
 import uk.me.cormack.lighting7.models.DaoMcpOAuthClients
 import uk.me.cormack.lighting7.models.DaoMcpOAuthGrants
+import uk.me.cormack.lighting7.models.DaoRemoteAccessSettingsTable
 import uk.me.cormack.lighting7.models.DaoUsers
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -175,6 +176,7 @@ class SyncCoverageTest {
         DaoUserSessions to Disposition.MachineLocal("live login sessions for this desk"),
         DaoMcpOAuthClients to Disposition.MachineLocal("OAuth clients registered with this desk's MCP server"),
         DaoMcpOAuthGrants to Disposition.MachineLocal("MCP OAuth grants: per-desk credentials, like sessions"),
+        DaoRemoteAccessSettingsTable to Disposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
         DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),

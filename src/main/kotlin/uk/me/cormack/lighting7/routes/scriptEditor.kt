@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -43,6 +44,9 @@ internal fun Route.routeScriptEditor(state: State) {
     val service = ScriptEditorService(state.scriptingHostConfiguration)
 
     route("/script-editor") {
+        // Language services compile the text they are sent; remotely that is the scripts gate's.
+        @Suppress("DEPRECATION")
+        intercept(ApplicationCallPipeline.Call) { call.requireScriptAccess(state) }
         get("/versions") {
             call.respond(listOf(CompilerVersion(KotlinVersion.CURRENT.toString(), latestStable = true)))
         }

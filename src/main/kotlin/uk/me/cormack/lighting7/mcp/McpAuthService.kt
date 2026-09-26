@@ -96,6 +96,8 @@ class McpAuthService(
     private val database: Database,
     private val authService: AuthService,
     private val config: McpConfig,
+    /** The desk's public base URL, read per request: it moves when remote access gets a domain. */
+    private val publicUrl: () -> String = { config.localUrl },
     private val accessTtl: Duration = Duration.ofHours(1),
     private val refreshTtl: Duration = Duration.ofDays(30),
     private val codeTtl: Duration = Duration.ofMinutes(1),
@@ -460,8 +462,9 @@ class McpAuthService(
     private fun checkResource(resource: String?) {
         if (resource == null) return
         val r = resource.trimEnd('/')
-        if (r != config.resourceUrl && r != config.publicUrl) {
-            throw McpOAuthError("invalid_target", "This desk only issues tokens for ${config.resourceUrl}")
+        val base = publicUrl()
+        if (r != "$base/mcp" && r != base) {
+            throw McpOAuthError("invalid_target", "This desk only issues tokens for $base/mcp")
         }
     }
 
