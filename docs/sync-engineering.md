@@ -589,8 +589,12 @@ from HEAD in that file and nothing else. `SnapshotEngine` puts the file back
 to HEAD and reports no changes, so a desk that has edited nothing has nothing
 to push; the registration rides along with the install's first real commit,
 which is the first commit the history view needs to credit it for. Until
-then a sync from it is `NO_OP`. `SnapshotEngineTest` and `PullOnlySyncTest`
-pin both halves.
+then a sync from it is `NO_OP`. When that first commit reaches the remote as
+an auto-merge, the merge tree starts from the remote's `installs.json`, so
+`autoMerge` unions the local side's registry back in — but only into a merge
+that commits anyway, or it would be the registration-only commit again.
+`SnapshotEngineTest` and `PullOnlySyncTest` pin both halves, the merge's
+included.
 
 The install row is machine-local; it never leaves the local SQLite DB.
 

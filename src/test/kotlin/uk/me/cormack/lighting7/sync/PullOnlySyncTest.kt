@@ -160,6 +160,46 @@ class PullOnlySyncTest {
     }
 
     @Test
+    fun `a first edit that lands through a merge still registers the install`() {
+        val projectIdA = seedA()
+        val (stateB, engineB, projectIdB) = seedB(push = true, projectIdA)
+
+        // B's first real edit races one of A's, so it reaches the remote as a merge built on
+        // A's tip — whose installs.json has never heard of B. The registry rule never commits
+        // a registration on its own, so the merge has to carry it.
+        addStack(stateB, projectIdB, "from-B")
+        addStack(stateA, projectIdA, "from-A")
+        runSync(stateA, engineA, projectIdA)
+        val merged = runSync(stateB, engineB, projectIdB)
+
+        assertEquals(SyncOutcome.MERGED, merged.outcome)
+        assertTrue(installUuid(stateB) in remoteInstalls(), "B registers with the merge")
+        assertTrue(installUuid(stateA) in remoteInstalls(), "A stays registered")
+    }
+
+    @Test
+    fun `a merge with nothing of its own to say does not carry the registration`() {
+        val projectIdA = seedA()
+        val (stateB, engineB, projectIdB) = seedB(push = true, projectIdA)
+
+        // B's first edit is one A has already pushed, so the merged tree is the remote's
+        // except for B's registration — the registration-only commit the rule refuses.
+        transaction(stateA.database) {
+            DaoCueStack.find { DaoCueStacks.project eq projectIdA }.single { it.name == "shared" }.delete()
+        }
+        runSync(stateA, engineA, projectIdA)
+        val afterA = remoteHead()
+        transaction(stateB.database) {
+            DaoCueStack.find { DaoCueStacks.project eq projectIdB }.single { it.name == "shared" }.delete()
+        }
+        val merged = runSync(stateB, engineB, projectIdB)
+
+        assertEquals(SyncOutcome.MERGED, merged.outcome)
+        assertEquals(afterA, remoteHead(), "a no-op merge pushes nothing")
+        assertFalse(installUuid(stateB) in remoteInstalls(), "B must not register through a no-op merge")
+    }
+
+    @Test
     fun `a pull-only install keeps its edits local and still pulls`() {
         val projectIdA = seedA()
         val (stateB, engineB, projectIdB) = seedB(push = false, projectIdA)

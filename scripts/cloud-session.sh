@@ -37,6 +37,9 @@
 #   LIGHTING7_AUTO_SYNC       1 leaves auto-sync on for imported projects (default off, so data
 #                             does not change under a test; pull-only either way)
 set -euo pipefail
+# import_repo runs inside `$(...)`, where bash otherwise clears -e: a failed API call there
+# (the placeholder token, auto-sync off) would be ignored and the import reported as done.
+shopt -s inherit_errexit
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DATA_DIR="${LIGHTING7_DATA_DIR:-$HOME/lighting7-data}"
@@ -47,6 +50,9 @@ JAR="$DATA_DIR/.cloud-session-cookies"
 JDK_URL="https://github.com/adoptium/temurin24-binaries/releases/download/jdk-24.0.2%2B12/OpenJDK24U-jdk_x64_linux_hotspot_24.0.2_12.tar.gz"
 JDK_DIR="/usr/lib/jvm/temurin-24"
 PLACEHOLDER_TOKEN="cloud-session-proxy-authenticates"
+# Set when a backend was already answering: this script did not start it, so the local.conf
+# it just wrote may not be the one that backend read.
+PULL_ONLY_UNVERIFIED=""
 
 # The image's locale is POSIX, and the JVM then cannot write class files named after test
 # names containing non-ASCII ("—"): compileTestKotlin dies with an internal compiler error.
@@ -92,7 +98,7 @@ write_conf() {
   local repo_conf="$REPO_DIR/local.conf"
   # A local.conf in the working directory wins over the data dir's (Application.kt), so one
   # left in the repo would silently drop pull-only.
-  if [[ -f "$repo_conf" ]] && ! grep -Eq '^[^#]*push[[:space:]]*[=:][[:space:]]*"?(false|off|no|0)' "$repo_conf"; then
+  if [[ -f "$repo_conf" ]] && ! grep -Eq '^[^#]*(^|[[:space:].{])push[[:space:]]*[=:][[:space:]]*"?(false|off|no|0)"?[[:space:]]*($|[#,}]|//)' "$repo_conf"; then
     die "$repo_conf overrides $DATA_DIR/local.conf and does not set sync.push = false. Delete it, or add that key."
   fi
   mkdir -p "$DATA_DIR"
@@ -115,6 +121,8 @@ status_ready() { curl -sf -m 3 "$BASE/status" 2>/dev/null | grep -q '"ready":tru
 start_backend() {
   if curl -sf -m 3 "$BASE/status" >/dev/null 2>&1; then
     log "Backend already answering on :8413"
+    PULL_ONLY_UNVERIFIED=1
+    printf '\033[33mwarning:\033[0m this script did not start that backend, so it cannot tell whether it read the pull-only %s. Restart it through this script if unsure.\n' "$DATA_DIR/local.conf" >&2
   else
     log "Starting ./gradlew run (first run builds both repos; log: $DATA_DIR/run.log)"
     # Redirect the whole detached group, stdin included, and exec down to Gradle: a
@@ -161,7 +169,7 @@ normalise_repo() {
 # placeholder token long enough for the import to find it.
 import_repo() {
   local url="$1" existing temp_id project_id
-  existing="$(api GET /cloud-sync/configs | json "next((k for k, c in d.items() if c.get('repoUrl') == '$url'), '')")"
+  existing="$(api GET /cloud-sync/configs | URL="$url" json "next((k for k, c in d.items() if c.get('repoUrl') == __import__('os').environ['URL']), '')")"
   if [[ -n "$existing" ]]; then
     log "$url already imported as project $existing" >&2
     echo "$existing"
@@ -205,7 +213,7 @@ main() {
 lighting7 is up at http://localhost:8413/
   admin login:  $ADMIN_USER / $ADMIN_PASSWORD
   data dir:     $DATA_DIR   (log: run.log)
-  sync:         pull-only — nothing this session does reaches a show's repo
+  sync:         ${PULL_ONLY_UNVERIFIED:+UNVERIFIED (backend was already running) — }pull-only — nothing this session does reaches a show's repo
 EOF
 }
 

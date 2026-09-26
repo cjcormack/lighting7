@@ -89,15 +89,15 @@ class SnapshotEngine(private val state: State) {
                 }
                 exporter.writeTombstones(path, syncStateKeys - exportResult.liveKeys)
 
-                val staged = JGitClient.stageAll(repo)
+                val stagedPaths = JGitClient.stageAllPaths(repo)
+                val staged = stagedPaths.isNotEmpty()
                 // A change confined to installs.json is this install registering itself (a
                 // new desk, or a renamed one) with nothing else to say. That is not worth a
                 // commit: every fresh install's first sync would otherwise push one, with no
                 // edit behind it. Put the file back — the registration rides along with the
                 // install's first real commit, which is the first commit it needs crediting
                 // for in the history view.
-                val registrationOnly = staged &&
-                    JGitClient.stagedPaths(repo) == setOf(INSTALLS_FILE)
+                val registrationOnly = stagedPaths == setOf(INSTALLS_FILE)
                 if (registrationOnly) {
                     JGitClient.restoreFromHead(repo, INSTALLS_FILE)
                 }
