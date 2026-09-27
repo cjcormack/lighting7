@@ -45,8 +45,21 @@ enumerates its subclasses at compile time — but that is also its one trap: Kot
 compiler does not recompile `SocketMessages.kt` when a new subclass appears in *another* file, so
 the first test run after adding one can fail with `Serializer for subclass '…' is not found in the
 polymorphic scope of 'OutMessage'` and a socket the server closed. That is a stale class file, not
-a missing module entry: `./gradlew :compileKotlin --rerun-tasks` (or touching `SocketMessages.kt`)
-clears it.
+a missing module entry: `./gradlew :compileKotlin --rerun-tasks` (or a *content* change to
+`SocketMessages.kt` — a `touch` is not enough) clears it. Removing a leaf is the same trap from the
+other side: the serializer still names the deleted class.
+
+It reached a desk once, as `tunnel.state`: every admin socket closed on connect with *"To be
+registered automatically, class 'TunnelStateOutMessage' has to be '@Serializable', and the base
+class 'OutMessage' has to be sealed and '@Serializable'"*. So `configureSockets` now runs
+`SocketMessageScope.verify()` first, which walks both roots' leaves through `sealedSubclasses`
+(fresh, since a leaf's metadata lives in its intermediate, recompiled with it) and checks each
+against the root's generated serializer (the stale half). A mismatch refuses to start the desk,
+naming every stale frame and the rebuild command, rather than surfacing as sockets closing.
+`SocketMessageScopeTest` pins it. It cannot see a *direct* subclass of a root declared in another
+file, whose metadata would be as stale as the serializer. `BootProgressStateOutMessage` is the one
+such frame today; every other domain adds its leaves under its own intermediate, so put a new frame
+under one, where the guard can see it.
 
 ### Snapshot rule
 
