@@ -187,6 +187,9 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertEquals(emptyList(), patchKeys())
 
         assertTrue(patchTwoDimmers().success)
+        assertTrue(patchTwoDimmers().success, "re-sending the same list is an update")
+        val fohMembers = call("get_patch", "{}").json()["groups"]!!.jsonObject["FOH"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(listOf("foh-1", "foh-2"), fohMembers, "group membership is not duplicated")
         // Move foh-2 onto foh-1's old address and foh-1 elsewhere, in one call: the overlap check
         // sees the patch as it will stand, not as it stood.
         val moved = call(
@@ -249,6 +252,8 @@ class McpSetupToolsTest : RouteIntegrationTest() {
             assertEquals("PROFILE", foh1.kindOverride)
             assertEquals(26, foh1.beamAngleDeg)
         }
+        // The running show's gel cache (what GET /fixtures serves) follows, as after the REST PUT.
+        assertEquals("L201", state.show.fixtures.patchMetadataFor("foh-1")?.gelCode)
 
         // Removing a rigging keeps its fixtures, detached.
         val removed = call("set_stage", """{"removeRiggings":["FOH bar"]}""")
@@ -257,6 +262,28 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         transaction(state.database) {
             assertNull(DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single().rigging)
         }
+    }
+
+    @Test
+    fun `a malformed number is refused rather than read as a clear`() {
+        assertTrue(call("set_stage", """{"regions":[{"name":"Main","centerX":1.5}],"riggings":[{"name":"LX1","z":6}]}""").success)
+        val result = call(
+            "set_stage",
+            """{"regions":[{"name":"Main","centerX":"DSC"}],"riggings":[{"name":"LX1","z":true}],"stage":{"widthM":"wide"}}""",
+        )
+        assertFalse(result.success)
+        assertEquals(3, result.problems().size, result.result)
+        assertTrue(result.problems().all { "must be a number" in it }, result.result)
+        transaction(state.database) {
+            assertEquals(1.5, DaoStageRegion.find { DaoStageRegions.name eq "Main" }.single().centerX)
+            assertEquals(6.0, DaoRigging.find { DaoRiggings.name eq "LX1" }.single().positionZ)
+        }
+        // An explicit null is still a clear.
+        assertTrue(call("set_stage", """{"regions":[{"name":"Main","centerX":null}]}""").success)
+        transaction(state.database) { assertNull(DaoStageRegion.find { DaoStageRegions.name eq "Main" }.single().centerX) }
+
+        assertFalse(call("set_stage", """{"stage":"big"}""").success)
+        assertFalse(call("create_project", """{"name":"Odd","stageWidthM":"wide"}""").success)
     }
 
     @Test
@@ -309,6 +336,24 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertFalse(append.success)
         assertTrue(append.problems().single().contains("already has a cue numbered '3'"), append.result)
         assertTrue(call("build_cue_stack", """{"stackId":$stackId,"cues":[{"number":"4","name":"Dusk"}]}""").success)
+    }
+
+    @Test
+    fun `build_cue_stack refuses what it would otherwise drop`() {
+        val result = call(
+            "build_cue_stack",
+            """{"stackName":"Act 2","cues":[
+                {"name":"Interval","marker":true,"number":"12A"},
+                {"number":"13","name":"Storm","layers":[{"lookId":99999,"targets":[{"type":"group","key":"FOH"}]}]}
+            ]}""",
+        )
+        assertFalse(result.success)
+        val problems = result.problems()
+        assertTrue(problems.any { "a marker cannot carry a number" in it }, problems.toString())
+        assertTrue(problems.any { "no look 99999" in it }, problems.toString())
+        transaction(state.database) {
+            assertTrue(DaoCueStack.find { DaoCueStacks.name eq "Act 2" }.empty(), "nothing is written")
+        }
     }
 
     @Test

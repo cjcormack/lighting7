@@ -292,7 +292,13 @@ Four decisions shape them:
 - **Writes broadcast as the routes do** (`patchListChanged` after a `DbFixtureLoader` reload,
   `riggingListChanged`, `stageRegionListChanged`, `cueListChanged` / `cueStackListChanged`,
   `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
-  metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way.
+  metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way —
+  and, like both REST placement paths, refreshes the one thing the running show caches from them,
+  the gel (`Fixtures.setPatchMetadata`, which `GET /fixtures` reads).
+- **A malformed value is refused, never read as a clear.** An explicit `null` clears a field; a
+  number field holding a string is a problem like any other. A cue layer naming a Look that is
+  not in the project is refused too, although the shared cue write (`createCueChildren`) drops
+  one silently — there, by design, for a Look deleted since.
 
 A prompt-book place is `{pdfPage, y, x?, width?, height?}`: `pdfPage` counts from 1 at the
 file's first page (converted to the stored 0-based index), `y` is a fraction of the page from the

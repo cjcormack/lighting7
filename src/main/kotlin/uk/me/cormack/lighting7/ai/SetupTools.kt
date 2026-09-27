@@ -38,6 +38,7 @@ import uk.me.cormack.lighting7.routes.validateStageDimensions
 import uk.me.cormack.lighting7.routes.validateStageMetadata
 import uk.me.cormack.lighting7.routes.validateStageRegion
 import uk.me.cormack.lighting7.show.DbFixtureLoader
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
 
@@ -116,6 +117,7 @@ class SetupTools(
             if (name.isEmpty()) add("name must not be blank")
             if (name.length > 50) add("name must be at most 50 characters")
             if ((description?.length ?: 0) > 255) add("description must be at most 255 characters")
+            addAll(malformedNumbers(input, listOf("stageWidthM", "stageDepthM", "stageHeightM"), "project"))
             validateStageDimensions(width, depth, height)?.let { add(it) }
         }
         if (problems.isNotEmpty()) return rejected(problems)
@@ -396,7 +398,16 @@ class SetupTools(
         val newGroups = transaction(state.database) {
             var sortOrder = (DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                 .maxOfOrNull { it.sortOrder } ?: -1) + 1
-            val groupsBefore = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }.map { it.name }.toSet()
+            // Loaded once rather than per row per group: a patch export runs to hundreds of rows,
+            // and the pool's one connection serialises every lookup.
+            val groupsByName = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+                .associateBy { it.name }.toMutableMap()
+            val groupsBefore = groupsByName.keys.toSet()
+            val members = groupsByName.values.flatMap { g -> g.members.map { g.id.value to it } }
+            val memberships = members.map { (groupId, member) -> groupId to member.fixturePatch.id.value }.toMutableSet()
+            val nextMemberOrder = groupsByName.values.associate { g ->
+                g.id.value to (members.filter { it.first == g.id.value }.maxOfOrNull { it.second.sortOrder } ?: -1) + 1
+            }.toMutableMap()
             for (row in parsed) {
                 val universeConfig = findUniverse(project, row.universe) ?: DaoUniverseConfig.new {
                     this.project = project
@@ -421,25 +432,24 @@ class SetupTools(
                 patch.startChannel = row.startChannel
                 row.placement.applyTo(patch)
                 for (groupName in row.groups) {
-                    val group = DaoFixtureGroup.find {
-                        (DaoFixtureGroups.project eq project.id) and (DaoFixtureGroups.name eq groupName)
-                    }.firstOrNull() ?: DaoFixtureGroup.new {
-                        this.project = project
-                        name = groupName
+                    val group = groupsByName.getOrPut(groupName) {
+                        DaoFixtureGroup.new {
+                            this.project = project
+                            name = groupName
+                        }
                     }
-                    val already = DaoFixtureGroupMember.find {
-                        (DaoFixtureGroupMembers.group eq group.id) and (DaoFixtureGroupMembers.fixturePatch eq patch.id)
-                    }.empty()
-                    if (already) {
+                    if (memberships.add(group.id.value to patch.id.value)) {
+                        val order = nextMemberOrder[group.id.value] ?: 0
+                        nextMemberOrder[group.id.value] = order + 1
                         DaoFixtureGroupMember.new {
                             this.group = group
                             fixturePatch = patch
-                            this.sortOrder = (group.members.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                            this.sortOrder = order
                         }
                     }
                 }
             }
-            DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }.map { it.name }.filter { it !in groupsBefore }
+            groupsByName.keys.filter { it !in groupsBefore }
         }
 
         DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
@@ -562,11 +572,20 @@ class SetupTools(
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
-        transaction(state.database) {
-            parsed.forEach { (patchId, placement) -> placement.applyTo(DaoFixturePatch.findById(patchId)!!) }
+        val gels = transaction(state.database) {
+            parsed.map { (patchId, placement) ->
+                val patch = DaoFixturePatch.findById(patchId)!!
+                placement.applyTo(patch)
+                patch.key to patch.gelCode
+            }
         }
         // Metadata only — the same set `METADATA_ONLY_PUT_KEYS` lets the patch route skip the
-        // fixture rebuild for — so the runtime rig is untouched and only the views refresh.
+        // fixture rebuild for — so the runtime rig is untouched. The one thing the running show
+        // does cache from these columns is the gel (`GET /fixtures` reads it), refreshed here as
+        // both REST placement paths refresh it.
+        for ((key, gel) in gels) {
+            state.show.fixtures.setPatchMetadata(key, Fixtures.FixturePatchMetadata(gelCode = gel))
+        }
         state.show.fixtures.patchListChanged()
         return success("Placed ${parsed.size} fixture(s)", buildJsonObject { put("placed", parsed.size) })
     }
@@ -577,16 +596,23 @@ class SetupTools(
         val project = state.projectManager.currentProject
         val problems = mutableListOf<String>()
 
+        for ((name, shape) in listOf("stage" to "an object", "regions" to "an array", "riggings" to "an array")) {
+            val element = input[name] ?: continue
+            val ok = if (name == "stage") element is JsonObject else element is JsonArray
+            if (!ok) problems += "$name must be $shape"
+        }
         val stage = input["stage"] as? JsonObject
         val width = stage?.double("widthM")
         val depth = stage?.double("depthM")
         val height = stage?.double("heightM")
+        stage?.let { problems += malformedNumbers(it, listOf("widthM", "depthM", "heightM"), "stage") }
         validateStageDimensions(width, depth, height)?.let { problems += "stage: $it" }
 
         val regions = (input["regions"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
             val row = element as? JsonObject ?: run { problems += "regions[$index]: not an object"; return@mapIndexedNotNull null }
             val name = row.string("name")?.trim().orEmpty()
             if (name.isEmpty() || name.length > 100) problems += "regions[$index]: name must be 1–100 characters"
+            problems += malformedNumbers(row, REGION_NUMBERS, "regions[$index] ('$name')")
             validateStageRegion(
                 row.double("centerX"), row.double("centerY"), row.double("centerZ"),
                 row.double("widthM"), row.double("depthM"), row.double("heightM"), row.double("yawDeg"),
@@ -597,6 +623,7 @@ class SetupTools(
             val row = element as? JsonObject ?: run { problems += "riggings[$index]: not an object"; return@mapIndexedNotNull null }
             val name = row.string("name")?.trim().orEmpty()
             if (name.isEmpty() || name.length > 100) problems += "riggings[$index]: name must be 1–100 characters"
+            problems += malformedNumbers(row, RIGGING_NUMBERS, "riggings[$index] ('$name')")
             val kind = row.string("kind")?.trim()?.uppercase()
             if (kind != null && kind !in RIGGING_KINDS) problems += "riggings[$index] ('$name'): kind must be one of ${RIGGING_KINDS.joinToString()}"
             validateRiggingPose(
@@ -810,9 +837,10 @@ class SetupTools(
         if (stackId == null && stackName.isNullOrEmpty()) problems += "give stackName for a new stack, or stackId to append to one"
         if (stackName != null && stackName.length > 255) problems += "stackName must be at most 255 characters"
 
-        data class Context(val stackError: String?, val takenNumbers: Set<String>, val pageCount: Int?)
+        data class Context(val stackError: String?, val takenNumbers: Set<String>, val pageCount: Int?, val lookIds: Set<Int>)
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
+            val lookIds = DaoLook.find { DaoLooks.project eq project.id }.map { it.id.value }.toSet()
             if (stackId != null) {
                 val stack = DaoCueStack.findById(stackId)
                 val error = when {
@@ -821,13 +849,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.cues?.filter { it.cueType == CueType.STANDARD.name }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount)
+                Context(error, numbers, pageCount, lookIds)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds)
             }
         }
         context.stackError?.let { problems += it }
@@ -841,8 +869,9 @@ class SetupTools(
             val marker = row.boolean("marker") == true
             if (name.isEmpty()) rowProblems += "name must not be blank"
             if (name.length > 255) rowProblems += "name must be at most 255 characters"
-            val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() && !marker }
-            if (number != null) {
+            val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
+            if (marker && number != null) rowProblems += "a marker cannot carry a number"
+            if (number != null && !marker) {
                 if (number.length > MAX_CUE_NUMBER_LENGTH) rowProblems += "number must be at most $MAX_CUE_NUMBER_LENGTH characters"
                 seenNumbers[number]?.let { rowProblems += "number '$number' is also used by cues[$it]" }
                 seenNumbers.putIfAbsent(number, index)
@@ -857,6 +886,12 @@ class SetupTools(
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
                     validateCueChildren(emptyList(), parsed)?.let { rowProblems += it }
+                    // `createCueChildren` drops a layer naming a record that no longer exists, by
+                    // design for a deleted Look. Here it would be a typo answered with success, so
+                    // it is refused before anything is written.
+                    parsed.mapNotNull { it.lookId }.filter { it !in context.lookIds }.distinct().forEach {
+                        rowProblems += "layers: no look $it in this project (see describe_rig)"
+                    }
                 }
             } catch (e: Exception) {
                 rowProblems += "layers: ${e.message ?: "malformed"}"
@@ -872,7 +907,7 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1069,12 +1104,26 @@ class SetupTools(
         )
     }
 
+    /**
+     * The fields among [names] that are present, not an explicit `null`, and not a number. The
+     * `double()` reader answers null for all three of absent, `null` and malformed, and the writes
+     * that follow it treat null as "clear": without this, `"centerX": "DSC"` would silently wipe a
+     * stored position where it should have been refused.
+     */
+    private fun malformedNumbers(row: JsonObject, names: List<String>, where: String): List<String> =
+        names.filter { name ->
+            val element = row[name] ?: return@filter false
+            element !is JsonNull && (element as? JsonPrimitive)?.doubleOrNull == null
+        }.map { "$where: $it must be a number" }
+
     private fun JsonObjectBuilder.putOptional(name: String, value: Double?) {
         value?.let { put(name, it) }
     }
 
     private companion object {
         const val MAX_PROBLEMS = 100
+        val REGION_NUMBERS = listOf("centerX", "centerY", "centerZ", "widthM", "depthM", "heightM", "yawDeg")
+        val RIGGING_NUMBERS = listOf("x", "y", "z", "yawDeg", "pitchDeg", "rollDeg", "lengthM")
         const val MAX_CUE_SECONDS = 3600.0
         const val DEFAULT_PLACE_X = 0.06
         const val DEFAULT_PLACE_WIDTH = 0.88
