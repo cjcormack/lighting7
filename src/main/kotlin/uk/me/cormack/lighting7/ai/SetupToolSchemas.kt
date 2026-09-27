@@ -70,6 +70,7 @@ private fun JsonObjectBuilder.placementProps() {
     prop("beamAngleDeg", "integer", "Beam angle 2–120, for fixture types that accept one (profiles, generic dimmers).")
     prop("gelCode", "string", "Gel as the plot writes it, e.g. 'L201', 'R80'.")
     enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind — e.g. PROFILE or FRESNEL for a generic dimmer.")
+    prop("lengthM", "number", "Installed length in metres along the unit's long axis (0.01–100), only for fixture types that take one (list_fixture_types marks them acceptsLength — a lightstrip, cut to its run). Refused for every other type; null returns to the type's default. A run laid round several sides (a ring round the stage edge) is one fixture: its own placement is one side, and each other side is an `alsoAt` entry with its own lengthM.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
     arrayProp(
         "alsoAt",
@@ -89,6 +90,7 @@ private val alsoAtSchema = objectSchema {
     prop("z", "number", "Metres. World z, or offset in the rigging's frame.")
     prop("yawDeg", "number", "Body rotation about Z, as for the fixture.")
     prop("pitchDeg", "number", "Body rotation about X, as for the fixture.")
+    prop("lengthM", "number", "This segment's length in metres, for a fixture type that takes one (acceptsLength); absent takes the fixture's own lengthM.")
 }
 
 internal val listProjectsTool = AnthropicToolDef(
@@ -120,7 +122,7 @@ internal val switchProjectTool = AnthropicToolDef(
 
 internal val listFixtureTypesTool = AnthropicToolDef(
     name = "list_fixture_types",
-    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change.",
+    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then.",
     inputSchema = objectSchema {
         prop("query", "string", "Optional case-insensitive filter on manufacturer, model, mode or typeKey.")
     },

@@ -269,6 +269,7 @@ class ProjectExporter(private val state: State) {
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,
                     kindOverride = p.kindOverride,
+                    lengthM = p.lengthM,
                     stageHidden = p.stageHidden,
                     infrastructure = p.infrastructure,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
@@ -281,6 +282,7 @@ class ProjectExporter(private val state: State) {
                             stageZ = pl.stageZ,
                             baseYawDeg = pl.baseYawDeg,
                             basePitchDeg = pl.basePitchDeg,
+                            lengthM = pl.lengthM,
                         )
                     },
                 )

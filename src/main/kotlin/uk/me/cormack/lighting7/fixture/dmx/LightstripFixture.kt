@@ -10,7 +10,14 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
 
-@FixtureType("lightstrip", kind = FixtureKind.STRIP)
+/**
+ * A run of RGBW LED tape on one 5-channel controller: the whole run is one colour. Its length is
+ * whatever it was cut to on the install — a ring round the stage edge, a line under a riser — so
+ * the type takes a per-patch length ([FixtureType.acceptsLength]) rather than declaring one, and a
+ * run laid in segments (four sides of a ring) is one patch with an extra placement per segment,
+ * each carrying its own length.
+ */
+@FixtureType("lightstrip", kind = FixtureKind.STRIP, acceptsLength = true)
 class LightstripFixture (
     universe: Universe,
     key: String,

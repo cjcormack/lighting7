@@ -63,7 +63,8 @@ cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMast
 cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
-                               # dimmer's other lanterns embedded as `extraPlacements` (v14+)
+                               # dimmer's other lanterns embedded as `extraPlacements` (v14+);
+                               # a lightstrip's `lengthM`, and each placement's (v15+)
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
@@ -191,7 +192,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 14`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 15`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -233,6 +234,21 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 15 — variable-length fixtures
+
+**v15 adds one optional field in two places.** `FixturePatchJson.lengthM` is a variable-length
+fixture's installed length (a lightstrip cut to its run — `docs/fixtures-engineering.md`
+§"Variable-length fixtures"), and `PatchPlacementJson.lengthM` is one side's own length when the run
+is laid in segments (a ring round the stage edge: one patch, a placement per side). Both are null
+by default and omitted then, so a project with no lengths exports byte-for-byte as it did at v14.
+
+**It still bumped `formatVersion`**, by the sharp-edge rule: a v14 reader ignores the key, imports
+the strip at its type's default length, and its next wipe-then-export push rewrites the patch file
+without it — shortening every peer's ring back to a metre. That is a degraded record written back,
+so a v14 install must refuse a v15 repo. `minReader` stays at 5: a missing length is the default.
+The importer writes the value as stored and does not check the type; the write boundary is where a
+length on a fixed-length type is refused, and the stage views ignore one that arrives anyway.
 
 ### Version 14 — paired placements
 

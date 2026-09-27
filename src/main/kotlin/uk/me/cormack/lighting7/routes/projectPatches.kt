@@ -90,10 +90,17 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 baseYawDeg = request.baseYawDeg,
                 basePitchDeg = request.basePitchDeg,
                 beamAngleDeg = request.beamAngleDeg,
+                lengthM = request.lengthM,
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
                 return@withProject
+            }
+            if (request.lengthM != null) {
+                fixedLengthRefusal(typeInfo.typeKey)?.let {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+                    return@withProject
+                }
             }
             val normalisedGelCode = normaliseGelCode(request.gelCode)
             val normalisedKindOverride = try {
@@ -165,6 +172,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
                     this.kindOverride = normalisedKindOverride
+                    this.lengthM = request.lengthM
                     this.stageHidden = request.stageHidden
                     this.infrastructure = request.infrastructure
                 }
@@ -216,6 +224,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 baseYawDeg = body["baseYawDeg"].nullableDouble(),
                 basePitchDeg = body["basePitchDeg"].nullableDouble(),
                 beamAngleDeg = body["beamAngleDeg"].nullableInt(),
+                lengthM = body["lengthM"].nullableDouble(),
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
@@ -240,12 +249,25 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             var sweptCellTiles = 0
             var infrastructureFlipped = false
+            // Set when the refusal is the request's fault rather than a conflict with stored state.
+            var refusedAsBadRequest = false
             val result = transaction(state.database) {
                 val patch = DaoFixturePatch.findById(resource.patchId)
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
 
                 if (patch.project.id != project.id) {
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
+                }
+
+                // A length on a fixed-length type, the patch's own or a segment's. Checked here, where
+                // the patch's type is known, and before the first write below for the rigging's reason.
+                val setsLength = body["lengthM"].nullableDouble() != null ||
+                    placementInputs.orEmpty().any { it.lengthM != null }
+                if (setsLength) {
+                    fixedLengthRefusal(patch.fixtureTypeKey)?.let {
+                        refusedAsBadRequest = true
+                        return@transaction Pair<FixturePatchDto?, String?>(null, it)
+                    }
                 }
 
                 // Resolved before the first write below, so an unknown rigging refuses the whole
@@ -278,6 +300,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("baseYawDeg" in body) patch.baseYawDeg = body["baseYawDeg"].nullableDouble()
                 if ("basePitchDeg" in body) patch.basePitchDeg = body["basePitchDeg"].nullableDouble()
                 if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
+                if ("lengthM" in body) patch.lengthM = body["lengthM"].nullableDouble()
                 if ("riggingUuid" in body) {
                     val uuidStr = body["riggingUuid"].nullableString()
                     if (uuidStr == null) {
@@ -337,7 +360,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             val (patchDto, error) = result
             if (error != null) {
-                val code = if (error == "Patch not found") HttpStatusCode.NotFound else HttpStatusCode.Conflict
+                val code = when {
+                    error == "Patch not found" -> HttpStatusCode.NotFound
+                    refusedAsBadRequest -> HttpStatusCode.BadRequest
+                    else -> HttpStatusCode.Conflict
+                }
                 call.respond(code, ErrorResponse(error))
                 return@withProject
             }
@@ -424,6 +451,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     baseYawDeg = entry["baseYawDeg"].nullableDouble(),
                     basePitchDeg = entry["basePitchDeg"].nullableDouble(),
                     beamAngleDeg = entry["beamAngleDeg"].nullableInt(),
+                    lengthM = entry["lengthM"].nullableDouble(),
                 )
                 if (stageError != null) {
                     if (request.atomic) {
@@ -484,9 +512,19 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val placementRiggingsById = mutableMapOf<Int, Map<String, DaoRigging>>()
                 val fatal = mutableListOf<BulkPlacementFailure>()
                 for ((patchId, entry) in prepared) {
-                    if (byId[patchId] == null) {
+                    val target = byId[patchId]
+                    if (target == null) {
                         fatal.add(BulkPlacementFailure(patchId, "Patch not found in this project"))
                         continue
+                    }
+                    val setsLength = entry["lengthM"].nullableDouble() != null ||
+                        placementInputsById[patchId].orEmpty().any { it.lengthM != null }
+                    if (setsLength) {
+                        val refusal = fixedLengthRefusal(target.fixtureTypeKey)
+                        if (refusal != null) {
+                            fatal.add(BulkPlacementFailure(patchId, refusal))
+                            continue
+                        }
                     }
                     if ("riggingUuid" in entry) {
                         val uuidStr = entry["riggingUuid"].nullableString()
@@ -535,6 +573,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("baseYawDeg" in entry) patch.baseYawDeg = entry["baseYawDeg"].nullableDouble()
                     if ("basePitchDeg" in entry) patch.basePitchDeg = entry["basePitchDeg"].nullableDouble()
                     if ("beamAngleDeg" in entry) patch.beamAngleDeg = entry["beamAngleDeg"].nullableInt()
+                    if ("lengthM" in entry) patch.lengthM = entry["lengthM"].nullableDouble()
                     if ("gelCode" in entry) patch.gelCode = normaliseGelCode(entry["gelCode"].nullableString())
                     // Already normalised (and validated) in the pass above.
                     if ("kindOverride" in entry) patch.kindOverride = kindOverrides[patchId]
@@ -721,6 +760,9 @@ data class FixturePatchDto(
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
+    /** The unit's own length in metres, for a type that takes one (`acceptsLength`); null is the
+     *  type's default. */
+    val lengthM: Double? = null,
     val stageHidden: Boolean = false,
     /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
     val infrastructure: Boolean = false,
@@ -755,6 +797,8 @@ data class CreatePatchRequest(
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
+    /** Only for a type that takes one (`acceptsLength`); refused with a 400 otherwise. */
+    val lengthM: Double? = null,
     val stageHidden: Boolean = false,
     /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
     val infrastructure: Boolean = false,
@@ -778,6 +822,8 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "beamAngleDeg",
     "gelCode",
     "kindOverride",
+    // A variable-length fixture's own length — drawn, never built from.
+    "lengthM",
     "stageHidden",
     // A paired fixture's other placements — its own table, which the loader never reads.
     "extraPlacements",
@@ -824,6 +870,7 @@ private fun DaoFixturePatch.toDto(
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
         kindOverride = kindOverride,
+        lengthM = lengthM,
         stageHidden = stageHidden,
         infrastructure = infrastructure,
         extraPlacements = placements.map { it.toDto() },
@@ -852,6 +899,7 @@ internal fun validateStageMetadata(
     baseYawDeg: Double?,
     basePitchDeg: Double?,
     beamAngleDeg: Int?,
+    lengthM: Double? = null,
 ): String? {
     checkStageCoord("stageX", stageX)?.let { return it }
     checkStageCoord("stageY", stageY)?.let { return it }
@@ -863,7 +911,20 @@ internal fun validateStageMetadata(
     if (beamAngleDeg != null && (beamAngleDeg < 2 || beamAngleDeg > 120)) {
         return "beamAngleDeg must be between 2 and 120"
     }
+    checkMetres("lengthM", lengthM, MIN_FIXTURE_LENGTH_M, MAX_FIXTURE_LENGTH_M)?.let { return it }
     return null
+}
+
+/**
+ * Why a `lengthM` may not be stored on a patch of [typeKey] (or on one of its placements), or null
+ * when the type takes one. Only a type whose length is set per install (`FixtureType.acceptsLength`
+ * — a lightstrip) does; a pixel bar is always the bar it is, so a length on one would only draw a
+ * lie. Callers ask only when a non-null length is being written: clearing one is always allowed.
+ */
+internal fun fixedLengthRefusal(typeKey: String): String? {
+    if (FixtureTypeRegistry.typeInfoForKey(typeKey)?.acceptsLength == true) return null
+    return "lengthM is only for fixture types whose length is set per install (such as lightstrip); " +
+        "'$typeKey' has a fixed length"
 }
 
 internal fun normaliseGelCode(raw: String?): String? {

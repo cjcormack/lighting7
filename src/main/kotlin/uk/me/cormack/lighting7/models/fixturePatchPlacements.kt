@@ -29,6 +29,12 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * override, hidden. A paired lantern is the same unit in the same colour; an override per
  * placement is additive later if a venue ever needs one.
  *
+ * The one exception is [lengthM], and it is the first such override: a variable-length type (a
+ * lightstrip, `FixtureType.acceptsLength`) laid in segments — a ring round the stage edge is one
+ * run on one controller, drawn as four sides — is one patch whose placements are the segments,
+ * and each side is its own length. Null takes the patch's own length. Refused, like the patch's,
+ * for a type whose length is fixed.
+ *
  * Portable: embedded in its patch's sync document as `extraPlacements`
  * (`FixturePatchJson`), in list order, so [sortOrder] is not on the wire.
  *
@@ -47,6 +53,8 @@ object DaoFixturePatchPlacements : IntIdTable("fixture_patch_placements") {
     val stageZ = double("stage_z").nullable()
     val baseYawDeg = double("base_yaw_deg").nullable()
     val basePitchDeg = double("base_pitch_deg").nullable()
+    /** This segment's length in metres, for a variable-length type; null takes the patch's own. */
+    val lengthM = double("length_m").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -62,6 +70,7 @@ class DaoFixturePatchPlacement(id: EntityID<Int>) : IntEntity(id) {
     var stageZ by DaoFixturePatchPlacements.stageZ
     var baseYawDeg by DaoFixturePatchPlacements.baseYawDeg
     var basePitchDeg by DaoFixturePatchPlacements.basePitchDeg
+    var lengthM by DaoFixturePatchPlacements.lengthM
     var sortOrder by DaoFixturePatchPlacements.sortOrder
     var uuid by DaoFixturePatchPlacements.uuid
 }

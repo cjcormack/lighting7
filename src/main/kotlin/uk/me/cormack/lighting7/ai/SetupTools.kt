@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
 import uk.me.cormack.lighting7.routes.PlacementInput
 import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.createCueChildren
+import uk.me.cormack.lighting7.routes.fixedLengthRefusal
 import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.renumberAutoCues
@@ -188,6 +189,10 @@ class SetupTools(
                         t.modeName?.let { put("mode", it) }
                         put("channelCount", t.channelCount)
                         put("kind", t.kind.name)
+                        if (t.acceptsLength) {
+                            put("acceptsLength", true)
+                            put("defaultLengthM", t.lengthM)
+                        }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
                     }
                 }
@@ -275,6 +280,7 @@ class SetupTools(
                             p.beamAngleDeg?.let { put("beamAngleDeg", it) }
                             p.gelCode?.let { put("gelCode", it) }
                             p.kindOverride?.let { put("kind", it) }
+                            putOptional("lengthM", p.lengthM)
                             if (p.stageHidden) put("stageHidden", true)
                             if (p.infrastructure) put("infrastructure", true)
                             val alsoAt = placementsByPatch[p.id.value].orEmpty()
@@ -287,6 +293,7 @@ class SetupTools(
                                                 ?.let { riggingNames[it] }?.let { put("rigging", it) }
                                             putOptional("x", pl.stageX); putOptional("y", pl.stageY); putOptional("z", pl.stageZ)
                                             putOptional("yawDeg", pl.baseYawDeg); putOptional("pitchDeg", pl.basePitchDeg)
+                                            putOptional("lengthM", pl.lengthM)
                                         }
                                     }
                                 }
@@ -371,6 +378,9 @@ class SetupTools(
                 ?.filter { it.isNotEmpty() }?.distinct().orEmpty()
             groups.filter { it.length > 100 }.forEach { rowProblems += "group name '$it' is longer than 100 characters" }
             val placement = parsePlacement(row, riggingIds, rowProblems)
+            if (placement.setsLength && FixtureTypeRegistry.typeInfoForKey(typeKey) != null) {
+                fixedLengthRefusal(typeKey)?.let { rowProblems += it }
+            }
             val infrastructure = optionalBoolean(row, "infrastructure", rowProblems)
 
             if (rowProblems.isNotEmpty()) {
@@ -508,10 +518,16 @@ class SetupTools(
         val beamAngleDeg: Optional<Int?>?,
         val gelCode: Optional<String?>?,
         val kind: Optional<String?>?,
+        val lengthM: Optional<Double?>?,
         val stageHidden: Boolean?,
         /** The whole `alsoAt` list when the row carried it (empty for an explicit clear). */
         val alsoAt: List<AlsoAt>?,
     ) {
+        /** Whether the row writes a non-null length — on the fixture or on any `alsoAt` segment —
+         *  which only a type that takes one may hold (`fixedLengthRefusal`). */
+        val setsLength: Boolean
+            get() = lengthM?.value != null || alsoAt.orEmpty().any { it.lengthM != null }
+
         fun applyTo(patch: DaoFixturePatch) {
             rigging?.let { r -> patch.rigging = r.value?.let { DaoRigging.findById(it) } }
             x?.let { patch.stageX = it.value }
@@ -522,6 +538,7 @@ class SetupTools(
             beamAngleDeg?.let { patch.beamAngleDeg = it.value }
             gelCode?.let { patch.gelCode = it.value }
             kind?.let { patch.kindOverride = it.value }
+            lengthM?.let { patch.lengthM = it.value }
             stageHidden?.let { patch.stageHidden = it }
             alsoAt?.let { list ->
                 // Positional identity: the n-th lantern listed keeps the n-th placement's uuid, so
@@ -538,6 +555,7 @@ class SetupTools(
                         riggingUuid = a.riggingId?.let { byId[it]?.uuid?.toString() },
                         stageX = a.x, stageY = a.y, stageZ = a.z,
                         baseYawDeg = a.yawDeg, basePitchDeg = a.pitchDeg,
+                        lengthM = a.lengthM,
                     )
                 }
                 applyExtraPlacements(patch, inputs, riggings)
@@ -551,6 +569,7 @@ class SetupTools(
         val riggingId: Int?,
         val x: Double?, val y: Double?, val z: Double?,
         val yawDeg: Double?, val pitchDeg: Double?,
+        val lengthM: Double?,
     )
 
     /** A present value, which may itself be null (an explicit clear). */
@@ -591,7 +610,9 @@ class SetupTools(
         val yaw = field("yawDeg") { it.doubleOrNull }
         val pitch = field("pitchDeg") { it.doubleOrNull }
         val beam = field("beamAngleDeg") { it.doubleOrNull?.toInt() }
-        validateStageMetadata(x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value)?.let { problems += it }
+        val length = field("lengthM") { it.doubleOrNull }
+        validateStageMetadata(x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value, length?.value)
+            ?.let { problems += it }
         val gel = field("gelCode") { it.contentOrNull }?.let { Optional(normaliseGelCode(it.value)) }
         val kind = field("kind") { it.contentOrNull }?.let {
             try {
@@ -603,7 +624,7 @@ class SetupTools(
         }
         val hidden = optionalBoolean(row, "stageHidden", problems)
         val alsoAt = parseAlsoAt(row["alsoAt"], riggingIds, problems)
-        return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, hidden, alsoAt)
+        return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, length, hidden, alsoAt)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -645,8 +666,11 @@ class SetupTools(
                     null
                 }
             }
-            val a = AlsoAt(label, riggingId, number("x"), number("y"), number("z"), number("yawDeg"), number("pitchDeg"))
-            validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null)?.let { problems += "alsoAt[$i]: $it" }
+            val a = AlsoAt(
+                label, riggingId, number("x"), number("y"), number("z"), number("yawDeg"), number("pitchDeg"),
+                number("lengthM"),
+            )
+            validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null, a.lengthM)?.let { problems += "alsoAt[$i]: $it" }
             out += a
         }
         return out
@@ -656,8 +680,9 @@ class SetupTools(
         val rows = input["placements"] as? JsonArray ?: return failure("Missing 'placements'")
         if (rows.isEmpty()) return failure("'placements' is empty")
         val project = state.projectManager.currentProject
-        val (patchIds, riggingIds) = transaction(state.database) {
-            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.associate { it.key to it.id.value } to
+        val (patches, riggingIds) = transaction(state.database) {
+            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                .associate { it.key to (it.id.value to it.fixtureTypeKey) } to
                 riggingIdsByName(project)
         }
 
@@ -668,10 +693,11 @@ class SetupTools(
             val row = element as? JsonObject ?: run { problems += "placements[$index]: not an object"; return@forEachIndexed }
             val key = row.string("key")?.trim().orEmpty()
             val rowProblems = mutableListOf<String>()
-            val patchId = patchIds[key]
+            val (patchId, typeKey) = patches[key] ?: (null to null)
             if (patchId == null) rowProblems += "no patched fixture has key '$key'"
             if (!seen.add(key)) rowProblems += "key '$key' is listed twice"
             val placement = parsePlacement(row, riggingIds, rowProblems)
+            if (placement.setsLength && typeKey != null) fixedLengthRefusal(typeKey)?.let { rowProblems += it }
             if (rowProblems.isEmpty()) parsed += patchId!! to placement
             else problems += rowProblems.map { "placements[$index] ('$key'): $it" }
         }

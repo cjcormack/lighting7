@@ -17,6 +17,13 @@ annotation class FixtureType(
     val lengthM: Double = -1.0,
     val widthM: Double = -1.0,
     val heightM: Double = -1.0,
+    /** The unit's length is installation-specific rather than a fact of the model — a lightstrip
+     *  is cut to the run it is laid along, where a pixel bar is always the bar it is. A type that
+     *  sets this takes a per-patch `lengthM` (and per-placement, for a run laid in segments);
+     *  [lengthM] above is then only the default drawn until one is set. Every other type refuses
+     *  a stored length at the write boundary. See `docs/fixtures-engineering.md` §"Variable-length
+     *  fixtures". */
+    val acceptsLength: Boolean = false,
     /** Beam shape/edge; [BeamShape.INHERIT]/[BeamEdge.INHERIT] resolve to the
      *  [kind] default in [FixtureTypeRegistry]. */
     val beamShape: BeamShape = BeamShape.INHERIT,

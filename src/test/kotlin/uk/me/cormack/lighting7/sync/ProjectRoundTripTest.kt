@@ -140,12 +140,42 @@ class ProjectRoundTripTest {
         assertEquals(foh.uuid, sr.riggingUuid, "a placement names its rigging by uuid")
         assertEquals(null, paired.extraPlacements[1].riggingUuid)
 
-        val unpaired = docs.filter { !it.contains("\"hex-2\"") }
-        assertEquals(patches.size - 1, unpaired.size)
+        val unpaired = docs.filter { !it.contains("\"hex-2\"") && !it.contains("\"ring-1\"") }
+        assertEquals(patches.size - 2, unpaired.size)
         assertTrue(
             unpaired.none { it.contains("\"extraPlacements\"") },
             "a patch with no extra placements must not carry the key at all",
         )
+    }
+
+    /**
+     * v15: a lightstrip's installed length travels on its patch, and a segment's own length on its
+     * placement. A patch without one carries no key, so a length-less export is v14's byte for byte.
+     */
+    @Test
+    fun `a variable-length fixture exports its length and its segments' lengths`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val ring = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "ring-1" }
+        assertEquals(8.5, ring.lengthM)
+        assertEquals(12.25, ring.extraPlacements.single().lengthM)
+        assertTrue(
+            docs.filter { !it.contains("\"ring-1\"") }.none { it.contains("\"lengthM\"") },
+            "a patch with no length must not carry the key at all",
+        )
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "ring-1" }
+        assertEquals(8.5, back.lengthM, "the importer keeps the patch's length")
+        assertEquals(12.25, back.extraPlacements.single().lengthM, "and the segment's")
     }
 
     /**
@@ -240,7 +270,7 @@ class ProjectRoundTripTest {
         exportDirA.resolve("buskRig").toFile().deleteRecursively()
         Files.writeString(
             exportDirA.resolve("formatVersion.json"),
-            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 14", "\"formatVersion\": 11"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": $SUPPORTED_FORMAT_VERSION", "\"formatVersion\": 11"),
         )
 
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)

@@ -356,6 +356,43 @@ class McpSetupToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a lightstrip ring takes a length per side, and a fixed-length type refuses one`() {
+        val types = call("list_fixture_types", """{"query":"lightstrip"}""").json()["fixtureTypes"]!!.jsonArray.map { it.jsonObject }
+        val strip = types.single { it["typeKey"]!!.jsonPrimitive.content == "lightstrip" }
+        assertTrue(strip["acceptsLength"]!!.jsonPrimitive.boolean)
+        assertEquals(1.0, strip["defaultLengthM"]!!.jsonPrimitive.content.toDouble())
+
+        val refused = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"bar","name":"Bar","fixtureTypeKey":"led-lightbar-12-pixel-48ch","universe":0,"startChannel":100,"lengthM":3}]}""",
+        )
+        assertFalse(refused.success)
+        assertTrue(refused.problems().single().contains("fixed length"), refused.result)
+        assertTrue(patchKeys().isEmpty(), "a refused call writes nothing")
+
+        val patched = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"ring","name":"Ring","fixtureTypeKey":"lightstrip","universe":0,"startChannel":20,
+                "y":0,"lengthM":10,"alsoAt":[{"label":"US","y":8,"yawDeg":180,"lengthM":10},{"label":"SL","x":-5,"y":4,"yawDeg":90,"lengthM":8}]}]}""",
+        )
+        assertTrue(patched.success, patched.result)
+        val listed = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.map { it.jsonObject }.single()
+        assertEquals(10.0, listed["lengthM"]!!.jsonPrimitive.content.toDouble())
+        assertEquals(listOf(10.0, 8.0), listed["alsoAt"]!!.jsonArray.map { it.jsonObject["lengthM"]!!.jsonPrimitive.content.toDouble() })
+
+        assertTrue(patchTwoDimmers().success)
+        val onDimmer = call("place_fixtures", """{"placements":[{"key":"foh-1","alsoAt":[{"x":1,"lengthM":2}]}]}""")
+        assertFalse(onDimmer.success)
+        assertTrue(onDimmer.problems().single().contains("fixed length"), onDimmer.result)
+        val tooLong = call("place_fixtures", """{"placements":[{"key":"ring","lengthM":500}]}""")
+        assertFalse(tooLong.success, tooLong.result)
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"ring","lengthM":null}]}""").success)
+        transaction(state.database) {
+            assertNull(DaoFixturePatch.find { DaoFixturePatches.key eq "ring" }.single().lengthM)
+        }
+    }
+
+    @Test
     fun `a malformed number is refused rather than read as a clear`() {
         assertTrue(call("set_stage", """{"regions":[{"name":"Main","centerX":1.5}],"riggings":[{"name":"LX1","z":6}]}""").success)
         val result = call(
