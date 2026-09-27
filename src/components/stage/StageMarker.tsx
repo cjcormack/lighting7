@@ -26,10 +26,16 @@ interface StageMarkerProps {
    * both cases: a placeholder would be a claim about the rig.
    */
   riggingName?: string
+  /**
+   * Set when this marker draws one of the patch's extra placements (a paired dimmer's other
+   * lantern): its label, e.g. "SR", drawn after the fixture's name. `null` for a placement with no
+   * label; absent for the patch's own placement.
+   */
+  placementLabel?: string | null
 }
 
 export function StageMarker(props: StageMarkerProps) {
-  const { patch, fixture, fixtureType, selected, dimmed, beamScale = 1, riggingName } = props
+  const { patch, fixture, fixtureType, selected, dimmed, beamScale = 1, riggingName, placementLabel } = props
 
   const showCone = !!fixtureType?.acceptsBeamAngle
   const beamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
@@ -46,6 +52,7 @@ export function StageMarker(props: StageMarkerProps) {
   const renderLabel = (
     <div className={labelClass} style={{ textShadow: '0 0 4px rgba(0,0,0,0.7)' }}>
       <span>{patch.displayName}</span>
+      {placementLabel && <span className="opacity-80">· {placementLabel}</span>}
       {riggingName && (
         <span
           className="rounded-sm px-1 py-px text-[9px] font-mono"

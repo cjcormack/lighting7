@@ -8,7 +8,7 @@ const par = { ...makeFixture('par-1', []), name: 'Par One' }
 
 // No placed patches, so the stage draws its fallback row of dots — one per fixture, titled by name.
 vi.mock('@/hooks/useProjectedPatches', () => ({
-  useProjectedPatches: () => ({ points: [] }),
+  useProjectedPatches: () => ({ points: [], extraPoints: [] }),
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({

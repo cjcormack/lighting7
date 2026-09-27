@@ -7,7 +7,7 @@ import { useViewedProject } from '../ProjectSwitcher'
 import { usePatchListQuery, usePatchGroupListQuery } from '../store/patches'
 import { useRiggingListQuery } from '../store/riggings'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
-import { useProjectedPatches } from '../hooks/useProjectedPatches'
+import { useProjectedPatches, type DrawnPoint } from '../hooks/useProjectedPatches'
 import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { StageMarker } from './stage/StageMarker'
 import { StageBackdrop } from './stage/StageBackdrop'
@@ -82,9 +82,19 @@ function StageOverviewPanelBody({
   // selection with Stage3D (see routes/Stage.tsx), which draws the selected
   // hidden patch so the operator can see what they're about to un-hide. Dropping
   // it here would blank the highlight on one surface while it shows on the other.
-  const { points: placedPatches } = useProjectedPatches(projectId, {
+  const { points: placedPatches, extraPoints } = useProjectedPatches(projectId, {
     includeKey: selectedFixtureKey,
   })
+  // A paired dimmer is one fixture drawn more than once, so the count is of fixtures on the
+  // plot, not of markers.
+  const drawnPoints = useMemo<DrawnPoint[]>(
+    () => [...placedPatches, ...extraPoints],
+    [placedPatches, extraPoints],
+  )
+  const placedCount = useMemo(
+    () => new Set(drawnPoints.map(({ patch }) => patch.key)).size,
+    [drawnPoints],
+  )
 
   const visibleGroups = (groups ?? []).filter((g) => g.memberCount > 0)
   const showChips = visibleGroups.length > 0
@@ -98,7 +108,7 @@ function StageOverviewPanelBody({
         />
         <span className="text-sm font-semibold">Stage</span>
         <span className="text-xs font-mono text-muted-foreground border-l pl-2">
-          {placedPatches.length} fixture{placedPatches.length === 1 ? '' : 's'}
+          {placedCount} fixture{placedCount === 1 ? '' : 's'}
         </span>
         <div className="flex-1" />
         {groupFilter != null && (
@@ -121,7 +131,7 @@ function StageOverviewPanelBody({
             active={groupFilter == null}
             onClick={() => onGroupFilterChange(null)}
           >
-            All <span className="ml-1 font-mono text-[10px] opacity-70">{placedPatches.length}</span>
+            All <span className="ml-1 font-mono text-[10px] opacity-70">{placedCount}</span>
           </ChipButton>
           {visibleGroups.map((g) => (
             <ChipButton
@@ -141,14 +151,17 @@ function StageOverviewPanelBody({
           <div className={cn('flex items-center justify-center', STAGE_CANVAS_HEIGHT)}>
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
-        ) : placedPatches.length === 0 ? (
+        ) : placedCount === 0 ? (
           <EmptyState projectId={projectId} />
         ) : (
           <StageChannelSourceProvider>
             {/* Follows the same vis source the Stage route's View menu sets, so the two
                 pictures agree whenever they are on screen together. */}
             <StageBackdrop className={STAGE_CANVAS_HEIGHT}>
-              {placedPatches.map(({ patch, leftPct, topPct }) => {
+              {drawnPoints.map(({ patch, leftPct, topPct, placement }) => {
+                // An extra placement is the same fixture: it lights, filters and selects as the
+                // patch, and only its position, rigging and label are its own.
+                const riggingUuid = placement ? placement.riggingUuid : patch.riggingUuid
                 const fixture = fixtureByKey.get(patch.key)
                 const fixtureType = fixture
                   ? typeByKey.get(fixture.typeKey)
@@ -158,7 +171,7 @@ function StageOverviewPanelBody({
                   patch.groups.some((g) => g.id === groupFilter)
                 return (
                   <button
-                    key={patch.id}
+                    key={placement ? `${patch.id}:${placement.uuid}` : patch.id}
                     type="button"
                     onClick={() => onFixtureClick(patch.key)}
                     className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer focus:outline-none"
@@ -174,10 +187,9 @@ function StageOverviewPanelBody({
                       selected={selectedFixtureKey === patch.key}
                       dimmed={!matchesFilter}
                       riggingName={
-                        patch.riggingUuid
-                          ? riggingNameByUuid.get(patch.riggingUuid)
-                          : undefined
+                        riggingUuid ? riggingNameByUuid.get(riggingUuid) : undefined
                       }
+                      placementLabel={placement ? placement.label : undefined}
                     />
                   </button>
                 )

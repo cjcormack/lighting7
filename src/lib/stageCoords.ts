@@ -157,7 +157,9 @@ export function worldPositionFor(
 // instead of the R3F swizzle. Used by the 2D top-down fallback panel which
 // reasons in stage metres rather than R3F space.
 export function worldPositionLighting(
-  patch: FixturePatch,
+  // Only the four placement fields, so an extra placement (a paired dimmer's other lantern) is
+  // composed through its rigging by the same arithmetic as the patch it belongs to.
+  patch: Pick<FixturePatch, 'stageX' | 'stageY' | 'stageZ' | 'riggingUuid'>,
   riggings: RiggingDto[],
 ): { x: number; y: number; z: number } | null {
   const sx = patch.stageX
