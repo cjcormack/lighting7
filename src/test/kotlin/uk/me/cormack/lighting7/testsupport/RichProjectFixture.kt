@@ -199,6 +199,24 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         fixtureTypeKey = "led-lightbar-12-pixel-48ch"
         key = "bar-1"; displayName = "Bar 1"; startChannel = 100; sortOrder = 5
     }
+    // A lightstrip laid as a ring (v15): the run's own length, and a segment with a length of its
+    // own. Both non-default, so a copier that lost either would show in the round-trip.
+    val ring = DaoFixturePatch.new {
+        this.project = project
+        universeConfig = u0
+        fixtureTypeKey = "lightstrip"
+        key = "ring-1"; displayName = "Ring 1"; startChannel = 200; sortOrder = 6
+        stageX = 0.0; stageY = 0.0; lengthM = 8.5
+    }
+    DaoFixturePatchPlacement.new {
+        fixturePatch = ring
+        label = "US"
+        stageX = 0.0
+        stageY = 6.0
+        baseYawDeg = 180.0
+        lengthM = 12.25
+        sortOrder = 0
+    }
     val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }
     DaoFixtureGroupMember.new {
         group = groupA; fixturePatch = patches[0]; sortOrder = 0

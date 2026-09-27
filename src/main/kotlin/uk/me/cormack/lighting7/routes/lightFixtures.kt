@@ -208,6 +208,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 lengthM = info.lengthM,
                 widthM = info.widthM,
                 heightM = info.heightM,
+                acceptsLength = info.acceptsLength,
                 beamShape = info.beamShape.name,
                 beamEdge = info.beamEdge.name,
             )
@@ -397,6 +398,8 @@ data class FixtureTypeDetails(
     val lengthM: Double? = null,
     val widthM: Double? = null,
     val heightM: Double? = null,
+    /** A patch of this type may carry its own `lengthM`; [lengthM] is then the default. */
+    val acceptsLength: Boolean = false,
     val beamShape: String = "NONE",
     val beamEdge: String = "SOFT",
 )

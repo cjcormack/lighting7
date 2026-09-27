@@ -32,6 +32,11 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
     val kindOverride = varchar("kind_override", 32).nullable()
+    /** The unit's length in metres along its long axis, for a type whose length is set per install
+     *  (`FixtureType.acceptsLength` — a lightstrip cut to its run). Null draws the type's default.
+     *  Refused at the write boundary for every other type. Presentational: the loader never reads
+     *  it. See `docs/fixtures-engineering.md` §"Variable-length fixtures". */
+    val lengthM = double("length_m").nullable()
     /** Omit this patch from the Stage view's 2D/3D renders. For patches that
      *  are real DMX but not stage objects — a dimmer driving hard power, a
      *  hazer's fan channel. Purely presentational: the fixture still patches,
@@ -71,7 +76,13 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
     var kindOverride by DaoFixturePatches.kindOverride
+    var lengthM by DaoFixturePatches.lengthM
     var stageHidden by DaoFixturePatches.stageHidden
     var infrastructure by DaoFixturePatches.infrastructure
     var uuid by DaoFixturePatches.uuid
 }
+
+/** Bounds on a patch's (or a placement's) [DaoFixturePatches.lengthM], metres. The floor is a
+ *  rigging's: strictly positive, since a zero-length body has nothing to draw. */
+const val MIN_FIXTURE_LENGTH_M = 0.01
+const val MAX_FIXTURE_LENGTH_M = 100.0

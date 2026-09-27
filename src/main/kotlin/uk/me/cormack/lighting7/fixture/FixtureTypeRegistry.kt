@@ -71,6 +71,9 @@ object FixtureTypeRegistry {
         val lengthM: Double,
         val widthM: Double,
         val heightM: Double,
+        /** Whether a patch may carry its own `lengthM` — see [FixtureType.acceptsLength]. When
+         *  true, [lengthM] is the default drawn for a patch that has none. */
+        val acceptsLength: Boolean,
         /** Resolved beam geometry — never [BeamShape.INHERIT]/[BeamEdge.INHERIT]. */
         val beamShape: BeamShape,
         val beamEdge: BeamEdge,
@@ -287,6 +290,7 @@ object FixtureTypeRegistry {
                 lengthM = if (annotation.lengthM >= 0.0) annotation.lengthM else kd.lengthM,
                 widthM = if (annotation.widthM >= 0.0) annotation.widthM else kd.widthM,
                 heightM = if (annotation.heightM >= 0.0) annotation.heightM else kd.heightM,
+                acceptsLength = annotation.acceptsLength,
                 beamShape = beamShape,
                 beamEdge = beamEdge,
             )

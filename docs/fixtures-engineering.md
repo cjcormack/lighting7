@@ -744,6 +744,44 @@ apart from its fixture, because it is not a fixture.
   clicking one selects the fixture; they are edited in the patch form's *Also hung at* section, not
   dragged on the plot (`lighting-react/docs/stage-vis-engineering.md`).
 
+### Variable-length fixtures
+
+Most types have a length that is a fact of the model: `@FixtureType(lengthM = …)`, or the
+`FixtureKind` default, and a pixel bar is always the bar it is. A **lightstrip** is not — it is cut
+to the run it is laid along, so its length is a fact of the install. Such a type sets
+`@FixtureType(acceptsLength = true)` (`LightstripFixture` is the one today), which surfaces as
+`FixtureTypeInfo.acceptsLength` / `FixtureTypeDetails.acceptsLength` on `GET /fixture-types`, and
+its declared `lengthM` becomes only the **default** drawn until a patch sets its own.
+
+- **Storage**: `fixture_patches.length_m` (metres along the body's long axis, its local +X) and
+  `fixture_patch_placements.length_m` — nullable, `MIN_FIXTURE_LENGTH_M` 0.01 to
+  `MAX_FIXTURE_LENGTH_M` 100 (`models/fixturePatches.kt`). Null on the patch is the type default;
+  null on a placement is the patch's own length.
+- **Runs in segments**: a run laid round several sides — the motivating case is a ring round the
+  stage edge on one 5-channel controller — is **one patch**, because it is one colour on one
+  address. Its own placement is one side; each other side is an **extra placement** carrying its
+  own position, yaw and `lengthM`. That is the one fixture fact a placement may override (see the
+  KDoc on `DaoFixturePatchPlacements`); everything else about a side — type, colour, groups — is
+  the fixture's.
+- **Refused for every other type**: `fixedLengthRefusal(typeKey)` in `routes/projectPatches.kt` is
+  the one rule, called wherever a **non-null** length would be written — `POST /patches`, `PUT
+  /patches/{id}` (its own `lengthM` or any `extraPlacements[].lengthM`; a 400, checked before the
+  first write), the bulk `PUT /patches/placements`, and the MCP `patch_fixtures` /
+  `place_fixtures`. Clearing one (`null`) is always allowed. The range check is
+  `validateStageMetadata`'s `lengthM` argument.
+- **Presentational only**: `DbFixtureLoader` never reads it, so `lengthM` is in
+  `METADATA_ONLY_PUT_KEYS` and a write never rebuilds the rig.
+- **Sync**: `FixturePatchJson.lengthM` and `PatchPlacementJson.lengthM` (formatVersion 15 —
+  `docs/sync-engineering.md` §"Version 15 — variable-length fixtures"). The importer takes them as
+  stored, with no type check; the stage views ignore a length on a fixed-length type.
+- **MCP**: `list_fixture_types` marks such a type `acceptsLength` with its `defaultLengthM`;
+  `patch_fixtures` / `place_fixtures` take `lengthM` on the row and on each `alsoAt` entry, and
+  `get_patch` reports both.
+- **Frontend**: the patch form offers *Length* only for such a type, and per side under *Other
+  sides of this run*; the 3D body is drawn at the length, and the 2D plot draws the fixture as a
+  bar between its two projected ends rather than a dot (`lighting-react/src/lib/fixtureLength.ts`,
+  which mirrors `FixtureModel`: the long axis turns with `baseYawDeg` only).
+
 ### Static fixtures vs. moving heads
 
 For a static fixture (PAR, wash bar, fresnel), `baseYawDeg` + `basePitchDeg`

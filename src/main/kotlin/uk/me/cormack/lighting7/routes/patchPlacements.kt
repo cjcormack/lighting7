@@ -29,6 +29,9 @@ data class PatchPlacementDto(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** This segment's own length, for a variable-length type (a lightstrip laid in a ring); null
+     *  takes the patch's `lengthM`. */
+    val lengthM: Double? = null,
 )
 
 /**
@@ -47,6 +50,7 @@ internal data class PlacementInput(
     val stageZ: Double?,
     val baseYawDeg: Double?,
     val basePitchDeg: Double?,
+    val lengthM: Double? = null,
 )
 
 /**
@@ -91,6 +95,7 @@ internal fun parseExtraPlacements(value: JsonElement?): Result<List<PlacementInp
                 stageZ = entry["stageZ"].nullableDouble(),
                 baseYawDeg = entry["baseYawDeg"].nullableDouble(),
                 basePitchDeg = entry["basePitchDeg"].nullableDouble(),
+                lengthM = entry["lengthM"].nullableDouble(),
             )
         } catch (e: IllegalArgumentException) {
             // A wrong JSON type (a string where a number goes, an object where a string goes).
@@ -103,6 +108,7 @@ internal fun parseExtraPlacements(value: JsonElement?): Result<List<PlacementInp
             baseYawDeg = input.baseYawDeg,
             basePitchDeg = input.basePitchDeg,
             beamAngleDeg = null,
+            lengthM = input.lengthM,
         )?.let { return Result.failure(IllegalArgumentException("$where: $it")) }
         if (input.uuid != null && !seen.add(input.uuid)) {
             return Result.failure(IllegalArgumentException("$where: uuid ${input.uuid} appears twice"))
@@ -168,6 +174,7 @@ internal fun applyExtraPlacements(
         row.stageZ = input.stageZ
         row.baseYawDeg = input.baseYawDeg
         row.basePitchDeg = input.basePitchDeg
+        row.lengthM = input.lengthM
         row.sortOrder = index
     }
     existing.values.filter { it.uuid !in kept }.forEach { it.delete() }
@@ -182,6 +189,7 @@ internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = PatchPlacemen
     stageZ = stageZ,
     baseYawDeg = baseYawDeg,
     basePitchDeg = basePitchDeg,
+    lengthM = lengthM,
 )
 
 /**

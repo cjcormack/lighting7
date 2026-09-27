@@ -101,6 +101,12 @@ import uk.me.cormack.lighting7.models.asDuration
 // moved for v6's reason — a v13 reader would import a paired patch without its lanterns and write
 // them away on its next push; MIN stays at 5 because the field defaults to empty.
 //
+// v15 added `lengthM` to `FixturePatchJson` and `PatchPlacementJson` (a lightstrip's installed
+// length, and each segment's). SUPPORTED moved for v14's reason — a v14 reader would import the
+// strip at its type's default and write the length away on its next push; MIN stays at 5 because
+// both fields default to null. Imported as stored, with no type check: the write boundary refuses
+// a length on a fixed-length type, and the stage views draw one only for a type that takes it.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -126,7 +132,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 14
+internal const val SUPPORTED_FORMAT_VERSION = 15
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -602,6 +608,7 @@ class ProjectImporter(private val state: State) {
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode
             kindOverride = p.kindOverride
+            lengthM = p.lengthM
             stageHidden = p.stageHidden
             infrastructure = p.infrastructure
             this.uuid = uuid
@@ -621,6 +628,7 @@ class ProjectImporter(private val state: State) {
                 stageZ = pl.stageZ
                 baseYawDeg = pl.baseYawDeg
                 basePitchDeg = pl.basePitchDeg
+                lengthM = pl.lengthM
                 sortOrder = index
                 this.uuid = UUID.fromString(pl.uuid)
             }

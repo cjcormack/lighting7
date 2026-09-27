@@ -26,6 +26,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v15: a variable-length fixture's length. `FixturePatchJson.lengthM` and
+    // `PatchPlacementJson.lengthM` carry a lightstrip's installed length and each of its segments'
+    // (`docs/fixtures-engineering.md` §"Variable-length fixtures"). Both default to null and are
+    // omitted then, so an export with no lengths is byte-identical to v14. It still bumps, for v14's
+    // reason: a v14 reader imports the strip at its type's default and writes the length away on its
+    // next wipe-then-export push. `minReader` stays at **5** — a missing length is the default.
+    //
     // v12: the busk rig (`docs/plans/completed/busk-further-plan.md` §3.7). A new `buskRig/`
     // folder — one document per **row** with its tiles nested, tiles naming a group or a patch by
     // uuid and a cell by its element key — beside `buskPages/`. The plan's first draft said one
@@ -127,7 +134,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 14,
+    val formatVersion: Int = 15,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -371,6 +378,8 @@ data class FixturePatchJson(
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
     val kindOverride: String? = null,
+    /** A variable-length type's installed length in metres (v15); null is the type's default. */
+    val lengthM: Double? = null,
     val stageHidden: Boolean = false,
     val infrastructure: Boolean = false,
     /**
@@ -399,6 +408,9 @@ data class PatchPlacementJson(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** This segment's own length (v15), for a variable-length type laid in segments; null takes
+     *  the patch's `lengthM`. */
+    val lengthM: Double? = null,
 )
 
 /**
