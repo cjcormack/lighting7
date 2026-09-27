@@ -49,6 +49,17 @@ kotlin {
 
 application {
     mainClass.set("uk.me.cormack.lighting7.ApplicationKt")
+
+    // Opt in to the two things JDK 24+ warns about on every start of `./gradlew run`, both from
+    // dependencies rather than this code: sqlite-jdbc (and libremidi, JNA) loading their native
+    // libraries (JEP 472), and Netty allocating off-heap memory through `sun.misc.Unsafe`
+    // (JEP 498). Neither is blocked yet — the warnings only say they will be — so these keep a
+    // real warning from being lost in the noise. Both flags need JDK 23+, which toolchain 24 is.
+    // The packaged app is spawned by the launcher with its own command line, not this one.
+    applicationDefaultJvmArgs = listOf(
+        "--enable-native-access=ALL-UNNAMED",
+        "--sun-misc-unsafe-memory-access=allow",
+    )
 }
 
 repositories {

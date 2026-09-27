@@ -47,6 +47,10 @@ class SocketConnection(val session: WebSocketServerSession) {
  * nothing off `state.show`; the comments at each site spell out why.
  */
 fun Application.configureSockets(state: State) {
+    // Before anything listens: a stale sealed serializer would otherwise surface as sockets
+    // closing when the unknown frame is first sent, not as a startup error.
+    SocketMessageScope.verify()
+
     install(WebSockets) {
         pingPeriod = 15.seconds
         timeout = 15.seconds
