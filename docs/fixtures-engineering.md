@@ -605,6 +605,39 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `SlenderBeamBarQuadFixture.Mode27Ch` | slender-beam-bar-quad-27ch | 27 | Dimmer, Strobe, MultiElementFixture (full) |
 | `VarytecEasymoveXl60SpotFixture.Mode11Ch` | varytec-easymove-xl-60-spot-11ch | 11 | Dimmer, Position, Strobe (+ colour/gobo wheels) |
 
+## Infrastructure fixtures
+
+Some patches are real DMX but not lighting: a dimmer channel switching a hazer's hard power, a
+relay, a fan. `DaoFixturePatches.infrastructure` (boolean, default false) marks one. An
+infrastructure fixture is **hidden from every operator surface except the Patches view** (where the
+flag is set, as a checkbox in the edit form and the patch sheet's *Role* column) **and the Channels
+view** (where its raw channels are driven). It is never offered as a target.
+
+It is presentational, like `stageHidden`, and deliberately so:
+
+- It still patches, outputs and takes part in anything that already names it — a group, a cue, a
+  Look row, an effect, a surface binding. Hiding is about what the operator is *offered*, not what
+  the desk *does*. Nothing sweeps references when the flag is set.
+- It implies `stageHidden` on the Stage without writing it: the Stage never shows infrastructure
+  under any flag, not even as the selected patch the picker keeps drawn.
+
+Where the rule lives:
+
+| Layer | What |
+|---|---|
+| `FixturePatchDto` / `CreatePatchRequest` / patch `PUT` | The field. The PUT applies it **without a rebuild** (`PUT_KEYS_WITHOUT_REBUILD`) — the loader builds nothing from it — and, when it flips, calls `Fixtures.announceFixturesChanged()` so every window refetches `GET /fixtures` and drops (or regains) the fixture, without tearing down every controller of a live rig for a view flag. It is **not** in `METADATA_ONLY_PUT_KEYS`, because that set is also the bulk placement route's allowlist, and that route announces nothing: the bulk route refuses it. |
+| `Fixtures.FixturePatchMetadata.infrastructure` / `isInfrastructure` / `operatorFixtures` / `infrastructureKeys()` | The running show's copy, set by `DbFixtureLoader`. Every `setPatchMetadata` caller passes the flag through, or a metadata-only edit (a gel) would reset it. `operatorFixtures` is the register minus infrastructure under one read lock — what a server-side "every fixture" that *offers* reads. |
+| `DmxFixtureDetails.infrastructure` (`GET /fixtures`) | What the frontend filters on. The list still **carries** the fixture, so a key a cue or group holds still resolves. |
+| `BuskRigOrder` / `DeskSelection` | The empty rig's *steps* leave it out (`operatorFixtures`), mirrored by the client's `effectiveRig`, so *All* / *Next* / *Invert* never reach a power dimmer. A group that contains one still steps as the group; a tile placed before the flag was set stays. `positions()` still ranks it: ordering a head a caller already named (a spread) is not offering one. |
+| `POST /templates/resolve` | Empty `targets` ("the whole patch", the template editor's *Resolves to* panel) is `operatorFixtures`; a target that names one still resolves it. |
+| `RigBriefing` (`describe_rig`, the AI prompt), `get_current_state` | The briefing lists it under its own *Infrastructure* heading (and sets its keys apart in the script API); `get_current_state`'s fixture list marks it `infrastructure: true`. |
+| MCP `patch_fixtures` / `get_patch` | Take and report `infrastructure`; a row that omits it leaves an existing fixture's flag alone. |
+| Sync | `FixturePatchJson.infrastructure`, an optional field with a false default — no `formatVersion` bump. |
+
+In lighting-react, views that list or offer fixtures read `useVisibleFixtureListQuery` /
+`useVisiblePatchListQuery` (or apply `lib/infrastructure.ts`'s `withoutInfrastructure`); views that
+only resolve a key they already hold read the raw lists.
+
 ## Stage geometry & coordinate system
 
 Fixture patches carry physical-world geometry on `DaoFixturePatches` so the

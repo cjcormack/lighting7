@@ -166,6 +166,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // Patch 4 has no stage geometry at all — the stand-in for the case
             // stageHidden exists for (real DMX, not a stage object).
             if (i == 4) stageHidden = true
+            // …and patch 3 stands in for infrastructure (a power dimmer): non-default, so the
+            // round-trip and clone tests see the field.
+            if (i == 3) infrastructure = true
         }
     }
     // Hex 2 is a paired dimmer: its other lantern hangs at the far end of the FOH truss, and a

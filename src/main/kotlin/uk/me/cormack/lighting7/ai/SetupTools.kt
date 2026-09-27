@@ -276,6 +276,7 @@ class SetupTools(
                             p.gelCode?.let { put("gelCode", it) }
                             p.kindOverride?.let { put("kind", it) }
                             if (p.stageHidden) put("stageHidden", true)
+                            if (p.infrastructure) put("infrastructure", true)
                             val alsoAt = placementsByPatch[p.id.value].orEmpty()
                             if (alsoAt.isNotEmpty()) {
                                 putJsonArray("alsoAt") {
@@ -312,6 +313,8 @@ class SetupTools(
         val endChannel: Int,
         val groups: List<String>,
         val placement: Placement,
+        /** Null when the row did not carry the key, so an update leaves the flag as it was. */
+        val infrastructure: Boolean?,
     )
 
     private fun patchFixtures(input: JsonObject): ToolExecutionResult {
@@ -368,11 +371,12 @@ class SetupTools(
                 ?.filter { it.isNotEmpty() }?.distinct().orEmpty()
             groups.filter { it.length > 100 }.forEach { rowProblems += "group name '$it' is longer than 100 characters" }
             val placement = parsePlacement(row, riggingIds, rowProblems)
+            val infrastructure = optionalBoolean(row, "infrastructure", rowProblems)
 
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
             } else {
-                parsed += PatchRow(index, key, name, typeKey, universe!!, start!!, end!!, groups, placement)
+                parsed += PatchRow(index, key, name, typeKey, universe!!, start!!, end!!, groups, placement, infrastructure)
             }
         }
 
@@ -448,6 +452,7 @@ class SetupTools(
                 patch.displayName = row.name
                 patch.startChannel = row.startChannel
                 row.placement.applyTo(patch)
+                row.infrastructure?.let { patch.infrastructure = it }
                 for (groupName in row.groups) {
                     val group = groupsByName.getOrPut(groupName) {
                         DaoFixtureGroup.new {
@@ -551,6 +556,13 @@ class SetupTools(
     /** A present value, which may itself be null (an explicit clear). */
     private class Optional<T>(val value: T)
 
+    /**
+     * An optional boolean field of a row: null when absent (leave it as it is), the value when a
+     * JSON boolean, and a problem — never a silent false — for anything else, `null` included.
+     */
+    private fun optionalBoolean(row: JsonObject, name: String, problems: MutableList<String>): Boolean? =
+        row[name]?.let { (it as? JsonPrimitive)?.booleanOrNull ?: run { problems += "$name must be a boolean"; null } }
+
     private fun parsePlacement(row: JsonObject, riggingIds: Map<String, Int>, problems: MutableList<String>): Placement {
         fun <T> field(name: String, read: (JsonPrimitive) -> T?): Optional<T?>? {
             val element = row[name] ?: return null
@@ -589,7 +601,7 @@ class SetupTools(
                 null
             }
         }
-        val hidden = row["stageHidden"]?.let { (it as? JsonPrimitive)?.booleanOrNull ?: run { problems += "stageHidden must be a boolean"; null } }
+        val hidden = optionalBoolean(row, "stageHidden", problems)
         val alsoAt = parseAlsoAt(row["alsoAt"], riggingIds, problems)
         return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, hidden, alsoAt)
     }
@@ -669,15 +681,15 @@ class SetupTools(
             parsed.map { (patchId, placement) ->
                 val patch = DaoFixturePatch.findById(patchId)!!
                 placement.applyTo(patch)
-                patch.key to patch.gelCode
+                patch.key to Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure)
             }
         }
         // Metadata only — the same set `METADATA_ONLY_PUT_KEYS` lets the patch route skip the
         // fixture rebuild for — so the runtime rig is untouched. The one thing the running show
         // does cache from these columns is the gel (`GET /fixtures` reads it), refreshed here as
         // both REST placement paths refresh it.
-        for ((key, gel) in gels) {
-            state.show.fixtures.setPatchMetadata(key, Fixtures.FixturePatchMetadata(gelCode = gel))
+        for ((key, metadata) in gels) {
+            state.show.fixtures.setPatchMetadata(key, metadata)
         }
         state.show.fixtures.patchListChanged()
         return success("Placed ${parsed.size} fixture(s)", buildJsonObject { put("placed", parsed.size) })

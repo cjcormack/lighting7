@@ -144,6 +144,8 @@ class Fixtures {
      */
     data class FixturePatchMetadata(
         val gelCode: String?,
+        /** The patch's `infrastructure` flag — see `DaoFixturePatches.infrastructure`. */
+        val infrastructure: Boolean = false,
     )
     private val patchMetadataRegister: MutableMap<String, FixturePatchMetadata> = mutableMapOf()
 
@@ -396,6 +398,38 @@ class Fixtures {
 
     fun patchMetadataFor(fixtureKey: String): FixturePatchMetadata? = registerLock.read {
         patchMetadataRegister[fixtureKey]
+    }
+
+    /**
+     * Whether the fixture keyed [fixtureKey] is patched as infrastructure. False for a key with no
+     * patch metadata (a Hue fixture, an element key, an unknown key) — infrastructure is a property
+     * of a patched head, never of one of its cells.
+     */
+    fun isInfrastructure(fixtureKey: String): Boolean = patchMetadataFor(fixtureKey)?.infrastructure == true
+
+    /**
+     * The fixtures an operator is offered: every registered fixture but an infrastructure one, in
+     * register order. One read lock for the whole pass, where filtering [fixtures] through
+     * [isInfrastructure] would take one per fixture.
+     */
+    val operatorFixtures: List<Fixture> get() = registerLock.read {
+        fixtureRegister.values.filterNot { patchMetadataRegister[it.key]?.infrastructure == true }
+    }
+
+    /** Every infrastructure fixture's key, under one read lock — for a caller that partitions a list. */
+    fun infrastructureKeys(): Set<String> = registerLock.read {
+        patchMetadataRegister.filterValues { it.infrastructure }.keys.toSet()
+    }
+
+    /**
+     * Tell listeners the fixture list's *contents* changed without the register changing — a patch
+     * flag `GET /fixtures` carries (`infrastructure`) was flipped on the metadata-only path. The
+     * same `fixturesChanged` a rebuild ends with, so every window refetches its list, without
+     * tearing down and recreating every controller to get it. No [structureVersion] bump: nothing a
+     * target expands to has moved.
+     */
+    fun announceFixturesChanged() {
+        changeListeners.forEach { it.fixturesChanged() }
     }
 
     /** Used by the metadata-only PUT fast path to refresh the cache without a fixtures rebuild. */

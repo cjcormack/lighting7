@@ -49,7 +49,11 @@ data class BuskRigTileSpec(
  *
  * **An empty rig is today's band** (D1): every group, then every fixture, in the order the two list
  * routes answer them — the client's `effectiveRig` draws exactly that, and `BuskRigOrderTest`'s
- * fixture is what `buskRig.test.ts` pins the mirror against.
+ * fixture is what `buskRig.test.ts` pins the mirror against. An **infrastructure** fixture is left
+ * out of the fixture half of the *steps* on both sides ([Fixtures.operatorFixtures]), so *All* never
+ * reaches a power dimmer; a group that contains one still steps as the group, and a tile the operator
+ * placed is stepped as placed. [positions] still ranks it — ordering a head a caller already named
+ * is not offering one.
  *
  * Element keys are opaque: every cell is read off `MultiElementFixture.elements`, never parsed.
  * Pure over a [BuskRigSpec] and a [Fixtures]; the reader that builds the spec from the tables lives
@@ -64,7 +68,7 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
         val out = LinkedHashSet<List<CueTargetDto>>()
         if (rig.isEmpty) {
             fixtures.groups.forEach { out += groupSteps(it.name, over) }
-            fixtures.fixtures.forEach { fixture -> out += fixtureSteps(fixture, over, BuskRigCellMode.PIPS, null) }
+            fallbackFixtures().forEach { fixture -> out += fixtureSteps(fixture, over, BuskRigCellMode.PIPS, null) }
             return out.toList()
         }
         for (row in rig.rows) {
@@ -121,6 +125,9 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
         }
         if (rig.isEmpty) {
             fixtures.groups.forEach { placeGroup(it.name) }
+            // Every fixture, infrastructure included: this orders heads a caller already named (a
+            // spread over explicit targets), it offers none — so an infrastructure head a spread
+            // names keeps its list-order place rather than sorting last.
             fixtures.fixtures.forEach { place(it) }
             return out
         }
@@ -171,6 +178,9 @@ class BuskRigOrder(private val fixtures: Fixtures, private val rig: BuskRigSpec)
     private fun resolveGroup(name: String) = runCatching { fixtures.untypedGroup(name) }.getOrNull()
 
     private fun resolveFixture(key: String): Fixture? = runCatching { fixtures.untypedFixture(key) }.getOrNull()
+
+    /** The empty rig's fixture half: every fixture but an infrastructure one, in list order. */
+    private fun fallbackFixtures(): List<Fixture> = fixtures.operatorFixtures
 
     private fun groupTarget(name: String) = CueTargetDto(TargetRef.Group.TYPE, name)
     private fun fixtureTarget(key: String) = CueTargetDto(TargetRef.Fixture.TYPE, key)

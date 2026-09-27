@@ -12,6 +12,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
+import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
@@ -207,6 +208,43 @@ class McpSetupToolsTest : RouteIntegrationTest() {
             assertEquals(1, foh2.startChannel)
             assertEquals("FOH 2 (moved)", foh2.displayName)
         }
+    }
+
+    /**
+     * `infrastructure` rides patch_fixtures: set on a row, reported by get_patch, carried into the
+     * running show (what `GET /fixtures` and the rig order read), kept by a later place_fixtures and
+     * by a re-sent row that omits it — and a non-boolean is a problem, not a silent false.
+     */
+    @Test
+    fun `patch_fixtures marks a fixture as infrastructure`() {
+        val patched = patchTwoDimmers(""","infrastructure":true""")
+        assertTrue(patched.success, patched.result)
+        val rows = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.associateBy { it.jsonObject["key"]!!.jsonPrimitive.content }
+        assertEquals("true", rows.getValue("foh-2").jsonObject["infrastructure"]?.jsonPrimitive?.content)
+        assertEquals(null, rows.getValue("foh-1").jsonObject["infrastructure"], "a lighting fixture omits the flag")
+        assertTrue(state.show.fixtures.isInfrastructure("foh-2"))
+        assertTrue(!state.show.fixtures.isInfrastructure("foh-1"))
+
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-2","gelCode":"L201"}]}""").success)
+        assertTrue(state.show.fixtures.isInfrastructure("foh-2"), "a placement refreshes the cache without clearing the flag")
+
+        assertTrue(patchTwoDimmers().success, "a row that omits the flag leaves it as it was")
+        assertTrue(state.show.fixtures.isInfrastructure("foh-2"))
+
+        // The chat's own reads of the rig set it apart rather than listing it as lighting.
+        val current = runBlocking {
+            AiTools(state).executeTool("get_current_state", Json.parseToJsonElement("""{"include":["fixtures"]}""").jsonObject)
+        }.json()["fixtures"]!!.jsonArray.associateBy { it.jsonObject["key"]!!.jsonPrimitive.content }
+        assertEquals("true", current.getValue("foh-2").jsonObject["infrastructure"]?.jsonPrimitive?.content)
+        assertEquals(null, current.getValue("foh-1").jsonObject["infrastructure"])
+        val briefing = RigBriefing(state).describeRig()
+        val lightingSection = briefing.substringAfter("## Available Fixtures").substringBefore("## Infrastructure")
+        assertTrue("`foh-1`" in lightingSection && "`foh-2`" !in lightingSection, briefing)
+        assertTrue("`foh-2`" in briefing.substringAfter("## Infrastructure").substringBefore("## Available Groups"), briefing)
+
+        val bad = patchTwoDimmers(""","infrastructure":"yes"""")
+        assertTrue(!bad.success)
+        assertTrue(bad.problems().any { "infrastructure must be a boolean" in it }, bad.result)
     }
 
     @Test

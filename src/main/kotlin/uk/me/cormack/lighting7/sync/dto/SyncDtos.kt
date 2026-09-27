@@ -372,6 +372,7 @@ data class FixturePatchJson(
     val gelCode: String? = null,
     val kindOverride: String? = null,
     val stageHidden: Boolean = false,
+    val infrastructure: Boolean = false,
     /**
      * The other places this fixture hangs — a paired dimmer's second lantern. Embedded in
      * list order (so no `sortOrder`), like a group's `members`, and omitted by canonical JSON

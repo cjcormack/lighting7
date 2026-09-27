@@ -270,6 +270,7 @@ class ProjectExporter(private val state: State) {
                     gelCode = p.gelCode,
                     kindOverride = p.kindOverride,
                     stageHidden = p.stageHidden,
+                    infrastructure = p.infrastructure,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(
                             uuid = pl.uuid.toString(),

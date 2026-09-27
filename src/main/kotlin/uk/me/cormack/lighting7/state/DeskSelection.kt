@@ -229,7 +229,8 @@ class DeskSelection(
                 val universe = if (order != null) {
                     order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS).flatten()
                 } else {
-                    fixturesProvider()?.fixtures?.map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }.orEmpty()
+                    // The rig order's own fallback, without it: never infrastructure (`BuskRigOrder`).
+                    fixturesProvider()?.operatorFixtures?.map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }.orEmpty()
                 }
                 val selected = coverageRule.expand(targets).toSet()
                 unitsOf(coverageRule.expand(universe), cellular).filterNot { coverageRule.covers(selected, it) }

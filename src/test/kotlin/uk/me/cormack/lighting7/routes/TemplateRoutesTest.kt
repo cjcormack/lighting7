@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.TemplateEffectDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -303,6 +304,29 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             assertTrue("mover-1" in keys, "RGBW head has colour but no UV — reported: $keys")
             assertEquals("no uv", body.entries.single { it.fixtureKey == "mover-1" }.detail)
         }
+
+    @Test
+    fun `a rig-wide resolve leaves infrastructure out, and a named target still resolves`() = testApplication {
+        // Empty targets is "the whole patch" the editor previews against — the patch an operator is
+        // offered, so never an infrastructure fixture. Naming one explicitly still resolves it.
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
+        state.show.fixtures.setPatchMetadata("hex-2", Fixtures.FixturePatchMetadata(gelCode = null, infrastructure = true))
+        val client = jsonClient()
+
+        val rigWide = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateResolveRequest(rows = listOf(colourRow())))
+        }.body<TemplateResolveResponse>()
+        assertEquals(listOf("hex-1"), rigWide.entries.map { it.fixtureKey }.distinct())
+
+        val named = client.post("${base()}/resolve") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateResolveRequest(rows = listOf(colourRow()), targets = listOf(TemplateTargetDto("fixture", "hex-2"))))
+        }.body<TemplateResolveResponse>()
+        assertEquals(listOf("hex-2"), named.entries.map { it.fixtureKey }.distinct())
+    }
 
     @Test
     fun `the refusal does not depend on which row was authored first`() = testApplication {

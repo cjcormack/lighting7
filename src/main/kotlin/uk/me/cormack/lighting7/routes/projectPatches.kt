@@ -166,6 +166,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.gelCode = normalisedGelCode
                     this.kindOverride = normalisedKindOverride
                     this.stageHidden = request.stageHidden
+                    this.infrastructure = request.infrastructure
                 }
 
                 // Assign to group if specified
@@ -238,6 +239,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             } else null
 
             var sweptCellTiles = 0
+            var infrastructureFlipped = false
             val result = transaction(state.database) {
                 val patch = DaoFixturePatch.findById(resource.patchId)
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
@@ -296,6 +298,14 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("stageHidden" in body) {
                     patch.stageHidden = body["stageHidden"].nullableBoolean() ?: false
                 }
+                // Also non-nullable. Metadata to the loader (it builds no fixture differently), but the
+                // flag rides the live fixture list (`GET /fixtures`), so a flip must also announce
+                // `fixturesChanged` — see [PUT_KEYS_WITHOUT_REBUILD] and the tail of this handler.
+                if ("infrastructure" in body) {
+                    val next = body["infrastructure"].nullableBoolean() ?: false
+                    if (next != patch.infrastructure) infrastructureFlipped = true
+                    patch.infrastructure = next
+                }
                 if (placementInputs != null && placementRiggings != null) {
                     applyExtraPlacements(patch, placementInputs, placementRiggings)
                 }
@@ -332,15 +342,18 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 return@withProject
             }
 
-            val touchedRebuildKey = body.keys.any { it !in METADATA_ONLY_PUT_KEYS }
+            val touchedRebuildKey = body.keys.any { it !in PUT_KEYS_WITHOUT_REBUILD }
             if (touchedRebuildKey && state.isCurrentProject(project)) {
                 DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
             } else if (state.isCurrentProject(project)) {
                 // Metadata-only edits skip the rebuild, so refresh the cache directly.
                 state.show.fixtures.setPatchMetadata(
                     patchDto!!.key,
-                    Fixtures.FixturePatchMetadata(gelCode = patchDto.gelCode),
+                    Fixtures.FixturePatchMetadata(gelCode = patchDto.gelCode, infrastructure = patchDto.infrastructure),
                 )
+                // A rebuild would have announced this itself; without one, the fixture list's
+                // contents still changed, and every window has to drop (or regain) the fixture.
+                if (infrastructureFlipped) state.show.fixtures.announceFixturesChanged()
             }
             state.show.fixtures.patchListChanged()
             if (sweptCellTiles > 0) state.show.fixtures.buskRigChanged()
@@ -574,7 +587,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 for (dto in updated) {
                     state.show.fixtures.setPatchMetadata(
                         dto.key,
-                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode),
+                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode, infrastructure = dto.infrastructure),
                     )
                 }
             }
@@ -709,6 +722,8 @@ data class FixturePatchDto(
     val gelCode: String? = null,
     val kindOverride: String? = null,
     val stageHidden: Boolean = false,
+    /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
+    val infrastructure: Boolean = false,
     /**
      * The other places this fixture hangs — a paired dimmer's second lantern, SL beside SR.
      * One fixture to control, several to draw. In order; empty for almost every patch.
@@ -741,6 +756,8 @@ data class CreatePatchRequest(
     val gelCode: String? = null,
     val kindOverride: String? = null,
     val stageHidden: Boolean = false,
+    /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
+    val infrastructure: Boolean = false,
 )
 
 /**
@@ -765,6 +782,16 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     // A paired fixture's other placements — its own table, which the loader never reads.
     "extraPlacements",
 )
+
+/**
+ * PUT body keys the single-patch PUT applies without a fixture rebuild: [METADATA_ONLY_PUT_KEYS]
+ * plus `infrastructure`, which the loader does not build from either, but which `GET /fixtures`
+ * carries — so the handler announces `fixturesChanged` for it when it flips rather than rebuilding
+ * every controller to get that broadcast. Kept out of [METADATA_ONLY_PUT_KEYS] itself because that
+ * set is also the bulk placement route's allowlist, which announces nothing: `infrastructure` is a
+ * patch role, not a placement.
+ */
+internal val PUT_KEYS_WITHOUT_REBUILD: Set<String> = METADATA_ONLY_PUT_KEYS + "infrastructure"
 
 // Helpers
 /** [placements] are the patch's extra placements; pass them when a caller has batch-loaded them. */
@@ -798,6 +825,7 @@ private fun DaoFixturePatch.toDto(
         gelCode = gelCode,
         kindOverride = kindOverride,
         stageHidden = stageHidden,
+        infrastructure = infrastructure,
         extraPlacements = placements.map { it.toDto() },
     )
 }

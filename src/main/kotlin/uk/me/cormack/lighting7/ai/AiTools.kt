@@ -416,6 +416,7 @@ class AiTools(private val state: State) {
 
             if ("fixtures" in include) {
                 put("fixtures", buildJsonArray {
+                    val infrastructureKeys = state.show.fixtures.infrastructureKeys()
                     for (fixture in state.show.fixtures.fixtures) {
                         addJsonObject {
                             put("key", fixture.key)
@@ -424,6 +425,9 @@ class AiTools(private val state: State) {
                             put("groups", buildJsonArray {
                                 state.show.fixtures.groupsForFixture(fixture.key).forEach { add(it) }
                             })
+                            // Listed, so a cue or group that names it still reads, but marked the way
+                            // `describe_rig` sets it apart: not lighting, and never a target to offer.
+                            if (fixture.key in infrastructureKeys) put("infrastructure", true)
                         }
                     }
                 })
