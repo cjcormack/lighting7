@@ -509,6 +509,26 @@ describe('the show-all fallback is the desk’s rig order', () => {
     expect(rigSteps(effective.rows)).toEqual(expected)
   })
 
+  it('leaves an infrastructure fixture out of the fallback, as the desk’s order does (`BuskRigOrderTest`)', () => {
+    const groups: GroupSummary[] = serverFixture.groups.map((g) => ({ ...frontWash, name: g.name, memberCount: g.members.length }))
+    const fixtures = serverFixture.fixtures.map(
+      (f) =>
+        ({
+          key: f.key,
+          name: f.key,
+          typeKey: f.type,
+          infrastructure: f.key === 'hex-2',
+          elements: fixtureCells(f.key, f.type).map((c, index) => ({ index, key: c.key, displayName: c.name, properties: [] })),
+        }) as unknown as Fixture,
+    )
+    const hex2 = [{ type: 'fixture', key: 'hex-2' }]
+    const all = serverFixture.cases.find((c) => c.rig === 'empty')!.stepsHeads
+    expect(all).toContainEqual(hex2)
+    expect(rigSteps(effectiveRig({ rows: [] }, groups, fixtures).rows)).toEqual(
+      all.filter((step) => JSON.stringify(step) !== JSON.stringify(hex2)),
+    )
+  })
+
   it('keeps a built rig as built', () => {
     const rig = sampleRig()
     expect(effectiveRig(rig, [frontWash], [])).toEqual({ rows: rig.rows, fallback: false })

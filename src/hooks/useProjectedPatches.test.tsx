@@ -60,7 +60,11 @@ function patch(overrides: Partial<FixturePatch>): FixturePatch {
 }
 
 let patches: FixturePatch[] = []
-vi.mock('../store/patches', () => ({ usePatchListQuery: () => ({ data: patches }) }))
+vi.mock('../store/patches', () => ({
+  usePatchListQuery: () => ({ data: patches }),
+  // The hook reads the visible list — the real rule, over this suite's patches.
+  useVisiblePatchListQuery: () => ({ data: patches.filter((p) => !p.infrastructure) }),
+}))
 vi.mock('../store/riggings', () => ({ useRiggingListQuery: () => ({ data: [rig] }) }))
 vi.mock('../store/projects', () => ({ useProjectQuery: () => ({ data: undefined }) }))
 
@@ -109,6 +113,23 @@ describe('useProjectedPatches — paired lanterns', () => {
 
     expect(result.current.points).toHaveLength(0)
     expect(result.current.extraPoints.map((p) => p.patch.key)).toEqual(['lantern-only'])
+  })
+
+  it('draws neither an infrastructure patch nor its lanterns — not even as the selected one', () => {
+    patches = [
+      patch({ key: 'par', stageX: 0, stageY: 0 }),
+      patch({
+        id: 2,
+        key: 'power',
+        infrastructure: true,
+        stageX: 1,
+        stageY: 1,
+        extraPlacements: [placement({ uuid: 'i', stageX: 2, stageY: 2 })],
+      }),
+    ]
+    const { result } = renderHook(() => useProjectedPatches(1, { includeKey: 'power' }))
+    expect(result.current.points.map((p) => p.patch.key)).toEqual(['par'])
+    expect(result.current.extraPoints).toEqual([])
   })
 
   it('reads a patch from a desk that predates the field as having no lanterns', () => {

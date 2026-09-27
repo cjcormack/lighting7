@@ -108,6 +108,7 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   gel: true,
   groups: true,
   stage: true,
+  role: true,
 }
 
 /**

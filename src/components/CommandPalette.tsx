@@ -9,7 +9,7 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useProjectListQuery, useCurrentProjectQuery } from "@/store/projects"
-import { useFixtureListQuery, type Fixture } from "@/store/fixtures"
+import { useVisibleFixtureListQuery, type Fixture } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import type { GroupSummary } from "@/api/groupsApi"
 import {
@@ -148,7 +148,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const navigate = useNavigate()
   const { data: projects } = useProjectListQuery(undefined, closed)
   const { data: currentProject } = useCurrentProjectQuery(undefined, closed)
-  const { data: fixtures } = useFixtureListQuery(undefined, closed)
+  const { data: fixtures } = useVisibleFixtureListQuery(closed)
   const { data: groups } = useGroupListQuery(undefined, closed)
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()

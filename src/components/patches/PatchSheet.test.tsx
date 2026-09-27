@@ -284,6 +284,22 @@ describe('PatchSheet', () => {
     expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, riggingUuid: 'rig-1' })
   })
 
+  it('marks a head as infrastructure from the Role column, and badges it on its row', async () => {
+    draw({ visibleColumns: ['role'] })
+    const role = within(row('PAR 1')).getByText('Lighting').closest('button')!
+    fireEvent.click(role)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Infra' }))
+    expect(updatePatch).toHaveBeenCalledTimes(1)
+    expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, infrastructure: true })
+
+    cleanup()
+    const infra = { ...RIG[0], infrastructure: true }
+    draw({ rows: [{ ...rows[0], patch: infra }], allPatches: [infra], visibleColumns: ['role'] })
+    expect(within(row('PAR 1')).getByText('Infra')).toBeInTheDocument()
+    expect(within(row('PAR 1')).getByRole('img', { name: /Infrastructure/ })).toBeInTheDocument()
+  })
+
   it('rings an overlapping address, names the other head, and says so under the sheet', () => {
     // Bar SL at 25–42 and a par dropped onto 30.
     const clash = patch(5, 'PAR 5', 30)

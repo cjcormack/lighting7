@@ -7,6 +7,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useProjectedPatches, type DrawnPoint } from '@/hooks/useProjectedPatches'
 import type { CueTarget } from '@/api/cuesApi'
 import { elementParents } from './targetUtils'
+import { withoutInfrastructure } from '@/lib/infrastructure'
 
 interface MiniStageProps {
   projectId: number
@@ -61,11 +62,13 @@ export function MiniStage({
   // the operator at least sees which fixtures are lit. Skip entirely if there
   // are zero fixtures in the project.
   if (placedPatches.length === 0) {
-    if (!fixtures || fixtures.length === 0) return null
+    // The same cut the plot makes (`useProjectedPatches`): infrastructure is never a dot.
+    const shown = withoutInfrastructure(fixtures)
+    if (!shown || shown.length === 0) return null
     return (
       <div className="rounded-md border bg-muted/40 p-2 relative overflow-hidden">
         <div className="flex flex-wrap gap-1.5 items-center">
-          {fixtures.map((f) => {
+          {shown.map((f) => {
             const lit =
               fixtureTargetKeys.has(f.key) ||
               f.groups.some((g) => groupTargetNames.has(g))

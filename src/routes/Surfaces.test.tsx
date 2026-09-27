@@ -53,7 +53,10 @@ vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({ data: [] }),
   useGroupPropertiesQuery: () => ({ data: [] }),
 }))
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: [] }),
+  useVisibleFixtureListQuery: () => ({ data: [] }),
+}))
 // The inspector resolves a record binding's uuid to a name through these three; empty is the arm
 // every case in this file takes, since none of them binds a record.
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))

@@ -1,5 +1,5 @@
 import { useGroupListQuery } from '@/store/groups'
-import { useFixtureListQuery } from '@/store/fixtures'
+import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { Badge } from '@/components/ui/badge'
 import { Layers, LayoutGrid } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ interface CueTargetPickerProps {
 
 export function CueTargetPicker({ onSelect, disabledKeys }: CueTargetPickerProps) {
   const { data: groups } = useGroupListQuery()
-  const { data: fixtures } = useFixtureListQuery()
+  const { data: fixtures } = useVisibleFixtureListQuery()
 
   return (
     <div className="flex flex-col gap-1 p-2">

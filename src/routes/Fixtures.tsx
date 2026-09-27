@@ -8,7 +8,7 @@ import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFi
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import { Search, Loader2, Settings2, SlidersHorizontal, Pencil, Check } from "lucide-react"
-import { Fixture, useFixtureListQuery } from "../store/fixtures"
+import { Fixture, useVisibleFixtureListQuery } from "../store/fixtures"
 import { filterTerms, fixtureMatchesTerms } from "../lib/fixtureSearch"
 import { EditModeProvider, useEditMode } from "../components/fixtures/EditModeContext"
 import { FxBadge } from "../components/fx/FxBadge"
@@ -87,7 +87,7 @@ export function ProjectFixtures() {
 }
 
 function FixturesContainer() {
-  const { data: maybeFixtureList, isLoading } = useFixtureListQuery()
+  const { data: maybeFixtureList, isLoading } = useVisibleFixtureListQuery()
   const [filter, setFilter] = useState("")
   const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
 

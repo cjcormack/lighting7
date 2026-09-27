@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { usePatchListQuery } from '../store/patches'
+import { useVisiblePatchListQuery } from '../store/patches'
 import type { FixturePatch } from '../api/patchApi'
 
 export interface UnplacedPatches {
@@ -41,7 +41,9 @@ export interface UnplacedPatches {
  * operator to place them undoes the point of hiding them.
  */
 export function useUnplacedPatches(projectId: number | undefined): UnplacedPatches {
-  const { data: patches } = usePatchListQuery(projectId ?? 0, { skip: projectId == null })
+  // Infrastructure is in none of the three lists: it is not placement work, and not a stage
+  // object to un-hide either — the Patches view is where it is managed.
+  const { data: patches } = useVisiblePatchListQuery(projectId ?? 0, { skip: projectId == null })
 
   return useMemo(() => {
     const unplaced: FixturePatch[] = []

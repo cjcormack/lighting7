@@ -18,7 +18,7 @@ import {
   withAxis,
   type ColourAxis,
 } from "@/lib/colourAxis"
-import { useFixtureListQuery } from "@/store/fixtures"
+import { useVisibleFixtureListQuery } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useLookListQuery } from "@/store/looks"
@@ -461,7 +461,7 @@ export function SurfaceLibrary({
   placements,
 }: SurfaceLibraryProps) {
   const { data: groups } = useGroupListQuery()
-  const { data: fixtures } = useFixtureListQuery()
+  const { data: fixtures } = useVisibleFixtureListQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: looks } = useLookListQuery({ projectId })
   const { data: templates } = useTemplateListQuery({ projectId })

@@ -322,7 +322,8 @@ export interface ToggleTemplateResponse {
 
 /**
  * The editor's live panel, asked against a **draft**: these rows, optionally narrowed to these
- * heads. Empty `targets` means the whole patch.
+ * heads. Empty `targets` means the whole patch an operator is offered — every head but an
+ * infrastructure one; a target that names one still resolves it.
  *
  * A draft rather than a saved id because the panel's whole job is to answer "what will this do to my
  * rig?" *before* anything is written.

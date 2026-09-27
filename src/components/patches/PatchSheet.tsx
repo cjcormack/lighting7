@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, EyeOff, Flashlight, Info, Trash2, X } from 'lucide-react'
+import { Crosshair, EyeOff, Flashlight, Info, Plug, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -47,6 +47,7 @@ export type PatchColumnKey =
   | 'gel'
   | 'groups'
   | 'stage'
+  | 'role'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   address: 'Address',
@@ -59,6 +60,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   gel: 'Gel',
   groups: 'Groups',
   stage: 'Stage',
+  role: 'Role',
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
@@ -72,6 +74,7 @@ export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
   'gel',
   'groups',
   'stage',
+  'role',
 ]
 
 /** One head on the patch list. */
@@ -110,6 +113,11 @@ const STAGE_OPTIONS: SheetOption[] = [
   { value: 'shown', label: 'Shown' },
   { value: 'hidden', label: 'Hidden' },
 ]
+/** `FixturePatch.infrastructure`: a lighting fixture, or infrastructure hidden everywhere but here and Channels. */
+const ROLE_OPTIONS: SheetOption[] = [
+  { value: 'lighting', label: 'Lighting' },
+  { value: 'infrastructure', label: 'Infra' },
+]
 
 /**
  * The patch list as a sheet (CLAUDE.md §Sheet kit): the patch list's rows on the
@@ -126,9 +134,9 @@ const STAGE_OPTIONS: SheetOption[] = [
  *    collide *before* Apply, which is the only overlap check there is: the patch PUT has none.
  *  - **The overlap is on the cell**: a destructive ring on the Address cell with the other head on
  *    its title, and a legend line in the footer — found here, not later in a sheet.
- *  - **Clear is refused on Address** (an address cannot be empty), on Key (it cannot be blank) and
- *    on Stage (a head is shown or hidden), and offered on Mount, Angle and Gel, which each have a
- *    null. The Fixture column is the row head, not a cell.
+ *  - **Clear is refused on Address** (an address cannot be empty), on Key (it cannot be blank), on
+ *    Stage (a head is shown or hidden) and on Role (lighting or infrastructure), and offered on
+ *    Mount, Angle and Gel, which each have a null. The Fixture column is the row head, not a cell.
  *  - **Every column is its own kind**, so a commit never crosses into a neighbour: Key, Mount,
  *    Angle, Gel and Stage all take a string, and without the kind a rigging picked over a
  *    Mount→Gel marquee would have landed as a gel code (`PatchSheet.test.tsx`).
@@ -532,6 +540,25 @@ export function PatchSheet({
         },
         clearRefusal: 'A head is either shown on the stage or hidden — pick one',
       },
+      {
+        key: 'role',
+        label: 'Role',
+        kind: 'role',
+        width: '84px',
+        value: (row) => (row.patch.infrastructure ? 'infrastructure' : 'lighting'),
+        cell: (_row, props) => (
+          <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={ROLE_OPTIONS} />
+        ),
+        write: (batch, value) => {
+          if (value !== 'lighting' && value !== 'infrastructure') return false
+          const infrastructure = value === 'infrastructure'
+          for (const row of batch) {
+            if (infrastructure !== (row.patch.infrastructure ?? false)) void put(row.patch.id, { infrastructure })
+          }
+          return true
+        },
+        clearRefusal: 'A head is either a lighting fixture or infrastructure — pick one',
+      },
     ]
     return visibleColumns.map((key) => all.find((c) => c.key === key)!).filter(Boolean)
   }, [allHeads, allPatches, applyKeyWrites, keyLanding, landing, mountOptions, onEditGroup, overlaps, put, visibleColumns])
@@ -702,9 +729,7 @@ export function PatchSheet({
                   }
                 />
               </span>
-              {row.patch.stageHidden && (
-                <EyeOff className="relative size-3 shrink-0 text-muted-foreground" role="img" aria-label="Hidden from Stage view" />
-              )}
+              <PatchVisibilityIcon patch={row.patch} />
             </>
           ),
           onOpen: openRow,
@@ -742,4 +767,17 @@ function isCellAddress(value: unknown): value is CellAddress {
 function trackFloor(width: string): number {
   const m = /^(?:minmax\()?\s*(\d+)px/.exec(width)
   return m ? Number(m[1]) : 96
+}
+
+/**
+ * The row head's one visibility mark: infrastructure (hidden everywhere but here and Channels)
+ * outranks stage-hidden, which it implies — so a head shows at most one.
+ */
+function PatchVisibilityIcon({ patch }: { patch: FixturePatch }) {
+  const className = 'relative size-3 shrink-0 text-muted-foreground'
+  if (patch.infrastructure) {
+    return <Plug className={className} role="img" aria-label="Infrastructure — hidden everywhere but Patches and Channels" />
+  }
+  if (patch.stageHidden) return <EyeOff className={className} role="img" aria-label="Hidden from Stage view" />
+  return null
 }

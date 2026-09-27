@@ -81,7 +81,10 @@ const rigProperties: AvailableProperty[] = [
 ]
 
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: groups }) }))
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: fixtures }) }))
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: fixtures }),
+  useVisibleFixtureListQuery: () => ({ data: fixtures }),
+}))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
 vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))

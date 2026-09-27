@@ -102,6 +102,69 @@ export default [
     rules: { "import/no-cycle": ["error", { ignoreExternal: true }] },
   },
   {
+    // Infrastructure fixtures (CLAUDE.md §Fixtures): the raw fixture and patch lists carry them, so a
+    // view that reaches for a raw hook to *list or offer* fixtures offers the hazer's power dimmer —
+    // and fails open, silently. The raw hooks are therefore allowed only in the files below, each of
+    // which either resolves keys it already holds or is the Patches view. Anything else reads
+    // `useVisibleFixtureListQuery` / `useVisiblePatchListQuery`. Adding a file here is a claim that it
+    // never enumerates the rig for an operator — make it in the review, not in passing. (Not
+    // covered: enumerating `useFixtureLookup().fixtures`, which is raw for the lookups it feeds.)
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/**/*.test.{ts,tsx}",
+      "src/store/fixtures.ts",
+      "src/store/patches.ts",
+      "src/hooks/useFixtureLookup.ts",
+      "src/hooks/useTargetProperties.ts",
+      "src/components/StageOverviewPanel.tsx",
+      "src/components/busking/ActiveEffectSheet.tsx",
+      "src/components/busking/RigBand.tsx",
+      "src/components/busking/RigPalette.tsx",
+      "src/components/busking/SideSheetFold.tsx",
+      "src/components/busking/useBuskingSelection.ts",
+      "src/components/cues/CueValueGrid.tsx",
+      "src/components/editor/ColourEditor.tsx",
+      "src/components/fixtures-list/useClearCellEffects.ts",
+      "src/components/fx/AddEditFxSheet.tsx",
+      "src/components/groups/CompactFixtureCard.tsx",
+      "src/components/groups/FixtureDetailModal.tsx",
+      "src/components/groups/GroupMembersSection.tsx",
+      "src/components/groups/useVisibleGroupMembers.ts",
+      "src/components/patches/PatchSheet.tsx",
+      "src/components/programmer/FocusedTemplateLayer.tsx",
+      "src/components/programmer/LayerPicker.tsx",
+      "src/components/programmer/LookRowStore.tsx",
+      "src/components/programmer/ProgrammerAddEffect.tsx",
+      "src/components/programmer/useLocalFamilyCounts.ts",
+      "src/components/surfaces/BindingTargetPicker.tsx",
+      "src/components/surfaces/SurfaceInspector.tsx",
+      "src/routes/Patches.tsx",
+      "src/routes/ProjectOverview.tsx",
+      "src/routes/Stage.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              regex: "(^|/)store/fixtures$",
+              importNames: ["useFixtureListQuery"],
+              message:
+                "Lists infrastructure fixtures. A view that lists or offers fixtures reads useVisibleFixtureListQuery (CLAUDE.md §Fixtures); a key-resolving file joins the allowlist in eslint.config.js.",
+            },
+            {
+              regex: "(^|/)store/patches$",
+              importNames: ["usePatchListQuery"],
+              message:
+                "Lists infrastructure patches. A view that lists or offers patches reads useVisiblePatchListQuery (CLAUDE.md §Fixtures); a key-resolving file joins the allowlist in eslint.config.js.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // react-three-fiber props (position, intensity, args, …) are not DOM
     // attributes; @react-three/fiber's own JSX types are what validate them.
     files: ["src/components/stage3d/**"],

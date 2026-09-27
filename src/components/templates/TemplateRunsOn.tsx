@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { useFixtureListQuery } from '@/store/fixtures'
+import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useMaster1Uuid, useSpeedMasterBpm, useSpeedMasterDisplay } from '@/store/speedMasters'
 import { effectSpeedLabel } from '@/components/fx/fxConstants'
 import { isTemplateRef, resolveColourToHex } from '@/components/fx/colourUtils'
@@ -54,7 +54,7 @@ export function TemplateRunsOn({
    */
   entry: EffectLibraryEntry | undefined
 }) {
-  const { data: fixtures } = useFixtureListQuery()
+  const { data: fixtures } = useVisibleFixtureListQuery()
   const master1 = useMaster1Uuid()
   // A null `speedMasterUuid` means master 1, and the bpm lookup needs the real row's uuid — an
   // `''`/null key matches no master in the live bank. Same resolution `BeatIndicator` makes.
