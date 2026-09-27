@@ -515,6 +515,12 @@ tasks.shadowJar {
     // byte-for-byte reproducible under `-PnativePayloadOs`. Its sibling,
     // `--sun-misc-unsafe-memory-access=allow`, has no manifest form and rides the launcher's
     // command line instead (`BACKEND_JVM_ARGS` in the launcher's LauncherMain.kt).
+    //
+    // Shadow 9 backs this task's manifest with `tasks.jar`'s own (DefaultInheritManifest's
+    // internal manifest *is* jar.manifest), so the attribute also lands on the thin
+    // `Lighting7-<version>.jar`. That is inert — the JVM reads it only from the jar named by
+    // `java -jar`, and the thin jar has no Main-Class — and avoiding it would mean constructing
+    // Shadow's internal DefaultInheritManifest here, which is not worth a no-op attribute.
     manifest {
         attributes("Enable-Native-Access" to "ALL-UNNAMED")
     }
