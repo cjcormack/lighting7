@@ -98,6 +98,7 @@ const CHIP_CLASS =
   'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-accent'
 
 const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
+  head: true,
   address: true,
   type: true,
   mode: true,
@@ -250,8 +251,8 @@ function PatchListContent({
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Filter…"
-            title="Filter by name, key, type or address"
-            aria-label="Filter by name, key, type or address"
+            title="Filter by name, head number, key, type or address"
+            aria-label="Filter by name, head number, key, type or address"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="h-8 pl-9"
@@ -523,7 +524,8 @@ function buildPatchRows(
     .filter((p) => {
       if (needle === '') return true
       const address = `${p.universe}-${String(p.startChannel).padStart(3, '0')}`
-      return [p.displayName, p.key, p.manufacturer, p.model, p.modeName, address]
+      const head = p.headNumber == null ? null : String(p.headNumber)
+      return [p.displayName, p.key, head, p.manufacturer, p.model, p.modeName, address]
         .some((field) => field?.toLowerCase().includes(needle))
     })
     .map((p) => {

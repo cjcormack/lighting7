@@ -14,8 +14,15 @@ import {
   type AddressedHead,
 } from '@/lib/patchAddress'
 import { checkKeyLanding, spreadKeys, type KeyedHead } from '@/lib/fixtureKey'
+import {
+  checkHeadNumberLanding,
+  findHeadNumberClashes,
+  headNumberDraftError,
+  parseHeadNumberDraft,
+  type NumberedHead,
+} from '@/lib/headNumber'
 import { toast } from 'sonner'
-import { useDeletePatchMutation, useUpdatePatchMutation } from '@/store/patches'
+import { useDeletePatchMutation, useSetHeadNumbersMutation, useUpdatePatchMutation } from '@/store/patches'
 import { useFixtureListQuery, type Fixture } from '@/store/fixtures'
 import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from '@/store/locate'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -25,7 +32,8 @@ import { SpreadPanel, type SpreadPlan } from '@/components/editor/SpreadPanel'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch } from '@/components/sheet/SheetPage'
 
-/** The overlap ring on an Address cell — worn by the cell and by the legend's swatch alike. */
+/** The clash ring — an Address that overlaps another head, a Head number another head shares —
+ *  worn by the cell and by the legend's swatch alike. */
 const OVERLAP_CELL_CLASS = 'rounded-sm ring-1 ring-inset ring-destructive bg-destructive/10'
 import { SheetTable } from '@/components/sheet/SheetTable'
 import { useSheet } from '@/components/sheet/useSheet'
@@ -37,6 +45,7 @@ import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/compone
 import type { FixturePatch } from '@/api/patchApi'
 
 export type PatchColumnKey =
+  | 'head'
   | 'address'
   | 'type'
   | 'mode'
@@ -50,6 +59,7 @@ export type PatchColumnKey =
   | 'role'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
+  head: 'Head',
   address: 'Address',
   type: 'Type',
   mode: 'Mode',
@@ -64,6 +74,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
+  'head',
   'address',
   'type',
   'mode',
@@ -96,6 +107,11 @@ function keyedHeads(batch: readonly SheetRow[]): KeyedHead[] {
     key: row.patch.key,
     name: row.patch.displayName,
   }))
+}
+
+/** A patch as the head-number arithmetic sees it. */
+function numberedHead(patch: FixturePatch): NumberedHead {
+  return { id: patch.id, name: patch.displayName, headNumber: patch.headNumber ?? null }
 }
 
 function headOf(patch: FixturePatch): AddressedHead {
@@ -134,6 +150,11 @@ const ROLE_OPTIONS: SheetOption[] = [
  *    collide *before* Apply, which is the only overlap check there is: the patch PUT has none.
  *  - **The overlap is on the cell**: a destructive ring on the Address cell with the other head on
  *    its title, and a legend line in the footer — found here, not later in a sheet.
+ *  - **Set over N head numbers counts up from the typed one** in visible-row order, and goes out
+ *    as **one** atomic request on the bulk route, which judges uniqueness against the batch's final
+ *    state — so a renumber that swaps two heads needs none of the Key column's write ordering. A
+ *    number another head holds is named before Apply (`lib/headNumber.ts`); a number two heads share
+ *    anyway (a sync merge) is ringed like an overlapping address. Clear unnumbers.
  *  - **Clear is refused on Address** (an address cannot be empty), on Key (it cannot be blank), on
  *    Stage (a head is shown or hidden) and on Role (lighting or infrastructure), and offered on
  *    Mount, Angle and Gel, which each have a null. The Fixture column is the row head, not a cell.
@@ -164,6 +185,7 @@ export function PatchSheet({
   onCountsChange?: (selected: number) => void
 }) {
   const [updatePatch] = useUpdatePatchMutation()
+  const [setHeadNumbers] = useSetHeadNumbersMutation()
   const [deletePatch] = useDeletePatchMutation()
   const { data: fixtures } = useFixtureListQuery()
   const { data: locateState } = useLocateStateQuery()
@@ -171,6 +193,35 @@ export function PatchSheet({
 
   const allHeads = useMemo(() => allPatches.map(headOf), [allPatches])
   const overlaps = useMemo(() => findOverlaps(allHeads), [allHeads])
+  const allNumbered = useMemo(() => allPatches.map(numberedHead), [allPatches])
+  const headClashes = useMemo(() => findHeadNumberClashes(allNumbered), [allNumbered])
+
+  /**
+   * One request for the whole renumber — the desk's bulk route, atomic, checked against the
+   * batch's final state. Only the heads whose number moves are sent.
+   */
+  const renumber = useCallback(
+    (numbers: { patchId: number; headNumber: number | null }[]) => {
+      if (numbers.length === 0) return
+      void setHeadNumbers({ projectId, numbers }).unwrap().catch(ignoreReportedError)
+    },
+    [projectId, setHeadNumbers],
+  )
+
+  /** What a typed start would do to these rows, checked against every head on the project. */
+  const headLanding = useCallback(
+    (batch: readonly SheetRow[], draft: string) => {
+      const start = parseHeadNumberDraft(draft)
+      if (start === null || start === 'invalid') return null
+      const landing = checkHeadNumberLanding(
+        (batch as readonly PatchSheetRow[]).map((row) => numberedHead(row.patch)),
+        start,
+        allNumbered,
+      )
+      return { lines: landing.lines, error: landing.error }
+    },
+    [allNumbered],
+  )
 
   const put = useCallback(
     (patchId: number, body: Record<string, unknown>) =>
@@ -263,6 +314,60 @@ export function PatchSheet({
 
   const columns = useMemo<SheetColumn<PatchSheetRow, PatchColumnKey>[]>(() => {
     const all: SheetColumn<PatchSheetRow, PatchColumnKey>[] = [
+      {
+        key: 'head',
+        label: 'Head',
+        kind: 'head',
+        width: '72px',
+        value: (row) => (row.patch.headNumber == null ? '' : String(row.patch.headNumber)),
+        cell: (row, props) => (
+          <TextCell
+            {...(props as React.ComponentProps<typeof TextCell>)}
+            mono
+            allowEmpty
+            placeholder="1"
+            face={
+              row.patch.headNumber != null ? (
+                <span className="mx-1.5 font-mono text-xs tabular-nums">{row.patch.headNumber}</span>
+              ) : (
+                <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
+              )
+            }
+            validate={headNumberDraftError}
+            plan={headLanding}
+          />
+        ),
+        write: (batch, value) => {
+          if (typeof value !== 'string') return false
+          const start = parseHeadNumberDraft(value)
+          if (start === 'invalid') return false
+          const heads = batch.map((row) => numberedHead(row.patch))
+          if (start === null) {
+            renumber(heads.filter((h) => h.headNumber != null).map((h) => ({ patchId: h.id, headNumber: null })))
+            return true
+          }
+          // Refused, and said so: the editor names a taken number before Apply, and this is the
+          // same refusal for a commit that reached the column any other way.
+          const { error, numbers } = checkHeadNumberLanding(heads, start, allNumbered)
+          if (error || !numbers) return false
+          renumber(
+            heads
+              .filter((h) => numbers.get(h.id) !== h.headNumber)
+              .map((h) => ({ patchId: h.id, headNumber: numbers.get(h.id)! })),
+          )
+          return true
+        },
+        clear: (batch) => {
+          renumber(
+            batch.filter((row) => row.patch.headNumber != null).map((row) => ({ patchId: row.patch.id, headNumber: null })),
+          )
+        },
+        cellClass: (row) => (headClashes.has(row.patch.id) ? OVERLAP_CELL_CLASS : undefined),
+        cellTitle: (row) => {
+          const other = headClashes.get(row.patch.id)
+          return other ? `Head ${row.patch.headNumber} is also ${other.name}` : undefined
+        },
+      },
       {
         key: 'address',
         label: 'Address',
@@ -561,7 +666,22 @@ export function PatchSheet({
       },
     ]
     return visibleColumns.map((key) => all.find((c) => c.key === key)!).filter(Boolean)
-  }, [allHeads, allPatches, applyKeyWrites, keyLanding, landing, mountOptions, onEditGroup, overlaps, put, visibleColumns])
+  }, [
+    allHeads,
+    allNumbered,
+    allPatches,
+    applyKeyWrites,
+    headClashes,
+    headLanding,
+    keyLanding,
+    landing,
+    mountOptions,
+    onEditGroup,
+    overlaps,
+    put,
+    renumber,
+    visibleColumns,
+  ])
 
   const copy = useCallback(
     (cellCount: number) => ({
@@ -741,6 +861,13 @@ export function PatchSheet({
           <LegendSwatch className={OVERLAP_CELL_CLASS} />
           <Info className="size-3" />
           {overlaps.size} address{overlaps.size === 1 ? '' : 'es'} overlap another fixture — hover an address for which
+        </p>
+      )}
+      {headClashes.size > 0 && (
+        <p className="flex items-center gap-2 border-t px-3 py-1 text-[10.5px] text-muted-foreground">
+          <LegendSwatch className={OVERLAP_CELL_CLASS} />
+          <Info className="size-3" />
+          {headClashes.size} fixture{headClashes.size === 1 ? ' shares its' : 's share a'} head number with another — hover a head for which
         </p>
       )}
       {/* Keeps the selection's cells honest for the footer's count even when nothing is drawn. */}

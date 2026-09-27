@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { headNumberFieldError, parseHeadNumberDraft } from '@/lib/headNumber'
 import { SheetHeader, SheetBody, SheetFooter } from '@/components/ui/sheet'
 import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
@@ -48,6 +49,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   // mounts fresh for each patch — seed once from props, no resync effect.
   const [displayName, setDisplayName] = useState(patch.displayName)
   const [key, setKey] = useState(patch.key)
+  // As typed, so a half-typed number is not coerced; parsed and checked through `lib/headNumber.ts`.
+  const [headDraft, setHeadDraft] = useState(patch.headNumber == null ? '' : String(patch.headNumber))
   const [startChannel, setStartChannel] = useState(patch.startChannel)
 
   const [placement, setPlacement] = useState<PatchPlacementValue>({
@@ -85,6 +88,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const channelOverflow = lastChannel > 512
 
   const keyConflict = existingPatches.some(p => p.key === key && p.id !== patch.id)
+  const headNumber = parseHeadNumberDraft(headDraft)
+  const headError = headNumberFieldError(headDraft, existingPatches, patch.id)
 
   const fixtureType = fixtureTypes?.find((t) => t.typeKey === patch.fixtureTypeKey)
   const acceptsBeamAngle = fixtureType?.acceptsBeamAngle ?? false
@@ -108,11 +113,13 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     key.trim().length > 0 &&
     !channelOverflow &&
     !keyConflict &&
+    headError == null &&
     startChannel >= 1 &&
     lengthsValid
   const hasChanges =
     displayName !== patch.displayName ||
     key !== patch.key ||
+    headNumber !== (patch.headNumber ?? null) ||
     startChannel !== patch.startChannel ||
     placement.riggingUuid !== patch.riggingUuid ||
     placement.stageX !== patch.stageX ||
@@ -132,6 +139,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     const body: Record<string, unknown> = {}
     if (displayName !== patch.displayName) body.displayName = displayName
     if (key !== patch.key) body.key = key
+    if (headNumber !== 'invalid' && headNumber !== (patch.headNumber ?? null)) body.headNumber = headNumber
     if (startChannel !== patch.startChannel) body.startChannel = startChannel
     if (placement.riggingUuid !== patch.riggingUuid) body.riggingUuid = placement.riggingUuid
     if (placement.stageX !== patch.stageX) body.stageX = placement.stageX
@@ -200,6 +208,25 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             onChange={(e) => setDisplayName(e.target.value)}
             autoFocus={autoFocusName}
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="edit-head">Head Number</Label>
+          <Input
+            id="edit-head"
+            inputMode="numeric"
+            placeholder="Unnumbered"
+            value={headDraft}
+            onChange={(e) => setHeadDraft(e.target.value)}
+            className="font-mono"
+          />
+          {headError ? (
+            <p className="text-xs text-destructive">{headError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              What another console calls it — a ChamSys head number, a fixture or channel number
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5">
