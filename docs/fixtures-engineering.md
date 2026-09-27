@@ -638,6 +638,44 @@ In lighting-react, views that list or offer fixtures read `useVisibleFixtureList
 `useVisiblePatchListQuery` (or apply `lib/infrastructure.ts`'s `withoutInfrastructure`); views that
 only resolve a key they already hold read the raw lists.
 
+## Head numbers
+
+`DaoFixturePatches.headNumber` is the operator's number for a head — what ChamSys MagicQ calls a
+head number, other desks a fixture or channel number. It exists because a show migrated from another
+console is keyed on those numbers (the patch export lists them, the operator calls fixtures by them),
+and a key like `lx1-spot-3` is not what anyone says on headset. It is optional and presentational: the
+loader never reads it, so a write never rebuilds the rig.
+
+- **Storage**: `head_number`, nullable integer, `MIN_HEAD_NUMBER` 1 to `MAX_HEAD_NUMBER` 99999
+  (`models/fixturePatches.kt`). Null is unnumbered.
+- **Unique within a project, at the write boundary — not by an index.** `POST /patches` and
+  `PUT /patches/{id}` answer 409 naming the head that holds the number (`headNumberHolder` /
+  `headNumberTaken` in `routes/projectPatches.kt`); a bad value (out of range, a fraction, a string)
+  is a 400 from `parseHeadNumber`, never the 500 `nullableInt()` would throw. No unique index, for
+  two reasons: a sync import of two peers' merged numbers must import rather than fail, and a
+  renumber that swaps two heads has to pass through a state where both hold one number.
+- **The bulk route renumbers atomically.** `headNumber` is in `METADATA_ONLY_PUT_KEYS`, so
+  `PUT /patches/placements` accepts it, and `headNumberClashes` judges uniqueness against the rig **as
+  it will stand** once the batch lands — every stored number, overridden by each entry not refused —
+  iterated to a fixpoint, because refusing one entry leaves its head on its old number, which a
+  sibling may have been moving onto. Every batch entry sharing a number is refused; a head outside
+  the batch keeps its own. It is the one key on that route with a uniqueness rule, and it is why the
+  patch list's *Set* over several heads is one request rather than the ordered PUT loop the Key
+  column needs.
+- **Sync**: `FixturePatchJson.headNumber` (formatVersion 16 — `docs/sync-engineering.md`
+  §"Version 16 — head numbers"). Imported as stored; the patch list rings a shared number rather than
+  anything refusing it.
+- **MCP**: `patch_fixtures` takes `headNumber` per row (absent leaves it, `null` clears) and checks
+  uniqueness against the patch as it will stand, as it does overlaps; `get_patch` reports it, and
+  `describe_rig` lists it beside each key (`head 12, key=…`) — read from the patch, since the live
+  registry carries none — so "head 12 at full" is something a model can act on.
+- **Not on `GET /fixtures`**, deliberately, yet: nothing outside the patch views reads it. Carrying it
+  there means adding it to `Fixtures.FixturePatchMetadata` (every `setPatchMetadata` caller passes it)
+  and announcing `fixturesChanged` when it moves, as `infrastructure` does.
+- **Frontend**: the patch list's *Head* column (Set over N numbers them consecutively from the typed
+  one, in visible-row order, through the bulk route; Clear unnumbers), and a *Head number* field in
+  the add and edit forms (`lighting-react/src/lib/headNumber.ts`).
+
 ## Stage geometry & coordinate system
 
 Fixture patches carry physical-world geometry on `DaoFixturePatches` so the

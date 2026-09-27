@@ -22,6 +22,14 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val fixtureTypeKey = varchar("fixture_type_key", 100)
     val key = varchar("key", 100)
     val displayName = varchar("display_name", 255)
+    /** The operator's number for this head — what another console calls a head, fixture or channel
+     *  number, and what a patch list migrated from one (a ChamSys MagicQ show) is keyed on. Null is
+     *  unnumbered. Unique within a project when set, [MIN_HEAD_NUMBER]..[MAX_HEAD_NUMBER], both
+     *  enforced at the write boundary rather than by an index — a sync merge of two peers' numbers
+     *  must import rather than fail, and a renumber that swaps two heads writes them in one
+     *  transaction. Presentational: the loader never reads it. See `docs/fixtures-engineering.md`
+     *  §"Head numbers". */
+    val headNumber = integer("head_number").nullable()
     val startChannel = integer("start_channel")
     val sortOrder = integer("sort_order").default(0)
     val stageX = double("stage_x").nullable()
@@ -66,6 +74,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var fixtureTypeKey by DaoFixturePatches.fixtureTypeKey
     var key by DaoFixturePatches.key
     var displayName by DaoFixturePatches.displayName
+    var headNumber by DaoFixturePatches.headNumber
     var startChannel by DaoFixturePatches.startChannel
     var sortOrder by DaoFixturePatches.sortOrder
     var stageX by DaoFixturePatches.stageX
@@ -86,3 +95,8 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
  *  rigging's: strictly positive, since a zero-length body has nothing to draw. */
 const val MIN_FIXTURE_LENGTH_M = 0.01
 const val MAX_FIXTURE_LENGTH_M = 100.0
+
+/** Bounds on a patch's [DaoFixturePatches.headNumber]. Five digits covers every console's fixture
+ *  numbering in practice (MagicQ, Eos channels); zero and negatives are no one's head. */
+const val MIN_HEAD_NUMBER = 1
+const val MAX_HEAD_NUMBER = 99999

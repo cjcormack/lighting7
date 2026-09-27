@@ -248,6 +248,48 @@ class McpSetupToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `patch_fixtures carries a head number across, unique in the project`() {
+        assertTrue(patchTwoDimmers(""","headNumber":7""").success)
+        fun heads() = call("get_patch", "{}").json()["fixtures"]!!.jsonArray
+            .associate { it.jsonObject["key"]!!.jsonPrimitive.content to it.jsonObject["headNumber"]?.jsonPrimitive?.int }
+        assertEquals(mapOf("foh-1" to null, "foh-2" to 7), heads(), "an unnumbered head omits the key")
+
+        // The briefing names the number beside the key it resolves to, so "head 7" is actionable.
+        assertTrue("(head 7, key=`foh-2`" in RigBriefing(state).describeRig())
+
+        // Taken by another head — already patched, or earlier in the same list — refuses the call.
+        val taken = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"foh-3","name":"FOH 3","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":3,"headNumber":7}]}""",
+        )
+        assertFalse(taken.success)
+        assertTrue(taken.problems().single().contains("head number 7"), taken.result)
+        assertEquals(listOf("foh-1", "foh-2"), patchKeys(), "a refused call writes nothing")
+
+        // A list that swaps two heads' numbers is judged as it will stand, so it goes through.
+        val swapped = call(
+            "patch_fixtures",
+            """{"fixtures":[
+                {"key":"foh-1","name":"FOH 1","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":1,"headNumber":7},
+                {"key":"foh-2","name":"FOH 2","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":2,"headNumber":8}
+            ]}""",
+        )
+        assertTrue(swapped.success, swapped.result)
+        assertEquals(mapOf("foh-1" to 7, "foh-2" to 8), heads())
+
+        assertTrue(patchTwoDimmers().success, "a row that omits the number leaves it as it was")
+        assertEquals(mapOf("foh-1" to 7, "foh-2" to 8), heads())
+        assertTrue(patchTwoDimmers(""","headNumber":null""").success, "null clears it")
+        assertEquals(mapOf("foh-1" to 7, "foh-2" to null), heads())
+
+        for (bad in listOf("0", "100000", "1.5", "\"12\"")) {
+            val refused = patchTwoDimmers(""","headNumber":$bad""")
+            assertFalse(refused.success, "$bad: ${refused.result}")
+            assertTrue(refused.problems().single().contains("headNumber"), refused.result)
+        }
+    }
+
+    @Test
     fun `set_stage upserts riggings by name and place_fixtures hangs fixtures on them`() {
         assertTrue(patchTwoDimmers().success)
 

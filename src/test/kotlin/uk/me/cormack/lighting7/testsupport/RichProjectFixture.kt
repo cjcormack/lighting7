@@ -169,6 +169,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // …and patch 3 stands in for infrastructure (a power dimmer): non-default, so the
             // round-trip and clone tests see the field.
             if (i == 3) infrastructure = true
+            // Head numbers (v16) on all but one, out of address order, so the round-trip and clone
+            // tests see both encodings and a number that is not a patch's position.
+            if (i != 4) headNumber = 100 + (5 - i)
         }
     }
     // Hex 2 is a paired dimmer: its other lantern hangs at the far end of the FOH truss, and a

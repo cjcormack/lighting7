@@ -33,6 +33,7 @@ import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.createCueChildren
 import uk.me.cormack.lighting7.routes.fixedLengthRefusal
 import uk.me.cormack.lighting7.routes.normaliseGelCode
+import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.renumberAutoCues
 import uk.me.cormack.lighting7.routes.validateCueChildren
@@ -268,6 +269,7 @@ class SetupTools(
                         addJsonObject {
                             put("key", p.key)
                             put("name", p.displayName)
+                            p.headNumber?.let { put("headNumber", it) }
                             put("fixtureTypeKey", p.fixtureTypeKey)
                             universe?.let { put("universe", it.universe) }
                             put("startChannel", p.startChannel)
@@ -322,6 +324,8 @@ class SetupTools(
         val placement: Placement,
         /** Null when the row did not carry the key, so an update leaves the flag as it was. */
         val infrastructure: Boolean?,
+        /** Held only when the row carried `headNumber`; its value null is an explicit clear. */
+        val headNumber: Optional<Int?>?,
     )
 
     private fun patchFixtures(input: JsonObject): ToolExecutionResult {
@@ -330,14 +334,19 @@ class SetupTools(
         val dryRun = input.boolean("dryRun") == true
         val project = state.projectManager.currentProject
 
-        data class Existing(val id: Int, val key: String, val universe: Int, val start: Int, val end: Int)
+        data class Existing(
+            val id: Int, val key: String, val universe: Int, val start: Int, val end: Int, val headNumber: Int?,
+        )
 
         val (existing, riggingIds) = transaction(state.database) {
             val universes = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
                 .associate { it.id.value to it.universe }
             DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.map { p ->
                 val count = FixtureTypeRegistry.channelCountForTypeKey(p.fixtureTypeKey) ?: 1
-                Existing(p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel, p.startChannel + count - 1)
+                Existing(
+                    p.id.value, p.key, universes[p.universeConfig.id.value] ?: -1, p.startChannel,
+                    p.startChannel + count - 1, p.headNumber,
+                )
             } to riggingIdsByName(project)
         }
         val existingByKey = existing.associateBy { it.key }
@@ -382,11 +391,16 @@ class SetupTools(
                 fixedLengthRefusal(typeKey)?.let { rowProblems += it }
             }
             val infrastructure = optionalBoolean(row, "infrastructure", rowProblems)
+            val headNumber = row["headNumber"]?.let { element ->
+                parseHeadNumber(element).fold({ Optional(it) }, { rowProblems += it.message.orEmpty(); null })
+            }
 
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
             } else {
-                parsed += PatchRow(index, key, name, typeKey, universe!!, start!!, end!!, groups, placement, infrastructure)
+                parsed += PatchRow(
+                    index, key, name, typeKey, universe!!, start!!, end!!, groups, placement, infrastructure, headNumber,
+                )
             }
         }
 
@@ -406,6 +420,25 @@ class SetupTools(
                         "overlaps ${sorted[i].label} (${sorted[i].start}–${sorted[i].end})"
                 }
             }
+        }
+        // Head numbers, likewise against the patch as it will stand: an updated row that does not
+        // carry the key keeps its number, a new one without it is unnumbered, and every head that
+        // shares a number is named — so a list that swaps two heads' numbers goes through.
+        if (problems.isEmpty()) {
+            val numberByKey = existing.associate { it.key to it.headNumber }.toMutableMap()
+            val labelByKey = existing.associate { it.key to "already-patched '${it.key}'" }.toMutableMap()
+            for (row in parsed) {
+                labelByKey[row.key] = "fixtures[${row.index}] ('${row.key}')"
+                when {
+                    row.headNumber != null -> numberByKey[row.key] = row.headNumber.value
+                    row.key !in existingByKey -> numberByKey[row.key] = null
+                }
+            }
+            numberByKey.entries.filter { it.value != null }.groupBy({ it.value!! }, { it.key })
+                .filterValues { it.size > 1 }.toSortedMap()
+                .forEach { (number, keys) ->
+                    problems += "head number $number is on ${keys.joinToString(" and ") { labelByKey.getValue(it) }}"
+                }
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -463,6 +496,7 @@ class SetupTools(
                 patch.startChannel = row.startChannel
                 row.placement.applyTo(patch)
                 row.infrastructure?.let { patch.infrastructure = it }
+                row.headNumber?.let { patch.headNumber = it.value }
                 for (groupName in row.groups) {
                     val group = groupsByName.getOrPut(groupName) {
                         DaoFixtureGroup.new {

@@ -24,11 +24,16 @@ class RigBriefing(private val state: State) {
         sb.appendLine("## Available Fixtures")
         val infrastructureKeys = state.show.fixtures.infrastructureKeys()
         val (infrastructure, lighting) = state.show.fixtures.fixtures.partition { it.key in infrastructureKeys }
+        // Head numbers are read from the patch rather than the live registry, which carries none
+        // (the loader never reads them). An operator migrated from another console calls fixtures
+        // by these — "head 12 at full" — so the model has to see them beside the keys it acts on.
+        val headNumbers = patchHeadNumbers()
         for (fixture in lighting) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
             // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
             // closing paren went missing for every fixture that *is* in a group.
-            sb.appendLine("- **${fixture.fixtureName}** (key=`${fixture.key}`, type=`${fixture.typeKey}`" +
+            sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
+                    "key=`${fixture.key}`, type=`${fixture.typeKey}`" +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     ")")
         }
@@ -39,7 +44,8 @@ class RigBriefing(private val state: State) {
         if (infrastructure.isNotEmpty()) {
             sb.appendLine("## Infrastructure (not lighting — do not target unless the operator names it)")
             for (fixture in infrastructure) {
-                sb.appendLine("- **${fixture.fixtureName}** (key=`${fixture.key}`, type=`${fixture.typeKey}`)")
+                sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
+                    "key=`${fixture.key}`, type=`${fixture.typeKey}`)")
             }
             sb.appendLine()
         }
@@ -244,4 +250,17 @@ class RigBriefing(private val state: State) {
 
         return sb.toString()
     }
+
+    /** Every patched head's number in the current project, by fixture key; unnumbered heads absent. */
+    private fun patchHeadNumbers(): Map<String, Int> {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                .mapNotNull { p -> p.headNumber?.let { p.key to it } }
+                .toMap()
+        }
+    }
+
+    private fun headLabel(headNumbers: Map<String, Int>, key: String): String =
+        headNumbers[key]?.let { "head $it, " } ?: ""
 }

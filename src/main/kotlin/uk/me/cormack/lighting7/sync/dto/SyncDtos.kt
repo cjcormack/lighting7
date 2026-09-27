@@ -26,6 +26,11 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v16: the operator's head number. `FixturePatchJson.headNumber` carries it (null — omitted —
+    // when a head is unnumbered, so an export with none is byte-identical to v15). It bumps for
+    // v14's reason: a v15 reader imports every patch unnumbered and writes the numbers away on its
+    // next wipe-then-export push. `minReader` stays at **5** — a missing number is unnumbered.
+    //
     // v15: a variable-length fixture's length. `FixturePatchJson.lengthM` and
     // `PatchPlacementJson.lengthM` carry a lightstrip's installed length and each of its segments'
     // (`docs/fixtures-engineering.md` §"Variable-length fixtures"). Both default to null and are
@@ -134,7 +139,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 15,
+    val formatVersion: Int = 16,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -367,6 +372,9 @@ data class FixturePatchJson(
     val fixtureTypeKey: String,
     val key: String,
     val displayName: String,
+    /** The operator's head number (v16); null is unnumbered. Imported as stored — see
+     *  `docs/sync-engineering.md` §"Version 16 — head numbers". */
+    val headNumber: Int? = null,
     val startChannel: Int,
     val sortOrder: Int = 0,
     val stageX: Double? = null,
