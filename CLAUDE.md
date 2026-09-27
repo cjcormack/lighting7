@@ -611,7 +611,8 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   the agent downloaded on first enable, never bundled: ngrok's licence) or one the operator runs,
   named by `mcp.publicUrl`. The desk is its own OAuth server; grants are machine-local and die with
   the user's sessions. The tools are the AI chat's minus `run_lighting_script`, plus
-  `describe_rig`. **The port split is the security boundary**: everything on that listener is
+  `describe_rig` and the MCP-only show-setup tools (`ai/SetupTools.kt`: projects, patch, stage and
+  rigging, cue stacks and prompt-book markup, built from documents the model reads). **The port split is the security boundary**: everything on that listener is
   remote, decided by port and never by a forwarded header, and `installRemoteHardening` applies
   there — no remote bootstrap, a sign-in lockout, `Secure` cookies, an Origin check, no QR flows,
   scripts refused unless an admin allows them. Anything mounted on it is reachable from the

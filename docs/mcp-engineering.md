@@ -237,8 +237,8 @@ URL's origin, claude.ai, claude.com or loopback (DNS-rebinding protection).
 
 ### Tools
 
-`describe_rig` plus `AiTools.mcpTools`, which is every chat tool **except
-`run_lighting_script`**. A script runs arbitrary Kotlin inside the desk's JVM, so reaching it
+`describe_rig`, then `AiTools.mcpTools` — every chat tool **except `run_lighting_script`** —
+then the show-setup tools below, which only this surface has. A script runs arbitrary Kotlin inside the desk's JVM, so reaching it
 through a tunnel would make a leaked token a shell on the desk machine; every other tool is a
 bounded operation on the show.
 
@@ -249,8 +249,60 @@ nothing it does not ask for, so the `instructions` sent at `initialize` tell the
 first, along with the composition rules (`RigBriefing.keyConcepts(scriptTool = false)`).
 
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
-answers `isError` with "still starting". `describe_rig` and `get_current_state` carry
-`readOnlyHint`.
+answers `isError` with "still starting". `describe_rig`, `get_current_state` and the four setup
+readers below carry `readOnlyHint`.
+
+### Show-setup tools
+
+`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds eleven tools that **build** a show
+rather than run one, for three jobs: a project and patch from another console's patch export, the
+Stage view (stage, regions, riggings, fixture placement) from plots or photos, and the show's cue
+stacks and prompt-book markup from a script and lighting notes.
+
+| Tool | Does |
+|------|------|
+| `list_projects` / `create_project` / `switch_project` | Projects. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description |
+| `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against |
+| `get_patch` | Stage, regions, riggings, universes, every patch (address, groups, rigging, placement) and groups |
+| `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups |
+| `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals |
+| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch, beam, gel, kind, hidden |
+| `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
+| `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
+
+Four decisions shape them:
+
+- **MCP only.** They are not in `AiTools.allTools`, so the in-app chat does not get them: its
+  conversation belongs to the current project, which `switch_project` would move out from under
+  it, and the documents these tools are for arrive through an MCP client.
+- **No tool takes a file.** The model reads the PDFs and photos in its own conversation and passes
+  structured data. The one file the desk must hold — the prompt-book PDF — comes in through the
+  Prompt Book view's import (`/prompt-book`), which hashes it and counts its pages with pdf.js;
+  the backend has no PDF parser and this did not add one. `get_prompt_book` and every `at` that
+  meets a book-less project say so, naming the desk's public URL when it is known.
+- **Whole request validated, nothing written on any error, every problem answered at once**
+  (`rejected()`, capped at 100). These calls carry tens or hundreds of rows transcribed from a
+  document; all-or-nothing makes resending the corrected request the whole recovery. The
+  validators are the routes' own (`validateStageMetadata`, `validateRiggingPose`,
+  `validateStageRegion`, `validateStageDimensions`, `checkPromptBookRegion`,
+  `validateCueChildren`), and `patch_fixtures` checks overlaps against the patch *as it will
+  stand* — rows being updated leave their old address — so a re-addressing list lands in one call.
+  Upsert by key / name and refusing a duplicate stack name or cue number make a retried call safe.
+- **Writes broadcast as the routes do** (`patchListChanged` after a `DbFixtureLoader` reload,
+  `riggingListChanged`, `stageRegionListChanged`, `cueListChanged` / `cueStackListChanged`,
+  `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
+  metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way.
+
+A prompt-book place is `{pdfPage, y, x?, width?, height?}`: `pdfPage` counts from 1 at the
+file's first page (converted to the stored 0-based index), `y` is a fraction of the page from the
+top, and the defaults (x 0.06, width 0.88, height 0.03) are the Prompt Book view's text-column
+band. A height that would run off the page is clamped rather than refused. Anchor labels are
+written `Q<number>` (else the cue name), as the view writes them. Cue times are **seconds** on
+this surface (`fadeSeconds`, `followSeconds`) because lighting notes are written that way;
+`followSeconds` is the cue's auto-advance delay.
+
+Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt`.
 
 ## Tests
 

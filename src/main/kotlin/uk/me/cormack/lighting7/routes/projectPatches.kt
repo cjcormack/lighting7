@@ -766,7 +766,7 @@ internal fun validateStageMetadata(
     return null
 }
 
-private fun normaliseGelCode(raw: String?): String? {
+internal fun normaliseGelCode(raw: String?): String? {
     val trimmed = raw?.trim() ?: return null
     if (trimmed.isEmpty()) return null
     return trimmed.take(20)
@@ -777,7 +777,7 @@ private fun normaliseGelCode(raw: String?): String? {
  * the name of a [FixtureKind]. Throws [IllegalArgumentException] for anything else
  * so the caller can map to a 400 response.
  */
-private fun normaliseKindOverride(raw: String?): String? {
+internal fun normaliseKindOverride(raw: String?): String? {
     val trimmed = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     return try {
         FixtureKind.valueOf(trimmed).name
