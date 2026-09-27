@@ -597,6 +597,7 @@ class ProjectImporter(private val state: State) {
             gelCode = p.gelCode
             kindOverride = p.kindOverride
             stageHidden = p.stageHidden
+            infrastructure = p.infrastructure
             this.uuid = uuid
         }
         uuid to dao

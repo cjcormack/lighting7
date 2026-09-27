@@ -39,6 +39,7 @@ internal fun Fixture.details(fixtures: Fixtures, compatibleLookIds: List<Int> = 
             } else null
 
             val capabilities = detectCapabilities()
+            val patchMetadata = fixtures.patchMetadataFor(this.key)
 
             DmxFixtureDetails(
                 name = this.fixtureName,
@@ -57,7 +58,8 @@ internal fun Fixture.details(fixtures: Fixtures, compatibleLookIds: List<Int> = 
                 mode = modeInfo,
                 capabilities = capabilities,
                 compatibleLookIds = compatibleLookIds,
-                gelCode = fixtures.patchMetadataFor(this.key)?.gelCode,
+                gelCode = patchMetadata?.gelCode,
+                infrastructure = patchMetadata?.infrastructure == true,
             )
         }
         is HueFixture -> {
@@ -257,6 +259,12 @@ data class DmxFixtureDetails(
     val capabilities: List<String>,
     override val compatibleLookIds: List<Int> = emptyList(),
     val gelCode: String? = null,
+    /**
+     * The patch is infrastructure (a power dimmer, a relay), not a lighting fixture. The list still
+     * carries it — a cue or group that names it must still resolve — and every operator surface but
+     * the Patches and Channels views filters it out.
+     */
+    val infrastructure: Boolean = false,
 ): FixtureDetails
 
 @Serializable

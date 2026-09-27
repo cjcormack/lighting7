@@ -372,6 +372,7 @@ data class FixturePatchJson(
     val gelCode: String? = null,
     val kindOverride: String? = null,
     val stageHidden: Boolean = false,
+    val infrastructure: Boolean = false,
 )
 
 /**

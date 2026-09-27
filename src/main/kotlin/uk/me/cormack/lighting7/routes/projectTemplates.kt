@@ -853,7 +853,7 @@ internal data class ToggleTemplateResponse(
 @Serializable
 internal data class TemplateResolveRequest(
     val rows: List<TemplateRowDto> = emptyList(),
-    /** Empty means "every patched fixture" — what the editor wants while nothing is selected. */
+    /** Empty means "every patched fixture but infrastructure" — what the editor wants while nothing is selected. */
     val targets: List<TemplateTargetDto> = emptyList(),
 )
 
@@ -1506,7 +1506,8 @@ private fun resolveTemplateAgainstPatch(
 ): TemplateResolveResponse {
     val fixtures = state.show.fixtures
     val candidates: List<Fixture> = if (request.targets.isEmpty()) {
-        fixtures.fixtures
+        // "The whole patch" is the patch an operator is offered: never an infrastructure fixture.
+        fixtures.operatorFixtures
     } else {
         val keys = expandTargetsToFixtureKeys(
             state,

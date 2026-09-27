@@ -22,7 +22,9 @@ class RigBriefing(private val state: State) {
         val sb = StringBuilder()
         // Fixtures
         sb.appendLine("## Available Fixtures")
-        for (fixture in state.show.fixtures.fixtures) {
+        val infrastructureKeys = state.show.fixtures.infrastructureKeys()
+        val (infrastructure, lighting) = state.show.fixtures.fixtures.partition { it.key in infrastructureKeys }
+        for (fixture in lighting) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
             // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
             // closing paren went missing for every fixture that *is* in a group.
@@ -31,6 +33,16 @@ class RigBriefing(private val state: State) {
                     ")")
         }
         sb.appendLine()
+
+        // Infrastructure — named, so a model reading a cue or group that includes one knows what it
+        // is, but set apart so it is never the obvious target of "all the lights".
+        if (infrastructure.isNotEmpty()) {
+            sb.appendLine("## Infrastructure (not lighting — do not target unless the operator names it)")
+            for (fixture in infrastructure) {
+                sb.appendLine("- **${fixture.fixtureName}** (key=`${fixture.key}`, type=`${fixture.typeKey}`)")
+            }
+            sb.appendLine()
+        }
 
         // Groups
         sb.appendLine("## Available Groups")
@@ -176,12 +188,22 @@ class RigBriefing(private val state: State) {
         // Fixture type API (for scripts)
         sb.appendLine("## Fixture Type API (for run_lighting_script)")
         sb.appendLine("When writing scripts, use `fixture<TypeName>(\"key\")` to access fixtures.")
+        val infrastructureKeys = state.show.fixtures.infrastructureKeys()
         val fixturesByType = state.show.fixtures.fixtures.groupBy { it::class }
         for ((klass, fixtures) in fixturesByType) {
             val sample = fixtures.first()
             val typeName = klass.simpleName ?: continue
+            // A script may still drive an infrastructure fixture, so its key stays — set apart, as
+            // `describeRig` sets it apart, so it is never the obvious target of "all the lights".
+            val (infrastructure, lighting) = fixtures.partition { it.key in infrastructureKeys }
             sb.appendLine("### $typeName")
-            sb.appendLine("Keys: ${fixtures.joinToString(", ") { "`${it.key}`" }}")
+            if (lighting.isNotEmpty()) sb.appendLine("Keys: ${lighting.joinToString(", ") { "`${it.key}`" }}")
+            if (infrastructure.isNotEmpty()) {
+                sb.appendLine(
+                    "Infrastructure keys (not lighting — do not target unless the operator names them): " +
+                        infrastructure.joinToString(", ") { "`${it.key}`" },
+                )
+            }
             sb.appendLine("Properties:")
             for (prop in sample.fixtureProperties) {
                 val propValue = prop.classProperty.call(sample)

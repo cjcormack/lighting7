@@ -37,6 +37,14 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
      *  hazer's fan channel. Purely presentational: the fixture still patches,
      *  still outputs, and still participates in groups, cues and FX. */
     val stageHidden = bool("stage_hidden").default(false)
+    /** Infrastructure rather than a lighting fixture — a dimmer channel switching hard power, a
+     *  relay, a hazer's fan. Hidden from every operator surface except the Patches and Channels
+     *  views (which are where it is patched and where its raw channels are driven), and never
+     *  offered as a target. Presentational like [stageHidden]: it still patches and outputs, and
+     *  anything that already names it — a group, a cue, a binding — keeps working. Implies
+     *  [stageHidden] on the stage without writing it. See `docs/fixtures-engineering.md`
+     *  §"Infrastructure fixtures". */
+    val infrastructure = bool("infrastructure").default(false)
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -64,5 +72,6 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var gelCode by DaoFixturePatches.gelCode
     var kindOverride by DaoFixturePatches.kindOverride
     var stageHidden by DaoFixturePatches.stageHidden
+    var infrastructure by DaoFixturePatches.infrastructure
     var uuid by DaoFixturePatches.uuid
 }

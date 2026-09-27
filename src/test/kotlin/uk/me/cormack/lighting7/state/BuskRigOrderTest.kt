@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.state
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.SpreadOver
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.BuskRigFixture
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -38,6 +39,38 @@ class BuskRigOrderTest {
         val last = positions.getValue(CueTargetDto("fixture", "bar-1.pixel-11"))
         val bar2 = positions.getValue(CueTargetDto("fixture", "bar-2"))
         assertTrue(bar1 < first && first < last && last < bar2)
+    }
+
+    /**
+     * An infrastructure fixture is not in the empty rig's fixture half — the client's
+     * `effectiveRig` drops it the same way, so *All* and *Next* never land on a power dimmer.
+     * Everything else in the fallback is unchanged and in the same order.
+     */
+    @Test
+    fun `the empty rig's fallback leaves an infrastructure fixture out`() {
+        val before = order("empty").steps(SpreadOver.HEADS)
+        val hex2 = listOf(CueTargetDto("fixture", "hex-2"))
+        assertTrue(hex2 in before, "the file's empty rig steps hex-2 as a fixture")
+
+        fixtures.setPatchMetadata("hex-2", Fixtures.FixturePatchMetadata(gelCode = null, infrastructure = true))
+        val after = order("empty")
+        assertEquals(before - setOf(hex2), after.steps(SpreadOver.HEADS))
+    }
+
+    /**
+     * Ordering is not offering: with no group reaching it, an infrastructure fixture a spread names
+     * directly still sorts where the fixture list has it, not last.
+     */
+    @Test
+    fun `an infrastructure fixture a caller names still sorts in list order`() {
+        val ungrouped = BuskRigFixture.fixtures(file.fixtures, emptyList())
+        ungrouped.setPatchMetadata("hex-2", Fixtures.FixturePatchMetadata(gelCode = null, infrastructure = true))
+        val order = BuskRigOrder(ungrouped, BuskRigFixture.rig(file.rigs.getValue("empty")))
+        assertTrue(listOf(CueTargetDto("fixture", "hex-2")) !in order.steps(SpreadOver.HEADS), "not offered")
+        assertEquals(
+            listOf("hex-1", "hex-2", "bar-1"),
+            order.sort(listOf("bar-1", "hex-2", "hex-1").map { CueTargetDto("fixture", it) }).map { it.key },
+        )
     }
 
     @Test

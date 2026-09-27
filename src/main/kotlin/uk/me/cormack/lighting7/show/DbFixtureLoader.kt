@@ -65,6 +65,7 @@ object DbFixtureLoader {
                         stageY = it.stageY,
                         beamAngleDeg = it.beamAngleDeg,
                         gelCode = it.gelCode,
+                        infrastructure = it.infrastructure,
                     )
                 }
 
@@ -138,7 +139,7 @@ object DbFixtureLoader {
 
                 setPatchMetadata(
                     patch.key,
-                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode),
+                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure),
                 )
             }
 
@@ -176,6 +177,7 @@ object DbFixtureLoader {
         val stageY: Double?,
         val beamAngleDeg: Int?,
         val gelCode: String?,
+        val infrastructure: Boolean,
     )
 
     private data class GroupMemberData(

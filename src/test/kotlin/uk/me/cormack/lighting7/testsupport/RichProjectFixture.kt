@@ -165,6 +165,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // Patch 4 has no stage geometry at all — the stand-in for the case
             // stageHidden exists for (real DMX, not a stage object).
             if (i == 4) stageHidden = true
+            // …and patch 3 stands in for infrastructure (a power dimmer): non-default, so the
+            // round-trip and clone tests see the field.
+            if (i == 3) infrastructure = true
         }
     }
     // A multi-head bar (v12), so the busk rig below can hold a HALVES tile, a PER_CELL tile and a

@@ -125,6 +125,7 @@ private val patchRowSchema = objectSchema(required = listOf("name", "fixtureType
         put("items", buildJsonObject { put("type", "string") })
         put("description", "Group names to add this fixture to (created on demand), e.g. positions like 'FOH' or 'LX1', or roles like 'Front wash'. Groups are how looks, cues and effects address many fixtures at once.")
     })
+    prop("infrastructure", "boolean", "Patched but not a lighting fixture — a dimmer channel switching hard power, a relay, a hazer's fan. Hidden from every desk view but Patches and Channels, and never offered as a target; don't put it in groups. Omit to leave an existing fixture's flag as it is.")
     placementProps()
 }
 
