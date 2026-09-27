@@ -27,19 +27,34 @@ class ChildProcess(val name: String, val process: Process) {
     val exitValue: Int? get() = if (process.isAlive) null else process.exitValue()
 
     companion object {
+        /**
+         * The child's command line. JVM options go before `-jar`: anything after the jar path is
+         * the application's own `args`, so a JVM flag misplaced there would be silently handed to
+         * `main` instead of the JVM.
+         */
+        fun commandLine(
+            java: Path,
+            jar: Path,
+            jvmArgs: List<String> = emptyList(),
+            args: List<String> = emptyList(),
+        ): List<String> =
+            listOf(java.toAbsolutePath().toString()) +
+                jvmArgs +
+                listOf("-jar", jar.toAbsolutePath().toString()) +
+                args
+
         fun spawn(
             name: String,
             java: Path,
             jar: Path,
+            jvmArgs: List<String> = emptyList(),
             args: List<String> = emptyList(),
             workingDir: Path? = null,
             env: Map<String, String> = emptyMap(),
             logFile: Path,
         ): ChildProcess {
             Files.createDirectories(logFile.parent)
-            val cmd = mutableListOf(java.toAbsolutePath().toString(), "-jar", jar.toAbsolutePath().toString())
-            cmd += args
-            val pb = ProcessBuilder(cmd)
+            val pb = ProcessBuilder(commandLine(java, jar, jvmArgs, args))
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()))
                 // Inherit the parent's (likely null) stdin. `Redirect.DISCARD` is output-only

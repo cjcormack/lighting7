@@ -55,7 +55,9 @@ application {
     // libraries (JEP 472), and Netty allocating off-heap memory through `sun.misc.Unsafe`
     // (JEP 498). Neither is blocked yet — the warnings only say they will be — so these keep a
     // real warning from being lost in the noise. Both flags need JDK 23+, which toolchain 24 is.
-    // The packaged app is spawned by the launcher with its own command line, not this one.
+    // The packaged app is spawned by the launcher with its own command line, not this one: there
+    // the native-access opt-in is the fat jar's `Enable-Native-Access` manifest attribute (see
+    // `tasks.shadowJar`) and the Unsafe one is the launcher's `BACKEND_JVM_ARGS`.
     applicationDefaultJvmArgs = listOf(
         "--enable-native-access=ALL-UNNAMED",
         "--sun-misc-unsafe-memory-access=allow",
@@ -505,6 +507,17 @@ tasks.shadowJar {
     // pattern list above stays honest.
     failOnDuplicateEntries.set(true)
     mergeServiceFiles()
+
+    // The packaged half of `applicationDefaultJvmArgs`' native-access opt-in (JEP 472): the
+    // launcher spawns this jar as `java -jar`, not through `./gradlew run`, and an executable
+    // jar's manifest is the one place JDK 22+ reads the opt-in from without a command-line flag.
+    // `ALL-UNNAMED` is the only value the attribute accepts. A constant, so the jar stays
+    // byte-for-byte reproducible under `-PnativePayloadOs`. Its sibling,
+    // `--sun-misc-unsafe-memory-access=allow`, has no manifest form and rides the launcher's
+    // command line instead (`BACKEND_JVM_ARGS` in the launcher's LauncherMain.kt).
+    manifest {
+        attributes("Enable-Native-Access" to "ALL-UNNAMED")
+    }
 
     // Drop every native payload the target OS cannot load. Filtering happens in the CopySpec,
     // i.e. before the transformers and before duplicate detection, so excluded entries simply
