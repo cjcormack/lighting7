@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { usePersistentState } from '../../hooks/usePersistentState'
-import { useFixtureListQuery } from '../../store/fixtures'
+import { useVisibleFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { useActiveEffectsQuery, useRemoveFxMutation } from '../../store/fixtureFx'
 import { useSpeedMasterDisplay } from '../../store/speedMasters'
@@ -50,7 +50,8 @@ interface PlacedEffect {
  *   programmer values, and go when Clear goes. They are badged so that isn't a surprise.
  */
 export function FxSheet() {
-  const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
+  // The rows it lists are the rig an operator is offered: never an infrastructure fixture.
+  const { data: maybeFixtures, isLoading: fixturesLoading } = useVisibleFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
   const { data: maybeEffects, isLoading: effectsLoading } = useActiveEffectsQuery()
   const [removeFx] = useRemoveFxMutation()

@@ -169,9 +169,15 @@ export function BindingTargetPicker({
   // the name they resolve to, shared with the inspector's binding card.
   const records = useRecordBindingOptions(projectId)
 
+  // Every lighting fixture, plus an infrastructure one only when this binding already names it: a
+  // binding that names one keeps resolving (and reads as what it is), but none is ever offered.
+  const boundKeys = useMemo(() => boundFixtureKeys(value), [value])
   const fixtureOptions = useMemo(
-    () => (patches ?? []).map((p) => ({ key: p.key, label: p.displayName })),
-    [patches],
+    () =>
+      (patches ?? [])
+        .filter((p) => !p.infrastructure || boundKeys.has(p.key))
+        .map((p) => ({ key: p.key, label: p.infrastructure ? `${p.displayName} (infrastructure)` : p.displayName })),
+    [patches, boundKeys],
   )
   const groupOptions = useMemo(
     () => (groups ?? []).map((g) => g.name),
@@ -1012,4 +1018,26 @@ function WindowField({ value, onChange }: { value: string; onChange: (name: stri
       </Select>
     </div>
   )
+}
+
+/**
+ * Every fixture key a binding target names, wherever its variant keeps one — a `fixtureKey` field
+ * or a `{ type: 'fixture', key }` target — found by walking the value rather than by listing the
+ * variants, so a new variant that names a fixture is covered without touching this.
+ */
+function boundFixtureKeys(value: unknown): Set<string> {
+  const keys = new Set<string>()
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(walk)
+      return
+    }
+    if (node == null || typeof node !== "object") return
+    const record = node as Record<string, unknown>
+    if (typeof record.fixtureKey === "string") keys.add(record.fixtureKey)
+    if (record.type === "fixture" && typeof record.key === "string") keys.add(record.key)
+    Object.values(record).forEach(walk)
+  }
+  walk(value)
+  return keys
 }

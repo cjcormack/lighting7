@@ -16,9 +16,14 @@ const fixtures = [
   { capabilities: ['dimmer', 'colour'] },
   { capabilities: ['dimmer', 'colour'] },
   { capabilities: ['dimmer'] },
+  // Infrastructure: in the raw list, never counted — the two hooks disagree about it on purpose.
+  { capabilities: ['dimmer', 'colour'], infrastructure: true },
 ]
 
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: fixtures }) }))
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: fixtures }),
+  useVisibleFixtureListQuery: () => ({ data: fixtures.filter((f) => !f.infrastructure) }),
+}))
 vi.mock('@/store/speedMasters', () => ({
   useMaster1Uuid: () => 'master-1-uuid',
   useSpeedMasterBpm: () => 128,

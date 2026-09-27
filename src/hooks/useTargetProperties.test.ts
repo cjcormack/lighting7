@@ -32,6 +32,14 @@ const fixtures = [
   },
   // An RGB-only head: its colour brings no emitters with it.
   { key: 'par-1', name: 'PAR 1', properties: [colour()] },
+  // Infrastructure, with a property no lighting head has: a target that names it still resolves
+  // it, but the rig-wide vocabulary never offers its `fan`.
+  {
+    key: 'hazer-power',
+    name: 'Hazer power',
+    infrastructure: true,
+    properties: [{ type: 'slider', name: 'fan', displayName: 'fan', category: 'other', channel: { universe: 0, channelNo: 40 }, min: 0, max: 255 }],
+  },
 ]
 
 const groupProperties = [
@@ -47,7 +55,10 @@ const groupProperties = [
   },
 ]
 
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: fixtures }) }))
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: fixtures }),
+  useVisibleFixtureListQuery: () => ({ data: fixtures.filter((f) => !f.infrastructure) }),
+}))
 vi.mock('@/store/groups', () => ({ useGroupPropertiesQuery: () => ({ data: groupProperties }) }))
 
 import { useRigProperties, useTargetProperties } from './useTargetProperties'
@@ -81,5 +92,11 @@ describe('useRigProperties', () => {
   it('is the union of the patch, emitters included and deduplicated by name', () => {
     const { result } = renderHook(() => useRigProperties())
     expect(result.current.map((p) => p.name)).toEqual(['dimmer', 'rgbColour', 'white', 'uv', 'strobe'])
+  })
+
+  it('leaves out a property only an infrastructure fixture has, which a named target still resolves', () => {
+    expect(renderHook(() => useRigProperties()).result.current.map((p) => p.name)).not.toContain('fan')
+    const named = renderHook(() => useTargetProperties({ type: 'fixture', key: 'hazer-power' })).result.current
+    expect(named.properties.map((p) => p.name)).toEqual(['fan'])
   })
 })

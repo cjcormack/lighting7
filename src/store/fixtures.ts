@@ -1,4 +1,5 @@
 import { restApi } from "./restApi"
+import { useWithoutInfrastructure } from "@/lib/infrastructure"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
 import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
@@ -285,6 +286,25 @@ export type Fixture = {
    */
   compatibleLookIds: number[]
   gelCode?: string | null
+  /**
+   * Patched as **infrastructure** — a dimmer channel on hard power, a relay, a hazer's fan — not
+   * a lighting fixture. Hidden from every view but Patches and Channels: enumerate the rig through
+   * `useVisibleFixtureListQuery` / `withoutInfrastructure`, never the raw list. The raw list still
+   * carries it because a cue, group or binding that already names it must keep resolving.
+   * Optional so an older backend (which never sends it) reads as "not infrastructure".
+   */
+  infrastructure?: boolean
+}
+
+/**
+ * `useFixtureListQuery` with infrastructure fixtures left out — what a view that *lists or offers*
+ * fixtures reads. A surface that only resolves a key it already holds (a cue row, an effect's
+ * target, a group member's name) reads the raw list, so a reference to an infrastructure fixture
+ * still resolves rather than reading as a missing one.
+ */
+export function useVisibleFixtureListQuery(options?: Parameters<typeof useFixtureListQuery>[1]) {
+  const result = useFixtureListQuery(undefined, options)
+  return useWithoutInfrastructure<typeof result, Fixture>(result, result.data)
 }
 
 /**

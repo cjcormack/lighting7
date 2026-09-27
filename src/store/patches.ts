@@ -1,4 +1,5 @@
 import { restApi } from "./restApi"
+import { useWithoutInfrastructure } from "@/lib/infrastructure"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
 import type {
@@ -202,3 +203,13 @@ export const {
   useUpdatePatchGroupMutation,
   useDeletePatchGroupMutation,
 } = patchesApi
+
+/**
+ * `usePatchListQuery` with infrastructure patches left out (`FixturePatch.infrastructure`) — what
+ * every view but Patches reads when it lists or offers patched fixtures. The Patches view reads the
+ * raw list: it is where the flag is set, so it must show what it hides.
+ */
+export function useVisiblePatchListQuery(projectId: number, options?: Parameters<typeof usePatchListQuery>[1]) {
+  const result = usePatchListQuery(projectId, options)
+  return useWithoutInfrastructure<typeof result, FixturePatch>(result, result.data)
+}

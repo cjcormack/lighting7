@@ -12,6 +12,7 @@ import { Loader2 } from 'lucide-react'
 import { useGroupListQuery, useGroupQuery, useGroupPropertiesQuery } from '../../store/groups'
 import { GroupPropertiesSection } from '../groups/GroupCard'
 import { GroupMembersSection } from '../groups/GroupMembersSection'
+import { useVisibleGroupMembers } from '../groups/useVisibleGroupMembers'
 import { FixtureDetailModal } from '../groups/FixtureDetailModal'
 import { LocateButton } from './LocateButton'
 
@@ -33,6 +34,8 @@ export function GroupDetailModal({
     groupName ?? '',
     { skip: !groupName }
   )
+  // What the member list shows — infrastructure members left out — so the header agrees with it.
+  const memberCount = useVisibleGroupMembers(groupDetail?.members)?.length ?? group?.memberCount
   const [isEditing, setIsEditing] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
 
@@ -49,9 +52,9 @@ export function GroupDetailModal({
           <div className="flex items-center justify-between pr-8">
             <div>
               <SheetTitle>{group?.name ?? 'Group'}</SheetTitle>
-              {group && (
+              {group && memberCount != null && (
                 <p className="text-sm text-muted-foreground">
-                  {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
+                  {memberCount} fixture{memberCount !== 1 ? 's' : ''}
                 </p>
               )}
             </div>

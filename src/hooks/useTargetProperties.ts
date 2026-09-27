@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useFixtureListQuery, type PropertyDescriptor } from '@/store/fixtures'
+import { useFixtureListQuery, useVisibleFixtureListQuery, type PropertyDescriptor } from '@/store/fixtures'
 import { useGroupPropertiesQuery } from '@/store/groups'
 import type { GroupPropertyDescriptor } from '@/api/groupsApi'
 
@@ -232,9 +232,12 @@ export function useTargetProperties(target: PropertyTarget | null): TargetProper
  * Deduplicated **by name**, and the first descriptor wins. Two fixtures declaring `dimmer` with
  * different ranges are one entry here on purpose — the target carries a name, and the desk resolves
  * the range per head at write time.
+ *
+ * The rig an operator is offered, so infrastructure is left out: a property only a power relay
+ * declares is not one to bind a fader to.
  */
 export function useRigProperties(): AvailableProperty[] {
-  const { data: fixtures } = useFixtureListQuery()
+  const { data: fixtures } = useVisibleFixtureListQuery()
 
   return useMemo(() => {
     const byName = new Map<string, AvailableProperty>()

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
-import { useFixtureListQuery, type Fixture } from '../store/fixtures'
+import { useVisibleFixtureListQuery, type Fixture } from '../store/fixtures'
 import { CompactFixtureCard, MultiElementCompactCard } from './groups/CompactFixtureCard'
 import { CollapsiblePanel } from './CollapsiblePanel'
 
@@ -21,7 +21,7 @@ export function FixtureOverviewPanel({ onFixtureClick, isVisible }: FixtureOverv
 function FixtureOverviewPanelBody({
   onFixtureClick,
 }: Pick<FixtureOverviewPanelProps, 'onFixtureClick'>) {
-  const { data: fixtures, isLoading } = useFixtureListQuery()
+  const { data: fixtures, isLoading } = useVisibleFixtureListQuery()
 
   // Separate fixtures into single fixtures and multi-head fixtures
   const { singleFixtures, multiHeadFixtures } = useMemo(() => {

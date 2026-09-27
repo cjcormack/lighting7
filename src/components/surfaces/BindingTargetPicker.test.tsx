@@ -18,21 +18,27 @@ vi.mock('@/store/groups', () => ({
   }),
 }))
 // One patched head, so the rig vocabulary has a colour for the axis field to show for.
-vi.mock('@/store/fixtures', () => ({
-  useFixtureListQuery: () => ({
-    data: [
-      {
-        key: 'hex-1',
-        name: 'Hex 1',
-        properties: [
-          { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 1 }, min: 0, max: 255 },
-          { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', redChannel: { universe: 0, channelNo: 2 }, greenChannel: { universe: 0, channelNo: 3 }, blueChannel: { universe: 0, channelNo: 4 } },
-        ],
-      },
+const rigFixtures = vi.hoisted(() => [
+  {
+    key: 'hex-1',
+    name: 'Hex 1',
+    properties: [
+      { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 1 }, min: 0, max: 255 },
+      { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', redChannel: { universe: 0, channelNo: 2 }, greenChannel: { universe: 0, channelNo: 3 }, blueChannel: { universe: 0, channelNo: 4 } },
     ],
-  }),
+  },
+])
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: rigFixtures }),
+  // The rig vocabulary reads the visible list; no fixture here is infrastructure.
+  useVisibleFixtureListQuery: () => ({ data: rigFixtures }),
 }))
-vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))
+// Empty for every suite but the infrastructure one, which fills it.
+let patches: { key: string; displayName: string; infrastructure?: boolean }[] = []
+vi.mock('@/store/patches', () => ({
+  usePatchListQuery: () => ({ data: patches }),
+  useVisiblePatchListQuery: () => ({ data: patches.filter((p) => !p.infrastructure) }),
+}))
 vi.mock('@/store/windows', () => ({
   useDeskWindows: () => [
     { id: 'w1', windowId: 'a', name: 'Screen 1', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
@@ -76,6 +82,7 @@ import { BindingTargetPicker } from './BindingTargetPicker'
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  patches = []
 })
 
 function renderPicker(continuous: boolean, value: BindingTarget, onChange = vi.fn()) {
@@ -259,5 +266,25 @@ describe('BindingTargetPicker colour axes', () => {
     fireEvent.change(screen.getByPlaceholderText('dimmer'), { target: { value: 'dimmer' } })
     expect(onChange).toHaveBeenCalledWith({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
     expect('colourAxis' in onChange.mock.calls[0]![0]).toBe(false)
+  })
+})
+
+describe('BindingTargetPicker infrastructure fixtures', () => {
+  it('keeps an infrastructure fixture a binding already names, and offers no other', () => {
+    // A binding made before its fixture was marked infrastructure must still read — as what it is
+    // — rather than as a blank field; but no infrastructure fixture is ever offered as a new pick.
+    patches = [
+      { key: 'hex-1', displayName: 'Hex 1' },
+      { key: 'hazer-power', displayName: 'Hazer power', infrastructure: true },
+      { key: 'relay-1', displayName: 'Relay 1', infrastructure: true },
+    ]
+    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hazer-power', propertyName: 'dimmer' })
+    expect(screen.getByText('Hazer power (infrastructure)')).toBeInTheDocument()
+    // The second combobox is the Fixture field (the first is the target kind).
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    const offered = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(offered).toContain('Hex 1')
+    expect(offered).toContain('Hazer power (infrastructure)')
+    expect(offered).not.toContain('Relay 1')
   })
 })

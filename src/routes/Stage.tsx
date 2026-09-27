@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { useViewedProject } from '../ProjectSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
-import { useUpdatePatchMutation, usePatchListQuery } from '../store/patches'
+import { useUpdatePatchMutation, usePatchListQuery, useVisiblePatchListQuery } from '../store/patches'
 import {
   useUpdateStageRegionMutation,
   useStageRegionListQuery,
@@ -184,6 +184,10 @@ export function Stage() {
 
   const { data: projectData } = useProjectQuery(projectId ?? 0, { skip: projectId == null })
   const { data: patches } = usePatchListQuery(projectId ?? 0, { skip: projectId == null })
+  // What the picker offers: every patch but infrastructure, which the Stage never shows — the same
+  // cached query, filtered. The raw list stays for everything that resolves a key or checks a new
+  // one against the whole patch.
+  const { data: stagePatches } = useVisiblePatchListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: regions } = useStageRegionListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip: projectId == null })
 
@@ -942,7 +946,7 @@ export function Stage() {
           {showPanelStub && <StageEditorPanelStub onExpand={() => setPanelCollapsed(false)} />}
           {showPicker && (
             <StageEditorPickerPanel
-              patches={patches ?? []}
+              patches={stagePatches ?? []}
               regions={regions ?? []}
               riggings={riggings ?? []}
               onSelect={handleSelectionChange}

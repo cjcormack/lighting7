@@ -37,6 +37,11 @@ export interface FixturePatch {
    *  that isn't a stage object — a dimmer driving hard power. Presentational
    *  only: the fixture still patches, outputs, and runs in cues and FX. */
   stageHidden: boolean;
+  /** Infrastructure, not a lighting fixture — a dimmer on hard power, a relay. Hidden from every
+   *  view but Patches and Channels (and so from the Stage, whatever `stageHidden` says); enumerate
+   *  patches outside those two through `useVisiblePatchListQuery`. Optional so an older backend
+   *  reads as "not infrastructure". */
+  infrastructure?: boolean;
 }
 
 /**
@@ -83,6 +88,7 @@ export interface CreatePatchRequest {
   gelCode?: string | null;
   kindOverride?: string | null;
   stageHidden?: boolean;
+  infrastructure?: boolean;
 }
 
 export interface UpdatePatchRequest {
@@ -101,6 +107,7 @@ export interface UpdatePatchRequest {
   gelCode?: string | null;
   kindOverride?: string | null;
   stageHidden?: boolean;
+  infrastructure?: boolean;
 }
 
 export interface PatchGroup {

@@ -70,10 +70,14 @@ const FIXTURES = [
   makeFixture('b', [], { name: 'SL Wash 2' }),
   // A multi-head fixture, so a row can be opened by → — the tree keys the cell arrows must not take.
   makePixelBar('c', 2, [], { name: 'Pixel Bar' }),
+  // Infrastructure: the raw list carries it and the visible one does not, so the list must read
+  // the visible one to leave it out.
+  makeFixture('hazer-power', [sliderProp('dimmer', 'dimmer', chan(40))], { name: 'Hazer power', infrastructure: true }),
 ]
 vi.mock('../../store/fixtures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../store/fixtures')>()),
   useFixtureListQuery: () => ({ data: FIXTURES, isLoading: false }),
+  useVisibleFixtureListQuery: () => ({ data: FIXTURES.filter((f) => !f.infrastructure), isLoading: false }),
 }))
 vi.mock('../../store/groups', () => ({ useGroupListQuery: () => ({ data: [], isLoading: false }) }))
 vi.mock('./useLitFixtureKeys', () => ({ useLitFixtureKeys: () => new Set<string>() }))
@@ -199,6 +203,13 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('FixturesListContainer on the plain list routes', () => {
+  it('lists no infrastructure fixture', () => {
+    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    const keys = (table.rows ?? []).flatMap((row) => ('fixture' in row ? [row.fixture.key] : []))
+    expect(keys).toContain('a')
+    expect(keys).not.toContain('hazer-power')
+  })
+
   it('hands the table a cell selection, the way the programmer sheet always was', () => {
     render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
     expect(table.cellSelection).toBeDefined()

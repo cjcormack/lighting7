@@ -13,14 +13,18 @@ import type { Fixture } from '@/store/fixtures'
 
 let groups: GroupSummary[] = []
 let fixtures: Fixture[] = []
-let patches: { id: number; key: string; displayName: string; stageHidden: boolean; groups: { id: number; name: string }[] }[] = []
+let patches: { id: number; key: string; displayName: string; stageHidden: boolean; infrastructure?: boolean; groups: { id: number; name: string }[] }[] = []
 
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: groups }) }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: fixtures }),
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
-vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: patches }) }))
+vi.mock('@/store/patches', () => ({
+  usePatchListQuery: () => ({ data: patches }),
+  // The real hook's rule, over the test's own list — the Rig tab offers no infrastructure.
+  useVisiblePatchListQuery: () => ({ data: patches.filter((p) => !p.infrastructure) }),
+}))
 
 import { RigPalette } from './RigPalette'
 
@@ -61,6 +65,25 @@ describe('the Rig tab', () => {
     draw(new Set(['group:Front wash']))
     expect(screen.getAllByText('on rig')).toHaveLength(1)
     expect(screen.getByText(/^2 not on the rig/)).toBeInTheDocument()
+  })
+
+  it('offers no infrastructure patch at all', () => {
+    patches = [
+      { id: 11, key: 'bar-1', displayName: 'Bar L', stageHidden: false, groups: [] },
+      { id: 13, key: 'hazer-power', displayName: 'Hazer power', stageHidden: false, infrastructure: true, groups: [] },
+    ]
+    draw()
+    expect(rowNames()).toEqual(['Front wash', 'Bar L'])
+    expect(screen.queryByText('Hazer power')).not.toBeInTheDocument()
+  })
+
+  it('keeps a group placeable when its only patched member is infrastructure', () => {
+    // A group is explicit and still drives its members, so it is placed from the whole patch's ids
+    // even though the member itself is never offered as a row.
+    patches = [{ id: 13, key: 'hazer-power', displayName: 'Hazer power', stageHidden: false, infrastructure: true, groups: [{ id: 1, name: 'Front wash' }] }]
+    draw()
+    expect(screen.queryByText(/no patched member/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Hazer power')).not.toBeInTheDocument()
   })
 
   it('dims a stageHidden patch rather than hiding it', () => {

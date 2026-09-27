@@ -58,6 +58,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
   const [stageHidden, setStageHidden] = useState(patch.stageHidden)
+  const [infrastructure, setInfrastructure] = useState(patch.infrastructure ?? false)
 
   const [updatePatch, { isLoading: isUpdating }] = useUpdatePatchMutation()
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
@@ -98,7 +99,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode ||
     kindOverride !== patch.kindOverride ||
-    stageHidden !== patch.stageHidden
+    stageHidden !== patch.stageHidden ||
+    infrastructure !== (patch.infrastructure ?? false)
 
   const handleSave = async () => {
     const body: Record<string, unknown> = {}
@@ -115,6 +117,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
     if (stageHidden !== patch.stageHidden) body.stageHidden = stageHidden
+    if (infrastructure !== (patch.infrastructure ?? false)) body.infrastructure = infrastructure
     // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
     // operator loses their edits with no indication the form still holds unsaved changes.
     try {
@@ -251,6 +254,23 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
           <p className="text-xs text-muted-foreground">
             For fixtures that aren&apos;t stage objects — a dimmer driving hard power. Still
             patched, still outputs, still runs in cues and FX.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <input
+              id="edit-infrastructure"
+              type="checkbox"
+              checked={infrastructure}
+              onChange={(e) => setInfrastructure(e.target.checked)}
+            />
+            <Label htmlFor="edit-infrastructure">Infrastructure</Label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Not a lighting fixture — a relay or a dimmer switching a hazer&apos;s power. Hidden from
+            every view but Patches and Channels (the Stage included), and never offered as a
+            target. Anything that already uses it keeps working.
           </p>
         </div>
 

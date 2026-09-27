@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { CompactFixtureCard, MultiElementCompactCard } from './CompactFixtureCard'
 import { useFixtureListQuery, type Fixture } from '../../store/fixtures'
 import type { GroupMember } from '../../api/groupsApi'
+import { useVisibleGroupMembers } from './useVisibleGroupMembers'
 
 interface GroupMembersSectionProps {
   members: GroupMember[] | undefined
@@ -11,11 +12,13 @@ interface GroupMembersSectionProps {
 }
 
 export function GroupMembersSection({
-  members,
+  members: allMembers,
   isLoading,
   onFixtureClick,
 }: GroupMembersSectionProps) {
   const { data: fixtureList } = useFixtureListQuery()
+  // An infrastructure head stays in the group (the group still drives it) but is not shown.
+  const members = useVisibleGroupMembers(allMembers)
 
   // Build a key→fixture lookup (single subscription shared across all member cards)
   const fixtureMap = useMemo(() => {

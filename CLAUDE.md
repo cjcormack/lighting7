@@ -176,6 +176,21 @@ Both use scripts as their base and allow configuring script settings per scene/c
 ### Fixtures
 DMX fixture definitions - describes what channels a fixture uses and how to control it.
 
+**Infrastructure fixtures.** A patch marked `infrastructure` (a dimmer on hard power, a relay) is
+hidden from every view but **Patches** and **Channels**, the Stage included. The raw
+`useFixtureListQuery` / `usePatchListQuery` still carry it, because a cue, group or binding that
+already names it must keep resolving — so a view that **lists or offers** fixtures reads
+`useVisibleFixtureListQuery` / `useVisiblePatchListQuery` (or `withoutInfrastructure` from
+`lib/infrastructure.ts`), and only a view that resolves a key it already holds reads the raw list.
+A new picker that reaches for the raw hook will offer the hazer's power dimmer — so ESLint refuses
+the raw `useFixtureListQuery` / `usePatchListQuery` imports outside an allowlist of key-resolving
+files in `eslint.config.js`; joining it is a claim reviewed there. (Enumerating
+`useFixtureLookup().fixtures` is not covered: it is raw for the lookups it feeds.) A picker that
+edits an existing reference keeps the one it already names, labelled, as `BindingTargetPicker`
+does; the Groups views count and list members through `useVisibleGroupMembers`. The empty busk
+rig's fallback (`effectiveRig`) drops it too, mirroring the desk's `BuskRigOrder`. Backend side:
+lighting7 `docs/fixtures-engineering.md` §"Infrastructure fixtures".
+
 ### Channels
 Raw DMX channel control per universe. Shows all 512 channels with current values.
 

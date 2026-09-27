@@ -11,7 +11,8 @@ import { FxBadge } from '../fx/FxBadge'
 import { FxSection } from '../fx/FxSection'
 import { BoundControlBadge } from '../surfaces/BoundControlBadge'
 import { categoriseProperties } from '@/hooks/useTargetProperties'
-import type { GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import type { GroupMember, GroupSummary, GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import { useVisibleGroupMembers } from './useVisibleGroupMembers'
 
 interface GroupCardProps {
   group: GroupSummary
@@ -27,6 +28,7 @@ function GroupCardInner({ group, onFixtureClick }: GroupCardProps) {
     <Card>
       <GroupCardHeader
         group={group}
+        members={groupDetail?.members}
         isEditing={isEditing}
         onToggleEdit={() => setIsEditing(!isEditing)}
       />
@@ -57,20 +59,25 @@ export const GroupCard = React.memo(GroupCardInner)
 
 function GroupCardHeader({
   group,
+  members,
   isEditing,
   onToggleEdit,
 }: {
   group: GroupSummary
+  members: GroupMember[] | undefined
   isEditing: boolean
   onToggleEdit: () => void
 }) {
+  // The count the member list below shows — infrastructure members left out of both — and the
+  // summary's own until the detail lands.
+  const count = useVisibleGroupMembers(members)?.length ?? group.memberCount
   return (
     <CardHeader className="pb-2">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <CardTitle className="text-lg truncate">{group.name}</CardTitle>
           <p className="text-xs text-muted-foreground truncate">
-            {group.memberCount} fixture{group.memberCount !== 1 ? 's' : ''}
+            {count} fixture{count !== 1 ? 's' : ''}
           </p>
         </div>
         <div className="flex items-center gap-1 shrink-0">

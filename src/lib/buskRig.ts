@@ -15,6 +15,7 @@ import type {
 } from '@/api/buskRigApi'
 import type { Fixture } from '@/store/fixtures'
 import { mintLocalKey } from './buskLayout'
+import { withoutInfrastructure } from './infrastructure'
 
 /**
  * The busk rig as a document, and every gesture that edits one — `buskLayout.ts`'s sibling, under
@@ -616,7 +617,9 @@ const FALLBACK_FIXTURES_ROW = 'Fixtures'
 /**
  * The rig the band draws: the built one, or — for an empty rig — every group then every fixture,
  * **in the order the two lists answer them**, which is the desk's own rig order for an empty rig
- * (`state/BuskRigOrder.kt`; pinned against its fixture in `buskRig.test.ts`).
+ * (`state/BuskRigOrder.kt`; pinned against its fixture in `buskRig.test.ts`). An infrastructure
+ * fixture is left out of the fixture row, as the desk leaves it out of its fallback order — so the
+ * band and *Next* / *All* agree, and neither reaches a power dimmer.
  *
  * Two rows rather than one, so the band's shape does not change the day a rig is built: a
  * `Groups` row and a `Fixtures` row, each present only when non-empty. Their tiles carry no ids
@@ -640,7 +643,7 @@ export function effectiveRig(
   }))
   if (groupTiles.length > 0) rows.push({ localKey: 'fallback:groups', name: FALLBACK_GROUPS_ROW, tiles: groupTiles })
 
-  const fixtureTiles: BuskRigTile[] = (fixtures ?? []).map((fixture) => ({
+  const fixtureTiles: BuskRigTile[] = withoutInfrastructure(fixtures ?? []).map((fixture) => ({
     localKey: `fallback:fixture:${fixture.key}`,
     kind: 'FIXTURE',
     patch: {

@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, GripVertical, Layers, LayoutGrid, Search } f
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { useGroupListQuery } from '@/store/groups'
-import { usePatchListQuery } from '@/store/patches'
+import { usePatchListQuery, useVisiblePatchListQuery } from '@/store/patches'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { BuskRigPatch } from '@/api/buskRigApi'
 import { paletteRecordKey, rigIdsFromPatches, rigPaletteId, type RigPaletteRecord } from '@/lib/buskRig'
@@ -146,14 +146,17 @@ export function RigPalette({
   onRigKeys: Set<string>
 }) {
   const { data: groups } = useGroupListQuery()
-  const { data: patches } = usePatchListQuery(projectId)
+  // Rows are the rig an operator is offered; the ids are the whole patch's, so a group whose only
+  // members are infrastructure is still placeable — a group is explicit, and still drives them.
+  const { data: patches } = useVisiblePatchListQuery(projectId)
+  const { data: allPatches } = usePatchListQuery(projectId)
   const { fixtureByKey } = useFixtureLookup()
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState<KindFilter>('all')
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
   const rows = useMemo<{ groups: PaletteRow[]; fixtures: PaletteRow[] }>(() => {
-    const ids = rigIdsFromPatches(patches)
+    const ids = rigIdsFromPatches(allPatches)
     const groupRows: PaletteRow[] = (groups ?? []).map((group) => {
       const record: RigPaletteRecord = { kind: 'group', group }
       const unplaceable = !ids.groupIdByName.has(group.name)
@@ -193,7 +196,7 @@ export function RigPalette({
       }
     })
     return { groups: groupRows, fixtures: fixtureRows }
-  }, [groups, patches, fixtureByKey])
+  }, [groups, patches, allPatches, fixtureByKey])
 
   const needle = search.trim().toLowerCase()
   const matches = (row: PaletteRow) => needle.length === 0 || row.name.toLowerCase().includes(needle)

@@ -50,7 +50,10 @@ const library: EffectLibraryEntry[] = [
 ]
 
 vi.mock('@/store/fixtureFx', () => ({ useEffectLibraryQuery: () => ({ data: library }) }))
-vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtures', () => ({
+  useFixtureListQuery: () => ({ data: [] }),
+  useVisibleFixtureListQuery: () => ({ data: [] }),
+}))
 vi.mock('@/store/speedMasters', () => ({
   // The D8 stamp: an effect authored under Colour picks up the master whose usage is `colour`.
   useSpeedMasterForCategory: () => (category: string | null) =>

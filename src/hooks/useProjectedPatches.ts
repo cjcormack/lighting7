@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { usePatchListQuery } from '../store/patches'
+import { useVisiblePatchListQuery } from '../store/patches'
 import { useRiggingListQuery } from '../store/riggings'
 import { useProjectQuery } from '../store/projects'
 import { worldPositionLighting } from '../lib/stageCoords'
@@ -55,7 +55,8 @@ export function useProjectedPatches(
   { projection = STAGE_PROJECTIONS.plan, includeKey = null }: UseProjectedPatchesOptions = {},
 ): { points: ProjectedPatch[]; extent: Extent; dims: StageDims } {
   const skip = projectId == null
-  const { data: patches } = usePatchListQuery(projectId ?? 0, { skip })
+  // Infrastructure never reaches the plot — not even as the selected patch `includeKey` keeps.
+  const { data: patches } = useVisiblePatchListQuery(projectId ?? 0, { skip })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip })
   const { data: projectDetail } = useProjectQuery(projectId ?? 0, { skip })
 

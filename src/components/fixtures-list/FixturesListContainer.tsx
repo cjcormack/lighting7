@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { labelUnlessCompact } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
 import { Lightbulb, Search } from 'lucide-react'
-import { useFixtureListQuery } from '../../store/fixtures'
+import { useVisibleFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
 import { usePersistentState } from '../../hooks/usePersistentState'
 import { stepCellSelection, useCellSelection, type CellSelection } from '../sheet/useCellSelection'
@@ -267,7 +267,7 @@ export function FixturesListContainer({
   renderFooter,
   compactControls = false,
 }: FixturesListContainerProps) {
-  const { data: maybeFixtures, isLoading: fixturesLoading } = useFixtureListQuery()
+  const { data: maybeFixtures, isLoading: fixturesLoading } = useVisibleFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
   const [searchParams, setSearchParams] = useSearchParams()
   const { projectId } = useParams()

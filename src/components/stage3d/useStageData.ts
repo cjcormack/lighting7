@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { usePatchListQuery } from '../../store/patches'
+import { useVisiblePatchListQuery } from '../../store/patches'
 import { useRiggingListQuery } from '../../store/riggings'
 import { useStageRegionListQuery } from '../../store/stageRegions'
 import { useFixtureLookup } from '../../hooks/useFixtureLookup'
@@ -27,7 +27,8 @@ export function useStageData(
   stageD: number,
   stageH: number,
 ): StageData {
-  const { data: patches } = usePatchListQuery(projectId)
+  // Infrastructure patches are not stage objects under any flag, so the scene never sees them.
+  const { data: patches } = useVisiblePatchListQuery(projectId)
   const { data: regions } = useStageRegionListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
   const { fixtureByKey, typeByKey } = useFixtureLookup()

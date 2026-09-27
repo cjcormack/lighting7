@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { useProjectQuery, useCurrentProjectQuery } from "../store/projects"
-import { useFixtureListQuery } from "../store/fixtures"
+import { useVisibleFixtureListQuery } from "../store/fixtures"
 import { usePatchListQuery } from "../store/patches"
 import { useLookListQuery } from "../store/looks"
 import { useGroupListQuery } from "../store/groups"
@@ -38,7 +38,7 @@ export default function ProjectOverview() {
   })
 
   // Fetch fixtures, groups, and universes only for the current project (they're global to active project)
-  const { data: fixtures } = useFixtureListQuery(undefined, {
+  const { data: fixtures } = useVisibleFixtureListQuery({
     skip: !project?.isCurrent,
   })
   const { data: groups } = useGroupListQuery(undefined, {
