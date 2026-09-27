@@ -245,3 +245,33 @@ be sized to the strip without waiting on DMX. A bar is several times wider than 
 dot-sized hit circle leaves the ends of a long bar unclickable. `stripGeometry`'s `count > 1` gate
 must stay in step with `FixtureAppearanceSource`'s, which decides whether an appearance carries
 `segments` at all; `Stage2DShapes.test.ts` pins them together.
+
+## Paired lanterns (extra placements)
+
+A paired dimmer is one patch drawn more than once: one circuit, an SL and an SR lantern on the same
+bar. The patch carries its other lanterns as `FixturePatch.extraPlacements` (backend contract in
+`lighting7/docs/fixtures-engineering.md` §"Extra placements (paired dimmers)"), and every stage
+surface draws each one **lit from the patch's own channels** — a lantern is the fixture in a
+second place, never a second fixture. Four rules keep that true:
+
+- **`useProjectedPatches` returns the lanterns apart from the fixtures** — `points` (one per
+  fixture, unchanged) and `extraPoints` (one per placed lantern, carrying `placement`). A surface
+  that only draws the rig (the overview panel, `MiniStage`) draws both; the editors keep reading
+  `points` for everything a gesture does. Folding the lanterns into `points` would have made every
+  drag, snap, count and bulk operation meet a fixture twice, and a drag on a lantern would move the
+  fixture's own placement to where that lantern hangs.
+- **A lantern selects its fixture and is never dragged.** On the 2D plot its press calls the
+  fixture's selection with no `buildDrag`, a marquee over it selects the fixture once, and it is an
+  alignment guide for the fixture it pairs with. In 3D it is a `FixtureModel` over the patch with the
+  placement's six geometry fields laid on (`patchAtPlacement` in `stage3d/lanterns.ts`), its own emitter slot after the
+  fixtures', and **no `onEditFocus`**, so the translate gizmo can never bind to it. Lanterns are
+  moved in the patch form's *Also hung at* section (`ExtraPlacementsFields`), which starts a new
+  one mirrored across the centre line (`lib/extraPlacements.ts`).
+- **Selection lights the pair.** Selection is by patch key, so selecting a fixture highlights every
+  lantern it has, which is the answer to "which lanterns is this circuit?".
+- **An unpositioned lantern is not drawn**, on either view: the 3D `worldPositionFor` reads a null
+  coordinate as 0, and a lantern at the origin would be a claim about the rig.
+
+What is left for later: dragging a lantern on the plot (the bulk route already takes
+`extraPlacements`, so it is a client change), and a lantern of a different type or gel from its
+fixture (additive on the backend if a venue ever needs it).

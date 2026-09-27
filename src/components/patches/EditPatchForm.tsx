@@ -10,9 +10,11 @@ import { useFixtureTypeListQuery } from '@/store/fixtures'
 import { KindOverrideField } from './KindOverrideField'
 import { GroupComboInput } from './GroupComboInput'
 import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacementFields'
+import { ExtraPlacementsFields } from './ExtraPlacementsFields'
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
-import type { FixturePatch } from '@/api/patchApi'
+import type { FixturePatch, PatchPlacementInput } from '@/api/patchApi'
+import { placementListsEqual, toPlacementInput } from '@/lib/extraPlacements'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 
 export interface EditPatchFormHandle {
@@ -59,6 +61,12 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
   const [stageHidden, setStageHidden] = useState(patch.stageHidden)
   const [infrastructure, setInfrastructure] = useState(patch.infrastructure ?? false)
+  // A paired dimmer's other lanterns, edited as one list and sent whole when it changed.
+  const [storedPlacements] = useState<PatchPlacementInput[]>(() =>
+    (patch.extraPlacements ?? []).map(toPlacementInput),
+  )
+  const [extraPlacements, setExtraPlacements] = useState<PatchPlacementInput[]>(storedPlacements)
+  const extraPlacementsChanged = !placementListsEqual(extraPlacements, storedPlacements)
 
   const [updatePatch, { isLoading: isUpdating }] = useUpdatePatchMutation()
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
@@ -100,7 +108,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     gelCode !== patch.gelCode ||
     kindOverride !== patch.kindOverride ||
     stageHidden !== patch.stageHidden ||
-    infrastructure !== (patch.infrastructure ?? false)
+    infrastructure !== (patch.infrastructure ?? false) ||
+    extraPlacementsChanged
 
   const handleSave = async () => {
     const body: Record<string, unknown> = {}
@@ -118,6 +127,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
     if (stageHidden !== patch.stageHidden) body.stageHidden = stageHidden
     if (infrastructure !== (patch.infrastructure ?? false)) body.infrastructure = infrastructure
+    if (extraPlacementsChanged) body.extraPlacements = extraPlacements
     // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
     // operator loses their edits with no indication the form still holds unsaved changes.
     try {
@@ -211,6 +221,13 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
           projectId={projectId}
           value={placement}
           onChange={setPlacement}
+        />
+
+        <ExtraPlacementsFields
+          projectId={projectId}
+          primary={placement}
+          value={extraPlacements}
+          onChange={setExtraPlacements}
         />
 
         {(acceptsBeamAngle || acceptsGel) && (

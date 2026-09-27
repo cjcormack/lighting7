@@ -17,6 +17,7 @@ import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
+import { lanternsFor } from './lanterns'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import {
   fromThree,
@@ -212,6 +213,11 @@ export function Stage3D({
     [selection, safeRiggings],
   )
 
+  // A paired dimmer's other lanterns: the same patch with the placement's geometry laid over its
+  // own, so `FixtureModel` composes it through the placement's rigging and lights it from the
+  // patch's channels. Memoised so each lantern's patch object is stable across renders.
+  const lanterns = useMemo(() => lanternsFor(visiblePatches), [visiblePatches])
+
   const fixtureNodes = visiblePatches.map((patch, slot) => {
     const fixture = fixtureByKey.get(patch.key)
     const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
@@ -232,6 +238,29 @@ export function Stage3D({
       />
     )
   })
+  // Emitter slots follow the fixtures', so every lantern has a beam of its own. No `onEditFocus`:
+  // the translate gizmo binds to the fixture's own placement only — a lantern is moved in the
+  // patch form, and a gizmo on one would write its position to the fixture's.
+  const lanternNodes = lanterns.map(({ id, source, patch }, i) => {
+    const fixture = fixtureByKey.get(patch.key)
+    const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
+    return (
+      <FixtureModel
+        key={id}
+        patch={patch}
+        fixture={fixture}
+        fixtureType={fixtureType}
+        riggings={safeRiggings}
+        regionGeometry={regionGeometry}
+        slot={visiblePatches.length + i}
+        selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
+        editMode={interactable}
+        showLabel={view.labels}
+        onClick={interactable ? () => handleFixtureClick(source) : undefined}
+      />
+    )
+  })
+  const allFixtureNodes = lanternNodes.length === 0 ? fixtureNodes : [...fixtureNodes, ...lanternNodes]
 
   return (
     <div
@@ -283,13 +312,13 @@ export function Stage3D({
         )}
         {view.fixtures && (view.beamCones ? (
           <StageEmitters
-            fixtureCount={visiblePatches.length}
+            fixtureCount={visiblePatches.length + lanterns.length}
             regionGeometry={regionGeometry}
             stage={stageDims}
           >
-            {fixtureNodes}
+            {allFixtureNodes}
           </StageEmitters>
-        ) : fixtureNodes)}
+        ) : allFixtureNodes)}
         {canEdit && selectedRegion && onRegionPositionChange && (
           <RegionEditHandles
             region={selectedRegion}
