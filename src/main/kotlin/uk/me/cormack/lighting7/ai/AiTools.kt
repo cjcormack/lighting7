@@ -674,32 +674,9 @@ class AiTools(private val state: State) {
 
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
-        val layersArray = input["layers"]?.jsonArray
         val adHocArray = input["adHocEffects"]?.jsonArray
 
-        val layers = layersArray?.mapIndexed { index, layer ->
-            val obj = layer.jsonObject
-            CueLayerDto(
-                lookId = obj["lookId"]!!.jsonPrimitive.int,
-                targets = obj["targets"]!!.jsonArray.map { t ->
-                    val tObj = t.jsonObject
-                    CueTargetDto(
-                        type = tObj["type"]!!.jsonPrimitive.content,
-                        key = tObj["key"]!!.jsonPrimitive.content,
-                    )
-                },
-                // Declaration order is the stack order unless the caller says otherwise, so a tool
-                // call that lists layers bottom-to-top composes the way it reads.
-                sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
-                propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
-                // Unrecognised blends are rejected by `createCueChildren` below rather than here,
-                // so this surface and the cue routes cannot disagree about what a valid blend is.
-                blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
-                amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
-                speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
-                rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
-            )
-        } ?: emptyList()
+        val layers = parseCueLayers(input["layers"]?.jsonArray)
         val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
 
         val project = state.projectManager.currentProject
@@ -732,6 +709,37 @@ class AiTools(private val state: State) {
             }.toString()
         )
     }
+
+    /**
+     * A tool call's cue `layers` array, in the [cueLayerSchema] shape. Shared by `create_cue` and
+     * the MCP setup surface's `build_cue_stack` (`SetupTools`), so the two cannot disagree about
+     * what a layer says. Throws on a missing field or an unknown speed master; the dispatchers
+     * turn that into a failed tool result.
+     */
+    internal fun parseCueLayers(layersArray: JsonArray?): List<CueLayerDto> =
+        layersArray?.mapIndexed { index, layer ->
+            val obj = layer.jsonObject
+            CueLayerDto(
+                lookId = obj["lookId"]!!.jsonPrimitive.int,
+                targets = obj["targets"]!!.jsonArray.map { t ->
+                    val tObj = t.jsonObject
+                    CueTargetDto(
+                        type = tObj["type"]!!.jsonPrimitive.content,
+                        key = tObj["key"]!!.jsonPrimitive.content,
+                    )
+                },
+                // Declaration order is the stack order unless the caller says otherwise, so a tool
+                // call that lists layers bottom-to-top composes the way it reads.
+                sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
+                propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
+                // Unrecognised blends are rejected by `createCueChildren` rather than here, so this
+                // surface and the cue routes cannot disagree about what a valid blend is.
+                blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
+                amount = obj["amount"]?.jsonPrimitive?.doubleOrNull ?: 1.0,
+                speedMasterUuid = checkedSpeedMasterUuid(obj["speedMasterUuid"]),
+                rateSpeedMasterUuid = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"]),
+            )
+        } ?: emptyList()
 
     private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")

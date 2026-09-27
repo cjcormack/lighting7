@@ -281,7 +281,7 @@ private val adHocEffectSchema = buildJsonObject {
     })
 }
 
-private val cueLayerSchema = buildJsonObject {
+internal val cueLayerSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
         put("lookId", buildJsonObject { put("type", "integer") })

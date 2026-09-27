@@ -513,7 +513,7 @@ private fun DaoProject.toDetailDto() = ProjectDetailDto(
  * if every field is acceptable. Width/depth/height are in metres; values must be finite
  * and fit a sane physical range.
  */
-private fun validateStageDimensions(width: Double?, depth: Double?, height: Double?): String? {
+internal fun validateStageDimensions(width: Double?, depth: Double?, height: Double?): String? {
     checkMetres("stageWidthM", width, 0.1, 500.0)?.let { return it }
     checkMetres("stageDepthM", depth, 0.1, 500.0)?.let { return it }
     checkMetres("stageHeightM", height, 0.1, 200.0)?.let { return it }
