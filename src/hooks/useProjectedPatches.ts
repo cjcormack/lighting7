@@ -2,7 +2,9 @@ import { useMemo } from 'react'
 import { useVisiblePatchListQuery } from '../store/patches'
 import { useRiggingListQuery } from '../store/riggings'
 import { useProjectQuery } from '../store/projects'
+import { useFixtureTypeListQuery, type FixtureTypeInfo } from '../store/fixtures'
 import { worldPositionLighting } from '../lib/stageCoords'
+import { bodyEndsLighting, drawnLengthM } from '../lib/fixtureLength'
 import {
   STAGE_PROJECTIONS,
   project,
@@ -28,6 +30,12 @@ export interface ProjectedPatch {
   /** Position within the stage envelope, for DOM-positioned views. */
   leftPct: number
   topPct: number
+  /**
+   * For a fixture whose length is set per install (a lightstrip), its two ends projected into the
+   * same plane — what a surface drawn to scale draws it as, so a run round the stage edge reads as
+   * the line it is rather than a dot at its middle. Absent for every other type.
+   */
+  span?: readonly [ScreenPoint, ScreenPoint]
 }
 
 /**
@@ -82,6 +90,7 @@ export function useProjectedPatches(
   const { data: patches } = useVisiblePatchListQuery(projectId ?? 0, { skip })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip })
   const { data: projectDetail } = useProjectQuery(projectId ?? 0, { skip })
+  const { data: fixtureTypes } = useFixtureTypeListQuery()
 
   const dims = useMemo<StageDims>(
     () => ({
@@ -94,16 +103,38 @@ export function useProjectedPatches(
 
   const extent = useMemo(() => projectionExtent(projection, dims), [projection, dims])
 
+  const typeByKey = useMemo(() => {
+    const map = new Map<string, FixtureTypeInfo>()
+    for (const type of fixtureTypes ?? []) map.set(type.typeKey, type)
+    return map
+  }, [fixtureTypes])
+
   const { points, extraPoints } = useMemo(() => {
     const rigs = riggings ?? []
     const out: ProjectedPatch[] = []
     const extras: ProjectedPlacement[] = []
+    // The projected ends of a variable-length body, or undefined for any other type (and for a
+    // type list that has not arrived yet — the fixture draws as a dot until it has).
+    const spanOf = (
+      world: LightingPoint,
+      patch: FixturePatch,
+      at: Pick<PatchPlacement, 'lengthM' | 'baseYawDeg' | 'basePitchDeg'>,
+      placement?: PatchPlacement,
+    ): ProjectedPatch['span'] => {
+      const type = typeByKey.get(patch.fixtureTypeKey)
+      if (!type?.acceptsLength) return undefined
+      const length = drawnLengthM(type, patch, placement)
+      if (length == null || !(length > 0)) return undefined
+      const [a, b] = bodyEndsLighting(world, length, at.baseYawDeg, at.basePitchDeg)
+      return [project(a, projection), project(b, projection)]
+    }
     for (const patch of patches ?? []) {
       if (patch.stageHidden && patch.key !== includeKey) continue
       const world = worldPositionLighting(patch, rigs)
       if (world) {
         const screen = project(world, projection)
-        out.push({ patch, world, screen, ...toPercent(screen, extent) })
+        const span = spanOf(world, patch, patch)
+        out.push({ patch, world, screen, ...toPercent(screen, extent), ...(span && { span }) })
       }
       // A lantern is drawn wherever it has a position, whether or not the fixture's own
       // placement does — the pair is one circuit, not a primary and its shadow.
@@ -111,11 +142,12 @@ export function useProjectedPatches(
         const at = worldPositionLighting(placement, rigs)
         if (!at) continue
         const screen = project(at, projection)
-        extras.push({ patch, placement, world: at, screen, ...toPercent(screen, extent) })
+        const span = spanOf(at, patch, placement, placement)
+        extras.push({ patch, placement, world: at, screen, ...toPercent(screen, extent), ...(span && { span }) })
       }
     }
     return { points: out, extraPoints: extras }
-  }, [patches, riggings, projection, extent, includeKey])
+  }, [patches, riggings, projection, extent, includeKey, typeByKey])
 
   return { points, extraPoints, extent, dims }
 }

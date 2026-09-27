@@ -33,6 +33,11 @@ export interface FixturePatch {
   /** Per-patch FixtureKind override for the 3D view — null means inherit
    *  the kind declared on the fixture type. */
   kindOverride: string | null;
+  /** The unit's installed length in metres, for a type whose length is set per install
+   *  (`FixtureTypeInfo.acceptsLength` — a lightstrip). Null or absent draws the type's default;
+   *  read it through `lib/fixtureLength.ts`, which also ignores it on a fixed-length type. Optional
+   *  because a desk that predates the field omits it. */
+  lengthM?: number | null;
   /** Omit this patch from the Stage view (2D map and 3D scene). For real DMX
    *  that isn't a stage object — a dimmer driving hard power. Presentational
    *  only: the fixture still patches, outputs, and runs in cues and FX. */
@@ -66,6 +71,9 @@ export interface PatchPlacement {
   stageZ: number | null;
   baseYawDeg: number | null;
   basePitchDeg: number | null;
+  /** This segment's own length, for a variable-length type laid in segments (a lightstrip ring,
+   *  one side per placement). Null or absent takes the patch's `lengthM`. */
+  lengthM?: number | null;
 }
 
 /**
@@ -79,6 +87,10 @@ export type PatchPlacementInput = Omit<PatchPlacement, 'uuid'> & { uuid?: string
 export const MAX_EXTRA_PLACEMENTS = 16;
 /** Mirrors `MAX_PLACEMENT_LABEL_LENGTH` there. */
 export const MAX_PLACEMENT_LABEL_LENGTH = 40;
+/** Mirror `MIN_FIXTURE_LENGTH_M` / `MAX_FIXTURE_LENGTH_M` in lighting7's `models/fixturePatches.kt`:
+ *  the bounds on a patch's (or a placement's) `lengthM`. */
+export const MIN_FIXTURE_LENGTH_M = 0.01;
+export const MAX_FIXTURE_LENGTH_M = 100;
 
 /**
  * Default Art-Net transmit interval, mirroring
@@ -123,6 +135,8 @@ export interface CreatePatchRequest {
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;
+  /** Only for a type that takes one (`acceptsLength`); the desk refuses it otherwise. */
+  lengthM?: number | null;
   stageHidden?: boolean;
   infrastructure?: boolean;
 }
@@ -142,6 +156,8 @@ export interface UpdatePatchRequest {
   beamAngleDeg?: number | null;
   gelCode?: string | null;
   kindOverride?: string | null;
+  /** Only for a type that takes one (`acceptsLength`); null returns to the type's default. */
+  lengthM?: number | null;
   stageHidden?: boolean;
   infrastructure?: boolean;
   /** The whole list, replacing the stored one; null or `[]` removes every extra placement. */

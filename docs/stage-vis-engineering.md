@@ -275,3 +275,29 @@ second place, never a second fixture. Four rules keep that true:
 What is left for later: dragging a lantern on the plot (the bulk route already takes
 `extraPlacements`, so it is a client change), and a lantern of a different type or gel from its
 fixture (additive on the backend if a venue ever needs it).
+
+## Variable-length fixtures
+
+A lightstrip's length is a fact of the install, not of the model: the type says so with
+`FixtureTypeInfo.acceptsLength`, and a patch then carries its own `lengthM` (backend contract in
+`lighting7/docs/fixtures-engineering.md` §"Variable-length fixtures"). A run laid round several
+sides — a ring round the stage edge on one controller — is one patch whose **extra placements are
+the other sides**, each with a `lengthM` of its own (null takes the patch's). Everything above about
+paired lanterns holds for a side: lit from the patch, selects the patch, never dragged.
+
+- **`lib/fixtureLength.ts` is the one reading of it.** `drawnLengthM` answers side → patch → type
+  default for a type that takes a length, and the type's own length for every other type — so a
+  stored length that reached a fixed-length patch some other way (an import is written as stored)
+  is never drawn. The editors ask `acceptsLength` whether to offer the field at all.
+- **3D**: `FixtureModel` sizes its body from `drawnLengthM`, and a side's length reaches it because
+  `patchAtPlacement` lays the placement's `lengthM` over the patch's.
+- **2D**: `useProjectedPatches` gives such a fixture (and each side) a `span` — its two ends,
+  projected — and `FixtureShape` draws a bar between them, to scale, with a stroke-shaped hit
+  target along it. A span that projects to a point (a run seen end-on in an elevation) falls back to
+  the dot, and a pixel bar keeps its segmented strip. The long axis is `longAxisLighting`, which
+  mirrors `FixtureModel`'s body rotation exactly — a YXZ Euler of `(basePitchDeg, baseYawDeg, 0)`
+  in world space, so the rigging's pose places the body but does not turn it, and pitch never moves
+  the long axis. Change one, change both.
+- **The form**: *Length* sits under the fixture's placement, and the extra-placements section reads
+  *Other sides of this run*, each side with its own *Length*. An out-of-range value is kept and
+  flagged, never clamped mid-keystroke, and the form will not save it.

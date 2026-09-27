@@ -3,6 +3,8 @@ import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FixturePatch, PatchPlacement } from '../api/patchApi'
 import type { RiggingDto } from '../api/riggingApi'
+import type { FixtureTypeInfo } from '../store/fixtures'
+import { STAGE_PROJECTIONS, project } from '../lib/stageProjection'
 
 const rig = {
   uuid: 'rig-lx1',
@@ -67,6 +69,8 @@ vi.mock('../store/patches', () => ({
 }))
 vi.mock('../store/riggings', () => ({ useRiggingListQuery: () => ({ data: [rig] }) }))
 vi.mock('../store/projects', () => ({ useProjectQuery: () => ({ data: undefined }) }))
+let fixtureTypes: Partial<FixtureTypeInfo>[] | undefined = []
+vi.mock('../store/fixtures', () => ({ useFixtureTypeListQuery: () => ({ data: fixtureTypes }) }))
 
 import { useProjectedPatches } from './useProjectedPatches'
 
@@ -136,5 +140,64 @@ describe('useProjectedPatches — paired lanterns', () => {
     patches = [patch({ key: 'old', stageX: 0, stageY: 0 })]
     const { result } = renderHook(() => useProjectedPatches(1))
     expect(result.current.extraPoints).toEqual([])
+  })
+})
+
+describe('useProjectedPatches — variable-length spans', () => {
+  const strip = { typeKey: 'lightstrip', acceptsLength: true, lengthM: 1 }
+  const dimmer = { typeKey: 'generic-dimmer', acceptsLength: false, lengthM: 0.25 }
+  const plan = (x: number, y: number, z = 0) => project({ x, y, z }, STAGE_PROJECTIONS.plan)
+  const close = (actual: { h: number; v: number }, expected: { h: number; v: number }) => {
+    expect(actual.h).toBeCloseTo(expected.h, 9)
+    expect(actual.v).toBeCloseTo(expected.v, 9)
+  }
+
+  it("spans a lightstrip ring's sides, each at its own length and yaw", () => {
+    fixtureTypes = [strip, dimmer]
+    patches = [
+      patch({
+        key: 'ring',
+        fixtureTypeKey: 'lightstrip',
+        stageX: 0,
+        stageY: 0,
+        lengthM: 10,
+        extraPlacements: [
+          // Stage left, running upstage: yaw 90 turns the long axis onto +Y.
+          placement({ uuid: 'sl', label: 'SL', stageX: -5, stageY: 4, baseYawDeg: 90, lengthM: 6 }),
+          // No length of its own: takes the fixture's.
+          placement({ uuid: 'us', label: 'US', stageX: 0, stageY: 8, baseYawDeg: 180 }),
+        ],
+      }),
+    ]
+    const { result } = renderHook(() => useProjectedPatches(1))
+
+    const [a, b] = result.current.points[0].span!
+    close(a, plan(-5, 0))
+    close(b, plan(5, 0))
+    const [sl, us] = result.current.extraPoints
+    close(sl.span![0], plan(-5, 1))
+    close(sl.span![1], plan(-5, 7))
+    // Yaw 180 reverses the ends; the span is still the fixture's 10 m.
+    close(us.span![0], plan(5, 8))
+    close(us.span![1], plan(-5, 8))
+  })
+
+  it("draws a strip with no length at its type's default", () => {
+    fixtureTypes = [strip]
+    patches = [patch({ key: 'ring', fixtureTypeKey: 'lightstrip', stageX: 2, stageY: 0 })]
+    const { result } = renderHook(() => useProjectedPatches(1))
+    const [a, b] = result.current.points[0].span!
+    close(a, plan(1.5, 0))
+    close(b, plan(2.5, 0))
+  })
+
+  it('never spans a fixed-length type, whatever its patch holds, nor anything before the types load', () => {
+    fixtureTypes = [strip, dimmer]
+    patches = [patch({ key: 'par', stageX: 0, stageY: 0, lengthM: 4 })]
+    expect(renderHook(() => useProjectedPatches(1)).result.current.points[0].span).toBeUndefined()
+
+    fixtureTypes = undefined
+    patches = [patch({ key: 'ring', fixtureTypeKey: 'lightstrip', stageX: 0, stageY: 0, lengthM: 4 })]
+    expect(renderHook(() => useProjectedPatches(1)).result.current.points[0].span).toBeUndefined()
   })
 })

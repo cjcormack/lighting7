@@ -82,6 +82,17 @@ describe('placementListsEqual', () => {
   })
 })
 
+describe("a variable-length run's sides", () => {
+  it('carry their own length, and absent reads as none', () => {
+    expect(toPlacementInput({ ...stored, lengthM: 6 }).lengthM).toBe(6)
+    expect(toPlacementInput(stored).lengthM).toBeNull()
+    const a = toPlacementInput(stored)
+    expect(placementListsEqual([a], [{ ...a, lengthM: undefined }])).toBe(true)
+    expect(placementListsEqual([a], [{ ...a, lengthM: 6 }])).toBe(false)
+    expect(placementListsEqual([{ ...a, lengthM: 6 }], [{ ...a, lengthM: 6.5 }])).toBe(false)
+  })
+})
+
 describe('normalisedLabel', () => {
   it('trims and reads blank as none', () => {
     expect(normalisedLabel(' SR ')).toBe('SR')

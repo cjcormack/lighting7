@@ -25,6 +25,7 @@ export function mirroredPlacement(primary: PlacementGeometry): PatchPlacementInp
     stageZ: primary.stageZ,
     baseYawDeg: negate(primary.baseYawDeg),
     basePitchDeg: primary.basePitchDeg,
+    // No `lengthM`: a new side of a variable-length run takes the fixture's own until given one.
   }
 }
 
@@ -45,6 +46,7 @@ export function toPlacementInput(p: PatchPlacement): PatchPlacementInput {
     stageZ: p.stageZ,
     baseYawDeg: p.baseYawDeg,
     basePitchDeg: p.basePitchDeg,
+    lengthM: p.lengthM ?? null,
   }
 }
 
@@ -74,7 +76,9 @@ export function placementListsEqual(
       x.stageY === y.stageY &&
       x.stageZ === y.stageZ &&
       x.baseYawDeg === y.baseYawDeg &&
-      x.basePitchDeg === y.basePitchDeg
+      x.basePitchDeg === y.basePitchDeg &&
+      // Absent and null both mean "the patch's own length", as the desk stores them.
+      (x.lengthM ?? null) === (y.lengthM ?? null)
     )
   })
 }
