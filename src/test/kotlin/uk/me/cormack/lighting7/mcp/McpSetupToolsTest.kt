@@ -303,6 +303,59 @@ class McpSetupToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `place_fixtures hangs a paired dimmer's other lantern with alsoAt`() {
+        assertTrue(patchTwoDimmers().success)
+        assertTrue(call("set_stage", """{"riggings":[{"name":"LX1","z":6.5,"lengthM":10}]}""").success)
+
+        val bad = call(
+            "place_fixtures",
+            """{"placements":[{"key":"foh-1","alsoAt":[{"rigging":"LX9"},{"x":"left"},{"label":"${"x".repeat(41)}"}]}]}""",
+        )
+        assertFalse(bad.success)
+        assertEquals(3, bad.problems().size, bad.result)
+
+        val placed = call(
+            "place_fixtures",
+            """{"placements":[{"key":"foh-1","rigging":"LX1","x":-3,
+                "alsoAt":[{"label":"SR","rigging":"LX1","x":3,"pitchDeg":45},{"x":0,"y":2}]}]}""",
+        )
+        assertTrue(placed.success, placed.result)
+        val firstUuid = transaction(state.database) {
+            val foh1 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single()
+            val extras = extraPlacementsOf(foh1)
+            assertEquals(listOf("SR", null), extras.map { it.label })
+            assertEquals("LX1", extras[0].rigging?.name)
+            assertEquals(45.0, extras[0].basePitchDeg)
+            assertEquals(2.0, extras[1].stageY)
+            extras[0].uuid
+        }
+
+        val listed = call("get_patch", "{}").json()["fixtures"]!!.jsonArray
+            .map { it.jsonObject }.single { it["key"]!!.jsonPrimitive.content == "foh-1" }
+        val alsoAt = listed["alsoAt"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("SR", alsoAt[0]["label"]!!.jsonPrimitive.content)
+        assertEquals("LX1", alsoAt[0]["rigging"]!!.jsonPrimitive.content)
+
+        // A row without alsoAt leaves the list; a shorter list keeps the first lantern's identity.
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-1","gelCode":"L201"}]}""").success)
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-1","alsoAt":[{"label":"SR","x":2}]}]}""").success)
+        transaction(state.database) {
+            val extras = extraPlacementsOf(DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single())
+            assertEquals(firstUuid, extras.single().uuid)
+            assertNull(extras.single().rigging, "an entry is a whole placement")
+        }
+
+        // Removing the rigging detaches the lantern too; an empty list clears.
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-1","alsoAt":[{"rigging":"LX1","x":2}]}]}""").success)
+        val removed = call("set_stage", """{"removeRiggings":["LX1"]}""")
+        assertEquals(2, removed.json()["fixturesDetached"]!!.jsonPrimitive.int, "the fixture and its other lantern")
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-1","alsoAt":[]}]}""").success)
+        transaction(state.database) {
+            assertTrue(extraPlacementsOf(DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single()).isEmpty())
+        }
+    }
+
+    @Test
     fun `a malformed number is refused rather than read as a clear`() {
         assertTrue(call("set_stage", """{"regions":[{"name":"Main","centerX":1.5}],"riggings":[{"name":"LX1","z":6}]}""").success)
         val result = call(

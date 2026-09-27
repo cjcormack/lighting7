@@ -28,6 +28,8 @@ import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
+import uk.me.cormack.lighting7.routes.PlacementInput
+import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.createCueChildren
 import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
@@ -209,6 +211,7 @@ class SetupTools(
             val groups = DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
                 .orderBy(DaoFixtureGroups.name to SortOrder.ASC).toList()
             val keyByPatchId = patches.associate { it.id.value to it.key }
+            val placementsByPatch = extraPlacementsByPatch(patches.map { it.id })
             val membersByGroup = groups.associate { g ->
                 g.name to g.members.sortedBy { it.sortOrder }.mapNotNull { keyByPatchId[it.fixturePatch.id.value] }
             }
@@ -274,6 +277,20 @@ class SetupTools(
                             p.kindOverride?.let { put("kind", it) }
                             if (p.stageHidden) put("stageHidden", true)
                             if (p.infrastructure) put("infrastructure", true)
+                            val alsoAt = placementsByPatch[p.id.value].orEmpty()
+                            if (alsoAt.isNotEmpty()) {
+                                putJsonArray("alsoAt") {
+                                    alsoAt.forEach { pl ->
+                                        addJsonObject {
+                                            pl.label?.let { put("label", it) }
+                                            pl.readValues.getOrNull(DaoFixturePatchPlacements.rigging)?.value
+                                                ?.let { riggingNames[it] }?.let { put("rigging", it) }
+                                            putOptional("x", pl.stageX); putOptional("y", pl.stageY); putOptional("z", pl.stageZ)
+                                            putOptional("yawDeg", pl.baseYawDeg); putOptional("pitchDeg", pl.basePitchDeg)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -492,6 +509,8 @@ class SetupTools(
         val gelCode: Optional<String?>?,
         val kind: Optional<String?>?,
         val stageHidden: Boolean?,
+        /** The whole `alsoAt` list when the row carried it (empty for an explicit clear). */
+        val alsoAt: List<AlsoAt>?,
     ) {
         fun applyTo(patch: DaoFixturePatch) {
             rigging?.let { r -> patch.rigging = r.value?.let { DaoRigging.findById(it) } }
@@ -504,8 +523,35 @@ class SetupTools(
             gelCode?.let { patch.gelCode = it.value }
             kind?.let { patch.kindOverride = it.value }
             stageHidden?.let { patch.stageHidden = it }
+            alsoAt?.let { list ->
+                // Positional identity: the n-th lantern listed keeps the n-th placement's uuid, so
+                // re-placing a pair edits it rather than deleting and re-adding it (which a cloud
+                // sync would show as two changes). The routes key by uuid; this tool has none.
+                val existing = extraPlacementsOf(patch)
+                val riggings = list.mapNotNull { it.riggingId }.distinct()
+                    .mapNotNull { DaoRigging.findById(it) }.associateBy { it.uuid.toString() }
+                val byId = riggings.values.associateBy { it.id.value }
+                val inputs = list.mapIndexed { i, a ->
+                    PlacementInput(
+                        uuid = existing.getOrNull(i)?.uuid,
+                        label = a.label,
+                        riggingUuid = a.riggingId?.let { byId[it]?.uuid?.toString() },
+                        stageX = a.x, stageY = a.y, stageZ = a.z,
+                        baseYawDeg = a.yawDeg, basePitchDeg = a.pitchDeg,
+                    )
+                }
+                applyExtraPlacements(patch, inputs, riggings)
+            }
         }
     }
+
+    /** One `alsoAt` entry: a whole placement, every field plain (absent means none). */
+    private class AlsoAt(
+        val label: String?,
+        val riggingId: Int?,
+        val x: Double?, val y: Double?, val z: Double?,
+        val yawDeg: Double?, val pitchDeg: Double?,
+    )
 
     /** A present value, which may itself be null (an explicit clear). */
     private class Optional<T>(val value: T)
@@ -556,7 +602,54 @@ class SetupTools(
             }
         }
         val hidden = optionalBoolean(row, "stageHidden", problems)
-        return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, hidden)
+        val alsoAt = parseAlsoAt(row["alsoAt"], riggingIds, problems)
+        return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, hidden, alsoAt)
+    }
+
+    /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
+    private fun parseAlsoAt(element: JsonElement?, riggingIds: Map<String, Int>, problems: MutableList<String>): List<AlsoAt>? {
+        if (element == null) return null
+        if (element is JsonNull) return emptyList()
+        val array = element as? JsonArray ?: run { problems += "alsoAt must be an array"; return null }
+        if (array.size > MAX_EXTRA_PLACEMENTS) {
+            problems += "alsoAt has ${array.size} entries (at most $MAX_EXTRA_PLACEMENTS)"
+            return null
+        }
+        val out = mutableListOf<AlsoAt>()
+        array.forEachIndexed { i, entryElement ->
+            val entry = entryElement as? JsonObject ?: run { problems += "alsoAt[$i] is not an object"; return@forEachIndexed }
+            fun number(name: String): Double? {
+                val e = entry[name] ?: return null
+                if (e is JsonNull) return null
+                return (e as? JsonPrimitive)?.doubleOrNull ?: run { problems += "alsoAt[$i].$name must be a number"; null }
+            }
+            fun text(name: String): String? {
+                val e = entry[name] ?: return null
+                if (e is JsonNull) return null
+                val p = e as? JsonPrimitive
+                if (p == null || !p.isString) {
+                    problems += "alsoAt[$i].$name must be a string"
+                    return null
+                }
+                return p.content.trim().takeIf { it.isNotEmpty() }
+            }
+            val label = text("label")
+            if (label != null && label.length > MAX_PLACEMENT_LABEL_LENGTH) {
+                problems += "alsoAt[$i].label is longer than $MAX_PLACEMENT_LABEL_LENGTH characters"
+            }
+            val riggingName = text("rigging")
+            val riggingId = riggingName?.let { name ->
+                riggingIds[name] ?: run {
+                    problems += "alsoAt[$i]: no rigging named '$name'" +
+                        (if (riggingIds.isEmpty()) " (create riggings with set_stage first)" else " (known: ${riggingIds.keys.joinToString()})")
+                    null
+                }
+            }
+            val a = AlsoAt(label, riggingId, number("x"), number("y"), number("z"), number("yawDeg"), number("pitchDeg"))
+            validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null)?.let { problems += "alsoAt[$i]: $it" }
+            out += a
+        }
+        return out
     }
 
     private fun placeFixtures(input: JsonObject): ToolExecutionResult {
@@ -714,6 +807,7 @@ class SetupTools(
                     // As the rigging route's delete: detach first, since Exposed does not enforce
                     // the FK's SET NULL.
                     DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }.forEach { it.rigging = null; detached++ }
+                    detached += detachPlacementsFromRigging(rigging)
                     rigging.delete()
                 }
             }

@@ -30,9 +30,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     get<ProjectPatchesResource> { resource ->
         withProject(state, resource.projectId) { project ->
             val patches = transaction(state.database) {
-                DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                val rows = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                     .orderBy(DaoFixturePatches.sortOrder to SortOrder.ASC)
-                    .map { it.toDto() }
+                    .toList()
+                val placementsByPatch = extraPlacementsByPatch(rows.map { it.id })
+                rows.map { it.toDto(placementsByPatch[it.id.value].orEmpty()) }
             }
             call.respond(patches)
         }
@@ -229,6 +231,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
             } else null
 
+            val placementInputs: List<PlacementInput>? = if ("extraPlacements" in body) {
+                parseExtraPlacements(body["extraPlacements"]).getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid extraPlacements"))
+                    return@withProject
+                }
+            } else null
+
             var sweptCellTiles = 0
             var infrastructureFlipped = false
             val result = transaction(state.database) {
@@ -237,6 +246,14 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
                 if (patch.project.id != project.id) {
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
+                }
+
+                // Resolved before the first write below, so an unknown rigging refuses the whole
+                // PUT rather than committing the fields above it (a normal return commits).
+                val placementRiggings = placementInputs?.let { inputs ->
+                    resolvePlacementRiggings(project, inputs).getOrElse {
+                        return@transaction Pair<FixturePatchDto?, String?>(null, it.message)
+                    }
                 }
 
                 body["displayName"].nullableString()?.let { patch.displayName = it }
@@ -288,6 +305,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     val next = body["infrastructure"].nullableBoolean() ?: false
                     if (next != patch.infrastructure) infrastructureFlipped = true
                     patch.infrastructure = next
+                }
+                if (placementInputs != null && placementRiggings != null) {
+                    applyExtraPlacements(patch, placementInputs, placementRiggings)
                 }
 
                 body["removeFromGroupId"].nullableInt()?.let { groupId ->
@@ -377,6 +397,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             // single PUT: a bad request should 400 rather than roll back a write.
             val prepared = mutableListOf<Pair<Int, JsonObject>>()
             val failures = mutableListOf<BulkPlacementFailure>()
+            val placementInputsById = mutableMapOf<Int, List<PlacementInput>>()
             for (entry in request.updates) {
                 val patchId = entry["patchId"].nullableInt()
                 if (patchId == null) {
@@ -412,6 +433,19 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     failures.add(BulkPlacementFailure(patchId, stageError))
                     continue
                 }
+                if ("extraPlacements" in entry) {
+                    val parsed = parseExtraPlacements(entry["extraPlacements"])
+                    val placementError = parsed.exceptionOrNull()?.message
+                    if (placementError != null) {
+                        if (request.atomic) {
+                            call.respond(HttpStatusCode.BadRequest, ErrorResponse("patch $patchId: $placementError"))
+                            return@withProject
+                        }
+                        failures.add(BulkPlacementFailure(patchId, placementError))
+                        continue
+                    }
+                    placementInputsById[patchId] = parsed.getOrThrow()
+                }
                 prepared.add(patchId to entry)
             }
 
@@ -423,10 +457,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }.associateBy { it.id.value }
 
                 // Resolve each DISTINCT rigging once; resolveRiggingForProject does a
-                // find() per call, and a 40-fixture hang would repeat it 40 times.
-                val riggingUuids = prepared.mapNotNull { (_, e) ->
-                    if ("riggingUuid" in e) e["riggingUuid"].nullableString() else null
-                }.distinct()
+                // find() per call, and a 40-fixture hang would repeat it 40 times. That
+                // includes the riggings a paired dimmer's other lanterns hang on.
+                val riggingUuids = (
+                    prepared.mapNotNull { (_, e) ->
+                        if ("riggingUuid" in e) e["riggingUuid"].nullableString() else null
+                    } + placementInputsById.values.flatten().mapNotNull { it.riggingUuid }
+                ).distinct()
                 val riggingByUuid = riggingUuids.associateWith { resolveRiggingForProject(project, it) }
 
                 // SECOND validation pass, and it has to come before the FIRST mutation.
@@ -444,6 +481,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 // Validating first means an atomic abort returns with a clean entity
                 // cache, so the commit that follows writes nothing.
                 val kindOverrides = mutableMapOf<Int, String?>()
+                val placementRiggingsById = mutableMapOf<Int, Map<String, DaoRigging>>()
                 val fatal = mutableListOf<BulkPlacementFailure>()
                 for ((patchId, entry) in prepared) {
                     if (byId[patchId] == null) {
@@ -465,6 +503,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                             continue
                         }
                     }
+                    placementInputsById[patchId]?.let { inputs ->
+                        val resolved = placementRiggingsFrom(riggingByUuid, inputs)
+                        val placementError = resolved.exceptionOrNull()?.message
+                        if (placementError != null) {
+                            fatal.add(BulkPlacementFailure(patchId, placementError))
+                            continue
+                        }
+                        placementRiggingsById[patchId] = resolved.getOrThrow()
+                    }
                 }
                 if (request.atomic && fatal.isNotEmpty()) {
                     return@transaction BulkOutcome(null, fatal.first().error, emptyList(), emptyList())
@@ -472,7 +519,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 failures.addAll(fatal)
                 val rejected = fatal.map { it.patchId }.toSet()
 
-                val updated = mutableListOf<FixturePatchDto>()
+                val written = mutableListOf<DaoFixturePatch>()
                 val warnings = mutableListOf<String>()
                 for ((patchId, entry) in prepared) {
                     if (patchId in rejected) continue
@@ -494,6 +541,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("stageHidden" in entry) {
                         patch.stageHidden = entry["stageHidden"].nullableBoolean() ?: false
                     }
+                    placementInputsById[patchId]?.let { inputs ->
+                        applyExtraPlacements(patch, inputs, placementRiggingsById.getValue(patchId))
+                    }
 
                     // The server is the only party that authoritatively knows the bar's
                     // length at write time, so it's the only place an off-the-end
@@ -510,7 +560,17 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         }
                     }
 
-                    updated.add(patch.toDto())
+                    written.add(patch)
+                }
+                // Every written patch's lanterns in one query, read after the writes above (a
+                // find flushes them first). Checked whether or not this entry touched them, as
+                // the fixture's own placement is: a lantern past the end of its bar stays
+                // reported however the patch is next edited.
+                val placementsByPatch = extraPlacementsByPatch(written.map { it.id })
+                val updated = written.map { patch ->
+                    val placements = placementsByPatch[patch.id.value].orEmpty()
+                    placements.mapNotNullTo(warnings) { it.offTheEndWarning(patch.key) }
+                    patch.toDto(placements)
                 }
                 BulkOutcome(updated, null, failures.toList(), warnings)
             }
@@ -558,6 +618,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 // Remove from any groups first
                 DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
                     .forEach { it.delete() }
+                deletePlacementsOf(patch)
 
                 patch.delete()
                 sweptTiles
@@ -663,6 +724,11 @@ data class FixturePatchDto(
     val stageHidden: Boolean = false,
     /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
     val infrastructure: Boolean = false,
+    /**
+     * The other places this fixture hangs — a paired dimmer's second lantern, SL beside SR.
+     * One fixture to control, several to draw. In order; empty for almost every patch.
+     */
+    val extraPlacements: List<PatchPlacementDto> = emptyList(),
 )
 
 @Serializable
@@ -713,6 +779,8 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "gelCode",
     "kindOverride",
     "stageHidden",
+    // A paired fixture's other placements — its own table, which the loader never reads.
+    "extraPlacements",
 )
 
 /**
@@ -726,7 +794,10 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
 internal val PUT_KEYS_WITHOUT_REBUILD: Set<String> = METADATA_ONLY_PUT_KEYS + "infrastructure"
 
 // Helpers
-private fun DaoFixturePatch.toDto(): FixturePatchDto {
+/** [placements] are the patch's extra placements; pass them when a caller has batch-loaded them. */
+private fun DaoFixturePatch.toDto(
+    placements: List<DaoFixturePatchPlacement> = extraPlacementsOf(this),
+): FixturePatchDto {
     val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
@@ -755,10 +826,11 @@ private fun DaoFixturePatch.toDto(): FixturePatchDto {
         kindOverride = kindOverride,
         stageHidden = stageHidden,
         infrastructure = infrastructure,
+        extraPlacements = placements.map { it.toDto() },
     )
 }
 
-private fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoRigging? {
+internal fun resolveRiggingForProject(project: DaoProject, uuidStr: String): DaoRigging? {
     val parsedUuid = runCatching { UUID.fromString(uuidStr) }.getOrNull() ?: return null
     val rigging = DaoRigging.find { DaoRiggings.uuid eq parsedUuid }.firstOrNull() ?: return null
     if (rigging.project.id != project.id) return null

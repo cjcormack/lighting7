@@ -263,10 +263,10 @@ stacks and prompt-book markup from a script and lighting notes.
 |------|------|
 | `list_projects` / `create_project` / `switch_project` | Projects. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description |
 | `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against |
-| `get_patch` | Stage, regions, riggings, universes, every patch (address, groups, rigging, placement) and groups |
-| `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups |
+| `get_patch` | Stage, regions, riggings, universes, every patch (address, groups, rigging, placement, and `alsoAt` — a paired dimmer's other lanterns) and groups |
+| `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes the same placement fields as `place_fixtures`, `alsoAt` included |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals |
-| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch, beam, gel, kind, hidden |
+| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch, beam, gel, kind, hidden, and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |

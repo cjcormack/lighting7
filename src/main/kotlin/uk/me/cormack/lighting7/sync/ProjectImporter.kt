@@ -24,6 +24,8 @@ import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
+import uk.me.cormack.lighting7.models.deletePlacementsOf
 import uk.me.cormack.lighting7.models.DaoCueSlot
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -95,6 +97,10 @@ import uk.me.cormack.lighting7.models.asDuration
 // v12 added `buskRig/` — one document per rig row, tiles nested, naming groups and patches by uuid
 // (busk-further plan §3.7). MIN stays at 5: a missing folder reads as an empty rig.
 //
+// v14 embedded `FixturePatchJson.extraPlacements` (a paired dimmer's other lanterns). SUPPORTED
+// moved for v6's reason — a v13 reader would import a paired patch without its lanterns and write
+// them away on its next push; MIN stays at 5 because the field defaults to empty.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -120,7 +126,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 13
+internal const val SUPPORTED_FORMAT_VERSION = 14
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -280,7 +286,7 @@ class ProjectImporter(private val state: State) {
                 group.members.forEach { it.delete() }
                 group.delete()
             }
-            project.fixturePatches.forEach { it.delete() }
+            project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
             project.riggings.forEach { it.delete() }
             project.stageRegions.forEach { it.delete() }
             project.universeConfigs.forEach { it.delete() }
@@ -599,6 +605,25 @@ class ProjectImporter(private val state: State) {
             stageHidden = p.stageHidden
             infrastructure = p.infrastructure
             this.uuid = uuid
+        }
+        p.extraPlacements.forEachIndexed { index, pl ->
+            val placementRigging = pl.riggingUuid?.let {
+                val riggingUuid = UUID.fromString(it)
+                riggingMap[riggingUuid]
+                    ?: throw ImportError.invalidArchive("Placement ${pl.uuid} of fixture patch ${p.uuid} references unknown rigging $riggingUuid")
+            }
+            DaoFixturePatchPlacement.new {
+                fixturePatch = dao
+                this.rigging = placementRigging
+                label = pl.label
+                stageX = pl.stageX
+                stageY = pl.stageY
+                stageZ = pl.stageZ
+                baseYawDeg = pl.baseYawDeg
+                basePitchDeg = pl.basePitchDeg
+                sortOrder = index
+                this.uuid = UUID.fromString(pl.uuid)
+            }
         }
         uuid to dao
     }

@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
+import uk.me.cormack.lighting7.models.detachPlacementsFromRigging
 import uk.me.cormack.lighting7.state.State
 
 internal fun Route.routeApiRestProjectRiggings(state: State) {
@@ -184,9 +185,10 @@ internal fun Route.routeApiRestProjectRiggings(state: State) {
                 if (rigging.project.id != project.id) return@transaction null
                 // Detach any patches before deleting (FK is ON DELETE SET NULL conceptually,
                 // but Exposed's optReference doesn't enforce that — clear explicitly).
+                // Extra placements (a paired dimmer's other lantern) hang on riggings too.
                 val detached = DaoFixturePatch.find { DaoFixturePatches.rigging eq rigging.id }
                     .onEach { it.rigging = null }
-                    .count()
+                    .count() + detachPlacementsFromRigging(rigging)
                 rigging.delete()
                 detached
             }

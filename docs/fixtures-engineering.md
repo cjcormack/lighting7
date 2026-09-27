@@ -706,6 +706,44 @@ orientation; when a rigging is set, they're typically authored relative to
 the rigging frame (e.g. a fixture clamped square on a rotated truss has
 `baseYawDeg = 0` and inherits the truss's yaw from the rigging).
 
+### Extra placements (paired dimmers)
+
+A paired dimmer drives two lanterns from one DMX address — an SL and an SR unit on one bar, say.
+That is **one fixture** to control (one address, one level, one row in every cue, group and FX
+target) and **two objects** on the stage. So the patch is made once, keeps its own placement in the
+columns above, and lists its other lanterns in `fixture_patch_placements`
+(`models/fixturePatchPlacements.kt`): per entry a `rigging_id`, `stage_x/y/z`, `base_yaw_deg`,
+`base_pitch_deg`, a short `label` (e.g. "SR") and a `sort_order`. The geometry follows the patch's
+rules exactly, rigging-relative offsets included. A placement carries none of the fixture's own facts
+(type, beam angle, gel, kind override, hidden), which a paired lantern shares.
+
+Why placements and not two patches at one address: two patches would be two fixtures the desk can
+set to different values while only one channel exists, the overlap check would have to be relaxed,
+and every group, cue and the DMX sheet would count the pair twice. A placement cannot be driven
+apart from its fixture, because it is not a fixture.
+
+- **Presentational only**, like every stage field: `DbFixtureLoader` never reads the table, so
+  `extraPlacements` is in `METADATA_ONLY_PUT_KEYS` and a write never rebuilds the rig.
+- **REST**: `FixturePatchDto.extraPlacements` (always present, usually empty). `PUT
+  /patches/{id}` and the bulk `PUT /patches/placements` take `extraPlacements` as the **whole
+  list**: an entry whose `uuid` names one of this patch's placements edits it, any other entry is
+  created with a fresh uuid, and a stored placement the list omits is deleted. Absent leaves the
+  list alone; `null` or `[]` clears it. Every entry is validated (ranges as for the patch, label ≤40
+  characters, at most 16 entries, no uuid twice) and its rigging resolved **before** anything is
+  written, so a refusal writes nothing. The bulk route adds its past-the-end-of-the-truss warning
+  for a placement as for the patch.
+- **No cascade**: `PRAGMA foreign_keys` is off, so every patch delete calls `deletePlacementsOf`
+  (the patch route, the universe delete, the project delete and the importer's replace path) and
+  every rigging delete calls `detachPlacementsFromRigging` (the rigging route and `set_stage`'s
+  `removeRiggings`), which leaves the offsets as they were — the patch's own treatment.
+- **Sync**: embedded in the patch's document as `extraPlacements` (formatVersion 14 —
+  `docs/sync-engineering.md` §"Version 14 — paired placements").
+- **MCP**: `place_fixtures` and `patch_fixtures` take `alsoAt` (a whole list, matched to the
+  stored placements by position), and `get_patch` reports it.
+- **Frontend**: every stage surface draws each lantern lit from the fixture's channels, and
+  clicking one selects the fixture; they are edited in the patch form's *Also hung at* section, not
+  dragged on the plot (`lighting-react/docs/stage-vis-engineering.md`).
+
 ### Static fixtures vs. moving heads
 
 For a static fixture (PAR, wash bar, fresnel), `baseYawDeg` + `basePitchDeg`

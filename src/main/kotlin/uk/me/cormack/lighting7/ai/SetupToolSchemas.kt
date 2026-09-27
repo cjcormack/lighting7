@@ -71,6 +71,24 @@ private fun JsonObjectBuilder.placementProps() {
     prop("gelCode", "string", "Gel as the plot writes it, e.g. 'L201', 'R80'.")
     enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind — e.g. PROFILE or FRESNEL for a generic dimmer.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
+    arrayProp(
+        "alsoAt",
+        alsoAtSchema,
+        "Other places this same fixture hangs — a paired (or ganged) dimmer driving several lanterns from one address, e.g. an SL and an SR unit on one bar. " +
+            "Patch the circuit once and list its other lanterns here; never patch a second fixture at the same address. " +
+            "Each is drawn in the Stage view, lit from the fixture's one channel. The list replaces the fixture's existing ones; [] or null removes them. At most 16.",
+    )
+}
+
+/** One of a fixture's other placements (`alsoAt`) — the geometry fields of a placement plus a label. */
+private val alsoAtSchema = objectSchema {
+    prop("label", "string", "Short name for this lantern on the plot, e.g. 'SR'. At most 40 characters.")
+    prop("rigging", "string", "Name of the rigging it hangs from; x/y/z are then offsets along that rigging's frame.")
+    prop("x", "number", "Metres. World x, or offset along the rigging when `rigging` is set.")
+    prop("y", "number", "Metres. World y, or offset in the rigging's frame.")
+    prop("z", "number", "Metres. World z, or offset in the rigging's frame.")
+    prop("yawDeg", "number", "Body rotation about Z, as for the fixture.")
+    prop("pitchDeg", "number", "Body rotation about X, as for the fixture.")
 }
 
 internal val listProjectsTool = AnthropicToolDef(
@@ -110,7 +128,7 @@ internal val listFixtureTypesTool = AnthropicToolDef(
 
 internal val getPatchTool = AnthropicToolDef(
     name = "get_patch",
-    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, type, universe/address, groups, rigging and position) and groups. Read it before changing the patch or stage, and after, to check the result.",
+    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. Read it before changing the patch or stage, and after, to check the result.",
     inputSchema = objectSchema {},
 )
 

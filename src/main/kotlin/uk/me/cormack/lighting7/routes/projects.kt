@@ -248,7 +248,7 @@ internal fun Route.routeApiRestProjects(state: State) {
                     group.members.forEach { it.delete() }
                     group.delete()
                 }
-                project.fixturePatches.forEach { it.delete() }
+                project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
                 project.riggings.forEach { it.delete() }
                 project.stageRegions.forEach { it.delete() }
                 project.universeConfigs.forEach { it.delete() }

@@ -127,7 +127,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 13,
+    val formatVersion: Int = 14,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -373,6 +373,32 @@ data class FixturePatchJson(
     val kindOverride: String? = null,
     val stageHidden: Boolean = false,
     val infrastructure: Boolean = false,
+    /**
+     * The other places this fixture hangs — a paired dimmer's second lantern. Embedded in
+     * list order (so no `sortOrder`), like a group's `members`, and omitted by canonical JSON
+     * when empty, so an export with no pairs is byte-identical to one written before the field
+     * existed. It still bumped formatVersion to 14: a v13 reader would import a paired patch
+     * without its lanterns and write them away on its next push (docs/sync-engineering.md
+     * §"Version 14 — paired placements").
+     */
+    val extraPlacements: List<PatchPlacementJson> = emptyList(),
+)
+
+/**
+ * One of a patch's extra placements (`fixture_patch_placements`). Same geometry and
+ * rigging-relative rule as the patch's own `stageX`… fields. [riggingUuid] is a reference,
+ * so a clone's `ExportUuidRemapper` rewrites it alongside the placement's own [uuid].
+ */
+@Serializable
+data class PatchPlacementJson(
+    val uuid: String,
+    val label: String? = null,
+    val riggingUuid: String? = null,
+    val stageX: Double? = null,
+    val stageY: Double? = null,
+    val stageZ: Double? = null,
+    val baseYawDeg: Double? = null,
+    val basePitchDeg: Double? = null,
 )
 
 /**

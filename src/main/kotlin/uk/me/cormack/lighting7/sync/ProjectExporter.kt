@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.extraPlacementsOf
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
@@ -32,6 +33,7 @@ import uk.me.cormack.lighting7.sync.dto.CueTriggerJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupJson
 import uk.me.cormack.lighting7.sync.dto.FixtureGroupMemberJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
+import uk.me.cormack.lighting7.sync.dto.PatchPlacementJson
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.FxDefinitionJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
@@ -269,6 +271,18 @@ class ProjectExporter(private val state: State) {
                     kindOverride = p.kindOverride,
                     stageHidden = p.stageHidden,
                     infrastructure = p.infrastructure,
+                    extraPlacements = extraPlacementsOf(p).map { pl ->
+                        PatchPlacementJson(
+                            uuid = pl.uuid.toString(),
+                            label = pl.label,
+                            riggingUuid = pl.rigging?.uuid?.toString(),
+                            stageX = pl.stageX,
+                            stageY = pl.stageY,
+                            stageZ = pl.stageZ,
+                            baseYawDeg = pl.baseYawDeg,
+                            basePitchDeg = pl.basePitchDeg,
+                        )
+                    },
                 )
             }
 
