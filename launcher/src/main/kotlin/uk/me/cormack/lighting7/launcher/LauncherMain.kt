@@ -22,6 +22,22 @@ private val READINESS_TIMEOUT_MS: Long = run {
     raw?.toLongOrNull()?.takeIf { it > 0 } ?: 600_000L
 }
 
+/**
+ * JVM options for the backend child — the packaged counterpart of the root build's
+ * `applicationDefaultJvmArgs`, which only `./gradlew run` sees.
+ *
+ * `--sun-misc-unsafe-memory-access=allow` silences JDK 24's JEP 498 warning about Netty allocating
+ * off-heap memory through `sun.misc.Unsafe`. It has no manifest form, unlike the native-access
+ * opt-in, which `lighting7.jar` carries as `Enable-Native-Access: ALL-UNNAMED`.
+ *
+ * Deliberately ungated: the flag is an unrecognised option on JDK < 23 and aborts JVM start, but
+ * the child's `java` is always this launcher's own `java.home` (see [resolveJavaExecutable]) — the
+ * bundled jlink runtime when packaged, the toolchain JDK under `:launcher:run` — and launcher.jar
+ * is compiled for JVM 24, so no JVM that could reject the flag can be running this code.
+ * `BackendCommandLineTest` pins that class-file version.
+ */
+internal val BACKEND_JVM_ARGS = listOf("--sun-misc-unsafe-memory-access=allow")
+
 /** Marker used to resolve the launcher's own JAR / classpath via [Class.protectionDomain]. */
 internal object LauncherMarker
 
@@ -70,6 +86,7 @@ fun main() {
         name = "lighting7",
         java = javaBin,
         jar = backendJar,
+        jvmArgs = BACKEND_JVM_ARGS,
         workingDir = dataDir,
         // Pin the backend to the launcher's resolved data dir. The child would inherit
         // LIGHTING7_DATA_DIR through the environment, but a `-Dlighting7.dataDir` override
