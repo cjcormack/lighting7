@@ -29,6 +29,7 @@ import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
 import uk.me.cormack.lighting7.models.DaoFxDefinitions
 import uk.me.cormack.lighting7.models.DaoInstalls
 import uk.me.cormack.lighting7.models.DaoMachineOverrides
@@ -137,6 +138,8 @@ class SyncCoverageTest {
         DaoRiggings to Disposition.Portable("riggings"),
         DaoStageRegions to Disposition.Portable("stageRegions"),
         DaoFixturePatches to Disposition.Portable("fixturePatches"),
+        // A paired dimmer's other lanterns, embedded in list order in their patch's document.
+        DaoFixturePatchPlacements to Disposition.Portable("fixturePatches", "extraPlacements"),
         DaoFixtureGroups to Disposition.Portable("fixtureGroups"),
         DaoFixtureGroupMembers to Disposition.Portable("fixtureGroups", "members"),
         DaoCueStacks to Disposition.Portable("cueStacks"),

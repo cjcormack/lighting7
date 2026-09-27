@@ -10,6 +10,8 @@ import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
+import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
+import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
@@ -113,6 +115,40 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * A paired dimmer's other lanterns travel inside their patch's document, in order, with the
+     * rigging named by uuid. The byte-for-byte test proves the importer keeps what the exporter
+     * writes; this pins what the exporter writes — and that a patch with none carries no key.
+     */
+    @Test
+    fun `extra placements export embedded in their patch in order`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val patches = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }
+        val paired = patches.single { it.key == "hex-2" }
+        assertEquals(listOf("SR", null), paired.extraPlacements.map { it.label })
+        val sr = paired.extraPlacements.first()
+        assertEquals(3.5, sr.stageX)
+        assertEquals(180.0, sr.baseYawDeg)
+        assertEquals(-15.0, sr.basePitchDeg)
+        val foh = Files.list(exportDirA.resolve("riggings")).use { stream ->
+            stream.toList().map { canonicalDecode(RiggingJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "FOH Truss" }
+        assertEquals(foh.uuid, sr.riggingUuid, "a placement names its rigging by uuid")
+        assertEquals(null, paired.extraPlacements[1].riggingUuid)
+
+        val unpaired = docs.filter { !it.contains("\"hex-2\"") }
+        assertEquals(patches.size - 1, unpaired.size)
+        assertTrue(
+            unpaired.none { it.contains("\"extraPlacements\"") },
+            "a patch with no extra placements must not carry the key at all",
+        )
+    }
+
+    /**
      * v10: a busk page travels as one document with columns, banks and pads nested, and every
      * structural field written even at zero. The byte-for-byte test proves the importer keeps what
      * the exporter writes; this pins what the exporter writes.
@@ -204,7 +240,7 @@ class ProjectRoundTripTest {
         exportDirA.resolve("buskRig").toFile().deleteRecursively()
         Files.writeString(
             exportDirA.resolve("formatVersion.json"),
-            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 13", "\"formatVersion\": 11"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": 14", "\"formatVersion\": 11"),
         )
 
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)

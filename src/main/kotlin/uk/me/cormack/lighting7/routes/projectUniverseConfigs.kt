@@ -132,6 +132,7 @@ internal fun Route.routeApiRestProjectUniverseConfigs(state: State) {
                     sweptTiles += deleteBuskRigTilesReferencing(patchId = patch.id.value)
                     DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
                         .forEach { it.delete() }
+                    deletePlacementsOf(patch)
                     patch.delete()
                 }
                 config.delete()

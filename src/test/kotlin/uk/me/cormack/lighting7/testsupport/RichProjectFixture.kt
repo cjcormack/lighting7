@@ -34,6 +34,7 @@ import uk.me.cormack.lighting7.models.DaoCueTrigger
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
@@ -166,6 +167,26 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
             // stageHidden exists for (real DMX, not a stage object).
             if (i == 4) stageHidden = true
         }
+    }
+    // Hex 2 is a paired dimmer: its other lantern hangs at the far end of the FOH truss, and a
+    // third, free-standing, is on the deck with only some geometry — so both the set and unset
+    // encodings of an embedded placement are exercised, and a placement's rigging reference is.
+    DaoFixturePatchPlacement.new {
+        fixturePatch = patches[1]
+        rigging = rigFront
+        label = "SR"
+        stageX = 3.5
+        stageY = 0.25
+        stageZ = -0.5
+        baseYawDeg = 180.0
+        basePitchDeg = -15.0
+        sortOrder = 0
+    }
+    DaoFixturePatchPlacement.new {
+        fixturePatch = patches[1]
+        stageX = -4.0
+        stageY = 1.0
+        sortOrder = 1
     }
     // A multi-head bar (v12), so the busk rig below can hold a HALVES tile, a PER_CELL tile and a
     // single-cell tile — none of which a hex can carry.

@@ -62,7 +62,8 @@ cuePropertyAssignments/{uuid}.json   # carries cueUuid
 cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
 cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
-fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid
+fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
+                               # dimmer's other lanterns embedded as `extraPlacements` (v14+)
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
@@ -190,7 +191,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 13`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 14`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -232,6 +233,24 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 14 — paired placements
+
+**v14 adds one embedded array.** `FixturePatchJson.extraPlacements` carries a patch's other
+lanterns — a paired dimmer driving an SL and an SR unit from one address — from the
+`fixture_patch_placements` table (`docs/fixtures-engineering.md` §"Extra placements (paired
+dimmers)"). Each entry is `{uuid, label?, riggingUuid?, stageX?, stageY?, stageZ?, baseYawDeg?,
+basePitchDeg?}`, in list order, so the table's `sort_order` is not on the wire. The entry's own
+`uuid` is an identity and `riggingUuid` a reference, so a clone's `ExportUuidRemapper` rewrites
+both with no change of its own; the importer resolves the rigging against the archive's
+`riggings/` and refuses an archive naming one it lacks, as it does for the patch's own
+`riggingUuid`.
+
+The list is omitted when empty, so a project with no pairs exports byte-for-byte as it did at v13.
+**It still bumped `formatVersion`**, by the sharp-edge rule above: a v13 reader ignores the key,
+imports a paired patch as a single lantern, and its next wipe-then-export push rewrites the patch
+file without the list — deleting every peer's lanterns. That is a degraded record written back,
+so a v13 install must refuse a v14 repo. `minReader` stays at 5: a missing list is an empty one.
 
 ### Version 12 — the busk rig
 
