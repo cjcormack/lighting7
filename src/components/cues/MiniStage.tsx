@@ -4,7 +4,7 @@ import { findGel } from '@/data/gels'
 import { DEFAULT_FIXTURE_COLOUR } from '@/components/fixtures/fixtureAppearance'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { useProjectedPatches } from '@/hooks/useProjectedPatches'
+import { useProjectedPatches, type DrawnPoint } from '@/hooks/useProjectedPatches'
 import type { CueTarget } from '@/api/cuesApi'
 import { elementParents } from './targetUtils'
 
@@ -32,7 +32,12 @@ export function MiniStage({
   targets,
   heightClass = 'h-32',
 }: MiniStageProps) {
-  const { points: placedPatches } = useProjectedPatches(projectId || undefined)
+  const { points: primaryPoints, extraPoints } = useProjectedPatches(projectId || undefined)
+  // A paired dimmer's other lanterns light with it, so they are drawn as markers like any other.
+  const placedPatches = useMemo<DrawnPoint[]>(
+    () => [...primaryPoints, ...extraPoints],
+    [primaryPoints, extraPoints],
+  )
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
 
   const groupTargetNames = useMemo(
@@ -90,7 +95,7 @@ export function MiniStage({
 
   return (
     <StageBackdrop className={cn('w-full', heightClass)}>
-      {placedPatches.map(({ patch, leftPct, topPct }) => {
+      {placedPatches.map(({ patch, leftPct, topPct, placement }) => {
         const lit = isTargeted(patch)
         const fixture = fixtureByKey.get(patch.key)
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
@@ -99,7 +104,7 @@ export function MiniStage({
         const colour = pickColour(patch.gelCode, !!fixtureType?.acceptsGel)
         return (
           <div
-            key={patch.id}
+            key={placement ? `${patch.id}:${placement.uuid}` : patch.id}
             className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none"
             style={{ left: `${leftPct}%`, top: `${topPct}%` }}
           >

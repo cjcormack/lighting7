@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RiggingDto } from '../../api/riggingApi'
-import type { FixturePatch } from '../../api/patchApi'
+import type { FixturePatch, PatchPlacement } from '../../api/patchApi'
 import { findGroupColourSource, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
 import {
   FixtureAppearanceSource,
@@ -266,6 +266,22 @@ export const RiggingShapes = memo(function RiggingShapes({
 export interface ProjectedFixture {
   patch: FixturePatch
   screen: ScreenPoint
+  /**
+   * Set when this is one of the patch's extra placements — a paired dimmer's other lantern. It
+   * draws, lights and selects as `patch`; only its position and label are its own.
+   */
+  placement?: PatchPlacement
+}
+
+/** A drawn fixture's identity: the patch, or the patch and one of its extra placements. */
+function drawnKey({ patch, placement }: ProjectedFixture): string {
+  return placement ? `${patch.key}\u0000${placement.uuid}` : patch.key
+}
+
+/** The text drawn beside a fixture: its name, and a lantern's own label after it. */
+function labelFor({ patch, placement }: ProjectedFixture): string {
+  const name = patch.displayName || patch.key
+  return placement?.label ? `${name} · ${placement.label}` : name
 }
 
 interface FixtureShapesProps {
@@ -279,7 +295,8 @@ interface FixtureShapesProps {
   mPerPx: number
   interactive: boolean
   editMode?: boolean
-  onPick?: (patch: FixturePatch, e: React.PointerEvent) => void
+  /** `placement` is set when the press landed on one of the patch's extra placements. */
+  onPick?: (patch: FixturePatch, e: React.PointerEvent, placement?: PatchPlacement) => void
   /**
    * Fixture and type lookups, for live colour. Each fixture's colour comes from its own
    * [FixtureShape] rather than from a `colourFor(patch)` callback: reading live values needs
@@ -311,15 +328,16 @@ function labelledKeys(
   const widthOf = (text: string) => text.length * 0.55 * LABEL_PX * mPerPx
 
   const ordered = [...fixtures].sort((a, b) => {
-    if (a.patch.key === selectedKey) return -1
-    if (b.patch.key === selectedKey) return 1
-    return a.screen.v - b.screen.v || a.screen.h - b.screen.h
+    // The selected fixture's own placement first, then its other lanterns, then the rest.
+    const rank = (f: ProjectedFixture) => (f.patch.key !== selectedKey ? 2 : f.placement ? 1 : 0)
+    return rank(a) - rank(b) || a.screen.v - b.screen.v || a.screen.h - b.screen.h
   })
 
   const placed: Array<{ h0: number; h1: number; v0: number; v1: number }> = []
   const keep = new Set<string>()
-  for (const { patch, screen } of ordered) {
-    const w = widthOf(patch.displayName || patch.key)
+  for (const fixture of ordered) {
+    const { screen } = fixture
+    const w = widthOf(labelFor(fixture))
     const box = {
       h0: screen.h - w / 2,
       h1: screen.h + w / 2,
@@ -331,7 +349,7 @@ function labelledKeys(
     )
     if (clashes) continue
     placed.push(box)
-    keep.add(patch.key)
+    keep.add(drawnKey(fixture))
   }
   return keep
 }
@@ -355,22 +373,27 @@ export const FixtureShapes = memo(function FixtureShapes({
   )
   return (
     <g>
-      {fixtures.map(({ patch, screen }) => {
+      {fixtures.map((drawn) => {
+        const { patch, screen, placement } = drawn
         // The anchor gets the full highlight; other members of a multi-selection
         // get a lighter ring, so it's clear which one the side panel is editing.
+        // A paired lantern shares its patch's selection: selecting the fixture lights both.
         const selected = patch.key === selectedKey
         const fixture = fixtureByKey.get(patch.key)
+        const key = drawnKey(drawn)
         return (
           <FixtureShape
-            key={patch.id}
+            key={key}
             patch={patch}
+            placement={placement}
+            label={labelFor(drawn)}
             screen={screen}
             fixture={fixture}
             fixtureType={fixture ? typeByKey.get(fixture.typeKey) : undefined}
             selected={selected}
             inSelection={selected || (selectedKeys?.has(`patch:${patch.key}`) ?? false)}
             dimmed={dimmedKeys?.size ? !dimmedKeys.has(patch.key) : false}
-            labelled={labelled?.has(patch.key) ?? false}
+            labelled={labelled?.has(key) ?? false}
             mPerPx={mPerPx}
             interactive={interactive}
             editMode={editMode}
@@ -384,6 +407,8 @@ export const FixtureShapes = memo(function FixtureShapes({
 
 interface FixtureShapeProps {
   patch: FixturePatch
+  placement: PatchPlacement | undefined
+  label: string
   screen: ScreenPoint
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
@@ -394,7 +419,7 @@ interface FixtureShapeProps {
   mPerPx: number
   interactive: boolean
   editMode: boolean
-  onPick?: (patch: FixturePatch, e: React.PointerEvent) => void
+  onPick?: (patch: FixturePatch, e: React.PointerEvent, placement?: PatchPlacement) => void
 }
 
 /**
@@ -406,6 +431,8 @@ interface FixtureShapeProps {
  */
 function FixtureShape({
   patch,
+  placement,
+  label,
   screen,
   fixture,
   fixtureType,
@@ -436,8 +463,8 @@ function FixtureShape({
             height={strip.height + 2 * (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
             fill="transparent"
             pointerEvents="all"
-            style={{ cursor: bodyCursor(selected, editMode) }}
-            onPointerDown={onPick ? (e) => onPick(patch, e) : undefined}
+            style={{ cursor: placement ? 'pointer' : bodyCursor(selected, editMode) }}
+            onPointerDown={onPick ? (e) => onPick(patch, e, placement) : undefined}
           />
         ) : (
           <circle
@@ -446,8 +473,8 @@ function FixtureShape({
             r={FIXTURE_HIT_PX * mPerPx}
             fill="transparent"
             pointerEvents="all"
-            style={{ cursor: bodyCursor(selected, editMode) }}
-            onPointerDown={onPick ? (e) => onPick(patch, e) : undefined}
+            style={{ cursor: placement ? 'pointer' : bodyCursor(selected, editMode) }}
+            onPointerDown={onPick ? (e) => onPick(patch, e, placement) : undefined}
           />
         )
       )}
@@ -486,7 +513,7 @@ function FixtureShape({
           className={selected ? 'fill-foreground' : 'fill-muted-foreground'}
           pointerEvents="none"
         >
-          {patch.displayName || patch.key}
+          {label}
         </text>
       )}
     </g>

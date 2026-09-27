@@ -31,7 +31,7 @@ import {
   type SelectIntent,
   type SelectionRef,
 } from '../stage3d/useStageSelection'
-import type { FixturePatch } from '../../api/patchApi'
+import type { FixturePatch, PatchPlacement } from '../../api/patchApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import {
@@ -135,10 +135,17 @@ export function Stage2DView({
   onRiggingPositionChange,
 }: Stage2DViewProps) {
   const selectedPatchKey = selection?.kind === 'patch' ? selection.patchKey : null
-  const { points, dims } = useProjectedPatches(projectId, {
+  const { points, extraPoints, dims } = useProjectedPatches(projectId, {
     projection,
     includeKey: selectedPatchKey,
   })
+  // Everything drawn: each fixture's own placement, then a paired dimmer's other lanterns. The
+  // lanterns select their fixture and are aligned to, but are never dragged — `points` stays
+  // the list a drag reads, so moving a fixture never moves it to where one of its lanterns hangs.
+  const drawnPoints = useMemo(
+    () => (extraPoints.length === 0 ? points : [...points, ...extraPoints]),
+    [points, extraPoints],
+  )
   const { data: regions } = useStageRegionListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
 
@@ -200,6 +207,10 @@ export function Stage2DView({
       for (const { patch, screen } of points) {
         sources.push({ id: `patch:${patch.key}`, points: [screen] })
       }
+      // A fixture lines up with its own pair across the stage, which is the usual reason to hang one.
+      for (const { placement, screen } of extraPoints) {
+        sources.push({ id: `placement:${placement.uuid}`, points: [screen] })
+      }
       for (const rig of riggings ?? []) {
         const pr = projectRigging(rig, projection)
         sources.push({ id: `rigging:${rig.uuid}`, points: [pr.a, pr.b] })
@@ -213,7 +224,7 @@ export function Stage2DView({
       }
       return buildGuideCandidates(sources, excludeId)
     },
-    [points, riggings, regions, projection],
+    [points, extraPoints, riggings, regions, projection],
   )
 
   /**
@@ -339,12 +350,16 @@ export function Stage2DView({
       // Fixtures only: a marquee over a plot means "these lights", and including
       // whatever regions happen to overlap would make align/distribute operate on
       // a mixed set the user didn't intend.
-      const hits = points
-        .filter(
-          ({ screen }) =>
-            screen.h >= hMin && screen.h <= hMax && screen.v >= vMin && screen.v <= vMax,
-        )
-        .map(({ patch }): SelectionRef => ({ kind: 'patch', patchKey: patch.key }))
+      // A lantern inside the band selects its fixture; a fixture caught twice is one hit.
+      const hitKeys = new Set(
+        drawnPoints
+          .filter(
+            ({ screen }) =>
+              screen.h >= hMin && screen.h <= hMax && screen.v >= vMin && screen.v <= vMax,
+          )
+          .map(({ patch }) => patch.key),
+      )
+      const hits = [...hitKeys].map((patchKey): SelectionRef => ({ kind: 'patch', patchKey }))
       if (hits.length > 0) onMarqueeSelect?.(hits, mq.intent === 'toggle' ? 'add' : mq.intent)
       return
     }
@@ -385,7 +400,11 @@ export function Stage2DView({
     [riggings],
   )
 
-  const onFixturePointerDown = (patch: FixturePatch, e: React.PointerEvent) => {
+  const onFixturePointerDown = (
+    patch: FixturePatch,
+    e: React.PointerEvent,
+    placement?: PatchPlacement,
+  ) => {
     // Drag stays bound to the anchor, but any selected fixture is draggable —
     // otherwise extending a selection would make the earlier ones immovable.
     const selected =
@@ -394,9 +413,10 @@ export function Stage2DView({
     const intent = selectionIntentFor(e.nativeEvent)
     bodyDrag(e, {
       onClick: () => onSelectionChange({ kind: 'patch', patchKey: patch.key }, intent),
-      // Drag only once selected — same rule as the 3D bodies.
+      // Drag only once selected — same rule as the 3D bodies. A paired dimmer's other lantern
+      // selects its fixture and never drags: it is moved in the patch form's "Also hung at".
       buildDrag:
-        !editMode || !selected || !onPatchPlacementChange
+        !editMode || !selected || !onPatchPlacementChange || placement
           ? undefined
           : () => {
               const rig = rigFor(patch.riggingUuid)
@@ -695,11 +715,12 @@ export function Stage2DView({
 
         {svg.measured && view.fixtures && (
           <FixtureShapes
-            // `points` directly, not a mapped copy: a fresh array on every render
-            // would defeat FixtureShapes' memo and re-run the O(n²) label
-            // declutter on every drag frame. ProjectedPatch is a structural
-            // superset of ProjectedFixture, so the extra fields are ignored.
-            fixtures={points}
+            // `drawnPoints` is memoised (and is `points` itself when nothing is
+            // paired), not a mapped copy: a fresh array on every render would
+            // defeat FixtureShapes' memo and re-run the O(n²) label declutter on
+            // every drag frame. ProjectedPatch is a structural superset of
+            // ProjectedFixture, so the extra fields are ignored.
+            fixtures={drawnPoints}
             selectedKey={selectedPatchKey}
             selectedKeys={selectedKeys}
             showLabels={view.labels}

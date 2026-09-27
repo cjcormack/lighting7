@@ -14,7 +14,7 @@ import {
   type StageDims,
   type StageProjection,
 } from '../lib/stageProjection'
-import type { FixturePatch } from '../api/patchApi'
+import type { FixturePatch, PatchPlacement } from '../api/patchApi'
 
 /** Envelope defaults when the project hasn't declared its stage dimensions. */
 export const DEFAULT_STAGE_DIMS: StageDims = { widthM: 10, depthM: 8, heightM: 6 }
@@ -29,6 +29,18 @@ export interface ProjectedPatch {
   leftPct: number
   topPct: number
 }
+
+/**
+ * One of a patch's extra placements — a paired dimmer's other lantern — projected the same way.
+ * `patch` is the fixture it belongs to (so it lights, selects and names as that fixture);
+ * `placement` is where this lantern hangs.
+ */
+export interface ProjectedPlacement extends ProjectedPatch {
+  placement: PatchPlacement
+}
+
+/** Either kind of point, for a surface that draws the whole rig: `placement` set on a lantern. */
+export type DrawnPoint = ProjectedPatch & { placement?: PatchPlacement }
 
 export interface UseProjectedPatchesOptions {
   projection?: StageProjection
@@ -53,7 +65,18 @@ export interface UseProjectedPatchesOptions {
 export function useProjectedPatches(
   projectId: number | undefined,
   { projection = STAGE_PROJECTIONS.plan, includeKey = null }: UseProjectedPatchesOptions = {},
-): { points: ProjectedPatch[]; extent: Extent; dims: StageDims } {
+): {
+  points: ProjectedPatch[]
+  /**
+   * Every placed extra placement, in patch then list order. Kept apart from `points` on purpose:
+   * `points` is one entry per fixture, which is what the editors drag, snap, count and marquee,
+   * and a lantern that moved the fixture's primary position when dragged would be a trap. A
+   * surface that just draws the rig draws both.
+   */
+  extraPoints: ProjectedPlacement[]
+  extent: Extent
+  dims: StageDims
+} {
   const skip = projectId == null
   const { data: patches } = usePatchListQuery(projectId ?? 0, { skip })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip })
@@ -70,18 +93,28 @@ export function useProjectedPatches(
 
   const extent = useMemo(() => projectionExtent(projection, dims), [projection, dims])
 
-  const points = useMemo(() => {
+  const { points, extraPoints } = useMemo(() => {
     const rigs = riggings ?? []
     const out: ProjectedPatch[] = []
+    const extras: ProjectedPlacement[] = []
     for (const patch of patches ?? []) {
       if (patch.stageHidden && patch.key !== includeKey) continue
       const world = worldPositionLighting(patch, rigs)
-      if (!world) continue
-      const screen = project(world, projection)
-      out.push({ patch, world, screen, ...toPercent(screen, extent) })
+      if (world) {
+        const screen = project(world, projection)
+        out.push({ patch, world, screen, ...toPercent(screen, extent) })
+      }
+      // A lantern is drawn wherever it has a position, whether or not the fixture's own
+      // placement does — the pair is one circuit, not a primary and its shadow.
+      for (const placement of patch.extraPlacements ?? []) {
+        const at = worldPositionLighting(placement, rigs)
+        if (!at) continue
+        const screen = project(at, projection)
+        extras.push({ patch, placement, world: at, screen, ...toPercent(screen, extent) })
+      }
     }
-    return out
+    return { points: out, extraPoints: extras }
   }, [patches, riggings, projection, extent, includeKey])
 
-  return { points, extent, dims }
+  return { points, extraPoints, extent, dims }
 }

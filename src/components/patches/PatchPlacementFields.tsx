@@ -26,9 +26,14 @@ interface Props {
   projectId: number
   value: PatchPlacementValue
   onChange: (next: PatchPlacementValue) => void
+  /**
+   * Prefix for the fields' element ids, so one form can hold several sets — the fixture's own
+   * placement and each of a paired dimmer's other lanterns — without two inputs sharing an id.
+   */
+  idPrefix?: string
 }
 
-function PatchPlacementFieldsImpl({ projectId, value, onChange }: Props) {
+function PatchPlacementFieldsImpl({ projectId, value, onChange, idPrefix = 'patch' }: Props) {
   const { data: riggings } = useRiggingListQuery(projectId)
   // Drag-driven onChange re-renders this on every frame; keep the sort off the hot path.
   const sortedRiggings = useMemo(() => (riggings ?? []).slice().sort(bySortOrder), [riggings])
@@ -39,14 +44,14 @@ function PatchPlacementFieldsImpl({ projectId, value, onChange }: Props) {
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="patch-mount">Mounting</Label>
+        <Label htmlFor={`${idPrefix}-mount`}>Mounting</Label>
         <Select
           value={mountValue}
           onValueChange={(v) =>
             onChange({ ...value, riggingUuid: v === FREE ? null : v })
           }
         >
-          <SelectTrigger id="patch-mount" className="w-full">
+          <SelectTrigger id={`${idPrefix}-mount`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -63,19 +68,19 @@ function PatchPlacementFieldsImpl({ projectId, value, onChange }: Props) {
       <div className="space-y-1.5">
         <FieldGroup label="Position (m)">
           <NumberField
-            id="patch-stage-x"
+            id={`${idPrefix}-stage-x`}
             label="X"
             value={value.stageX}
             onChange={(v) => onChange({ ...value, stageX: v })}
           />
           <NumberField
-            id="patch-stage-y"
+            id={`${idPrefix}-stage-y`}
             label="Y"
             value={value.stageY}
             onChange={(v) => onChange({ ...value, stageY: v })}
           />
           <NumberField
-            id="patch-stage-z"
+            id={`${idPrefix}-stage-z`}
             label="Z"
             value={value.stageZ}
             onChange={(v) => onChange({ ...value, stageZ: v })}
@@ -95,13 +100,13 @@ function PatchPlacementFieldsImpl({ projectId, value, onChange }: Props) {
         <div className="pt-3">
           <FieldGroup label="Base orientation (°)">
             <NumberField
-              id="patch-base-yaw"
+              id={`${idPrefix}-base-yaw`}
               label="Yaw"
               value={value.baseYawDeg}
               onChange={(v) => onChange({ ...value, baseYawDeg: v })}
             />
             <NumberField
-              id="patch-base-pitch"
+              id={`${idPrefix}-base-pitch`}
               label="Pitch"
               value={value.basePitchDeg}
               onChange={(v) => onChange({ ...value, basePitchDeg: v })}
