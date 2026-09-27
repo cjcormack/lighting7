@@ -118,6 +118,11 @@ export type FixtureTypeInfo = {
   lengthM?: number | null
   widthM?: number | null
   heightM?: number | null
+  /** The unit's length is set per install (a lightstrip cut to its run) rather than by the model:
+   *  a patch may carry its own `lengthM`, and `lengthM` above is only the default drawn until it
+   *  does. Every other type's length is fixed, and the desk refuses a stored one. Optional so an
+   *  older desk reads as "fixed". */
+  acceptsLength?: boolean
   beamShape?: BeamShape
   beamEdge?: BeamEdge
 }

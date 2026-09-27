@@ -13,6 +13,8 @@ import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacement
 import { ExtraPlacementsFields } from './ExtraPlacementsFields'
 import { BeamAngleField } from './BeamAngleField'
 import { GelPickerField } from './GelPickerField'
+import { FixtureLengthField, fixtureLengthValid } from './FixtureLengthField'
+import { acceptsLength as typeAcceptsLength } from '@/lib/fixtureLength'
 import type { FixturePatch, PatchPlacementInput } from '@/api/patchApi'
 import { placementListsEqual, toPlacementInput } from '@/lib/extraPlacements'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -59,6 +61,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
+  const [lengthM, setLengthM] = useState<number | null>(patch.lengthM ?? null)
   const [stageHidden, setStageHidden] = useState(patch.stageHidden)
   const [infrastructure, setInfrastructure] = useState(patch.infrastructure ?? false)
   // A paired dimmer's other lanterns, edited as one list and sent whole when it changed.
@@ -86,6 +89,10 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const fixtureType = fixtureTypes?.find((t) => t.typeKey === patch.fixtureTypeKey)
   const acceptsBeamAngle = fixtureType?.acceptsBeamAngle ?? false
   const acceptsGel = fixtureType?.acceptsGel ?? false
+  // A type whose length is set per install (a lightstrip): the fixture, and each of its other
+  // placements, takes a length of its own. Every other type's length is the model's.
+  const acceptsLength = typeAcceptsLength(fixtureType)
+  const typeLengthM = fixtureType?.lengthM ?? null
   // Only expose the override picker for fixture types whose declared kind is
   // GENERIC — those are the ones (generic dimmers, UV) that ship without a
   // shape hint. Other types already render distinctly per kind.
@@ -93,7 +100,16 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const beamGelTitle =
     acceptsBeamAngle && acceptsGel ? 'Beam & Gel' : acceptsBeamAngle ? 'Beam' : 'Gel'
 
-  const isValid = displayName.trim().length > 0 && key.trim().length > 0 && !channelOverflow && !keyConflict && startChannel >= 1
+  const lengthsValid =
+    !acceptsLength ||
+    (fixtureLengthValid(lengthM) && extraPlacements.every((p) => fixtureLengthValid(p.lengthM)))
+  const isValid =
+    displayName.trim().length > 0 &&
+    key.trim().length > 0 &&
+    !channelOverflow &&
+    !keyConflict &&
+    startChannel >= 1 &&
+    lengthsValid
   const hasChanges =
     displayName !== patch.displayName ||
     key !== patch.key ||
@@ -107,6 +123,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode ||
     kindOverride !== patch.kindOverride ||
+    lengthM !== (patch.lengthM ?? null) ||
     stageHidden !== patch.stageHidden ||
     infrastructure !== (patch.infrastructure ?? false) ||
     extraPlacementsChanged
@@ -125,6 +142,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
+    if (lengthM !== (patch.lengthM ?? null)) body.lengthM = lengthM
     if (stageHidden !== patch.stageHidden) body.stageHidden = stageHidden
     if (infrastructure !== (patch.infrastructure ?? false)) body.infrastructure = infrastructure
     if (extraPlacementsChanged) body.extraPlacements = extraPlacements
@@ -223,11 +241,29 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
           onChange={setPlacement}
         />
 
+        {acceptsLength && (
+          <div className="space-y-1.5">
+            <FixtureLengthField
+              id="edit-length"
+              value={lengthM}
+              onChange={setLengthM}
+              fallbackM={typeLengthM}
+              fallbackLabel="default"
+            />
+            <p className="text-xs text-muted-foreground">
+              As installed — this type is cut to its run. It runs along the fixture&apos;s own X, turned
+              by its yaw. A run round several sides, like a ring round the stage edge, is this side
+              here and each other side below.
+            </p>
+          </div>
+        )}
+
         <ExtraPlacementsFields
           projectId={projectId}
           primary={placement}
           value={extraPlacements}
           onChange={setExtraPlacements}
+          segmentLength={acceptsLength ? { fixtureM: lengthM ?? typeLengthM } : undefined}
         />
 
         {(acceptsBeamAngle || acceptsGel) && (

@@ -30,7 +30,9 @@ export function lanternsFor(patches: readonly FixturePatch[]): Lantern[] {
 /**
  * `patch` drawn at one of its extra placements: the placement's rigging, position and body
  * orientation over the patch's own, everything else — key, type, beam, gel, kind — the patch's.
- * `FixtureModel` reads placement from exactly those six fields. The one other field it changes is
+ * `FixtureModel` reads placement from exactly those six fields. A segment of a variable-length
+ * fixture (one side of a lightstrip ring) also carries its own `lengthM`, and takes the patch's
+ * where it has none. The one other field it changes is
  * `displayName`, which `FixtureModel` draws as the 3D label: a labelled lantern reads
  * "Name · SR", as it does on the 2D plot and the overview panel.
  */
@@ -45,5 +47,6 @@ export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement)
     stageZ: placement.stageZ,
     baseYawDeg: placement.baseYawDeg,
     basePitchDeg: placement.basePitchDeg,
+    lengthM: placement.lengthM ?? patch.lengthM ?? null,
   }
 }

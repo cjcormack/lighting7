@@ -128,3 +128,46 @@ describe('ExtraPlacementsFields', () => {
     expect((screen.getByRole('button', { name: /Lantern/ }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+describe('ExtraPlacementsFields — the sides of a variable-length run', () => {
+  function SegmentHarness({ initial, onValue }: { initial: PatchPlacementInput[]; onValue: (v: PatchPlacementInput[]) => void }) {
+    const [value, setValue] = useState(initial)
+    return (
+      <ExtraPlacementsFields
+        projectId={1}
+        primary={primary}
+        value={value}
+        onChange={(next) => {
+          setValue(next)
+          onValue(next)
+        }}
+        segmentLength={{ fixtureM: 10 }}
+      />
+    )
+  }
+
+  it("names them as sides, and gives each a length that falls back to the fixture's", () => {
+    const onValue = vi.fn()
+    render(<SegmentHarness initial={[]} onValue={onValue} />)
+    expect(screen.getByText('Other sides of this run')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Side/ }))
+
+    const length = screen.getByLabelText('Length') as HTMLInputElement
+    expect(length.value).toBe('')
+    expect(length.placeholder).toBe("10 m (fixture's)")
+
+    fireEvent.change(length, { target: { value: '6.5' } })
+    expect(onValue.mock.lastCall![0][0].lengthM).toBe(6.5)
+    fireEvent.change(length, { target: { value: '' } })
+    expect(onValue.mock.lastCall![0][0].lengthM).toBeNull()
+
+    fireEvent.change(length, { target: { value: '250' } })
+    expect(screen.getByText(/Between 0.01 and 100 m/)).toBeTruthy()
+  })
+
+  it('offers no length for a fixed-length fixture', () => {
+    render(<Harness initial={[]} onValue={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Lantern/ }))
+    expect(screen.queryByLabelText('Length')).toBeNull()
+  })
+})

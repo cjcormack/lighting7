@@ -101,6 +101,7 @@ import {
 import { FixtureBody } from './fixtureBodies'
 import { STRIP_HEIGHT, STRIP_LEN } from './fixtureBodies/StripBody'
 import type { FixtureBodyDims, PixelColorWriter } from './fixtureBodies/types'
+import { drawnLengthM } from '../../lib/fixtureLength'
 import { WASH_ANGLE_DEG, WASH_OPACITY } from './washConfig'
 
 const DEFAULT_BEAM_DEG = 30
@@ -269,14 +270,20 @@ export function FixtureModel({
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
 
   // Real physical size for body scaling; undefined when the backend didn't send
-  // dimensions, so bodies keep their hard-coded design size.
+  // dimensions, so bodies keep their hard-coded design size. The length is the patch's own for a
+  // type whose length is set per install (a lightstrip) — and a lantern's `patch` already carries
+  // its segment's, from `patchAtPlacement`.
+  const acceptsPatchLength = fixtureType?.acceptsLength
   const bodyDims = useMemo<FixtureBodyDims | undefined>(() => {
-    const l = fixtureType?.lengthM
+    const l = drawnLengthM(
+      { acceptsLength: acceptsPatchLength, lengthM: fixtureType?.lengthM },
+      { lengthM: patch.lengthM },
+    )
     const w = fixtureType?.widthM
     const h = fixtureType?.heightM
     if (l == null || w == null || h == null) return undefined
     return { lengthM: l, widthM: w, heightM: h }
-  }, [fixtureType?.lengthM, fixtureType?.widthM, fixtureType?.heightM])
+  }, [acceptsPatchLength, patch.lengthM, fixtureType?.lengthM, fixtureType?.widthM, fixtureType?.heightM])
 
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)

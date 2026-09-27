@@ -271,6 +271,11 @@ export interface ProjectedFixture {
    * draws, lights and selects as `patch`; only its position and label are its own.
    */
   placement?: PatchPlacement
+  /**
+   * For a fixture whose length is set per install (a lightstrip), its two projected ends: it is
+   * drawn as a bar between them, at its real length, rather than as a dot. See `useProjectedPatches`.
+   */
+  span?: readonly [ScreenPoint, ScreenPoint]
 }
 
 /** A drawn fixture's identity: the patch, or the patch and one of its extra placements. */
@@ -374,7 +379,7 @@ export const FixtureShapes = memo(function FixtureShapes({
   return (
     <g>
       {fixtures.map((drawn) => {
-        const { patch, screen, placement } = drawn
+        const { patch, screen, placement, span } = drawn
         // The anchor gets the full highlight; other members of a multi-selection
         // get a lighter ring, so it's clear which one the side panel is editing.
         // A paired lantern shares its patch's selection: selecting the fixture lights both.
@@ -388,6 +393,7 @@ export const FixtureShapes = memo(function FixtureShapes({
             placement={placement}
             label={labelFor(drawn)}
             screen={screen}
+            span={span}
             fixture={fixture}
             fixtureType={fixture ? typeByKey.get(fixture.typeKey) : undefined}
             selected={selected}
@@ -410,6 +416,7 @@ interface FixtureShapeProps {
   placement: PatchPlacement | undefined
   label: string
   screen: ScreenPoint
+  span: readonly [ScreenPoint, ScreenPoint] | undefined
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
   selected: boolean
@@ -434,6 +441,7 @@ function FixtureShape({
   placement,
   label,
   screen,
+  span,
   fixture,
   fixtureType,
   selected,
@@ -450,12 +458,31 @@ function FixtureShape({
   // can be sized to match the body. A pixel bar is drawn several times wider than a dot, and
   // sizing the hit area off the dot alone left the ends of a long bar unclickable.
   const strip = stripGeometry(fixture, screen, r, mPerPx)
+  // A variable-length body is drawn to scale along its span, unless it is a pixel bar (whose
+  // cells need the segmented strip) or its span projects to a point (a run seen end-on, in an
+  // elevation), where a dot says more than a zero-length line.
+  const bar = !strip && span && spanLength(span) > DEGENERATE_LENGTH_M ? span : null
+  const cursor = placement ? 'pointer' : bodyCursor(selected, editMode)
+  const pick = onPick ? (e: React.PointerEvent) => onPick(patch, e, placement) : undefined
   return (
     <g opacity={dimmed ? 0.3 : 1}>
       {/* Invisible hit target: a 7px dot is far below the ~44px a finger
           needs, and editing is enabled on tablets. */}
       {interactive && (
-        strip ? (
+        bar ? (
+          <line
+            x1={bar[0].h}
+            y1={bar[0].v}
+            x2={bar[1].h}
+            y2={bar[1].v}
+            stroke="transparent"
+            strokeWidth={2 * FIXTURE_HIT_PX * mPerPx}
+            strokeLinecap="round"
+            pointerEvents="stroke"
+            style={{ cursor }}
+            onPointerDown={pick}
+          />
+        ) : strip ? (
           <rect
             x={strip.left - (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
             y={strip.top - (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
@@ -463,8 +490,8 @@ function FixtureShape({
             height={strip.height + 2 * (FIXTURE_HIT_PX - FIXTURE_DOT_PX) * mPerPx}
             fill="transparent"
             pointerEvents="all"
-            style={{ cursor: placement ? 'pointer' : bodyCursor(selected, editMode) }}
-            onPointerDown={onPick ? (e) => onPick(patch, e, placement) : undefined}
+            style={{ cursor }}
+            onPointerDown={pick}
           />
         ) : (
           <circle
@@ -473,8 +500,8 @@ function FixtureShape({
             r={FIXTURE_HIT_PX * mPerPx}
             fill="transparent"
             pointerEvents="all"
-            style={{ cursor: placement ? 'pointer' : bodyCursor(selected, editMode) }}
-            onPointerDown={onPick ? (e) => onPick(patch, e, placement) : undefined}
+            style={{ cursor }}
+            onPointerDown={pick}
           />
         )
       )}
@@ -484,6 +511,7 @@ function FixtureShape({
             screen={screen}
             r={r}
             strip={strip}
+            bar={bar}
             color={color}
             intensity={intensity}
             segments={segments}
@@ -561,6 +589,7 @@ function FixtureBody({
   screen,
   r,
   strip,
+  bar,
   color,
   intensity,
   segments,
@@ -570,6 +599,7 @@ function FixtureBody({
   screen: ScreenPoint
   r: number
   strip: StripGeometry | null
+  bar: readonly [ScreenPoint, ScreenPoint] | null
   color: string
   intensity: number
   segments?: PixelSegment[]
@@ -617,6 +647,35 @@ function FixtureBody({
     )
   }
 
+  if (bar) {
+    // The outline is a wider stroke laid under the lit one, so it reads as a border round the bar
+    // at any angle; a stroke has no border of its own.
+    const thickness = 2 * r * STRIP_HEIGHT_RATIO
+    // `outline.strokeWidth` is in screen pixels (non-scaling); this stroke scales, so convert —
+    // and double it, since half of a stroke under the bar is hidden by the lit line on top.
+    const border = outline.strokeWidth * 2 * (r / FIXTURE_DOT_PX)
+    const ends = { x1: bar[0].h, y1: bar[0].v, x2: bar[1].h, y2: bar[1].v }
+    return (
+      <>
+        <line
+          {...ends}
+          className={outline.className}
+          stroke={outline.stroke}
+          strokeWidth={thickness + border}
+          strokeLinecap="round"
+          pointerEvents="none"
+        />
+        <line
+          {...ends}
+          stroke={dimCssColour(color, perceptualBrightness(intensity, BODY_FLOOR))}
+          strokeWidth={thickness}
+          strokeLinecap="round"
+          pointerEvents="none"
+        />
+      </>
+    )
+  }
+
   return (
     <circle
       cx={screen.h}
@@ -626,4 +685,9 @@ function FixtureBody({
       {...outline}
     />
   )
+}
+
+/** A span's projected length, in screen-metres. */
+function spanLength([a, b]: readonly [ScreenPoint, ScreenPoint]): number {
+  return Math.hypot(b.h - a.h, b.v - a.v)
 }

@@ -81,3 +81,12 @@ describe('lanternsFor', () => {
     expect(lanternsFor([base])).toEqual([])
   })
 })
+
+describe("patchAtPlacement — a variable-length run's sides", () => {
+  it("takes the side's own length, else the fixture's", () => {
+    const strip = { ...base, fixtureTypeKey: 'lightstrip', lengthM: 10 }
+    expect(patchAtPlacement(strip, { ...sr, lengthM: 6 }).lengthM).toBe(6)
+    expect(patchAtPlacement(strip, sr).lengthM).toBe(10)
+    expect(patchAtPlacement({ ...strip, lengthM: null }, sr).lengthM).toBeNull()
+  })
+})
