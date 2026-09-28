@@ -50,7 +50,7 @@ jobs:
       - name: Set up Gradle
         # Held at v5 deliberately: v6 moved the caching into a proprietary component, and taking
         # it means accepting Gradle's Terms of Use — an owner's decision, not a Dependabot merge.
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       # `build`, not just `test`: it also assembles the fat jar, whose doLast verifier fails on
       # a wrong native payload (see "Building and Running" in CLAUDE.md), and runs the
