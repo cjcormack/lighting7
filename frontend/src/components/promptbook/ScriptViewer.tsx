@@ -39,7 +39,7 @@ import {
 import { FloatingSelectionToolbar } from './FloatingSelectionToolbar'
 import type { PromptBookTool } from './ToolPalette'
 
-// Vite worker wiring per react-pdf v10 docs — react-pdf pins the matching
+// Vite worker wiring per react-pdf v11 docs — react-pdf pins the matching
 // pdfjs-dist, so API and worker versions can't skew.
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
