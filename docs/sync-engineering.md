@@ -64,7 +64,8 @@ cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
                                # dimmer's other lanterns embedded as `extraPlacements` (v14+);
-                               # a lightstrip's `lengthM`, and each placement's (v15+)
+                               # a lightstrip's `lengthM`, and each placement's (v15+);
+                               # the operator's `headNumber` (v16+)
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
@@ -192,7 +193,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 15`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 16`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -234,6 +235,20 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 16 — head numbers
+
+**v16 adds one optional field.** `FixturePatchJson.headNumber` is the operator's number for a head —
+a ChamSys head number carried across a migration (`docs/fixtures-engineering.md` §"Head numbers").
+Null by default and omitted then, so a project with no numbers exports byte-for-byte as it did at
+v15.
+
+**It bumped `formatVersion`** by the sharp-edge rule, for v15's reason: a v15 reader ignores the
+key, imports every patch unnumbered, and its next wipe-then-export push rewrites every patch file
+without it — unnumbering every peer's rig. `minReader` stays at 5: a missing number is unnumbered.
+The importer writes the number as stored, **without a uniqueness check**: numbers are unique per
+project only at the write boundary, and a merge of two peers' renumbers must import rather than
+refuse the project. The patch list rings a shared number so the operator can fix it.
 
 ### Version 15 — variable-length fixtures
 

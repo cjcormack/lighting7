@@ -258,6 +258,7 @@ class ProjectExporter(private val state: State) {
                     fixtureTypeKey = p.fixtureTypeKey,
                     key = p.key,
                     displayName = p.displayName,
+                    headNumber = p.headNumber,
                     startChannel = p.startChannel,
                     sortOrder = p.sortOrder,
                     stageX = p.stageX,

@@ -11,7 +11,11 @@ import io.ktor.server.resources.delete
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.and
@@ -102,6 +106,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     return@withProject
                 }
             }
+            headNumberRangeError(request.headNumber)?.let {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+                return@withProject
+            }
             val normalisedGelCode = normaliseGelCode(request.gelCode)
             val normalisedKindOverride = try {
                 normaliseKindOverride(request.kindOverride)
@@ -151,6 +159,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if (existingKey != null) {
                     return@transaction Pair<FixturePatchDto?, String?>(null, "Duplicate key: ${request.key}")
                 }
+                request.headNumber?.let { n ->
+                    headNumberHolder(project, n, exceptPatchId = null)?.let {
+                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(n, it))
+                    }
+                }
 
                 val maxSortOrder = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
                     .maxOfOrNull { it.sortOrder } ?: -1
@@ -162,6 +175,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.fixtureTypeKey = request.fixtureTypeKey
                     this.key = request.key
                     this.displayName = request.name
+                    this.headNumber = request.headNumber
                     this.startChannel = request.startChannel
                     this.sortOrder = maxSortOrder + 1
                     this.stageX = request.stageX
@@ -247,6 +261,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
             } else null
 
+            val headNumber: Int? = if ("headNumber" in body) {
+                parseHeadNumber(body["headNumber"]).getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid headNumber"))
+                    return@withProject
+                }
+            } else null
+
             var sweptCellTiles = 0
             var infrastructureFlipped = false
             // Set when the refusal is the request's fault rather than a conflict with stored state.
@@ -270,6 +291,14 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                 }
 
+                // Another head's number: a conflict with stored state, so a 409. Before the first
+                // write below for the rigging's reason — a normal return commits.
+                if (headNumber != null) {
+                    headNumberHolder(project, headNumber, exceptPatchId = patch.id.value)?.let {
+                        return@transaction Pair<FixturePatchDto?, String?>(null, headNumberTaken(headNumber, it))
+                    }
+                }
+
                 // Resolved before the first write below, so an unknown rigging refuses the whole
                 // PUT rather than committing the fields above it (a normal return commits).
                 val placementRiggings = placementInputs?.let { inputs ->
@@ -279,6 +308,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
 
                 body["displayName"].nullableString()?.let { patch.displayName = it }
+                if ("headNumber" in body) patch.headNumber = headNumber
                 body["key"].nullableString()?.let { newKey ->
                     val existing = DaoFixturePatch.find {
                         (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.key eq newKey)
@@ -402,7 +432,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
     //     construction* rather than by someone remembering to check;
     //   - it keeps `key`, `startChannel` and group membership — whose uniqueness
     //     and channel-overlap validation is inherently per-patch — out of the bulk
-    //     path entirely.
+    //     path entirely. `headNumber` is the one unique key it does carry, and it is
+    //     checked against the batch's final state rather than per entry, which is
+    //     what makes a renumber (the patch list's Set over N heads) one atomic write.
     // A body carrying anything else is a 400, not a silent partial apply.
     put<ProjectPatchPlacementsResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -425,6 +457,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val prepared = mutableListOf<Pair<Int, JsonObject>>()
             val failures = mutableListOf<BulkPlacementFailure>()
             val placementInputsById = mutableMapOf<Int, List<PlacementInput>>()
+            // Only the entries that carry the key — a null value is an explicit clear.
+            val headNumbersById = mutableMapOf<Int, Int?>()
             for (entry in request.updates) {
                 val patchId = entry["patchId"].nullableInt()
                 if (patchId == null) {
@@ -460,6 +494,19 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                     failures.add(BulkPlacementFailure(patchId, stageError))
                     continue
+                }
+                if ("headNumber" in entry) {
+                    val parsed = parseHeadNumber(entry["headNumber"])
+                    val headError = parsed.exceptionOrNull()?.message
+                    if (headError != null) {
+                        if (request.atomic) {
+                            call.respond(HttpStatusCode.BadRequest, ErrorResponse("patch $patchId: $headError"))
+                            return@withProject
+                        }
+                        failures.add(BulkPlacementFailure(patchId, headError))
+                        continue
+                    }
+                    headNumbersById[patchId] = parsed.getOrThrow()
                 }
                 if ("extraPlacements" in entry) {
                     val parsed = parseExtraPlacements(entry["extraPlacements"])
@@ -551,6 +598,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         placementRiggingsById[patchId] = resolved.getOrThrow()
                     }
                 }
+                // Head numbers are unique in the project, so they are checked against the rig as it
+                // will stand once the whole batch lands — which is what lets one request swap two
+                // heads' numbers, where two single PUTs would each refuse the other's.
+                if (headNumbersById.isNotEmpty()) {
+                    // `failures` holds the pre-pass's refusals (non-atomic only): an entry whose
+                    // number parsed but whose placements did not is not written either.
+                    val refused = (fatal + failures).map { it.patchId }.toSet()
+                    fatal += headNumberClashes(project, headNumbersById, rejected = refused)
+                }
                 if (request.atomic && fatal.isNotEmpty()) {
                     return@transaction BulkOutcome(null, fatal.first().error, emptyList(), emptyList())
                 }
@@ -574,6 +630,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("basePitchDeg" in entry) patch.basePitchDeg = entry["basePitchDeg"].nullableDouble()
                     if ("beamAngleDeg" in entry) patch.beamAngleDeg = entry["beamAngleDeg"].nullableInt()
                     if ("lengthM" in entry) patch.lengthM = entry["lengthM"].nullableDouble()
+                    if (patchId in headNumbersById) patch.headNumber = headNumbersById[patchId]
                     if ("gelCode" in entry) patch.gelCode = normaliseGelCode(entry["gelCode"].nullableString())
                     // Already normalised (and validated) in the pass above.
                     if ("kindOverride" in entry) patch.kindOverride = kindOverrides[patchId]
@@ -741,6 +798,8 @@ data class FixturePatchDto(
     val id: Int,
     val key: String,
     val displayName: String,
+    /** The operator's head number, unique in the project; null when unnumbered. */
+    val headNumber: Int? = null,
     val fixtureTypeKey: String,
     val startChannel: Int,
     val channelCount: Int?,
@@ -786,6 +845,8 @@ data class CreatePatchRequest(
     val key: String,
     val name: String,
     val startChannel: Int,
+    /** Unique in the project when set ([MIN_HEAD_NUMBER]..[MAX_HEAD_NUMBER]); a taken one is a 409. */
+    val headNumber: Int? = null,
     val address: String? = null,
     val groupName: String? = null,
     val stageX: Double? = null,
@@ -824,6 +885,9 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "kindOverride",
     // A variable-length fixture's own length — drawn, never built from.
     "lengthM",
+    // The operator's head number — a label, never built from. The one key here with a uniqueness
+    // rule, which the bulk route checks against the batch's final state (`headNumberClashes`).
+    "headNumber",
     "stageHidden",
     // A paired fixture's other placements — its own table, which the loader never reads.
     "extraPlacements",
@@ -851,6 +915,7 @@ private fun DaoFixturePatch.toDto(
         id = id.value,
         key = key,
         displayName = displayName,
+        headNumber = headNumber,
         fixtureTypeKey = fixtureTypeKey,
         startChannel = startChannel,
         channelCount = typeInfo?.channelCount,
@@ -925,6 +990,74 @@ internal fun fixedLengthRefusal(typeKey: String): String? {
     if (FixtureTypeRegistry.typeInfoForKey(typeKey)?.acceptsLength == true) return null
     return "lengthM is only for fixture types whose length is set per install (such as lightstrip); " +
         "'$typeKey' has a fixed length"
+}
+
+/** Why [headNumber] is out of range, or null when it is in range (or null — unnumbered). */
+internal fun headNumberRangeError(headNumber: Int?): String? =
+    if (headNumber != null && headNumber !in MIN_HEAD_NUMBER..MAX_HEAD_NUMBER) {
+        "headNumber must be between $MIN_HEAD_NUMBER and $MAX_HEAD_NUMBER"
+    } else null
+
+/**
+ * A `headNumber` from a raw JSON body: null (an explicit clear) stays null, a whole number in range
+ * is taken, and anything else — a string, a fraction, out of range — is a failure naming why.
+ * Parsed by hand rather than through `nullableInt()`, which throws on a fraction and so answers 500.
+ */
+internal fun parseHeadNumber(element: JsonElement?): Result<Int?> {
+    if (element == null || element is JsonNull) return Result.success(null)
+    val number = (element as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+        ?: return Result.failure(IllegalArgumentException("headNumber must be a whole number"))
+    headNumberRangeError(number)?.let { return Result.failure(IllegalArgumentException(it)) }
+    return Result.success(number)
+}
+
+/** The patch in [project] that holds head [number], other than [exceptPatchId]; null when free. */
+internal fun headNumberHolder(project: DaoProject, number: Int, exceptPatchId: Int?): DaoFixturePatch? =
+    DaoFixturePatch.find {
+        (DaoFixturePatches.project eq project.id) and (DaoFixturePatches.headNumber eq number)
+    }.firstOrNull { it.id.value != exceptPatchId }
+
+internal fun headNumberTaken(number: Int, holder: DaoFixturePatch): String =
+    "Head number $number is already '${holder.displayName}' (${holder.key})"
+
+/**
+ * The bulk route's head-number check: every entry in [assigned] (patch id → its new number, null
+ * clearing) whose number another head of [project] will hold once the batch lands. The rig "as it
+ * will stand" is every patch's stored number, overridden by each assignment not in [rejected].
+ *
+ * Iterated to a fixpoint, because refusing an entry leaves that head on its *old* number — which a
+ * sibling entry may have been moving onto (A: 1 → 2 beside B: 2 → 3, with B refused). Every head
+ * that shares a number is refused, not only the second one: which of two batch entries "got there
+ * first" is not a thing a batch has. A head already holding the number and not in the batch keeps it.
+ */
+internal fun headNumberClashes(
+    project: DaoProject,
+    assigned: Map<Int, Int?>,
+    rejected: Set<Int>,
+): List<BulkPlacementFailure> {
+    val stored = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }.toList()
+    val byId = stored.associateBy { it.id.value }
+    val failed = mutableMapOf<Int, String>()
+    while (true) {
+        val refused = rejected + failed.keys
+        val numberOf = stored.associate { p ->
+            val id = p.id.value
+            id to (if (id in assigned && id !in refused) assigned[id] else p.headNumber)
+        }
+        val holders = numberOf.entries.filter { it.value != null }.groupBy({ it.value!! }, { it.key })
+        var changed = false
+        for ((number, ids) in holders) {
+            if (ids.size < 2) continue
+            for (id in ids) {
+                if (id !in assigned || id in refused) continue
+                val other = byId.getValue(ids.first { it != id })
+                failed[id] = headNumberTaken(number, other)
+                changed = true
+            }
+        }
+        if (!changed) break
+    }
+    return failed.map { (id, error) -> BulkPlacementFailure(id, error) }
 }
 
 internal fun normaliseGelCode(raw: String?): String? {

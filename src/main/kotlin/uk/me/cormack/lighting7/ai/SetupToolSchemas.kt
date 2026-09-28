@@ -130,13 +130,14 @@ internal val listFixtureTypesTool = AnthropicToolDef(
 
 internal val getPatchTool = AnthropicToolDef(
     name = "get_patch",
-    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. Read it before changing the patch or stage, and after, to check the result.",
+    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. Read it before changing the patch or stage, and after, to check the result.",
     inputSchema = objectSchema {},
 )
 
 private val patchRowSchema = objectSchema(required = listOf("name", "fixtureTypeKey", "universe", "startChannel")) {
     prop("key", "string", "Stable identifier, unique in the project, used by every other tool (e.g. 'foh-1', 'lx1-spot-3'). Derived from name when omitted. A key that is already patched updates that fixture in place instead of adding one.")
     prop("name", "string", "Display name, e.g. 'FOH 1' or the source console's channel label.")
+    prop("headNumber", "integer", "The operator's number for this head, 1–99999, unique in the project — what the source console calls a head number (ChamSys MagicQ), fixture number or channel number (ETC Eos). Carry it across from a migrated patch list so the operator can keep calling fixtures by it. Omit to leave an existing fixture's number as it is; null removes it.")
     prop("fixtureTypeKey", "string", "From list_fixture_types.")
     prop("universe", "integer", "The desk's DMX universe number. The desk counts from 0, so another console's 'universe 1' is usually 0 here — check get_patch for the universes already set up, and ask the operator if unsure.")
     prop("startChannel", "integer", "DMX start address within the universe, 1–512. An address written '2/101' is universe 2, address 101 on the source console.")
@@ -152,7 +153,7 @@ private val patchRowSchema = objectSchema(required = listOf("name", "fixtureType
 internal val patchFixturesTool = AnthropicToolDef(
     name = "patch_fixtures",
     description = "Patch fixtures into the current project in one go — the tool for turning a patch list (a PDF or CSV exported from another console, or a paperwork plot) into the desk's patch. " +
-        "The whole list is checked first — known types, addresses inside 1–512, no two fixtures overlapping on a universe, unique keys, riggings that exist — and nothing is written if any row fails; the answer lists every problem, so fix them and send the list again. " +
+        "The whole list is checked first — known types, addresses inside 1–512, no two fixtures overlapping on a universe, unique keys and head numbers, riggings that exist — and nothing is written if any row fails; the answer lists every problem, so fix them and send the list again. " +
         "Use dryRun first on a big list. Rows whose key is already patched are updated, so re-sending a corrected list is safe. New universes are created with no node address — the operator sets the Art-Net node IPs in the desk's universe settings. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("fixtures")) {
         arrayProp("fixtures", patchRowSchema)

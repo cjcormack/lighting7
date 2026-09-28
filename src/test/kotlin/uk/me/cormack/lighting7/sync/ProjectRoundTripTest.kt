@@ -149,6 +149,32 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * v16: a head number travels on its patch, and an unnumbered patch carries no key — so an
+     * export of a rig with no numbers is v15's byte for byte.
+     */
+    @Test
+    fun `a patch exports its head number, and an unnumbered one carries no key`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        fun heads(dir: Path): Map<String, Int?> =
+            Files.list(dir.resolve("fixturePatches")).use { stream ->
+                stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+            }.associate { it.key to it.headNumber }
+        val exported = heads(exportDirA)
+        assertEquals(mapOf("hex-1" to 104, "hex-2" to 103, "hex-3" to 102, "hex-4" to null), exported.filterKeys { it.startsWith("hex-") })
+        val unnumbered = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }.filter { it.contains("\"hex-4\"") }
+        assertFalse(unnumbered.single().contains("\"headNumber\""), "an unnumbered patch must not carry the key at all")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        assertEquals(exported, heads(exportDirB), "the importer keeps every head number")
+    }
+
+    /**
      * v15: a lightstrip's installed length travels on its patch, and a segment's own length on its
      * placement. A patch without one carries no key, so a length-less export is v14's byte for byte.
      */

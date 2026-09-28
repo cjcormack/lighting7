@@ -107,6 +107,12 @@ import uk.me.cormack.lighting7.models.asDuration
 // both fields default to null. Imported as stored, with no type check: the write boundary refuses
 // a length on a fixed-length type, and the stage views draw one only for a type that takes it.
 //
+// v16 added `FixturePatchJson.headNumber` (the operator's head number, as a patch migrated from
+// another console carries it). SUPPORTED moved for v14's reason — a v15 reader would import every
+// patch unnumbered and write the numbers away on its next push; MIN stays at 5 because the field
+// defaults to null. Imported as stored, with no uniqueness check: a merge of two peers' numbers
+// must import, and the patch list marks a shared number rather than refusing the project.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -132,7 +138,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 15
+internal const val SUPPORTED_FORMAT_VERSION = 16
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -598,6 +604,7 @@ class ProjectImporter(private val state: State) {
             fixtureTypeKey = p.fixtureTypeKey
             key = p.key
             displayName = p.displayName
+            headNumber = p.headNumber
             startChannel = p.startChannel
             sortOrder = p.sortOrder
             stageX = p.stageX
