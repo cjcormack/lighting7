@@ -15,11 +15,9 @@ import { rowTiles, runsOf } from './buskRig'
  * (`useBuskRigQuery`, `effectiveRig` for an empty one) and the two lists it already holds. It is
  * the split `deskFollow.ts` already makes, applied to the one write that needs a rule.
  *
- * **Pinned against the server's own fixture.** `cellsSubSelection.test.ts` reads
- * `__fixtures__/subselect.fixture.json`, a copy of lighting7's
- * `src/test/resources/busk/subselect.fixture.json` that `DeskSelectionSubselectTest` pins
+ * **Pinned against the server's own fixture.** `cellsSubSelection.test.ts` imports the backend's
+ * `src/test/resources/busk/subselect.fixture.json`, which `DeskSelectionSubselectTest` pins
  * `DeskSelection.subselect` against — the `templateIntent.test.ts` way of keeping a mirror honest.
- * When that fixture changes, copy it again.
  *
  * Three things this side has to derive that the desk reads off its live registers, each a place
  * the two could disagree and each recorded here so the disagreement is a known one:

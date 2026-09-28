@@ -1,5 +1,7 @@
 #!/bin/sh
-# Pre-commit gate — see the "Pre-commit gate" section of CLAUDE.md.
+# Pre-commit gate for the frontend — see the "Pre-commit gate" section of
+# frontend/CLAUDE.md. The backend's equivalent, `./gradlew test`, is not hooked:
+# see "Pre-commit checks" in the root CLAUDE.md.
 #
 # Enable in a fresh clone with:
 #   git config core.hooksPath .githooks
@@ -28,19 +30,22 @@ fi
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "pre-commit: npm is not on PATH, so the gate cannot run." >&2
-  echo "            Run 'npm run check' yourself, then commit with --no-verify." >&2
+  echo "            Run 'npm run check' in frontend/ yourself, then commit with --no-verify." >&2
   exit 1
 fi
 
-# A docs-, editor- or asset-only commit doesn't need a build and test run.
+# A docs-, editor-, asset- or backend-only commit doesn't need a frontend build
+# and test run.
 # core.quotePath=false keeps non-ASCII paths raw; the default escapes them into
 # a "…"-wrapped form that would slip past the patterns below and skip the gate.
 STAGED=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
-if ! printf '%s\n' "$STAGED" | grep -qE '^(src/|index\.html$|package(-lock)?\.json$|tsconfig[^/]*\.json$|vite\.config\.|vitest\.config\.|eslint\.config\.|postcss\.config\.|tailwind\.config\.)'; then
+if ! printf '%s\n' "$STAGED" | grep -qE '^frontend/(src/|index\.html$|package(-lock)?\.json$|tsconfig[^/]*\.json$|vite\.config\.|vitest\.config\.|eslint\.config\.|postcss\.config\.|tailwind\.config\.)'; then
   echo "pre-commit: nothing buildable staged — skipping gate."
   exit 0
 fi
 
-echo "pre-commit: build + tests + lint (npm run check)…"
+echo "pre-commit: build + tests + lint (npm run check in frontend/)…"
+# Hooks run from the top of the work tree.
+cd frontend
 npm run check
 echo "pre-commit: gate passed."

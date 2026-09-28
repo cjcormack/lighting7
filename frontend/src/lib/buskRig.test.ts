@@ -3,7 +3,7 @@ import type { GroupSummary } from '@/api/groupsApi'
 import type { CueTarget } from '@/api/cuesApi'
 import type { BuskRig, BuskRigElement, BuskRigPatch, BuskRigRow, BuskRigTile } from '@/api/buskRigApi'
 import type { Fixture } from '@/store/fixtures'
-import fixture from './__fixtures__/rigOrder.fixture.json'
+import fixture from '../../../src/test/resources/busk/rigOrder.fixture.json'
 import {
   applyDrop,
   effectiveRig,
@@ -44,11 +44,10 @@ import { parseBuskDragId } from './buskLayout'
  * The load-bearing pin is the last block: **the show-all fallback's order is the desk's**.
  * `state/BuskRigOrder.kt` walks the rig for `selection.subselect`'s *Next* / *Prev*, and with an
  * empty rig it answers every group then every fixture — which is exactly what `effectiveRig` draws.
- * The two must agree, so this file reads the server's own test fixture. `__fixtures__/` holds a
- * **copy** of `lighting7/src/test/resources/busk/rigOrder.fixture.json`: a cross-repo import would
- * make the suite depend on a sibling checkout, and the app's tsconfig carries no Node types to read
- * one with. When `BuskRigOrderTest`'s fixture changes, copy it here again — the two files are meant
- * to be byte-identical, and the pin below is only as good as that copy.
+ * The two must agree, so this file imports the server's own test fixture,
+ * `src/test/resources/busk/rigOrder.fixture.json` — the one `BuskRigOrderTest` reads — from the
+ * backend's tree. It was a hand-refreshed copy while the frontend was a separate repo; one commit
+ * now changes the rule, the fixture and both pins together.
  */
 
 // ─── Fixtures ───────────────────────────────────────────────────────────

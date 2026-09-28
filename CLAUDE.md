@@ -91,7 +91,10 @@ Two related facts, both visible in `~/.gradle/daemon/<version>/daemon-*.out.log`
 ### Pre-commit checks
 
 This project has no Makefile — the global `make commit-check` rule does not
-apply. `./gradlew test` is the equivalent pre-commit check. A recent green
+apply. `./gradlew test` is the equivalent pre-commit check for the backend; the
+frontend's is `npm run check` in `frontend/`, which `.githooks/pre-commit` runs
+when anything buildable under `frontend/` is staged (enable it with
+`git config core.hooksPath .githooks`). A recent green
 run earlier in the same session is sufficient; you do not need to re-run it
 just before `git commit` if nothing has changed since.
 
@@ -118,7 +121,9 @@ explains why it is safe.
 ### Git workflow
 
 Solo personal repo — commit and push directly to `main`. Do **not** open pull
-requests, do **not** create feature branches. The standard "still don't commit
+requests, do **not** create feature branches. The frontend is in this repo
+(`frontend/`), so a change that crosses the wire — a route and its client, a
+Kotlin rule and its TypeScript mirror — is one commit. The standard "still don't commit
 or push without me asking" rule from the global CLAUDE.md still applies; this
 section only changes *how* a confirmed commit/push happens (straight to `main`,
 no PR).
@@ -599,7 +604,10 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 ## Related Projects
 
-- **Frontend**: `/Users/chris/Development/Personal/lighting-react/`
+- **Frontend**: `frontend/` in this repo, with its own `frontend/CLAUDE.md`. It was the separate
+  `lighting-react` repo until the two were merged with both histories intact: every pre-merge
+  commit keeps its hash, so the hashes the docs cite still resolve. `git log --follow` reaches a
+  frontend file's history from before its move into `frontend/`.
 
 ## External Integrations
 

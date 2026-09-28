@@ -2,19 +2,16 @@ import { describe, expect, it } from 'vitest'
 import type { CueTarget } from '@/api/cuesApi'
 import type { BuskRigRow, BuskRigTile } from '@/api/buskRigApi'
 import { SUBSELECT_MODES, type SubselectMode } from '@/api/selectionApi'
-import fixture from './__fixtures__/subselect.fixture.json'
+import fixture from '../../../src/test/resources/busk/subselect.fixture.json'
 import { rigStepsOver, selectedCells, subselectTargets, type CellsFixture, type CellsRig } from './cellsSubSelection'
 
 /**
  * The unlinked window's mirror of `DeskSelection.subselect` (busk-further plan D12), pinned against
  * the desk's own test data.
  *
- * `__fixtures__/subselect.fixture.json` is a **copy** of
- * `lighting7/src/test/resources/busk/subselect.fixture.json`, the file `DeskSelectionSubselectTest`
- * reads — the `rigOrder.fixture.json` arrangement, for its reason: a cross-repo import would make
- * this suite depend on a sibling checkout, and the app's tsconfig carries no Node types to read one
- * with. The two files are meant to be byte-identical; when the server's changes, copy it again. Every
- * case is run, so a rule the desk changes fails here the day the copy is refreshed.
+ * It imports `src/test/resources/busk/subselect.fixture.json` from the backend's tree — the file
+ * `DeskSelectionSubselectTest` reads, not a copy of it (it was one while the frontend was a separate
+ * repo). Every case is run, so a rule the desk changes fails here in the same commit.
  */
 
 // ─── The fixture's shape, as much of it as this side reads ──────────────

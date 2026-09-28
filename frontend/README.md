@@ -13,7 +13,7 @@ React frontend for Chris' DMX Controller v7 - a web-based interface for controll
 ## Requirements
 
 - Node.js 18+
-- [lighting7 backend](../lighting7) running on port 8413
+- The lighting7 backend (the root of this repo, [`..`](..)) running on port 8413
 
 ## Getting Started
 

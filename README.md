@@ -17,7 +17,7 @@ A professional stage and event lighting control system built in Kotlin. Control 
 
 - JDK 21+ on `PATH` for Gradle (the project's Kotlin toolchain pins JVM 24 — Gradle's foojay resolver auto-downloads a matching JDK if your system JDK differs).
 - Network access to ArtNet devices for DMX output.
-- For frontend builds: a checkout of [`lighting-react`](../lighting-react) at `../lighting-react` (override with `-PlightingReactPath=...`). The Gradle build invokes its `npm run build` and bakes the output into the JAR.
+- The React frontend lives in [`frontend/`](frontend/). The Gradle build runs its `npm run build` (with a Node it downloads itself) and bakes the output into the JAR.
 
 SQLite is used for persistence — there is no database server to install. The DB file is created on first launch under the platform's app data dir:
 

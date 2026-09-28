@@ -2,12 +2,18 @@
 
 ## Project Overview
 
-This is the React frontend for the DMX lighting controller system. The backend is located at `/Users/chris/Development/Personal/lighting7` (Kotlin/JVM).
+This is the React frontend for the DMX lighting controller system. It lives in `frontend/` of the
+lighting7 repo; the backend (Kotlin/JVM) is the repo root, `..` from here, and its own guidance is
+`../CLAUDE.md`. They were two repos, `lighting7` and `lighting-react`, until they were merged with
+both histories intact — every pre-merge commit keeps its hash, so a hash cited below still
+resolves; use `git log --follow` for a file's history from before its move into `frontend/`.
+Prose below still says "lighting7" for the backend.
 
 ## Git workflow
 
 Solo personal repo — commit and push directly to `main`. Do **not** open pull
-requests, do **not** create feature branches. The standard "still don't commit
+requests, do **not** create feature branches. A change that crosses the wire is one
+commit: the backend route and this side's client land together. The standard "still don't commit
 or push without me asking" rule from the global CLAUDE.md still applies; this
 section only changes *how* a confirmed commit/push happens (straight to `main`,
 no PR).
@@ -28,10 +34,11 @@ ESLint reports is one this change introduced. Fix it rather than committing
 over it. `npm run lint` passes `--max-warnings 0`, because plain `eslint` exits
 0 on warnings and would wave them through.
 
-**A git hook enforces this.** `.githooks/pre-commit` runs `npm run check` and
-refuses the commit if it fails; it skips the run when nothing buildable is
-staged (docs, `.idea/`, assets). Enable it in a fresh clone with
-`git config core.hooksPath .githooks`. Bypass a single commit with
+**A git hook enforces this.** `.githooks/pre-commit` at the repo root runs
+`npm run check` in `frontend/` and refuses the commit if it fails; it skips the
+run when nothing buildable under `frontend/` is staged (docs, `.idea/`, assets,
+backend-only changes). Enable it in a fresh clone with
+`git config core.hooksPath .githooks` from the repo root. Bypass a single commit with
 `git commit --no-verify`. It checks the working tree rather than the staged
 snapshot — see the comment at the top of the hook for why.
 
@@ -220,9 +227,9 @@ effect half narrow, and each removes a way for it to complicate the cook: **a va
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
 A **Beam** template holds values only — the effect library has no beam category, and the backend
 refuses `beam`, `controls` and `composite` **by name** so a script-registered beam effect cannot
-mint one behind the rule. Backend contract in `lighting7/docs/lighting-composition-model.md` §"Looks and layers"
+mint one behind the rule. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
-`lighting7/docs/plans/completed/looks-and-layers-plan.md` and
+`../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
 
 They were one entity until session 3, split on the row's targeting mode: a **bound** Look behaved
@@ -323,7 +330,7 @@ of every layer below it, on every property it asserts. It is **suppression, not 
 instance keeps running, so clearing the stomp brings it back mid-phase — and it applies to the
 programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle; a read-only row
 draws a badge instead, and the dense row draws both — the badge on the row, because stomp is the
-one setting that changes what the rows *below* do, and the toggle in its popover. Backend contract in `lighting7/docs/lighting-composition-model.md`
+one setting that changes what the rows *below* do, and the toggle in its popover. Backend contract in `../docs/lighting-composition-model.md`
 §Stomp, which is also where the *other* stomp lives — the cue-level, cross-cue, removing one. Don't
 conflate them.
 
@@ -540,8 +547,8 @@ has a name, a `solo` flag and a `flow` (`WRAP` | `COLUMN` | `SCROLL` — the las
 pads scrolling sideways, the rig row's own flow, offered to banks since 2026-09-21) and holds ordered **pads**, each a
 reference to exactly one template, Look or cue. One record may sit on several pads, on several
 pages. Backend contract in `lighting7/models/buskLayout.kt` and
-`lighting7/docs/lighting-composition-model.md` §"The busk layout"; the plan is
-`lighting7/docs/plans/completed/busk-layout-plan.md` and the design authority is `look-groups-design/`.
+`../docs/lighting-composition-model.md` §"The busk layout"; the plan is
+`../docs/plans/completed/busk-layout-plan.md` and the design authority is `look-groups-design/`.
 
 It replaced an automatic layout — four family columns of templates, a Looks pool, a cue column of
 stack cards and pinned-cue pads. The reason is the one a template group could not meet: a group
@@ -1350,10 +1357,9 @@ empty list, so `rows`, `tiles` and a patch's `elements` are all optional on this
 `GET /fixtures` answer them**. That order is not a choice made here: `state/BuskRigOrder.kt` walks
 the rig for `selection.subselect`'s *Next* / *Prev* and answers every group then every fixture for
 an empty one, and the two must agree. `buskRig.test.ts` pins `effectiveRig` and `rigSteps` against
-the server's own fixture — `src/lib/__fixtures__/rigOrder.fixture.json` is a **copy** of
-`lighting7/src/test/resources/busk/rigOrder.fixture.json` (a cross-repo import would make the suite
-depend on a sibling checkout, and the app's tsconfig has no Node types to read one with), so when
-`BuskRigOrderTest`'s fixture changes, copy it again. The fallback has **one render path** with the
+the server's own fixture — the test imports `../src/test/resources/busk/rigOrder.fixture.json`,
+the file `BuskRigOrderTest` reads, straight from the backend's tree (it was a hand-refreshed copy
+while the two were separate repos). The fallback has **one render path** with the
 built rig: its rows are rows like any other, only their tiles carry no address, take no drop and
 are drawn dimmed behind the new-row zone while editing an empty rig.
 
@@ -1407,9 +1413,9 @@ fallback and a press before the query lands would walk the wrong order with no f
 `effectiveRig`'s rows, the fixtures' `elements` and the groups' members derived from each fixture's
 `groups` in fixture-list order (`GroupSummary` carries no member list; a session 7 amendment to
 D12's "member lists it already fetches") — pure, no React, and **pinned against the server's own
-fixture**: `src/lib/__fixtures__/subselect.fixture.json` is a copy of lighting7's
-`src/test/resources/busk/subselect.fixture.json`, `rigOrder.fixture.json`'s arrangement, and
-`cellsSubSelection.test.ts` runs every case. The Spread tab's *Over: Cells* counts through the same
+fixture**: `cellsSubSelection.test.ts` imports the backend's
+`../src/test/resources/busk/subselect.fixture.json`, as `buskRig.test.ts` does the rig order's, and
+runs every case. The Spread tab's *Over: Cells* counts through the same
 module (`selectedCells`), so the chip and the tab cannot count cells two ways. Below `md` the nine
 modes sit under a *Cells* heading in the band's verbs menu.
 
@@ -1590,7 +1596,7 @@ drag, because the window that saw the press keeps the pointer for the whole gest
 neighbour never receives a pointer event of its own. Backend contract in `lighting7`'s
 `state/HandState.kt` and `plugins/HandSocket.kt` (17140b3), the wire in
 `docs/websocket-engineering.md` §Hand; the plan is
-`lighting7/docs/plans/completed/multi-screen-plan.md` §3.5 and D12, and where
+`../docs/plans/completed/multi-screen-plan.md` §3.5 and D12, and where
 that plan's sketch and the shipped commit differ, **the commit wins**.
 
 **Three frames, and none of them places.** `hand.state {item?}` is the connect snapshot and the
@@ -1901,8 +1907,8 @@ snapshot, for `dragOverlayRegistry`'s stated reason.
 rules, and — under *Edit bindings* — lets a library be dragged onto it: **a row lands on a strip, a
 chip lands on one control**. Read
 [`docs/midi-surface-engineering.md`](docs/midi-surface-engineering.md) before touching it; the plan
-is `lighting7/docs/plans/completed/midi-surface-plan.md` and the layout authority
-`lighting7/docs/plans/completed/midi-surface-design/`.
+is `../docs/plans/completed/midi-surface-plan.md` and the layout authority
+`../docs/plans/completed/midi-surface-design/`.
 
 The four things that bite, in one line each. **`lib/surfaceResolve.ts` is a mirror of
 `ControlSurfaceBindingService.resolve` and `deriveStripTarget`** and its failure is silent — a
@@ -2044,7 +2050,7 @@ match nothing, silently.
 count's hover, and both verbs are on the busk target band — which is what gives an iPad portrait two
 recent chips instead of none. Below `@[600px]` the chip scroller is not drawn at all and the library
 is reached through `All · n` alone, with Recent as the sheet's first section. The design authority
-is `lighting7/docs/plans/programmer-chrome-design/`, page *Templates*.
+is `../docs/plans/programmer-chrome-design/`, page *Templates*.
 
 **New from selection** is server-side (`POST /templates/from-programmer`), for the same reason apply
 is: converting a recorded *literal* back into an **intent** is per-head arithmetic that has to agree
@@ -2100,7 +2106,7 @@ editor per column spread over the selected columns, the Set · Clear · Spread b
 `components/sheet/`, mounted by the **patch list** (`components/patches/PatchSheet.tsx`), the
 **DMX sheet** (`components/channels/DmxSheet.tsx`) and the **cue sheet**
 (`components/runner/CueSheet.tsx`) as well as the programmer. The design record is
-`lighting7/docs/plans/sheet-views-design/` (the `Kit` artboard is the module map, `Spec` the desk
+`../docs/plans/sheet-views-design/` (the `Kit` artboard is the module map, `Spec` the desk
 survey and the rules). The surfaces differ in their columns and their verbs, never in the gesture.
 
 **What lifted out of `components/fixtures-list/`**, generic over the column key (`CellRef<C>`,
@@ -2503,7 +2509,7 @@ the divider, `SHEET_FOOTER_CLASS`), and `components/sheet/SheetPage.tsx` the thi
 them (`SheetPage`, `.Header`, `.Row`, `.Footer`, `.Empty`) plus the one `LegendSwatch`. `SheetTable`
 and `FixturesTable` draw their frame from the constants; every surface mounts the components and
 never writes the classes. A surface that wants to differ says so at the import, in one file. The
-design record is `lighting7/docs/plans/list-shell-design/` (`Kit.dc.html`'s "Where the code goes"
+design record is `../docs/plans/list-shell-design/` (`Kit.dc.html`'s "Where the code goes"
 is the file-by-file map; the five open calls are made on `Spec` under "Called — 2026-09-15").
 
 The rules the two files encode, each of which was a measured inconsistency before them: a list is a
@@ -2541,8 +2547,8 @@ not have the header row and the gutter. `/settings/patches` redirects there, `?a
 ### Library sheets
 
 **The five libraries — Scripts, FX Library, Looks, Templates, Speed Masters — are sheets on the
-sheet kit, each on the route it always had** (`lighting7/docs/plans/completed/library-sheets-plan.md`;
-the boards are `lighting7/docs/plans/library-sheets-design/`, where the plan won on behaviour and the
+sheet kit, each on the route it always had** (`../docs/plans/completed/library-sheets-plan.md`;
+the boards are `../docs/plans/library-sheets-design/`, where the plan won on behaviour and the
 boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
 it (1), **Looks and Templates** (2), a generic value template's **Value** edited in the cell (3), and
 **Scripts and the FX Library** (4). The rules, which every one of the five keeps:
@@ -2853,7 +2859,7 @@ deleted, and with them `scriptUtils`' usage-glyph helpers, which only ever read 
 ### The editor kit
 
 **Every value editor is built from the same five pieces, exported once from `components/editor/`**
-(editor-kit plan D8, D9; the design record is `lighting7/docs/plans/editor-kit-design/`, whose
+(editor-kit plan D8, D9; the design record is `../docs/plans/editor-kit-design/`, whose
 `Editors.dc.html` draws the anatomy and each editor on it). They were the busk sheet's anatomy —
 9px uppercase labels, 28px fields with the unit inside, a read-out line, a static footer with the
 save first — and the programmer's four cell editors and the kit's four each answered the count
@@ -3466,7 +3472,7 @@ because it is what makes editing a Look feel local rather than like a trip to th
 `ProgrammerScopeBand`, and a layer is focused by clicking its name badge in the stack rail.
 
 **The programmer's chrome is one spacing system**, and every number in it is stated once here so a
-row cannot drift from its neighbours (design record: `lighting7/docs/plans/programmer-chrome-design/`,
+row cannot drift from its neighbours (design record: `../docs/plans/programmer-chrome-design/`,
 whose `INDEX.md` has the reasoning). A 12px gutter on every row, the `ShowHeader` included — and
 that header is shared, so Show, the Prompt Book and Busk take it too, and on those three it differs
 from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row is 40px and holds
@@ -3603,7 +3609,7 @@ yours. It is a sequence, so a failure part-way leaves the Look and says so.
 ### The rail's tabs
 
 **The rail's header is a tab strip — Stack · Colour · Spread** (editor-kit plan session 4,
-`lighting7/docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail as it always was,
+`../docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail as it always was,
 `LAYERS n · FX n` its face and the body and footer unchanged; **Colour** and **Spread** are the busk
 sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
 `RailSpreadTab.tsx`) — a long busk over one marquee with the grid uncovered, where a cell's popover
@@ -4009,7 +4015,7 @@ only while it is on a live view, the label flipping with the state like the full
 *Show <view> on <window> · Immersive* arm on every live view beside the busk focus arms. A MIDI
 `ImmersiveSet` target is `FU-SURFACE-IMMERSIVE-SET`, not built.
 
-**The one rule underneath all of it is the secure context** (`lighting7/docs/desk-screens.md`):
+**The one rule underneath all of it is the secure context** (`../docs/desk-screens.md`):
 installation, Keyboard Lock and Window Management exist only on a potentially-trustworthy origin,
 and the desk serves plain HTTP — so the two desk screens must be opened at `http://localhost:8413/`,
 and the iPad at the `.local` name gets the Fullscreen API and nothing else. Nothing in the UI says
@@ -4033,7 +4039,7 @@ mints its LAN address server-side per request and exposes it on no GET route, so
 
 Login, roles, and user administration for a desk whose accounts live on the
 **machine**, not in a project — see
-`lighting7/docs/desk-accounts.md` for the backend contract and the break-glass
+`../docs/desk-accounts.md` for the backend contract and the break-glass
 recovery. Frontend shape:
 
 - `AuthGate` (wrapping `BootGate` in `App.tsx`) decides between `SetupScreen`,
@@ -4091,7 +4097,7 @@ recovery. Frontend shape:
   its own subtree.
 
   **Connected apps** sit on the Devices tab under the sessions: the MCP OAuth grants
-  (`lighting7/docs/mcp-engineering.md`), one row each with Revoke, via
+  (`../docs/mcp-engineering.md`), one row each with Revoke, via
   `GET`/`DELETE /auth/connected-apps`. Drawn only when there is at least one, so a desk
   that never connected Claude shows nothing new. They are beside the devices because they
   answer the same question — what can act as me — and the backend ends them on the same
@@ -4099,7 +4105,7 @@ recovery. Frontend shape:
   `AuthConnectedApps` too.
 - **Account changes self-heal across clients**, via two frames from one backend flow rather
   than the show-scoped `FixturesChangeListener` bus every other list rides (users belong to the
-  machine; see `lighting7/docs/desk-accounts.md` → "Account edits reach other clients").
+  machine; see `../docs/desk-accounts.md` → "Account edits reach other clients").
   `usersWsApi` → `store/users.ts` invalidates `UserList` / `User` on every socket;
   `authWsApi.subscribeOwnAccountChanged` → `store/auth.ts` invalidates `Auth` on **only** the
   affected user's sockets. Keep those two apart: folding the `Auth` invalidation into the
@@ -4262,7 +4268,7 @@ long form of all three.
   snapshots, and Blind snapped for the rest of the visit. The action bar's Blind and Clear read one
   subscribed value from it; the marquee's Backspace reads it at press time.
 - **DBO is still inert** in every host — local state, no side effect
-  ([`FU-FE-DBO-INERT`](../lighting7/docs/plans/followups.md)). It no longer has a working Blind tile
+  ([`FU-FE-DBO-INERT`](../docs/plans/followups.md)). It no longer has a working Blind tile
   beside it to read as a peer of, but a tile that does nothing is still the part that must not stand.
 
 **Browsing a stack never moves the playhead.** A tab click used to run
@@ -4358,7 +4364,7 @@ FX definitions have a `timingSource` field (`BEAT` or `WALL_CLOCK`) controlling 
 
 ### Cloud sync — the GitHub identity
 
-Backend contract in `lighting7/docs/sync-engineering.md`. Three traps on this side:
+Backend contract in `../docs/sync-engineering.md`. Three traps on this side:
 
 - **`identity.connected === true` does not mean OAuth works.** A rejected identity keeps
   `connected: true` and gains `reauthRequired` — that conflation is why the desk showed
@@ -4389,7 +4395,7 @@ interrupted — and here they are not shown it at all, since they cannot fix it.
 The **Updates** tab in `InstallSettings` (`components/updates/UpdatePanel.tsx`), backed by
 `store/updates.ts` and `api/updateWsApi.ts`. Windows installer builds only; every other build
 renders a one-line explanation of why it can't update itself. Backend contract and the MSI
-mechanics live in `lighting7/docs/windows-updates.md`.
+mechanics live in `../docs/windows-updates.md`.
 
 - **`updateStateChanged` is the one payload-carrying machine-socket frame**, so `updateWsApi` is
   modelled on `cloudSyncWsApi`, not `installWsApi`. For a several-hundred-megabyte download the
@@ -4418,7 +4424,7 @@ The **Remote access** tab in `InstallSettings` (`components/remoteAccess/RemoteA
 backed by `store/remoteAccess.ts` and `api/remoteAccessWsApi.ts`: the desk's own ngrok tunnel,
 which puts the **whole desk** on the internet at the operator's ngrok domain. Admin only — the tab
 trigger is hidden from operators like Users, the query passes `skip: !isAdmin`, and the desk sends
-`tunnel.state` to admin sockets alone. Backend contract in `lighting7/docs/mcp-engineering.md`
+`tunnel.state` to admin sockets alone. Backend contract in `../docs/mcp-engineering.md`
 §"Remote access" and §"Remote hardening".
 
 - **The authtoken is write-only.** `GET /install/tunnel` answers `hasAuthtoken` and never the

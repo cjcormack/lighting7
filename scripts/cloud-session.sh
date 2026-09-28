@@ -16,7 +16,7 @@
 #   2. Writes `local.conf` into the data dir: pull-only sync (`sync.push = false`), the file
 #      credential store (no keychain here), and no mDNS.
 #   3. Starts `./gradlew run` in the background if nothing answers on :8413, and waits for the
-#      show to be ready. That builds ../lighting-react too. Log: <data dir>/run.log.
+#      show to be ready. That builds frontend/ too. Log: <data dir>/run.log.
 #   4. Creates the first admin account (or logs in as it), so a browser test gets past the
 #      "Set up this desk" screen with the credentials below.
 #   5. Imports each repo through cloud sync and switches its auto-sync off.
@@ -192,7 +192,6 @@ import_repo() {
 }
 
 main() {
-  [[ -d "$REPO_DIR/../lighting-react" ]] || die "expected lighting-react beside lighting7 at $REPO_DIR/../lighting-react"
   ensure_jdk24
   write_conf
   start_backend

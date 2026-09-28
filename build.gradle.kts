@@ -8,7 +8,6 @@ val sqlite_version: String by project
 val exposed_version: String by project
 val hikaricp_version: String by project
 
-val lightingReactPath: String by project
 
 plugins {
     // Kotlin floor is 2.2.x: ktmidi-jvm-desktop's transitive stdlib needs it (dropping
@@ -169,12 +168,12 @@ dependencies {
 }
 
 // ─── Frontend bundling ─────────────────────────────────────────────────
-// The React app lives in a sibling repo (`../lighting-react` by default).
-// `buildFrontend` runs `npm install && npm run build` against it, producing
-// `dist/`. `copyFrontend` mirrors that into `src/main/resources/static/` so
+// The React app lives in `frontend/` (it was the separate lighting-react repo until the two
+// were merged with their histories intact). `buildFrontend` runs `npm install && npm run build`
+// there, producing `dist/`. `copyFrontend` mirrors that into `src/main/resources/static/` so
 // Ktor's `staticResources("/", "static")` serves it from the JAR classpath.
 
-val lightingReactDir = file(lightingReactPath)
+val frontendDir = layout.projectDirectory.dir("frontend").asFile
 val frontendStaticDir = layout.projectDirectory.dir("src/main/resources/static")
 
 node {
@@ -182,24 +181,23 @@ node {
     // system Node install — gradle-daemon's sanitized PATH usually misses nvm anyway.
     download.set(true)
     version.set("24.10.0")
-    nodeProjectDir.set(lightingReactDir)
+    nodeProjectDir.set(frontendDir)
 }
 
 val buildFrontend = tasks.register<com.github.gradle.node.npm.task.NpmTask>("buildFrontend") {
-    description = "Run `npm install && npm run build` in the lighting-react repo."
+    description = "Run `npm install && npm run build` in frontend/."
     group = "build"
-    workingDir.set(lightingReactDir)
+    workingDir.set(frontendDir)
     dependsOn(tasks.named("npmInstall"))
     args.set(listOf("run", "build"))
-    inputs.file(lightingReactDir.resolve("package.json"))
-    inputs.file(lightingReactDir.resolve("package-lock.json"))
-    inputs.file(lightingReactDir.resolve("vite.config.ts")).optional()
-    inputs.file(lightingReactDir.resolve("tsconfig.json")).optional()
-    inputs.file(lightingReactDir.resolve("eslint.config.js")).optional()
-    inputs.file(lightingReactDir.resolve("index.html")).optional()
-    inputs.dir(lightingReactDir.resolve("src")).withPropertyName("frontendSrc")
-    outputs.dir(lightingReactDir.resolve("dist")).withPropertyName("frontendDist")
-    onlyIf { lightingReactDir.exists() }
+    inputs.file(frontendDir.resolve("package.json"))
+    inputs.file(frontendDir.resolve("package-lock.json"))
+    inputs.file(frontendDir.resolve("vite.config.ts")).optional()
+    inputs.file(frontendDir.resolve("tsconfig.json")).optional()
+    inputs.file(frontendDir.resolve("eslint.config.js")).optional()
+    inputs.file(frontendDir.resolve("index.html")).optional()
+    inputs.dir(frontendDir.resolve("src")).withPropertyName("frontendSrc")
+    outputs.dir(frontendDir.resolve("dist")).withPropertyName("frontendDist")
 }
 
 // `Sync`, not `Copy`: Vite emits content-hashed filenames (`index-<hash>.js`), so every
@@ -217,13 +215,13 @@ val copyFrontend = tasks.register<Sync>("copyFrontend") {
     description = "Mirror the built React bundle into src/main/resources/static/, pruning stale chunks."
     group = "build"
     dependsOn(buildFrontend)
-    from(lightingReactDir.resolve("dist"))
+    from(frontendDir.resolve("dist"))
     into(frontendStaticDir)
     // Require an actual entry point — a bare empty `dist/` (e.g. after a vite failure) means
     // the bundle is broken; serving the previous classpath copy is preferable to copying nothing.
     // Note this skips the *pruning* as well as the copy, which is the intended pairing: a failed
     // Vite run leaves the last good bundle in place rather than emptying the directory.
-    onlyIf { lightingReactDir.resolve("dist/index.html").exists() }
+    onlyIf { frontendDir.resolve("dist/index.html").exists() }
 }
 
 tasks.named("processResources") {
