@@ -27,7 +27,7 @@ plugins {
     // rejected every Lighting7 symbol. The editor is now served in-process by the same compiler
     // that runs the scripts, so that constraint is gone: there is only one Kotlin version.
     kotlin("jvm")
-    id("io.ktor.plugin") version "3.5.1"
+    id("io.ktor.plugin") version "3.6.0"
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.github.node-gradle.node") version "7.1.0"
     id("com.gradleup.shadow")
@@ -155,7 +155,7 @@ dependencies {
     // footprint for jlink runtimes. That turned out not to be true: 7.7.1 resolves the same
     // three transitives as 6.10.0 (JavaEWAH, slf4j-api, commons-codec), with only
     // commons-codec moving 1.17.0 -> 1.22.0. Pin lifted.
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.7.1.202607240634-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.8.0.202609011348-r")
 
     // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
     // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.
