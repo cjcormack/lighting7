@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -190,6 +191,51 @@ internal val clearEffectsTool = AnthropicToolDef(
     }
 )
 
+/** The DMX address both park tools take — the desk's universe number and a channel in it — plus [extra]. */
+private fun parkAddressProperties(extra: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+    put("universe", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 0)
+        put("description", "The desk's DMX universe number (counted from 0, as get_patch lists them).")
+    })
+    put("channel", buildJsonObject {
+        put("type", "integer"); put("minimum", 1); put("maximum", 512)
+        put("description", "DMX channel within the universe, 1–512. get_patch gives each fixture's startChannel–endChannel.")
+    })
+    extra()
+}
+
+internal val parkChannelTool = AnthropicToolDef(
+    name = "park_channel",
+    description = "Park a DMX channel: lock its output at a fixed value above everything else — cues, looks, effects, " +
+            "the programmer and manual channel writes all stop reaching it until it is unparked. For holding a light " +
+            "that must not move whatever the show does (a work light, a hazer's level, a channel with a faulty lamp " +
+            "parked at 0). Parking an already parked channel changes its value. Park persists with the project, " +
+            "across restarts. The answer names the fixture channel it drives, when it is patched.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", parkAddressProperties {
+            put("value", buildJsonObject {
+                put("type", "integer"); put("minimum", 0); put("maximum", 255)
+                put("description", "The DMX value to hold, 0–255.")
+            })
+        })
+        put("required", buildJsonArray { add("universe"); add("channel"); add("value") })
+    }
+)
+
+internal val unparkChannelTool = AnthropicToolDef(
+    name = "unpark_channel",
+    description = "Unpark a parked DMX channel, handing it back to the show. The output does not jump: the parked " +
+            "value is handed down as the channel's value underneath, where the next cue, effect or programmer " +
+            "write takes over from it. get_current_state's `parked` (and describe_rig) list what is parked.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", parkAddressProperties())
+        put("required", buildJsonArray { add("universe"); add("channel") })
+    }
+)
+
 internal val getCurrentStateTool = AnthropicToolDef(
     name = "get_current_state",
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
@@ -199,7 +245,8 @@ internal val getCurrentStateTool = AnthropicToolDef(
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
-            "id reads back to a screen name.",
+            "id reads back to a screen name; " +
+            "`parked` lists the parked DMX channels (park_channel / unpark_channel), which hold their value above everything else.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -211,7 +258,7 @@ internal val getCurrentStateTool = AnthropicToolDef(
                         add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
                         add("groups"); add("looks"); add("templates"); add("cues")
                         add("cue_stacks"); add("cue_run"); add("programmer"); add("selection")
-                        add("windows")
+                        add("windows"); add("parked")
                     })
                 })
                 put("description", "What to include. Defaults to all.")

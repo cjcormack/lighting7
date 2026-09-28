@@ -243,10 +243,20 @@ through a tunnel would make a leaked token a shell on the desk machine; every ot
 bounded operation on the show.
 
 `describe_rig` returns what the chat puts in its system prompt each turn (`ai/RigBriefing.kt`,
-shared with `AiService`): fixtures, groups, the effect library, what is running, speed masters,
-Looks, colour templates, cues and stacks. The chat gets that for free; an MCP client gets
+shared with `AiService`): fixtures, groups, the effect library, what is running and parked,
+speed masters, Looks, colour templates, cues and stacks. The chat gets that for free; an MCP client gets
 nothing it does not ask for, so the `instructions` sent at `initialize` tell the model to call it
 first, along with the composition rules (`RigBriefing.keyConcepts(scriptTool = false)`).
+
+`describe_rig` and `get_current_state` both report **parked channels** — address, held value,
+and the fixture channel it drives (`ai/ParkReport.kt`, from `Fixtures.getChannelMappings`) — and
+`park_channel` / `unpark_channel` (chat tools, so the chat has them too) park and release one. Park
+sits above every layer the other tools write, so a model that cannot see it applies a look to a
+parked head, sees nothing change and cannot say why. The two tools make exactly the WebSocket's
+`parkChannel` / `unparkChannel` write (`ParkManager` plus the provenance refresh), so unpark keeps
+its hand-down; `park_channel` refuses a universe the show does not output, the silent miss a model
+counting universes from 1 would otherwise make, and `unpark_channel` on an unparked address answers
+`wasParked: false` rather than an error.
 
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the four setup
@@ -263,7 +273,7 @@ stacks and prompt-book markup from a script and lighting notes.
 |------|------|
 | `list_projects` / `create_project` / `switch_project` | Projects. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description |
 | `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM` |
-| `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups |
+| `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` included |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch, beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |

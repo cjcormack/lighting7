@@ -156,6 +156,9 @@ export function worldPositionFor(
 // returns the FOH-relative (X = stage right, Y = upstage, Z = up) triple
 // instead of the R3F swizzle. Used by the 2D top-down fallback panel which
 // reasons in stage metres rather than R3F space.
+//
+// Mirrored on the backend by `worldPosition` (show/StageCoords.kt), which MCP's
+// get_patch reports as each placement's `world` — change the two together.
 export function worldPositionLighting(
   // Only the four placement fields, so an extra placement (a paired dimmer's other lantern) is
   // composed through its rigging by the same arithmetic as the patch it belongs to.
