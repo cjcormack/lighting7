@@ -1,0 +1,97 @@
+name: CI
+
+# The PR gate: both halves of the repo, on every pull request into main and on every push to
+# main. The two jobs are the CI equivalents of the local pre-commit checks — `./gradlew test`
+# for the backend and `npm run check` in frontend/ (see "Pre-commit checks" in CLAUDE.md).
+#
+# No `paths:` filters, deliberately. A required status check whose workflow is skipped by a
+# path filter never reports, and GitHub then blocks the PR waiting for it forever. Running
+# both jobs on a docs-only PR costs minutes; a filter that wedges merges costs more.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR supersedes the run in flight. Runs on main are never cancelled, so every
+# merge commit gets a complete result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    # Job names are what branch protection's "required status checks" match on — renaming
+    # one silently un-requires it until the rule is updated to the new name.
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # The runner's locale is POSIX, and compileTestKotlin then fails with an internal
+      # compiler error writing class files named after test names that contain "—" (the same
+      # trap scripts/cloud-session.sh exports this for).
+      LC_ALL: C.UTF-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 24
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # `build`, not just `test`: it also assembles the fat jar, whose doLast verifier fails on
+      # a wrong native payload (see "Building and Running" in CLAUDE.md), and runs the
+      # launcher's tests. `processResources` pulls in buildFrontend, so this compiles the
+      # frontend too — with the Node version Gradle pins, which is not necessarily the one
+      # the Frontend job uses.
+      - name: Build and test
+        run: ./gradlew build --stacktrace
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            build/reports/tests/
+            launcher/build/reports/tests/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # build (tsc + vite) + vitest + eslint --max-warnings 0 — the same gate as
+      # .githooks/pre-commit.
+      - name: Build, test and lint
+        run: npm run check

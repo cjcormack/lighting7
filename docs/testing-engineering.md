@@ -127,7 +127,11 @@ in a per-JVM temp directory. That singleton is safe across processes but **not**
 
 These measure wall clock and are the first to fail on a loaded machine. Treat a failure here as
 "the machine was busy" only after checking it is not a real regression, and never tighten their
-bounds:
+bounds. CI's `Backend` job (`.github/workflows/ci.yml`) runs on a shared GitHub-hosted runner,
+which is exactly that loaded machine: a failure there earns one re-run of the job, and a test
+that needs re-running more than occasionally is a follow-up to fix, not a retry to automate.
+That job is also always cold — `build/test-data` does not survive between runs, so it pays the
+~55 s first-run FX compile every time.
 
 | Test | What it asserts |
 |---|---|

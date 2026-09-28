@@ -11,12 +11,14 @@ Prose below still says "lighting7" for the backend.
 
 ## Git workflow
 
-Solo personal repo — commit and push directly to `main`. Do **not** open pull
-requests, do **not** create feature branches. A change that crosses the wire is one
-commit: the backend route and this side's client land together. The standard "still don't commit
-or push without me asking" rule from the global CLAUDE.md still applies; this
-section only changes *how* a confirmed commit/push happens (straight to `main`,
-no PR).
+Every change reaches `main` through a pull request — the branch, merge and shipping-verb rules are
+the root's, in `../CLAUDE.md` §"Git workflow". Two points bear repeating from this side:
+
+- A change that crosses the wire is **one PR**: the backend route and this side's client land
+  together, never as two PRs that are each broken without the other.
+- CI's `Frontend` job runs exactly the gate below, `npm run check`, on every PR. The `Backend` job
+  builds this app as well (Gradle's `buildFrontend`), with Gradle's pinned Node rather than
+  `.nvmrc`'s.
 
 ### Pre-commit gate
 
