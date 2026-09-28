@@ -122,3 +122,17 @@ export function headNumberFieldError(
   const holder = all.find((patch) => patch.headNumber === parsed && patch.id !== exceptId)
   return holder ? `Head ${parsed} is already ${holder.displayName}` : null
 }
+
+/**
+ * The number an unnumbered head is offered: one past the highest on the project, or the first
+ * number when nothing is numbered yet. One past the highest rather than the lowest gap, because it
+ * is also where a *run* starts — a marquee over eight unnumbered heads counts up from it, and
+ * every number past the highest is free, so the suggestion always lands clear. Null when the
+ * ceiling leaves nothing to offer.
+ */
+export function nextHeadNumber(all: readonly NumberedHead[]): number | null {
+  let highest = MIN_HEAD_NUMBER - 1
+  for (const head of all) if (head.headNumber != null && head.headNumber > highest) highest = head.headNumber
+  const next = highest + 1
+  return next <= MAX_HEAD_NUMBER ? next : null
+}
