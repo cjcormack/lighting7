@@ -1,10 +1,15 @@
 import { Loader2, X } from 'lucide-react'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { FixtureDetailView } from '@/components/fixtures/FixtureDetailView'
+import { StageAimControls, isAimable } from './StageAimControls'
 
 interface StageFixtureControlPanelProps {
   /** Selected patch key — equals the fixture key (see useFixtureLookup). */
   patchKey: string
+  /** The project the fixture is patched in — what an aim is addressed to. */
+  projectId: number
+  /** Whether that project is the live one; aiming writes the programmer, so only then. */
+  canAim: boolean
   onClose: () => void
 }
 
@@ -12,9 +17,10 @@ interface StageFixtureControlPanelProps {
  * Docked, sheet-styled fixture control panel shown when a fixture is selected
  * on the stage in view mode. Reuses the same live-control view as the
  * `FixtureDetailModal` (colour, dimmer, position, channels…) — always editable,
- * no edit button — but docked inline rather than overlaying the page.
+ * no edit button — but docked inline rather than overlaying the page. A moving head also gets
+ * "Aim at point" underneath, pinned to the panel's foot.
  */
-export function StageFixtureControlPanel({ patchKey, onClose }: StageFixtureControlPanelProps) {
+export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose }: StageFixtureControlPanelProps) {
   const { fixtureByKey } = useFixtureLookup()
   const fixture = fixtureByKey.get(patchKey)
 
@@ -29,7 +35,16 @@ export function StageFixtureControlPanel({ patchKey, onClose }: StageFixtureCont
         <X className="size-4" />
       </button>
       {fixture ? (
-        <FixtureDetailView key={patchKey} fixture={fixture} isEditing />
+        <>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <FixtureDetailView key={patchKey} fixture={fixture} isEditing />
+          </div>
+          {canAim && isAimable(fixture) && (
+            <div className="border-t p-4">
+              <StageAimControls key={patchKey} projectId={projectId} fixtureKeys={[patchKey]} />
+            </div>
+          )}
+        </>
       ) : (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="size-5 animate-spin text-muted-foreground" />

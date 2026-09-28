@@ -217,6 +217,13 @@ stage read path, adding a source, or relying on what `ProgrammerState.channels` 
 is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
 the bug that doc exists to prevent.
 
+**Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*
+besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
+height, sent to `POST /programmer/aim` for the selected moving heads — under the single fixture's
+panel, or its own docked panel for a multi-selection in view mode, and only on the live project.
+The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
+point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
+
 ### Looks, templates and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its

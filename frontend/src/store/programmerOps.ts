@@ -380,6 +380,36 @@ export interface SpreadResponse {
   skippedFamilies?: string[]
 }
 
+/**
+ * `POST /projects/{id}/programmer/aim` — a mirror of lighting7's `AimRequest`
+ * (`routes/programmerAim.kt`): point moving heads at a spot on the stage. The point is metres in
+ * stage coordinates (x audience-right, y upstage, z up); the desk works out each head's pan and
+ * tilt from its placement, mount and travel, and writes them (fine channels too) into the
+ * programmer as Local entries.
+ */
+export interface AimRequest {
+  projectId: number
+  targets: CueTarget[]
+  x: number
+  y: number
+  z: number
+  fadeMs?: number
+}
+
+/** One head's aim: its `"pan,tilt"` literal and the travel degrees it came from. */
+export interface AimWrite {
+  target: CueTarget
+  value: string
+  panDeg: number
+  tiltDeg: number
+}
+
+/** What the desk aimed and what it could not, by name. Lists are omitted when empty. */
+export interface AimResponse {
+  written?: AimWrite[]
+  skipped?: SpreadSkip[]
+}
+
 export const programmerOpsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     recordProgrammer: build.mutation<RecordResponse, RecordRequest>({
@@ -488,6 +518,20 @@ export const programmerOpsApi = restApi.injectEndpoints({
         body,
       }),
     }),
+
+    /**
+     * `POST /projects/{id}/programmer/aim` — aim at a point, resolved on the desk. A REST mutation
+     * for the spread's reason: the Stage view reads the structured reply (what was skipped and
+     * why). It invalidates nothing — the writes ride `programmer.entryChanged` like any Local edit.
+     * Not silent: `AIM_INVALID` / `AIM_NEEDS_SELECTION` toast under the endpoint's own id.
+     */
+    aim: build.mutation<AimResponse, AimRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/programmer/aim`,
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -498,4 +542,5 @@ export const {
   useIncludeIntoProgrammerMutation,
   useUpdateProgrammerMutation,
   useSpreadMutation,
+  useAimMutation,
 } = programmerOpsApi

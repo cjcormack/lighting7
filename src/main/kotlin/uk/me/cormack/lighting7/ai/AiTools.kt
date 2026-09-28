@@ -36,6 +36,7 @@ class AiTools(private val state: State) {
         clearEffectsTool,
         parkChannelTool,
         unparkChannelTool,
+        aimFixturesTool,
         getCurrentStateTool,
         createCueTool,
         applyCueTool,
@@ -76,6 +77,7 @@ class AiTools(private val state: State) {
                 "clear_effects" -> executeClearEffects(input)
                 "park_channel" -> executeParkChannel(input)
                 "unpark_channel" -> executeUnparkChannel(input)
+                "aim_fixtures" -> executeAimFixtures(input)
                 "get_current_state" -> executeGetCurrentState(input)
                 "create_cue" -> executeCreateCue(input)
                 "apply_cue" -> executeApplyCue(input)
@@ -702,6 +704,57 @@ class AiTools(private val state: State) {
      * address is stored and held but reaches no fixture, which is exactly the silent miss a model
      * counting universes from 1 would make.
      */
+    private fun executeAimFixtures(input: JsonObject): ToolExecutionResult {
+        val targetsArray = input["targets"] as? JsonArray ?: return errorResult("Missing 'targets'")
+        val targets = targetsArray.map { t ->
+            val obj = t as? JsonObject ?: return errorResult("Each target is an object with 'type' and 'key'")
+            CueTargetDto(
+                type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return errorResult("A target is missing 'type'"),
+                key = obj["key"]?.jsonPrimitive?.contentOrNull ?: return errorResult("A target is missing 'key'"),
+            )
+        }
+        val x = input["x"]?.jsonPrimitive?.doubleOrNull ?: return errorResult("Missing 'x'")
+        val y = input["y"]?.jsonPrimitive?.doubleOrNull ?: return errorResult("Missing 'y'")
+        val z = input["z"]?.jsonPrimitive?.doubleOrNull ?: return errorResult("Missing 'z'")
+        val fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull
+        val dryRun = input["dryRun"]?.jsonPrimitive?.booleanOrNull ?: false
+
+        val project = state.projectManager.currentProject
+        return when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs, write = !dryRun)) {
+            is AimOutcome.Invalid -> errorResult(outcome.message)
+            is AimOutcome.Done -> {
+                val response = outcome.response
+                val verb = if (dryRun) "Would aim" else "Aimed"
+                ToolExecutionResult(
+                    success = true,
+                    description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
+                        if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}",
+                    result = buildJsonObject {
+                        put("dryRun", dryRun)
+                        put("aimed", buildJsonArray {
+                            response.written.forEach { w ->
+                                addJsonObject {
+                                    put("fixture", w.target.key)
+                                    put("panDeg", w.panDeg)
+                                    put("tiltDeg", w.tiltDeg)
+                                    put("position", w.value)
+                                }
+                            }
+                        })
+                        put("skipped", buildJsonArray {
+                            response.skipped.forEach { s ->
+                                addJsonObject {
+                                    put("target", s.target.key)
+                                    put("reason", s.reason)
+                                }
+                            }
+                        })
+                    }.toString(),
+                )
+            }
+        }
+    }
+
     private suspend fun executeParkChannel(input: JsonObject): ToolExecutionResult {
         val universe = (input["universe"] as? JsonPrimitive)?.intOrNull
             ?: return errorResult("universe must be an integer")
