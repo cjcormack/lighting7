@@ -27,7 +27,7 @@ plugins {
     // rejected every Lighting7 symbol. The editor is now served in-process by the same compiler
     // that runs the scripts, so that constraint is gone: there is only one Kotlin version.
     kotlin("jvm")
-    id("io.ktor.plugin") version "3.5.1"
+    id("io.ktor.plugin") version "3.6.0"
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.github.node-gradle.node") version "7.1.0"
     id("com.gradleup.shadow")
@@ -89,9 +89,19 @@ repositories {
 // (2.0.2 adds valueextraction, ClockProvider, @NotEmpty/@Email), so the consumers above keep
 // linking. Dropping the legacy pair is what makes shadowJar's `failOnDuplicateEntries`
 // achievable — see the fat-jar section below.
+//
+// Ktor 3.6's Netty engine also depends on Netty's HTTP/3 codec, which drags in
+// `netty-codec-native-quic` — quiche binaries for five platforms, each jar carrying the same
+// licence and metadata entries, so `failOnDuplicateEntries` refuses them. The desk never calls
+// `enableHttp3`, and the engine touches those classes only on that path (they are linked from
+// method bodies, not from a field type or a class initialiser), so the codec is dropped here
+// rather than shipped and then filtered through the `nativePayloads` table below.
 configurations.configureEach {
     exclude(group = "javax.validation", module = "validation-api")
     exclude(group = "javax.xml.bind", module = "jaxb-api")
+    exclude(group = "io.netty", module = "netty-codec-http3")
+    exclude(group = "io.netty", module = "netty-codec-native-quic")
+    exclude(group = "io.netty", module = "netty-codec-classes-quic")
 }
 
 dependencies {
@@ -164,7 +174,7 @@ dependencies {
     // footprint for jlink runtimes. That turned out not to be true: 7.7.1 resolves the same
     // three transitives as 6.10.0 (JavaEWAH, slf4j-api, commons-codec), with only
     // commons-codec moving 1.17.0 -> 1.22.0. Pin lifted.
-    implementation("org.eclipse.jgit:org.eclipse.jgit:7.7.1.202607240634-r")
+    implementation("org.eclipse.jgit:org.eclipse.jgit:7.8.0.202609011348-r")
 
     // Cross-platform OS-keychain access for storing GitHub PATs (cloud-sync phase 4).
     // Wraps macOS Security framework, libsecret, and Windows Credential Manager via JNA.
@@ -471,6 +481,12 @@ val nativePayloads: List<Triple<String, String, String?>> = listOf(
 
 tasks.shadowJar {
     archiveFileName.set("lighting7.jar")
+
+    // The fat jar sits at the classic zip format's 65,535-entry ceiling: the Mac jar measured
+    // 65,527 entries at the Ktor 3.6 bump, and the Linux one had already crossed it
+    // (`Zip64RequiredException`). The JDK has read zip64 jars since 7, so `java -jar` and jpackage
+    // are unaffected.
+    isZip64 = true
 
     // Shadow 9 applies DuplicatesStrategy.EXCLUDE by default, which drops duplicate
     // entries *before* the transformers below run — that would defeat both

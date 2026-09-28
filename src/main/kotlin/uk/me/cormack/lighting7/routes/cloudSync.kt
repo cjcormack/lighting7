@@ -6,7 +6,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
-import io.ktor.server.request.receiveNullable
 import io.ktor.server.resources.delete
 import io.ktor.server.resources.get
 import io.ktor.server.resources.post
@@ -161,7 +160,7 @@ internal fun Route.routeApiRestProjectCloudSync(state: State) {
     }
 
     post<ProjectSyncSnapshotResource> { resource ->
-        val request = call.receiveNullable<TakeSnapshotRequest>() ?: TakeSnapshotRequest()
+        val request = call.receive<TakeSnapshotRequest?>() ?: TakeSnapshotRequest()
         withProject(state, resource.parent.projectId) { project ->
             // Refuse to take a snapshot while a conflict session is open — the snapshot
             // would race the canonical-JSON the resolution UI is showing.
