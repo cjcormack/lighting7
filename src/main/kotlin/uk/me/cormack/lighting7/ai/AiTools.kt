@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
 import uk.me.cormack.lighting7.fx.TemplateProperty
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -33,6 +34,8 @@ class AiTools(private val state: State) {
         setBpmTool,
         createSpeedMasterTool,
         clearEffectsTool,
+        parkChannelTool,
+        unparkChannelTool,
         getCurrentStateTool,
         createCueTool,
         applyCueTool,
@@ -71,6 +74,8 @@ class AiTools(private val state: State) {
                 "set_bpm" -> executeSetBpm(input)
                 "create_speed_master" -> executeCreateSpeedMaster(input)
                 "clear_effects" -> executeClearEffects(input)
+                "park_channel" -> executeParkChannel(input)
+                "unpark_channel" -> executeUnparkChannel(input)
                 "get_current_state" -> executeGetCurrentState(input)
                 "create_cue" -> executeCreateCue(input)
                 "apply_cue" -> executeApplyCue(input)
@@ -356,6 +361,7 @@ class AiTools(private val state: State) {
             ?: setOf(
                 "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
                 "templates", "cues", "cue_stacks", "cue_run", "programmer", "selection", "windows",
+                "parked",
             )
 
         val result = buildJsonObject {
@@ -667,6 +673,16 @@ class AiTools(private val state: State) {
                     }
                 })
             }
+            if ("parked" in include) {
+                // Park sits above every layer this surface writes, so a model that cannot see it
+                // would apply a look, watch nothing change on a parked head, and have no way to
+                // say why. Always present (empty when nothing is parked), like `windows`.
+                put("parked", buildJsonArray {
+                    for (parked in parkedChannelReports(state)) {
+                        addJsonObject { putParkedChannel(parked.universe, parked.channel, parked.value, parked.mapping) }
+                    }
+                })
+            }
         }
 
         return ToolExecutionResult(
@@ -674,6 +690,103 @@ class AiTools(private val state: State) {
             description = "Retrieved current state",
             result = result.toString()
         )
+    }
+
+    /**
+     * The same write as the WebSocket's `parkChannel` (`plugins/ParkSocket.kt`): [ParkManager.park]
+     * persists and broadcasts `parkState`, and the provenance refresh is what moves the Channels
+     * view's "parked" marker. Nothing to nudge on the controllers — they consult the park source
+     * at transmit time, so the park lands on the next frame.
+     *
+     * The universe must be one the show outputs (the Channels view's list): a park on any other
+     * address is stored and held but reaches no fixture, which is exactly the silent miss a model
+     * counting universes from 1 would make.
+     */
+    private suspend fun executeParkChannel(input: JsonObject): ToolExecutionResult {
+        val universe = (input["universe"] as? JsonPrimitive)?.intOrNull
+            ?: return errorResult("universe must be an integer")
+        val channel = (input["channel"] as? JsonPrimitive)?.intOrNull
+            ?: return errorResult("channel must be an integer")
+        val value = (input["value"] as? JsonPrimitive)?.intOrNull
+            ?: return errorResult("value must be an integer")
+        if (channel !in 1..512) return errorResult("channel must be between 1 and 512, got $channel")
+        if (value !in 0..255) return errorResult("value must be between 0 and 255, got $value")
+        val universes = state.show.fixtures.controllers.map { it.universe.universe }.distinct().sorted()
+        if (universe !in universes) {
+            return errorResult(
+                "universe $universe is not output by this show" +
+                    if (universes.isEmpty()) " (it has no universes)" else " (its universes: ${universes.joinToString()})",
+            )
+        }
+
+        val parkManager = state.show.parkManager
+        val previous = parkManager.getParkedValue(universe, channel)?.toInt()
+        parkManager.park(universe, channel, value.toUByte())
+        state.show.fxEngine.provenance.emitUpdate()
+
+        val mapping = channelMappingAt(state, universe, channel)
+        return ToolExecutionResult(
+            success = true,
+            description = "Parked universe $universe channel $channel at $value" +
+                (mapping?.let { " (${it.fixtureName} — ${it.description})" } ?: "") +
+                (previous?.let { " (was parked at $it)" } ?: ""),
+            result = buildJsonObject {
+                putParkedChannel(universe, channel, value, mapping)
+                previous?.let { put("previousValue", it) }
+            }.toString(),
+        )
+    }
+
+    /** The WebSocket's `unparkChannel`: [ParkManager.unpark] hands the parked value down first. */
+    private suspend fun executeUnparkChannel(input: JsonObject): ToolExecutionResult {
+        val universe = (input["universe"] as? JsonPrimitive)?.intOrNull
+            ?: return errorResult("universe must be an integer")
+        val channel = (input["channel"] as? JsonPrimitive)?.intOrNull
+            ?: return errorResult("channel must be an integer")
+
+        val parkManager = state.show.parkManager
+        // Not an error: the outcome the caller wanted — the channel not parked — already holds.
+        // Said plainly rather than as a silent success, so a model that got the address wrong
+        // can tell it unparked nothing.
+        val parkedValue = parkManager.getParkedValue(universe, channel)?.toInt()
+            ?: return ToolExecutionResult(
+                success = true,
+                description = "Universe $universe channel $channel was not parked",
+                result = buildJsonObject {
+                    put("universe", universe)
+                    put("channel", channel)
+                    put("wasParked", false)
+                }.toString(),
+            )
+        parkManager.unpark(universe, channel)
+        state.show.fxEngine.provenance.emitUpdate()
+
+        val mapping = channelMappingAt(state, universe, channel)
+        return ToolExecutionResult(
+            success = true,
+            description = "Unparked universe $universe channel $channel (was $parkedValue)" +
+                (mapping?.let { " (${it.fixtureName} — ${it.description})" } ?: ""),
+            result = buildJsonObject {
+                put("universe", universe)
+                put("channel", channel)
+                put("wasParked", true)
+                put("parkedValue", parkedValue)
+                mapping?.let { putChannelMapping(it) }
+            }.toString(),
+        )
+    }
+
+    private fun JsonObjectBuilder.putParkedChannel(universe: Int, channel: Int, value: Int, mapping: Fixtures.ChannelMapping?) {
+        put("universe", universe)
+        put("channel", channel)
+        put("value", value)
+        mapping?.let { putChannelMapping(it) }
+    }
+
+    private fun JsonObjectBuilder.putChannelMapping(mapping: Fixtures.ChannelMapping) {
+        put("fixtureKey", mapping.fixtureKey)
+        put("fixtureName", mapping.fixtureName)
+        put("channelDescription", mapping.description)
     }
 
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {

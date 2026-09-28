@@ -130,7 +130,9 @@ internal val listFixtureTypesTool = AnthropicToolDef(
 
 internal val getPatchTool = AnthropicToolDef(
     name = "get_patch",
-    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. Read it before changing the patch or stage, and after, to check the result.",
+    description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
+        "Each placed fixture and `alsoAt` lantern also carries `world`: where it actually is on stage, in world coordinates — x/y/z are offsets along the rigging when `rigging` is set, and `world` composes them with the rigging's position and rotation. It is absent for one with no x or y, which the Stage view does not draw. " +
+        "Read it before changing the patch or stage, and after, to check the result. " + COORDINATES,
     inputSchema = objectSchema {},
 )
 

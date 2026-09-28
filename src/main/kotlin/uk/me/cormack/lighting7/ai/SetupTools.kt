@@ -43,6 +43,8 @@ import uk.me.cormack.lighting7.routes.validateStageMetadata
 import uk.me.cormack.lighting7.routes.validateStageRegion
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
+import uk.me.cormack.lighting7.show.RiggingPose
+import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
 
@@ -207,6 +209,9 @@ class SetupTools(
             val riggings = DaoRigging.find { DaoRiggings.project eq project.id }
                 .orderBy(DaoRiggings.sortOrder to SortOrder.ASC).toList()
             val riggingNames = riggings.associate { it.id.value to it.name }
+            val riggingPoses = riggings.associate { r ->
+                r.id.value to RiggingPose(r.positionX, r.positionY, r.positionZ, r.yawDeg, r.pitchDeg, r.rollDeg)
+            }
             val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }
                 .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).toList()
             val universes = DaoUniverseConfig.find { DaoUniverseConfigs.project eq project.id }
@@ -275,9 +280,10 @@ class SetupTools(
                             put("startChannel", p.startChannel)
                             put("endChannel", p.startChannel + count - 1)
                             groupsByKey[p.key]?.let { g -> putJsonArray("groups") { g.forEach { add(it) } } }
-                            p.readValues.getOrNull(DaoFixturePatches.rigging)?.value
-                                ?.let { riggingNames[it] }?.let { put("rigging", it) }
+                            val riggingId = p.readValues.getOrNull(DaoFixturePatches.rigging)?.value
+                            riggingId?.let { riggingNames[it] }?.let { put("rigging", it) }
                             putOptional("x", p.stageX); putOptional("y", p.stageY); putOptional("z", p.stageZ)
+                            putWorld(p.stageX, p.stageY, p.stageZ, riggingId?.let { riggingPoses[it] })
                             putOptional("yawDeg", p.baseYawDeg); putOptional("pitchDeg", p.basePitchDeg)
                             p.beamAngleDeg?.let { put("beamAngleDeg", it) }
                             p.gelCode?.let { put("gelCode", it) }
@@ -291,9 +297,10 @@ class SetupTools(
                                     alsoAt.forEach { pl ->
                                         addJsonObject {
                                             pl.label?.let { put("label", it) }
-                                            pl.readValues.getOrNull(DaoFixturePatchPlacements.rigging)?.value
-                                                ?.let { riggingNames[it] }?.let { put("rigging", it) }
+                                            val placementRiggingId = pl.readValues.getOrNull(DaoFixturePatchPlacements.rigging)?.value
+                                            placementRiggingId?.let { riggingNames[it] }?.let { put("rigging", it) }
                                             putOptional("x", pl.stageX); putOptional("y", pl.stageY); putOptional("z", pl.stageZ)
+                                            putWorld(pl.stageX, pl.stageY, pl.stageZ, placementRiggingId?.let { riggingPoses[it] })
                                             putOptional("yawDeg", pl.baseYawDeg); putOptional("pitchDeg", pl.basePitchDeg)
                                             putOptional("lengthM", pl.lengthM)
                                         }
@@ -1285,6 +1292,25 @@ class SetupTools(
     private fun JsonObjectBuilder.putOptional(name: String, value: Double?) {
         value?.let { put(name, it) }
     }
+
+    /**
+     * `world`: where a placement actually is on stage, as the Stage view draws it
+     * ([worldPosition]) — the answer to "where is it" that a rigging-relative x/y/z is not. Absent
+     * for an unplaced one (no x or no y), which the Stage view draws nowhere. Rounded to the
+     * millimetre, so a rotation's floating-point dust (a `1e-16` for a zero) does not read as a
+     * position.
+     */
+    private fun JsonObjectBuilder.putWorld(x: Double?, y: Double?, z: Double?, rigging: RiggingPose?) {
+        val world = worldPosition(x, y, z, rigging) ?: return
+        putJsonObject("world") {
+            put("x", roundToMillimetre(world.x))
+            put("y", roundToMillimetre(world.y))
+            put("z", roundToMillimetre(world.z))
+        }
+    }
+
+    // Through a Long, so a rounded `-1e-16` is a plain 0 rather than `-0.0`.
+    private fun roundToMillimetre(value: Double): Double = Math.round(value * 1000) / 1000.0
 
     private companion object {
         const val MAX_PROBLEMS = 100

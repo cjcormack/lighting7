@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.state.State
  */
 class RigBriefing(private val state: State) {
 
-    /** Fixtures, groups, the effect library, what is running, speed masters and the show's records. */
+    /** Fixtures, groups, the effect library, what is running and parked, speed masters and the show's records. */
     fun describeRig(): String {
         val sb = StringBuilder()
         // Fixtures
@@ -81,6 +81,20 @@ class RigBriefing(private val state: State) {
             sb.appendLine("No active effects.")
         }
         sb.appendLine()
+
+        // Parked channels. Park overrides every layer the tools write, so a model that is not told
+        // would apply a look to a parked head, see nothing change, and have no way to say why.
+        // Only when something is parked: an empty heading every turn would be noise.
+        val parked = parkedChannelReports(state)
+        if (parked.isNotEmpty()) {
+            sb.appendLine("## Parked Channels")
+            sb.appendLine("Held at a fixed value above everything else — cues, looks, effects and the programmer do not reach them. unpark_channel releases one.")
+            for (p in parked) {
+                val drives = p.mapping?.let { " — ${it.fixtureName} (key=`${it.fixtureKey}`): ${it.description}" } ?: " — not patched"
+                sb.appendLine("- universe ${p.universe}, channel ${p.channel} at ${p.value}$drives")
+            }
+            sb.appendLine()
+        }
 
         // Speed masters, with their uuids — like the colour templates below, a uuid the model
         // cannot see is a reference it cannot make, and every effect-authoring tool takes one.
