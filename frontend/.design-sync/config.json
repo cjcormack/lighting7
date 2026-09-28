@@ -1,0 +1,108 @@
+{
+  "pkg": "lighting-desk-ui",
+  "globalName": "LightingDeskUi",
+  "projectId": "a509f2da-e0a1-4e25-a018-575b2d520679",
+  "shape": "package",
+  "buildCmd": "npm run build:ds",
+  "entry": "./design-system/dist/index.js",
+  "srcDir": "../src",
+  "tsconfig": "../tsconfig.json",
+  "cssEntry": "dist/index.css",
+  "componentSrcMap": {
+    "TimingFields": "../src/components/cues/TimingEditor.tsx",
+    "Section": "../src/components/looks/paneChrome.tsx",
+    "AddBtn": "../src/components/looks/paneChrome.tsx",
+    "RemoveBtn": "../src/components/looks/paneChrome.tsx",
+    "LookValueChip": "../src/components/looks/lookValueChips.tsx",
+    "LookPreviewSwatches": "../src/components/looks/lookValueChips.tsx",
+    "ThemeToggle": "../src/ThemeToggle.tsx"
+  },
+  "provider": {
+    "component": "TooltipProvider"
+  },
+  "overrides": {
+    "Sheet": {
+      "cardMode": "single",
+      "viewport": "900x640"
+    },
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "800x560"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "viewport": "800x560"
+    },
+    "Popover": {
+      "cardMode": "single",
+      "viewport": "640x480"
+    },
+    "DropdownMenu": {
+      "cardMode": "single",
+      "viewport": "640x520"
+    },
+    "ContextMenu": {
+      "cardMode": "single",
+      "viewport": "640x520"
+    },
+    "Tooltip": {
+      "cardMode": "single",
+      "viewport": "560x360"
+    },
+    "Select": {
+      "cardMode": "single",
+      "viewport": "640x520"
+    },
+    "ColourPickerPopover": {
+      "cardMode": "single",
+      "viewport": "640x560"
+    },
+    "GelPickerField": {
+      "cardMode": "single",
+      "viewport": "640x560"
+    },
+    "StageShortcutsPopover": {
+      "cardMode": "single",
+      "viewport": "640x520"
+    },
+    "Table": {
+      "cardMode": "column"
+    },
+    "PromptBookToolbar": {
+      "cardMode": "column"
+    },
+    "OffPlayheadBanner": {
+      "cardMode": "column"
+    },
+    "OutOfOrderBanner": {
+      "cardMode": "column"
+    },
+    "ShowMarkerRow": {
+      "cardMode": "column"
+    },
+    "MarkerRow": {
+      "cardMode": "column"
+    },
+    "AuthScreenLayout": {
+      "cardMode": "single",
+      "primaryStory": "Login",
+      "viewport": "720x640"
+    },
+    "FloatingSelectionToolbar": {
+      "cardMode": "single",
+      "primaryStory": "AboveSelection",
+      "viewport": "720x480"
+    },
+    "ToggleGroup": {
+      "cardMode": "column"
+    },
+    "BeamAngleField": {
+      "cardMode": "column"
+    },
+    "Stage2DHud": {
+      "cardMode": "column"
+    }
+  },
+  "guidelinesGlob": [],
+  "readmeHeader": ".design-sync/conventions.md"
+}

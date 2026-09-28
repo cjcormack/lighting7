@@ -1,0 +1,9 @@
+{
+  "name": "lighting-desk-ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Library build of the desk's UI primitives and standalone app components, consumed by the design-sync converter (see .design-sync/). Not published.",
+  "module": "dist/index.js",
+  "types": "dist/types/design-system/index.d.ts"
+}

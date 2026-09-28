@@ -32,7 +32,7 @@ jobs:
       - name: Checkout lighting7
         uses: actions/checkout@v4
 
-      # Pre-flight, deliberately before the two large checkouts and the JDK installs: a bad tag
+      # Pre-flight, deliberately before the JDK installs and the build: a bad tag
       # should cost seconds, not the 40 minutes it takes to discover the same thing from
       # Gradle's requireMsiCompatibleVersion at the end of a full build.
       - name: Validate release tag
@@ -54,12 +54,6 @@ jobs:
           if ([int]$Matches[1] -lt 1) { throw "Tag '$ref': major must be >= 1 (jpackage requirement)." }
           if ($ref -eq "v1.0.0") { throw "v1.0.0 is reserved for unversioned local builds so a hand-built MSI can never be mistaken for a release. Start at v1.1.0." }
           Write-Host "Tag '$ref' is a valid release version."
-
-      - name: Checkout lighting-react
-        uses: actions/checkout@v4
-        with:
-          repository: cjcormack/lighting-react
-          path: lighting-react
 
       # Liberica ships `jmods/`, which Temurin's Windows distribution does not and `jlink`
       # needs. This used to install JDK 17 alongside, purely for the bundled
@@ -124,7 +118,6 @@ jobs:
           GH_OAUTH_CLIENT_SECRET: ${{ secrets.LIGHTING7_GH_OAUTH_CLIENT_SECRET }}
         run: |
           .\gradlew.bat packageWindows `
-            "-PlightingReactPath=./lighting-react" `
             "-PjpackageAppVersion=$env:EFFECTIVE_VERSION" `
             "-PbuildChannel=release" `
             "-PbuildCommitSha=$env:BUILD_COMMIT_SHA" `

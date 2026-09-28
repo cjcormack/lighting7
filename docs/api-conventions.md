@@ -5,8 +5,8 @@ carried three spellings for the same idea. These are the rules it settled on. Th
 purpose: the point is that a new endpoint has an obvious shape, not that every shape is legislated.
 
 The decision behind all of it is **normalize hard, no aliases**. A renamed path is renamed, not
-dual-mounted — this is a single-install desk with its frontend in one adjacent repo
-(`../lighting-react`), so there is no third-party client to keep compatible, and a compatibility
+dual-mounted — this is a single-install desk with its frontend in this repo
+(`frontend/`), so there is no third-party client to keep compatible, and a compatibility
 alias would only be a second spelling that never dies.
 
 ## Paths

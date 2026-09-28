@@ -1,0 +1,53 @@
+/* The stylesheet entry for the design-sync library build (design-system/vite.config.ts).
+ *
+ * The app's own entry is `src/index.css` and this file only adds to it. Tailwind v4 emits
+ * exactly the utilities it finds in the files it scans, which for the app means "the classes
+ * `src/` actually uses" — correct for the app, too narrow for the two audiences of this build:
+ *
+ *  1. The preview cards under `.design-sync/previews/`, which compose the components with
+ *     layout glue the app has no reason to use (fixed-height wrappers to hold an open popover,
+ *     avatar stacks, list markers). A class that isn't in the stylesheet fails silently — no
+ *     error, the element simply has no style — so the cards misrender in ways only a human
+ *     reading the screenshots would catch.
+ *  2. The claude.ai/design agent, which builds *new* screens out of these components. It is
+ *     given the compiled stylesheet and nothing else, so any utility missing from it is a
+ *     utility that silently does nothing in every design ever built here. The app never needs
+ *     `min-h-screen` or `sm:grid-cols-2`; a screen being designed does.
+ *
+ * Keep the inline list below in step with the class table in `.design-sync/conventions.md` —
+ * that table is what the design agent is told it may use, and every entry must resolve.
+ * `node .design-sync/check-classes.mjs ds-bundle/_ds_bundle.css <class...>` verifies them.
+ */
+@import "../src/index.css";
+
+/* 1. Scan the authored preview cards. */
+@source "../.design-sync/previews";
+
+/* 2. The documented vocabulary for building screens. */
+@source inline("relative absolute fixed sticky inset-0 top-0 right-0 bottom-0 left-0 z-10 z-20 z-50");
+@source inline("block inline-flex flex flex-row flex-col flex-wrap flex-1 shrink-0 grow hidden");
+@source inline("items-start items-center items-end justify-start justify-center justify-between justify-end");
+@source inline("grid grid-cols-{1,2,3,4,5,6} col-span-{1,2,3,4} row-span-2");
+@source inline("{sm,md,lg}:grid-cols-{1,2,3,4} {sm,md,lg}:flex-row {sm,md,lg}:max-w-{sm,md,lg,xl,2xl}");
+@source inline("gap-{0.5,1,1.5,2,2.5,3,4,5,6,8} gap-x-{2,4} gap-y-{2,4}");
+@source inline("p-{0,1,1.5,2,3,4,5,6,8} px-{1,2,3,4,6,8} py-{0.5,1,1.5,2,3,4,6}");
+@source inline("m-0 mx-auto mt-{1,2,4,6,8} mb-{1,2,4,6} ml-auto mr-auto");
+@source inline("space-y-{0,1,1.5,2,3,4,6,8} space-x-{1,2,3,4}");
+@source inline("w-{full,fit,auto,px,4,5,6,8,10,12,16,20,24,32,40,48,56,64,72,80,96} size-{3,4,5,6,8,10,12,14,16}");
+@source inline("h-{full,auto,px,4,5,6,8,10,12,16,20,24,32,40,44,48,56,64,72,80,96} min-h-screen min-h-full min-h-0 min-w-0 h-screen");
+@source inline("max-w-{none,xs,sm,md,lg,xl,2xl,3xl,4xl,5xl,6xl,7xl,full} max-h-full");
+@source inline("text-{xs,sm,base,lg,xl,2xl,3xl,4xl} font-{normal,medium,semibold,bold} font-mono tabular-nums");
+@source inline("leading-{none,tight,snug,normal,relaxed} tracking-{tight,normal,wide,wider} text-{left,center,right}");
+@source inline("truncate text-balance whitespace-nowrap uppercase lowercase capitalize italic underline line-through");
+@source inline("border border-{0,2} border-{t,b,l,r} divide-y divide-x border-dashed");
+@source inline("rounded-{none,xs,sm,md,lg,xl,2xl,3xl,full}");
+@source inline("shadow-{xs,sm,md,lg,xl,none} ring-{0,1,2} ring-offset-2 opacity-{0,50,60,70,80,100}");
+@source inline("overflow-{hidden,auto,visible} overflow-{x,y}-auto overflow-{x,y}-hidden");
+@source inline("cursor-pointer cursor-not-allowed select-none pointer-events-none transition-colors duration-200");
+@source inline("list-disc list-decimal list-inside sr-only");
+/* Semantic colour utilities, including the hover/focus states the primitives themselves use. */
+@source inline("{hover:,}bg-{background,foreground,card,popover,primary,secondary,muted,accent,destructive,transparent}");
+@source inline("{hover:,}text-{background,foreground,card-foreground,popover-foreground,primary,primary-foreground,secondary-foreground,muted-foreground,accent-foreground,destructive}");
+@source inline("border-{background,foreground,border,input,primary,muted,accent,destructive,transparent}");
+@source inline("ring-{ring,border,primary,destructive} ring-background focus-visible:ring-2 focus-visible:ring-ring");
+@source inline("fill-{current,none} stroke-current");

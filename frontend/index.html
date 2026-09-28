@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Installable (multi-screen plan §3.6, D13): `display: fullscreen` with `standalone` as the
+         fallback, so an installed desk screen launches chromeless with no gesture and no Esc trap,
+         and an iPad's Add to Home Screen gets standalone. No service worker, deliberately: the desk
+         is on the LAN and an offline shell would only show a page that cannot reach it. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Lighting" />
+    <meta name="theme-color" content="#18181b" />
+    <title>Chris&apos; DMX Controller v7</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

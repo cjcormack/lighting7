@@ -674,7 +674,7 @@ loader never reads it, so a write never rebuilds the rig.
   and announcing `fixturesChanged` when it moves, as `infrastructure` does.
 - **Frontend**: the patch list's *Head* column (Set over N numbers them consecutively from the typed
   one, in visible-row order, through the bulk route; Clear unnumbers), and a *Head number* field in
-  the add and edit forms (`lighting-react/src/lib/headNumber.ts`).
+  the add and edit forms (`frontend/src/lib/headNumber.ts`).
 
 ## Stage geometry & coordinate system
 
@@ -780,7 +780,7 @@ apart from its fixture, because it is not a fixture.
   stored placements by position), and `get_patch` reports it.
 - **Frontend**: every stage surface draws each lantern lit from the fixture's channels, and
   clicking one selects the fixture; they are edited in the patch form's *Also hung at* section, not
-  dragged on the plot (`lighting-react/docs/stage-vis-engineering.md`).
+  dragged on the plot (`frontend/docs/stage-vis-engineering.md`).
 
 ### Variable-length fixtures
 
@@ -817,7 +817,7 @@ its declared `lengthM` becomes only the **default** drawn until a patch sets its
   `get_patch` reports both.
 - **Frontend**: the patch form offers *Length* only for such a type, and per side under *Other
   sides of this run*; the 3D body is drawn at the length, and the 2D plot draws the fixture as a
-  bar between its two projected ends rather than a dot (`lighting-react/src/lib/fixtureLength.ts`,
+  bar between its two projected ends rather than a dot (`frontend/src/lib/fixtureLength.ts`,
   which mirrors `FixtureModel`: the long axis turns with `baseYawDeg` only).
 
 ### Static fixtures vs. moving heads
