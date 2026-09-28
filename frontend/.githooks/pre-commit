@@ -1,0 +1,46 @@
+#!/bin/sh
+# Pre-commit gate — see the "Pre-commit gate" section of CLAUDE.md.
+#
+# Enable in a fresh clone with:
+#   git config core.hooksPath .githooks
+#
+# Bypass a single commit with:
+#   git commit --no-verify
+#
+# Caveat: this checks the *working tree*, not the staged snapshot. Verifying the
+# staged subset in isolation means stashing mid-hook, which can lose work if the
+# hook dies partway. Committing a subset of the tree is rare here, and when it
+# happens a green gate still tells you the tree is sound — just not that the
+# subset is independently sound.
+
+set -e
+
+# npm here is nvm-managed, and GUI clients (IntelliJ's VCS pane, Tower, …) run
+# hooks from a login-less environment whose PATH has no nvm shims. Load nvm
+# rather than failing with a bare "npm: command not found".
+if ! command -v npm >/dev/null 2>&1; then
+  NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+  if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+  fi
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "pre-commit: npm is not on PATH, so the gate cannot run." >&2
+  echo "            Run 'npm run check' yourself, then commit with --no-verify." >&2
+  exit 1
+fi
+
+# A docs-, editor- or asset-only commit doesn't need a build and test run.
+# core.quotePath=false keeps non-ASCII paths raw; the default escapes them into
+# a "…"-wrapped form that would slip past the patterns below and skip the gate.
+STAGED=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
+if ! printf '%s\n' "$STAGED" | grep -qE '^(src/|index\.html$|package(-lock)?\.json$|tsconfig[^/]*\.json$|vite\.config\.|vitest\.config\.|eslint\.config\.|postcss\.config\.|tailwind\.config\.)'; then
+  echo "pre-commit: nothing buildable staged — skipping gate."
+  exit 0
+fi
+
+echo "pre-commit: build + tests + lint (npm run check)…"
+npm run check
+echo "pre-commit: gate passed."

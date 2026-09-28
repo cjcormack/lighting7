@@ -1,0 +1,837 @@
+{
+ "_": "Pinned by DeskSelectionSubselectTest (lighting7) and lib/cellsSubSelection.ts (lighting-react): the rewrite rules of DeskSelection.subselect over the effective rig order. Targets are CueTargetDto.",
+ "fixtures": [
+  {
+   "key": "hex-1",
+   "type": "hex"
+  },
+  {
+   "key": "hex-2",
+   "type": "hex"
+  },
+  {
+   "key": "bar-1",
+   "type": "led-lightbar-12-pixel-48ch"
+  },
+  {
+   "key": "bar-2",
+   "type": "led-lightbar-12-pixel-48ch"
+  }
+ ],
+ "groups": [
+  {
+   "name": "front-wash",
+   "members": [
+    "hex-1",
+    "hex-2"
+   ]
+  },
+  {
+   "name": "bars",
+   "members": [
+    "bar-1",
+    "bar-2"
+   ]
+  }
+ ],
+ "rigs": {
+  "empty": [],
+  "built": [
+   {
+    "name": "Wash",
+    "tiles": [
+     {
+      "group": "front-wash"
+     },
+     {
+      "fixture": "hex-2",
+      "cellMode": "PIPS"
+     }
+    ]
+   },
+   {
+    "name": "Bars",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "cellMode": "HALVES",
+      "cellSplit": 5
+     },
+     {
+      "fixture": "bar-2",
+      "cellMode": "PER_CELL"
+     },
+     {
+      "fixture": "bar-1",
+      "elementKey": "bar-1.pixel-3",
+      "cellMode": "WHOLE"
+     },
+     {
+      "fixture": "gone",
+      "cellMode": "PIPS"
+     },
+     {
+      "group": "nope"
+     }
+    ]
+   }
+  ],
+  "cellFirst": [
+   {
+    "name": "Cells",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "elementKey": "bar-1.pixel-5"
+     }
+    ]
+   },
+   {
+    "name": "All",
+    "tiles": [
+     {
+      "fixture": "bar-1",
+      "cellMode": "PIPS"
+     }
+    ]
+   }
+  ],
+  "groupOnly": [
+   {
+    "name": "Bars",
+    "tiles": [
+     {
+      "group": "bars"
+     }
+    ]
+   }
+  ]
+ },
+ "cases": [
+  {
+   "note": "ALL widens every cell to its fixture and keeps heads and groups as written",
+   "rig": "built",
+   "mode": "ALL",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ]
+  },
+  {
+   "note": "MASTERS drops every cell",
+   "rig": "built",
+   "mode": "MASTERS",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ]
+  },
+  {
+   "note": "ODD over heads when no selected head has cells; a group counts by its members in rig order",
+   "rig": "built",
+   "mode": "ODD",
+   "selection": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    }
+   ]
+  },
+  {
+   "note": "EVEN over heads",
+   "rig": "built",
+   "mode": "EVEN",
+   "selection": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ]
+  },
+  {
+   "note": "ODD over cells when a selected fixture has them",
+   "rig": "built",
+   "mode": "ODD",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-4"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-6"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-8"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-10"
+    }
+   ]
+  },
+  {
+   "note": "EVEN over cells",
+   "rig": "built",
+   "mode": "EVEN",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    }
+   ]
+  },
+  {
+   "note": "a head without cells is one unit beside the cells of one that has them",
+   "rig": "built",
+   "mode": "ODD",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    }
+   ]
+  },
+  {
+   "note": "FIRST_HALF of twelve cells",
+   "rig": "built",
+   "mode": "FIRST_HALF",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-4"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    }
+   ]
+  },
+  {
+   "note": "SECOND_HALF of twelve cells",
+   "rig": "built",
+   "mode": "SECOND_HALF",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-6"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-8"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-10"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    }
+   ]
+  },
+  {
+   "note": "an odd count gives the first half the extra unit; a selected cell makes the selection cell-granular",
+   "rig": "built",
+   "mode": "FIRST_HALF",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ]
+  },
+  {
+   "note": "SECOND_HALF of an odd count",
+   "rig": "built",
+   "mode": "SECOND_HALF",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    }
+   ]
+  },
+  {
+   "note": "INVERT takes the rig as the universe at head granularity; the rig's own cell steps stay cells",
+   "rig": "built",
+   "mode": "INVERT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-4"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-6"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-8"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-10"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-4"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-6"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-8"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-10"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-11"
+    }
+   ]
+  },
+  {
+   "note": "INVERT at cell granularity: a selected parent covers its cells",
+   "rig": "built",
+   "mode": "INVERT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-1"
+    },
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-3"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-4"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-5"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-6"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-7"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-8"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-9"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-10"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-11"
+    }
+   ]
+  },
+  {
+   "note": "NEXT steps a group as a group; the member's own lit tile is subsumed",
+   "rig": "built",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ]
+  },
+  {
+   "note": "NEXT onto a HALVES tile lands on its first run",
+   "rig": "built",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "hex-2"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    }
+   ]
+  },
+  {
+   "note": "NEXT with only cells selected steps one cell",
+   "rig": "built",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-2"
+    },
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    }
+   ]
+  },
+  {
+   "note": "NEXT from one pip reached only through a group tile steps to the next pip, not the whole group",
+   "rig": "groupOnly",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-0"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-1"
+    }
+   ]
+  },
+  {
+   "note": "NEXT from the last pip of one bar steps into the next bar",
+   "rig": "groupOnly",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-11"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-2.pixel-0"
+    }
+   ]
+  },
+  {
+   "note": "PREV wraps from the first step to the last",
+   "rig": "built",
+   "mode": "PREV",
+   "selection": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-1.pixel-3"
+    }
+   ]
+  },
+  {
+   "note": "NEXT wraps from the last step to the first",
+   "rig": "empty",
+   "mode": "NEXT",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "bar-2"
+    }
+   ],
+   "expected": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ]
+  },
+  {
+   "note": "NEXT from nothing lands on the first step",
+   "rig": "built",
+   "mode": "NEXT",
+   "selection": [],
+   "expected": [
+    {
+     "type": "group",
+     "key": "front-wash"
+    }
+   ]
+  },
+  {
+   "note": "PREV from nothing lands on the last step",
+   "rig": "empty",
+   "mode": "PREV",
+   "selection": [],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "bar-2"
+    }
+   ]
+  },
+  {
+   "note": "a selection the rig does not place counts in the order written",
+   "rig": "empty",
+   "mode": "ODD",
+   "selection": [
+    {
+     "type": "fixture",
+     "key": "gone-2"
+    },
+    {
+     "type": "fixture",
+     "key": "gone-1"
+    }
+   ],
+   "expected": [
+    {
+     "type": "fixture",
+     "key": "gone-2"
+    }
+   ]
+  }
+ ]
+}

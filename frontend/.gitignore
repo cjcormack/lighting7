@@ -1,0 +1,42 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-rror.log*
+
+# Spector.js captures from Stage 3D profileHarness runs
+capture*.json
+/.claude/launch.json
+
+# Design canvas working copy — the committed design lives in
+# lighting7/docs/plans/desk-simplification-design/ beside its plan.
+.design/
+
+# design-sync (see .design-sync/): the library build output, the staged
+# converter scripts + their deps, the generated bundle and machine state.
+# Everything else under .design-sync/ is committed.
+/design-system/dist
+/.ds-sync/
+/ds-bundle/
+/.design-sync/.cache/
+/.design-sync/learnings/
+/.design-sync/node_modules

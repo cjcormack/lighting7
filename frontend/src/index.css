@@ -1,0 +1,349 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant pointer-coarse (@media (pointer: coarse));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.546 0.245 262.881);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  /* Warning amber. The app has no warning role of its own; this exists for the script editor's
+     non-error diagnostics, which need a second severity colour that is not `--destructive`. */
+  --editor-warning: oklch(0.68 0.16 70);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.546 0.245 262.881);
+  --radius: 0.625rem;
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.546 0.245 262.881);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.967 0.001 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.546 0.245 262.881);
+
+  /* Surface panel only — the MIDI picture in Settings › Surfaces draws a piece of hardware, so
+     it needs a plastic ground, knob and cap shades and an LED colour that no other surface has a
+     use for. Taken verbatim from `lighting7/docs/plans/completed/midi-surface-design/`. `--surface-led` is
+     amber because that is what an X-Touch's buttons actually light, and reading the picture
+     against the desk is the whole point of it. */
+  --surface-panel: oklch(0.955 0.003 286);
+  --surface-panel-edge: oklch(0.88 0.004 286);
+  --surface-knob: oklch(0.32 0.01 286);
+  --surface-knob-edge: oklch(0.22 0.01 286);
+  --surface-cap: oklch(0.3 0.01 286);
+  --surface-cap-line: oklch(0.85 0.005 286);
+  --surface-track: oklch(0.8 0.006 286);
+  --surface-led: oklch(0.72 0.17 60);
+  --surface-led-off: oklch(0.86 0.006 286);
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.21 0.006 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.21 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.623 0.214 259.815);
+  --primary-foreground: oklch(0.21 0.006 285.885);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --editor-warning: oklch(0.78 0.15 75);
+  --border: oklch(0.274 0.006 286.033);
+  --input: oklch(0.274 0.006 286.033);
+  --ring: oklch(0.623 0.214 259.815);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.21 0.006 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.623 0.214 259.815);
+  --sidebar-primary-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-accent: oklch(0.274 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.274 0.006 286.033);
+  --sidebar-ring: oklch(0.623 0.214 259.815);
+
+  --surface-panel: oklch(0.185 0.006 286);
+  --surface-panel-edge: oklch(0.3 0.006 286);
+  --surface-knob: oklch(0.36 0.008 286);
+  --surface-knob-edge: oklch(0.5 0.008 286);
+  --surface-cap: oklch(0.42 0.008 286);
+  --surface-cap-line: oklch(0.9 0.005 286);
+  --surface-track: oklch(0.3 0.006 286);
+  --surface-led: oklch(0.8 0.17 65);
+  --surface-led-off: oklch(0.3 0.006 286);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-panel-edge: var(--surface-panel-edge);
+  --color-surface-knob: var(--surface-knob);
+  --color-surface-knob-edge: var(--surface-knob-edge);
+  --color-surface-cap: var(--surface-cap);
+  --color-surface-cap-line: var(--surface-cap-line);
+  --color-surface-track: var(--surface-track);
+  --color-surface-led: var(--surface-led);
+  --color-surface-led-off: var(--surface-led-off);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* react-colorful colour picker styles.
+
+   **No size pin any more.** `.react-colorful { width: 200px !important; height: 200px !important }`
+   sat here until the editor kit's session 2, sizing every picker on the desk to one square and
+   forcing every host that wanted another size to fight it with `!important` of its own. Every
+   picker is fluid now (`.colour-picker-fluid`, below) or sizes itself: the library's own 200×200
+   default stands where nothing says otherwise. The pin also silently beat an inline `style` — the
+   sheet kit's old fan popover asked for 150×120 on its two pickers and drew 200×200 until the pin
+   went; that popover went with the editor kit's session 3, and the Spread panel's colour endpoint
+   is `ColourEditor` compact in every host (the busk tab's shipped measurement, below).
+
+   **Size rules for the picker live here and not as Tailwind utilities, and that is a mechanism, not
+   a preference.** Tailwind v4 emits every utility inside `@layer utilities`, and react-colorful
+   injects its own stylesheet unlayered; an unlayered declaration beats a layered one whatever its
+   specificity, so `[&_.react-colorful]:h-44` on a wrapper is generated, applied, and loses to the
+   library's `height: 200px`. (`TemplateEditor`'s `!w-40` / `!h-32` work only because an important
+   layered declaration beats an unlayered normal one.) And an arbitrary variant reads `_` as a
+   space, so `[&_.react-colorful__hue]:…` targets `.react-colorful hue`. Measured in the app on
+   2026-09-22: the square drew 200 and the hue 12 with both utilities on the row.
+
+   The three rules that stay are the picker's *look*, and every picker's, deliberately — the
+   selectors are unscoped so that they stay that way: `ColourEditor` (the programmer's colour cell,
+   `fixtures/PropertyVisualizers` and its group twin through `ColourPickerPopover`, the busk Colour
+   tab and the Spread panel's endpoint picker in every host), plus `fx/ColourEditorBody` and
+   `templates/TemplateEditor`, which mount `react-colorful` directly. One app should not hold two
+   answers to how far a hue strip sits from its square. Anything added here lands on all of them:
+   check them. */
+.react-colorful__saturation {
+  border-radius: var(--radius-sm);
+}
+
+.react-colorful__hue {
+  /* 12px is a mouse's target; the compact colour editor grows it to 20px (`.colour-picker-compact`
+     below), since that arm is always a thumb. The important flag is what beats the library's own
+     24px whichever stylesheet the browser sees first. */
+  height: 12px !important;
+  border-radius: var(--radius-sm);
+  /* The gap is smaller than it reads here: the round thumb below is 20px on a 12px bar, so it
+     overhangs by 4px at each end and eats a third of this margin. 16px is what leaves the hue
+     strip looking like a separate control from the saturation square above it. The cost is 4px off
+     the saturation square — checked in each host, and invisible. */
+  margin-top: 16px;
+}
+
+.react-colorful__pointer {
+  width: 20px;
+  height: 20px;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* The compact picker: the colour editor on any viewport too short for its full layout, whichever
+   of the three forms it is wearing (`useEditorCramped`). Height only: the width is what keeps the
+   hue bar draggable. 11rem is what the height budget allows, not a guess: the compact editor puts
+   its emitter rows beside the picker (they wrap back under it when there is no width), so the
+   picker alone is the editor's height, and a landscape iPhone leaves ~236px of sheet body after
+   Safari and the header. Raising it past ~13rem starts to scroll again on the shortest screens
+   this runs on. The hue bar goes the other way and grows: 12px is a mouse's target; this is the
+   one arm that is always a thumb. Unlayered two-class selectors, so the square needs no important
+   flag against the library's one-class rule; the hue does, against the 12px rule above. */
+.colour-picker-compact .react-colorful {
+  height: 11rem;
+}
+
+.colour-picker-compact .react-colorful__hue {
+  height: 20px !important;
+}
+
+/* The fluid picker: the square takes the row's width beside the R/G/B boxes and keeps the library's
+   height. `flex: 1 1 0%` with `min-width: 0` is what lets it shrink below 200px in a narrow sheet as
+   readily as it grows in a wide one — the busk side sheet is dragged to width, the programmer's
+   popover is 352. On the row that `ColourEditor` draws in every host; a host that wants a fixed
+   square gives the row a fixed width (the visualisers' 224px popover). No `!important`: nothing
+   pins the width any more, and the two-class selector already beats the library's one. */
+.colour-picker-fluid .react-colorful {
+  width: auto;
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+/* Cue slot edit mode wiggle animation */
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-1.5deg); }
+  75% { transform: rotate(1.5deg); }
+}
+
+/* Run view live-cue pulse — matches the green ring around the play indicator */
+@keyframes r-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+
+/* Run view fade-pulse — amber dot shimmer on the FADING badge */
+@keyframes r-fade-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.35; transform: scale(0.7); }
+}
+
+/* Kotlin playground: hide the widget's own Run button.
+ *
+ * Every surface that mounts the editor supplies its own Compile/Run wired to the app's script
+ * engine (POST /{projectId}/scripts/run), which runs against the live show. The widget's button
+ * is a second, less correct path to the same thing — and since the bundled kotlin-compiler-server
+ * was retired there is nothing behind it, so /api/script-editor answers it with an explanation rather
+ * than executing anything. */
+.kotlin-editor .run-button {
+  display: none;
+}
+
+/* Kotlin playground: lift the autocomplete popup above the sheet it is used inside.
+ *
+ * CodeMirror appends `.CodeMirror-hints` to <body> with `z-index: 10`, while Radix sheets and
+ * their overlay sit at `z-index: 50` — so the popup renders *behind* the sheet. Every surface
+ * that mounts the editor is inside a sheet, so this affected all of them; it only became visible
+ * when completion started returning results (before FU-DIST-KCS-RETIRE the bundled compiler
+ * server answered `/complete` with nothing, so no popup ever appeared).
+ *
+ * Qualified with `body` for specificity, not tidiness: kotlin-playground injects its own
+ * stylesheet at mount, i.e. *after* this file, so a bare `.CodeMirror-hints` ties on specificity
+ * and loses on source order. */
+body .CodeMirror-hints {
+  z-index: 60;
+}
+
+/* Kotlin playground: draw the error and warning marks locally.
+ *
+ * The widget's own stylesheet paints both the squiggle and the gutter icons with images from
+ * `https://try.kotlinlang.org/static/images/…` — a host that stopped serving them when the
+ * playground moved to play.kotlinlang.org, and one a desk on a show LAN has no route to anyway.
+ * Nothing else was wrong: the marks are applied to the right ranges, but their entire appearance
+ * was that missing image, so a script full of errors highlighted as a script with none.
+ *
+ * `text-decoration` needs no asset. `text-decoration-skip-ink: none` keeps the wave running under
+ * descenders, which is what makes it read as a squiggle rather than a dashed line.
+ *
+ * Qualified with `body` for the same reason as the rule above: kotlin-playground injects its
+ * stylesheet at mount, after this file, so equal specificity loses on source order. */
+body .kotlin-editor .cm__red_wavy_line,
+body .kotlin-editor .cm__green_wavy_line {
+  background: none;
+  padding-bottom: 0;
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+body .kotlin-editor .cm__red_wavy_line {
+  text-decoration-color: var(--destructive);
+}
+
+body .kotlin-editor .cm__green_wavy_line {
+  text-decoration-color: var(--editor-warning);
+}
+
+/* The gutter icons come from the same dead sprite. A dot carries the one thing the icon did:
+ * this line has something on it, in this severity. `INFOgutter` is styled too — the class is
+ * built from the severity we send, so INFO diagnostics would otherwise leave an unstyled 13px
+ * gap in the gutter. */
+body .kotlin-editor .ERRORgutter,
+body .kotlin-editor .WARNINGgutter,
+body .kotlin-editor .INFOgutter {
+  background: none;
+  height: 8px;
+  width: 8px;
+  margin-top: 4px;
+  margin-left: 4px;
+  border-radius: 50%;
+}
+
+body .kotlin-editor .ERRORgutter {
+  background-color: var(--destructive);
+}
+
+body .kotlin-editor .WARNINGgutter {
+  background-color: var(--editor-warning);
+}
+
+body .kotlin-editor .INFOgutter {
+  background-color: var(--muted-foreground);
+}
