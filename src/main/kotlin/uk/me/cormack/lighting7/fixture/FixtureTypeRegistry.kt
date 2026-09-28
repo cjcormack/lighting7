@@ -41,6 +41,7 @@ object FixtureTypeRegistry {
         LaserworldCS1000RGBMk3Fixture::class,
         LedLightbar12PixelFixture::class,
         LightstripFixture::class,
+        LightstripRgbFixture::class,
         MartinMac250Fixture::class,
         RobeColorSpot575Fixture::class,
         Scantastic4Fixture::class,

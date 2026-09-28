@@ -588,7 +588,8 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `RobeColorSpot575Fixture.Mode2Ch` | robe-color-spot-575-mode-2 | 19 | Dimmer, Position, Strobe (+ dual colour wheels, static/rotating gobos, prism, frost, iris, zoom, focus, lamp/reset methods) |
 | `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
 | `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |
-| `LightstripFixture` | lightstrip | 3 | Colour |
+| `LightstripFixture` | lightstrip | 5 | Colour, White (variable length) |
+| `LightstripRgbFixture` | lightstrip-rgb | 3 | Colour (variable length) |
 | `StarClusterFixture` | starcluster | 2 | Dimmer, Settings |
 | `ScantasticFixture` | scantastic | 17 | Settings (scanner effects) |
 | `ShehdsLed19RgbwFixture.Mode16Ch` | shehds-led19-rgbw-16ch | 16 | Dimmer, Colour, White, Strobe, Position |
@@ -787,7 +788,7 @@ apart from its fixture, because it is not a fixture.
 Most types have a length that is a fact of the model: `@FixtureType(lengthM = …)`, or the
 `FixtureKind` default, and a pixel bar is always the bar it is. A **lightstrip** is not — it is cut
 to the run it is laid along, so its length is a fact of the install. Such a type sets
-`@FixtureType(acceptsLength = true)` (`LightstripFixture` is the one today), which surfaces as
+`@FixtureType(acceptsLength = true)` (`LightstripFixture` and `LightstripRgbFixture` today), which surfaces as
 `FixtureTypeInfo.acceptsLength` / `FixtureTypeDetails.acceptsLength` on `GET /fixture-types`, and
 its declared `lengthM` becomes only the **default** drawn until a patch sets its own.
 
