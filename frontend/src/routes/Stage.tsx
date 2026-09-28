@@ -81,6 +81,8 @@ import {
 } from '../components/stage3d/StageEditorPanel'
 import { StageEditorPickerPanel } from '../components/stage3d/StageEditorPickerPanel'
 import { StageFixtureControlPanel } from '../components/stage3d/StageFixtureControlPanel'
+import { StageAimPanel, isAimable } from '../components/stage3d/StageAimControls'
+import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
 import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
 import type { EditRiggingFormHandle } from '../components/rigging/EditRiggingForm'
@@ -262,6 +264,16 @@ export function Stage() {
     }
     return out
   }, [patches, sel.refs])
+  const { fixtureByKey } = useFixtureLookup()
+  // A multi-selection in view mode has no fixture panel; the moving heads in it can still be aimed
+  // together. Aiming writes the programmer, so only on the live project.
+  const aimableKeys = useMemo(
+    () =>
+      project?.isCurrent
+        ? selectedPatches.filter((p) => isAimable(fixtureByKey.get(p.key))).map((p) => p.key)
+        : [],
+    [project?.isCurrent, selectedPatches, fixtureByKey],
+  )
 
   const applyBulk = useCallback(
     (changes: PlacementChange[], label: string, warnings?: string[]) => {
@@ -607,6 +619,7 @@ export function Stage() {
   // ambiguous about which one they were driving.
   const showControlPanel =
     !editingActive && sel.count === 1 && selection?.kind === 'patch' && isTabletOrLarger
+  const showAimPanel = !editingActive && sel.count > 1 && isTabletOrLarger && aimableKeys.length > 0
 
   const handleSelectionChange = (s: Selection, intent: SelectIntent = 'replace') => {
     selectOne(s, intent)
@@ -955,6 +968,15 @@ export function Stage() {
           {showControlPanel && selection?.kind === 'patch' && (
             <StageFixtureControlPanel
               patchKey={selection.patchKey}
+              projectId={projectId}
+              canAim={project?.isCurrent ?? false}
+              onClose={() => clearSelection()}
+            />
+          )}
+          {showAimPanel && (
+            <StageAimPanel
+              projectId={projectId}
+              fixtureKeys={aimableKeys}
               onClose={() => clearSelection()}
             />
           )}

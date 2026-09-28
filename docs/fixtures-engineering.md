@@ -896,3 +896,40 @@ Regions are additive — the union of all regions is the playable surface. A
 plain rectangular stage is a single region whose `width_m`/`depth_m` match
 the project's bounding box. CRUD endpoints mirror riggings under
 `/api/rest/projects/{projectId}/stage-regions`.
+
+### Aiming a head at a point
+
+`POST /api/rest/projects/{projectId}/programmer/aim` `{targets, x, y, z, fadeMs?}` points moving
+heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` tool (chat and MCP,
+with a `dryRun`) is the same call. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
+`routes/programmerAim.kt` reads the placements, converts to DMX and writes the programmer as owner
+`WEB`, like a spread — so Record captures an aim, Blind previews it and Clear releases it. The
+Stage view's docked fixture panel (and its multi-select aim panel, in view mode) is the UI.
+
+The solve is the **inverse of the Stage view's drawing**, not of a model of real yokes, so a head
+the desk aims is drawn with its beam through the point. The view places the body at the patch's
+world position (composed through its rigging by `worldPosition`) and rotates it by `baseYawDeg` /
+`basePitchDeg` only — **a rigging's pose moves a fixture but does not turn it** in the view, so the
+solve does not turn it either. At DMX mid-travel a head's beam runs up the body's own axis, so a
+hung mover is `basePitchDeg = 180` and a floor-standing one 0; pan turns about that axis and tilt
+leans away from it. `beamDirection` is the forward half, pinned against the view's `panTiltToDir`
+vectors in `FixtureAimTest`.
+
+- **Travel degrees come from the annotation.** A head aims only where both its pan and tilt carry
+  `@FixtureProperty(degMin =, degMax =)`; the mechanical centre is the middle of the range, as the
+  view's `axisCentreDeg` reads it. Pan repeats every 360°, and tilting either way off the axis
+  reaches the same direction with pan half a turn apart, so every candidate inside the travel is
+  tried and the one nearest the centre of both wins — never the long way round, and the same answer
+  for the same rig each time. Pan turns about the body axis, so it never changes how far off that
+  axis a direction is: a 0–270° tilt misses only the 45° cone behind the base, a 0–180° one the whole
+  hemisphere behind it.
+- **Fine channels are written.** A head with `PAN_FINE` / `TILT_FINE` sliders gets 16 bits
+  (`coarse + fine / 256`, as the view combines them); one step of an 8-bit 540° pan is about 2°,
+  some 37 cm at a 10 m throw. The degree→DMX mapping is `TemplateResolver`'s (range, inversion,
+  the coarse slider's own `min..max`).
+- **Everything else is skipped by name**, never guessed at: a fixed head, an axis with no degree
+  range, an unplaced fixture, a cell (it has no placement of its own), a point at the fixture or
+  outside its travel (the reason says how far out).
+- **It aims from the placement point.** The drawn head pivots a few centimetres along the body axis
+  from it, so the drawn beam passes that close to the point; a real head is as close as its
+  placement and mount were measured.

@@ -258,6 +258,13 @@ its hand-down; `park_channel` refuses a universe the show does not output, the s
 counting universes from 1 would otherwise make, and `unpark_channel` on an unparked address answers
 `wasParked: false` rather than an error.
 
+`aim_fixtures` (a chat tool too) points moving heads at a stage coordinate — the same
+`aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
+`dryRun` that answers each head's degrees and writes nothing. It is the setup-time answer to "focus
+the specials on DSC": a model reading a plot knows where a region or a mark is in stage metres (from
+`get_patch`) and has no way to turn that into DMX itself. Heads it cannot aim come back by name
+(`docs/fixtures-engineering.md` §"Aiming a head at a point").
+
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the four setup
 readers below carry `readOnlyHint`.
