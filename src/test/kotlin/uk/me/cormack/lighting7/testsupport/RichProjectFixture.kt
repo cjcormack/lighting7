@@ -210,6 +210,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         fixtureTypeKey = "lightstrip"
         key = "ring-1"; displayName = "Ring 1"; startChannel = 200; sortOrder = 6
         stageX = 0.0; stageY = 0.0; lengthM = 8.5
+        // Roll (v17) on the patch and on a segment below: a ring's side stood on end.
+        baseRollDeg = -12.5
     }
     DaoFixturePatchPlacement.new {
         fixturePatch = ring
@@ -217,6 +219,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         stageX = 0.0
         stageY = 6.0
         baseYawDeg = 180.0
+        baseRollDeg = 90.0
         lengthM = 12.25
         sortOrder = 0
     }

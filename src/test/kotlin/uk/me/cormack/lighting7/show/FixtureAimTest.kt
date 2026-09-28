@@ -96,6 +96,37 @@ class FixtureAimTest {
     }
 
     @Test
+    fun `a rolled mount is aimed through its roll too`() {
+        val random = Random(20260929)
+        var aimed = 0
+        repeat(2000) {
+            val from = StagePoint(random.nextDouble(-8.0, 8.0), random.nextDouble(-2.0, 10.0), random.nextDouble(0.0, 9.0))
+            val to = StagePoint(random.nextDouble(-8.0, 8.0), random.nextDouble(-2.0, 10.0), random.nextDouble(-1.0, 4.0))
+            val yaw = random.nextDouble(-180.0, 180.0)
+            val pitch = random.nextDouble(-180.0, 180.0)
+            val roll = random.nextDouble(-180.0, 180.0)
+            val aim = aimAt(from, yaw, pitch, to, pan540, tilt270, roll)
+            if (aim is AimSolution.Aimed) {
+                aimed++
+                val beam = beamDirection(yaw, pitch, aim.panDeg - pan540.centreDeg, aim.tiltDeg - tilt270.centreDeg, roll)
+                assertNear(unit(from, to), beam, 1e-9, "yaw $yaw pitch $pitch roll $roll from $from to $to:")
+            }
+        }
+        assertTrue(aimed > 1500, "most directions are in reach, was $aimed")
+    }
+
+    @Test
+    fun `roll turns the body about three-js Z before pitch and yaw`() {
+        // A standing head (beam up its body +Y, i.e. stage +z) rolled 90° lies on its side: three.js
+        // Rz(90°) takes +Y to −X, which is stage audience-left.
+        assertNear(StagePoint(-1.0, 0.0, 0.0), beamDirection(0.0, 0.0, 0.0, 0.0, 90.0))
+        // Then yawed 90° (Ry takes three.js −X to +Z, i.e. stage −y): pointing at the audience.
+        assertNear(StagePoint(0.0, -1.0, 0.0), beamDirection(90.0, 0.0, 0.0, 0.0, 90.0))
+        // Roll 0 is exactly the unrolled mount.
+        assertNear(beamDirection(30.0, 40.0, 50.0, 60.0), beamDirection(30.0, 40.0, 50.0, 60.0, 0.0))
+    }
+
+    @Test
     fun `the answer nearest the centre of travel wins, so a head is never sent round the long way`() {
         val random = Random(7)
         repeat(500) {

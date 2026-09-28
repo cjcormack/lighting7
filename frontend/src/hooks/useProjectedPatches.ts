@@ -118,14 +118,14 @@ export function useProjectedPatches(
     const spanOf = (
       world: LightingPoint,
       patch: FixturePatch,
-      at: Pick<PatchPlacement, 'lengthM' | 'baseYawDeg' | 'basePitchDeg'>,
+      at: Pick<PatchPlacement, 'lengthM' | 'baseYawDeg' | 'basePitchDeg' | 'baseRollDeg'>,
       placement?: PatchPlacement,
     ): ProjectedPatch['span'] => {
       const type = typeByKey.get(patch.fixtureTypeKey)
       if (!type?.acceptsLength) return undefined
       const length = drawnLengthM(type, patch, placement)
       if (length == null || !(length > 0)) return undefined
-      const [a, b] = bodyEndsLighting(world, length, at.baseYawDeg, at.basePitchDeg)
+      const [a, b] = bodyEndsLighting(world, length, at.baseYawDeg, at.basePitchDeg, at.baseRollDeg)
       return [project(a, projection), project(b, projection)]
     }
     for (const patch of patches ?? []) {

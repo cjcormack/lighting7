@@ -705,12 +705,13 @@ Patch validation accepts any finite value in ±500 m on each axis — generous
 enough for any real venue, tight enough to catch unit mistakes (mm, pixels).
 
 `baseYawDeg` rotates about Z (up). `basePitchDeg` rotates about X. Numerically
-unchanged from v2 — only the axis labels swapped.
+unchanged from v2 — only the axis labels swapped. `baseRollDeg` (sync v17) is the third turn,
+applied first: the body's `YXZ` Euler is `(pitch, yaw, roll)` in three.js space.
 
 ### Per-patch fields
 
 Defined on `DaoFixturePatches` and surfaced through `FixturePatchDto`. Every
-field is nullable; an unplaced fixture has `null` on all five.
+field is nullable; an unplaced fixture has `null` on all six.
 
 | Column          | Meaning                                                         |
 |-----------------|-----------------------------------------------------------------|
@@ -719,11 +720,17 @@ field is nullable; an unplaced fixture has `null` on all five.
 | `stage_z`       | Z position in metres (height above deck).                       |
 | `base_yaw_deg`  | Body rotation around Z. 0° = pointing toward the audience (along −Y); +yaw rotates toward audience-right. Stored ±360°; renderers should reduce mod 360. |
 | `base_pitch_deg`| Body rotation around X. 0° = horizontal; +pitch aims the fixture down. |
+| `base_roll_deg` | Body rotation around its local Z (three.js), applied before pitch and yaw — it tips the body sideways in its own X–Y plane. For a moving head that lays it on its side; it is not a spin about the beam. ±180°; null is 0. |
 
-Roll (rotation around the beam axis) is intentionally not stored on patches —
-add it when a fixture type actually needs it (asymmetric beams, gobo
-orientation). Riggings carry roll, so a rolled truss propagates orientation
-to its fixtures via the rigging frame.
+Roll was left out until a fixture needed it, and a lightstrip did: its length runs along the body's
+own X, which pitch turns *about* and yaw swings *round*, so with yaw and pitch alone a strip is
+always level — a ring's upright sides were drawn lying flat at the right height. Roll 90 stands one
+on end. It is stored on the patch and on each extra placement (`fixture_patch_placements`), so one
+side of a run can stand while another lies along the deck; the placement mirror (`mirroredPlacement`)
+negates it with the yaw, as a reflection across x = 0 does. The Stage view's rotate gizmo edits yaw
+and pitch only and leaves a stored roll alone; the patch form's *Base orientation* takes all three.
+The aim solve composes it too (`aimAt` / `beamDirection` below), so a head hung on its side aims
+true.
 
 #### Rigging-relative offsets
 
@@ -752,7 +759,7 @@ That is **one fixture** to control (one address, one level, one row in every cue
 target) and **two objects** on the stage. So the patch is made once, keeps its own placement in the
 columns above, and lists its other lanterns in `fixture_patch_placements`
 (`models/fixturePatchPlacements.kt`): per entry a `rigging_id`, `stage_x/y/z`, `base_yaw_deg`,
-`base_pitch_deg`, a short `label` (e.g. "SR") and a `sort_order`. The geometry follows the patch's
+`base_pitch_deg`, `base_roll_deg`, a short `label` (e.g. "SR") and a `sort_order`. The geometry follows the patch's
 rules exactly, rigging-relative offsets included. A placement carries none of the fixture's own facts
 (type, beam angle, gel, kind override, hidden), which a paired lantern shares.
 
@@ -776,7 +783,8 @@ apart from its fixture, because it is not a fixture.
   every rigging delete calls `detachPlacementsFromRigging` (the rigging route and `set_stage`'s
   `removeRiggings`), which leaves the offsets as they were — the patch's own treatment.
 - **Sync**: embedded in the patch's document as `extraPlacements` (formatVersion 14 —
-  `docs/sync-engineering.md` §"Version 14 — paired placements").
+  `docs/sync-engineering.md` §"Version 14 — paired placements"); a placement's `baseRollDeg` is
+  formatVersion 17 (§"Version 17 — fixture roll").
 - **MCP**: `place_fixtures` and `patch_fixtures` take `alsoAt` (a whole list, matched to the
   stored placements by position), and `get_patch` reports it.
 - **Frontend**: every stage surface draws each lantern lit from the fixture's channels, and
@@ -819,13 +827,14 @@ its declared `lengthM` becomes only the **default** drawn until a patch sets its
 - **Frontend**: the patch form offers *Length* only for such a type, and per side under *Other
   sides of this run*; the 3D body is drawn at the length, and the 2D plot draws the fixture as a
   bar between its two projected ends rather than a dot (`frontend/src/lib/fixtureLength.ts`,
-  which mirrors `FixtureModel`: the long axis turns with `baseYawDeg` only).
+  which mirrors `FixtureModel`: the long axis swings with `baseYawDeg` and tips up with
+  `baseRollDeg`; pitch turns the body about it).
 
 ### Static fixtures vs. moving heads
 
 For a static fixture (PAR, wash bar, fresnel), `baseYawDeg` + `basePitchDeg`
-**is** the aim direction — the beam exits along the body's local −Y axis after
-applying yaw and pitch.
+(+ `baseRollDeg`, where set) **is** the aim direction — the beam exits along the
+body's local −Y axis after applying roll, pitch and yaw.
 
 For a moving head, the base orientation describes only where the **yoke is
 bolted**. The live aim is the base orientation composed with runtime
@@ -910,7 +919,7 @@ Stage view's docked fixture panel (and its multi-select aim panel, in view mode)
 The solve is the **inverse of the Stage view's drawing**, not of a model of real yokes, so a head
 the desk aims is drawn with its beam through the point. The view places the body at the patch's
 world position (composed through its rigging by `worldPosition`) and rotates it by `baseYawDeg` /
-`basePitchDeg` only — **a rigging's pose moves a fixture but does not turn it** in the view, so the
+`basePitchDeg` / `baseRollDeg` only — **a rigging's pose moves a fixture but does not turn it** in the view, so the
 solve does not turn it either. At DMX mid-travel a head's beam runs up the body's own axis, so a
 hung mover is `basePitchDeg = 180` and a floor-standing one 0; pan turns about that axis and tilt
 leans away from it. `beamDirection` is the forward half, pinned against the view's `panTiltToDir`
@@ -934,3 +943,11 @@ vectors in `FixtureAimTest`.
 - **It aims from the placement point.** The drawn head pivots a few centimetres along the body axis
   from it, so the drawn beam passes that close to the point; a real head is as close as its
   placement and mount were measured.
+- **An aim can be kept as a position template.** The programmer is scratch — Clear releases an aim
+  like any other entry — so `aim_fixtures` takes `saveAsTemplate`: a new template with one
+  fixture-specific `position` row per aimed head, in travel degrees (`deg:pan,tilt`, the template
+  grammar), which `TemplateResolver` turns back into each head's aim to within that tenth of a degree
+  (the grammar's precision; the programmer write is exact, fine channels included). It is a focus
+  palette cues, Looks and busk pads can reference, and it outlives the programmer. The template is
+  created before the programmer is written, so a taken name refuses the call with no head moved;
+  `dryRun` creates nothing.

@@ -263,7 +263,7 @@ second place, never a second fixture. Four rules keep that true:
 - **A lantern selects its fixture and is never dragged.** On the 2D plot its press calls the
   fixture's selection with no `buildDrag`, a marquee over it selects the fixture once, and it is an
   alignment guide for the fixture it pairs with. In 3D it is a `FixtureModel` over the patch with the
-  placement's six geometry fields laid on (`patchAtPlacement` in `stage3d/lanterns.ts`), its own emitter slot after the
+  placement's seven geometry fields laid on (`patchAtPlacement` in `stage3d/lanterns.ts`), its own emitter slot after the
   fixtures', and **no `onEditFocus`**, so the translate gizmo can never bind to it. Lanterns are
   moved in the patch form's *Also hung at* section (`ExtraPlacementsFields`), which starts a new
   one mirrored across the centre line (`lib/extraPlacements.ts`).
@@ -295,9 +295,10 @@ paired lanterns holds for a side: lit from the patch, selects the patch, never d
   projected — and `FixtureShape` draws a bar between them, to scale, with a stroke-shaped hit
   target along it. A span that projects to a point (a run seen end-on in an elevation) falls back to
   the dot, and a pixel bar keeps its segmented strip. The long axis is `longAxisLighting`, which
-  mirrors `FixtureModel`'s body rotation exactly — a YXZ Euler of `(basePitchDeg, baseYawDeg, 0)`
-  in world space, so the rigging's pose places the body but does not turn it, and pitch never moves
-  the long axis. Change one, change both.
+  mirrors `FixtureModel`'s body rotation exactly — a YXZ Euler of `(basePitchDeg, baseYawDeg,
+  baseRollDeg)` in world space, so the rigging's pose places the body but does not turn it, pitch
+  never moves the long axis, and roll is the only turn that lifts it off level (90 stands a run on
+  end). Change one, change both.
 - **The form**: *Length* sits under the fixture's placement, and the extra-placements section reads
   *Other sides of this run*, each side with its own *Length*. An out-of-range value is kept and
   flagged, never clamped mid-keystroke, and the form will not save it.

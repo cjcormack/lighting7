@@ -53,6 +53,8 @@ object DaoFixturePatchPlacements : IntIdTable("fixture_patch_placements") {
     val stageZ = double("stage_z").nullable()
     val baseYawDeg = double("base_yaw_deg").nullable()
     val basePitchDeg = double("base_pitch_deg").nullable()
+    /** As [DaoFixturePatches.baseRollDeg]: a ring's upright side is a placement rolled 90°. */
+    val baseRollDeg = double("base_roll_deg").nullable()
     /** This segment's length in metres, for a variable-length type; null takes the patch's own. */
     val lengthM = double("length_m").nullable()
     val sortOrder = integer("sort_order").default(0)
@@ -70,6 +72,7 @@ class DaoFixturePatchPlacement(id: EntityID<Int>) : IntEntity(id) {
     var stageZ by DaoFixturePatchPlacements.stageZ
     var baseYawDeg by DaoFixturePatchPlacements.baseYawDeg
     var basePitchDeg by DaoFixturePatchPlacements.basePitchDeg
+    var baseRollDeg by DaoFixturePatchPlacements.baseRollDeg
     var lengthM by DaoFixturePatchPlacements.lengthM
     var sortOrder by DaoFixturePatchPlacements.sortOrder
     var uuid by DaoFixturePatchPlacements.uuid

@@ -241,8 +241,10 @@ internal val aimFixturesTool = AnthropicToolDef(
     description = "Point moving heads at a spot on the stage: give a point in stage coordinates and the desk works out " +
             "each head's pan and tilt from where it hangs (get_patch's `world` position), how its body is mounted " +
             "(its pitchDeg / yawDeg — for a moving head, pitchDeg 0 is standing on the deck and 180 is hung from a bar) " +
-            "and its pan/tilt travel, and writes them into the programmer; record_cue or update_from_programmer keeps " +
-            "them. Coordinates are metres, the frame get_patch and set_stage use: origin the centre of the downstage " +
+            "and its pan/tilt travel, and writes them into the programmer. The programmer is scratch: clearing it " +
+            "loses the aim, so keep it — record_cue or update_from_programmer puts it in a cue, and saveAsTemplate " +
+            "also records it as a position template (a focus palette) that cues, looks and busk pads can use. " +
+            "Coordinates are metres, the frame get_patch and set_stage use: origin the centre of the downstage " +
             "edge at deck level, +x audience-right, +y upstage, +z up. A performer standing in a region is its " +
             "centerX / centerY with z its centerZ plus head height (about 1.7). A head that cannot be aimed is skipped " +
             "with the reason — a fixed lantern, an unplaced fixture, a type with no pan/tilt degree range, a point " +
@@ -273,6 +275,17 @@ internal val aimFixturesTool = AnthropicToolDef(
             put("dryRun", buildJsonObject {
                 put("type", "boolean")
                 put("description", "Work out and report each head's pan and tilt without writing anything.")
+            })
+            put("saveAsTemplate", buildJsonObject {
+                put("type", "string")
+                put(
+                    "description",
+                    "Also save the aims as a new position template with this name: one row per aimed head, " +
+                        "in pan/tilt degrees, so it outlives the programmer. The name must be unused — a taken " +
+                        "name refuses the call before any head moves. For heads aimed at different points in " +
+                        "one template, dryRun each aim and pass the positions to create_template " +
+                        "(value 'deg:<panDeg>,<tiltDeg>', targetKey the fixture).",
+                )
             })
         })
         put("required", buildJsonArray { add("targets"); add("x"); add("y"); add("z") })
@@ -722,7 +735,7 @@ internal val createTemplateTool = AnthropicToolDef(
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
-                            put("description", "The value, in the same spelling an effect parameter takes: '#ff8800' for a colour, a number for a slider.")
+                            put("description", "The value as an intent, not a DMX literal: '#ff8800' for rgbColour, 'pct:75' for dimmer, strobe, zoom, focus, iris or frost, 'deg:<pan>,<tilt>' for position (travel degrees, what aim_fixtures reports), 'dmx:180' for white, amber or uv, 'on' / 'off' for prism.")
                         })
                         put("targetKey", buildJsonObject {
                             put("type", "string")

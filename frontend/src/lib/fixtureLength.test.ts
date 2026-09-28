@@ -52,6 +52,13 @@ describe('longAxisLighting', () => {
     close(longAxisLighting(90, 45), longAxisLighting(90, 0))
     close(longAxisLighting(0, -30), { x: 1, y: 0, z: 0 })
   })
+
+  it('stands on end under roll, whatever the yaw — the only way off level', () => {
+    close(longAxisLighting(0, 0, 90), { x: 0, y: 0, z: 1 })
+    close(longAxisLighting(90, 0, 90), { x: 0, y: 0, z: 1 })
+    close(longAxisLighting(0, 0, 30), { x: Math.cos(Math.PI / 6), y: 0, z: 0.5 })
+    close(longAxisLighting(90, 45, null), longAxisLighting(90, 45))
+  })
 })
 
 describe('bodyEndsLighting', () => {
@@ -62,5 +69,13 @@ describe('bodyEndsLighting', () => {
     expect(b.y).toBeCloseTo(7, 9)
     expect(a.z).toBeCloseTo(0.1, 9)
     expect(b.z).toBeCloseTo(0.1, 9)
+  })
+
+  it('runs a rolled body up and down from its position', () => {
+    const [a, b] = bodyEndsLighting({ x: -4, y: 2, z: 1 }, 2, 90, 0, 90)
+    expect(a.x).toBeCloseTo(-4, 9)
+    expect(b.y).toBeCloseTo(2, 9)
+    expect(a.z).toBeCloseTo(0, 9)
+    expect(b.z).toBeCloseTo(2, 9)
   })
 })

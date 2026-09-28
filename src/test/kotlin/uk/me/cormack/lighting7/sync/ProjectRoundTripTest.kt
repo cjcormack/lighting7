@@ -204,6 +204,33 @@ class ProjectRoundTripTest {
         assertEquals(12.25, back.extraPlacements.single().lengthM, "and the segment's")
     }
 
+    /** v17: a body's roll, on the patch and on a placement, and absent where it is unset. */
+    @Test
+    fun `a rolled fixture exports its roll and its segments' rolls`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val ring = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "ring-1" }
+        assertEquals(-12.5, ring.baseRollDeg)
+        assertEquals(90.0, ring.extraPlacements.single().baseRollDeg)
+        assertTrue(
+            docs.filter { !it.contains("\"ring-1\"") }.none { it.contains("\"baseRollDeg\"") },
+            "a patch with no roll must not carry the key at all",
+        )
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "ring-1" }
+        assertEquals(-12.5, back.baseRollDeg, "the importer keeps the patch's roll")
+        assertEquals(90.0, back.extraPlacements.single().baseRollDeg, "and the segment's")
+    }
+
     /**
      * v10: a busk page travels as one document with columns, banks and pads nested, and every
      * structural field written even at zero. The byte-for-byte test proves the importer keeps what

@@ -67,6 +67,7 @@ private fun JsonObjectBuilder.placementProps() {
     prop("z", "number", "Metres. World z (height above deck), or offset in the rigging's frame (usually 0 or slightly negative for a hung fixture).")
     prop("yawDeg", "number", "Body rotation about Z. 0 = pointing at the audience (−y); 180 = pointing upstage (a backlight); +yaw turns toward audience-right.")
     prop("pitchDeg", "number", "Body rotation about X. 0 = horizontal, +pitch aims down. A typical FOH or overhead unit is 30–60.")
+    prop("rollDeg", "number", "Body roll, −180–180: tips the body sideways, lifting its own x (length) axis toward vertical; applied before pitch and yaw. A long body (a lightstrip, a bar) runs along its own x: pitch turns it about that length and yaw swings it round, so neither lifts it off level — roll 90 stands it on end (a strip running up a wall, a ring's upright side). For a moving head it lays the unit on its side; it is not a spin about the beam.")
     prop("beamAngleDeg", "integer", "Beam angle 2–120, for fixture types that accept one (profiles, generic dimmers).")
     prop("gelCode", "string", "Gel as the plot writes it, e.g. 'L201', 'R80'.")
     enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind — e.g. PROFILE or FRESNEL for a generic dimmer.")
@@ -90,6 +91,7 @@ private val alsoAtSchema = objectSchema {
     prop("z", "number", "Metres. World z, or offset in the rigging's frame.")
     prop("yawDeg", "number", "Body rotation about Z, as for the fixture.")
     prop("pitchDeg", "number", "Body rotation about X, as for the fixture.")
+    prop("rollDeg", "number", "Body roll, as for the fixture — 90 stands this segment on end.")
     prop("lengthM", "number", "This segment's length in metres, for a fixture type that takes one (acceptsLength); absent takes the fixture's own lengthM.")
 }
 
@@ -160,6 +162,21 @@ internal val patchFixturesTool = AnthropicToolDef(
     inputSchema = objectSchema(required = listOf("fixtures")) {
         arrayProp("fixtures", patchRowSchema)
         prop("dryRun", "boolean", "Validate and report what would change without writing anything. Default false.")
+    },
+)
+
+internal val deleteGroupsTool = AnthropicToolDef(
+    name = "delete_groups",
+    description = "Delete fixture groups from the current project by name — groups left over from an old patch, or ones patch_fixtures created under a wrong name. " +
+        "The fixtures stay patched; they only leave the group. A group that still has members is refused unless force is set, so a typo cannot take apart a group that looks and cues address — check get_patch's `groups` first. " +
+        "Everything is validated before anything is deleted.",
+    inputSchema = objectSchema(required = listOf("names")) {
+        put("names", buildJsonObject {
+            put("type", "array")
+            put("items", buildJsonObject { put("type", "string") })
+            put("description", "Group names exactly as get_patch lists them.")
+        })
+        prop("force", "boolean", "Also delete groups that still have members. Default false.")
     },
 )
 
@@ -305,6 +322,7 @@ internal val setupToolDefs: List<AnthropicToolDef> = listOf(
     listFixtureTypesTool,
     getPatchTool,
     patchFixturesTool,
+    deleteGroupsTool,
     setStageTool,
     placeFixturesTool,
     getPromptBookTool,

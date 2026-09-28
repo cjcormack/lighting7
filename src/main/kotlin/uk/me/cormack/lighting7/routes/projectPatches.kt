@@ -95,6 +95,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 basePitchDeg = request.basePitchDeg,
                 beamAngleDeg = request.beamAngleDeg,
                 lengthM = request.lengthM,
+                baseRollDeg = request.baseRollDeg,
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
@@ -183,6 +184,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.stageZ = request.stageZ
                     this.baseYawDeg = request.baseYawDeg
                     this.basePitchDeg = request.basePitchDeg
+                    this.baseRollDeg = request.baseRollDeg
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
                     this.kindOverride = normalisedKindOverride
@@ -239,6 +241,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 basePitchDeg = body["basePitchDeg"].nullableDouble(),
                 beamAngleDeg = body["beamAngleDeg"].nullableInt(),
                 lengthM = body["lengthM"].nullableDouble(),
+                baseRollDeg = body["baseRollDeg"].nullableDouble(),
             )
             if (stageError != null) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(stageError))
@@ -329,6 +332,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("stageZ" in body) patch.stageZ = body["stageZ"].nullableDouble()
                 if ("baseYawDeg" in body) patch.baseYawDeg = body["baseYawDeg"].nullableDouble()
                 if ("basePitchDeg" in body) patch.basePitchDeg = body["basePitchDeg"].nullableDouble()
+                if ("baseRollDeg" in body) patch.baseRollDeg = body["baseRollDeg"].nullableDouble()
                 if ("beamAngleDeg" in body) patch.beamAngleDeg = body["beamAngleDeg"].nullableInt()
                 if ("lengthM" in body) patch.lengthM = body["lengthM"].nullableDouble()
                 if ("riggingUuid" in body) {
@@ -486,6 +490,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     basePitchDeg = entry["basePitchDeg"].nullableDouble(),
                     beamAngleDeg = entry["beamAngleDeg"].nullableInt(),
                     lengthM = entry["lengthM"].nullableDouble(),
+                    baseRollDeg = entry["baseRollDeg"].nullableDouble(),
                 )
                 if (stageError != null) {
                     if (request.atomic) {
@@ -628,6 +633,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("stageZ" in entry) patch.stageZ = entry["stageZ"].nullableDouble()
                     if ("baseYawDeg" in entry) patch.baseYawDeg = entry["baseYawDeg"].nullableDouble()
                     if ("basePitchDeg" in entry) patch.basePitchDeg = entry["basePitchDeg"].nullableDouble()
+                    if ("baseRollDeg" in entry) patch.baseRollDeg = entry["baseRollDeg"].nullableDouble()
                     if ("beamAngleDeg" in entry) patch.beamAngleDeg = entry["beamAngleDeg"].nullableInt()
                     if ("lengthM" in entry) patch.lengthM = entry["lengthM"].nullableDouble()
                     if (patchId in headNumbersById) patch.headNumber = headNumbersById[patchId]
@@ -815,6 +821,8 @@ data class FixturePatchDto(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** Body roll about its local Z, applied before pitch and yaw — what stands a strip on end; null is 0. */
+    val baseRollDeg: Double? = null,
     val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
@@ -854,6 +862,8 @@ data class CreatePatchRequest(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** Body roll about its local Z, applied before pitch and yaw — what stands a strip on end; null is 0. */
+    val baseRollDeg: Double? = null,
     val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
@@ -879,6 +889,7 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "stageZ",
     "baseYawDeg",
     "basePitchDeg",
+    "baseRollDeg",
     "riggingUuid",
     "beamAngleDeg",
     "gelCode",
@@ -931,6 +942,7 @@ private fun DaoFixturePatch.toDto(
         stageZ = stageZ,
         baseYawDeg = baseYawDeg,
         basePitchDeg = basePitchDeg,
+        baseRollDeg = baseRollDeg,
         riggingUuid = rigging?.uuid?.toString(),
         beamAngleDeg = beamAngleDeg,
         gelCode = gelCode,
@@ -965,6 +977,7 @@ internal fun validateStageMetadata(
     basePitchDeg: Double?,
     beamAngleDeg: Int?,
     lengthM: Double? = null,
+    baseRollDeg: Double? = null,
 ): String? {
     checkStageCoord("stageX", stageX)?.let { return it }
     checkStageCoord("stageY", stageY)?.let { return it }
@@ -973,6 +986,7 @@ internal fun validateStageMetadata(
     // tripping a 400. Renderers should reduce mod 360.
     checkAngle("baseYawDeg", baseYawDeg, -360.0, 360.0)?.let { return it }
     checkAngle("basePitchDeg", basePitchDeg, -180.0, 180.0)?.let { return it }
+    checkAngle("baseRollDeg", baseRollDeg, -180.0, 180.0)?.let { return it }
     if (beamAngleDeg != null && (beamAngleDeg < 2 || beamAngleDeg > 120)) {
         return "beamAngleDeg must be between 2 and 120"
     }

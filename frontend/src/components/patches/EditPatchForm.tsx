@@ -60,6 +60,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     stageZ: patch.stageZ,
     baseYawDeg: patch.baseYawDeg,
     basePitchDeg: patch.basePitchDeg,
+    baseRollDeg: patch.baseRollDeg ?? null,
   })
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
@@ -80,7 +81,9 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const { data: fixtureTypes } = useFixtureTypeListQuery()
 
   useImperativeHandle(ref, () => ({
-    setPlacement: (next: PatchPlacementValue) => setPlacement(next),
+    // Merged, not replaced: the Stage view's drag sends position, yaw and pitch, and a roll it does
+    // not carry must stay as the form holds it rather than read as a clear.
+    setPlacement: (next: PatchPlacementValue) => setPlacement((prev) => ({ ...prev, ...next })),
   }), [])
 
   const channelCount = patch.channelCount ?? 1
@@ -127,6 +130,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     placement.stageZ !== patch.stageZ ||
     placement.baseYawDeg !== patch.baseYawDeg ||
     placement.basePitchDeg !== patch.basePitchDeg ||
+    (placement.baseRollDeg ?? null) !== (patch.baseRollDeg ?? null) ||
     beamAngleDeg !== patch.beamAngleDeg ||
     gelCode !== patch.gelCode ||
     kindOverride !== patch.kindOverride ||
@@ -147,6 +151,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if (placement.stageZ !== patch.stageZ) body.stageZ = placement.stageZ
     if (placement.baseYawDeg !== patch.baseYawDeg) body.baseYawDeg = placement.baseYawDeg
     if (placement.basePitchDeg !== patch.basePitchDeg) body.basePitchDeg = placement.basePitchDeg
+    if ((placement.baseRollDeg ?? null) !== (patch.baseRollDeg ?? null)) body.baseRollDeg = placement.baseRollDeg ?? null
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
     if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride

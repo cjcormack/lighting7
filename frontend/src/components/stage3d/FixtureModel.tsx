@@ -333,10 +333,10 @@ export function FixtureModel({
       new Euler(
         MathUtils.degToRad(patch.basePitchDeg ?? 0),
         MathUtils.degToRad(patch.baseYawDeg ?? 0),
-        0,
+        MathUtils.degToRad(patch.baseRollDeg ?? 0),
         'YXZ',
       ),
-    [patch.basePitchDeg, patch.baseYawDeg],
+    [patch.basePitchDeg, patch.baseYawDeg, patch.baseRollDeg],
   )
 
   useEffect(() => {

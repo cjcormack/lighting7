@@ -24,6 +24,10 @@ export interface FixturePatch {
   stageZ: number | null;
   baseYawDeg: number | null;
   basePitchDeg: number | null;
+  /** Body roll: the `Z` of the `YXZ` Euler, applied before pitch and yaw — it tips the body sideways
+   *  in its own X–Y plane (for a moving head, onto its side; not a spin about the beam). What stands a strip on end: pitch turns a strip about its own length and yaw
+   *  swings it round, so neither can lift it off level. Absent or null is 0. */
+  baseRollDeg?: number | null;
   /**
    * The rigging this patch hangs on, or null when it is free-standing.
    *
@@ -75,6 +79,8 @@ export interface PatchPlacement {
   stageZ: number | null;
   baseYawDeg: number | null;
   basePitchDeg: number | null;
+  /** As `FixturePatch.baseRollDeg` — a ring's upright side is a placement rolled 90°. */
+  baseRollDeg?: number | null;
   /** This segment's own length, for a variable-length type laid in segments (a lightstrip ring,
    *  one side per placement). Null or absent takes the patch's `lengthM`. */
   lengthM?: number | null;
@@ -140,6 +146,7 @@ export interface CreatePatchRequest {
   stageZ?: number | null;
   baseYawDeg?: number | null;
   basePitchDeg?: number | null;
+  baseRollDeg?: number | null;
   riggingUuid?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;
@@ -163,6 +170,7 @@ export interface UpdatePatchRequest {
   stageZ?: number | null;
   baseYawDeg?: number | null;
   basePitchDeg?: number | null;
+  baseRollDeg?: number | null;
   riggingUuid?: string | null;
   beamAngleDeg?: number | null;
   gelCode?: string | null;

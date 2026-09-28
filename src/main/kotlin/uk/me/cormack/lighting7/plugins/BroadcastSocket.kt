@@ -196,6 +196,15 @@ data object FixturesChangedOutMessage : BroadcastOutMessage()
 @SerialName("promptBookChanged")
 data object PromptBookChangedOutMessage : BroadcastOutMessage()
 
+/**
+ * A project's own row changed — name, description or stage bounding box — through the REST edit
+ * or the `set_stage` tool. The client re-reads its project queries; without it the Stage view
+ * kept drawing the old stage box until a reload.
+ */
+@Serializable
+@SerialName("projectDetailsChanged")
+data class ProjectDetailsChangedOutMessage(val projectId: Int) : BroadcastOutMessage()
+
 // ─── Listener wiring ────────────────────────────────────────────────────
 
 /**
@@ -265,6 +274,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         }
 
         override fun promptBookChanged() = fire(PromptBookChangedOutMessage)
+        override fun projectDetailsChanged(projectId: Int) = fire(ProjectDetailsChangedOutMessage(projectId))
     }
 
     var currentFixtures = state.show.fixtures

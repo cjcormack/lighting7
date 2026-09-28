@@ -31,6 +31,7 @@ import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
 import uk.me.cormack.lighting7.routes.PlacementInput
 import uk.me.cormack.lighting7.routes.applyExtraPlacements
 import uk.me.cormack.lighting7.routes.createCueChildren
+import uk.me.cormack.lighting7.routes.deleteFixtureGroupRows
 import uk.me.cormack.lighting7.routes.fixedLengthRefusal
 import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
@@ -82,6 +83,7 @@ class SetupTools(
             listFixtureTypesTool.name -> listFixtureTypes(input)
             getPatchTool.name -> getPatch()
             patchFixturesTool.name -> patchFixtures(input)
+            deleteGroupsTool.name -> deleteGroups(input)
             setStageTool.name -> setStage(input)
             placeFixturesTool.name -> placeFixtures(input)
             getPromptBookTool.name -> getPromptBook()
@@ -204,8 +206,11 @@ class SetupTools(
     }
 
     private fun getPatch(): ToolExecutionResult {
-        val project = state.projectManager.currentProject
+        val current = state.projectManager.currentProject
         val body = transaction(state.database) {
+            // Re-read the row: `currentProject` is the entity loaded at the last project switch,
+            // and its columns are that load's values — a set_stage since then would read stale.
+            val project = DaoProject.findById(current.id) ?: current
             val riggings = DaoRigging.find { DaoRiggings.project eq project.id }
                 .orderBy(DaoRiggings.sortOrder to SortOrder.ASC).toList()
             val riggingNames = riggings.associate { it.id.value to it.name }
@@ -285,6 +290,7 @@ class SetupTools(
                             putOptional("x", p.stageX); putOptional("y", p.stageY); putOptional("z", p.stageZ)
                             putWorld(p.stageX, p.stageY, p.stageZ, riggingId?.let { riggingPoses[it] })
                             putOptional("yawDeg", p.baseYawDeg); putOptional("pitchDeg", p.basePitchDeg)
+                            putOptional("rollDeg", p.baseRollDeg)
                             p.beamAngleDeg?.let { put("beamAngleDeg", it) }
                             p.gelCode?.let { put("gelCode", it) }
                             p.kindOverride?.let { put("kind", it) }
@@ -302,6 +308,7 @@ class SetupTools(
                                             putOptional("x", pl.stageX); putOptional("y", pl.stageY); putOptional("z", pl.stageZ)
                                             putWorld(pl.stageX, pl.stageY, pl.stageZ, placementRiggingId?.let { riggingPoses[it] })
                                             putOptional("yawDeg", pl.baseYawDeg); putOptional("pitchDeg", pl.basePitchDeg)
+                                            putOptional("rollDeg", pl.baseRollDeg)
                                             putOptional("lengthM", pl.lengthM)
                                         }
                                     }
@@ -315,7 +322,7 @@ class SetupTools(
                 }
             }
         }
-        return success("Patch and stage of '${project.name}'", body)
+        return success("Patch and stage of '${body["project"]!!.jsonPrimitive.content}'", body)
     }
 
     /** One row of a patch_fixtures call, validated and resolved. */
@@ -538,6 +545,65 @@ class SetupTools(
         return success("Patched ${toCreate.size} new and updated ${toUpdate.size} fixture(s)", result)
     }
 
+    private fun deleteGroups(input: JsonObject): ToolExecutionResult {
+        val names = input["names"] as? JsonArray ?: return failure("Missing 'names'")
+        if (names.isEmpty()) return failure("'names' is empty")
+        val problems = mutableListOf<String>()
+        val force = optionalBoolean(input, "force", problems) == true
+        val project = state.projectManager.currentProject
+        val groups = transaction(state.database) {
+            DaoFixtureGroup.find { DaoFixtureGroups.project eq project.id }
+                .associate { it.name to (it.id.value to it.members.count()) }
+        }
+
+        val wanted = mutableListOf<Int>()
+        val seen = mutableSetOf<String>()
+        names.forEachIndexed { index, element ->
+            val name = (element as? JsonPrimitive)?.takeIf { it.isString }?.content
+            if (name == null) {
+                problems += "names[$index] is not a string"
+                return@forEachIndexed
+            }
+            val (groupId, members) = groups[name] ?: run {
+                problems += "no group named '$name'" +
+                    (if (groups.isEmpty()) " (this project has no groups)" else " (known: ${groups.keys.sorted().joinToString()})")
+                return@forEachIndexed
+            }
+            if (!seen.add(name)) {
+                problems += "group '$name' is listed twice"
+                return@forEachIndexed
+            }
+            if (members > 0 && !force) {
+                problems += "group '$name' still has $members member(s): pass force to delete it anyway (the fixtures stay patched)"
+                return@forEachIndexed
+            }
+            wanted += groupId
+        }
+        if (problems.isNotEmpty()) return rejected(problems)
+
+        val (sweptTiles, unlinked) = transaction(state.database) {
+            var tiles = 0
+            var members = 0
+            for (groupId in wanted) {
+                val group = DaoFixtureGroup.findById(groupId) ?: continue
+                members += group.members.count().toInt()
+                tiles += deleteFixtureGroupRows(group)
+            }
+            tiles to members
+        }
+        if (sweptTiles > 0) state.show.fixtures.buskRigChanged()
+        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+        state.show.fixtures.patchListChanged()
+        return success(
+            "Deleted ${wanted.size} group(s)",
+            buildJsonObject {
+                put("deleted", wanted.size)
+                put("membersUnlinked", unlinked)
+                put("buskRigTilesRemoved", sweptTiles)
+            },
+        )
+    }
+
     private fun findUniverse(project: DaoProject, universe: Int): DaoUniverseConfig? = DaoUniverseConfig.find {
         (DaoUniverseConfigs.project eq project.id) and (DaoUniverseConfigs.subnet eq 0) and
             (DaoUniverseConfigs.universe eq universe)
@@ -555,7 +621,7 @@ class SetupTools(
     private class Placement(
         val rigging: Optional<Int?>?,
         val x: Optional<Double?>?, val y: Optional<Double?>?, val z: Optional<Double?>?,
-        val yawDeg: Optional<Double?>?, val pitchDeg: Optional<Double?>?,
+        val yawDeg: Optional<Double?>?, val pitchDeg: Optional<Double?>?, val rollDeg: Optional<Double?>?,
         val beamAngleDeg: Optional<Int?>?,
         val gelCode: Optional<String?>?,
         val kind: Optional<String?>?,
@@ -576,6 +642,7 @@ class SetupTools(
             z?.let { patch.stageZ = it.value }
             yawDeg?.let { patch.baseYawDeg = it.value }
             pitchDeg?.let { patch.basePitchDeg = it.value }
+            rollDeg?.let { patch.baseRollDeg = it.value }
             beamAngleDeg?.let { patch.beamAngleDeg = it.value }
             gelCode?.let { patch.gelCode = it.value }
             kind?.let { patch.kindOverride = it.value }
@@ -595,7 +662,7 @@ class SetupTools(
                         label = a.label,
                         riggingUuid = a.riggingId?.let { byId[it]?.uuid?.toString() },
                         stageX = a.x, stageY = a.y, stageZ = a.z,
-                        baseYawDeg = a.yawDeg, basePitchDeg = a.pitchDeg,
+                        baseYawDeg = a.yawDeg, basePitchDeg = a.pitchDeg, baseRollDeg = a.rollDeg,
                         lengthM = a.lengthM,
                     )
                 }
@@ -609,7 +676,7 @@ class SetupTools(
         val label: String?,
         val riggingId: Int?,
         val x: Double?, val y: Double?, val z: Double?,
-        val yawDeg: Double?, val pitchDeg: Double?,
+        val yawDeg: Double?, val pitchDeg: Double?, val rollDeg: Double?,
         val lengthM: Double?,
     )
 
@@ -650,9 +717,10 @@ class SetupTools(
         val z = field("z") { it.doubleOrNull }
         val yaw = field("yawDeg") { it.doubleOrNull }
         val pitch = field("pitchDeg") { it.doubleOrNull }
+        val roll = field("rollDeg") { it.doubleOrNull }
         val beam = field("beamAngleDeg") { it.doubleOrNull?.toInt() }
         val length = field("lengthM") { it.doubleOrNull }
-        validateStageMetadata(x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value, length?.value)
+        validateStageMetadata(x?.value, y?.value, z?.value, yaw?.value, pitch?.value, beam?.value, length?.value, roll?.value)
             ?.let { problems += it }
         val gel = field("gelCode") { it.contentOrNull }?.let { Optional(normaliseGelCode(it.value)) }
         val kind = field("kind") { it.contentOrNull }?.let {
@@ -665,7 +733,7 @@ class SetupTools(
         }
         val hidden = optionalBoolean(row, "stageHidden", problems)
         val alsoAt = parseAlsoAt(row["alsoAt"], riggingIds, problems)
-        return Placement(rigging, x, y, z, yaw, pitch, beam, gel, kind, length, hidden, alsoAt)
+        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, gel, kind, length, hidden, alsoAt)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -709,9 +777,9 @@ class SetupTools(
             }
             val a = AlsoAt(
                 label, riggingId, number("x"), number("y"), number("z"), number("yawDeg"), number("pitchDeg"),
-                number("lengthM"),
+                number("rollDeg"), number("lengthM"),
             )
-            validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null, a.lengthM)?.let { problems += "alsoAt[$i]: $it" }
+            validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null, a.lengthM, a.rollDeg)?.let { problems += "alsoAt[$i]: $it" }
             out += a
         }
         return out
@@ -777,7 +845,11 @@ class SetupTools(
         val width = stage?.double("widthM")
         val depth = stage?.double("depthM")
         val height = stage?.double("heightM")
-        stage?.let { problems += malformedNumbers(it, listOf("widthM", "depthM", "heightM"), "stage") }
+        stage?.let {
+            problems += malformedNumbers(it, STAGE_NUMBERS, "stage")
+            problems += unknownFields(it, STAGE_NUMBERS, "stage")
+            if (it.isEmpty()) problems += "stage: send at least one of ${STAGE_NUMBERS.joinToString()}"
+        }
         validateStageDimensions(width, depth, height)?.let { problems += "stage: $it" }
 
         val regions = (input["regions"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
@@ -785,6 +857,7 @@ class SetupTools(
             val name = row.string("name")?.trim().orEmpty()
             if (name.isEmpty() || name.length > 100) problems += "regions[$index]: name must be 1–100 characters"
             problems += malformedNumbers(row, REGION_NUMBERS, "regions[$index] ('$name')")
+            problems += unknownFields(row, REGION_NUMBERS + "name", "regions[$index] ('$name')")
             validateStageRegion(
                 row.double("centerX"), row.double("centerY"), row.double("centerZ"),
                 row.double("widthM"), row.double("depthM"), row.double("heightM"), row.double("yawDeg"),
@@ -796,6 +869,7 @@ class SetupTools(
             val name = row.string("name")?.trim().orEmpty()
             if (name.isEmpty() || name.length > 100) problems += "riggings[$index]: name must be 1–100 characters"
             problems += malformedNumbers(row, RIGGING_NUMBERS, "riggings[$index] ('$name')")
+            problems += unknownFields(row, RIGGING_NUMBERS + listOf("name", "kind"), "riggings[$index] ('$name')")
             val kind = row.string("kind")?.trim()?.uppercase()
             if (kind != null && kind !in RIGGING_KINDS) problems += "riggings[$index] ('$name'): kind must be one of ${RIGGING_KINDS.joinToString()}"
             validateRiggingPose(
@@ -823,12 +897,15 @@ class SetupTools(
         if (problems.isNotEmpty()) return rejected(problems)
 
         var detached = 0
+        // The stage box as stored after the write, answered so the caller sees what landed.
+        var storedStage: Triple<Double?, Double?, Double?>? = null
         transaction(state.database) {
             if (stage != null) {
                 val p = DaoProject.findById(project.id)!!
                 if ("widthM" in stage) p.stageWidthM = width
                 if ("depthM" in stage) p.stageDepthM = depth
                 if ("heightM" in stage) p.stageHeightM = height
+                storedStage = Triple(p.stageWidthM, p.stageDepthM, p.stageHeightM)
             }
             var regionOrder = (DaoStageRegion.find { DaoStageRegions.project eq project.id }.maxOfOrNull { it.sortOrder } ?: -1) + 1
             for ((name, row) in regions) {
@@ -879,6 +956,7 @@ class SetupTools(
                 }
             }
         }
+        if (stage != null) state.show.fixtures.projectDetailsChanged(project.id.value)
         if (regions.isNotEmpty() || removeRegions.isNotEmpty()) state.show.fixtures.stageRegionListChanged()
         if (riggings.isNotEmpty() || removeRiggings.isNotEmpty()) {
             state.show.fixtures.riggingListChanged()
@@ -894,6 +972,13 @@ class SetupTools(
                 put("regionsRemoved", removeRegions.size)
                 put("riggingsRemoved", removeRiggings.size)
                 put("fixturesDetached", detached)
+                storedStage?.let { (w, d, h) ->
+                    putJsonObject("stage") {
+                        putOptional("widthM", w)
+                        putOptional("depthM", d)
+                        putOptional("heightM", h)
+                    }
+                }
             },
         )
     }
@@ -1278,6 +1363,13 @@ class SetupTools(
     }
 
     /**
+     * A field this tool does not know. set_stage writes only the fields it names, so a misspelt one
+     * (`width` for `widthM`) would otherwise be skipped and the call still answer success.
+     */
+    private fun unknownFields(row: JsonObject, known: List<String>, where: String): List<String> =
+        row.keys.filter { it !in known }.map { "$where: unknown field '$it' (known: ${known.joinToString()})" }
+
+    /**
      * The fields among [names] that are present, not an explicit `null`, and not a number. The
      * `double()` reader answers null for all three of absent, `null` and malformed, and the writes
      * that follow it treat null as "clear": without this, `"centerX": "DSC"` would silently wipe a
@@ -1314,6 +1406,7 @@ class SetupTools(
 
     private companion object {
         const val MAX_PROBLEMS = 100
+        val STAGE_NUMBERS = listOf("widthM", "depthM", "heightM")
         val REGION_NUMBERS = listOf("centerX", "centerY", "centerZ", "widthM", "depthM", "heightM", "yawDeg")
         val RIGGING_NUMBERS = listOf("x", "y", "z", "yawDeg", "pitchDeg", "rollDeg", "lengthM")
         const val MAX_CUE_SECONDS = 3600.0

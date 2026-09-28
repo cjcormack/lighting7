@@ -8,11 +8,13 @@ export interface PlacementGeometry {
   stageZ: number | null
   baseYawDeg: number | null
   basePitchDeg: number | null
+  baseRollDeg?: number | null
 }
 
 /**
  * A new lantern for a paired dimmer, seeded as the mirror image of the fixture's own placement
- * across the centre line — same rigging, X and yaw negated. That is the pair this feature exists
+ * across the centre line — same rigging, X, yaw and roll negated (a reflection across x = 0 turns
+ * each of those the other way, and leaves pitch alone). That is the pair this feature exists
  * for (an SL unit and its SR partner on one bar), and x = 0 is the middle of a rigging and of the
  * stage alike, so the mirror lands on the other side of either. The operator adjusts from there.
  */
@@ -25,6 +27,7 @@ export function mirroredPlacement(primary: PlacementGeometry): PatchPlacementInp
     stageZ: primary.stageZ,
     baseYawDeg: negate(primary.baseYawDeg),
     basePitchDeg: primary.basePitchDeg,
+    baseRollDeg: negate(primary.baseRollDeg ?? null),
     // No `lengthM`: a new side of a variable-length run takes the fixture's own until given one.
   }
 }
@@ -46,6 +49,9 @@ export function toPlacementInput(p: PatchPlacement): PatchPlacementInput {
     stageZ: p.stageZ,
     baseYawDeg: p.baseYawDeg,
     basePitchDeg: p.basePitchDeg,
+    // Carried even though no field edits it here: the list is sent whole, and an entry without it
+    // would clear a roll set elsewhere (the Stage view, or place_fixtures over MCP).
+    baseRollDeg: p.baseRollDeg ?? null,
     lengthM: p.lengthM ?? null,
   }
 }
@@ -77,6 +83,7 @@ export function placementListsEqual(
       x.stageZ === y.stageZ &&
       x.baseYawDeg === y.baseYawDeg &&
       x.basePitchDeg === y.basePitchDeg &&
+      (x.baseRollDeg ?? null) === (y.baseRollDeg ?? null) &&
       // Absent and null both mean "the patch's own length", as the desk stores them.
       (x.lengthM ?? null) === (y.lengthM ?? null)
     )

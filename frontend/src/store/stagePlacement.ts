@@ -31,6 +31,7 @@ export interface PatchPlacementValues {
   stageZ?: number | null
   baseYawDeg?: number | null
   basePitchDeg?: number | null
+  baseRollDeg?: number | null
 }
 
 export interface RegionPlacementValues {

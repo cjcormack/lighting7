@@ -26,6 +26,7 @@ export interface BulkPlacementEntry {
   stageZ?: number | null
   baseYawDeg?: number | null
   basePitchDeg?: number | null
+  baseRollDeg?: number | null
 }
 
 export interface BulkPlacementResponse {

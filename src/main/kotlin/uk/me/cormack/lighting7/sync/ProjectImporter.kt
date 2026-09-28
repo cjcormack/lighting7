@@ -113,6 +113,11 @@ import uk.me.cormack.lighting7.models.asDuration
 // defaults to null. Imported as stored, with no uniqueness check: a merge of two peers' numbers
 // must import, and the patch list marks a shared number rather than refusing the project.
 //
+// v17 added `baseRollDeg` to `FixturePatchJson` and `PatchPlacementJson` (a body's roll about its
+// local Z — what stands a ring's side on end). SUPPORTED moved for v14's reason — a v16 reader
+// would import every rolled body flat and write the roll away on its next push; MIN stays at 5
+// because both fields default to null.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -138,7 +143,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 16
+internal const val SUPPORTED_FORMAT_VERSION = 17
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -612,6 +617,7 @@ class ProjectImporter(private val state: State) {
             stageZ = p.stageZ
             baseYawDeg = p.baseYawDeg
             basePitchDeg = p.basePitchDeg
+            baseRollDeg = p.baseRollDeg
             beamAngleDeg = p.beamAngleDeg
             gelCode = p.gelCode
             kindOverride = p.kindOverride
@@ -635,6 +641,7 @@ class ProjectImporter(private val state: State) {
                 stageZ = pl.stageZ
                 baseYawDeg = pl.baseYawDeg
                 basePitchDeg = pl.basePitchDeg
+                baseRollDeg = pl.baseRollDeg
                 lengthM = pl.lengthM
                 sortOrder = index
                 this.uuid = UUID.fromString(pl.uuid)

@@ -183,6 +183,7 @@ internal fun Route.routeApiRestProjects(state: State) {
             }
 
             if (project != null) {
+                state.show.fixtures.projectDetailsChanged(resource.id)
                 call.respond(project)
             } else {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Project not found"))

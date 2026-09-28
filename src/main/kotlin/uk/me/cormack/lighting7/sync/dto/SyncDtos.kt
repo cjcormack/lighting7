@@ -139,7 +139,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 16,
+    val formatVersion: Int = 17,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -382,6 +382,9 @@ data class FixturePatchJson(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** Body roll about its local Z (v17); null is 0. See `docs/sync-engineering.md`
+     *  §"Version 17 — fixture roll". */
+    val baseRollDeg: Double? = null,
     val riggingUuid: String? = null,
     val beamAngleDeg: Int? = null,
     val gelCode: String? = null,
@@ -416,6 +419,8 @@ data class PatchPlacementJson(
     val stageZ: Double? = null,
     val baseYawDeg: Double? = null,
     val basePitchDeg: Double? = null,
+    /** This lantern's body roll (v17); null is 0. */
+    val baseRollDeg: Double? = null,
     /** This segment's own length (v15), for a variable-length type laid in segments; null takes
      *  the patch's `lengthM`. */
     val lengthM: Double? = null,

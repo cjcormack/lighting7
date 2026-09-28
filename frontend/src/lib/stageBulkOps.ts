@@ -300,7 +300,8 @@ export interface MirrorOptions {
   axis?: 'h' | 'v'
   /** Screen-metre coordinate to reflect about. Defaults to 0 — the stage centre line. */
   aboutM?: number
-  /** Negate `baseYawDeg` too. Off by default: see the note below. */
+  /** Negate `baseYawDeg` too — and `baseRollDeg`, which a reflection turns the other way with it.
+   *  Off by default: see the note below. */
   alsoFlipYaw?: boolean
   /** Mirror rig-mounted fixtures by un-parenting them rather than skipping. */
   unparentMounted?: boolean
@@ -354,6 +355,9 @@ export function mirrorTargets(
     const change: PlacementChange = lowerToPlacement(frame, world)
     if (t.rig && unparentMounted) change.riggingUuid = null
     if (alsoFlipYaw && t.patch.baseYawDeg != null) change.baseYawDeg = -t.patch.baseYawDeg
+    // As `mirroredPlacement`: a reflection turns roll the other way with yaw, so a ring side stood
+    // on end one way is stood the other way, not copied.
+    if (alsoFlipYaw && t.patch.baseRollDeg) change.baseRollDeg = -t.patch.baseRollDeg
     changes.push(change)
   }
 
