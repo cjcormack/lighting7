@@ -42,9 +42,10 @@ export function ScriptUploadCard({
         const bytes = await file.arrayBuffer()
         // pdfjs consumes (and may detach) the buffer it's given — hand it a copy
         // so the original survives for the upload body.
-        const doc = await pdfjs.getDocument({ data: bytes.slice(0) }).promise
-        const pageCount = doc.numPages
-        await doc.destroy()
+        // pdf.js 6 dropped the document proxy's destroy(); the loading task owns teardown.
+        const loadingTask = pdfjs.getDocument({ data: bytes.slice(0) })
+        const pageCount = (await loadingTask.promise).numPages
+        await loadingTask.destroy()
         onUpload({ bytes, pageCount, fileName: file.name })
       } catch {
         setReadError('Could not read that file as a PDF.')
