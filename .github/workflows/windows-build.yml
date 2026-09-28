@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout lighting7
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Pre-flight, deliberately before the JDK installs and the build: a bad tag
       # should cost seconds, not the 40 minutes it takes to discover the same thing from
@@ -59,7 +59,7 @@ jobs:
       # needs. This used to install JDK 17 alongside, purely for the bundled
       # kotlin-compiler-server fork's pinned daemon JVM; that fork is gone.
       - name: Set up JDK 24 (Liberica)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: liberica
           java-version: 24
@@ -76,7 +76,7 @@ jobs:
           Write-Host "jmods/ found at $jmodsPath."
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Resolve effective installer version
         shell: pwsh
@@ -150,7 +150,7 @@ jobs:
           Write-Host "$name  sha256=$hash"
 
       - name: Upload installer as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighting7-windows-msi
           path: dist/*
@@ -162,7 +162,7 @@ jobs:
       # Prerelease tags never reach this step; "Validate release tag" rejects them outright.
       - name: Publish GitHub Release (tag dispatches only)
         if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && inputs.create_release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           files: |
