@@ -18,6 +18,7 @@ import { GroupComboInput } from './GroupComboInput'
 import { FixtureTypePickerContent, type FixtureCountMap } from '@/components/fixtures/FixtureTypePicker'
 import { buildFixtureTypeHierarchy, type FixtureTypeHierarchy } from '@/api/fixtureTypeHierarchy'
 import type { FixturePatch } from '@/api/patchApi'
+import { headNumberFieldError, parseHeadNumberDraft } from '@/lib/headNumber'
 
 interface AddFixtureSheetProps {
   open: boolean
@@ -70,6 +71,7 @@ export function AddFixtureSheet({
   const [fixtureName, setFixtureName] = useState('')
   const [key, setKey] = useState('')
   const [keyManuallyEdited, setKeyManuallyEdited] = useState(false)
+  const [headDraft, setHeadDraft] = useState('')
   const [universe, setUniverse] = useState(() => {
     if (existingPatches.length === 0) return 0
     return existingPatches[existingPatches.length - 1].universe
@@ -111,6 +113,8 @@ export function AddFixtureSheet({
   const channelOverflow = lastChannel > 512
   const existingKeys = useMemo(() => new Set(existingPatches.map(p => p.key)), [existingPatches])
   const keyConflict = effectiveKey ? existingKeys.has(effectiveKey) : false
+  const headNumber = parseHeadNumberDraft(headDraft)
+  const headError = headNumberFieldError(headDraft, existingPatches, null)
 
   const universePatch = existingPatches.filter(p => p.universe === universe)
   const overlapWarning = useMemo(() => {
@@ -123,7 +127,7 @@ export function AddFixtureSheet({
     return null
   }, [startChannel, channelCount, lastChannel, universePatch])
 
-  const isValid = selectedTypeKey && effectiveKey && fixtureName.trim() && !channelOverflow && !overlapWarning && !keyConflict && startChannel >= 1
+  const isValid = selectedTypeKey && effectiveKey && fixtureName.trim() && !channelOverflow && !overlapWarning && !keyConflict && !headError && startChannel >= 1
 
   // Handlers
   const handleNameChange = (value: string) => {
@@ -189,6 +193,7 @@ export function AddFixtureSheet({
         key: patchedKey,
         name: patchedName,
         startChannel,
+        headNumber: typeof headNumber === 'number' ? headNumber : undefined,
         address: !universeExists && address ? address : undefined,
         groupName: groupName || undefined,
       }).unwrap()
@@ -216,6 +221,8 @@ export function AddFixtureSheet({
       }
     }
     setStartChannel(startChannel + channelCount)
+    // The next fixture takes the next head number, as it takes the next name and address.
+    if (typeof headNumber === 'number') setHeadDraft(String(headNumber + 1))
     nameInputRef.current?.focus()
   }
 
@@ -225,6 +232,7 @@ export function AddFixtureSheet({
     setFixtureName('')
     setKey('')
     setKeyManuallyEdited(false)
+    setHeadDraft('')
     setStartChannel(1)
     setAddress('')
     setGroupName('')
@@ -354,6 +362,18 @@ export function AddFixtureSheet({
               </div>
 
               <div className="space-y-1.5">
+                <Label htmlFor="patch-head">Head Number</Label>
+                <Input
+                  id="patch-head"
+                  inputMode="numeric"
+                  value={headDraft}
+                  onChange={e => setHeadDraft(e.target.value)}
+                  placeholder="optional — the source console's head number"
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="patch-key">Key</Label>
                 <Input
                   id="patch-key"
@@ -384,6 +404,7 @@ export function AddFixtureSheet({
               {keyConflict && (
                 <Warning>Key &ldquo;{effectiveKey}&rdquo; already exists</Warning>
               )}
+              {headError && <Warning>{headError}</Warning>}
             </SheetBody>
 
             <SheetFooter className="flex-row justify-end gap-2">

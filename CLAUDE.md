@@ -2345,6 +2345,16 @@ Three surface rules, each pinned by its test:
   the only writer is how one walks onto a key the other is mid-way through vacating. **`key` is also outside `METADATA_ONLY_PUT_KEYS`**, so each of those PUTs
   rebuilds the fixture registry and broadcasts — the same cost the address batch has always had, and
   the same answer: a bulk route is lighting7 work and Chris's call.
+  **The Head column is the operator's head number** — a ChamSys head number carried across a
+  migration (lighting7 `docs/fixtures-engineering.md` §"Head numbers"), unique in the project,
+  optional. **Set over N counts up from the typed number** in visible-row order, and — unlike Key —
+  goes out as **one atomic request** on the bulk placement route (`useSetHeadNumbersMutation`), which
+  the desk judges against the batch's *final* state, so a renumber that swaps two heads needs no write
+  ordering and cannot half-apply. A number held by a head outside the batch is named before Apply
+  (`lib/headNumber.ts`); a number two heads share anyway (a sync merge imports as it stands) is ringed
+  like an overlapping address, with its own legend line. Clear unnumbers; there is no Spread. The add
+  and edit forms carry a *Head number* field, and the add sheet advances it by one per fixture patched.
+  It is **not** on `GET /fixtures` yet, so nothing outside the patch views can show it.
   **A batch landing is drawn one head to a line** — `EditorReadout`'s `lines` arm, which was
   `cells/LandingLines.tsx` until the editor kit — shared by the address editor and the Key column,
   rather than joined with `·` into a paragraph read at the worst moment.

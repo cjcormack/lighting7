@@ -17,8 +17,10 @@ import type { FixturePatch } from '@/api/patchApi'
  * Everything store-connected is mocked away; the point is the gesture and the write it produces.
  */
 const updatePatch = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const setHeadNumbers = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/patches', () => ({
   useUpdatePatchMutation: () => [updatePatch],
+  useSetHeadNumbersMutation: () => [setHeadNumbers],
   useDeletePatchMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
 }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
@@ -138,6 +140,7 @@ afterEach(() => {
   // default has to be put back, or every later test in this file inherits the hang.
   updatePatch.mockClear()
   updatePatch.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
+  setHeadNumbers.mockClear()
 })
 
 /**
@@ -149,6 +152,8 @@ function stubFlatLayout() {
   const rect = (left: number, right: number) =>
     ({ left, top: 0, right, bottom: 0, width: right - left, height: 0, x: left, y: 0, toJSON: () => ({}) }) as DOMRect
   const bands: Record<string, [number, number]> = {
+    // Only ever drawn alone, so it may share the Address column's band.
+    head: [240, 312],
     address: [240, 344],
     type: [344, 600],
     key: [600, 740],
@@ -421,5 +426,100 @@ describe('PatchSheet', () => {
     fireEvent.change(field, { target: { value: '90' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 3, startChannel: 90 })
+  })
+
+  describe('the Head column', () => {
+    // PAR 1..3 numbered 1..3 in address order; Bar SL unnumbered.
+    const NUMBERED = RIG.map((p, i) => ({ ...p, headNumber: i < 3 ? i + 1 : null }))
+    const numberedRows: PatchSheetRow[] = NUMBERED.map((p) => ({
+      id: patchRowId(p.id),
+      patch: p,
+      riggingName: null,
+      acceptsBeamAngle: false,
+      acceptsGel: false,
+    }))
+    const drawHeads = (over: Partial<React.ComponentProps<typeof PatchSheet>> = {}) =>
+      draw({ rows: numberedRows, allPatches: NUMBERED, visibleColumns: ['head'], ...over })
+
+    /** The Head cell's trigger on a named row. */
+    const headCell = (name: string) => row(name).querySelector('[data-cell="head"] button') as HTMLElement
+
+    /** A marquee down the Head column over rows `from`..`to` (indices into the drawn rows). */
+    function dragHeads(from: number, to: number) {
+      const cell = headCell(screen.getAllByText(/^(PAR \d|Bar SL)$/)[from].textContent!)
+      fireEvent.pointerDown(cell, { button: 0, clientX: 260, clientY: from * 36 + 10 })
+      fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 280, clientY: to * 36 + 26 })
+      fireEvent.pointerUp(cell, { button: 0, clientX: 280, clientY: to * 36 + 26 })
+      fireEvent.click(cell)
+    }
+
+    it('numbers a selection consecutively from the typed number, in one request of the heads that moved', async () => {
+      drawHeads()
+      // PAR 3 (3) and Bar SL (unnumbered), from 3: PAR 3 keeps 3, Bar SL takes 4.
+      dragHeads(2, 3)
+      expect(screen.getByText('2 cells')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const field = await screen.findByLabelText('Head')
+      fireEvent.change(field, { target: { value: '3' } })
+      expect(screen.getByText('PAR 3 → 3')).toBeInTheDocument()
+      expect(screen.getByText('Bar SL → 4')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      expect(setHeadNumbers).toHaveBeenCalledTimes(1)
+      expect(setHeadNumbers).toHaveBeenCalledWith({ projectId: 1, numbers: [{ patchId: 4, headNumber: 4 }] })
+      expect(updatePatch).not.toHaveBeenCalled()
+    })
+
+    it('swaps numbers within the selection — the desk judges the batch as it will stand', async () => {
+      // Drawn PAR 2 above PAR 1, numbered from 1: PAR 2 → 1, PAR 1 → 2, which each other holds.
+      drawHeads({ rows: [numberedRows[1], numberedRows[0]] })
+      dragHeads(0, 1)
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      fireEvent.change(await screen.findByLabelText('Head'), { target: { value: '1' } })
+      expect(screen.getByRole('button', { name: 'Apply' })).not.toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      expect(setHeadNumbers).toHaveBeenCalledWith({
+        projectId: 1,
+        numbers: [
+          { patchId: 2, headNumber: 1 },
+          { patchId: 1, headNumber: 2 },
+        ],
+      })
+    })
+
+    it('names a number another head holds, and refuses Apply', async () => {
+      drawHeads()
+      // PAR 1 and PAR 2 from 2: PAR 1 → 2 is PAR 2's (in the batch, fine), PAR 2 → 3 is PAR 3's.
+      dragHeads(0, 1)
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const field = await screen.findByLabelText('Head')
+      fireEvent.change(field, { target: { value: '2' } })
+      expect(screen.getByText('Head 3 is already PAR 3')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
+      fireEvent.keyDown(field, { key: 'Enter' })
+      fireEvent.change(field, { target: { value: '1.5' } })
+      expect(screen.getByText(/A head number is a whole number/)).toBeInTheDocument()
+      expect(setHeadNumbers).not.toHaveBeenCalled()
+    })
+
+    it('clears to unnumbered, sending only the heads that had a number', () => {
+      drawHeads()
+      dragHeads(2, 3)
+      fireEvent.click(screen.getByRole('button', { name: 'Clear cells' }))
+      expect(setHeadNumbers).toHaveBeenCalledWith({ projectId: 1, numbers: [{ patchId: 3, headNumber: null }] })
+    })
+
+    it('rings a head number two heads share, names the other, and says so under the sheet', () => {
+      // A sync merge can import a shared number; the desk refuses one on every write.
+      const shared = NUMBERED.map((p) => (p.id === 4 ? { ...p, headNumber: 2 } : p))
+      drawHeads({
+        allPatches: shared,
+        rows: numberedRows.map((r) => (r.patch.id === 4 ? { ...r, patch: shared[3] } : r)),
+      })
+      const cell = row('Bar SL').querySelector('[data-cell="head"]')!
+      expect(cell.className).toContain('ring-destructive')
+      expect(cell).toHaveAttribute('title', 'Head 2 is also PAR 2')
+      expect(screen.getByText(/2 fixtures share a head number/)).toBeInTheDocument()
+      expect(row('PAR 1').querySelector('[data-cell="head"]')!.className).not.toContain('ring-destructive')
+    })
   })
 })

@@ -5,6 +5,10 @@ export interface FixturePatch {
   id: number;
   key: string;
   displayName: string;
+  /** The operator's number for this head — a ChamSys head number, another desk's fixture or
+   *  channel number — unique in the project; null when unnumbered. Optional because a desk that
+   *  predates the field omits it. The arithmetic is `lib/headNumber.ts`. */
+  headNumber?: number | null;
   fixtureTypeKey: string;
   startChannel: number;
   channelCount: number | null;
@@ -91,6 +95,9 @@ export const MAX_PLACEMENT_LABEL_LENGTH = 40;
  *  the bounds on a patch's (or a placement's) `lengthM`. */
 export const MIN_FIXTURE_LENGTH_M = 0.01;
 export const MAX_FIXTURE_LENGTH_M = 100;
+/** Mirror `MIN_HEAD_NUMBER` / `MAX_HEAD_NUMBER` in lighting7's `models/fixturePatches.kt`. */
+export const MIN_HEAD_NUMBER = 1;
+export const MAX_HEAD_NUMBER = 99999;
 
 /**
  * Default Art-Net transmit interval, mirroring
@@ -124,6 +131,8 @@ export interface CreatePatchRequest {
   key: string;
   name: string;
   startChannel: number;
+  /** Unique in the project; the desk answers 409 for a number another head holds. */
+  headNumber?: number | null;
   address?: string;
   groupName?: string;
   stageX?: number | null;
@@ -143,6 +152,8 @@ export interface CreatePatchRequest {
 
 export interface UpdatePatchRequest {
   displayName?: string;
+  /** Null unnumbers the head; a number another head holds is a 409. */
+  headNumber?: number | null;
   key?: string;
   startChannel?: number;
   addToGroup?: string;

@@ -132,6 +132,26 @@ export const patchesApi = restApi.injectEndpoints({
       }),
     }),
 
+    // Renumber heads — the bulk route again, but **not** a placement: `headNumber` is the one key
+    // on it with a uniqueness rule, which the desk judges against the batch's final state
+    // (`headNumberClashes` in projectPatches.kt). That is what makes numbering a selection one
+    // atomic request, a swap included, where a PUT per head would refuse the second of two heads
+    // trading numbers. Atomic: a clash anywhere writes nothing and answers 400 naming it.
+    //
+    // Unlike `bulkPlacements` it invalidates like `updatePatch` does, since there is no batch
+    // helper to own a single refetch — one gesture, one request.
+    setHeadNumbers: build.mutation<
+      BulkPlacementResponse,
+      { projectId: number; numbers: ReadonlyArray<{ patchId: number; headNumber: number | null }> }
+    >({
+      query: ({ projectId, numbers }) => ({
+        url: `projects/${projectId}/patches/placements`,
+        method: 'PUT',
+        body: { updates: numbers, atomic: true },
+      }),
+      invalidatesTags: ['Patch'],
+    }),
+
     // Delete a patch
     deletePatch: build.mutation<void, { projectId: number; patchId: number }>({
       query: ({ projectId, patchId }) => ({
@@ -195,6 +215,7 @@ export const {
   usePatchListQuery,
   useCreatePatchMutation,
   useUpdatePatchMutation,
+  useSetHeadNumbersMutation,
   useDeletePatchMutation,
   useUniverseConfigListQuery,
   useUpdateUniverseConfigMutation,
