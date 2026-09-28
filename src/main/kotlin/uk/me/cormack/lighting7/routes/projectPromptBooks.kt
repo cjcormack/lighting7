@@ -326,7 +326,7 @@ internal fun Route.routeApiRestProjectPromptBooks(state: State) {
             "Cannot upload prompt book scripts - not current project",
         ) { project ->
             // Bounded read: never buffer more than the cap + 1 sentinel byte.
-            val bytes = call.receiveChannel().readRemaining(MAX_SCRIPT_BYTES + 1L).readByteArray()
+            val bytes = call.receiveChannel().readBuffer(MAX_SCRIPT_BYTES + 1L).readByteArray()
             if (bytes.isEmpty()) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Empty upload"))
                 return@withCurrentProject

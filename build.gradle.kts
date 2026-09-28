@@ -89,9 +89,19 @@ repositories {
 // (2.0.2 adds valueextraction, ClockProvider, @NotEmpty/@Email), so the consumers above keep
 // linking. Dropping the legacy pair is what makes shadowJar's `failOnDuplicateEntries`
 // achievable — see the fat-jar section below.
+//
+// Ktor 3.6's Netty engine also depends on Netty's HTTP/3 codec, which drags in
+// `netty-codec-native-quic` — quiche binaries for five platforms, each jar carrying the same
+// licence and metadata entries, so `failOnDuplicateEntries` refuses them. The desk never calls
+// `enableHttp3`, and the engine touches those classes only on that path (they are linked from
+// method bodies, not from a field type or a class initialiser), so the codec is dropped here
+// rather than shipped and then filtered through the `nativePayloads` table below.
 configurations.configureEach {
     exclude(group = "javax.validation", module = "validation-api")
     exclude(group = "javax.xml.bind", module = "jaxb-api")
+    exclude(group = "io.netty", module = "netty-codec-http3")
+    exclude(group = "io.netty", module = "netty-codec-native-quic")
+    exclude(group = "io.netty", module = "netty-codec-classes-quic")
 }
 
 dependencies {
