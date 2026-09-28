@@ -482,6 +482,12 @@ val nativePayloads: List<Triple<String, String, String?>> = listOf(
 tasks.shadowJar {
     archiveFileName.set("lighting7.jar")
 
+    // The fat jar sits at the classic zip format's 65,535-entry ceiling: the Mac jar measured
+    // 65,527 entries at the Ktor 3.6 bump, and the Linux one had already crossed it
+    // (`Zip64RequiredException`). The JDK has read zip64 jars since 7, so `java -jar` and jpackage
+    // are unaffected.
+    isZip64 = true
+
     // Shadow 9 applies DuplicatesStrategy.EXCLUDE by default, which drops duplicate
     // entries *before* the transformers below run — that would defeat both
     // mergeServiceFiles() (the SPI merging described above) and the built-in
