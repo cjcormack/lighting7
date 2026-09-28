@@ -39,9 +39,8 @@ class TraitExtensionsTest {
             fixtures.forEach { add(it) }
         }
 
-        val dimmer = group.dimmer
+        val dimmer: AggregateSlider = group.dimmer
         assertNotNull(dimmer)
-        assertTrue(dimmer is AggregateSlider)
         assertEquals(3, dimmer.memberCount)
     }
 
@@ -81,9 +80,8 @@ class TraitExtensionsTest {
             fixtures.forEach { add(it) }
         }
 
-        val colour = group.rgbColour
+        val colour: AggregateColour = group.rgbColour
         assertNotNull(colour)
-        assertTrue(colour is AggregateColour)
         assertEquals(3, colour.memberCount)
     }
 
@@ -122,8 +120,7 @@ class TraitExtensionsTest {
             fixtures.forEach { add(it) }
         }
 
-        val redSlider = group.rgbColour.redSlider
-        assertTrue(redSlider is AggregateSlider)
+        val redSlider: AggregateSlider = group.rgbColour.redSlider
 
         redSlider.value = 255u
 
@@ -149,9 +146,8 @@ class TraitExtensionsTest {
             fixtures.forEach { add(it) }
         }
 
-        val uv = group.uv
+        val uv: AggregateSlider = group.uv
         assertNotNull(uv)
-        assertTrue(uv is AggregateSlider)
     }
 
     @Test

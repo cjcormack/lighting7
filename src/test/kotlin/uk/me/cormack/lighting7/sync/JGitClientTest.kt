@@ -86,7 +86,7 @@ class JGitClientTest {
 
             val head = JGitClient.head(repo)
             assertNotNull(head)
-            assertEquals(commit.sha, head!!.sha)
+            assertEquals(commit.sha, head.sha)
 
             assertFalse(JGitClient.isWorkingTreeDirty(repo))
         }

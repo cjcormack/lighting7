@@ -6,6 +6,11 @@ plugins {
 
 kotlin {
     jvmToolchain(24)
+
+    // As in the root build: a warning fails the build rather than accumulating.
+    compilerOptions {
+        allWarningsAsErrors = true
+    }
 }
 
 repositories {

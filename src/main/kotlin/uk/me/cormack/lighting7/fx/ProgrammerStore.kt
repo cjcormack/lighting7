@@ -531,7 +531,7 @@ class ProgrammerStore {
                     next
                 }
                 val after = byProperty[propertyName]?.top?.value
-                if (before != null && before?.resolved != after?.resolved) {
+                if (before != null && before.resolved != after?.resolved) {
                     moved.add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
                 }
             }

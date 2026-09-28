@@ -170,7 +170,7 @@ class CueRoutesTest {
         )
         val round = json.decodeFromString<CuePropertyAssignmentDto>(json.encodeToString(deadFixture))
         assertIs<AssignmentHealth.MissingFixture>(round.health)
-        assertEquals("hex-renamed", (round.health as AssignmentHealth.MissingFixture).fixtureKey)
+        assertEquals("hex-renamed", round.health.fixtureKey)
     }
 
     @Test

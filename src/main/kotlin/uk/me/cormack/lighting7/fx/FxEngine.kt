@@ -613,7 +613,7 @@ class FxEngine(
         }
 
         if (effect.effect is StatefulEffect) {
-            (effect.effect as StatefulEffect).initialize()
+            effect.effect.initialize()
         }
 
         // Bind the persisted master uuids to runtime bank slots. Unknown or null → master 1
@@ -1260,7 +1260,7 @@ class FxEngine(
     ): FxOutput {
         // Stateful effects
         val raw = if (effect.effect is StatefulEffect) {
-            (effect.effect as StatefulEffect).calculateStateful(tick, deltaMs, context)
+            effect.effect.calculateStateful(tick, deltaMs, context)
         } else {
             effect.effect.calculate(phase, context)
         }

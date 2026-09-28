@@ -184,7 +184,7 @@ class SyncStateBookkeepingTest {
                 .firstOrNull { it.recordUuid == stackUuid }
         }
         assertTrue(afterRow != null, "Tombstone row must persist (not GC'd) so it propagates to peers")
-        assertEquals(true, afterRow!!.lastSyncedIsDeleted, "sync_state must mark the record as deleted")
+        assertEquals(true, afterRow.lastSyncedIsDeleted, "sync_state must mark the record as deleted")
         kotlin.test.assertNotEquals(
             initial.second, afterRow.lastSyncedHash,
             "Tombstone hash must differ from the live-record hash",

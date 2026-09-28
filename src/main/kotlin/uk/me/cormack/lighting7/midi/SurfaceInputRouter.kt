@@ -356,7 +356,6 @@ class SurfaceInputRouter(
                         actions.writeGroupProperty(target.groupName, target.propertyName, 127u, target.colourAxis)
                     is BindingTarget.SelectionProperty ->
                         actions.writeSelectionProperty(target.propertyName, 127u, target.colourAxis)
-                    else -> Unit
                 }
             }
         }

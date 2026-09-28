@@ -272,9 +272,9 @@ class CueStackManager(
             fxEngine.cueLayer.removeAssignments(cueData.cueId)
         }
         // Restore outgoing to 1.0 in case a prior mid-flight crossfade left it partial.
-        // `useCrossfade` already implies `outgoingCueId != null`.
+        // `useCrossfade` already implies `outgoingCueId != null`, and the compiler smart-casts on it.
         if (useCrossfade && cooked.values.rows.isNotEmpty()) {
-            fxEngine.cueLayer.updateFadeWeights(mapOf(outgoingCueId!! to 1.0))
+            fxEngine.cueLayer.updateFadeWeights(mapOf(outgoingCueId to 1.0))
         }
         if (cueData.stomp) {
             fxEngine.stompForCue(
