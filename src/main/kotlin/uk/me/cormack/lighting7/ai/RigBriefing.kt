@@ -152,7 +152,7 @@ class RigBriefing(private val state: State) {
         val cues = transaction(state.database) {
             DaoCue.find { DaoCues.project eq project.id }
                 .map {
-                    val stackInfo = it.cueStack?.let { s -> " [stack: ${s.name}]" } ?: ""
+                    val stackInfo = " [stack: ${it.cueStack.name}]"
                     "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects)$stackInfo"
                 }
         }

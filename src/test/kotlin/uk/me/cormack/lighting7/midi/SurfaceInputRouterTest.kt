@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.midi
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -19,6 +20,7 @@ import kotlin.test.assertTrue
  * device attach paths are covered by higher-level tests (DeviceMatcherTest); here we focus
  * on event-to-descriptor matching, binding resolution, and dispatch semantics.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class SurfaceInputRouterTest {
 
     private val projectId = 42

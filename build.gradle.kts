@@ -1,12 +1,12 @@
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipFile
 
-val kotlin_version: String by project
-val logback_version: String by project
+val kotlin_version = providers.gradleProperty("kotlin_version").get()
+val logback_version = providers.gradleProperty("logback_version").get()
 
-val sqlite_version: String by project
-val exposed_version: String by project
-val hikaricp_version: String by project
+val sqlite_version = providers.gradleProperty("sqlite_version").get()
+val exposed_version = providers.gradleProperty("exposed_version").get()
+val hikaricp_version = providers.gradleProperty("hikaricp_version").get()
 
 
 plugins {
@@ -44,6 +44,15 @@ val jvmToolchainVersion = 24
 
 kotlin {
     jvmToolchain(jvmToolchainVersion)
+
+    // A warning is a build failure, so the list can't grow back to the ~40 CI used to print.
+    // Fix the cause; where it genuinely can't be fixed, suppress it at the site with a comment
+    // saying why, never here. The build scripts' own warnings are covered by
+    // `org.gradle.kotlin.dsl.allWarningsAsErrors` and Gradle deprecations by
+    // `org.gradle.warning.mode`, both in gradle.properties.
+    compilerOptions {
+        allWarningsAsErrors = true
+    }
 }
 
 application {
@@ -962,6 +971,12 @@ tasks.test {
     // `build/` rather than a per-run temp dir keeps the compiled-script cache warm between runs,
     // which is worth ~55 s on the first run after any rebuild; `clean` discards it.
     systemProperty("lighting7.dataDir", layout.buildDirectory.dir("test-data").get().asFile.absolutePath)
+
+    // The same JDK 24+ opt-ins as `./gradlew run` (see `application` above): sqlite-jdbc loads its
+    // native library in every test that opens a DB, and the embedded Kotlin compiler the script
+    // tests drive calls `sun.misc.Unsafe::invokeCleaner`. Without them each test JVM opens with
+    // eight lines of WARNING that bury anything real.
+    jvmArgs(application.applicationDefaultJvmArgs)
 
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
     // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark. Both are

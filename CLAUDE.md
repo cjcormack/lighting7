@@ -103,6 +103,14 @@ backend job runs `./gradlew build` rather than `test`: that adds the fat jar, wh
 verifier would otherwise first fail on a release build, and the `launcher` module's tests. It runs
 on Linux under `LC_ALL=C.UTF-8` for the reason given under §"Cloud sessions".
 
+**Warnings fail the build.** Kotlin compiler warnings in `src/` and `launcher/`
+(`compilerOptions.allWarningsAsErrors`), in the `*.gradle.kts` scripts
+(`org.gradle.kotlin.dsl.allWarningsAsErrors`), and Gradle deprecations (`org.gradle.warning.mode=fail`)
+are all errors — the last two are in `gradle.properties`. Fix the cause; where one genuinely can't
+be fixed, `@Suppress`/`@OptIn` it at the site with a comment, never globally. Kotlin compiles
+incrementally, so a warning in an untouched file only shows on a full recompile — CI's is always
+full.
+
 `tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
 resolves the script cache, prompt-book PDF store, sync working tree and export
 root under `appDataDir()` — without it the suite reads and writes the real

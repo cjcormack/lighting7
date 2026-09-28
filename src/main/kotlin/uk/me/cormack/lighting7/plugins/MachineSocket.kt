@@ -113,7 +113,7 @@ fun setupMachineSubscriptions(scope: SocketScope) {
         //
         // Compare the id, never the role: `scope.user` was resolved once at upgrade time, so its
         // role goes stale the moment somebody is re-roled. The id cannot change.
-        if (scope.user == null || userId == scope.user?.userId) {
+        if (scope.user == null || userId == scope.user.userId) {
             scope.send(OwnAccountChangedOutMessage)
         }
         scope.send(UserListChangedOutMessage)
