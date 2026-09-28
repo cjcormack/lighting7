@@ -1,0 +1,36 @@
+# Dependency update PRs, gated by the CI workflow like any other PR.
+#
+# Grouped so a week's updates arrive as a few PRs rather than dozens: minor and patch bumps
+# share one PR per ecosystem, majors come one at a time because each is its own migration.
+#
+# Watch for what it misses. The Node distribution pinned in build.gradle.kts's `node {}` block is
+# a plain string Dependabot never sees, and `kotlin_version` / `shadow_version` reach the plugins
+# through gradle.properties and pluginManagement, which it may not follow — check those by hand.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      gradle-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        update-types: [minor, patch]

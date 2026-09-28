@@ -179,8 +179,12 @@ val frontendStaticDir = layout.projectDirectory.dir("src/main/resources/static")
 node {
     // Download a pinned Node distribution into .gradle/ so the build doesn't depend on a
     // system Node install — gradle-daemon's sanitized PATH usually misses nvm anyway.
+    //
+    // Must satisfy `engines.node` in frontend/package.json (the floor its deps set — jsdom 30 and
+    // React Router 8). npm only *warns* on a mismatch, so a stale pin here builds every shipped
+    // jar on a Node the frontend doesn't support, silently. Dependabot doesn't bump this string.
     download.set(true)
-    version.set("24.10.0")
+    version.set("24.21.0")
     nodeProjectDir.set(frontendDir)
 }
 

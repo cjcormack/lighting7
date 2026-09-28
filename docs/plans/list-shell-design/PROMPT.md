@@ -69,7 +69,7 @@ docs/stage-vis-engineering.md only if it references the Patch List tab.
 Verify: `npm run check` green with 0 warnings; then the browser pass at 1180×820 against the six
 artboards — header/row/bar/footer heights and the 12px gutter measured with getBoundingClientRect on
 each of the six views, the sheet header, sticky column and body computed to the same background, and
-exactly one 1px line between the bar and the sheet. Commit straight to main, no PR, per CLAUDE.md.
+exactly one 1px line between the bar and the sheet. Commit on a branch and open a PR against main, per CLAUDE.md §"Git workflow".
 ```
 
 The reviewers should be pointed at the record too: the Kit's rules are the acceptance criteria, and

@@ -96,7 +96,12 @@ frontend's is `npm run check` in `frontend/`, which `.githooks/pre-commit` runs
 when anything buildable under `frontend/` is staged (enable it with
 `git config core.hooksPath .githooks`). A recent green
 run earlier in the same session is sufficient; you do not need to re-run it
-just before `git commit` if nothing has changed since.
+just before `git commit` or `gh pr create` if nothing has changed since.
+
+CI runs the same two gates on every PR (`.github/workflows/ci.yml`, see §"Git workflow"). The
+backend job runs `./gradlew build` rather than `test`: that adds the fat jar, whose native-payload
+verifier would otherwise first fail on a release build, and the `launcher` module's tests. It runs
+on Linux under `LC_ALL=C.UTF-8` for the reason given under §"Cloud sessions".
 
 `tasks.test` pins `-Dlighting7.dataDir` at `build/test-data`, because `State`
 resolves the script cache, prompt-book PDF store, sync working tree and export
@@ -120,13 +125,29 @@ explains why it is safe.
 
 ### Git workflow
 
-Solo personal repo — commit and push directly to `main`. Do **not** open pull
-requests, do **not** create feature branches. The frontend is in this repo
-(`frontend/`), so a change that crosses the wire — a route and its client, a
-Kotlin rule and its TypeScript mirror — is one commit. The standard "still don't commit
-or push without me asking" rule from the global CLAUDE.md still applies; this
-section only changes *how* a confirmed commit/push happens (straight to `main`,
-no PR).
+Every change reaches `main` through a pull request; nothing is committed or pushed to `main`
+directly. It is still a solo repo — the PR is the CI gate and the review surface, not a
+hand-off to anyone.
+
+- **A branch per change**, cut from an up-to-date `main`. An agent's branch is `claude/<slug>`
+  (the desktop app's worktrees already name them so); otherwise anything descriptive.
+- **One PR per change, including one that crosses the wire.** The frontend is in this repo
+  (`frontend/`), so a route and its client, or a Kotlin rule and its TypeScript mirror, land in
+  one PR — never a backend PR and a frontend PR that are each broken without the other. Several
+  commits on the branch are fine, and each should still be a coherent step with a real message.
+- **CI must be green before merging.** `.github/workflows/ci.yml` runs two jobs on every PR:
+  `Backend` (`./gradlew build`) and `Frontend` (`npm run check` in `frontend/`). CI is the
+  backstop, not the first run — the local checks below are still expected before pushing.
+- **Merge with a merge commit**, never squash or rebase-merge, and bring a stale branch up to
+  date by merging `main` into it rather than rebasing it once pushed. Plan docs and commit
+  messages cite SHAs (`docs/plans/*` rows, "session 3 shipped (lighting-react a3699076)"), and a
+  branch commit's SHA survives only a merge. It also keeps the narrative where the plan rows say
+  it lives: in the branch's commit messages. The PR description summarises and links; it is not
+  the record.
+- **The shipping-verb rule in the global CLAUDE.md applies unchanged**, one step at a time:
+  "commit" commits on the branch, "push" pushes the branch, "open a PR" opens it
+  (`gh pr create --base main`), and only "merge" or "land" merges it. Never enable auto-merge
+  unless asked.
 
 ## Project Structure
 
