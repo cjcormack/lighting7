@@ -101,6 +101,11 @@ interface FixturesChangeListener {
     /** A cue stack's live cue, armed next, or fade progress changed. */
     fun cueRunStateChanged(runState: CueRunState) {}
     fun promptBookChanged() {}
+    /**
+     * A project's own row changed — its name, description or stage bounding box. Keyed by
+     * [projectId] because the REST edit can name any project, not only the current one.
+     */
+    fun projectDetailsChanged(projectId: Int) {}
 }
 
 class Fixtures {
@@ -551,6 +556,12 @@ class Fixtures {
     fun promptBookChanged() {
         changeListeners.forEach {
             it.promptBookChanged()
+        }
+    }
+
+    fun projectDetailsChanged(projectId: Int) {
+        changeListeners.forEach {
+            it.projectDetailsChanged(projectId)
         }
     }
 

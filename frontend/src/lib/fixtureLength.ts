@@ -45,18 +45,20 @@ const SCRATCH_AXIS = new Vector3()
  * The unit vector of a fixture body's long axis (its local +X) in world lighting coords.
  *
  * Mirrors `FixtureModel` exactly, so the 2D plot and the 3D body agree: the body is drawn at its
- * world position under a YXZ Euler of `(basePitchDeg, baseYawDeg, 0)` alone — a rigging's pose
- * places the body but does not turn it. Pitch turns about the body's own X, so it never moves the
- * long axis: only the yaw does.
+ * world position under a YXZ Euler of `(basePitchDeg, baseYawDeg, baseRollDeg)` alone — a rigging's
+ * pose places the body but does not turn it. Pitch turns about the body's own X, so it never moves
+ * the long axis: yaw swings it round the stage, and roll is the only thing that tilts it off level
+ * (roll 90 stands a strip on end).
  */
 export function longAxisLighting(
   baseYawDeg: number | null | undefined,
   basePitchDeg: number | null | undefined,
+  baseRollDeg?: number | null,
 ): LightingPoint {
   SCRATCH_EULER.set(
     MathUtils.degToRad(basePitchDeg ?? 0),
     MathUtils.degToRad(baseYawDeg ?? 0),
-    0,
+    MathUtils.degToRad(baseRollDeg ?? 0),
     'YXZ',
   )
   return fromThree(SCRATCH_AXIS.set(1, 0, 0).applyEuler(SCRATCH_EULER))
@@ -71,8 +73,9 @@ export function bodyEndsLighting(
   lengthM: number,
   baseYawDeg: number | null | undefined,
   basePitchDeg: number | null | undefined,
+  baseRollDeg?: number | null,
 ): [LightingPoint, LightingPoint] {
-  const axis = longAxisLighting(baseYawDeg, basePitchDeg)
+  const axis = longAxisLighting(baseYawDeg, basePitchDeg, baseRollDeg)
   const half = lengthM / 2
   return [
     { x: world.x - axis.x * half, y: world.y - axis.y * half, z: world.z - axis.z * half },

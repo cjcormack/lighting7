@@ -41,6 +41,12 @@ lightingApi.projects.subscribeToSwitch(function() {
   ]))
 })
 
+// A project's name, description or stage box changed on the desk — another window's edit, or
+// `set_stage` over MCP. Without this the Stage view kept drawing the old stage box until a reload.
+lightingApi.projects.subscribeToDetails(function () {
+  store.dispatch(restApi.util.invalidateTags(['ProjectList', 'Project']))
+})
+
 // Bridge `scriptListChanged` into cache invalidation.
 //
 // The script endpoints live in this slice rather than in `store/scripts.ts` (types only), so the

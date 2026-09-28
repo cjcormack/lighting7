@@ -30,6 +30,8 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
+import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.StagePoint
@@ -59,7 +61,10 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
     private val tools by lazy { AiTools(state) }
 
     /** Place an already-seeded patch: world coordinates, or an offset on [riggingName]. */
-    private fun place(key: String, x: Double, y: Double, z: Double, pitchDeg: Double? = 180.0, yawDeg: Double? = null, riggingName: String? = null) {
+    private fun place(
+        key: String, x: Double, y: Double, z: Double, pitchDeg: Double? = 180.0, yawDeg: Double? = null,
+        riggingName: String? = null, rollDeg: Double? = null,
+    ) {
         transaction(state.database) {
             val patch = DaoFixturePatch.find { DaoFixturePatches.key eq key }.first()
             patch.stageX = x
@@ -67,6 +72,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
             patch.stageZ = z
             patch.basePitchDeg = pitchDeg
             patch.baseYawDeg = yawDeg
+            patch.baseRollDeg = rollDeg
             if (riggingName != null) patch.rigging = DaoRigging.all().first { it.name == riggingName }
         }
     }
@@ -122,8 +128,8 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
             ?.slots?.firstOrNull()?.value?.resolved
 
     /** The drawn beam of a 540°/210° spot aimed at [panDeg] / [tiltDeg] travel, as a stage direction. */
-    private fun spotBeam(yawDeg: Double?, pitchDeg: Double?, panDeg: Double, tiltDeg: Double) =
-        beamDirection(yawDeg, pitchDeg, panDeg - 270.0, tiltDeg - 105.0)
+    private fun spotBeam(yawDeg: Double?, pitchDeg: Double?, panDeg: Double, tiltDeg: Double, rollDeg: Double? = null) =
+        beamDirection(yawDeg, pitchDeg, panDeg - 270.0, tiltDeg - 105.0, rollDeg)
 
     private fun assertPointsAt(from: StagePoint, to: StagePoint, beam: StagePoint, degrees: Double) {
         val dx = to.x - from.x; val dy = to.y - from.y; val dz = to.z - from.z
@@ -176,6 +182,18 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         val written = out.written.single()
         assertEquals(270.0, written.panDeg)
         assertEquals(105.0, written.tiltDeg)
+    }
+
+    @Test
+    fun `a rolled head is aimed through its roll`() = testApplication {
+        seed()
+        // Hung on a side wall: rolled onto its side, so its body axis runs across the stage.
+        place("spot-coarse", 6.0, 4.0, 3.0, pitchDeg = 0.0, rollDeg = 90.0)
+        mountTestApp(state)
+        val point = StagePoint(-1.0, 2.0, 1.7)
+        val out = jsonClient().run(AimRequest(targets = listOf(fixture("spot-coarse")), x = point.x, y = point.y, z = point.z))
+        val written = out.written.single()
+        assertPointsAt(StagePoint(6.0, 4.0, 3.0), point, spotBeam(null, 0.0, written.panDeg, written.tiltDeg, 90.0), 0.2)
     }
 
     @Test
@@ -251,6 +269,52 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertFalse(wet.json()["dryRun"]!!.jsonPrimitive.boolean)
         assertEquals("par-1", wet.json()["skipped"]!!.jsonArray.single().jsonObject["target"]!!.jsonPrimitive.content)
         assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
+    }
+
+    @Test
+    fun `aim_fixtures saveAsTemplate keeps the aims as a position template beside the programmer`() {
+        seed()
+        val result = call(
+            """{"targets":[{"type":"group","key":"spots"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Wall focus"}""",
+        )
+        assertTrue(result.success, result.result)
+        val template = result.json()["template"]!!.jsonObject
+        assertEquals("Wall focus", template["name"]!!.jsonPrimitive.content)
+        assertEquals(2, template["rowCount"]!!.jsonPrimitive.content.toInt())
+
+        val rows = transaction(state.database) {
+            DaoTemplate.find { DaoTemplates.name eq "Wall focus" }.single().rows
+                .associate { it.targetKey to (it.propertyName to it.value) }
+        }
+        // One fixture-specific position row per aimed head, in travel degrees: spot-fine hangs
+        // straight above the point, so it is mid-travel.
+        assertEquals(setOf("spot-fine", "spot-coarse"), rows.keys)
+        assertEquals("position" to "deg:270,105", rows.getValue("spot-fine"))
+        assertTrue(rows.getValue("spot-coarse").second.startsWith("deg:"), rows.toString())
+        // And the programmer was written, as without it.
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
+    }
+
+    @Test
+    fun `aim_fixtures saveAsTemplate with a taken name moves nothing`() {
+        seed()
+        val first = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Focus"}""")
+        assertTrue(first.success, first.result)
+        state.show.programmerStore.clearAll()
+        val again = call("""{"targets":[{"type":"fixture","key":"spot-coarse"}],"x":0,"y":4,"z":0,"saveAsTemplate":"Focus"}""")
+        assertFalse(again.success, again.result)
+        assertTrue(again.result.contains("already exists"), again.result)
+        assertTrue(state.show.programmerStore.entries().isEmpty(), "a refused save writes no aim either")
+    }
+
+    @Test
+    fun `aim_fixtures dryRun makes no template`() {
+        seed()
+        val dry = call("""{"targets":[{"type":"fixture","key":"spot-fine"}],"x":0,"y":4,"z":0,"dryRun":true,"saveAsTemplate":"Dry"}""")
+        assertTrue(dry.success, dry.result)
+        assertNull(dry.json()["template"])
+        assertNotNull(dry.json()["templateNote"])
+        assertTrue(transaction(state.database) { DaoTemplate.find { DaoTemplates.name eq "Dry" }.empty() })
     }
 
     @Test

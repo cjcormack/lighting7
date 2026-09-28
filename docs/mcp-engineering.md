@@ -260,7 +260,9 @@ counting universes from 1 would otherwise make, and `unpark_channel` on an unpar
 
 `aim_fixtures` (a chat tool too) points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
-`dryRun` that answers each head's degrees and writes nothing. It is the setup-time answer to "focus
+`dryRun` that answers each head's degrees and writes nothing, and a `saveAsTemplate` that also
+records the aims as a new position template (one fixture row per head, in degrees), since an aim
+left only in the programmer is lost at the operator's next Clear. It is the setup-time answer to "focus
 the specials on DSC": a model reading a plot knows where a region or a mark is in stage metres (from
 `get_patch`) and has no way to turn that into DMX itself. Heads it cannot aim come back by name
 (`docs/fixtures-engineering.md` §"Aiming a head at a point").
@@ -271,7 +273,7 @@ readers below carry `readOnlyHint`.
 
 ### Show-setup tools
 
-`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds eleven tools that **build** a show
+`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds twelve tools that **build** a show
 rather than run one, for three jobs: a project and patch from another console's patch export, the
 Stage view (stage, regions, riggings, fixture placement) from plots or photos, and the show's cue
 stacks and prompt-book markup from a script and lighting notes.
@@ -282,8 +284,9 @@ stacks and prompt-book markup from a script and lighting notes.
 | `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM` |
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` included |
-| `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals |
-| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch, beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |
+| `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
+| `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
+| `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
@@ -307,8 +310,9 @@ Four decisions shape them:
   stand* — rows being updated leave their old address — so a re-addressing list lands in one call.
   Upsert by key / name and refusing a duplicate stack name or cue number make a retried call safe.
 - **Writes broadcast as the routes do** (`patchListChanged` after a `DbFixtureLoader` reload,
-  `riggingListChanged`, `stageRegionListChanged`, `cueListChanged` / `cueStackListChanged`,
-  `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
+  `riggingListChanged`, `stageRegionListChanged`, `projectDetailsChanged` for the stage box,
+  `buskRigChanged` when `delete_groups` takes rig tiles off, `cueListChanged` /
+  `cueStackListChanged`, `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
   metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way —
   and, like both REST placement paths, refreshes the one thing the running show caches from them,
   the gel (`Fixtures.setPatchMetadata`, which `GET /fixtures` reads).

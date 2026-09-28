@@ -53,6 +53,7 @@ describe('ExtraPlacementsFields', () => {
         stageZ: -0.4,
         baseYawDeg: -10,
         basePitchDeg: 45,
+        baseRollDeg: null,
       },
     ])
   })

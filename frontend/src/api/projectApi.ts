@@ -133,11 +133,21 @@ type ProjectChangedMessage = {
   newProjectName: string;
 }
 
-type ProjectInMessage = ProjectStateMessage | ProjectChangedMessage;
+/**
+ * A project's own row changed — name, description or stage bounding box — through the REST edit or
+ * the `set_stage` MCP tool. Any project, not only the current one.
+ */
+export interface ProjectDetailsChangedMessage {
+  type: 'projectDetailsChanged';
+  projectId: number;
+}
+
+type ProjectInMessage = ProjectStateMessage | ProjectChangedMessage | ProjectDetailsChangedMessage;
 
 export interface ProjectApi {
   subscribe(fn: (state: ProjectStateMessage) => void): Subscription;
   subscribeToSwitch(fn: (data: ProjectChangedMessage) => void): Subscription;
+  subscribeToDetails(fn: (data: ProjectDetailsChangedMessage) => void): Subscription;
   requestState(): void;
 }
 
@@ -145,6 +155,7 @@ export function createProjectApi(conn: InternalApiConnection): ProjectApi {
   let nextSubscriptionId = 1;
   const stateSubscriptions = new Map<number, (state: ProjectStateMessage) => void>();
   const switchSubscriptions = new Map<number, (data: ProjectChangedMessage) => void>();
+  const detailsSubscriptions = new Map<number, (data: ProjectDetailsChangedMessage) => void>();
 
   const notifyState = (state: ProjectStateMessage) => {
     stateSubscriptions.forEach((fn) => fn(state));
@@ -170,6 +181,8 @@ export function createProjectApi(conn: InternalApiConnection): ProjectApi {
         projectName: message.newProjectName,
         description: null,
       });
+    } else if (message.type === 'projectDetailsChanged') {
+      detailsSubscriptions.forEach((fn) => fn(message));
     }
   };
 
@@ -203,6 +216,19 @@ export function createProjectApi(conn: InternalApiConnection): ProjectApi {
       return {
         unsubscribe: () => {
           switchSubscriptions.delete(thisId);
+        },
+      };
+    },
+
+    subscribeToDetails(fn: (data: ProjectDetailsChangedMessage) => void): Subscription {
+      const thisId = nextSubscriptionId;
+      nextSubscriptionId++;
+
+      detailsSubscriptions.set(thisId, fn);
+
+      return {
+        unsubscribe: () => {
+          detailsSubscriptions.delete(thisId);
         },
       };
     },

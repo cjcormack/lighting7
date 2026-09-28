@@ -37,7 +37,22 @@ describe('mirroredPlacement', () => {
       stageZ: -0.5,
       baseYawDeg: -20,
       basePitchDeg: 45,
+      baseRollDeg: null,
     })
+  })
+
+  it('turns a rolled body the other way too, as a reflection does', () => {
+    const m = mirroredPlacement({
+      riggingUuid: null,
+      stageX: -4,
+      stageY: 2,
+      stageZ: 1,
+      baseYawDeg: 90,
+      basePitchDeg: 10,
+      baseRollDeg: 90,
+    })
+    expect(m.baseRollDeg).toBe(-90)
+    expect(m.basePitchDeg).toBe(10)
   })
 
   it('keeps nulls null and never writes -0', () => {
@@ -90,6 +105,16 @@ describe("a variable-length run's sides", () => {
     expect(placementListsEqual([a], [{ ...a, lengthM: undefined }])).toBe(true)
     expect(placementListsEqual([a], [{ ...a, lengthM: 6 }])).toBe(false)
     expect(placementListsEqual([{ ...a, lengthM: 6 }], [{ ...a, lengthM: 6.5 }])).toBe(false)
+  })
+})
+
+describe('a placement roll', () => {
+  it('is carried into the editable entry, so a save never clears one it did not edit', () => {
+    expect(toPlacementInput({ ...stored, baseRollDeg: 90 }).baseRollDeg).toBe(90)
+    expect(toPlacementInput(stored).baseRollDeg).toBeNull()
+    const a = toPlacementInput(stored)
+    expect(placementListsEqual([a], [{ ...a, baseRollDeg: undefined }])).toBe(true)
+    expect(placementListsEqual([a], [{ ...a, baseRollDeg: 90 }])).toBe(false)
   })
 })
 

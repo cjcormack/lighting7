@@ -20,6 +20,8 @@ export interface PatchPlacementValue {
   stageZ: number | null
   baseYawDeg: number | null
   basePitchDeg: number | null
+  /** Roll about the body's local Z. Optional: the Stage view's drag writes yaw and pitch only. */
+  baseRollDeg?: number | null
 }
 
 interface Props {
@@ -111,7 +113,16 @@ function PatchPlacementFieldsImpl({ projectId, value, onChange, idPrefix = 'patc
               value={value.basePitchDeg}
               onChange={(v) => onChange({ ...value, basePitchDeg: v })}
             />
+            <NumberField
+              id={`${idPrefix}-base-roll`}
+              label="Roll"
+              value={value.baseRollDeg ?? null}
+              onChange={(v) => onChange({ ...value, baseRollDeg: v })}
+            />
           </FieldGroup>
+          <p className="pt-1.5 text-xs text-muted-foreground">
+            Roll tips the body sideways, face on — 90 stands a strip on end.
+          </p>
         </div>
       </details>
     </div>

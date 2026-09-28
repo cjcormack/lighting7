@@ -104,13 +104,7 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
             val deleted = transaction(state.database) {
                 val group = DaoFixtureGroup.findById(resource.groupId) ?: return@transaction null
                 if (group.project.id != project.id) return@transaction null
-                // Its busk rig tiles go with it — a tile is an enrichment, never a guard, and the
-                // FK has no cascade (`DaoBuskRigTiles`).
-                val sweptTiles = deleteBuskRigTilesReferencing(groupId = group.id.value)
-                // Remove all memberships (fixtures stay, just unlinked from group)
-                group.members.forEach { it.delete() }
-                group.delete()
-                sweptTiles
+                deleteFixtureGroupRows(group)
             }
 
             if (deleted == null) {
@@ -127,6 +121,20 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
             call.respond(HttpStatusCode.NoContent)
         }
     }
+}
+
+/**
+ * Delete [group] and the rows that hang off it, inside the caller's transaction: its busk rig tiles
+ * — a tile is an enrichment, never a guard, and the FK has no cascade (`DaoBuskRigTiles`) — and its
+ * memberships, so the fixtures stay patched, just unlinked from the group. Answers how many rig
+ * tiles went, so the caller knows whether to fire `buskRigChanged`. Shared by the REST delete and
+ * the `delete_groups` MCP tool, which must leave the same rows behind.
+ */
+internal fun deleteFixtureGroupRows(group: DaoFixtureGroup): Int {
+    val sweptTiles = deleteBuskRigTilesReferencing(groupId = group.id.value)
+    group.members.forEach { it.delete() }
+    group.delete()
+    return sweptTiles
 }
 
 // Resources

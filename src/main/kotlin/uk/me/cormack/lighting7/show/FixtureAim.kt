@@ -36,14 +36,14 @@ sealed interface AimSolution {
  * drawing of a head, so a head aimed here is drawn with its beam through the point.
  *
  * The Stage view (`frontend/src/components/stage3d/FixtureModel.tsx`) builds a head as: the body
- * at the fixture's world position, rotated by the patch's base orientation — `Euler(pitch, yaw, 0,
- * 'YXZ')`, i.e. `Ry(yaw) · Rx(pitch)` in three.js space — then a yoke panning about the body's
+ * at the fixture's world position, rotated by the patch's base orientation — `Euler(pitch, yaw, roll,
+ * 'YXZ')`, i.e. `Ry(yaw) · Rx(pitch) · Rz(roll)` in three.js space — then a yoke panning about the body's
  * own +Y and a head tilting about X inside it (`panTiltToDir` / `headQuaternionFor` in
  * `lib/stageCoords.ts`). At signed pan 0 / tilt 0 (DMX mid-travel) the beam runs up the body's
  * +Y axis; a hung mover is `basePitchDeg = 180`. A rigging's pose places the body (through
  * [worldPosition]) but does **not** rotate it — the view draws it that way, so so does this.
  *
- * So the beam direction is `Ry(yaw) · Rx(pitch) · Ry(pan) · Rx(tilt) · (0, 1, 0)`, and this
+ * So the beam direction is `Ry(yaw) · Rx(pitch) · Rz(roll) · Ry(pan) · Rx(tilt) · (0, 1, 0)`, and this
  * solves it backwards in the same space, term for term, as [worldPosition] does: bring the
  * direction into the body's frame, where it is `(sin t · sin p, cos t, sin t · cos p)`.
  *
@@ -64,6 +64,7 @@ fun aimAt(
     target: StagePoint,
     pan: AimAxis,
     tilt: AimAxis,
+    baseRollDeg: Double? = null,
 ): AimSolution {
     // The direction in three.js space: (x, z, −y).
     var dx = target.x - from.x
@@ -73,15 +74,17 @@ fun aimAt(
     if (length < MIN_AIM_DISTANCE_M) return AimSolution.AtFixture
     dx /= length; dy /= length; dz /= length
 
-    // Into the body's frame: Rx(−pitch) · Ry(−yaw).
+    // Into the body's frame: Rz(−roll) · Rx(−pitch) · Ry(−yaw).
     val yaw = Math.toRadians(baseYawDeg ?: 0.0)
     val pitch = Math.toRadians(basePitchDeg ?: 0.0)
+    val roll = Math.toRadians(baseRollDeg ?: 0.0)
     val x1 = dx * cos(yaw) - dz * sin(yaw)
     val z1 = dx * sin(yaw) + dz * cos(yaw)
     val y1 = dy
-    val lx = x1
-    val ly = y1 * cos(pitch) + z1 * sin(pitch)
+    val y2 = y1 * cos(pitch) + z1 * sin(pitch)
     val lz = -y1 * sin(pitch) + z1 * cos(pitch)
+    val lx = x1 * cos(roll) + y2 * sin(roll)
+    val ly = -x1 * sin(roll) + y2 * cos(roll)
 
     val tilt0 = Math.toDegrees(acos(ly.coerceIn(-1.0, 1.0)))
     val alongAxis = sqrt(lx * lx + lz * lz) < 1e-9
@@ -112,21 +115,29 @@ fun aimAt(
 
 /**
  * The beam direction, as a unit vector in stage coordinates, of a head with base orientation
- * [baseYawDeg] / [basePitchDeg] at **signed** pan and tilt (degrees about each axis's centre) —
+ * [baseYawDeg] / [basePitchDeg] / [baseRollDeg] at **signed** pan and tilt (degrees about each axis's centre) —
  * the forward half of [aimAt], and the Stage view's `panTiltToDir` composed with the body's base
  * rotation.
  */
-fun beamDirection(baseYawDeg: Double?, basePitchDeg: Double?, panSignedDeg: Double, tiltSignedDeg: Double): StagePoint {
+fun beamDirection(
+    baseYawDeg: Double?,
+    basePitchDeg: Double?,
+    panSignedDeg: Double,
+    tiltSignedDeg: Double,
+    baseRollDeg: Double? = null,
+): StagePoint {
     val p = Math.toRadians(panSignedDeg)
     val t = Math.toRadians(tiltSignedDeg)
     // Rx(tilt) · (0, 1, 0), then Ry(pan).
     val hx0 = 0.0
     val hy0 = cos(t)
     val hz0 = sin(t)
-    val hx1 = hx0 * cos(p) + hz0 * sin(p)
+    val hxp = hx0 * cos(p) + hz0 * sin(p)
     val hz1 = -hx0 * sin(p) + hz0 * cos(p)
-    val hy1 = hy0
-    // Rx(pitch), then Ry(yaw).
+    // Rz(roll), then Rx(pitch), then Ry(yaw).
+    val roll = Math.toRadians(baseRollDeg ?: 0.0)
+    val hx1 = hxp * cos(roll) - hy0 * sin(roll)
+    val hy1 = hxp * sin(roll) + hy0 * cos(roll)
     val pitch = Math.toRadians(basePitchDeg ?: 0.0)
     val yaw = Math.toRadians(baseYawDeg ?: 0.0)
     val y2 = hy1 * cos(pitch) - hz1 * sin(pitch)

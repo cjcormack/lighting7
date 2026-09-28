@@ -446,6 +446,16 @@ describe("mirrorTargets", () => {
     expect(mirrorTargets(ts, PLAN, { alsoFlipYaw: true }).changes[0].baseYawDeg).toBe(-30)
   })
 
+  it("turns a rolled body the other way with the yaw, as a reflection does", () => {
+    const ts = resolveBulkTargets([patch({ stageX: 1, stageY: 0, baseYawDeg: 90, baseRollDeg: 90 })], [])
+    expect("baseRollDeg" in mirrorTargets(ts, PLAN).changes[0]).toBe(false)
+    const flipped = mirrorTargets(ts, PLAN, { alsoFlipYaw: true }).changes[0]
+    expect(flipped.baseYawDeg).toBe(-90)
+    expect(flipped.baseRollDeg).toBe(-90)
+    const unrolled = resolveBulkTargets([patch({ stageX: 1, stageY: 0, baseYawDeg: 90 })], [])
+    expect("baseRollDeg" in mirrorTargets(unrolled, PLAN, { alsoFlipYaw: true }).changes[0]).toBe(false)
+  })
+
   it("does not invent a yaw for a fixture that has none", () => {
     const ts = resolveBulkTargets([patch({ stageX: 1, stageY: 0, baseYawDeg: null })], [])
     expect("baseYawDeg" in mirrorTargets(ts, PLAN, { alsoFlipYaw: true }).changes[0]).toBe(false)

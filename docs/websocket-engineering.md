@@ -523,6 +523,7 @@ payload-free, since one project has one rig).
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
 | `stageRegionListChanged` | — | Stage-region CRUD |
+| `projectDetailsChanged` | `projectId` | A project's own row changed — name, description or stage box — through `PUT /projects/{id}` or the `set_stage` MCP tool. The client invalidates its `Project` / `ProjectList` caches, which is what redraws the Stage view's box |
 | `speedMasters.listChanged` | — | Speed-master CRUD only; live BPM rides `speedMasters.changed` |
 | `scriptListChanged` | — | A script was created, renamed, edited or deleted |
 | `fxDefinitionListChanged` | — | A user-defined effect was created, edited or deleted |

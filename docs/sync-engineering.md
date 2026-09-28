@@ -193,7 +193,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 16`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 17`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -235,6 +235,18 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 17 — fixture roll
+
+**v17 adds one optional field in two places.** `FixturePatchJson.baseRollDeg` and
+`PatchPlacementJson.baseRollDeg` are a body's roll about its local Z — the third turn of
+its `YXZ` Euler, which is what stands a lightstrip on end (a ring's upright side), since yaw and
+pitch alone keep its length level (`docs/fixtures-engineering.md` §"Per-patch fields"). Both are
+null by default and omitted then, so a project with no roll exports byte-for-byte as it did at v16.
+
+**It bumped `formatVersion`** by the sharp-edge rule, for v15's reason: a v16 reader ignores the
+key, imports every rolled body lying flat, and its next wipe-then-export push rewrites the patch
+file without it — laying every peer's ring down again. `minReader` stays at 5: a missing roll is 0.
 
 ### Version 16 — head numbers
 

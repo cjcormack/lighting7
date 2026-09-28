@@ -7,7 +7,7 @@ import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
- * Stage geometry ([stageX]/[stageY]/[stageZ], [baseYawDeg], [basePitchDeg]) is FOH-relative,
+ * Stage geometry ([stageX]/[stageY]/[stageZ], [baseYawDeg], [basePitchDeg], [baseRollDeg]) is FOH-relative,
  * right-handed, **Z-up**, metres — see `docs/fixtures-engineering.md`. For moving heads,
  * `base*` is the yoke orientation, not the live aim.
  *
@@ -37,6 +37,11 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val stageZ = double("stage_z").nullable()
     val baseYawDeg = double("base_yaw_deg").nullable()
     val basePitchDeg = double("base_pitch_deg").nullable()
+    /** Body roll: rotation about the body's local Z (three.js terms), applied before pitch and yaw.
+     *  What stands a strip on end — its length runs along its own X, which pitch turns about and yaw
+     *  swings round, so neither lifts it off level. For a moving head it lays the unit on its side;
+     *  it is not a spin about the beam. Null is 0. */
+    val baseRollDeg = double("base_roll_deg").nullable()
     val beamAngleDeg = integer("beam_angle_deg").nullable()
     val gelCode = varchar("gel_code", 20).nullable()
     val kindOverride = varchar("kind_override", 32).nullable()
@@ -82,6 +87,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var stageZ by DaoFixturePatches.stageZ
     var baseYawDeg by DaoFixturePatches.baseYawDeg
     var basePitchDeg by DaoFixturePatches.basePitchDeg
+    var baseRollDeg by DaoFixturePatches.baseRollDeg
     var beamAngleDeg by DaoFixturePatches.beamAngleDeg
     var gelCode by DaoFixturePatches.gelCode
     var kindOverride by DaoFixturePatches.kindOverride

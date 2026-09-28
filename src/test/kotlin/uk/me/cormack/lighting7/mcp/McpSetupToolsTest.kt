@@ -65,7 +65,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         val names = protocol.toolDefs.map { it.name }
         for (tool in listOf(
             "list_projects", "create_project", "switch_project", "list_fixture_types", "get_patch",
-            "patch_fixtures", "set_stage", "place_fixtures", "get_prompt_book", "build_cue_stack",
+            "patch_fixtures", "delete_groups", "set_stage", "place_fixtures", "get_prompt_book", "build_cue_stack",
             "mark_up_prompt_book",
         )) {
             assertTrue(tool in names, "$tool is offered")
@@ -500,6 +500,92 @@ class McpSetupToolsTest : RouteIntegrationTest() {
 
         assertFalse(call("set_stage", """{"stage":"big"}""").success)
         assertFalse(call("create_project", """{"name":"Odd","stageWidthM":"wide"}""").success)
+    }
+
+    @Test
+    fun `get_patch reads back the stage box set_stage just wrote`() {
+        fun stage(): List<Double?> = call("get_patch", "{}").json()["stage"]!!.jsonObject.let { box ->
+            listOf("widthM", "depthM", "heightM").map { box[it]?.jsonPrimitive?.content?.toDouble() }
+        }
+        // The theatre's report: the box was written, but get_patch kept answering the one it read
+        // at the last project switch, so every correction looked like it had not saved.
+        val first = call("set_stage", """{"stage":{"widthM":10.4,"depthM":11,"heightM":6}}""")
+        assertTrue(first.success, first.result)
+        assertEquals(listOf(10.4, 11.0, 6.0), stage())
+        val second = call("set_stage", """{"stage":{"widthM":8.6,"heightM":4}}""")
+        assertTrue(second.success, second.result)
+        val answered = second.json()["stage"]!!.jsonObject
+        assertEquals(8.6, answered["widthM"]!!.jsonPrimitive.content.toDouble(), "set_stage answers the box as stored")
+        assertEquals(11.0, answered["depthM"]!!.jsonPrimitive.content.toDouble(), "a field not sent is kept")
+        assertEquals(listOf(8.6, 11.0, 4.0), stage())
+    }
+
+    @Test
+    fun `set_stage refuses a field it does not know rather than skipping it`() {
+        val result = call(
+            "set_stage",
+            """{"stage":{"width":8.6},"regions":[{"name":"Main","centreX":0}],"riggings":[{"name":"LX1","height":6}]}""",
+        )
+        assertFalse(result.success, result.result)
+        assertEquals(3, result.problems().size, result.result)
+        assertTrue(result.problems().all { "unknown field" in it }, result.result)
+        assertFalse(call("set_stage", """{"stage":{}}""").success, "an empty stage changes nothing")
+        transaction(state.database) {
+            assertTrue(DaoStageRegion.find { DaoStageRegions.project eq projectId }.empty())
+            assertNull(DaoProject.findById(projectId)!!.stageWidthM)
+        }
+    }
+
+    @Test
+    fun `delete_groups removes groups, keeping their fixtures, and refuses a non-empty one without force`() {
+        assertTrue(patchTwoDimmers().success)
+        // An empty group left behind by an old patch.
+        transaction(state.database) {
+            DaoFixtureGroup.new { project = DaoProject.findById(projectId)!!; name = "Non Dims" }
+        }
+
+        val refused = call("delete_groups", """{"names":["Non Dims","Front wash","Nope","Non Dims"]}""")
+        assertFalse(refused.success)
+        val problems = refused.problems()
+        assertEquals(3, problems.size, refused.result)
+        assertTrue(problems.any { "'Front wash' still has 1 member" in it }, refused.result)
+        assertTrue(problems.any { "no group named 'Nope'" in it }, refused.result)
+        assertTrue(problems.any { "listed twice" in it }, refused.result)
+        fun groupNames() = transaction(state.database) {
+            DaoFixtureGroup.find { DaoFixtureGroups.project eq projectId }.map { it.name }.sorted()
+        }
+        assertEquals(listOf("FOH", "Front wash", "Non Dims"), groupNames(), "a refused call deletes nothing")
+
+        val deleted = call("delete_groups", """{"names":["Non Dims"]}""")
+        assertTrue(deleted.success, deleted.result)
+        assertEquals(listOf("FOH", "Front wash"), groupNames())
+
+        val forced = call("delete_groups", """{"names":["FOH"],"force":true}""")
+        assertTrue(forced.success, forced.result)
+        assertEquals(2, forced.json()["membersUnlinked"]!!.jsonPrimitive.int)
+        assertEquals(listOf("Front wash"), groupNames())
+        assertEquals(listOf("foh-1", "foh-2"), patchKeys(), "the fixtures stay patched")
+        assertFalse("FOH" in state.show.fixtures.groups.map { it.name }, "the running rig loses the group")
+    }
+
+    @Test
+    fun `place_fixtures stands a strip on end with rollDeg`() {
+        val patched = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"ring","name":"Ring","fixtureTypeKey":"lightstrip-rgb","universe":0,"startChannel":20,
+                "x":0,"y":0,"lengthM":8,"alsoAt":[{"label":"SL","x":-4,"y":2,"z":1,"yawDeg":90,"rollDeg":90,"lengthM":2}]}]}""",
+        )
+        assertTrue(patched.success, patched.result)
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"ring","rollDeg":-30}]}""").success)
+        val ring = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.single().jsonObject
+        assertEquals(-30.0, ring["rollDeg"]!!.jsonPrimitive.content.toDouble())
+        assertEquals(90.0, ring["alsoAt"]!!.jsonArray.single().jsonObject["rollDeg"]!!.jsonPrimitive.content.toDouble())
+        transaction(state.database) {
+            assertEquals(-30.0, DaoFixturePatch.find { DaoFixturePatches.key eq "ring" }.single().baseRollDeg)
+        }
+        val outOfRange = call("place_fixtures", """{"placements":[{"key":"ring","rollDeg":270}]}""")
+        assertFalse(outOfRange.success, outOfRange.result)
+        assertTrue(outOfRange.problems().single().contains("baseRollDeg"), outOfRange.result)
     }
 
     @Test

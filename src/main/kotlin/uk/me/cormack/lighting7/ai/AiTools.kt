@@ -718,41 +718,89 @@ class AiTools(private val state: State) {
         val z = input["z"]?.jsonPrimitive?.doubleOrNull ?: return errorResult("Missing 'z'")
         val fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull
         val dryRun = input["dryRun"]?.jsonPrimitive?.booleanOrNull ?: false
+        val saveAs = when (val raw = input["saveAsTemplate"]) {
+            null, JsonNull -> null
+            else -> (raw as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+                ?: return errorResult("saveAsTemplate must be a template name")
+        }
 
         val project = state.projectManager.currentProject
-        return when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs, write = !dryRun)) {
-            is AimOutcome.Invalid -> errorResult(outcome.message)
-            is AimOutcome.Done -> {
-                val response = outcome.response
-                val verb = if (dryRun) "Would aim" else "Aimed"
-                ToolExecutionResult(
-                    success = true,
-                    description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
-                        if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}",
-                    result = buildJsonObject {
-                        put("dryRun", dryRun)
-                        put("aimed", buildJsonArray {
-                            response.written.forEach { w ->
-                                addJsonObject {
-                                    put("fixture", w.target.key)
-                                    put("panDeg", w.panDeg)
-                                    put("tiltDeg", w.tiltDeg)
-                                    put("position", w.value)
-                                }
-                            }
-                        })
-                        put("skipped", buildJsonArray {
-                            response.skipped.forEach { s ->
-                                addJsonObject {
-                                    put("target", s.target.key)
-                                    put("reason", s.reason)
-                                }
-                            }
-                        })
-                    }.toString(),
+        // Resolved without writing first, so a template that cannot be made (a name already taken)
+        // refuses the whole call before any head moves — the template is the reason it was made.
+        val resolved = when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs, write = false)) {
+            is AimOutcome.Invalid -> return errorResult(outcome.message)
+            is AimOutcome.Done -> outcome.response
+        }
+        // Aims into a position template: one fixture-specific row per aimed head, in travel
+        // degrees — the template grammar's position intent, which holds a tenth of a degree — so it
+        // resolves back to each head's aim to within that, and outlives the programmer.
+        val templateRows = resolved.written.map { w ->
+            TemplateRowDto(
+                targetType = TargetRef.Fixture.TYPE,
+                targetKey = w.target.key,
+                propertyName = TemplateProperty.POSITION.propertyName,
+                value = TemplateIntent.Position(w.panDeg, w.tiltDeg).serialize(),
+            )
+        }
+        var savedTemplate: TemplateDto? = null
+        if (saveAs != null && !dryRun && templateRows.isNotEmpty()) {
+            when (val created = performTemplateCreate(state, project, TemplateInput(name = saveAs, rows = templateRows))) {
+                is TemplateCreateResult.Invalid -> return errorResult(created.message)
+                is TemplateCreateResult.Duplicate -> return errorResult(
+                    "${created.message} — nothing was aimed. Pick another name, or combine several aims in one " +
+                        "template by running each with dryRun and passing their positions to create_template.",
                 )
+                is TemplateCreateResult.Ok -> savedTemplate = created.template
             }
         }
+        val response = if (dryRun) resolved else when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs)) {
+            is AimOutcome.Invalid -> return errorResult(outcome.message)
+            is AimOutcome.Done -> outcome.response
+        }
+
+        val verb = if (dryRun) "Would aim" else "Aimed"
+        return ToolExecutionResult(
+            success = true,
+            description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
+                (if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}") +
+                (savedTemplate?.let { " and saved them as template '${it.name}'" } ?: ""),
+            result = buildJsonObject {
+                put("dryRun", dryRun)
+                savedTemplate?.let { t ->
+                    putJsonObject("template") {
+                        put("templateId", t.id)
+                        put("uuid", t.uuid)
+                        put("name", t.name)
+                        put("rowCount", t.rows.size)
+                    }
+                }
+                if (saveAs != null && savedTemplate == null) {
+                    put(
+                        "templateNote",
+                        if (dryRun) "dryRun: template '$saveAs' was not created"
+                        else "no head could be aimed, so template '$saveAs' was not created",
+                    )
+                }
+                put("aimed", buildJsonArray {
+                    response.written.forEach { w ->
+                        addJsonObject {
+                            put("fixture", w.target.key)
+                            put("panDeg", w.panDeg)
+                            put("tiltDeg", w.tiltDeg)
+                            put("position", w.value)
+                        }
+                    }
+                })
+                put("skipped", buildJsonArray {
+                    response.skipped.forEach { s ->
+                        addJsonObject {
+                            put("target", s.target.key)
+                            put("reason", s.reason)
+                        }
+                    }
+                })
+            }.toString(),
+        )
     }
 
     private suspend fun executeParkChannel(input: JsonObject): ToolExecutionResult {

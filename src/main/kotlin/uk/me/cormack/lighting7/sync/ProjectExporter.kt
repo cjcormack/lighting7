@@ -266,6 +266,7 @@ class ProjectExporter(private val state: State) {
                     stageZ = p.stageZ,
                     baseYawDeg = p.baseYawDeg,
                     basePitchDeg = p.basePitchDeg,
+                    baseRollDeg = p.baseRollDeg,
                     riggingUuid = p.rigging?.uuid?.toString(),
                     beamAngleDeg = p.beamAngleDeg,
                     gelCode = p.gelCode,
@@ -283,6 +284,7 @@ class ProjectExporter(private val state: State) {
                             stageZ = pl.stageZ,
                             baseYawDeg = pl.baseYawDeg,
                             basePitchDeg = pl.basePitchDeg,
+                            baseRollDeg = pl.baseRollDeg,
                             lengthM = pl.lengthM,
                         )
                     },

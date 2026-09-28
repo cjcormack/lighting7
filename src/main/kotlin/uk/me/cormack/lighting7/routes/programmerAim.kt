@@ -178,7 +178,12 @@ internal fun aimIntoProgrammer(
 }
 
 /** Where a patched fixture is and how its body is turned. [world] is null when it is unplaced. */
-private data class AimPlacement(val world: StagePoint?, val baseYawDeg: Double?, val basePitchDeg: Double?)
+private data class AimPlacement(
+    val world: StagePoint?,
+    val baseYawDeg: Double?,
+    val basePitchDeg: Double?,
+    val baseRollDeg: Double?,
+)
 
 /** The placements of the patches keyed [keys] in [project], composed through their riggings. */
 private fun aimPlacements(state: State, project: DaoProject, keys: Collection<String>): Map<String, AimPlacement> {
@@ -194,6 +199,7 @@ private fun aimPlacements(state: State, project: DaoProject, keys: Collection<St
                     worldPosition(p.stageX, p.stageY, p.stageZ, riggingId?.let { poses[it] }),
                     p.baseYawDeg,
                     p.basePitchDeg,
+                    p.baseRollDeg,
                 )
             }
     }
@@ -225,7 +231,7 @@ private fun aimHead(head: GroupableFixture, placement: AimPlacement?, point: Sta
     val tiltAxis = aimAxis(tilt) ?: return HeadAim.Skip("tilt has no degree range annotated")
     val from = placement?.world ?: return HeadAim.Skip("not placed on the stage")
 
-    return when (val solution = aimAt(from, placement.baseYawDeg, placement.basePitchDeg, point, panAxis, tiltAxis)) {
+    return when (val solution = aimAt(from, placement.baseYawDeg, placement.basePitchDeg, point, panAxis, tiltAxis, placement.baseRollDeg)) {
         AimSolution.AtFixture -> HeadAim.Skip("the point is where the fixture is")
         is AimSolution.OutOfReach -> HeadAim.Skip(
             "out of reach — needs pan ${formatSigned(solution.panSignedDeg)}° and tilt ${formatSigned(solution.tiltSignedDeg)}° " +
