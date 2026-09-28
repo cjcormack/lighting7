@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { findGel, GELS } from '@/data/gels'
 import {
   checkLanding,
   consecutiveLanding,
@@ -18,6 +17,7 @@ import {
   checkHeadNumberLanding,
   findHeadNumberClashes,
   headNumberDraftError,
+  nextHeadNumber,
   parseHeadNumberDraft,
   type NumberedHead,
 } from '@/lib/headNumber'
@@ -40,6 +40,7 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { AddressCell, type CellAddress } from '@/components/sheet/cells/AddressCell'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
+import { GelCell } from './GelCell'
 import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { FixturePatch } from '@/api/patchApi'
@@ -195,6 +196,14 @@ export function PatchSheet({
   const overlaps = useMemo(() => findOverlaps(allHeads), [allHeads])
   const allNumbered = useMemo(() => allPatches.map(numberedHead), [allPatches])
   const headClashes = useMemo(() => findHeadNumberClashes(allNumbered), [allNumbered])
+  /**
+   * What an unnumbered Head cell opens with: the next free number, selected, rather than an empty
+   * field under a `1` placeholder that read as the value about to be applied.
+   */
+  const headSeed = useMemo(() => {
+    const next = nextHeadNumber(allNumbered)
+    return next == null ? null : { value: String(next), note: `Next free head number — type to change` }
+  }, [allNumbered])
 
   /**
    * One request for the whole renumber — the desk's bulk route, atomic, checked against the
@@ -318,14 +327,15 @@ export function PatchSheet({
         key: 'head',
         label: 'Head',
         kind: 'head',
-        width: '72px',
+        width: '64px',
         value: (row) => (row.patch.headNumber == null ? '' : String(row.patch.headNumber)),
         cell: (row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
             mono
             allowEmpty
-            placeholder="1"
+            placeholder="Blank to unnumber"
+            emptySeed={headSeed}
             face={
               row.patch.headNumber != null ? (
                 <span className="mx-1.5 font-mono text-xs tabular-nums">{row.patch.headNumber}</span>
@@ -372,7 +382,7 @@ export function PatchSheet({
         key: 'address',
         label: 'Address',
         kind: 'address',
-        width: '104px',
+        width: '96px',
         value: (row): CellAddress => ({
           universe: row.patch.universe,
           channel: row.patch.startChannel,
@@ -432,25 +442,28 @@ export function PatchSheet({
       {
         key: 'type',
         label: 'Type',
-        width: 'minmax(180px, 1fr)',
+        width: 'minmax(128px, 1fr)',
         value: () => undefined,
-        display: (row) => (
-          <span className="mx-1.5 truncate text-xs text-muted-foreground">
-            {[row.patch.manufacturer, row.patch.model].filter(Boolean).join(' ')}
-          </span>
-        ),
+        display: (row) => {
+          const type = [row.patch.manufacturer, row.patch.model].filter(Boolean).join(' ')
+          return (
+            <span className="mx-1.5 truncate text-xs text-muted-foreground" title={type}>
+              {type}
+            </span>
+          )
+        },
       },
       {
         key: 'mode',
         label: 'Mode',
-        width: '118px',
+        width: '96px',
         value: () => undefined,
         display: (row) => <span className="mx-1.5 truncate text-xs">{row.patch.modeName ?? ''}</span>,
       },
       {
         key: 'ch',
         label: 'Ch',
-        width: '56px',
+        width: '48px',
         align: 'right',
         value: () => undefined,
         display: (row) => (
@@ -461,13 +474,13 @@ export function PatchSheet({
         key: 'key',
         label: 'Key',
         kind: 'key',
-        width: '132px',
+        width: '112px',
         value: (row) => row.patch.key,
         cell: (_row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
             mono
-            placeholder="par-1"
+            placeholder="A key, e.g. par-1"
             plan={keyLanding}
           />
         ),
@@ -497,7 +510,7 @@ export function PatchSheet({
         key: 'mount',
         label: 'Mount',
         kind: 'mount',
-        width: '118px',
+        width: '104px',
         value: (row) => row.patch.riggingUuid ?? NO_MOUNT,
         cell: (row, props) => (
           <OptionCell
@@ -526,14 +539,14 @@ export function PatchSheet({
         key: 'angle',
         label: 'Angle',
         kind: 'angle',
-        width: '72px',
+        width: '64px',
         value: (row) => (row.acceptsBeamAngle ? String(row.patch.beamAngleDeg ?? '') : undefined),
         cell: (row, props) => (
           <TextCell
             {...(props as React.ComponentProps<typeof TextCell>)}
             mono
             allowEmpty
-            placeholder="25"
+            placeholder="Blank for the default"
             face={
               row.patch.beamAngleDeg != null ? (
                 <span className="mx-1.5 font-mono text-xs tabular-nums">{row.patch.beamAngleDeg}°</span>
@@ -564,40 +577,15 @@ export function PatchSheet({
         key: 'gel',
         label: 'Gel',
         kind: 'gel',
-        width: '96px',
+        width: '88px',
         value: (row) => (row.acceptsGel ? (row.patch.gelCode ?? '') : undefined),
-        cell: (row, props) => {
-          const gel = findGel(row.patch.gelCode)
-          return (
-            <TextCell
-              {...(props as React.ComponentProps<typeof TextCell>)}
-              mono
-              allowEmpty
-              placeholder="L201"
-              face={
-                row.patch.gelCode ? (
-                  <span className="mx-1.5 flex items-center gap-1.5">
-                    <span
-                      className="size-3 shrink-0 rounded-sm border border-border/60"
-                      style={{ background: gel?.color ?? 'transparent' }}
-                      aria-hidden
-                    />
-                    <span className="font-mono text-xs">{row.patch.gelCode}</span>
-                  </span>
-                ) : (
-                  <span className="mx-1.5 text-xs text-muted-foreground/60">—</span>
-                )
-              }
-              validate={(draft) => {
-                const code = draft.trim().toUpperCase()
-                return code === '' || GELS.some((g) => g.code === code) ? null : `“${code}” is not a gel in the library`
-              }}
-            />
-          )
-        },
+        // The patch editor's gel picker, not a typed code: search by name or number, filter by
+        // brand, pick from swatches (`GelCell`). Its value is the code, `''` for open white.
+        cell: (_row, props) => <GelCell {...(props as React.ComponentProps<typeof GelCell>)} />,
         write: (batch, value) => {
           if (typeof value !== 'string') return false
-          const code = value.trim().toUpperCase() || null
+          // `GelCell` commits a library code as it stands, or `''` for open white.
+          const code = value || null
           for (const row of batch) if (row.acceptsGel && code !== row.patch.gelCode) void put(row.patch.id, { gelCode: code })
           return true
         },
@@ -608,15 +596,20 @@ export function PatchSheet({
       {
         key: 'groups',
         label: 'Groups',
-        width: '150px',
+        // Takes the most of the slack: a head in three groups needs ~200px of badges, where
+        // Type is one string that truncates with its whole text on the hover.
+        width: 'minmax(160px, 1.5fr)',
         value: () => undefined,
         display: (row) => (
-          <div className="mx-1 flex min-w-0 flex-wrap gap-1 overflow-hidden">
+          <div
+            className="mx-1 flex min-w-0 gap-1 overflow-hidden"
+            title={row.patch.groups.map((g) => g.name).join(', ') || undefined}
+          >
             {row.patch.groups.map((g) => (
               <Badge
                 key={g.id}
                 variant="secondary"
-                className="cursor-pointer px-1.5 py-0 text-[10px] hover:bg-accent"
+                className="shrink-0 cursor-pointer px-1.5 py-0 text-[10px] hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onEditGroup(g.id, g.name)
@@ -632,7 +625,7 @@ export function PatchSheet({
         key: 'stage',
         label: 'Stage',
         kind: 'stage',
-        width: '64px',
+        width: '84px',
         value: (row) => (row.patch.stageHidden ? 'hidden' : 'shown'),
         cell: (_row, props) => (
           <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={STAGE_OPTIONS} />
@@ -673,6 +666,7 @@ export function PatchSheet({
     applyKeyWrites,
     headClashes,
     headLanding,
+    headSeed,
     keyLanding,
     landing,
     mountOptions,
@@ -816,10 +810,10 @@ export function PatchSheet({
       </div>
       <SheetTable<PatchSheetRow, PatchColumnKey>
         {...sheet.tableProps}
-        minWidth={`${240 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
+        minWidth={`${220 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         firstColumn={{
           label: 'Fixture',
-          width: '240px',
+          width: '220px',
           render: (row, selected) => (
             <>
               {/* **A double click renames the head — in the same popover every value cell opens.**

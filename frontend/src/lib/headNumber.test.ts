@@ -4,6 +4,7 @@ import {
   consecutiveHeadNumbers,
   findHeadNumberClashes,
   headNumberFieldError,
+  nextHeadNumber,
   parseHeadNumberDraft,
 } from './headNumber'
 
@@ -85,5 +86,17 @@ describe('headNumberFieldError', () => {
     expect(headNumberFieldError('2', all, null)).toBeNull()
     expect(headNumberFieldError('', all, null)).toBeNull()
     expect(headNumberFieldError('abc', all, null)).toMatch(/whole number/)
+  })
+})
+
+describe('nextHeadNumber', () => {
+  it('offers one past the highest number, or the first number on an unnumbered rig', () => {
+    expect(nextHeadNumber([head(1, 4), head(2, null), head(3, 101), head(4, 7)])).toBe(102)
+    expect(nextHeadNumber([head(1, null), head(2, null)])).toBe(1)
+    expect(nextHeadNumber([])).toBe(1)
+  })
+
+  it('offers nothing when the highest number is the ceiling', () => {
+    expect(nextHeadNumber([head(1, 99999)])).toBeNull()
   })
 })
