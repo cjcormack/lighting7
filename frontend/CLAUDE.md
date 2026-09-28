@@ -217,6 +217,13 @@ stage read path, adding a source, or relying on what `ProgrammerState.channels` 
 is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
 the bug that doc exists to prevent.
 
+**Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*
+besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
+height, sent to `POST /programmer/aim` for the selected moving heads — under the single fixture's
+panel, or its own docked panel for a multi-selection in view mode, and only on the live project.
+The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
+point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
+
 ### Looks, templates and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its
@@ -2363,6 +2370,13 @@ Three surface rules, each pinned by its test:
   like an overlapping address, with its own legend line. Clear unnumbers; there is no Spread. The add
   and edit forms carry a *Head number* field, and the add sheet advances it by one per fixture patched.
   It is **not** on `GET /fixtures` yet, so nothing outside the patch views can show it.
+  **An unnumbered Head opens on the next free number** (`nextHeadNumber`: one past the highest, so
+  a run from it always lands clear), selected and noted as a suggestion — `TextCell`'s `emptySeed`
+  — where it used to open empty under a `1` placeholder that read as the value about to be applied.
+  **The Gel cell is the patch editor's gel picker** (`GelCell` over `GelPicker`, which
+  `GelPickerField` also mounts): search, brand chips, swatches, ↑/↓ and Enter — not a typed code.
+  **Every `OptionCell` with two or more options draws its filter**, because the filter is the
+  cell's keyboard: Stage and Role could not be set by typing while the threshold was three.
   **A batch landing is drawn one head to a line** — `EditorReadout`'s `lines` arm, which was
   `cells/LandingLines.tsx` until the editor kit — shared by the address editor and the Key column,
   rather than joined with `·` into a paragraph read at the worst moment.

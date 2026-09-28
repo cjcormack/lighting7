@@ -397,6 +397,52 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         }
     }
 
+    /**
+     * `world` is the placement composed through its rigging's pose — the position the Stage view
+     * draws — for the fixture and for each `alsoAt` lantern. The pose math has its own vectors in
+     * `StageCoordsTest`; this pins that get_patch feeds it the right rigging for each placement.
+     */
+    @Test
+    fun `get_patch gives every placed fixture and lantern its world position`() {
+        assertTrue(patchTwoDimmers().success)
+        assertTrue(
+            call(
+                "patch_fixtures",
+                """{"fixtures":[{"key":"cyc-1","name":"Cyc 1","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":3}]}""",
+            ).success,
+        )
+        assertTrue(
+            call(
+                "set_stage",
+                """{"riggings":[{"name":"FOH bar","x":0,"y":-6,"z":7},{"name":"Boom SL","x":-5,"y":1,"z":0,"yawDeg":90}]}""",
+            ).success,
+        )
+        val placed = call(
+            "place_fixtures",
+            """{"placements":[
+                {"key":"foh-1","rigging":"FOH bar","x":-1.5,"y":0,"z":-0.2,
+                    "alsoAt":[{"label":"Boom","rigging":"Boom SL","x":2,"y":0,"z":1.5},{"label":"Free","x":3,"y":4}]},
+                {"key":"foh-2","x":2.5,"y":1,"z":0.5}
+            ]}""",
+        )
+        assertTrue(placed.success, placed.result)
+
+        val fixtures = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.map { it.jsonObject }
+            .associateBy { it["key"]!!.jsonPrimitive.content }
+        fun JsonObject.world(): List<Double>? =
+            this["world"]?.jsonObject?.let { w -> listOf("x", "y", "z").map { w[it]!!.jsonPrimitive.content.toDouble() } }
+
+        val foh1 = fixtures.getValue("foh-1")
+        assertEquals(-1.5, foh1["x"]!!.jsonPrimitive.content.toDouble(), "x stays the offset along the rigging")
+        assertEquals(listOf(-1.5, -6.0, 6.8), foh1.world(), "the offset is composed with the rigging's position")
+        val lanterns = foh1["alsoAt"]!!.jsonArray.map { it.jsonObject }
+        // Yaw 90 runs the boom upstage, so 2 m along it is 2 m upstage of its origin.
+        assertEquals(listOf(-5.0, 3.0, 1.5), lanterns[0].world(), "a lantern on a rotated rigging")
+        assertEquals(listOf(3.0, 4.0, 0.0), lanterns[1].world(), "a free lantern is its own world position, z the deck")
+        assertEquals(listOf(2.5, 1.0, 0.5), fixtures.getValue("foh-2").world(), "a free fixture")
+        assertNull(fixtures.getValue("cyc-1").world(), "an unplaced fixture has none")
+    }
+
     @Test
     fun `a lightstrip ring takes a length per side, and a fixed-length type refuses one`() {
         val types = call("list_fixture_types", """{"query":"lightstrip"}""").json()["fixtureTypes"]!!.jsonArray.map { it.jsonObject }

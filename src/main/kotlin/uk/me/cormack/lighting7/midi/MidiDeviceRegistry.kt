@@ -267,6 +267,9 @@ class MidiDeviceRegistry(
         runCatching { old.close() }
     }
 
+    // GlobalScope only before `start()` — the registry's own scope once it has one. The same
+    // fallback KtMidiController's constructor defaults to, and opts in to for the same reason.
+    @OptIn(DelicateCoroutinesApi::class)
     private suspend fun doOpen(handle: MidiDeviceHandle, forAccess: MidiAccessSource): MidiController = coroutineScope {
         // Open both directions in parallel — native backends can take tens of ms each on USB
         // enumeration. [forAccess] pins to the access source that enumerated [handle], so a

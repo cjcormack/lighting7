@@ -106,7 +106,7 @@ class JGitRemoteTest {
 
             val rel = JGitClient.classify(repo, "HEAD", "refs/remotes/origin/main")
             assertTrue(rel is HistoryRelation.LocalAhead)
-            assertEquals(1, (rel as HistoryRelation.LocalAhead).ahead)
+            assertEquals(1, rel.ahead)
         }
     }
 
@@ -155,7 +155,7 @@ class JGitRemoteTest {
 
             val rel = JGitClient.classify(repo, "HEAD", "refs/remotes/origin/main")
             assertTrue(rel is HistoryRelation.RemoteAhead, "expected RemoteAhead, got $rel")
-            assertEquals(1, (rel as HistoryRelation.RemoteAhead).behind)
+            assertEquals(1, rel.behind)
         }
     }
 
@@ -195,9 +195,8 @@ class JGitRemoteTest {
 
             val rel = JGitClient.classify(repo, "HEAD", "refs/remotes/origin/main")
             assertTrue(rel is HistoryRelation.Diverged, "expected Diverged, got $rel")
-            val d = rel as HistoryRelation.Diverged
-            assertEquals(1, d.ahead)
-            assertEquals(1, d.behind)
+            assertEquals(1, rel.ahead)
+            assertEquals(1, rel.behind)
 
             // Force-push from A wins.
             val pushed = JGitClient.push(repo, "origin", "main", noAuth, force = true)
@@ -254,7 +253,7 @@ class JGitRemoteTest {
             JGitClient.fetch(repo, "origin", "main", noAuth)
             val content = JGitClient.readBlob(repo, "refs/remotes/origin/main", "formatVersion.json")
             assertNotNull(content)
-            assertTrue(content!!.contains("formatVersion"), "expected formatVersion JSON, got: $content")
+            assertTrue(content.contains("formatVersion"), "expected formatVersion JSON, got: $content")
         }
     }
 

@@ -189,9 +189,9 @@ class MidiFeedbackConflationTest {
     @Test
     fun `inbound CC rate counter records control change events from the input parser`() {
         val target = RecordingSendTarget()
-        var listener: ((ByteArray, Int, Int) -> Unit)? = null
+        var captured: ((ByteArray, Int, Int) -> Unit)? = null
         val source = object : MidiInputSource {
-            override fun setListener(l: (ByteArray, Int, Int) -> Unit) { listener = l }
+            override fun setListener(listener: (ByteArray, Int, Int) -> Unit) { captured = listener }
             override fun close() {}
         }
         @OptIn(DelicateCoroutinesApi::class)
@@ -203,7 +203,7 @@ class MidiFeedbackConflationTest {
             parentScope = GlobalScope,
         )
         try {
-            val emit: (ByteArray) -> Unit = { bytes -> listener?.invoke(bytes, 0, bytes.size) }
+            val emit: (ByteArray) -> Unit = { bytes -> captured?.invoke(bytes, 0, bytes.size) }
             // CC: status 0xB0, cc=7, value=64.
             emit(byteArrayOf(0xB0.toByte(), 0x07, 0x40))
             // NoteOn: status 0x90, note=60, vel=127 — should NOT count toward CC rate.

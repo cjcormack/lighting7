@@ -23,10 +23,13 @@ export interface OptionCellProps extends SheetCellProps<string> {
 }
 
 /**
- * Below this many options the filter is not drawn: there is nothing to narrow, and a search box
- * over a two-row list is a control asking to be read for no gain.
+ * From this many options the filter is drawn — every list with a choice in it. It was three, on
+ * the reasoning that a two-row list has nothing to narrow; but the filter is also the cell's
+ * **keyboard**, the type-ahead a character typed at the grid lands in and Enter takes the top
+ * match of, and without it a two-option cell (the patch list's Stage and Role) could not be set
+ * from the keyboard at all: select, type `h`, Enter works on Mount and did nothing on Stage.
  */
-const FILTER_FROM_OPTIONS = 3
+const FILTER_FROM_OPTIONS = 2
 
 /**
  * An option cell — one of a closed list: a fade curve, a mount, a stage flag

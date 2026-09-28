@@ -278,9 +278,8 @@ class MultiElementFixtureTest {
         assertEquals("quad-bar-27-elements", group.name)
         assertEquals(4, group.size)
 
-        // 27CH mode has FullHead elements with additional properties
-        group.fixtures.forEach { fullHead ->
-            assertTrue(fullHead is SlenderBeamBarQuadFixture.FullHead)
-        }
+        // 27CH mode has FullHead elements with additional properties — checked by the compiler
+        @Suppress("UNUSED_VARIABLE")
+        val heads: List<SlenderBeamBarQuadFixture.FullHead> = group.fixtures
     }
 }

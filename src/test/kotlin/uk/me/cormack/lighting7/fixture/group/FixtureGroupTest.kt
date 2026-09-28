@@ -305,7 +305,6 @@ class FixtureGroupTest {
         val uvFixtures = group.flattenAs<UVFixture>()
 
         assertEquals(3, uvFixtures.size)
-        assertTrue(uvFixtures.all { it is UVFixture })
     }
 
     @Test

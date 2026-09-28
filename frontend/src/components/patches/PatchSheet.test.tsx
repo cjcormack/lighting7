@@ -305,6 +305,51 @@ describe('PatchSheet', () => {
     expect(within(row('PAR 1')).getByRole('img', { name: /Infrastructure/ })).toBeInTheDocument()
   })
 
+  it('types a Stage choice — a two-option cell has the filter Mount has', async () => {
+    draw({ visibleColumns: ['stage'] })
+    fireEvent.click(within(row('PAR 1')).getByText('Shown').closest('button')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+    const filter = await screen.findByRole('combobox', { name: 'Filter Stage options' })
+    fireEvent.change(filter, { target: { value: 'hid' } })
+    expect(screen.queryByRole('option', { name: 'Shown' })).toBeNull()
+    fireEvent.keyDown(filter, { key: 'Enter' })
+    expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, stageHidden: true })
+  })
+
+  describe('the Gel column', () => {
+    const gelRows = rows.map((r) => ({ ...r, acceptsGel: true }))
+    const gelCell = (name: string) => row(name).querySelector('[data-cell="gel"] button') as HTMLElement
+
+    it('picks from the gel library — search, then click — as the patch editor does', async () => {
+      draw({ rows: gelRows, visibleColumns: ['gel'] })
+      fireEvent.click(gelCell('PAR 1'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const search = await screen.findByRole('combobox', { name: 'Search gels' })
+      fireEvent.change(search, { target: { value: 'full ct blue' } })
+      fireEvent.click(screen.getByRole('option', { name: /L201/ }))
+      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, gelCode: 'L201' })
+    })
+
+    it('takes the first match on Enter, and Open white clears a gel', async () => {
+      const gelled = { ...RIG[0], gelCode: 'L201' }
+      draw({ rows: [{ ...gelRows[0], patch: gelled }], allPatches: [gelled], visibleColumns: ['gel'] })
+      fireEvent.click(gelCell('PAR 1'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const search = await screen.findByRole('combobox', { name: 'Search gels' })
+      // With nothing typed, the highlight rests on the current gel.
+      expect(screen.getByRole('option', { name: /L201/ })).toHaveAttribute('data-highlighted', 'true')
+      fireEvent.change(search, { target: { value: 'L106' } })
+      fireEvent.keyDown(search, { key: 'Enter' })
+      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, gelCode: 'L106' })
+
+      updatePatch.mockClear()
+      fireEvent.click(gelCell('PAR 1'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      fireEvent.click(await screen.findByRole('option', { name: /Open white/ }))
+      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, gelCode: null })
+    })
+  })
+
   it('rings an overlapping address, names the other head, and says so under the sheet', () => {
     // Bar SL at 25–42 and a par dropped onto 30.
     const clash = patch(5, 'PAR 5', 30)
@@ -499,6 +544,29 @@ describe('PatchSheet', () => {
       fireEvent.change(field, { target: { value: '1.5' } })
       expect(screen.getByText(/A head number is a whole number/)).toBeInTheDocument()
       expect(setHeadNumbers).not.toHaveBeenCalled()
+    })
+
+    it('opens an unnumbered head on the next free number, saying so, and applies it', async () => {
+      // PAR 1..3 hold 1..3, so Bar SL is offered 4 — a real, selected draft, not a placeholder.
+      drawHeads()
+      fireEvent.click(headCell('Bar SL'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const field = await screen.findByLabelText('Head')
+      expect(field).toHaveValue('4')
+      expect(screen.getByText(/Next free head number/)).toBeInTheDocument()
+      fireEvent.change(field, { target: { value: '9' } })
+      expect(screen.queryByText(/Next free head number/)).toBeNull()
+      fireEvent.change(field, { target: { value: '4' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+      expect(setHeadNumbers).toHaveBeenCalledWith({ projectId: 1, numbers: [{ patchId: 4, headNumber: 4 }] })
+    })
+
+    it('opens a numbered head on its own number, with no suggestion', async () => {
+      drawHeads()
+      fireEvent.click(headCell('PAR 2'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      expect(await screen.findByLabelText('Head')).toHaveValue('2')
+      expect(screen.queryByText(/Next free head number/)).toBeNull()
     })
 
     it('clears to unnumbered, sending only the heads that had a number', () => {

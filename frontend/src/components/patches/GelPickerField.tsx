@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ChevronDown, X } from 'lucide-react'
-import {
-  GEL_BRANDS,
-  findGel,
-  searchGels,
-  type Gel,
-  type GelBrand,
-} from '@/data/gels'
-
-type BrandFilter = 'All' | GelBrand
+import { findGel } from '@/data/gels'
+import { GelPicker } from './GelPicker'
 
 interface GelPickerFieldProps {
   id?: string
@@ -21,15 +13,11 @@ interface GelPickerFieldProps {
 
 export function GelPickerField({ id, value, onChange }: GelPickerFieldProps) {
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [brand, setBrand] = useState<BrandFilter>('All')
   const current = useMemo(() => findGel(value), [value])
-  const results = useMemo(() => searchGels(query, brand), [query, brand])
 
-  const select = (gel: Gel | null) => {
-    onChange(gel?.code ?? null)
+  const select = (code: string | null) => {
+    onChange(code)
     setOpen(false)
-    setQuery('')
   }
 
   return (
@@ -100,82 +88,7 @@ export function GelPickerField({ id, value, onChange }: GelPickerFieldProps) {
           align="start"
           className="w-(--radix-popover-trigger-width) min-w-72 p-0 overflow-hidden"
         >
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search gels (e.g. L201, blue, amber)…"
-            className="border-0 border-b border-border rounded-none focus-visible:ring-0 focus-visible:border-border"
-            autoFocus
-          />
-          <div className="flex gap-1 border-b border-border px-2 py-1.5">
-            {(['All', ...GEL_BRANDS] as BrandFilter[]).map((b) => {
-              const selected = brand === b
-              return (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setBrand(b)}
-                  className={
-                    'px-2.5 py-0.5 rounded text-[11px] transition-colors ' +
-                    (selected
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground/70 hover:text-foreground')
-                  }
-                >
-                  {b}
-                </button>
-              )
-            })}
-          </div>
-          <ul className="max-h-60 overflow-y-auto py-1">
-            <li>
-              <button
-                type="button"
-                onClick={() => select(null)}
-                className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-muted/60 text-left"
-              >
-                <span
-                  className="block w-4 h-4 rounded-sm shrink-0 border border-dashed border-muted-foreground/40"
-                  aria-hidden
-                />
-                <span className="font-mono text-[11px] text-muted-foreground w-10">—</span>
-                <span className="text-[11px] italic text-muted-foreground/70 truncate">
-                  Open white
-                </span>
-              </button>
-            </li>
-            {results.map((g) => (
-              <li key={g.brand + g.code}>
-                <button
-                  type="button"
-                  onClick={() => select(g)}
-                  className="flex w-full items-center gap-2.5 px-3 py-1.5 hover:bg-muted/60 text-left"
-                >
-                  <span
-                    className="block w-4 h-4 rounded-sm shrink-0 border"
-                    style={{
-                      background: g.color,
-                      borderColor: 'rgba(255,255,255,0.1)',
-                      boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.5)',
-                    }}
-                    aria-hidden
-                  />
-                  <span className="font-mono text-[11px] text-foreground w-10 shrink-0">
-                    {g.code}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground truncate flex-1">
-                    {g.name}
-                    <span className="ml-1.5 text-muted-foreground/60">{g.brand}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-            {results.length === 0 && (
-              <li className="px-3 py-2 text-[11px] text-muted-foreground/70">
-                No gels match.
-              </li>
-            )}
-          </ul>
+          <GelPicker value={value} onPick={(code) => select(code)} autoFocus />
         </PopoverContent>
       </Popover>
     </div>

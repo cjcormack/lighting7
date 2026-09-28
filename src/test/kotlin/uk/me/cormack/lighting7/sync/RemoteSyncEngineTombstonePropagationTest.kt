@@ -155,7 +155,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                 .firstOrNull { it.recordUuid == recordUuid }
         }
         assertTrue(cTombstoneRow != null, "C's sync_state must have a row for the tombstoned record")
-        assertEquals(true, cTombstoneRow!!.lastSyncedIsDeleted, "Tombstone must carry isDeleted=true")
+        assertEquals(true, cTombstoneRow.lastSyncedIsDeleted, "Tombstone must carry isDeleted=true")
 
         // ─── Phase 4: C makes an unrelated edit, pushes ──────────────────────
         // Without carry-forward, the snapshot would drop the tombstone here and C's push
@@ -236,7 +236,7 @@ class RemoteSyncEngineTombstonePropagationTest {
                     .firstOrNull { it.recordUuid == recordUuid }
             }
             assertTrue(row != null, "Cycle $i: tombstone row vanished from sync_state")
-            assertEquals(true, row!!.lastSyncedIsDeleted, "Cycle $i: tombstone lost its isDeleted flag")
+            assertEquals(true, row.lastSyncedIsDeleted, "Cycle $i: tombstone lost its isDeleted flag")
         }
 
         // A pulls everything; should still not have the record.

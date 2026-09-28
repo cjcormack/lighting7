@@ -26,7 +26,7 @@ class FixtureTypeRegistryTest {
         assertEquals("Chauvet", hex.manufacturer)
         assertEquals("Freedom Par Hex", hex.model)
         assertNotNull(hex.channelCount)
-        assertTrue(hex.channelCount!! > 0)
+        assertTrue(hex.channelCount > 0)
     }
 
     @Test

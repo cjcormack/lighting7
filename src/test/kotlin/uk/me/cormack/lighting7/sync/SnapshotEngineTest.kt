@@ -61,7 +61,7 @@ class SnapshotEngineTest {
             val install = DaoInstall.all().first()
             install.friendlyName to install.uuid.toString().take(8)
         }
-        assertEquals(friendly, commit!!.authorName)
+        assertEquals(friendly, commit.authorName)
         assertTrue(
             commit.authorEmail.endsWith("@lighting7.local"),
             "author email should be {shortUuid}@lighting7.local, got ${commit.authorEmail}",
@@ -157,7 +157,7 @@ class SnapshotEngineTest {
             }
         }.exceptionOrNull()
         assertNotNull(ex)
-        assertTrue(ex!!.message?.contains("Project not found") == true)
+        assertTrue(ex.message?.contains("Project not found") == true)
     }
 
     @Test

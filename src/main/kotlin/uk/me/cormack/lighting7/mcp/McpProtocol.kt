@@ -47,7 +47,7 @@ class McpProtocol(private val state: State) {
     private val describeRigTool = AnthropicToolDef(
         name = DESCRIBE_RIG,
         description = "Describe the rig and the show as they are now: every fixture and group, the effect " +
-            "library, running effects, speed masters (with the uuids other tools take), looks, colour " +
+            "library, running effects, parked channels, speed masters (with the uuids other tools take), looks, colour " +
             "templates, cues and cue stacks. Call this first in a conversation, and again after the " +
             "show changes, because every other tool refers to things by the keys and ids listed here.",
         inputSchema = buildJsonObject {
@@ -213,7 +213,7 @@ class McpProtocol(private val state: State) {
             The operator may attach another console's patch export, a lighting plot, photos of the rig, a script and lighting notes. Read them yourself and pass the tools structured data; no tool takes a file.
             - Every tool acts on the current project. For a new show: create_project, then switch_project — which stops the live output, so confirm first unless the operator asked for it.
             - Patch: list_fixture_types to match each fixture to a typeKey (conventional lanterns are 'generic-dimmer'), then patch_fixtures with the whole list, using dryRun first. Report fixtures with no matching type rather than guessing. Put fixtures in groups by position and role; groups are what looks and cues address.
-            - Stage: set_stage for the stage size, regions and riggings (named as the plot names them), then place_fixtures to hang fixtures on them. get_patch shows the result.
+            - Stage: set_stage for the stage size, regions and riggings (named as the plot names them), then place_fixtures to hang fixtures on them. get_patch shows the result. aim_fixtures points moving heads at a stage coordinate (a region's centre at head height, a mark on the plot) through the programmer, for record_cue to keep.
             - Show: the operator imports the script PDF through the desk's Prompt Book view (get_prompt_book says where); then build_cue_stack creates the stack and cues in running order with numbers, notes and timings, anchoring each at the line it is called on, and mark_up_prompt_book adds notes and moves anchors. PDF pages count from 1 at the file's first page.
             - These tools validate a whole request and write nothing if any row is wrong; fix every listed problem and resend.
         """.trimIndent()

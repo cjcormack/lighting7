@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -190,6 +191,94 @@ internal val clearEffectsTool = AnthropicToolDef(
     }
 )
 
+/** The DMX address both park tools take — the desk's universe number and a channel in it — plus [extra]. */
+private fun parkAddressProperties(extra: JsonObjectBuilder.() -> Unit = {}) = buildJsonObject {
+    put("universe", buildJsonObject {
+        put("type", "integer")
+        put("minimum", 0)
+        put("description", "The desk's DMX universe number (counted from 0, as get_patch lists them).")
+    })
+    put("channel", buildJsonObject {
+        put("type", "integer"); put("minimum", 1); put("maximum", 512)
+        put("description", "DMX channel within the universe, 1–512. get_patch gives each fixture's startChannel–endChannel.")
+    })
+    extra()
+}
+
+internal val parkChannelTool = AnthropicToolDef(
+    name = "park_channel",
+    description = "Park a DMX channel: lock its output at a fixed value above everything else — cues, looks, effects, " +
+            "the programmer and manual channel writes all stop reaching it until it is unparked. For holding a light " +
+            "that must not move whatever the show does (a work light, a hazer's level, a channel with a faulty lamp " +
+            "parked at 0). Parking an already parked channel changes its value. Park persists with the project, " +
+            "across restarts. The answer names the fixture channel it drives, when it is patched.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", parkAddressProperties {
+            put("value", buildJsonObject {
+                put("type", "integer"); put("minimum", 0); put("maximum", 255)
+                put("description", "The DMX value to hold, 0–255.")
+            })
+        })
+        put("required", buildJsonArray { add("universe"); add("channel"); add("value") })
+    }
+)
+
+internal val unparkChannelTool = AnthropicToolDef(
+    name = "unpark_channel",
+    description = "Unpark a parked DMX channel, handing it back to the show. The output does not jump: the parked " +
+            "value is handed down as the channel's value underneath, where the next cue, effect or programmer " +
+            "write takes over from it. get_current_state's `parked` (and describe_rig) list what is parked.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", parkAddressProperties())
+        put("required", buildJsonArray { add("universe"); add("channel") })
+    }
+)
+
+internal val aimFixturesTool = AnthropicToolDef(
+    name = "aim_fixtures",
+    description = "Point moving heads at a spot on the stage: give a point in stage coordinates and the desk works out " +
+            "each head's pan and tilt from where it hangs (get_patch's `world` position), how its body is mounted " +
+            "(its pitchDeg / yawDeg — for a moving head, pitchDeg 0 is standing on the deck and 180 is hung from a bar) " +
+            "and its pan/tilt travel, and writes them into the programmer; record_cue or update_from_programmer keeps " +
+            "them. Coordinates are metres, the frame get_patch and set_stage use: origin the centre of the downstage " +
+            "edge at deck level, +x audience-right, +y upstage, +z up. A performer standing in a region is its " +
+            "centerX / centerY with z its centerZ plus head height (about 1.7). A head that cannot be aimed is skipped " +
+            "with the reason — a fixed lantern, an unplaced fixture, a type with no pan/tilt degree range, a point " +
+            "outside its travel. dryRun reports what would land without writing it.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("targets", buildJsonObject {
+                put("type", "array")
+                put("items", targetSchema)
+                put("description", "The fixtures to aim, or groups (every member is aimed).")
+            })
+            for (axis in listOf("x", "y", "z")) {
+                put(axis, buildJsonObject {
+                    put("type", "number")
+                    put("minimum", -500); put("maximum", 500)
+                    put("description", when (axis) {
+                        "x" -> "Metres audience-right of centre (negative is audience-left)."
+                        "y" -> "Metres upstage of the downstage edge (negative is in front of it)."
+                        else -> "Metres above the deck."
+                    })
+                })
+            }
+            put("fadeMs", buildJsonObject {
+                put("type", "integer"); put("minimum", 0)
+                put("description", "Time for the heads to move there, in milliseconds. Omit to snap.")
+            })
+            put("dryRun", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Work out and report each head's pan and tilt without writing anything.")
+            })
+        })
+        put("required", buildJsonArray { add("targets"); add("x"); add("y"); add("z") })
+    }
+)
+
 internal val getCurrentStateTool = AnthropicToolDef(
     name = "get_current_state",
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
@@ -199,7 +288,8 @@ internal val getCurrentStateTool = AnthropicToolDef(
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
-            "id reads back to a screen name.",
+            "id reads back to a screen name; " +
+            "`parked` lists the parked DMX channels (park_channel / unpark_channel), which hold their value above everything else.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -211,7 +301,7 @@ internal val getCurrentStateTool = AnthropicToolDef(
                         add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
                         add("groups"); add("looks"); add("templates"); add("cues")
                         add("cue_stacks"); add("cue_run"); add("programmer"); add("selection")
-                        add("windows")
+                        add("windows"); add("parked")
                     })
                 })
                 put("description", "What to include. Defaults to all.")

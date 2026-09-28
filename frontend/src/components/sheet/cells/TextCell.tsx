@@ -39,6 +39,14 @@ export interface TextCellProps extends SheetCellProps<string> {
   plan?: (rows: readonly SheetRow[], draft: string) => TextLanding | null
   /** The commit for an emptied field. Absent means an empty draft is refused. */
   allowEmpty?: boolean
+  /**
+   * What an **empty** cell's editor opens with, instead of an empty field under a placeholder — a
+   * suggestion the column can compute, such as the patch list's next free head number. It is a
+   * real draft, selected like any other value, so typing replaces it and Enter applies it; `note`
+   * says so under the field while the draft is still the suggestion, so it cannot be mistaken for
+   * the cell's current value. A character typed at the grid still replaces it.
+   */
+  emptySeed?: { value: string; note: string } | null
 }
 
 /**
@@ -75,11 +83,20 @@ export const TextCell = memo(function TextCell({
   validate,
   plan,
   allowEmpty = false,
+  emptySeed,
 }: TextCellProps) {
   const [draft, setDraft] = useState(value)
   const valueRef = useRef(value)
   valueRef.current = value
-  const reset = useCallback(() => setDraft(valueRef.current), [])
+  const seedRef = useRef(emptySeed)
+  seedRef.current = emptySeed
+  /** The suggestion this open was seeded with, if any — latched so the note tracks this open's. */
+  const [seeded, setSeeded] = useState<string | null>(null)
+  const reset = useCallback(() => {
+    const seed = valueRef.current === '' ? seedRef.current : null
+    setDraft(seed ? seed.value : valueRef.current)
+    setSeeded(seed ? seed.value : null)
+  }, [])
 
   const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
@@ -93,8 +110,12 @@ export const TextCell = memo(function TextCell({
   // The character that opened the editor replaces the draft: typing at the grid is the operator
   // starting a new value, not appending to the old one.
   useEffect(() => {
-    if (keyboardOpen) setDraft(keyboardOpen)
+    if (keyboardOpen) {
+      setDraft(keyboardOpen)
+      setSeeded(null)
+    }
   }, [keyboardOpen])
+  const seedNote = seeded != null && draft === seeded ? (emptySeed?.note ?? null) : null
 
   const trimmed = draft.trim()
   const empty = trimmed === '' && !allowEmpty
@@ -161,7 +182,12 @@ export const TextCell = memo(function TextCell({
           />
         </div>
         <EditorReadout lines={landing?.lines} error={error}>
-          {skipped ? <span data-editor-skipped>{skipped}</span> : undefined}
+          {seedNote || skipped ? (
+            <>
+              {seedNote && <span data-editor-seed-note>{seedNote}</span>}
+              {skipped && <span data-editor-skipped>{skipped}</span>}
+            </>
+          ) : undefined}
         </EditorReadout>
         <EditorFooter>
           <Button

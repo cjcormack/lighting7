@@ -131,7 +131,7 @@ class ControlSurfaceBindingService(
     private val locks = ConcurrentHashMap<Int, Any>()
     private fun lockFor(projectId: Int): Any = locks.computeIfAbsent(projectId) {
         lockSeq.incrementAndGet()
-        Object()
+        Any()
     }
 
     /** Ensure the cache is populated for [projectId]. Safe to call repeatedly. */

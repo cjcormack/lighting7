@@ -403,7 +403,7 @@ data class ColourTarget(
         // from [below] (e.g. a raw write on just the red channel overlays a cue's colour).
         val colourSlot = store.get(fixture.targetKey, propertyName)
         val colourValue = (colourSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value
-        val colourSeq = if (colourValue != null) colourSlot!!.seq else Long.MIN_VALUE
+        val colourSeq = if (colourValue != null) colourSlot.seq else Long.MIN_VALUE
 
         val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour
         if (colourValue == null && dmxColour == null) return below
@@ -414,7 +414,7 @@ data class ColourTarget(
             } else null
             val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             return when {
-                sideValue != null && side!!.seq > colourSeq -> sideValue
+                sideValue != null && side.seq > colourSeq -> sideValue
                 entryComponent != null -> entryComponent
                 else -> sideValue
             }
@@ -635,7 +635,7 @@ data class PositionTarget(
         // sideband channel slot (raw pan/tilt writes stay channel-shaped in the sideband).
         val posSlot = store.get(fixture.targetKey, propertyName)
         val posValue = posSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Position
-        val posSeq = if (posValue != null) posSlot!!.seq else Long.MIN_VALUE
+        val posSeq = if (posValue != null) posSlot.seq else Long.MIN_VALUE
 
         val positionFixture = fixture as? WithPosition
         if (posValue == null && positionFixture == null) return below
@@ -645,7 +645,7 @@ data class PositionTarget(
             val side = dmx?.let { store.getChannelSlot(it.universe.universe, it.channelNo) }
             val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
             return when {
-                sideValue != null && side!!.seq > posSeq -> sideValue
+                sideValue != null && side.seq > posSeq -> sideValue
                 entryValue != null -> entryValue
                 else -> sideValue
             }
