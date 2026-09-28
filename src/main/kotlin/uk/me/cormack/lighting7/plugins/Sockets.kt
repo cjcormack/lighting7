@@ -33,11 +33,13 @@ class SocketConnection(val session: WebSocketServerSession) {
  * matching `handleXxx(scope, message)`. Cleanup is automatic via [SocketScope.cancelAll]
  * — domains add jobs by calling [SocketScope.subscribe], not by tracking jobs locally.
  *
- * Adding a new domain is a one-file change: define a sealed `XxxInMessage : InMessage()`
- * with leaf cases, add a `handleXxx(scope, message)` and (optionally) a
- * `setupXxxSubscriptions(scope)` in that file, then add one arm to the dispatch `when`
- * below + one call to setup. The Kotlin sealed-class exhaustiveness check enforces that
- * every leaf gets a handler arm.
+ * Adding a new domain is a one-file change plus its wiring: define a sealed
+ * `XxxInMessage : InMessage()` with leaf cases, add a `handleXxx(scope, message)` and
+ * (optionally) a `setupXxxSubscriptions(scope)` in that file, list the intermediate in its
+ * root's `@SealedIntermediates` in `SocketMessages.kt`, then add one arm to the dispatch
+ * `when` below + one call to setup. The Kotlin sealed-class exhaustiveness check enforces that
+ * every leaf gets a handler arm, and `SealedSerializerScopeTest` that every intermediate is
+ * listed.
  *
  * That recipe describes the **show-scoped** band of subscriptions, which is registered after
  * the warm-up gate because it touches `state.show`. There is a second, **machine-scoped** band
