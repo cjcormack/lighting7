@@ -41,25 +41,36 @@ where a reader cannot tell which convention applies. Both were fixed:
 New messages take the dotted form.
 
 **Adding a frame needs no registration** — `OutMessage` is a sealed hierarchy and kotlinx
-enumerates its subclasses at compile time — but that is also its one trap: Kotlin's incremental
-compiler does not recompile `SocketMessages.kt` when a new subclass appears in *another* file, so
-the first test run after adding one can fail with `Serializer for subclass '…' is not found in the
-polymorphic scope of 'OutMessage'` and a socket the server closed. That is a stale class file, not
-a missing module entry: `./gradlew :compileKotlin --rerun-tasks` (or a *content* change to
-`SocketMessages.kt` — a `touch` is not enough) clears it. Removing a leaf is the same trap from the
-other side: the serializer still names the deleted class.
+enumerates its subclasses at compile time — **but adding a domain does**: its intermediate
+(`FooOutMessage`, `FooInMessage`) goes in the root's `@SealedIntermediates` list in
+`SocketMessages.kt`. That list is what keeps the generated serializer current. kotlinx generates
+the root's serializer in the root's file, and Kotlin's incremental compiler recompiles a file only
+when something it *references* changes; a leaf added, removed or renamed under an intermediate in
+another file changes the intermediate, and the serializer's own reference to it is
+plugin-generated and untracked. Without the list, the build goes green and the first send fails
+with `Serializer for subclass '…' is not found in the polymorphic scope of 'OutMessage'` (or, for a
+deleted leaf, `NoClassDefFoundError` naming it), until `./gradlew :compileKotlin --rerun-tasks`.
+The class literals in the annotation are tracked references, so a listed intermediate's changes
+recompile the root with it. A *direct* subclass of a root needs no entry: the root's own metadata
+lists it, so the compiler already recompiles the root's file for one — `BootProgressStateOutMessage`
+is safe in `BootSocket.kt`. Each case was reproduced against the incremental compile before
+the list went in; see `SealedSerializers.kt`.
 
-It reached a desk once, as `tunnel.state`: every admin socket closed on connect with *"To be
-registered automatically, class 'TunnelStateOutMessage' has to be '@Serializable', and the base
-class 'OutMessage' has to be sealed and '@Serializable'"*. So `configureSockets` now runs
-`SocketMessageScope.verify()` first, which walks both roots' leaves through `sealedSubclasses`
-(fresh, since a leaf's metadata lives in its intermediate, recompiled with it) and checks each
-against the root's generated serializer (the stale half). A mismatch refuses to start the desk,
-naming every stale frame and the rebuild command, rather than surfacing as sockets closing.
-`SocketMessageScopeTest` pins it. It cannot see a *direct* subclass of a root declared in another
-file, whose metadata would be as stale as the serializer. `BootProgressStateOutMessage` is the one
-such frame today; every other domain adds its leaves under its own intermediate, so put a new frame
-under one, where the guard can see it.
+`SealedSerializerScopeTest` enforces the list: it scans every `@Serializable` sealed hierarchy in
+the main source set, and fails when a root's `@SealedIntermediates` misses an intermediate (or names
+something that is not one) — on a clean build too, so CI catches a new domain before any
+incremental build has gone stale. The same scan checks every leaf against its root's serializer,
+which catches staleness itself in a local `./gradlew test`. The rule is not WebSocket-specific: any
+other hierarchy that grows an intermediate needs the annotation on its root, and the test will say
+so.
+
+The startup guard stays as the backstop. Staleness reached a desk once, as `tunnel.state` — every
+admin socket closed on connect — so `configureSockets` runs `SocketMessageScope.verify()` first,
+comparing each root's leaves (walked through `sealedSubclasses`, fresh because a leaf's metadata
+lives in its intermediate) against the generated serializer (the stale half). A mismatch refuses to
+start the desk, naming every stale frame, the rebuild command, and any intermediate missing from
+`@SealedIntermediates` as the likely cause. It fired again for `projectDetailsChanged`, a leaf
+added under `BroadcastOutMessage` — the failure that prompted the list.
 
 ### Snapshot rule
 
