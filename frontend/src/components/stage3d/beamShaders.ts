@@ -1,6 +1,6 @@
 import { AdditiveBlending, BackSide, DoubleSide, ShaderMaterial, Vector2, Vector3 } from 'three'
 import type { DataArrayTexture } from 'three'
-import { BEAM_LENGTH, MAX_BEAM_REGIONS } from './emitterLayout'
+import { BEAM_LENGTH, COOKIE_LIFT_M, MAX_BEAM_REGIONS } from './emitterLayout'
 import {
   EDGE_SOFT_RANGE_M,
   FOCUS_LOD_K,
@@ -32,6 +32,8 @@ const REGION_UNIFORMS_GLSL = /* glsl */ `
   uniform vec2 uRegionYawCs[MAX_REGIONS];
 `
 
+// `yawCs` is (cos yaw, sin yaw), the region's own turn; the ray is rotated
+// into the box's frame by −yaw.
 const RAY_OBB_T_GLSL = /* glsl */ `
   float rayObbT(vec3 origin, vec3 dir, vec3 center, vec3 halfExt, vec2 yawCs) {
     vec3 rel = origin - center;
@@ -184,11 +186,21 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
 `
 
 // Cookie geometry projected onto a surface (floor quad, region box, wall
-// quad). Used by every pool InstancedMesh — same shader, only the baked
-// per-instance geometry differs (placement is in the instance matrix).
+// quad). Used by every pool InstancedMesh — same shader, only the per-instance
+// placement differs. The floor and wall quads carry theirs in the instance
+// matrix. A region receiver (REGION_RECEIVER) carries none: it is a unit box
+// scaled, turned and placed from the region uniforms, its region being the
+// instance index modulo the region count (the receivers are laid out
+// lobe-major, `lobe * regionCount + region`). That is what lets a region drag
+// be a uniform write instead of a rebuild of every receiver buffer.
 // `aVisible < 0.5` lets a mesh hide individual cookies without rewriting
 // their matrices each frame.
 const POOL_VERTEX_SHADER = /* glsl */ `
+  #ifdef REGION_RECEIVER
+  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
+  #define COOKIE_LIFT ${COOKIE_LIFT_M.toFixed(4)}
+  ${REGION_UNIFORMS_GLSL}
+  #endif
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
   attribute vec3 aColor;
@@ -220,7 +232,19 @@ const POOL_VERTEX_SHADER = /* glsl */ `
       return;
     }
 
+    #ifdef REGION_RECEIVER
+    int ri = gl_InstanceID % max(uNumRegions, 1);
+    // Inflated by the cookie lift on every axis so the receiver's skin sits
+    // just off the region's own faces.
+    vec3 local = position * 2.0 * (uRegionHalf[ri] + vec3(COOKIE_LIFT));
+    // Turn by +yaw about Y — the region's own rotation, as StageRegionMeshes
+    // draws it. uRegionYawCs holds (cos yaw, sin yaw).
+    vec2 cs = uRegionYawCs[ri];
+    vec3 turned = vec3(cs.x * local.x + cs.y * local.z, local.y, -cs.y * local.x + cs.x * local.z);
+    vec4 wp = modelMatrix * vec4(uRegionCenter[ri] + turned, 1.0);
+    #else
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    #endif
     vWorldPos = wp.xyz;
 
     vBeamOrigin = aBeamOrigin;
@@ -238,9 +262,15 @@ const POOL_VERTEX_SHADER = /* glsl */ `
   }
 `
 
+// A floor or wall pool fragment this close to a region (or inside it) lies on
+// that region's own surface, which the region receiver lights: a deck whose
+// top is at 0 shares the floor pool's plane exactly.
+const REGION_SURFACE_EPS_M = 0.005
+
 const POOL_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
   #define MAX_DIST ${BEAM_LENGTH.toFixed(1)}
+  #define REGION_SURFACE_EPS ${REGION_SURFACE_EPS_M.toFixed(4)}
   uniform float uCoreBoost;
   uniform float uWallZ;
   ${REGION_UNIFORMS_GLSL}
@@ -264,10 +294,30 @@ const POOL_FRAGMENT_SHADER = /* glsl */ `
   ${RAY_OBB_T_GLSL}
   ${CROSS_SECTION_GLSL}
 
+  #ifndef REGION_RECEIVER
+  bool onOrInRegion(vec3 p, vec3 center, vec3 halfExt, vec2 yawCs) {
+    vec3 rel = p - center;
+    float c = yawCs.x; float s = yawCs.y;
+    vec3 lo = vec3(c * rel.x - s * rel.z, rel.y, s * rel.x + c * rel.z);
+    return all(lessThanEqual(abs(lo), halfExt + vec3(REGION_SURFACE_EPS)));
+  }
+  #endif
+
   void main() {
     // No receiving surface exists beyond the upstage wall; light that "would"
     // land there lands on the wall cookie instead.
     if (vWorldPos.z < uWallZ - 0.005) discard;
+
+    #ifndef REGION_RECEIVER
+    // A floor or wall pool on (or under) a region is that region's receiver's
+    // to draw. The shadow test below cannot catch the case where the two
+    // surfaces coincide — a deck flush with the stage at 0, whose top face is
+    // the floor pool's own plane — and additive blending would light it twice.
+    for (int i = 0; i < MAX_REGIONS; i++) {
+      if (i >= uNumRegions) break;
+      if (onOrInRegion(vWorldPos, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i])) discard;
+    }
+    #endif
 
     vec3 toFrag = vWorldPos - vBeamOrigin;
     float fragDist = length(toFrag);
@@ -617,14 +667,24 @@ export function makeConeMaterial(): ShaderMaterial {
 
 /**
  * `withGobo` compiles in the focus/gobo/shadow-mask path. Off for the
- * per-pixel wash pools: a strip draws 16 pools per fixture (× regions) and
+ * per-pixel wash pools: a strip draws a pool per pixel (× regions) and
  * can't gobo anything, so it shouldn't pay for the texture fetch or the two
  * cross products — and the `#ifdef` also keeps three extra instanced
  * attributes off that geometry.
+ *
+ * `regionReceiver` builds the geometry from the region uniforms rather than
+ * the instance matrix — see the vertex shader.
  */
-export function makePoolMaterial(withGobo: boolean, gobo?: DataArrayTexture): ShaderMaterial {
+export function makePoolMaterial(
+  withGobo: boolean,
+  gobo?: DataArrayTexture,
+  options: { regionReceiver?: boolean } = {},
+): ShaderMaterial {
+  const defines: Record<string, string> = {}
+  if (withGobo) defines.USE_GOBO = ''
+  if (options.regionReceiver) defines.REGION_RECEIVER = ''
   return new ShaderMaterial({
-    defines: withGobo ? { USE_GOBO: '' } : {},
+    defines,
     uniforms: {
       uCoreBoost: { value: 0.5 },
       uWallZ: { value: NO_WALL_Z },

@@ -46,6 +46,7 @@ import {
   type RegionPositionUpdate,
   type RiggingPositionUpdate,
   type Selection,
+  type StageRecovery,
 } from '../components/stage3d/Stage3D'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
@@ -165,7 +166,9 @@ export function Stage() {
   const [placing, setPlacing] = useState<'region' | 'rigging' | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [gizmoModeManual, setGizmoModeManual] = useState<GizmoMode>('translate')
-  const { flags: viewFlags, setFlag: setViewFlag } = useStageView()
+  const { flags: viewFlags, setFlag: setViewFlag, setLabelMode } = useStageView()
+  // Filled by the 3D canvas while it is mounted; the View menu's *Test recovery* calls it.
+  const recoveryRef = useRef<StageRecovery | null>(null)
   const visSource = useVisSource()
   // Reads the same cached queries the Next GO source does, so it costs no extra request.
   const nextGoStatus = useNextGoStatus(visSource === 'nextGo')
@@ -696,9 +699,10 @@ export function Stage() {
           name: nextDefaultName('Region', regions),
           centerX: p.x,
           centerY: p.y,
-          // centerZ is a region's FLOOR, so a click in an elevation places the
-          // floor at the clicked height rather than burying half the box.
-          centerZ: p.z,
+          // centerZ is a region's top surface and the box hangs below it, so the
+          // new box's floor goes at the clicked height — a click on the deck
+          // stands it on the deck rather than sinking it into a pit.
+          centerZ: p.z + REGION_DEFAULT_SIZE_M,
           widthM: REGION_DEFAULT_SIZE_M,
           depthM: REGION_DEFAULT_SIZE_M,
           heightM: REGION_DEFAULT_SIZE_M,
@@ -825,7 +829,11 @@ export function Stage() {
           <StageViewMenu
             flags={viewFlags}
             setFlag={setViewFlag}
+            setLabelMode={setLabelMode}
             hide={mode === '3d' ? undefined : ['beamCones']}
+            onTestRecovery={
+              mode === '3d' ? () => recoveryRef.current?.testContextLoss() : undefined
+            }
             visSource={visSource}
             setVisSource={setVisSource}
             sourceStatus={{ nextGo: nextGoStatus }}
@@ -884,6 +892,7 @@ export function Stage() {
                   onPatchPlacementChange={handlePatchPlacementChange}
                   onRegionPositionChange={handleRegionPositionChange}
                   onRiggingPositionChange={handleRiggingPositionChange}
+                  recoveryRef={recoveryRef}
                 />
               ) : (
                 <Stage2DView

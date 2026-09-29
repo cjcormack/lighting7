@@ -74,13 +74,15 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
     () => localEdgeMidpoints(w, d).map(([lx, ly]) => rotateXY(lx, ly, yawRad)),
     [w, d, yawRad],
   )
+  // `centerZ` is the top surface and the box hangs below it (worldCornersFor).
+  const floorZ = cz - h
   const r3fFloorEdges = useMemo(
-    () => edgeXY.map(([rx, ry]) => toThree(cx + rx, cy + ry, cz)),
-    [edgeXY, cx, cy, cz],
+    () => edgeXY.map(([rx, ry]) => toThree(cx + rx, cy + ry, floorZ)),
+    [edgeXY, cx, cy, floorZ],
   )
   const r3fTopEdges = useMemo(
-    () => edgeXY.map(([rx, ry]) => toThree(cx + rx, cy + ry, cz + h)),
-    [edgeXY, cx, cy, cz, h],
+    () => edgeXY.map(([rx, ry]) => toThree(cx + rx, cy + ry, cz)),
+    [edgeXY, cx, cy, cz],
   )
   const r3fRotations = useMemo(
     () =>
@@ -146,29 +148,30 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
 
     let updateFromHit: (p: Vector3, settled: boolean) => void
     if (tier === 'top') {
-      const lockedCz = cz
+      // Top handle: drag raises/lowers centerZ (the deck); heightM compensates
+      // so the floor stays put. Clamp so heightM stays above MIN_HEIGHT_M.
+      const lockedFloorZ = floorZ
       updateFromHit = (p, settled) => {
-        const newTopZ = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
-        const newHeight = Math.max(MIN_HEIGHT_M, newTopZ - lockedCz)
+        const raw = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
+        let newCz = raw
+        let newHeight = newCz - lockedFloorZ
+        if (newHeight < MIN_HEIGHT_M) {
+          newHeight = MIN_HEIGHT_M
+          newCz = lockedFloorZ + MIN_HEIGHT_M
+        }
         onChange(
-          { centerX: lockedCx, centerY: lockedCy, centerZ: lockedCz, yawDeg: lockedYaw, heightM: newHeight },
+          { centerX: lockedCx, centerY: lockedCy, centerZ: newCz, yawDeg: lockedYaw, heightM: newHeight },
           settled,
         )
       }
     } else {
-      // Floor handle: drag raises/lowers centerZ; heightM compensates so the
-      // top face stays put. Clamp so heightM stays above MIN_HEIGHT_M.
-      const lockedTopZ = cz + h
+      // Floor handle: changes only the thickness; the deck (centerZ) stays put.
+      const lockedCz = cz
       updateFromHit = (p, settled) => {
-        const raw = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
-        let newCz = raw
-        let newHeight = lockedTopZ - newCz
-        if (newHeight < MIN_HEIGHT_M) {
-          newHeight = MIN_HEIGHT_M
-          newCz = lockedTopZ - MIN_HEIGHT_M
-        }
+        const newFloorZ = snapActiveRef?.current ? snap(p.y, SNAP_DISTANCE_M) : p.y
+        const newHeight = Math.max(MIN_HEIGHT_M, lockedCz - newFloorZ)
         onChange(
-          { centerX: lockedCx, centerY: lockedCy, centerZ: newCz, yawDeg: lockedYaw, heightM: newHeight },
+          { centerX: lockedCx, centerY: lockedCy, centerZ: lockedCz, yawDeg: lockedYaw, heightM: newHeight },
           settled,
         )
       }
@@ -200,6 +203,8 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
     const handleR3F = r3fRotations[idx]
     const { x: handleLx, y: handleLy } = fromThree(handleR3F)
     const startAngle = Math.atan2(handleLy - lockedCy, handleLx - lockedCx)
+    // The rotation handles sit on the deck (a deck at 0 hangs below the stage
+    // floor, where a handle would be hidden), so the drag plane does too.
     const plane = new Plane(PLANE_NORMAL_UP, -lockedCz)
 
     const updateFromHit = (p: Vector3, settled: boolean) => {

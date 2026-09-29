@@ -13,7 +13,6 @@ interface StageRegionMeshesProps {
   regions: StageRegionDto[]
   selectedUuid?: string | null
   editMode?: boolean
-  showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
   /** Body drag emits a horizontal move (centerX/Y change, everything else
    *  unchanged). Only present in edit mode; absent disables body drag. */
@@ -29,7 +28,6 @@ export function StageRegionMeshes({
   regions,
   selectedUuid,
   editMode,
-  showLabel,
   onClick,
   onMove,
   snapActiveRef,
@@ -44,7 +42,6 @@ export function StageRegionMeshes({
           region={region}
           selected={region.uuid === selectedUuid}
           editMode={editMode}
-          showLabel={showLabel}
           onClick={onClick}
           onMove={onMove}
           snapActiveRef={snapActiveRef}
@@ -60,7 +57,6 @@ interface RegionMeshProps {
   region: StageRegionDto
   selected: boolean
   editMode?: boolean
-  showLabel?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
   onMove?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   snapActiveRef?: React.RefObject<boolean>
@@ -94,7 +90,6 @@ function RegionMesh({
   region,
   selected,
   editMode,
-  showLabel,
   onClick,
   onMove,
   snapActiveRef,
@@ -113,9 +108,12 @@ function RegionMesh({
   const h = region.heightM ?? 1
   const yawDeg = region.yawDeg ?? 0
 
-  // toThree swizzles lighting (X, Y, Z) → R3F (X, Z, -Y); region centre
-  // is the floor of the box so we lift the box up by half its height.
-  const pos = toThree(cx, cy, cz + h / 2)
+  // toThree swizzles lighting (X, Y, Z) → R3F (X, Z, -Y). `centerZ` is the
+  // platform's top surface (the backend's meaning, `worldCornersFor`'s), so the
+  // box hangs *down* from it: its centre is half a thickness below.
+  const pos = toThree(cx, cy, cz - h / 2)
+  // Just above the deck, in the box's own frame (its origin is the box centre).
+  const labelOffset = useMemo<[number, number, number]>(() => [0, h / 2 + 0.05, 0], [h])
 
   const shift = useMemo(() => hueShiftForUuid(region.uuid), [region.uuid])
   const active = selected || (!!editMode && hovered)
@@ -166,9 +164,9 @@ function RegionMesh({
       <boxGeometry args={[w, h, d]} />
       <meshStandardMaterial color={fillColor} transparent opacity={active ? 0.38 : 0.28} />
       <Edges color={edgeColor} />
-      {showLabel && (
-        <StageLabel position={[0, h / 2 + 0.05, 0]}>{region.name}</StageLabel>
-      )}
+      <StageLabel position={labelOffset} kind="position" emphasised={active}>
+        {region.name}
+      </StageLabel>
     </mesh>
   )
 }

@@ -182,8 +182,9 @@ export const PRISM_FACETS = 3
 
 /**
  * Facet count of the prism currently in the beam; 0 = prism out. Clamped to
- * `MAX_PRISM_LOBES` — the renderer allocates exactly that many lobes per
- * fixture, so a larger return value would index into the next slot's block.
+ * `MAX_PRISM_LOBES`, the most lobes the renderer gives any slot (a prism
+ * fixture's — see `emitterNeedsFor`). The director clamps again to the slot's
+ * own block, and the emitter handle drops a write past it.
  *
  * Prefers `prismFacets` declared on the option. On an annotated wheel a null
  * option means "prism out" (the OFF bands); only a wholly unannotated wheel

@@ -149,7 +149,20 @@ export function Stage2DView({
   const { data: regions } = useStageRegionListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
 
-  const fitTo = useMemo(() => projectionExtent(projection, dims), [projection, dims])
+  // The lowest region floor, to the whole metre below it: regions hang down from their deck, and
+  // the elevations must fit a deck at 0 or a pit. Whole metres so that dragging a region's height
+  // refits the view only when it crosses a metre, not on every frame of the drag.
+  const regionFloorZ = useMemo(
+    () =>
+      Math.floor(
+        Math.min(0, ...(regions ?? []).map((r) => (r.centerZ ?? 0) - (r.heightM ?? 1))),
+      ),
+    [regions],
+  )
+  const fitTo = useMemo(
+    () => projectionExtent(projection, dims, regionFloorZ),
+    [projection, dims, regionFloorZ],
+  )
   const svg = useSvgMetres(fitTo)
   const [cursor, setCursor] = useState<ScreenPoint | null>(null)
   const bodyDrag = useBodyDrag2D(svg.ref, svg.toMetres)
@@ -707,7 +720,7 @@ export function Stage2DView({
             dropTargetUuid={hoverRigUuid}
             interactive
             editMode={editMode}
-            showLabels={view.labels}
+            showLabels={view.labels !== 'none'}
             mPerPx={svg.mPerPx}
             onPick={onRiggingPointerDown}
           />
@@ -723,7 +736,7 @@ export function Stage2DView({
             fixtures={drawnPoints}
             selectedKey={selectedPatchKey}
             selectedKeys={selectedKeys}
-            showLabels={view.labels}
+            showLabels={view.labels !== 'none'}
             mPerPx={svg.mPerPx}
             interactive
             editMode={editMode}

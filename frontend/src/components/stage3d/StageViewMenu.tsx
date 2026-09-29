@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -17,13 +18,25 @@ import {
   isVisSource,
   type VisSource,
 } from '@/hooks/useVisSource'
-import type { StageViewFlags } from './useStageView'
+import type { StageViewFlags, StageViewToggle } from './useStageView'
+import {
+  STAGE_LABEL_MODES,
+  STAGE_LABEL_MODE_LABELS,
+  isStageLabelMode,
+  type StageLabelMode,
+} from './stageLabels'
 
 interface StageViewMenuProps {
   flags: StageViewFlags
-  setFlag: <K extends keyof StageViewFlags>(key: K, value: boolean) => void
+  setFlag: (key: StageViewToggle, value: boolean) => void
+  setLabelMode: (mode: StageLabelMode) => void
   /** Flags with no meaning in the current view — e.g. beam cones in a 2D plot. */
-  hide?: ReadonlyArray<keyof StageViewFlags>
+  hide?: ReadonlyArray<StageViewToggle>
+  /**
+   * The 3D view's *Test recovery*: drops the WebGL context the way Safari does under memory
+   * pressure, so the paused state and *Restore* can be exercised on purpose. Absent in 2D.
+   */
+  onTestRecovery?: () => void
   /** Which layer of the lighting cascade the stage draws. */
   visSource: VisSource
   setVisSource: (next: VisSource) => void
@@ -37,12 +50,14 @@ interface StageViewMenuProps {
 export function StageViewMenu({
   flags,
   setFlag,
+  setLabelMode,
   hide,
+  onTestRecovery,
   visSource,
   setVisSource,
   sourceStatus,
 }: StageViewMenuProps) {
-  const hidden = (key: keyof StageViewFlags) => hide?.includes(key) ?? false
+  const hidden = (key: StageViewToggle) => hide?.includes(key) ?? false
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -103,12 +118,33 @@ export function StageViewMenu({
         >
           Regions
         </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem
-          checked={flags.labels}
-          onCheckedChange={(v) => setFlag('labels', !!v)}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Labels</DropdownMenuLabel>
+        <DropdownMenuRadioGroup
+          value={flags.labels}
+          onValueChange={(v) => {
+            if (isStageLabelMode(v)) setLabelMode(v)
+          }}
         >
-          Labels
-        </DropdownMenuCheckboxItem>
+          {STAGE_LABEL_MODES.map((mode) => (
+            <DropdownMenuRadioItem key={mode} value={mode}>
+              {STAGE_LABEL_MODE_LABELS[mode]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {onTestRecovery && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onTestRecovery}>
+              <span className="flex flex-col gap-0.5">
+                <span>Test recovery</span>
+                <span className="text-xs text-muted-foreground">
+                  Drops the 3D context the way Safari does under memory pressure
+                </span>
+              </span>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

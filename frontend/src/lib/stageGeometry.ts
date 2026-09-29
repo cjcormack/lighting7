@@ -75,9 +75,11 @@ export function localRotationOffsets(
 
 /**
  * The region's 8 world corners in lighting coords — indices 0-3 on the floor,
- * 4-7 directly above them. `centerZ` is the **floor** of the box, not its
- * midpoint (matching StageRegionMeshes), so the top face sits at
- * `centerZ + heightM`.
+ * 4-7 directly above them. `centerZ` is the **top surface** of the box — the
+ * platform's deck, the backend's meaning (`models/stageRegions.kt`) and the one
+ * the aim tool and the MCP schema use — so the box hangs down from it and its
+ * floor sits at `centerZ - heightM`. "Main stage" at 0 with 0.95 m of thickness
+ * is a deck flush with 0, not a slab standing 0.95 m proud of it.
  */
 export function worldCornersFor(region: StageRegionDto): Array<[number, number, number]> {
   const cx = region.centerX ?? 0
@@ -88,8 +90,8 @@ export function worldCornersFor(region: StageRegionDto): Array<[number, number, 
   const d = region.depthM ?? 1
   const yaw = MathUtils.degToRad(region.yawDeg ?? 0)
   const xys = localCorners(w, d).map(([lx, ly]) => rotateXY(lx, ly, yaw))
-  const floor: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz])
-  const top: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz + h])
+  const floor: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz - h])
+  const top: Array<[number, number, number]> = xys.map(([rx, ry]) => [cx + rx, cy + ry, cz])
   return [...floor, ...top]
 }
 

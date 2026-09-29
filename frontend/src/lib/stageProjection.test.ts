@@ -182,6 +182,23 @@ describe("projectionExtent", () => {
       }
     }
   })
+
+  it("reaches below the deck to a floor it is given, and only below", () => {
+    // A region hangs down from its deck, so a deck at 0 or a pit sits below the envelope.
+    expect(projectionExtent(STAGE_PROJECTIONS.front, DIMS, -2)).toEqual({
+      hMin: -5,
+      hMax: 5,
+      vMin: -6,
+      vMax: 2,
+    })
+    expect(projectionExtent(STAGE_PROJECTIONS.front, DIMS, 3)).toEqual(
+      projectionExtent(STAGE_PROJECTIONS.front, DIMS),
+    )
+    // Plan has no Z axis on screen, so it is unchanged.
+    expect(projectionExtent(STAGE_PROJECTIONS.plan, DIMS, -2)).toEqual(
+      projectionExtent(STAGE_PROJECTIONS.plan, DIMS),
+    )
+  })
 })
 
 describe("visibleExtent", () => {

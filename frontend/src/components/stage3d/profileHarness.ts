@@ -189,7 +189,8 @@ function makeRegions(stageW: number, stageD: number): StageRegionDto[] {
       name: `Riser ${i + 1}`,
       centerX: cx,
       centerY: cy,
-      centerZ: 0,
+      // `centerZ` is a riser's top surface; standing on the deck, that is its height.
+      centerZ: h,
       widthM: w,
       depthM: d,
       heightM: h,

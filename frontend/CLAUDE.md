@@ -217,6 +217,14 @@ stage read path, adding a source, or relying on what `ProgrammerState.channels` 
 is the backend's channel *sideband*, not the programmer's channel output, and mistaking the two is
 the bug that doc exists to prevent.
 
+**The 3D canvas renders on demand** (`frameloop="demand"`), so anything added to the scene that
+changes the picture without changing an R3F prop — an imperative material write, an emitter buffer
+write, a uniform — must call `invalidate` (`useStageInvalidate` from `stage3d/stageInvalidate.tsx`),
+or it shows only when something else happens to draw a frame. The same doc's §"The 3D renderer"
+lists what already asks, and covers the other renderer rules: no MSAA in the composer, DPR at 1.5,
+context-loss recovery, emitters sized by the rig, region receivers placed by uniforms, regions
+hanging down from `centerZ` (the top surface), dark-glass lenses, and the one DOM label layer.
+
 **Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*
 besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
 height, sent to `POST /programmer/aim` for the selected moving heads — under the single fixture's
