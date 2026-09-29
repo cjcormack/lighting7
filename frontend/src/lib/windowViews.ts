@@ -1,16 +1,19 @@
 import { pathHasSegment } from './navMatch'
 import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskWindow'
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
+import { STAGE_VIEWPOINTS, STAGE_VIEWPOINT_LABELS, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
- * live views and the two libraries. A `windows.show` carries a **route path**, so this is the
- * vocabulary that turns a picker's choice into one and a row's `view` back into a label.
+ * live views, the Stage view and the two libraries. A `windows.show` carries a **route path**, so
+ * this is the vocabulary that turns a picker's choice into one and a row's `view` back into a label.
  *
- * Six literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
+ * Seven literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
  * entry's `pathMatch` answers "which sidebar row is lit" and has already diverged from "what is
  * this view called" once (`/templates` carries four ⌘K entries on one `pathMatch`). The order is
- * `ViewSwitcher`'s for the four, then the two libraries.
+ * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
+ * viewpoint), then the two libraries. Stage is not a live view — it has no `ShowHeader` and no
+ * immersive — so it carries its viewpoint and nothing else.
  *
  * Matching is [pathHasSegment], never `startsWith`: `/programmer` must not answer for `/program`
  * (the legacy redirect) and `/fx-library` must not answer for `/busk`'s old `/fx`.
@@ -28,6 +31,7 @@ export interface WindowView {
    * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
    * (busk-chrome plan D9): immersive is a window's fact, but it rides *here* because a top-level
    * announce key would drop the frame, and it is drawn on the row as the view's Chrome segment.
+   * Stage carries [STAGE_VIEWPOINT_OPTION].
    */
   options?: readonly WindowViewOption[]
 }
@@ -91,6 +95,19 @@ export const IMMERSIVE_OPTION: WindowViewOption = {
   valueLabels: { off: 'App', on: 'Immersive' },
 }
 
+/**
+ * The Stage view's camera, *Viewpoint · Orbit | Eye | Plan | Front | Side* on the row (stage-view
+ * plan session 1; `Screens.dc.html` §1). The target applies it through `lib/stageViewpoint.ts`.
+ * Session 2 adds saved views and seats, and the segment becomes a picker then.
+ */
+export const STAGE_VIEWPOINT_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_VIEWPOINT,
+  label: 'Viewpoint',
+  kind: 'enum',
+  values: STAGE_VIEWPOINTS,
+  valueLabels: STAGE_VIEWPOINT_LABELS,
+}
+
 export const WINDOW_VIEWS: readonly WindowView[] = [
   { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION] },
   { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION] },
@@ -107,24 +124,27 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
       IMMERSIVE_OPTION,
     ],
   },
+  { id: 'stage', label: 'Stage', segment: '/stage', options: [STAGE_VIEWPOINT_OPTION] },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'templates', label: 'Templates', segment: '/templates' },
 ]
 
 /**
  * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
- * on the busk view, and `immersive` under every live view; nothing at all — the key absent, not
- * an empty map — for a view that contributes none, so a window on a library still sends the
- * five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which views carry the key
- * without a router.
+ * on the busk view, the viewpoint on the Stage view, and `immersive` under every live view; nothing
+ * at all — the key absent, not an empty map — for a view that contributes none, so a window on a
+ * library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which
+ * views carry the key without a router.
  */
 export function announcedViewOptions(
   view: WindowView | null,
   buskOptions: Readonly<Record<string, string>>,
   immersive: Immersive,
+  stageOptions: Readonly<Record<string, string>> = {},
 ): Record<string, string> | undefined {
   if (view?.options == null) return undefined
-  const options: Record<string, string> = view.id === 'busk' ? { ...buskOptions } : {}
+  const options: Record<string, string> =
+    view.id === 'busk' ? { ...buskOptions } : view.id === 'stage' ? { ...stageOptions } : {}
   if (view.options.some((option) => option.key === VIEW_OPTION_IMMERSIVE)) options[VIEW_OPTION_IMMERSIVE] = immersive
   return options
 }
@@ -135,7 +155,7 @@ export function windowViewPath(view: WindowView, projectId: number): string {
 }
 
 /**
- * Which of the six a route path is showing, or null for any other page. Longest segment wins so
+ * Which of the seven a route path is showing, or null for any other page. Longest segment wins so
  * a future `/show/…` sibling still reads as Show, not as whatever shorter segment it also ends in.
  */
 export function windowViewOf(pathname: string): WindowView | null {
@@ -147,7 +167,7 @@ export function windowViewOf(pathname: string): WindowView | null {
   return best
 }
 
-/** A label for any route: one of the six by name, else the path itself. */
+/** A label for any route: one of the seven by name, else the path itself. */
 export function windowViewLabel(pathname: string): string {
   return windowViewOf(pathname)?.label ?? pathname
 }

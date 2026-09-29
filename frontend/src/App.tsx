@@ -65,8 +65,9 @@ import { isPublicPath } from "./lib/publicPath";
 // what decides whether a router renders at all, and neither may sit behind a chunk fetch.
 //
 // This does *not* take `three` itself out of the entry chunk: `lib/stageCoords.ts` is Three-typed
-// and reaches non-3D code through `hooks/useProjectedPatches`, which the Layout's stage overview
-// panel uses. Separating those helpers is a job of its own.
+// and reaches non-3D code the app shell mounts — the Layout's Positions panel derives its rows
+// through it (`components/positions/positionRows.ts`). Separating those helpers is a job of its
+// own; the panel's Plan tab, which does need three, is its own chunk.
 const Stage = React.lazy(() => import("./routes/Stage").then((m) => ({ default: m.Stage })));
 const StageRedirect = React.lazy(() =>
   import("./routes/Stage").then((m) => ({ default: m.StageRedirect })),

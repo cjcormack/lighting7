@@ -330,7 +330,9 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 `viewOptions` is a window's **per-view options** — for the busk view its `focus`,
 `sheet` and page facts (busk-further plan D13), and under every live view `immersive` (`on` |
 `off`, busk-chrome plan D9: a window's fact, riding here because a top-level announce key would
-drop the frame) — announced as a free `String → String` map and carried back on `windows.state`
+drop the frame), and for the Stage view its camera, `viewpoint` (`orbit` | `eye` | `plan` |
+`front` | `side`, stage-view plan session 1; the Stage view is not a live view and carries no
+`immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how

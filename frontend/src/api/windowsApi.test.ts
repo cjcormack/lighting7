@@ -48,6 +48,8 @@ describe('the announce', () => {
         expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows'])
         continue
       }
+      // Stage is not a live view: its options are its own (below), and never immersive.
+      if (view.id === 'stage') continue
       // Six keys and never a seventh: immersive rides inside viewOptions, not beside it.
       expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
       expect((frame.viewOptions as Record<string, string>).immersive, view.id).toBe('on')
@@ -56,6 +58,17 @@ describe('the announce', () => {
     expect(announcedViewOptions(windowViewOf('/projects/1/busk'), busk, 'off')).toEqual({ ...busk, immersive: 'off' })
     expect(announcedViewOptions(windowViewOf('/projects/1/show'), busk, 'off')).toEqual({ immersive: 'off' })
     expect(announcedViewOptions(windowViewOf('/projects/1/fixtures'), busk, 'on')).toBeUndefined()
+  })
+
+  it('carries the Stage view’s viewpoint inside viewOptions and nothing else — no seventh key, no immersive (stage-view plan session 1)', () => {
+    const busk = { focus: 'pads', sheet: 'none', pageFollows: 'true' }
+    const options = announcedViewOptions(windowViewOf('/projects/1/stage'), busk, 'on', { viewpoint: 'front' })
+    expect(options).toEqual({ viewpoint: 'front' })
+    const frame = announceFrame({ ...ME, view: '/projects/1/stage', viewOptions: options })
+    expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
+    // …and the viewpoint rides nowhere else.
+    expect(announcedViewOptions(windowViewOf('/projects/1/busk'), busk, 'off', { viewpoint: 'front' })).toEqual({ ...busk, immersive: 'off' })
+    expect(announcedViewOptions(windowViewOf('/projects/1/looks'), busk, 'off', { viewpoint: 'front' })).toBeUndefined()
   })
 
   it('is sent at once while the socket is open, as the frame the desk declares', () => {

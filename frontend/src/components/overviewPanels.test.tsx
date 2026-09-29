@@ -60,7 +60,7 @@ describe('overview panel registry', () => {
     expect(screen.getByTestId('toolbar').children).toHaveLength(4)
     expect(
       screen.getAllByRole('listitem').map((li) => li.textContent),
-    ).toEqual(['Stage Overview', 'Fixture Overview', 'Speed Master Overview', 'Cue Slots'])
+    ).toEqual(['Positions', 'Fixture Overview', 'Speed Master Overview', 'Cue Slots'])
   })
 
   it('pairs each panel with its own visibility, never by array position', () => {
@@ -73,7 +73,7 @@ describe('overview panel registry', () => {
     fireEvent.click(screen.getByTestId('toolbar').children[2])
 
     expect(paletteRow('Speed Master Overview').dataset.visible).toBe('true')
-    expect(paletteRow('Stage Overview').dataset.visible).toBe('false')
+    expect(paletteRow('Positions').dataset.visible).toBe('false')
     expect(paletteRow('Fixture Overview').dataset.visible).toBe('false')
     expect(paletteRow('Cue Slots').dataset.visible).toBe('false')
   })

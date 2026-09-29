@@ -165,7 +165,10 @@ const CONE_FRAGMENT_SHADER = /* glsl */ `
       }
     }
 
-    vec3 V = normalize(-vViewPos);
+    // The view direction in view space: towards the eye under perspective, and the one constant
+    // axis under an orthographic section (whose eye is at infinity), so the rim fade does not skew
+    // across an ortho frame.
+    vec3 V = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-vViewPos);
     float ndotv = abs(dot(normalize(vViewNormal), V));
     // Same edge rule as the pools: with a focal distance the shell sharpens
     // where the fragment sits near the focal plane, so a tightly-focused beam
@@ -479,8 +482,15 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   }
 
   void main() {
+    // The pixel's view ray. A perspective camera's rays fan out from its position; an orthographic
+    // section's are parallel, along the camera's forward axis, each starting on the camera plane
+    // (the section plane) — so t >= 0 below is also the section's cut.
     vec3 camPos = cameraPosition;
     vec3 rayDir = normalize(vWorldPos - camPos);
+    if (isOrthographic) {
+      rayDir = -normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]));
+      camPos = vWorldPos - rayDir * dot(vWorldPos - cameraPosition, rayDir);
+    }
     vec3 O = vBeamOrigin;
     vec3 d = vBeamDir;
 

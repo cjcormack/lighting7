@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { RotateCcw } from 'lucide-react'
-import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
+import { Edges, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useProjectQuery } from '../../store/projects'
 import { Bloom } from './Bloom'
@@ -21,6 +21,14 @@ import { emitterNeedsFor } from './emitterNeeds'
 import { StageLabelContext, StageLabelDriver } from './StageLabel'
 import { StageLabelStore } from './stageLabels'
 import { StageInvalidateProvider } from './stageInvalidate'
+import { StageCameraRig, type StageCameraControls, type StageCameraHandle } from './StageCameraRig'
+import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
+import {
+  STAGE_VIEWPOINT_LABELS,
+  STAGE_VIEWPOINT_NOTES,
+  type StageViewpoint,
+} from '../../lib/stageViewpoint'
+import type { LightingPoint } from '../../lib/stageProjection'
 // drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
 // reach. This is the Liberation Sans that react-pdf's pinned pdf.js ships; importing it as an
 // asset URL bundles it with the app (the precedent is ScriptViewer's pdf.js worker).
@@ -35,6 +43,7 @@ import {
   normaliseSignedDeg,
   patchPlacementFromWorld,
   rigEuler,
+  worldPositionLighting,
 } from '../../lib/stageCoords'
 import type {
   PatchPlacementUpdate,
@@ -47,6 +56,16 @@ import { formatTriple } from '../../lib/utils'
 import { NO_RAYCAST } from './raycast'
 
 const EMPTY_RIGGINGS: RiggingDto[] = []
+/** The snap state of a view that edits nothing. */
+const NO_SNAP: SnapGrid = {
+  step: 0.25,
+  setStep: () => {},
+  snapOn: false,
+  setSnapOn: () => {},
+  active: false,
+  activeRef: { current: false },
+  snapValue: (v) => v,
+}
 const EMPTY_PATCHES: FixturePatch[] = []
 const EMPTY_REGIONS: StageRegionDto[] = []
 
@@ -77,6 +96,15 @@ export interface StageRecovery {
   testContextLoss(): void
 }
 
+/**
+ * The route's handle on the camera: *Frame the selection* (F). Points are lighting coordinates;
+ * whichever camera is current moves in its own way — the orbit pulls in, the eye turns its head, a
+ * section slides within its plane.
+ */
+export interface StageFraming {
+  frame(points: readonly LightingPoint[]): void
+}
+
 interface Stage3DProps {
   projectId: number
   editMode: boolean
@@ -89,8 +117,9 @@ interface Stage3DProps {
   /** Which TransformControls mode the fixture gizmo runs in. The parent owns
    *  this so it can drive both a manual toggle button and a held-Alt key. */
   gizmoMode?: GizmoMode
-  /** Grid-snap state, owned by the route and shared with the 2D editor. */
-  snap: SnapGrid
+  /** Grid-snap state, owned by the route and shared with the 2D editor. Absent for a view that
+   *  cannot edit (the Positions panel's plan), which snaps nothing. */
+  snap?: SnapGrid
   /** Suppress the bottom-center patch info overlay — set when the parent shows
    *  the right-hand fixture control card, so the name isn't shown twice. */
   hidePatchSelectionInfo?: boolean
@@ -101,6 +130,18 @@ interface Stage3DProps {
   onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
   /** Filled while the canvas is mounted; see [StageRecovery]. */
   recoveryRef?: React.RefObject<StageRecovery | null>
+  /** Which camera draws the scene (`lib/stageViewpoint.ts`). */
+  viewpoint?: StageViewpoint
+  /**
+   * Keep this window's camera poses in `sessionStorage`, so a remount — a route change, *Restore* —
+   * lands where the camera was left. The Stage route's canvas only; an embedded view (the Positions
+   * panel's plan) is a second camera and must not move the Stage view's.
+   */
+  persistCamera?: boolean
+  /** Draw the viewpoint's name and how to drive it over the canvas, top right. */
+  showViewpointCaption?: boolean
+  /** Filled while the canvas is mounted; see [StageFraming]. */
+  framingRef?: React.RefObject<StageFraming | null>
 }
 
 export function Stage3D({
@@ -112,13 +153,17 @@ export function Stage3D({
   placementZ,
   gizmoMode = 'translate',
   hidePatchSelectionInfo = false,
-  snap,
+  snap = NO_SNAP,
   onSelectionChange,
   onPlacementClick,
   onPatchPlacementChange,
   onRegionPositionChange,
   onRiggingPositionChange,
   recoveryRef,
+  viewpoint = 'orbit',
+  persistCamera = false,
+  showViewpointCaption = false,
+  framingRef,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
   const stageW = project?.stageWidthM ?? 10
@@ -131,7 +176,6 @@ export function Stage3D({
     stageH,
   )
 
-  const cameraDistance = Math.max(stageW, stageD) * 1.4
   const gridSize = Math.max(stageW, stageD) * 1.6
   // Stable identity: StageEmitters rebuilds its instance buffers when this
   // changes, so it must not be a fresh object every render.
@@ -165,7 +209,10 @@ export function Stage3D({
   // patchTarget feeds TransformControls for the patch translate gizmo. Region
   // and rigging never use this — their interactions are entirely handle-based.
   const [patchTarget, setPatchTarget] = useState<Object3D | null>(null)
-  const orbitRef = useRef<React.ComponentRef<typeof OrbitControls>>(null!)
+  // The current camera's controls — orbit, eye or section — which a drag switches off while it
+  // holds the pointer. Lent by `StageCameraRig`.
+  const orbitRef = useRef<StageCameraControls | null>(null)
+  const cameraHandleRef = useRef<StageCameraHandle | null>(null)
   // Snapping state is owned by the route and shared with the 2D editor, so one
   // header control governs both views and Shift means the same thing in each.
   const snapActive = snap.active
@@ -240,6 +287,31 @@ export function Stage3D({
   // own, so `FixtureModel` composes it through the placement's rigging and lights it from the
   // patch's channels. Memoised so each lantern's patch object is stable across renders.
   const lanterns = useMemo(() => lanternsFor(visiblePatches), [visiblePatches])
+
+  // The whole scene as one box, for the orthographic sections' planes and fit. Keyed on the lists,
+  // never on channels, so a section the operator has not moved refits when the rig changes and not
+  // when a fader does.
+  const sceneBounds = useMemo(() => {
+    const points: LightingPoint[] = []
+    for (const patch of [...visiblePatches, ...lanterns.map((l) => l.patch)]) {
+      const at = worldPositionLighting(patch, safeRiggings)
+      if (at) points.push(at)
+    }
+    return sceneBoundsLighting(stageDims, safeRiggings, safeRegions, points)
+  }, [visiblePatches, lanterns, safeRiggings, safeRegions, stageDims])
+  // Where the orbit camera stands until it is moved; read once, when the orbit rig mounts.
+  const defaultOrbit = useMemo(() => defaultOrbitPose(stageDims), [stageDims])
+
+  useEffect(() => {
+    if (!framingRef) return
+    framingRef.current = {
+      frame: (points) =>
+        cameraHandleRef.current?.frame(points.map(({ x, y, z }) => [x, z, -y] as const)),
+    }
+    return () => {
+      framingRef.current = null
+    }
+  }, [framingRef])
 
   // What each emitter slot needs — fixtures first, then lanterns, in the slot order below. A
   // fresh layout every render is fine: StageEmitters rebuilds only when its signature changes.
@@ -345,7 +417,6 @@ export function Stage3D({
         dpr={[1, 1.5]}
         frameloop="demand"
         gl={{ toneMapping: NoToneMapping, antialias: true }}
-        camera={{ position: [0, stageH * 0.7, cameraDistance], fov: 45 }}
         style={{ background: '#0b0e14' }}
         onPointerMissed={handlePointerMissed}
       >
@@ -417,13 +488,20 @@ export function Stage3D({
             onDragEnd={enableOrbit}
           />
         )}
+        <StageCameraRig
+          viewpoint={viewpoint}
+          defaultOrbit={defaultOrbit}
+          bounds={sceneBounds}
+          persist={persistCamera}
+          controlsRef={orbitRef}
+          handleRef={cameraHandleRef}
+        />
         <Controls
           orbitRef={orbitRef}
           patchTarget={editMode ? patchTarget : null}
           selection={selection}
           patches={patches ?? null}
           riggings={safeRiggings}
-          stageH={stageH}
           snapActive={snapActive}
           snapStepM={snap.step}
           gizmoMode={gizmoMode}
@@ -439,6 +517,7 @@ export function Stage3D({
         aria-hidden
         className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
       />
+      {showViewpointCaption && !contextLost && <ViewpointCaption viewpoint={viewpoint} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
@@ -491,13 +570,22 @@ function SelectionInfo({
   )
 }
 
+/** The camera's name and how to drive it, over the canvas's top-right corner (`Stage.dc.html`). */
+function ViewpointCaption({ viewpoint }: { viewpoint: StageViewpoint }) {
+  return (
+    <div className="pointer-events-none absolute right-3 top-3 max-w-[calc(100%-1.5rem)] truncate rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur">
+      <span className="font-semibold">{STAGE_VIEWPOINT_LABELS[viewpoint]}</span>
+      <span className="ml-1.5 text-muted-foreground">{STAGE_VIEWPOINT_NOTES[viewpoint]}</span>
+    </div>
+  )
+}
+
 interface ControlsProps {
-  orbitRef: React.RefObject<React.ComponentRef<typeof OrbitControls>>
+  orbitRef: React.RefObject<StageCameraControls | null>
   patchTarget: Object3D | null
   selection: Selection
   patches: FixturePatch[] | null
   riggings: RiggingDto[]
-  stageH: number
   snapActive: boolean
   snapStepM: number
   gizmoMode: GizmoMode
@@ -513,7 +601,6 @@ function Controls({
   selection,
   patches,
   riggings,
-  stageH,
   snapActive,
   snapStepM,
   gizmoMode,
@@ -664,7 +751,6 @@ function Controls({
 
   return (
     <>
-      <OrbitControls ref={orbitRef} makeDefault enableDamping target={[0, stageH / 4, 0]} />
       <group ref={setProxy} />
       {patchTarget && proxy && (
         <TransformControls

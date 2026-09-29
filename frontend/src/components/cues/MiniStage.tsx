@@ -20,7 +20,8 @@ interface MiniStageProps {
 }
 
 /**
- * Compact stage map matching the look of the global `StageOverviewPanel` —
+ * Compact stage map matching the look of the old global `StageOverviewPanel` (Positions since the
+ * stage-view plan's session 1) —
  * grid backdrop, UPSTAGE/DOWNSTAGE labels, crosshair axes — but rendering the
  * **simulated cue state** (targeted fixtures glow; everything else is dimmed)
  * rather than the live fixture state.

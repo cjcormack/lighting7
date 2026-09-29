@@ -295,6 +295,19 @@ describe('ScreensSheet', () => {
       expect(within(rowFor('Screen 1')).queryByRole('radiogroup', { name: /Focus|Sheet/ })).toBeNull()
     })
 
+    it('draws a Stage row’s Viewpoint from what it announced, sets it by a viewOptions frame, and no Chrome segment (stage-view plan session 1)', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'front' } })
+      render(<ScreensSheet />)
+      const hall = rowFor('Hall')
+      const viewpoint = within(hall).getByRole('radiogroup', { name: 'Viewpoint on Hall' })
+      expect(within(viewpoint).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Orbit', 'Eye', 'Plan', 'Front', 'Side'])
+      expect(within(viewpoint).getByRole('radio', { name: 'Front' })).toHaveAttribute('aria-checked', 'true')
+      // Stage is not a live view: no immersive to set.
+      expect(within(hall).queryByRole('radiogroup', { name: 'Chrome on Hall' })).toBeNull()
+      fireEvent.click(within(viewpoint).getByRole('radio', { name: 'Plan' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { viewpoint: 'plan' } }])
+    })
+
     it('draws nothing at all on a library row', () => {
       registry.windows[2] = row('s-3', 'w-3', 'Chris’s iPad', { view: '/projects/1/looks' })
       render(<ScreensSheet />)

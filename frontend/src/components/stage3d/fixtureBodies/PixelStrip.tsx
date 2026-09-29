@@ -76,7 +76,10 @@ const GLOW_FRAGMENT = /* glsl */ `
   varying vec3 vViewPos;
   varying float vAlong;
   void main() {
-    vec3 V = normalize(-vViewPos);
+    // The view direction in view space: towards the eye under perspective, and the one constant
+    // axis under an orthographic section (whose eye is at infinity), so the rim fade does not skew
+    // across an ortho frame.
+    vec3 V = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-vViewPos);
     float radial = pow(abs(dot(normalize(vViewNormal), V)), ${GLOW_EDGE_SOFTNESS.toFixed(2)});
     // Bright at the lens (cone apex, uv.y≈1) fading to black at the wide far end
     // (base, uv.y≈0). Clamp the base: pow() of a negative (out-of-range uv) is

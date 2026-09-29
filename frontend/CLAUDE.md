@@ -205,8 +205,9 @@ Raw DMX channel control per universe. Shows all 512 channels with current values
 
 ### Stage views
 
-Three surfaces render live fixture state: the 3D canvas, the 2D Plan/Front/Side plot, and the
-`StageOverviewPanel` mini-stage. All three read through a **`ChannelSource`** rather than
+Three surfaces render live fixture state: the 3D canvas, the 2D Plan/Front/Side plot (Edit only, now),
+and the **Positions** panel behind the header's stage toggle. All three read through a
+**`ChannelSource`** rather than
 `lightingApi.channels` directly, so the operator can point them at Output / Output + Programmer /
 Programmer only — which is what makes Blind previewable. Colour and intensity come from one shared
 colour-source dispatch (`components/fixtures/fixtureAppearance.tsx`); the 3D path keeps a separate
@@ -224,6 +225,24 @@ or it shows only when something else happens to draw a frame. The same doc's §"
 lists what already asks, and covers the other renderer rules: no MSAA in the composer, DPR at 1.5,
 context-loss recovery, emitters sized by the rig, region receivers placed by uniforms, regions
 hanging down from `centerZ` (the top surface), dark-glass lenses, and the one DOM label layer.
+
+**The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
+around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
+switches cameras, and `Stage2DView` draws a section **only while editing** (D1, until session 5's 3D
+editing parity). The viewpoint is **per window**, `lib/stageViewpoint.ts` in `sessionStorage`, and
+rides `windows.viewOptions` (§Windows, full screen and the hand); the orbit and eye poses are kept in
+`sessionStorage` too (`lib/stageCameraPoses.ts`), so a reload or a context-loss *Restore* lands where
+the camera was. F frames the selection — the Stage's own, else the desk's — and O goes back to
+Orbit. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
+`useDefaultCamera`, and the bloom composer rebuilds after the swap's frame, so `Bloom` invalidates on
+each new composer or the view sits on the old camera's picture.
+
+**Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
+rigging, upstage first, the stage edge marked, derived on every render and never stored
+(`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group
+chip dims the units outside it, and the Plan tab is `Stage3D` on the plan section, lazily imported so
+three.js stays out of the app shell. It is mounted on every route, so everything below
+`CollapsiblePanel` — queries, channel subscriptions, the canvas — unmounts while it is closed.
 
 **Aim at point** (`components/stage3d/StageAimControls.tsx`) is the Stage view's one live *write*
 besides the docked fixture panel it sits in: a stage coordinate, or a region's centre at head
@@ -3885,8 +3904,9 @@ all move). Three things about the registry (`api/windowsApi.ts`, `store/windows.
   its Chrome segment (§Windows, full screen and the hand) and the sheet never learns the word busk. The fourth command,
   **`windows.viewOptions {targetId, view, options}`**, is rebroadcast like the other three; the
   named window applies it **for that view only** — a busk frame arriving at a window on the Prompt
-  Book is ignored rather than stored for a later visit — through `applyImmersiveViewOption` and,
-  on the busk view, `applyBuskViewOptions`, and re-announces. `{sheet: 'toggle'}` flips
+  Book is ignored rather than stored for a later visit — through `applyImmersiveViewOption` on a
+  view whose descriptor carries it, `applyBuskViewOptions` on the busk view and
+  `applyStageViewOptions` on the Stage view, and re-announces. `{sheet: 'toggle'}` flips
   the fold and the last open tab (a MIDI `BuskSheetToggle`'s spelling); `{page: n}` **unlinks**
   that window onto the page exactly as arriving with `?page=` does; and **`{pageFollows}` is
   applied** since desk-follow session 3 (D6) — `'true'` pages the window with the desk again,
@@ -4022,6 +4042,16 @@ D11 holds.
 Programmer, Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `options` descriptor
 (`IMMERSIVE_OPTION`) and Busk carries it fourth — because the desk's Json is bare and a sixth
 top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
+**The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
+the libraries, carrying one option, `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
+Plan | Front | Side*), and **no immersive** — it is a window view, not a live view, so it has no
+`ShowHeader` to leave standing. `announcedViewOptions` takes the viewpoint as its fourth argument and
+sends it only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose descriptor
+carries it and the viewpoint only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`, which
+ignores a value outside the vocabulary). The Screens row draws the segment generically, ⌘K gains
+*Show Stage on <window>* and *Open Stage on another display* from the same list, and
+`windowSetupUrl` carries `viewpoint=`, which the Stage route applies on arrival and strips. Session 2
+turns the segment into a picker over saved views and seats.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
 which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
 applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving
@@ -4606,7 +4636,7 @@ path may quietly change where it lands.
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
   pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
-  every **other** window × the six views in `lib/windowViews.ts` (this window has the Navigation
+  every **other** window × the seven views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
   missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
   *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,

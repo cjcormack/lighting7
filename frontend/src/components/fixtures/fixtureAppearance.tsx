@@ -67,7 +67,7 @@ interface FixtureAppearanceProps {
  * a *different* set of value hooks — `useColourValue` wants a `ColourPropertyDescriptor`,
  * `useGroupColourValues` subscribes to a variable-length channel list, and a gel fixture needs
  * neither — so they cannot be collapsed behind one hook without breaking hook order. Splitting them
- * across leaf components gives each a fixed hook set, which is the trick `StageMarker` already used
+ * across leaf components gives each a fixed hook set, which is the trick the old `StageMarker` already used
  * internally and the reason the 2D plot went without live colour for so long.
  */
 export function FixtureAppearanceSource({

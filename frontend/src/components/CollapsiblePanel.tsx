@@ -23,8 +23,8 @@ interface CollapsiblePanelProps {
  * The open/close animation is a CSS grid-rows collapse, so the *wrapper* has to stay mounted for
  * the panel to animate out at all — which is why Layout renders all four unconditionally. The
  * body must not stay with it: a collapsed panel that keeps rendering is a live rig's worth of
- * work behind a zero-height container on every route (the mini-stage's markers re-rendering at
- * frame rate, the effects panel's beat interval, the cue-slot panel's queries and its wheel and
+ * work behind a zero-height container on every route (the Positions chips re-rendering at frame
+ * rate and its plan's canvas, the effects panel's beat interval, the cue-slot panel's queries and its wheel and
  * pointer listeners), all of it for a panel nobody can see.
  *
  * So the body is mounted while the panel is open and for one collapse's worth of time after it

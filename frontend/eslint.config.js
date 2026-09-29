@@ -116,7 +116,6 @@ export default [
       "src/store/patches.ts",
       "src/hooks/useFixtureLookup.ts",
       "src/hooks/useTargetProperties.ts",
-      "src/components/StageOverviewPanel.tsx",
       "src/components/busking/ActiveEffectSheet.tsx",
       "src/components/busking/RigBand.tsx",
       "src/components/busking/RigPalette.tsx",
