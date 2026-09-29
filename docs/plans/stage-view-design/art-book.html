@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Art of the Stage View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&display=swap">
+<style>
+/* Layout: a programme book — full-bleed plates on a blacked-out page, captions set in the margin
+   like a prompt copy, chapter heads stencilled like the side of a road case. One dark world on
+   purpose: the book is about light in a dark room. */
+:root {
+  --bg: #0e0d0c;          /* the auditorium at blackout, a warm black */
+  --panel: #171513;
+  --ink: #ece5d8;         /* programme paper */
+  --dim: #9d9387;
+  --rule: #2c2824;
+  --tungsten: #f2b86e;    /* 3200 K */
+  --exit: #3bd46e;        /* the green exit sign, used once per chapter */
+  --night: #5b78ff;
+  --display: "Big Shoulders Stencil Display", "Arial Narrow", Impact, sans-serif;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html { background: var(--bg); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 18px/1.55 var(--serif); -webkit-font-smoothing: antialiased; }
+img { max-width: 100%; display: block; }
+a { color: var(--tungsten); }
+:focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
+* { box-sizing: border-box; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 24px; }
+.measure { max-width: 64ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); }
+.eyebrow b { color: var(--exit); font-weight: 500; }
+h1, h2 { font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; line-height: 0.92; margin: 0; text-wrap: balance; }
+h2 { font-size: clamp(48px, 8vw, 104px); color: var(--ink); }
+h3 { font: 500 22px/1.25 var(--serif); margin: 0 0 8px; }
+p { margin: 0 0 14px; }
+.lede { font-size: 22px; line-height: 1.5; color: var(--ink); }
+.muted { color: var(--dim); }
+
+/* Cover */
+.cover { position: relative; }
+.cover img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; }
+.cover::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, var(--bg) 97%); pointer-events: none; }
+.cover .title { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; }
+.cover h1 { font-size: clamp(56px, 11vw, 168px); color: var(--ink); }
+.cover h1 span { color: var(--tungsten); display: block; font-size: 0.46em; letter-spacing: 0.06em; margin-bottom: 0.18em; }
+.cover .by { display: flex; gap: 20px; flex-wrap: wrap; padding-block: 16px 8px; }
+
+/* Chapters */
+.chapter { padding-block: 96px 24px; border-top: 1px solid var(--rule); }
+.chapter:first-of-type { border-top: 0; }
+.chapter header { display: grid; gap: 18px; margin-bottom: 40px; }
+
+/* Plates: image, then a caption in a narrow margin column with the plate number */
+figure { margin: 0; }
+.plate { display: grid; gap: 12px; margin-block: 32px; }
+.plate img, .fader, .cuestage { border-radius: 2px; background: #000; }
+figcaption { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; font-size: 16px; line-height: 1.5; color: var(--dim); max-width: 78ch; }
+figcaption .no { font: 500 12px/1.9 var(--mono); letter-spacing: 0.08em; color: var(--tungsten); text-transform: uppercase; }
+figcaption em { color: var(--ink); font-style: italic; }
+.bleed { margin-inline: calc(50% - 50vw); }
+.bleed figcaption { padding-inline: max(24px, calc(50vw - 620px)); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.grid2 .plate, .grid3 .plate { margin-block: 0; }
+.grid2 figcaption, .grid3 figcaption { grid-template-columns: 1fr; gap: 2px; }
+.stack { display: grid; gap: 40px; margin-block: 32px; }
+
+/* Before / after label on an image */
+.tag { position: relative; }
+.tag::before { content: attr(data-tag); position: absolute; left: 12px; top: 12px; z-index: 1; font: 500 11px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 6px 8px; background: rgba(14, 13, 12, 0.82); color: var(--ink); border: 1px solid var(--rule); }
+.tag[data-tone="now"]::before { color: var(--dim); }
+.tag[data-tone="new"]::before { color: var(--tungsten); border-color: rgba(242, 184, 110, 0.4); }
+
+/* A dimmer: the lit plate over the dark one, on a fader */
+.fader { position: relative; overflow: hidden; }
+.fader img + img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 120ms linear; }
+.faderbar { display: flex; align-items: center; gap: 14px; font: 500 12px/1 var(--mono); color: var(--dim); letter-spacing: 0.08em; text-transform: uppercase; }
+.faderbar input { flex: 1; max-width: 360px; accent-color: var(--tungsten); }
+.faderbar output { color: var(--tungsten); min-width: 4ch; font-variant-numeric: tabular-nums; }
+
+/* The cue list */
+.cuestage { position: relative; overflow: hidden; aspect-ratio: 16 / 10; }
+.cuestage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 900ms ease; }
+.cuestage img.on { opacity: 1; }
+.cuebar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.cuebar button { font: 500 13px/1 var(--mono); color: var(--dim); background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 9px 12px; cursor: pointer; }
+.cuebar button[aria-pressed="true"] { color: var(--ink); border-color: var(--tungsten); }
+.cuebar .go { color: #1b1206; background: var(--tungsten); border-color: var(--tungsten); font-weight: 500; letter-spacing: 0.1em; }
+.cuebar .now { font: 400 15px/1.4 var(--serif); color: var(--dim); margin-left: 6px; }
+
+/* Gel-swatch-book lantern library */
+.swatchbook { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-block: 28px; }
+.swatch { display: grid; grid-template-rows: 54px auto; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; background: var(--panel); }
+.swatch .chip { position: relative; }
+.swatch .chip span { position: absolute; left: 10px; bottom: 8px; font: 500 11px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: rgba(14, 13, 12, 0.8); }
+.swatch .body { padding: 10px 12px 12px; display: grid; gap: 4px; }
+.swatch .nm { font: 500 17px/1.25 var(--serif); }
+.swatch .dt { font: 400 12px/1.5 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* Tracking diagram */
+.diagram { overflow-x: auto; margin-block: 28px; }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto; }
+
+/* Positions sheet, recreated */
+.sheet { background: var(--panel); border: 1px solid var(--rule); border-radius: 3px; padding: 14px 16px; font-size: 13px; }
+.srow { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--rule); }
+.srow:first-child { border-top: 0; }
+.srow .pn { font: 500 11px/1.5 var(--mono); color: var(--tungsten); letter-spacing: 0.06em; }
+.srow .pn small { display: block; color: var(--dim); font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.c { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px 0 4px; border: 1px solid var(--rule); border-radius: 4px; font: 400 12px/1 var(--mono); color: var(--ink); background: #1c1a17; white-space: nowrap; }
+.c i { width: 14px; height: 14px; border-radius: 2px; background: #2a2724; }
+.c b { font-weight: 400; color: var(--dim); }
+.edge { text-align: center; font: 500 10px/1 var(--mono); letter-spacing: 0.3em; color: var(--dim); padding: 8px 0; border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); margin: 4px 0; }
+
+/* Colophon */
+.list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+.list li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 16px; padding: 14px 0; border-top: 1px solid var(--rule); }
+.list li span { font: 500 12px/1.8 var(--mono); color: var(--tungsten); }
+footer { padding-block: 64px 96px; color: var(--dim); font-size: 15px; }
+
+@media (max-width: 820px) {
+  body { font-size: 17px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  figcaption { grid-template-columns: 1fr; gap: 2px; }
+  .chapter { padding-block: 64px 16px; }
+  .cover img { aspect-ratio: 4 / 5; }
+}
+@media (prefers-reduced-motion: reduce) { .cuestage img, .fader img + img { transition: none; } }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <img src="plates/lanterns-lit.jpg" alt="Fifteen conventional lanterns hung on one bar, lit warm white, their beams crossing onto a boarded floor">
+  <div class="title wrap">
+    <h1><span>The Commemoration Hall</span>The art of the stage view</h1>
+    <div class="by">
+      <span class="eyebrow">Design record · 29 September 2026</span>
+      <span class="eyebrow">Project 15 · 55 patched · 45 on stage</span>
+      <span class="eyebrow">Hall 8.6 × 18.4 m</span>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="fw">
+  <header>
+    <span class="eyebrow">Foreword</span>
+    <h2 id="fw">Five asks</h2>
+  </header>
+  <div class="measure">
+    <p class="lede">The desk already knows where every lantern hangs. What it cannot show is the room they hang in, how the stage looks from a seat, or which lantern is which. This book collects the pictures made while working out how it could.</p>
+    <p>Chris asked for five things. The 3D view should model the real hall, with Claude doing the modelling. You should be able to see the stage from anywhere, a seat in the stalls included. The 2D plan should be fixed or dropped. Fixtures should look like the fixtures, with more choice for the generic dimmers and without glowing balls. And scenery, from tabs to a single prop, should be placeable and move with the show.</p>
+    <p class="muted">Every render in this book comes from the throwaway prototype beside the design record (<code>docs/plans/stage-view-design/</code>). The rig is the real patch of project 15. The hall, the set and the lantern models are estimates, made from a five-second phone video shot from the balcony.</p>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c1">
+  <header>
+    <span class="eyebrow"><b>●</b> The room</span>
+    <h2 id="c1">From a void to a hall</h2>
+  </header>
+  <div class="measure">
+    <p>Today the desk can store a stage box, rectangular platforms, straight bars and fixture positions. The hall itself is missing: walls, proscenium, masking, seating, balcony, set. The rig floats in a grid.</p>
+  </div>
+
+  <div class="stack">
+    <figure class="plate tag" data-tag="The hall · from the balcony">
+      <img src="foh-wide.jpg" alt="Phone video frame from the balcony: a dark hall, a lit box set through a proscenium arch, the audience in silhouette" loading="lazy">
+      <figcaption><span class="no">Plate 1</span><span>The reference. A performance, filmed from the back of the balcony. Panelled walls, pillars, a tile ceiling, two exit signs, and a box set lit through a low proscenium.</span></figcaption>
+    </figure>
+    <div class="grid2">
+      <figure class="plate tag" data-tag="The desk today" data-tone="now">
+        <img src="plates/before-3d-canvas.jpg" alt="The current 3D stage view: wireframe boxes, grey bars, white spheres for fixtures" loading="lazy">
+        <figcaption><span class="no">Plate 2</span><span>What the desk draws today. The auditorium is a thin region 0.95 m below the deck, and the stage box stops at the proscenium.</span></figcaption>
+      </figure>
+      <figure class="plate tag" data-tag="Proposed" data-tone="new">
+        <img src="plates/room-desk-afternoon.jpg" alt="The proposed view from the balcony: the hall's walls and seating, the rig on its bars, the box set lit warm" loading="lazy">
+        <figcaption><span class="no">Plate 3</span><span>The same angle from the proposed scene document: a room, a proscenium, masking legs, 144 seats, a balcony, the box set, and the real rig lighting it.</span></figcaption>
+      </figure>
+    </div>
+  </div>
+
+  <figure class="plate bleed">
+    <img src="plates/room-desk-walkin.jpg" alt="Walk-in state: house lights up over the stalls, red house tabs closed across the proscenium" loading="lazy">
+    <figcaption><span class="no">Plate 4</span><span><em>Walk-in.</em> The house lights are real fixtures, so turning them up lights the stalls. The house tabs are scenery, closed by the cue.</span></figcaption>
+  </figure>
+
+  <div class="grid2">
+    <figure class="plate">
+      <img src="plates/room-orbit.jpg" alt="The hall from above and outside, walls cut away like a doll's house" loading="lazy">
+      <figcaption><span class="no">Plate 5</span><span>Orbit. Room walls face inward, so seen from outside the near ones disappear. Nothing needs hiding by hand.</span></figcaption>
+    </figure>
+    <div class="measure" style="align-self: center">
+      <h3>Claude builds the room</h3>
+      <p>The venue is a document of named elements, and there are seven kinds: room, proscenium, flat, drape, platform, seating and object. Claude writes it with one <code>set_scene</code> call. It can also fill a proscenium-hall template with a dozen measurements taken from a photo.</p>
+      <p class="muted">A <code>render_view</code> tool would give Claude a picture back from a desk window, so it can compare its model with the photo and correct it.</p>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c2">
+  <header>
+    <span class="eyebrow"><b>●</b> Vantage points</span>
+    <h2 id="c2">Sit anywhere</h2>
+  </header>
+  <div class="measure">
+    <p>Viewpoints are saved per project, and every seat is one. A seat view puts your eye 1.15 m above the seat and lets you turn your head; it does not orbit. Pick <em>Sit in a seat</em>, click one, and you are there.</p>
+  </div>
+  <div class="grid3">
+    <figure class="plate">
+      <img src="plates/view-rowf-night.jpg" alt="From row F centre at night: blue light, the moon behind the French window" loading="lazy">
+      <figcaption><span class="no">Plate 6</span><span>Row F, centre, during <em>Night falls</em>.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/view-rowa1.jpg" alt="From the front row at the far end: the set seen at an angle, close to the stage" loading="lazy">
+      <figcaption><span class="no">Plate 7</span><span>Row A, seat 1: the worst sightline in the house.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/view-actor.jpg" alt="From centre stage looking out: front-of-house lanterns shining into the lens" loading="lazy">
+      <figcaption><span class="no">Plate 8</span><span>Centre stage, looking out. This is the view for finding which units blind whom.</span></figcaption>
+    </figure>
+  </div>
+
+  <div class="measure" style="margin-top: 56px">
+    <h3>Plan, front and side are cameras, not a second renderer</h3>
+    <p>Today Plan, Front and Side swap the 3D scene for an SVG drawing. Instead, each becomes an orthographic camera on the same scene. It cuts away whatever sits between it and the section plane: the ceilings in plan, the balcony in front, the stage-left wall in side.</p>
+  </div>
+  <figure class="plate">
+    <img src="plates/section-plan.jpg" alt="Plan section: the hall from above, seats in rows, beams drawn as footprints on the stage" loading="lazy">
+    <figcaption><span class="no">Plate 9</span><span>Plan, with the ceilings cut away. Beams read as footprints.</span></figcaption>
+  </figure>
+  <div class="grid2">
+    <figure class="plate">
+      <img src="plates/section-front.jpg" alt="Front elevation through the proscenium" loading="lazy">
+      <figcaption><span class="no">Plate 10</span><span>Front, from the back of the stalls, with the balcony cut away.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/section-side.jpg" alt="Side section of the whole building, stage on the right" loading="lazy">
+      <figcaption><span class="no">Plate 11</span><span>Side, with the stage-left wall cut away. The whole building, from the balcony to the back wall of the stage.</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c3">
+  <header>
+    <span class="eyebrow"><b>●</b> The lanterns</span>
+    <h2 id="c3">Glass, not lamps</h2>
+  </header>
+  <div class="grid2">
+    <figure class="plate tag" data-tag="The desk today" data-tone="now">
+      <img src="plates/before-balls.jpg" alt="Detail of today's 3D view: white glowing spheres under grey bars" loading="lazy">
+      <figcaption><span class="no">Plate 12</span><span>Every body ends in a sphere drawn in full colour. At dimmer zero its opacity is still 0.5, and bloom makes it glow.</span></figcaption>
+    </figure>
+    <figure class="plate tag" data-tag="Proposed · dimmer at 0" data-tone="new">
+      <img src="plates/lantern-closeup.jpg" alt="Two black profile lanterns hanging from a bar, lenses dark, colour frames and shutter handles visible" loading="lazy">
+      <figcaption><span class="no">Plate 13</span><span>Matt black housings, a yoke and a hanger to the bar, shutter handles, a colour frame. The lens is dark glass until the dimmer comes up.</span></figcaption>
+    </figure>
+  </div>
+
+  <figure class="plate bleed">
+    <div class="fader" id="fader1">
+      <img src="plates/lanterns-dark.jpg" alt="The lantern library on one bar, all at zero" loading="lazy">
+      <img src="plates/lanterns-lit.jpg" alt="The lantern library on one bar, all at 85 percent" loading="lazy">
+    </div>
+    <figcaption><span class="no">Plate 14</span><span>
+      <span class="faderbar"><label for="dim1">Dimmer</label><input id="dim1" type="range" min="0" max="100" value="0"><output for="dim1">0%</output></span>
+      The library on one bar, left to right: Source Four 19°, 26°, 36° and Zoom 25–50°; CCT Silhouette 30; Strand Patt 23; Cantata F; Selecon Rama 175; Patt 743; Prelude PC; Par 64 CP62 and CP61; a Par 16 birdie; a Coda 500 flood; a house downlight.</span></figcaption>
+  </figure>
+
+  <figure class="plate bleed">
+    <div class="fader" id="fader2">
+      <img src="plates/movers-dark.jpg" alt="The DMX fixtures in the rig on one bar, all at zero" loading="lazy">
+      <img src="plates/movers-lit.jpg" alt="The DMX fixtures in the rig on one bar, lit in saturated colours" loading="lazy">
+    </div>
+    <figcaption><span class="no">Plate 15</span><span>
+      <span class="faderbar"><label for="dim2">Dimmer</label><input id="dim2" type="range" min="0" max="100" value="0"><output for="dim2">0%</output></span>
+      The DMX types in this rig. Each carries a body description shaped like GDTF's, so a real model can replace it later. Left to right: Orbit 70, Shehds 19×15, Easymove XL 60, Robe ColorSpot 575, MAC 250, Wash 42 LED, Source Four Revolution, Liteobar 252, SOL Party, a two-cell blinder, and the Twin Shot confetti cannon. The multi-head ones light cell by cell (plate 19).</span></figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top: 32px">
+    <figure class="plate">
+      <img src="plates/beam-origin.jpg" alt="Side view of two profiles: each beam leaves the lens at the lens's own width" loading="lazy">
+      <figcaption><span class="no">Plate 16</span><span>The beam leaves the lens at the lens's own width and spreads at the field angle. Traced back, its apex falls at the lamp: about 0.5 m behind the lens of a 19° Source Four, inside the body.</span></figcaption>
+    </figure>
+    <div class="measure" style="align-self: center">
+      <h3>Where the light comes from</h3>
+      <p>Today the desk starts every beam as a point at the lens (<code>FixtureModel.tsx:759</code>). Here a beam leaves its <em>aperture</em> — the lens, or an LED cell's face — at the aperture's own size and shape, and spreads at the field angle. Its apex sits behind the lens by the aperture's radius over the tangent of half the field. For a lantern that is the lamp; for a wide LED face it is far behind, so the beam leaves as a column. One rule covers both.</p>
+      <p class="muted">Aiming does not change: <code>FixtureAim</code> still solves from the placement point, the pivot of the yoke.</p>
+    </div>
+  </div>
+
+  <div class="measure" style="margin-top: 56px">
+    <h3>The lantern library</h3>
+    <p>A generic dimmer picks a lantern, and so does each of its extra placements, so a pair on one dimmer can be a profile and a fresnel. The library ships with the desk, from datasheets we collect ourselves: GDTF-Share's models cannot be redistributed, and the Open Fixture Library has no tungsten.</p>
+  </div>
+  <div class="swatchbook" id="swatches"></div>
+  <p class="muted measure">PAR beams are ovals of about 2:1, and turning the lamp in the can turns the oval. The patch gains a lamp rotation, and the renderer draws the cone as an ellipse. GDTF has no way to say this.</p>
+
+  <div class="grid2" style="margin-top: 40px">
+    <figure class="plate">
+      <img src="plates/rig-adv1-night.jpg" alt="Close on the ADV1 bar at night: hung movers and blinders, lenses coloured blue" loading="lazy">
+      <figcaption><span class="no">Plate 17</span><span>ADV1 during <em>Night falls</em>. Lenses take the colour only with level.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/rig-adv1-blackout.jpg" alt="Close on the ADV1 bar at blackout: the same fixtures, lenses dark" loading="lazy">
+      <figcaption><span class="no">Plate 18</span><span>The same bar at blackout. Nothing glows.</span></figcaption>
+    </figure>
+  </div>
+  <figure class="plate">
+    <img src="plates/multihead-lit.jpg" alt="Close on multi-head fixtures: a batten with three segments in cyan, blue and magenta, a single-lens effect, a two-cell blinder in amber and warm white, and the edge of a confetti cannon" loading="lazy">
+    <figcaption><span class="no">Plate 19</span><span>Multi-head fixtures, cell by cell. The Liteobar's three sections and the blinder's two cells each have their own lens and their own beam, leaving their own face, and each takes its element's colour. At the right edge is the Twin Shot, which turned out to be a confetti cannon (plate 28).</span></figcaption>
+  </figure>
+  <figure class="plate bleed">
+    <img src="plates/wash-vs-spot.jpg" alt="Five fixtures side by side: a profile and a Par can throwing cones, a wash mover, a two-cell blinder and a three-segment batten throwing soft columns" loading="lazy">
+    <figcaption><span class="no">Plate 20</span><span>Spots and washes. Left to right: a Source Four 26°, a Par 64, a Shehds wash head, the two-cell blinder, the Liteobar. The first two throw cones with a focused edge. The rest leave their whole face as soft columns, and the batten's segments throw rectangles.</span></figcaption>
+  </figure>
+
+  <div class="measure" style="margin-top: 56px">
+    <h3>Shaping the light</h3>
+    <p>A profile has four shutters, a rotating gate and often an iris. A fresnel has barn doors. Every conventional has a focus knob, from a hard edge to a soft one, and some have zoom. Those are set with a spanner at the focus call, so they belong to the lantern's placement rather than to a look. Each lantern of a pair is focused separately.</p>
+  </div>
+  <div class="grid2">
+    <figure class="plate">
+      <img src="plates/shutters-studio.jpg" alt="Three profiles aimed at a wall through haze: an open round beam, a beam framed to a skewed quadrilateral by four shutters, and an irised-down beam" loading="lazy">
+      <figcaption><span class="no">Plate 21</span><span>Three Source Four 19°s. Open; framed by all four shutters, two of them angled; irised to 45%. The cut runs through the haze and the pool along the same line.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/shutters-wall.jpg" alt="The same three beams landing on the wall: a circle, a straight-edged quadrilateral, a small circle" loading="lazy">
+      <figcaption><span class="no">Plate 22</span><span>The same three on the wall. A shutter gives a straight edge, sharp or soft with the focus.</span></figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top: 32px; align-items: center">
+    <figure class="plate" style="margin: 0">
+      <svg viewBox="-150 -150 300 300" role="img" aria-label="The gate, seen along the beam: a circle of light with four shutters cutting into it, two of them angled, and an iris ring" style="max-width: 360px; width: 100%; justify-self: center">
+        <defs><clipPath id="gate"><circle r="100"/></clipPath></defs>
+        <circle r="100" fill="#f2b86e" opacity="0.18"/>
+        <g clip-path="url(#gate)" fill="#0e0d0c" stroke="#f2b86e" stroke-width="1.5">
+          <rect x="65" y="-200" width="200" height="400" transform="rotate(-82)"/>
+          <rect x="70" y="-200" width="200" height="400" transform="rotate(0)"/>
+          <rect x="80" y="-200" width="200" height="400" transform="rotate(84)"/>
+          <rect x="55" y="-200" width="200" height="400" transform="rotate(192)"/>
+        </g>
+        <circle r="100" fill="none" stroke="#9d9387" stroke-width="1.5"/>
+        <circle r="86" fill="none" stroke="#9d9387" stroke-width="1" stroke-dasharray="4 5"/>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="#9d9387" text-anchor="middle">
+          <text y="-116">TOP · 35% · 8°</text><text y="128">BOTTOM · 20% · −6°</text>
+          <text x="118" y="4" transform="rotate(90 118 4)">RIGHT · 30%</text><text x="-118" y="4" transform="rotate(-90 -118 4)">LEFT · 45% · 12°</text>
+          <text y="-72" fill="#f2b86e">iris</text>
+        </g>
+      </svg>
+    </figure>
+    <div class="measure">
+      <h3>The focus card</h3>
+      <p>Select a lantern and press <em>Focus</em>. For each shutter or barn door you set a depth and an angle, named for the edge of the light it cuts rather than its place in the gate, where the image is upside down. Then set the gate rotation, the iris, sharp to soft, and zoom within the lantern's range.</p>
+      <p class="muted">Moving lights already render zoom and focus from their channels. The Revolution's iris channel exists but is not drawn today; here it is. A fixture with DMX framing shutters would drive the same four blades from its channels.</p>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top: 40px; align-items: center">
+    <figure class="plate" style="margin: 0">
+      <img src="plates/balcony-ledge.jpg" alt="Along the balcony front: a confetti cannon and a Source Four Revolution standing on the ledge, the Revolution's beam reaching for the stage" loading="lazy">
+      <figcaption><span class="no">Plate 23</span><span>The balcony units stand on the front ledge. They do not hang.</span></figcaption>
+    </figure>
+    <div class="measure">
+      <h3>Standing, not hanging</h3>
+      <p>The rigging's kind decides the mount. Bars, pipes and trusses are hung from. A ledge or a floor stand is stood on: base down, yoke up, no hanger, and a mover's rest beam points up. A standing body is the hung one turned over.</p>
+      <p class="muted">This matters for aiming too. The desk solves a standing mover differently from a hung one, and the balcony Revolutions are stored as hung.</p>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c4">
+  <header>
+    <span class="eyebrow"><b>●</b> Scenery</span>
+    <h2 id="c4">The set stays where you put it</h2>
+  </header>
+  <div class="measure">
+    <p>A tab track is not a light, so scenery changes are their own record, attached to a cue, to a cue stack (its set), or to a Look. Lighting cues on this desk are complete states. Scenery <em>tracks</em>: its state at any cue is every change from the top of the list down to it. GO TO Q3 lands the set as if the list had been run.</p>
+  </div>
+
+  <figure class="plate">
+    <div class="cuestage" id="cuestage">
+      <img class="on" src="plates/scenery-q1.jpg" alt="Q1 from row F: tabs closed" data-cue="0">
+      <img src="plates/scenery-q2-moving.jpg" alt="Q2 in progress: tabs half drawn" data-cue="m">
+      <img src="plates/scenery-q2.jpg" alt="Q2 complete: tabs drawn, the room lit" data-cue="1">
+      <img src="plates/scenery-q3.jpg" alt="Q3: night, the moon flown in" data-cue="2">
+    </div>
+    <div class="cuebar" role="group" aria-label="Act 1">
+      <button type="button" data-q="0" aria-pressed="true">Q1 Walk-in</button>
+      <button type="button" data-q="1" aria-pressed="false">Q2 Tabs out</button>
+      <button type="button" data-q="2" aria-pressed="false">Q3 Night falls</button>
+      <button type="button" class="go" id="go">GO</button>
+      <span class="now" id="now">Q1 · the house tabs close.</span>
+    </div>
+    <figcaption style="margin-top: 12px"><span class="no">Plates 24–27</span><span>Act 1 from row F. Scenery moves on its own clock: the tabs take 4 s whatever the lighting fade is, and the moon flies in over 6 s.</span></figcaption>
+  </figure>
+
+  <div class="diagram" role="img" aria-label="Tracking: House tabs closed at Q1, drawn at Q2, tracked through Q3 and Q4. Moon out at Q1, tracked at Q2, flown in at Q3, tracked at Q4.">
+    <svg viewBox="0 0 960 230" xmlns="http://www.w3.org/2000/svg">
+      <g font-family="IBM Plex Mono, monospace" font-size="13" fill="#9d9387">
+        <text x="180" y="30">Q1 Walk-in</text><text x="370" y="30">Q2 Tabs out</text><text x="560" y="30">Q3 Night falls</text><text x="750" y="30">Q4 Blackout</text>
+        <text x="16" y="92">House tabs</text><text x="16" y="172">Moon</text>
+      </g>
+      <g stroke="#2c2824"><line x1="170" y1="44" x2="170" y2="210"/><line x1="360" y1="44" x2="360" y2="210"/><line x1="550" y1="44" x2="550" y2="210"/><line x1="740" y1="44" x2="740" y2="210"/><line x1="16" y1="124" x2="940" y2="124"/></g>
+      <g font-family="Newsreader, Georgia, serif" font-size="16">
+        <rect x="178" y="70" width="174" height="34" rx="3" fill="#f2b86e"/><text x="190" y="92" fill="#1b1206">closed</text>
+        <rect x="368" y="70" width="174" height="34" rx="3" fill="#f2b86e"/><text x="380" y="92" fill="#1b1206">drawn · 4 s</text>
+        <rect x="558" y="70" width="174" height="34" rx="3" fill="none" stroke="#f2b86e" stroke-dasharray="4 4"/><text x="570" y="92" fill="#9d9387">drawn · tracks</text>
+        <rect x="748" y="70" width="174" height="34" rx="3" fill="none" stroke="#f2b86e" stroke-dasharray="4 4"/><text x="760" y="92" fill="#9d9387">drawn · tracks</text>
+        <rect x="178" y="150" width="174" height="34" rx="3" fill="#5b78ff"/><text x="190" y="172" fill="#0e0d0c">out</text>
+        <rect x="368" y="150" width="174" height="34" rx="3" fill="none" stroke="#5b78ff" stroke-dasharray="4 4"/><text x="380" y="172" fill="#9d9387">out · tracks</text>
+        <rect x="558" y="150" width="174" height="34" rx="3" fill="#5b78ff"/><text x="570" y="172" fill="#0e0d0c">in · 6 s</text>
+        <rect x="748" y="150" width="174" height="34" rx="3" fill="none" stroke="#5b78ff" stroke-dasharray="4 4"/><text x="760" y="172" fill="#9d9387">in · tracks</text>
+      </g>
+      <text x="16" y="224" font-family="IBM Plex Mono, monospace" font-size="12" fill="#9d9387">Solid: changed on this cue. Dashed: tracked from above.</text>
+    </svg>
+  </div>
+
+  <div class="grid2">
+    <div class="measure">
+      <h3>Why not a virtual fixture</h3>
+      <p>Everything in the cue pipeline ends as a DMX channel write. A scenery "fixture" would need real channels, and every property category misbehaves for it: some snap halfway through a crossfade, some die at Blackout, some are swept up by a Beam-masked Record. And because cues do not track, a tab closed in cue 14 would open again at cue 15.</p>
+    </div>
+    <div class="measure">
+      <h3>Unless it really is one</h3>
+      <p>A motorised tab track on a DMX relay is a fixture, and it is patched as one. The tabs element then follows its channel instead of scenery changes.</p>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c4b">
+  <header>
+    <span class="eyebrow"><b>●</b> One-shot effects</span>
+    <h2 id="c4b">The party trick</h2>
+  </header>
+  <div class="measure">
+    <p>The Twin Shot is a confetti cannon: two tubes, two fire channels, and a master enable. Every fire spends a cartridge, so a fire is an event, not a level. It happens once, on a GO or a held button, only while the desk is armed, and never because a look happened to contain it.</p>
+  </div>
+  <div class="grid2">
+    <figure class="plate">
+      <img src="plates/cannon-closeup.jpg" alt="A confetti cannon hung on the ADV1 bar: a black box with two splayed tubes pointing at the stage" loading="lazy">
+      <figcaption><span class="no">Plate 28</span><span>The Twin Shot on ADV1: a low base and two splayed tubes, no lens, no beam.</span></figcaption>
+    </figure>
+    <figure class="plate">
+      <img src="plates/confetti-curtain-call.jpg" alt="The stage at the curtain call from the front rows, a cloud of confetti drifting over the set" loading="lazy">
+      <figcaption><span class="no">Plate 29</span><span><em>Q5 Curtain call</em>, 1.6 s after GO. Both cannons fire as cue events 0.6–1.1 s in. The flakes flutter at a capped fall speed and settle where they land.</span></figcaption>
+    </figure>
+  </div>
+  <div class="grid2" style="margin-top: 32px">
+    <div class="measure">
+      <h3>A trigger is not a slider</h3>
+      <p>Today the two fire channels are ordinary sliders, so a Look, a cue or a Beam-masked Record can hold a raised one, which then fires on every recall. The proposal makes them triggers: never a look row, a template, an effect target or a Record capture, and never restored from a channel snapshot.</p>
+    </div>
+    <div class="measure">
+      <h3>Armed, and said so</h3>
+      <p>Arming is desk-wide, operator-only, shown on every window, and lapses on its own. A cue event on an unarmed desk is skipped and announced, never queued. In Blind a fire is rehearsed: confetti in the visualiser, nothing on the wire.</p>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c5">
+  <header>
+    <span class="eyebrow"><b>●</b> The plan</span>
+    <h2 id="c5">Retiring the scaled plan</h2>
+  </header>
+  <div class="measure">
+    <p>LX1, LX2 and LX3 carry seven or eight units each on a 6 m bar. At a zoom that shows the whole hall they are a few pixels apart, and no labelling scheme fixes that. None of the consoles researched runs its show from a true-scale plan either; they use arranged schematics.</p>
+  </div>
+  <figure class="plate tag" data-tag="The desk today" data-tone="now">
+    <img src="plates/before-plan-canvas.jpg" alt="Today's stage overview: fixture names overlapping into an unreadable pile" loading="lazy">
+    <figcaption><span class="no">Plate 30</span><span>The overview panel today: every name, placement label and rigging badge drawn, none decluttered.</span></figcaption>
+  </figure>
+
+  <div class="grid2" style="margin-top: 32px">
+    <div class="sheet" aria-label="Positions sheet, recreated">
+      <div class="srow"><div class="pn">LX3<small>8.7 m</small></div><div class="chips"><span class="c"><i style="background:#ffe6b8"></i>Robe 575 SR <b>95</b></span><span class="c"><i style="background:#86d38f"></i>Liteobar SR <b>60</b></span><span class="c"><i></i>SOL Party SR</span><span class="c"><i></i>Easymove SR</span><span class="c"><i style="background:#ffe6b8"></i>Robe 575 SL <b>95</b></span><span class="c"><i style="background:#86d38f"></i>Liteobar SL <b>60</b></span></div></div>
+      <div class="srow"><div class="pn">LX2<small>6.7 m</small></div><div class="chips"><span class="c"><i style="background:#b39a7c"></i>Fresnel ×2 <b>45</b></span><span class="c"><i></i>Orbit 70 SR</span><span class="c"><i style="background:#8d9ab8"></i>Shehds SR <b>40</b></span><span class="c"><i></i>MAC 250 SR</span><span class="c"><i style="background:#b39a7c"></i>Fresnel C <b>45</b></span><span class="c"><i></i>MAC 250 SL</span></div></div>
+      <div class="srow"><div class="pn">LX1<small>3.7 m</small></div><div class="chips"><span class="c"><i style="background:#e8c9a0"></i>Fresnel ×2 <b>70</b></span><span class="c"><i></i>Orbit 70 SR</span><span class="c"><i style="background:#8d9ab8"></i>Shehds SR <b>40</b></span><span class="c"><i style="background:#e8c9a0"></i>Fresnel C <b>70</b></span></div></div>
+      <div class="srow"><div class="pn">Pros<small>0.4 m</small></div><div class="chips"><span class="c"><i></i>Ring ×3</span></div></div>
+      <div class="edge">STAGE EDGE</div>
+      <div class="srow"><div class="pn">ADV1<small>−0.3 m</small></div><div class="chips"><span class="c"><i></i>Robe 575 SR</span><span class="c"><i style="background:#c6a47a"></i>Cans ×2 <b>40</b></span><span class="c"><i></i>Blinder SR</span><span class="c"><i></i>Twin Shot</span></div></div>
+      <div class="srow"><div class="pn">ADV2<small>−3.3 m</small></div><div class="chips"><span class="c"><i style="background:#f2c48e"></i>Front Outer ×2 <b>85</b></span><span class="c"><i style="background:#f2c48e"></i>Front SR ×2 <b>85</b></span><span class="c"><i style="background:#f2c48e"></i>Front C ×2 <b>85</b></span></div></div>
+      <div class="srow"><div class="pn">FOH Balc.<small>−17.3 m</small></div><div class="chips"><span class="c"><i style="background:#f2c48e"></i>S4 Rev SR <b>55</b></span><span class="c"><i></i>Twin Shot</span><span class="c"><i style="background:#f2c48e"></i>S4 Rev SL <b>55</b></span></div></div>
+    </div>
+    <div class="measure" style="align-self: center">
+      <h3>Positions</h3>
+      <p>The replacement for the overview panel. There is one row per position, upstage first, with the stage edge marked. Units sit in rig order as seen from the desk, each with its live colour and level. Paired lanterns share a chip. The sheet is derived from the rigging and never stored, so there is nothing to keep in step.</p>
+      <p class="muted">The scaled plan survives as the Plan camera (plate 9), with beams and scenery in it.</p>
+    </div>
+  </div>
+</section>
+
+<section class="chapter wrap" aria-labelledby="c6">
+  <header>
+    <span class="eyebrow"><b>●</b> What changes</span>
+    <h2 id="c6">The running order</h2>
+  </header>
+  <ol class="list">
+    <li><span>0</span><div><h3>Stop the leaks</h3><p class="muted">The bloom pass's 8× multisampled buffers, instance buffers sized for the worst case, a React root and a backdrop blur per label, and no recovery when Safari takes the graphics context back. Also the platform drawn 0.95 m proud of the deck, and the lens that glows at zero.</p></div></li>
+    <li><span>1</span><div><h3>Cameras and Positions</h3><p class="muted">Saved and seat viewpoints, orthographic sections on the 3D scene, and Positions in place of the overview panel.</p></div></li>
+    <li><span>2</span><div><h3>The scene document</h3><p class="muted">Elements and viewpoints as portable, synced records, written by <code>set_scene</code> and read by <code>get_scene</code>, with a stage summary in <code>describe_rig</code>.</p></div></li>
+    <li><span>3</span><div><h3>Light on every surface</h3><p class="muted">One shader lights every venue and set surface from the live lights, replacing the per-region cookie instances.</p></div></li>
+    <li><span>4</span><div><h3>Claude's eyes</h3><p class="muted"><code>render_view</code>, rendered by a signed-in desk window.</p></div></li>
+    <li><span>5</span><div><h3>Retire the SVG plan</h3><p class="muted">Editing in the ortho cameras reaches parity, then 3,000 lines go.</p></div></li>
+    <li><span>6</span><div><h3>Fixture bodies</h3><p class="muted">Dark glass, black housings, parametric lantern shapes instanced per part, beams that leave the aperture, multi-head fixtures lit cell by cell, and shutters, barn doors, iris, focus and zoom.</p></div></li>
+    <li><span>7</span><div><h3>The lantern library</h3><p class="muted">Lantern type, zoom and lamp rotation on patches and placements, a body on every DMX type, and oval PAR beams.</p></div></li>
+    <li><span>8</span><div><h3>Scenery that moves</h3><p class="muted">Changes on cues, stacks and Looks, resolved on the desk, streamed as <code>scenery.state</code>, previewed by Next GO.</p></div></li>
+    <li><span>9</span><div><h3>The party trick</h3><p class="muted">Triggers as their own kind of property, cue events, a desk-wide arm, loaded and spent tubes, and confetti in every window. In Blind, a fire is rehearsed.</p></div></li>
+  </ol>
+</section>
+
+<footer class="wrap">
+  <p>Sixteen decisions are open, D1 to D16, in <code>docs/plans/stage-view-design/INDEX.md</code>. Plates 3–11 and 13–29 are renders from <code>prototype.html</code>; the hall, set and lantern models are estimates. Plates 2, 12 and 30 are from the desk as it is on 29 September 2026. Plate 1 is a frame of the balcony video.</p>
+</footer>
+
+<script>
+// Faders: the lit plate over the dark one
+for (const [id, fid] of [['dim1', 'fader1'], ['dim2', 'fader2']]) {
+  const input = document.getElementById(id), lit = document.querySelector('#' + fid + ' img + img'), out = input.parentElement.querySelector('output')
+  const set = () => { lit.style.opacity = (input.value / 100).toFixed(2); out.textContent = input.value + '%' }
+  input.addEventListener('input', set); set()
+}
+// Lantern library, as a gel swatch book
+const LIB = [
+  ['Source Four 19°', 'Profile', '13° beam · 19° field', 'shutters · frame', '#f5d2a0'],
+  ['Source Four 26°', 'Profile', '17° · 26°', 'shutters · frame', '#f5d2a0'],
+  ['Source Four 36°', 'Profile', '25° · 36°', 'shutters · frame', '#f5d2a0'],
+  ['Source Four Zoom', 'Profile', 'zoom 25–50°', 'shutters · frame', '#f5d2a0'],
+  ['CCT Silhouette 30', 'Profile', 'zoom 22–40°', 'shutters · frame', '#f5d2a0'],
+  ['Strand Patt 23', 'Profile', '17° · 30°', 'shutters · 100 mm frame', '#f5d2a0'],
+  ['Strand Cantata F', 'Fresnel', 'zoom 9–51°', 'barn doors · 185 mm frame', '#f0b872'],
+  ['Selecon Rama 175', 'Fresnel', 'zoom 7–56°', 'barn doors · frame', '#f0b872'],
+  ['Strand Patt 743', 'Fresnel', 'zoom 15–65°', 'barn doors · 215 mm frame', '#f0b872'],
+  ['Strand Prelude PC', 'PC', '20° · 34°', 'frame', '#e8a45c'],
+  ['Par 64 · CP62', 'PAR', 'oval 12×28° beam · 21×44° field', 'lamp rotates the oval', '#e89a4c'],
+  ['Par 64 · CP61', 'PAR', 'oval 7×14° · 14×26°', 'lamp rotates the oval', '#e89a4c'],
+  ['Par 16 birdie', 'PAR', '10° · 18°', 'MR16', '#e89a4c'],
+  ['Strand Coda 500', 'Flood', '≈100° field', 'asymmetric', '#d98c46'],
+  ['House downlight', 'House', '110° field', 'ceiling can', '#c9b69a'],
+]
+document.getElementById('swatches').innerHTML = LIB.map(([n, fam, ang, feat, col]) =>
+  `<div class="swatch"><div class="chip" style="background:${col}"><span>${fam}</span></div><div class="body"><span class="nm">${n}</span><span class="dt">${ang}</span><span class="dt">${feat}</span></div></div>`).join('')
+// The cue list: Q2 passes through the tabs-moving plate on its way
+const stage = document.getElementById('cuestage'), buttons = [...document.querySelectorAll('.cuebar button[data-q]')], now = document.getElementById('now')
+const NOTES = ['Q1 · the house tabs close.', 'Q2 · the tabs draw over 4 s, and the room comes up.', 'Q3 · night falls, and the moon flies in over 6 s. The tabs track.']
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+let active = 0, timer = null
+function show(key) { for (const img of stage.querySelectorAll('img')) img.classList.toggle('on', img.dataset.cue === String(key)) }
+function go(q) {
+  clearTimeout(timer); active = q
+  buttons.forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.q === q)))
+  now.textContent = NOTES[q]
+  if (q === 1 && !reduce) { show('m'); timer = setTimeout(() => show(1), 1400) } else show(q)
+}
+buttons.forEach((b) => b.addEventListener('click', () => go(+b.dataset.q)))
+document.getElementById('go').addEventListener('click', () => go((active + 1) % 3))
+</script>
+</body>
+</html>

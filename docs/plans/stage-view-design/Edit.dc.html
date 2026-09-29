@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { z-index:6; position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+    /* ── additions for the stage-view boards ─────────────────────────────── */
+    .appbar .armed { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.21 27); border:1px solid oklch(0.7 0.19 27); font-size:12px; font-weight:700; letter-spacing:0.06em; }
+    .viewhdr { height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .viewhdr .vt { font-size:14px; font-weight:600; margin-right:6px; }
+    .vp { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); font-size:12.5px; font-weight:600; color:oklch(0.85 0.1 255); }
+    .vp small { font-weight:400; color:var(--mfg); }
+    .btn .kbd, .kbd { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:1px 5px; border-radius:4px; border:1px solid var(--bd); color:var(--mfg); }
+    .spacer { flex:1; }
+    .canvas { position:relative; flex:1; min-width:0; background:#07090d; overflow:hidden; }
+    .canvas > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .ov { position:absolute; }
+    .ovcap { left:12px; top:10px; font-size:12px; color:var(--mfg); }
+    .ovcap b { color:var(--fg); font-weight:600; }
+    .poslbl { position:absolute; padding:1px 6px; border-radius:4px; font:700 10px ui-monospace,Menlo,monospace; letter-spacing:0.06em; color:var(--amber); background:oklch(0.141 0.005 285.823 / 0.82); border:1px solid oklch(0.82 0.16 80 / 0.4); }
+    .fxlbl { position:absolute; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:oklch(0.3 0.09 260 / 0.92); border:1px solid var(--pri); }
+    .selbar { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; display:flex; gap:10px; align-items:center; background:oklch(0.21 0.006 285.885 / 0.94); border:1px solid var(--bd); border-radius:10px; padding:6px 8px 6px 12px; font-size:12px; white-space:nowrap; }
+    .selbar .m { color:var(--mfg); }
+    .selbar .b { border:1px solid var(--bd); background:var(--muted); border-radius:6px; padding:2px 8px; font-size:11px; }
+    .panel { width:360px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+    .panel .ph { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .panel .ph b { font-size:14px; }
+    .panel .pb { padding:12px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sec .st { display:flex; align-items:center; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .sec .st::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .row2 { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; align-items:center; font-size:12px; }
+    .row2 > span:first-child { color:var(--mfg); font-size:11px; }
+    .row3 { display:grid; grid-template-columns:62px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; font-size:11px; }
+    .row3 > span:first-child { color:var(--mfg); }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .sel::after { content:'▾'; margin-left:auto; color:var(--mfg); font-size:10px; }
+    .num { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font:12px ui-monospace,Menlo,monospace; display:flex; align-items:center; font-variant-numeric:tabular-nums; }
+    .gate { width:132px; height:132px; flex:0 0 auto; }
+    .chipx { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px 0 4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11px; white-space:nowrap; }
+    .chipx i { width:14px; height:14px; border-radius:3px; background:#2a2d33; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08); display:block; }
+    .chipx b { font-weight:400; color:var(--mfg); font:10px ui-monospace,Menlo,monospace; }
+    .chipx.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.18); }
+    .prow { display:grid; grid-template-columns:70px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--bd); align-items:start; }
+    .prow .pn { font:700 10px ui-monospace,Menlo,monospace; color:var(--amber); letter-spacing:0.04em; padding-top:4px; }
+    .prow .pn small { display:block; font-weight:400; color:var(--mfg); letter-spacing:0; }
+    .prow .cs { display:flex; flex-wrap:wrap; gap:4px; }
+    .edge { text-align:center; font:700 9px ui-monospace,Menlo,monospace; letter-spacing:0.2em; color:var(--mfg); padding:4px 0; border-top:1px dashed var(--bd); border-bottom:1px dashed var(--bd); }
+    .pal { width:220px; flex-shrink:0; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+    .pal .pi { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; font-size:12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.5); }
+    .pal .pi svg { color:var(--mfg); }
+    .pal .ph2 { padding:10px 12px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .el { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; font-size:12px; padding:4px 0; align-items:baseline; }
+    .el .k { font:10px ui-monospace,Menlo,monospace; color:oklch(0.8 0.12 255); }
+    .el .d { font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .el.on { background:oklch(0.623 0.214 259.815 / 0.14); border-radius:6px; padding:4px 6px; margin:0 -6px; }
+    .sheet { width:520px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; }
+    .item { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; }
+    .item .m { color:var(--mfg); font-size:11px; }
+    .item.new { border-color:oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.18); }
+    .item.danger { border-color:oklch(0.55 0.2 27 / 0.7); background:oklch(0.3 0.08 27 / 0.25); }
+    .dim { opacity:0.45; }
+    .hatch { background-image:repeating-linear-gradient(135deg, oklch(0.274 0.006 286.033 / 0.5) 0 6px, transparent 6px 12px); }
+    .frame { position:absolute; border:2px dashed var(--amber); border-radius:10px; pointer-events:none; }
+    .btn.pri { background:var(--pri); color:#fff; border:0; }
+    .btn.red { background:oklch(0.55 0.21 27); color:#fff; border:0; }
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1160px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+<div style="display:flex; flex:1; min-height:0;">
+<div class="rail"><div class="rh"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div><div class="rsep"></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5-8 4.5-8-4.5L12 2Z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg></div><div class="rsep"></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1M16 3h1a2 2 0 0 1 2 2v5c0 1.1.9 2 2 2a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2h-1"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="12" height="12" rx="2"/><path d="M9 21h10a2 2 0 0 0 2-2V9"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="15.5" cy="10" r="1"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg></div><div class="rsep"></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M10 2c0 4.4-3.6 8-8 8"/><path d="M14 2c0 4.4 3.6 8 8 8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2"/></svg></div><div class="rsep"></div><div class="ri on"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></div><div class="rsep"></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></div></div>
+<div style="flex:1; min-width:0; display:flex; flex-direction:column; position:relative;">
+<div class="appbar"><span class="title">Chris' DMX Controller v7</span><span class="conn"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Connected</span><span class="ib"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M10 2c0 4.4-3.6 8-8 8"/><path d="M14 2c0 4.4 3.6 8 8 8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg></span><span class="ib"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span class="ib"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg></span><span class="ib"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg></span><span class="ib"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/></svg></span><span class="avatar">CL</span></div>
+<div class="viewhdr">
+  <span class="vt">Stage</span>
+  <span class="btn out sm"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Region</span><span class="btn out sm"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Rigging</span>
+  <span class="btn sm" style="background:var(--muted)"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Scenery ▾</span>
+  <span class="seg"><span class="on">Move</span><span>Rotate</span></span>
+  <span class="btn out sm"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>Snap</span><span class="field" style="width:78px">0.1 m</span>
+  <span class="spacer"></span>
+  <span class="seg"><span class="on">Venue</span><span class="on">Set</span></span>
+  <span class="seg"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>View</span><span class="on" style="background:var(--pri);color:#fff"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Edit</span></span>
+  <span class="seg"><span class="on">Orbit</span><span>Plan</span><span>Front</span><span>Side</span></span>
+</div>
+<div class="ov" style="left:250px; top:48px; width:300px; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,0.5); padding:6px; z-index:3; font-size:12.5px">
+<div class="lbl" style="padding:6px 8px 4px">Add to the scene</div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg><span>Room</span><span class="spacer"></span><span class="m">hall, stage house</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18"/><path d="M10 21v-7h4v7"/></svg><span>Proscenium</span><span class="spacer"></span><span class="m">wall with an arch</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18"/><path d="M10 21v-7h4v7"/></svg><span>Flat</span><span class="spacer"></span><span class="m">doors, windows</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18M5 3c0 6 2 12 5 18M19 3c0 6-2 12-5 18M5 21h4M15 21h4"/></svg><span>Drape</span><span class="spacer"></span><span class="m">legs, borders, cyc</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18M5 3c0 6 2 12 5 18M19 3c0 6-2 12-5 18M5 21h4M15 21h4"/></svg><span>Tabs</span><span class="spacer"></span><span class="m">draw or fly</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h6v-5h5v-5h5V6h3"/></svg><span>Platform</span><span class="spacer"></span><span class="m">deck, rostrum, balcony</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21v-6h12v6M8 15V4h8v11"/></svg><span>Seating</span><span class="spacer"></span><span class="m">rows → seats</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></svg><span>Object</span><span class="spacer"></span><span class="m">furniture, props</span></div><div class="item" style="border:0;background:none;padding:5px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h16M6 3v16l6-3 6 3V3"/></svg><span>Flown piece</span><span class="spacer"></span><span class="m">trims in and out</span></div>
+<div style="height:1px;background:var(--bd);margin:4px 0"></div>
+<div class="item" style="border:0;background:none;padding:6px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2M15 16v-2M8 9h2M20 9h2M17.8 11.8 19 13M15 9h0M17.8 6.2 19 5M3 21l9-9M12.2 6.2 11 5"/></svg>Proscenium hall from measurements…</div>
+<div class="item" style="border:0;background:none;padding:6px 8px"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8z"/></svg>Ask Claude to model the venue</div></div>
+<div style="flex:1; min-height:0; display:flex;">
+  <div class="canvas">
+    <img src="plates/edit-orbit.jpg" style="object-position:35% 50%">
+    <div class="ov" style="left:299px; top:318px; width:660px; height:400px; border:2px solid var(--pri); border-radius:4px; box-shadow:0 0 0 9999px rgba(0,0,0,0.12)"></div>
+    <svg class="ov" style="left:530px; top:600px" width="130" height="120" viewBox="0 0 130 120"><path d="M55 95 L55 15" stroke="#4ade80" stroke-width="3"/><path d="M55 95 L120 95" stroke="#f87171" stroke-width="3"/><path d="M55 95 L15 118" stroke="#60a5fa" stroke-width="3"/><path d="M49 21 55 8 61 21Z M114 89 127 95 114 101Z" fill="#fff"/></svg>
+    <span class="fxlbl" style="left:640px; top:291px">House tabs · open 0.00 at Q1</span>
+    <span class="callout" style="left:12px; top:12px">2</span>
+  </div>
+  <div class="panel">
+    <div class="ph"><b>House tabs</b><span class="tag new">new</span><span class="spacer"></span><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+    <div class="pb">
+      <div class="row2"><span>Name</span><span class="field">House tabs</span></div>
+      <div class="row2"><span>Kind</span><span class="sel">Drape · tabs · draw</span></div>
+      <div class="row2"><span>Layer</span><span class="seg"><span class="on">Venue</span><span>Set</span></span></div>
+      <div class="sec"><div class="st">Where</div>
+        <div class="row2"><span>Position (m)</span><div style="display:flex;gap:6px"><span class="num">X 0.00</span><span class="num">Y 0.62</span><span class="num">Z 0.00</span></div></div>
+        <div class="row2"><span>Size (m)</span><div style="display:flex;gap:6px"><span class="num">W 5.60</span><span class="num">H 3.10</span></div></div>
+      </div>
+      <div class="sec"><div class="st">Finish</div>
+        <div class="row2"><span>Colour</span><div style="display:flex;gap:6px;align-items:center"><span style="width:28px;height:22px;border-radius:6px;background:#6e121b;border:1px solid var(--bd)"></span><span class="mono cap">#6e121b</span><span class="sel" style="flex:1">Velour, pleated</span></div></div>
+      </div>
+      <div class="sec"><div class="st">State when nothing moves it</div>
+        <div class="row3" style="grid-template-columns:84px minmax(0,1fr) 44px"><span>Open</span><div class="slider"><i style="left:100%"></i></div><span class="mono cap">1.00</span></div>
+      </div>
+      <div class="sec"><div class="st">Moves with</div>
+        <div class="item"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M10 2c0 4.4-3.6 8-8 8"/><path d="M14 2c0 4.4 3.6 8 8 8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg><b>Q1 Walk-in</b><span class="m">closed</span><span class="spacer"></span><span class="m">Act 1</span></div>
+        <div class="item"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M10 2c0 4.4-3.6 8-8 8"/><path d="M14 2c0 4.4 3.6 8 8 8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg><b>Q2 Tabs out</b><span class="m">drawn · 4 s</span><span class="spacer"></span><span class="m">Act 1</span></div>
+        <div class="item hatch"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10s3-3 3-8"/><path d="M22 10s-3-3-3-8"/><path d="M10 2c0 4.4-3.6 8-8 8"/><path d="M14 2c0 4.4 3.6 8 8 8"/><path d="M2 10v2a10 10 0 0 0 20 0v-2"/></svg><span class="m">Q3–Q5 track: drawn</span></div>
+        <p class="cap">Edited on the cue, the stack or the Look; this list is where to find them.</p>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:12px"><span class="switch"></span>Hidden in the Stage view</label>
+    </div>
+    <div style="margin-top:auto; display:flex; gap:8px; padding:12px; border-top:1px solid var(--bd)"><span class="btn out sm" style="color:oklch(0.75 0.15 25)">Delete</span><span class="spacer"></span><span class="btn out sm">Cancel</span><span class="btn sm pri">Save</span></div>
+    <span class="callout" style="position:absolute; right:340px; top:112px">3</span>
+    <span class="callout" style="position:absolute; right:340px; top:540px">4</span>
+  </div>
+</div>
+<span class="callout" style="left:246px; top:58px">1</span>
+<span class="callout" style="left:1000px; top:58px">5</span>
+</div></div>
+
+<div class="legend">
+<div><span class="n">1</span><span><b>+ Scenery</b> joins + Region and + Rigging in Edit mode's header: the seven element kinds, tabs and flown pieces, and two builders. <i>Proscenium hall from measurements…</i> is the template <span class="mono">set_scene</span> expands; <i>Ask Claude</i> opens the chat with the MCP scene tools.</span></div>
+<div><span class="n">2</span><span><b>Same gizmos, same snapping.</b> Elements move, rotate and snap like regions and riggings do today. The Venue | Set toggle hides a layer while you work, the way the View menu's Show list does.</span></div>
+<div><span class="n">3</span><span><b>The element form</b> is a new body in the existing <span class="mono">StageEditorPanel</span> (360 px), beside <span class="mono">EditStageRegionForm</span> and <span class="mono">EditRiggingForm</span>. Kind decides the fields; tabs get a draw/fly operation and one state, <i>open</i>.</span></div>
+<div><span class="n">4</span><span><b>Moves with</b> lists the cues, stacks and Looks that set this element, with the tracked cues hatched. Read here, edited there: scenery changes belong to the show, not to the element.</span></div>
+<div><span class="n">5</span><span><b>Venue and set are layers,</b> so the hall outlives a production. Turning Set off shows the empty room; cloning a project copies both through export and import.</span></div>
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1160}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>

@@ -1,0 +1,1490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Commemoration Hall stage</title>
+<style>
+/* Layout: the desk's Stage route — header row, a 3D canvas, and the side sheet on the right
+   (Positions · Scene · Notes). Dark only, in the desk's own OKLch vocabulary. */
+:root {
+  --bg: oklch(0.141 0.005 285.823);
+  --card: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.274 0.006 286.033);
+  --fg: oklch(0.985 0 0);
+  --mfg: oklch(0.705 0.015 286.067);
+  --bd: oklch(0.274 0.006 286.033);
+  --pri: oklch(0.623 0.214 259.815);
+  --amber: oklch(0.82 0.16 80);
+  --canvas: #0b0e14;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.45 var(--sans); -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--pri); outline-offset: 1px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
+.bar { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 16px; border-bottom: 1px solid var(--bd); flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.brand b { font-size: 14px; }
+.brand span { color: var(--mfg); font-size: 12px; }
+.views { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+.seg { display: inline-flex; gap: 2px; border: 1px solid var(--bd); background: var(--card); border-radius: 8px; padding: 2px; flex: 0 0 auto; }
+.seg button { border: 0; background: none; height: 24px; padding: 0 9px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--mfg); white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--muted); color: var(--fg); }
+.seg button.pick[aria-pressed="true"] { background: oklch(0.623 0.214 259.815 / 0.25); color: oklch(0.85 0.1 255); }
+.barR { display: flex; align-items: center; gap: 6px; color: var(--mfg); font-size: 12px; }
+select { background: var(--card); border: 1px solid var(--bd); border-radius: 6px; height: 26px; padding: 0 6px; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+.stage { position: relative; min-height: 0; overflow: hidden; background: var(--canvas); }
+#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lbl { position: absolute; left: 0; top: 0; padding: 1px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; background: oklch(0.141 0.005 285.823 / 0.82); border: 1px solid oklch(0.4 0.01 286 / 0.5); color: var(--fg); will-change: transform; }
+.lbl.pos { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: var(--amber); border-color: oklch(0.82 0.16 80 / 0.4); }
+.lbl.sel { border-color: var(--pri); background: oklch(0.3 0.09 260 / 0.9); }
+.cap { position: absolute; left: 12px; top: 10px; font-size: 12px; color: var(--mfg); pointer-events: none; }
+.cap b { color: var(--fg); font-weight: 600; }
+.stats { position: absolute; right: 12px; top: 10px; display: flex; gap: 10px; align-items: center; font: 11px var(--mono); color: var(--mfg); font-variant-numeric: tabular-nums; }
+.stats button { border: 1px solid var(--bd); background: var(--card); border-radius: 6px; padding: 1px 7px; font-family: var(--sans); font-size: 11px; color: var(--mfg); }
+.dock { position: absolute; left: 12px; bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; right: 12px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.haze { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mfg); background: var(--card); border: 1px solid var(--bd); border-radius: 8px; padding: 3px 8px; }
+.haze input { width: 90px; accent-color: var(--pri); }
+.selbar { position: absolute; left: 50%; transform: translateX(-50%); bottom: 54px; display: flex; gap: 10px; align-items: center; background: oklch(0.21 0.006 285.885 / 0.94); border: 1px solid var(--bd); border-radius: 10px; padding: 6px 8px 6px 12px; font-size: 12px; white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; }
+.selbar b { font-weight: 600; }
+.selbar .m { color: var(--mfg); }
+.selbar button { border: 1px solid var(--bd); background: var(--muted); border-radius: 6px; padding: 2px 8px; font-size: 11px; }
+.focus { position: absolute; right: 12px; bottom: 54px; width: 300px; max-width: calc(100% - 24px); max-height: calc(100% - 110px); overflow-y: auto; background: oklch(0.21 0.006 285.885 / 0.96); border: 1px solid var(--bd); border-radius: 10px; padding: 10px 12px; font-size: 12px; display: grid; gap: 8px; }
+.focus .fh { display: flex; align-items: center; gap: 8px; }
+.focus .fh b { font-size: 13px; }
+.focus .fh button { margin-left: auto; border: 0; background: none; color: var(--mfg); font-size: 16px; }
+.focus svg { width: 132px; height: 132px; justify-self: center; }
+.focus .frow { display: grid; grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-items: center; }
+.focus .frow.one { grid-template-columns: 58px minmax(0, 1fr) 34px; }
+.focus label { color: var(--mfg); font-size: 11px; }
+.focus input[type=range] { width: 100%; accent-color: var(--amber); }
+.focus .val { color: var(--mfg); font: 10px var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.focus .note { color: var(--mfg); margin: 0; }
+.focus .tabs2 { display: flex; gap: 4px; }
+.focus .tabs2 button { border: 1px solid var(--bd); background: var(--card); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--mfg); }
+.focus .tabs2 button[aria-pressed="true"] { color: var(--fg); border-color: var(--amber); }
+.toast { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); max-width: calc(100% - 24px); background: oklch(0.21 0.006 285.885 / 0.96); border: 1px solid var(--amber); border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+.armchip { position: absolute; left: 12px; top: 34px; font: 700 11px var(--mono); letter-spacing: 0.08em; color: #fff; background: oklch(0.55 0.21 27); border-radius: 6px; padding: 3px 8px; }
+.selbar button.danger { background: oklch(0.55 0.21 27); border-color: oklch(0.6 0.2 27); color: #fff; }
+.selbar button:disabled { opacity: 0.45; }
+.tip { position: absolute; pointer-events: none; background: oklch(0.21 0.006 285.885 / 0.96); border: 1px solid var(--bd); border-radius: 6px; padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+.tip .m { color: var(--mfg); }
+.lost { position: absolute; inset: 0; display: grid; place-items: center; background: oklch(0.141 0.005 285.823 / 0.9); }
+.lost > div { max-width: 320px; text-align: center; display: grid; gap: 8px; justify-items: center; }
+.lost p { margin: 0; color: var(--mfg); }
+.lost button { border: 0; background: var(--pri); color: oklch(0.985 0 0); border-radius: 8px; padding: 6px 14px; font-weight: 600; }
+
+.sheet { border-left: 1px solid var(--bd); display: grid; grid-template-rows: auto 1fr; min-height: 0; background: var(--bg); }
+.tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--bd); }
+.tabs button { border: 0; background: none; padding: 6px 10px 8px; font-size: 12px; font-weight: 600; color: var(--mfg); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--pri); }
+.pane { overflow-y: auto; padding: 12px; min-height: 0; }
+.eyebrow { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--mfg); }
+.hint { color: var(--mfg); font-size: 12px; margin: 0 0 10px; }
+
+.prow { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-top: 1px solid var(--bd); align-items: start; }
+.prow:first-of-type { border-top: 0; }
+.prow .pn { font: 700 10px var(--mono); letter-spacing: 0.04em; color: var(--amber); padding-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .pn small { display: block; font-weight: 400; color: var(--mfg); letter-spacing: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px 0 4px; border-radius: 6px; border: 1px solid var(--bd); background: var(--card); font-size: 11px; max-width: 100%; }
+.chip .sw { width: 14px; height: 14px; border-radius: 3px; background: #2a2d33; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 0.08); flex: 0 0 auto; }
+.chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .lv { color: var(--mfg); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+.chip .x2 { color: var(--mfg); font-size: 10px; }
+.chip[aria-pressed="true"] { border-color: var(--pri); background: oklch(0.623 0.214 259.815 / 0.18); }
+.stagefront { text-align: center; font: 700 9px var(--mono); letter-spacing: 0.2em; color: var(--mfg); padding: 4px 0; border-top: 1px dashed var(--bd); border-bottom: 1px dashed var(--bd); margin: 4px 0; }
+
+.layers { display: grid; gap: 4px; margin-bottom: 12px; }
+.layers label { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.layers input { accent-color: var(--pri); }
+.el { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 8px; font-size: 12px; padding: 3px 0; align-items: baseline; }
+.kind { font: 10px var(--mono); color: oklch(0.8 0.12 255); }
+.dim { font: 10px var(--mono); color: var(--mfg); white-space: nowrap; }
+.grp { margin: 14px 0 4px; }
+pre { margin: 8px 0 0; padding: 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--bd); font: 11px/1.5 var(--mono); overflow-x: auto; color: oklch(0.88 0.02 286); }
+.notes h3 { font-size: 12px; margin: 14px 0 4px; }
+.notes h3:first-child { margin-top: 0; }
+.notes p, .notes li { color: var(--mfg); margin: 0 0 6px; font-size: 12px; max-width: 62ch; }
+.notes ul { padding-left: 18px; margin: 0; }
+.notes b { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .main { grid-template-columns: 1fr; grid-template-rows: 58vh auto; }
+  .sheet { border-left: 0; border-top: 1px solid var(--bd); }
+  .stats .hide-s { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand"><b>Stage</b><span>The Commemoration Hall · prototype</span></div>
+    <nav class="views" id="views" aria-label="Viewpoints"></nav>
+    <div class="barR"><label for="labels">Labels</label>
+      <select id="labels"><option value="positions">Positions</option><option value="all">All fixtures</option><option value="none">None</option></select>
+    </div>
+  </header>
+  <main class="main">
+    <section class="stage" id="stage">
+      <canvas id="c"></canvas>
+      <div id="labelLayer" class="labels"></div>
+      <div class="cap" id="cap"></div>
+      <div class="stats" id="stats"></div>
+      <div class="dock">
+        <div class="seg" id="looks" role="group" aria-label="Cue list, Act 1"></div>
+        <label class="haze" for="haze"><span>Haze</span><input id="haze" type="range" min="0" max="1" step="0.01" value="0.5"></label>
+      </div>
+      <div class="selbar" id="selbar" hidden></div>
+      <div class="focus" id="focus" hidden></div>
+      <div class="toast" id="toast" role="status" hidden></div>
+      <div class="armchip" id="armchip" hidden></div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="lost" id="lost" hidden><div><b>3D paused</b><p>The browser took the graphics context back to save memory. Everything else on the desk carries on.</p><button id="restore" type="button">Restore 3D</button></div></div>
+    </section>
+    <aside class="sheet">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-positions" aria-selected="true">Positions</button>
+        <button type="button" role="tab" id="tab-scene" aria-selected="false">Scene</button>
+        <button type="button" role="tab" id="tab-fixtures" aria-selected="false">Fixtures</button>
+        <button type="button" role="tab" id="tab-notes" aria-selected="false">Notes</button>
+      </div>
+      <div class="pane" id="pane-positions"></div>
+      <div class="pane" id="pane-scene" hidden></div>
+      <div class="pane" id="pane-fixtures" hidden></div>
+      <div class="pane notes" id="pane-notes" hidden></div>
+    </aside>
+  </main>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three'
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+
+// ─── Coordinates ──────────────────────────────────────────────────────────────────────────────
+// The desk's stage frame: metres, x audience-right, y upstage, z up, origin at the centre of the
+// downstage edge at deck level. three.js is Y-up, so (x, y, z) → (x, z, −y), as lib/stageCoords.
+THREE.ColorManagement.enabled = false
+const V = (x, y, z) => new THREE.Vector3(x, z, -y)
+const D2R = Math.PI / 180
+const lin = (hex) => { const c = new THREE.Color(hex); return new THREE.Vector3(c.r ** 2.2, c.g ** 2.2, c.b ** 2.2) }
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// ─── The rig: project 15's placements as the desk composes them ──────────────────────────────
+// [key, name, fixture type, kind override, rigging, world xyz, base yaw, base pitch, beam°, hidden, length]
+const RIG = [["adv2-front-sr","ADV2 Front SR","generic-dimmer","PROFILE","ADV2",[2.5,-3.3,2.9],-136,10,19,false,null],["adv2-front-sr","ADV2 Front SR","generic-dimmer","PROFILE","ADV2",[-2.5,-3.3,2.9],175,14,19,false,null],["adv2-front-c","ADV2 Front C","generic-dimmer","PROFILE","ADV2",[2.2,-3.3,2.9],-155,13,19,false,null],["adv2-front-c","ADV2 Front C","generic-dimmer","PROFILE","ADV2",[-2.2,-3.3,2.9],155,13,19,false,null],["adv2-front-sl","ADV2 Front SL","generic-dimmer","PROFILE","ADV2",[1.9,-3.3,2.9],178,14,19,false,null],["adv2-front-sl","ADV2 Front SL","generic-dimmer","PROFILE","ADV2",[-1.9,-3.3,2.9],140,11,19,false,null],["adv2-front-outer","ADV2 Front Outer","generic-dimmer","PROFILE","ADV2",[2.8,-3.3,2.9],179,14,19,false,null],["adv2-front-outer","ADV2 Front Outer","generic-dimmer","PROFILE","ADV2",[-2.8,-3.3,2.9],-179,14,19,false,null],["lx1-fresnel","LX1 Fresnel","generic-dimmer","FRESNEL","LX1",[2.5,3.72,3.7],-13,57,null,false,null],["lx1-fresnel","LX1 Fresnel","generic-dimmer","FRESNEL","LX1",[-2.5,3.72,3.7],13,57,null,false,null],["lx2-fresnel","LX2 Fresnel","generic-dimmer","FRESNEL","LX2",[2.5,6.7,3.7],-13,57,null,false,null],["lx2-fresnel","LX2 Fresnel","generic-dimmer","FRESNEL","LX2",[-2.5,6.7,3.7],13,57,null,false,null],["adv1-cans","ADV1 Cans","generic-dimmer","PAR","ADV1",[1.5,-0.32,2.9],180,30,null,false,null],["adv1-cans","ADV1 Cans","generic-dimmer","PAR","ADV1",[-1.5,-0.32,2.9],180,30,null,false,null],["lx1-fresnel-c","LX1 Fresnel C","generic-dimmer","FRESNEL","LX1",[0,3.72,3.7],0,58,null,false,null],["lx2-fresnel-c","LX2 Fresnel C","generic-dimmer","FRESNEL","LX2",[0,6.7,3.7],0,58,null,false,null],["lx2-orbit70-sr","LX2 Orbit 70 SR","gear4music-orbit-70-13ch",null,"LX2",[-1.7,6.7,3.6],0,180,null,false,null],["lx2-orbit70-sl","LX2 Orbit 70 SL","gear4music-orbit-70-13ch",null,"LX2",[1.7,6.7,3.6],0,180,null,false,null],["lx1-orbit70-sr","LX1 Orbit 70 SR","gear4music-orbit-70-13ch",null,"LX1",[-1.7,3.72,3.6],0,180,null,false,null],["lx1-orbit70-sl","LX1 Orbit 70 SL","gear4music-orbit-70-13ch",null,"LX1",[1.7,3.72,3.6],0,180,null,false,null],["lx2-shehds19x15-sr","LX2 Shehds 19x15 SR","shehds-led19-rgbw-24ch",null,"LX2",[-1.3,6.7,3.6],0,180,null,false,null],["lx2-shehds19x15-sl","LX2 Shehds 19x15 SL","shehds-led19-rgbw-24ch",null,"LX2",[1.3,6.7,3.6],0,180,null,false,null],["lx1-shehds19x15-sr","LX1 Shehds 19x15 SR","shehds-led19-rgbw-24ch",null,"LX1",[-1.3,3.72,3.6],0,180,null,false,null],["lx1-shehds19x15-sl","LX1 Shehds 19x15 SL","shehds-led19-rgbw-24ch",null,"LX1",[1.3,3.72,3.6],0,180,null,false,null],["lx3-easymove60-sr","LX3 Easymove 60 SR","varytec-easymove-xl-60-spot-11ch",null,"LX3",[0.75,8.7,3.6],0,180,null,false,null],["lx3-easymove60-sl","LX3 Easymove 60 SL","varytec-easymove-xl-60-spot-11ch",null,"LX3",[2.25,8.7,3.6],0,180,null,false,null],["lx3-robe575-sr","LX3 Robe 575 SR","robe-color-spot-575-mode-2",null,"LX3",[-1.5,8.7,3.5],0,180,null,false,null],["lx3-robe575-sl","LX3 Robe 575 SL","robe-color-spot-575-mode-2",null,"LX3",[1.5,8.7,3.5],0,180,null,false,null],["lx2-mac250-sl","LX2 MAC 250 SL","martin-mac-250-mode-4",null,"LX2",[1,6.7,3.5],0,180,null,false,null],["lx2-mac250-sr","LX2 MAC 250 SR","martin-mac-250-mode-4",null,"LX2",[-1,6.7,3.5],0,180,null,false,null],["adv1-robe575-sl","ADV1 Robe 575 SL","robe-color-spot-575-mode-2",null,"ADV1",[2.5,-0.32,2.7],180,180,null,false,null],["adv1-robe575-sr","ADV1 Robe 575 SR","robe-color-spot-575-mode-2",null,"ADV1",[-2.5,-0.32,2.7],180,180,null,false,null],["wall-sr-orbit70","Wall SR Orbit 70","gear4music-orbit-70-13ch",null,"Wall SR",[-4.3,-2.32,2.6],146,180,null,false,null],["wall-sl-orbit70","Wall SL Orbit 70","gear4music-orbit-70-13ch",null,"Wall SL",[4.3,-2.32,2.6],-146,180,null,false,null],["wall-sr-wash42","Wall SR Wash 42","imgstageline-wash-42led-13ch",null,"Wall SR",[-4.3,-11.36,2.6],164,180,null,false,null],["wall-sl-wash42","Wall SL Wash 42","imgstageline-wash-42led-13ch",null,"Wall SL",[4.3,-11.36,2.6],-164,180,null,false,null],["lx3-liteobar-sr","LX3 Liteobar SR","kam-liteobar-252-11ch",null,"LX3",[-1.5,8.7,3.9],0,60,null,false,null],["lx3-liteobar-sl","LX3 Liteobar SL","kam-liteobar-252-11ch",null,"LX3",[1.5,8.7,3.9],0,60,null,false,null],["lx3-solparty-sr","LX3 SOL Party SR","gear4music-sol-party-12b-8ch",null,"LX3",[-1,8.7,3.8],0,60,null,false,null],["lx3-solparty-sl","LX3 SOL Party SL","gear4music-sol-party-12b-8ch",null,"LX3",[1,8.7,3.8],0,60,null,false,null],["adv1-blinder-sr","ADV1 Blinder SR","china-2-cell-led-blinder-8ch",null,"ADV1",[-1.5,-0.32,3],0,10,null,false,null],["adv1-blinder-sl","ADV1 Blinder SL","china-2-cell-led-blinder-8ch",null,"ADV1",[1.5,-0.32,3],0,10,null,false,null],["adv1-twinshot","ADV1 Twin Shot","equinox-twin-shot-mkii",null,"ADV1",[0,-0.32,3],180,35,null,false,null],["foh-balcony-s4rev-sr","FOH Balcony S4 Rev SR","etc-source4-revolution-base-frame",null,"FOH Balcony",[-4,-17.3,2.5],180,180,null,false,null],["foh-balcony-s4rev-sl","FOH Balcony S4 Rev SL","etc-source4-revolution-base-frame",null,"FOH Balcony",[3,-17.3,2.5],180,180,null,false,null],["foh-balcony-twinshot","FOH Balcony Twin Shot","equinox-twin-shot-mkii",null,"FOH Balcony",[0,-17.3,2.6],180,5,null,false,null],["ring","Ring","lightstrip-rgb","STRIP","Proscenium",[2.55,0.4,1.45],-90,0,null,false,2.9],["ring","Ring","lightstrip-rgb","STRIP","Proscenium",[0,0.4,2.9],0,-90,null,false,5.1],["ring","Ring","lightstrip-rgb","STRIP","Proscenium",[-2.55,0.4,1.45],-90,0,null,false,2.9],["house-1","House 1","generic-dimmer","GENERIC",null,[0,-1.32,3.1],0,90,null,false,null],["house-2","House 2","generic-dimmer","GENERIC",null,[0,-4.3,3.1],0,90,null,false,null],["house-3","House 3","generic-dimmer","GENERIC",null,[0,-8.3,3.1],0,90,null,false,null]]
+
+const RIGGINGS = [
+  { name: 'LX3', kind: 'BAR', x: 0, y: 8.7, z: 4, yaw: 0, len: 6 },
+  { name: 'LX2', kind: 'BAR', x: 0, y: 6.7, z: 4, yaw: 0, len: 6 },
+  { name: 'LX1', kind: 'BAR', x: 0, y: 3.72, z: 4, yaw: 0, len: 6 },
+  { name: 'Proscenium', kind: 'OTHER', x: 0, y: 0.5, z: 3.2, yaw: 0, len: 5.1 },
+  { name: 'ADV1', kind: 'BAR', x: 0, y: -0.32, z: 3.2, yaw: 0, len: 6 },
+  { name: 'ADV2', kind: 'BAR', x: 0, y: -3.3, z: 3.2, yaw: 0, len: 6 },
+  { name: 'Wall SR', kind: 'PIPE', x: -4.3, y: -6.84, z: 2.9, yaw: 90, len: 10 },
+  { name: 'Wall SL', kind: 'PIPE', x: 4.3, y: -6.84, z: 2.9, yaw: 90, len: 10 },
+  // Not a bar: the balcony's front ledge, which these units stand on (Chris, 2026-09-29).
+  { name: 'FOH Balcony', kind: 'LEDGE', x: 0, y: -16.24, z: 1.9, yaw: 0, len: 8.6 },
+]
+
+// ─── The scene document: what `set_scene` would store. Venue elements outlive a production;
+// set elements belong to this one. Sizes and positions are estimates from the FOH video. ────────
+const flat = (name, a, b, h, colour, openings = [], pattern = 'panels') => {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  return { name, kind: 'flat', layer: 'set', x: (a[0] + b[0]) / 2, y: (a[1] + b[1]) / 2, z: 0,
+    yawDeg: Math.round(Math.atan2(dy, dx) / D2R * 10) / 10, widthM: Math.round(Math.hypot(dx, dy) * 100) / 100,
+    depthM: 0.08, heightM: h, finish: { colour, pattern }, params: { openings } }
+}
+const SCENE = [
+  { name: 'Hall', kind: 'room', layer: 'venue', x: 0, y: -9.2, z: -0.95, yawDeg: 0, widthM: 8.6, depthM: 18.4, heightM: 4.55,
+    finish: { colour: '#4a4540', pattern: 'plain' },
+    params: { omit: ['upstage'], floor: { colour: '#2b2724', pattern: 'boards' }, ceiling: { colour: '#8d8b84', pattern: 'tiles' } } },
+  { name: 'Stage house', kind: 'room', layer: 'venue', x: 0, y: 5.75, z: 0, yawDeg: 0, widthM: 8.6, depthM: 10.5, heightM: 4.6,
+    finish: { colour: '#161617', pattern: 'plain' }, params: { omit: ['downstage', 'floor'] } },
+  { name: 'Main stage', kind: 'platform', layer: 'venue', x: 0, y: 5.5, z: 0, yawDeg: 0, widthM: 6.3, depthM: 11, heightM: 0.95,
+    finish: { colour: '#4a443d', pattern: 'boards' }, params: { region: 'Main stage' } },
+  { name: 'Proscenium', kind: 'proscenium', layer: 'venue', x: 0, y: 0.35, z: -0.95, yawDeg: 0, widthM: 8.6, depthM: 0.3, heightM: 5.55,
+    finish: { colour: '#6a5d52', pattern: 'panels' }, params: { openingWidthM: 5.1, openingHeightM: 2.9, openingSillM: 0.95, surroundM: 0.18 } },
+  { name: 'Forestage unit', kind: 'object', layer: 'venue', x: 0, y: -0.45, z: -0.95, yawDeg: 0, widthM: 2.6, depthM: 0.7, heightM: 0.55,
+    finish: { colour: '#6b6c68' }, params: { shape: 'box' } },
+  { name: 'Plant SR', kind: 'object', layer: 'venue', x: -1.6, y: -0.45, z: -0.95, yawDeg: 0, widthM: 0.55, depthM: 0.55, heightM: 0.85,
+    finish: { colour: '#2f5a2a' }, params: { shape: 'cylinder' } },
+  { name: 'Plant SL', kind: 'object', layer: 'venue', x: 1.6, y: -0.45, z: -0.95, yawDeg: 0, widthM: 0.55, depthM: 0.55, heightM: 0.85,
+    finish: { colour: '#2f5a2a' }, params: { shape: 'cylinder' } },
+  { name: 'House tabs', kind: 'drape', layer: 'venue', x: 0, y: 0.62, z: 0, yawDeg: 0, widthM: 5.6, depthM: 0.12, heightM: 3.1,
+    finish: { colour: '#6e121b' }, params: { role: 'tabs', operation: 'draw', states: { open: 1 } } },
+  { name: 'Leg SR', kind: 'drape', layer: 'venue', x: -2.95, y: 0.75, z: 0, yawDeg: 0, widthM: 0.9, depthM: 0.05, heightM: 4.0,
+    finish: { colour: '#0d0d0e' }, params: { role: 'leg' } },
+  { name: 'Leg SL', kind: 'drape', layer: 'venue', x: 2.95, y: 0.75, z: 0, yawDeg: 0, widthM: 0.9, depthM: 0.05, heightM: 4.0,
+    finish: { colour: '#0d0d0e' }, params: { role: 'leg' } },
+  { name: 'Balcony', kind: 'platform', layer: 'venue', x: 0, y: -17.3, z: 0.9, yawDeg: 0, widthM: 8.6, depthM: 2.2, heightM: 0.3,
+    finish: { colour: '#2e2b28' }, params: { railHeightM: 1.0, railEdge: 'upstage' } },
+  ...[-3.5, -7.5, -11.5, -15.5].flatMap((y, i) => [-1, 1].map((s) => ({
+    name: `Pillar ${s < 0 ? 'SR' : 'SL'} ${i + 1}`, kind: 'object', layer: 'venue', x: s * 4.15, y, z: -0.95, yawDeg: 0,
+    widthM: 0.3, depthM: 0.45, heightM: 4.55, finish: { colour: '#2f2c29' }, params: { shape: 'box' } }))),
+  ...[-1, 1].map((s) => ({ name: `Exit sign ${s < 0 ? 'SR' : 'SL'}`, kind: 'object', layer: 'venue', x: s * 4.26, y: -1.3, z: 1.35, yawDeg: 0,
+    widthM: 0.05, depthM: 0.36, heightM: 0.18, finish: { colour: '#27ff6e', emissive: true }, params: { shape: 'box' } })),
+  { name: 'Stalls', kind: 'seating', layer: 'venue', x: 0, y: -2.4, z: -0.95, yawDeg: 0,
+    finish: { colour: '#6a2733' }, params: { rows: 12, seatsPerRow: 12, rowPitchM: 0.95, seatPitchM: 0.52, firstRow: 'A', rakeM: 0 } },
+  // The box set: a drawing room with a French window
+  flat('SR wall', [-2.55, 0.65], [-2.3, 4.3], 2.8, '#8a847a', [{ kind: 'door', fromM: 0.45, widthM: 0.9, heightM: 2.1 }]),
+  flat('Back wall', [-2.3, 4.3], [2.3, 4.3], 2.8, '#cdc3ad', [{ kind: 'french window', fromM: 2.55, widthM: 1.2, heightM: 2.35 }], 'plain'),
+  flat('SL wall', [2.3, 4.3], [2.55, 0.65], 2.8, '#8a847a'),
+  { name: 'Gothic window SR', kind: 'object', layer: 'set', x: -1.55, y: 4.24, z: 0.45, yawDeg: 0, widthM: 0.85, depthM: 0.03, heightM: 2.15, finish: { colour: '#ebe3d1' }, params: { shape: 'box' } },
+  { name: 'Gothic window C', kind: 'object', layer: 'set', x: -0.55, y: 4.24, z: 0.45, yawDeg: 0, widthM: 0.85, depthM: 0.03, heightM: 2.15, finish: { colour: '#ebe3d1' }, params: { shape: 'box' } },
+  { name: 'Garden backing', kind: 'drape', layer: 'set', x: 0.85, y: 5.6, z: 0, yawDeg: 0, widthM: 2.6, depthM: 0.05, heightM: 3.2, finish: { colour: '#24472a' }, params: { role: 'backcloth' } },
+  { name: 'Moon', kind: 'object', layer: 'set', x: 0.85, y: 5.5, z: 1.7, yawDeg: 0, widthM: 0.6, depthM: 0.03, heightM: 0.6,
+    finish: { colour: '#e9e6da' }, params: { shape: 'disc', flies: true, states: { trimM: 5.2 } } },
+  { name: 'Curtain SR', kind: 'object', layer: 'set', x: 0.12, y: 4.18, z: 0, yawDeg: 0, widthM: 0.3, depthM: 0.14, heightM: 2.6, finish: { colour: '#7c2016' }, params: { shape: 'box' } },
+  { name: 'Curtain SL', kind: 'object', layer: 'set', x: 1.58, y: 4.18, z: 0, yawDeg: 0, widthM: 0.3, depthM: 0.14, heightM: 2.6, finish: { colour: '#7c2016' }, params: { shape: 'box' } },
+  { name: 'Rostrum', kind: 'platform', layer: 'set', x: 0.3, y: 3.75, z: 0.2, yawDeg: 0, widthM: 3.4, depthM: 0.9, heightM: 0.2, finish: { colour: '#b9ae98' }, params: {} },
+  { name: 'Fireplace', kind: 'object', layer: 'set', x: 2.28, y: 1.9, z: 0, yawDeg: 0, widthM: 0.3, depthM: 1.2, heightM: 1.15, finish: { colour: '#e7e3da' }, params: { shape: 'box' } },
+  { name: 'Sofa', kind: 'object', layer: 'set', x: -0.85, y: 1.75, z: 0, yawDeg: 0, widthM: 1.9, depthM: 0.85, heightM: 0.85, finish: { colour: '#a98542' }, params: { shape: 'box' } },
+  { name: 'Coffee table', kind: 'object', layer: 'set', x: -0.6, y: 0.95, z: 0, yawDeg: 0, widthM: 0.9, depthM: 0.45, heightM: 0.4, finish: { colour: '#5a3d27' }, params: { shape: 'box' } },
+  { name: 'Armchair', kind: 'object', layer: 'set', x: 1.3, y: 1.7, z: 0, yawDeg: 0, widthM: 0.75, depthM: 0.75, heightM: 0.95, finish: { colour: '#4d3553' }, params: { shape: 'box' } },
+  { name: 'Standard lamp', kind: 'object', layer: 'set', x: -2.0, y: 2.3, z: 0, yawDeg: 0, widthM: 0.05, depthM: 0.05, heightM: 1.45, finish: { colour: '#3a3027' }, params: { shape: 'cylinder' } },
+  { name: 'Lamp shade', kind: 'object', layer: 'set', x: -2.0, y: 2.3, z: 1.3, yawDeg: 0, widthM: 0.45, depthM: 0.45, heightM: 0.35, finish: { colour: '#ffc76b', emissive: true }, params: { shape: 'shade' } },
+]
+
+const VIEWPOINTS = [
+  { id: 'orbit', name: 'Orbit', kind: 'orbit' },
+  { id: 'desk', name: 'Balcony · desk', kind: 'eye', eye: [1.25, -17.0, 2.6], target: [0, 2.6, 0.8], fov: 50, note: 'standing behind the balcony ledge' },
+  { id: 'rowf', name: 'Row F centre', kind: 'seat', seat: 'F6' },
+  { id: 'rowa1', name: 'Row A, seat 1', kind: 'seat', seat: 'A1' },
+  { id: 'actor', name: 'Centre stage', kind: 'eye', eye: [-0.2, 2.3, 1.62], target: [0, -12, 1.4], fov: 62, note: 'an actor looking out' },
+  { id: 'plan', name: 'Plan', kind: 'ortho' },
+  { id: 'front', name: 'Front', kind: 'ortho' },
+  { id: 'side', name: 'Side', kind: 'ortho' },
+]
+
+// ─── Lanterns and fixture bodies ─────────────────────────────────────────────────────────────
+// A generic-dimmer patch (or each of its extra placements) names a lantern from this library; a
+// DMX fixture type carries its own body. A body is parametric: a yoke that pans about the vertical,
+// a head that tilts in it, the beam along the head's −Y, and accessories hung off the head.
+// Numbers are maker data where known (see INDEX.md §"The lantern library"); sizes in metres.
+const LANTERNS = {
+  's4-19':   { name: 'Source Four 19°', family: 'Profile', beam: 13, field: 19, power: 44, body: { shape: 'profile', len: 0.64, dia: 0.26, lensR: 0.085, shutters: true, frame: true } },
+  's4-26':   { name: 'Source Four 26°', family: 'Profile', beam: 17, field: 26, power: 40, body: { shape: 'profile', len: 0.57, dia: 0.26, lensR: 0.085, shutters: true, frame: true } },
+  's4-36':   { name: 'Source Four 36°', family: 'Profile', beam: 25, field: 36, power: 36, body: { shape: 'profile', len: 0.54, dia: 0.26, lensR: 0.085, shutters: true, frame: true } },
+  's4-zoom': { name: 'Source Four Zoom 25–50°', family: 'Profile', beam: 24, field: 35, power: 36, zoom: [25, 50], body: { shape: 'profile', len: 0.7, dia: 0.28, lensR: 0.09, shutters: true, frame: true } },
+  'sil-30':  { name: 'CCT Silhouette 30', family: 'Profile', beam: 20, field: 30, power: 34, zoom: [22, 40], body: { shape: 'profile', len: 0.72, dia: 0.3, lensR: 0.1, shutters: true, frame: true } },
+  'patt-23': { name: 'Strand Patt 23', family: 'Profile', beam: 17, field: 30, power: 18, body: { shape: 'profile', len: 0.3, dia: 0.15, lensR: 0.05, shutters: true, frame: true } },
+  'cantata-f': { name: 'Strand Cantata F', family: 'Fresnel', beam: 30, field: 45, power: 30, zoom: [9, 51], body: { shape: 'fresnel', len: 0.42, dia: 0.3, lensR: 0.1, barnDoors: true, frame: true } },
+  'rama-175':  { name: 'Selecon Rama 175', family: 'Fresnel', beam: 30, field: 45, power: 30, zoom: [7, 56], body: { shape: 'fresnel', len: 0.38, dia: 0.3, lensR: 0.09, barnDoors: true, frame: true } },
+  'patt-743':  { name: 'Strand Patt 743', family: 'Fresnel', beam: 30, field: 48, power: 26, zoom: [15, 65], body: { shape: 'fresnel', len: 0.34, dia: 0.3, lensR: 0.1, barnDoors: true, frame: true } },
+  'prelude-pc': { name: 'Strand Prelude PC', family: 'PC', beam: 20, field: 34, power: 24, body: { shape: 'fresnel', len: 0.3, dia: 0.22, lensR: 0.07, barnDoors: false, frame: true } },
+  'par64-cp62': { name: 'Par 64 · CP62 MFL', family: 'PAR', beam: 19, field: 32, oval: [44, 21], power: 40, body: { shape: 'par', len: 0.36, dia: 0.23, lensR: 0.095, frame: true } },
+  'par64-cp61': { name: 'Par 64 · CP61 NSP', family: 'PAR', beam: 10, field: 20, oval: [26, 14], power: 46, body: { shape: 'par', len: 0.36, dia: 0.23, lensR: 0.095, frame: true } },
+  'par16':      { name: 'Par 16 birdie', family: 'PAR', beam: 10, field: 18, power: 10, body: { shape: 'par', len: 0.12, dia: 0.07, lensR: 0.028, frame: false } },
+  'coda-flood': { name: 'Strand Coda 500 flood', family: 'Flood', beam: 70, field: 100, power: 16, body: { shape: 'flood', len: 0.2, dia: 0.24, lensR: 0.1, frame: true } },
+  'downlight':  { name: 'House downlight', family: 'House', beam: 80, field: 110, power: 16, body: { shape: 'downlight', len: 0.16, dia: 0.2, lensR: 0.08 } },
+}
+const LANTERN_FOR_KIND = { PROFILE: 's4-19', FRESNEL: 'cantata-f', PAR: 'par64-cp62', GENERIC: 'downlight' }
+const TYPE_BODIES = [
+  ['orbit-70',           { name: 'Gear4music Orbit 70', family: 'Wash mover', cls: 'mover', beam: 18, field: 25, power: 28, body: { shape: 'mover', head: 'wash', len: 0.2, dia: 0.2, lensR: 0.08 } }],
+  ['shehds',             { name: 'Shehds 19×15 wash', family: 'Wash mover', cls: 'mover', beam: 16, field: 22, power: 34, body: { shape: 'mover', head: 'wash', len: 0.22, dia: 0.26, lensR: 0.11 } }],
+  ['easymove',           { name: 'Varytec Easymove XL 60', family: 'Spot mover', cls: 'mover', beam: 12, field: 15, power: 34, body: { shape: 'mover', head: 'spot', len: 0.3, dia: 0.18, lensR: 0.05 } }],
+  ['robe-color-spot',    { name: 'Robe ColorSpot 575', family: 'Spot mover', cls: 'mover', beam: 14, field: 18, power: 60, body: { shape: 'mover', head: 'spot', len: 0.42, dia: 0.26, lensR: 0.07 } }],
+  ['mac-250',            { name: 'Martin MAC 250', family: 'Spot mover', cls: 'mover', beam: 12, field: 16, power: 40, body: { shape: 'mover', head: 'spot', len: 0.36, dia: 0.22, lensR: 0.06 } }],
+  ['wash-42',            { name: 'IMG Wash 42 LED', family: 'Wash mover', cls: 'mover', beam: 22, field: 30, power: 26, body: { shape: 'mover', head: 'wash', len: 0.2, dia: 0.24, lensR: 0.1 } }],
+  ['source4-revolution', { name: 'Source Four Revolution', family: 'Automated profile', cls: 'mover', beam: 9, field: 12, power: 55, body: { shape: 'mover', head: 'profile', len: 0.6, dia: 0.26, lensR: 0.085 } }],
+  ['liteobar',           { name: 'KAM Liteobar 252', family: 'LED batten', beam: 22, field: 30, power: 24, body: { shape: 'batten', len: 1.0, dia: 0.1, lensR: 0.025, cells: 3, cellShape: 'segment', elements: true } }],
+  ['sol-party',          { name: 'SOL Party 12B', family: 'Effect', beam: 22, field: 30, power: 14, body: { shape: 'effect', len: 0.22, dia: 0.16, lensR: 0.05, cells: 1 } }],
+  ['blinder',            { name: '2-cell LED blinder', family: 'Blinder', beam: 45, field: 60, power: 30, body: { shape: 'blinder', len: 0.46, dia: 0.24, lensR: 0.085, cells: 2, elements: true } }],
+  ['twin-shot',          { name: 'Equinox Twin Shot MKII', family: 'Confetti cannon', cls: 'cannon', beam: 1, field: 1, power: 0, body: { shape: 'cannon', len: 0.4, dia: 0.24, lensR: 0.03 } }],
+]
+function specFor(type, kind, lanternId) {
+  if (kind === 'STRIP') return { cls: 'strip', label: 'LED strip', family: 'Strip' }
+  if (type === 'generic-dimmer') {
+    const id = lanternId || LANTERN_FOR_KIND[kind] || 's4-26', l = LANTERNS[id]
+    return { ...l, cls: 'static', lantern: id, label: l.name }
+  }
+  for (const [s, v] of TYPE_BODIES) if (type.includes(s)) return { cls: 'static', ...v, label: v.name }
+  return { cls: 'static', beam: 20, field: 30, power: 30, label: 'Dimmer', family: 'Generic', body: { shape: 'par', len: 0.3, dia: 0.2, lensR: 0.08 } }
+}
+const staticDir = (yaw, pitch) => { const y = yaw * D2R, p = pitch * D2R
+  return V(Math.sin(y) * Math.cos(p), -Math.cos(y) * Math.cos(p), -Math.sin(p)).normalize() }
+
+// A rigging's kind decides the mount: bars, pipes and trusses are hung from; a ledge or floor stand
+// is stood on. A standing body is the hung one turned over — base down, yoke up — and a standing
+// mover's rest beam points up, as `FixtureAim` already assumes for basePitchDeg 0.
+const STAND_KINDS = new Set(['LEDGE', 'FLOOR_STAND'])
+const P = RIG.map(([key, name, type, kind, rig, pos, yaw, pitch, , , length], i) => {
+  const s = specFor(type, kind)
+  const r = RIGGINGS.find((q) => q.name === rig), mount = r && STAND_KINDS.has(r.kind) ? 'stand' : 'hang'
+  if (mount === 'stand') pos = [pos[0], r.y, r.z]
+  const posV = V(...pos)
+  const home = s.cls === 'mover' ? new THREE.Vector3(0, mount === 'stand' ? 1 : -1, 0) : staticDir(yaw, pitch)
+  return { i, key, name, type, kind, rig, mount, pos, yaw, pitch, length, s, posV, home,
+    cur: { level: 0, col: lin('#ffcf94'), dir: home.clone() }, from: null, to: null }
+})
+
+// ─── Renderer: one canvas, DPR capped, no post-processing, MSAA on the default framebuffer only ─
+const canvas = document.getElementById('c')
+const stageEl = document.getElementById('stage')
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5))
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace
+renderer.setClearColor('#07090d')
+const scene = new THREE.Scene()
+const persp = new THREE.PerspectiveCamera(45, 1, 0.05, 200)
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 80)
+let cam = persp
+
+// ─── Receivers: every venue and set surface is lit by one shader looping over the live lights ──
+// This replaces the per-(beam × region) cookie instances: cost is pixels × lights, and any number
+// of surfaces receives light — flats, sofa, seats, walls — not just 16 region boxes.
+const MAXL = 48
+const LU = {
+  uLPos: { value: Array.from({ length: MAXL }, () => new THREE.Vector3()) },
+  uLDir: { value: Array.from({ length: MAXL }, () => new THREE.Vector3(0, -1, 0)) },
+  uLCol: { value: Array.from({ length: MAXL }, () => new THREE.Vector3()) },
+  uLCone: { value: Array.from({ length: MAXL }, () => new THREE.Vector2(0.9, 0.95)) },
+  uLRange: { value: new Array(MAXL).fill(0) },
+  // The beam's frame: its right axis, the four blades (depth, angle), and apex distance · iris · softness
+  uLRight: { value: Array.from({ length: MAXL }, () => new THREE.Vector3(1, 0, 0)) },
+  uLShut: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) },
+  uLShutA: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) },
+  uLOpt: { value: Array.from({ length: MAXL }, () => new THREE.Vector3(0, 1, 0.5)) },
+  uCount: { value: 0 },
+  uAmbient: { value: 0.012 },
+}
+// The beam's cross-section, shared by surfaces and haze. uv is 1 at the field edge. A blade at angle a
+// with depth d keeps the side of the line dot(uv, n) = 1 − d nearest the axis; iris shrinks the
+// circle; soft is the focus, from a hard profile edge (0) to a wash's feathered one (1).
+const BEAM_MASK = `
+float beamMask(vec2 uv, vec4 shutD, vec4 shutA, float iris, float soft) {
+  float r = length(uv), w = mix(0.025, 0.4, soft);
+  float m = 1.0 - smoothstep(1.0 - w, 1.0, r);
+  m *= 1.0 - smoothstep(iris - w * 0.6, iris + 0.005, r);
+  for (int b = 0; b < 4; b++) {
+    float lim = 1.0 - shutD[b];
+    float x = dot(uv, vec2(cos(shutA[b]), sin(shutA[b])));
+    m *= 1.0 - smoothstep(lim - w * 0.6, lim + 0.005, x);
+  }
+  return m;
+}`
+const RECV_VS = `
+varying vec3 vW; varying vec3 vN;
+#ifdef USE_INSTANCING_COLOR
+varying vec3 vIC;
+#endif
+void main() {
+  mat4 m = modelMatrix;
+  #ifdef USE_INSTANCING
+  m = m * instanceMatrix;
+  #endif
+  vec4 w = m * vec4(position, 1.0);
+  vW = w.xyz; vN = normalize(mat3(m) * normal);
+  #ifdef USE_INSTANCING_COLOR
+  vIC = instanceColor;
+  #endif
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`
+const RECV_FS = `
+uniform vec3 uAlbedo; uniform int uPattern; uniform float uAmbient; uniform float uFill; uniform int uCount;
+uniform vec3 uLPos[MAXL]; uniform vec3 uLDir[MAXL]; uniform vec3 uLCol[MAXL]; uniform vec2 uLCone[MAXL]; uniform float uLRange[MAXL];
+uniform vec3 uLRight[MAXL]; uniform vec4 uLShut[MAXL]; uniform vec4 uLShutA[MAXL]; uniform vec3 uLOpt[MAXL];
+varying vec3 vW; varying vec3 vN;
+#ifdef USE_INSTANCING_COLOR
+varying vec3 vIC;
+#endif
+float h21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+${BEAM_MASK}
+float grid(vec2 q, vec2 cell, float w) {
+  vec2 f = fract(q / cell); vec2 e = min(f, 1.0 - f) * cell;
+  return smoothstep(w * 0.4, w, min(e.x, e.y));
+}
+float pattern(vec3 p, vec3 n) {
+  vec2 q = abs(n.y) > 0.5 ? p.xz : (abs(n.x) > 0.5 ? p.zy : p.xy);
+  if (uPattern == 1) { vec2 c = floor(q / 0.6); return mix(0.5, 1.0, grid(q, vec2(0.6), 0.03)) * (0.9 + 0.14 * h21(c)); }
+  if (uPattern == 2) { return mix(0.62, 1.0, grid(q, vec2(0.6), 0.02)); }
+  if (uPattern == 3) { float b = floor(q.x / 0.14); float f = fract(q.x / 0.14); float e = min(f, 1.0 - f) * 0.14;
+    return mix(0.7, 1.0, smoothstep(0.003, 0.009, e)) * (0.85 + 0.2 * h21(vec2(b, floor(q.y / 2.4 + h21(vec2(b)))))); }
+  return 1.0;
+}
+void main() {
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  vec3 alb = uAlbedo * pattern(vW, n);
+  #ifdef USE_INSTANCING_COLOR
+  alb *= vIC;
+  #endif
+  vec3 acc = vec3(uAmbient) + uFill * (0.3 + 0.7 * max(dot(n, normalize(vec3(0.25, 0.9, 0.35))), 0.0));
+  for (int i = 0; i < MAXL; i++) {
+    if (i >= uCount) break;
+    vec3 L = uLPos[i] - vW; float d2 = dot(L, L); float d = sqrt(d2); L /= d;
+    float c = dot(-L, uLDir[i]);
+    float s = smoothstep(uLCone[i].x, uLCone[i].y, c);
+    if (s <= 0.0) continue;
+    vec3 v = vW - uLPos[i];
+    float axial = dot(v, uLDir[i]);
+    s = 1.0 - smoothstep(uLRange[i] + 0.15, uLRange[i] + 0.45, axial);
+    // Where the point sits in the beam's cross-section, 1 at the field edge: the same frame the
+    // haze uses, so a shutter cuts the pool and the beam along the same straight line.
+    vec3 zAx = cross(uLRight[i], -uLDir[i]);
+    float tanO = sqrt(1.0 - uLCone[i].x * uLCone[i].x) / uLCone[i].x;
+    vec2 uv = vec2(dot(v, uLRight[i]), dot(v, zAx)) / max(axial * tanO, 1e-4);
+    s *= beamMask(uv, uLShut[i], uLShutA[i], uLOpt[i].y, uLOpt[i].z);
+    if (s <= 0.0) continue;
+    float da = max(d - uLOpt[i].x, 0.3);
+    acc += uLCol[i] * s * max(dot(n, L), 0.0) / (da * da + 0.5);
+  }
+  vec3 col = 1.0 - exp(-alb * acc * 1.1);
+  gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+}`
+const PATTERN = { plain: 0, panels: 1, tiles: 2, boards: 3 }
+const recv = (hex, pattern = 'plain', fill = 0) => new THREE.ShaderMaterial({
+  defines: { MAXL }, uniforms: { ...LU, uAlbedo: { value: lin(hex) }, uPattern: { value: PATTERN[pattern] ?? 0 }, uFill: { value: fill } },
+  vertexShader: RECV_VS, fragmentShader: RECV_FS,
+})
+
+const SCENERY_APPLY = {} // element name → apply(state)
+// ─── Scene builders, one per element kind ─────────────────────────────────────────────────────
+const layers = { venue: new THREE.Group(), set: new THREE.Group(), seating: new THREE.Group(), rigging: new THREE.Group() }
+Object.values(layers).forEach((g) => scene.add(g))
+const sectionTagged = [] // objects an orthographic section may cut away
+
+function place(obj, el) { obj.position.copy(V(el.x, el.y, el.z)); obj.rotation.y = (el.yawDeg || 0) * D2R; return obj }
+function box(w, h, d, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m }
+
+function buildRoom(el) {
+  const g = place(new THREE.Group(), el), w = el.widthM, d = el.depthM, h = el.heightM, omit = el.params.omit || []
+  const wall = recv(el.finish.colour, el.finish.pattern)
+  const face = (name, geo, mat, fn) => { if (omit.includes(name)) return; const m = new THREE.Mesh(geo, mat); fn(m); g.add(m) }
+  const fl = el.params.floor || el.finish, ce = el.params.ceiling || el.finish
+  face('floor', new THREE.PlaneGeometry(w, d), recv(fl.colour, fl.pattern), (m) => { m.rotation.x = -Math.PI / 2 })
+  face('ceiling', new THREE.PlaneGeometry(w, d), recv(ce.colour, ce.pattern), (m) => { m.rotation.x = Math.PI / 2; m.position.y = h })
+  face('sr', new THREE.PlaneGeometry(d, h), wall, (m) => { m.rotation.y = Math.PI / 2; m.position.set(-w / 2, h / 2, 0) })
+  face('sl', new THREE.PlaneGeometry(d, h), wall, (m) => { m.rotation.y = -Math.PI / 2; m.position.set(w / 2, h / 2, 0) })
+  face('downstage', new THREE.PlaneGeometry(w, h), wall, (m) => { m.rotation.y = Math.PI; m.position.set(0, h / 2, d / 2) })
+  face('upstage', new THREE.PlaneGeometry(w, h), wall, (m) => { m.position.set(0, h / 2, -d / 2) })
+  return g
+}
+// A panel with openings along its width (doors, windows, a proscenium arch).
+function flatSegments(g, w, h, t, mat, openings) {
+  let cur = 0
+  const seg = (a, b, z0, z1) => { if (b - a > 0.001 && z1 - z0 > 0.001) g.add(box(b - a, z1 - z0, t, mat, -w / 2 + (a + b) / 2, (z0 + z1) / 2, 0)) }
+  for (const o of [...openings].sort((a, b) => a.fromM - b.fromM)) {
+    seg(cur, o.fromM, 0, h)
+    seg(o.fromM, o.fromM + o.widthM, 0, o.sillM || 0)
+    seg(o.fromM, o.fromM + o.widthM, (o.sillM || 0) + o.heightM, h)
+    cur = o.fromM + o.widthM
+  }
+  seg(cur, w, 0, h)
+}
+function buildFlat(el) {
+  const g = place(new THREE.Group(), el)
+  flatSegments(g, el.widthM, el.heightM, el.depthM, recv(el.finish.colour, el.finish.pattern), el.params.openings || [])
+  return g
+}
+function buildProscenium(el) {
+  const g = place(new THREE.Group(), el), p = el.params, w = el.widthM, ow = p.openingWidthM, oh = p.openingHeightM, sill = p.openingSillM, s = p.surroundM
+  flatSegments(g, w, el.heightM, el.depthM, recv(el.finish.colour, el.finish.pattern), [{ fromM: (w - ow) / 2, widthM: ow, sillM: sill, heightM: oh }])
+  const black = recv('#0e0e10'), zf = el.depthM / 2 + 0.012
+  g.add(box(s, oh + s, 0.02, black, -(ow + s) / 2, sill + (oh + s) / 2, zf))
+  g.add(box(s, oh + s, 0.02, black, (ow + s) / 2, sill + (oh + s) / 2, zf))
+  g.add(box(ow + 2 * s, s, 0.02, black, 0, sill + oh + s / 2, zf))
+  return g
+}
+function buildPlatform(el) {
+  const g = place(new THREE.Group(), el), mat = recv(el.finish.colour, el.finish.pattern)
+  g.add(box(el.widthM, el.heightM, el.depthM, mat, 0, -el.heightM / 2, 0))
+  if (el.params.railHeightM) g.add(box(el.widthM, el.params.railHeightM, 0.08, recv('#24211f'), 0, el.params.railHeightM / 2, -el.depthM / 2 + 0.04))
+  return g
+}
+function buildObject(el) {
+  const f = el.finish, sh = el.params.shape || 'box'
+  const mat = f.emissive ? new THREE.MeshBasicMaterial({ color: f.colour }) : recv(f.colour, f.pattern)
+  if (sh === 'disc') { const m = new THREE.Mesh(new THREE.CylinderGeometry(el.widthM / 2, el.widthM / 2, el.depthM, 32), mat); m.rotation.x = Math.PI / 2; m.position.y = el.widthM / 2
+    const g = place(new THREE.Group().add(m), el); SCENERY_APPLY[el.name] = (st) => { g.position.y = st.trimM }; return g }
+  const geo = sh === 'cylinder' ? new THREE.CylinderGeometry(el.widthM / 2, el.widthM / 2, el.heightM, 20)
+    : sh === 'shade' ? new THREE.CylinderGeometry(el.widthM * 0.28, el.widthM / 2, el.heightM, 20)
+    : new THREE.BoxGeometry(el.widthM, el.heightM, el.depthM)
+  const m = new THREE.Mesh(geo, mat); m.position.y = el.heightM / 2
+  return place(new THREE.Group().add(m), el)
+}
+function mergeBoxes(parts) {
+  const pos = [], nor = []
+  for (const b of parts) {
+    const g = new THREE.BoxGeometry(b[0], b[1], b[2]).toNonIndexed(); g.translate(b[3], b[4], b[5])
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array)
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
+  return g
+}
+const SEATS = []
+let seatMesh = null
+function buildSeating(el) {
+  const p = el.params, geo = mergeBoxes([[0.46, 0.08, 0.45, 0, 0.44, 0], [0.46, 0.52, 0.06, 0, 0.72, 0.22], [0.12, 0.4, 0.12, 0, 0.2, 0]])
+  const mesh = new THREE.InstancedMesh(geo, recv(el.finish.colour), p.rows * p.seatsPerRow)
+  const m = new THREE.Matrix4(), white = new THREE.Color(1, 1, 1)
+  let n = 0
+  for (let r = 0; r < p.rows; r++) for (let s = 0; s < p.seatsPerRow; s++) {
+    const x = el.x + (s - (p.seatsPerRow - 1) / 2) * p.seatPitchM, y = el.y - r * p.rowPitchM, z = el.z + r * (p.rakeM || 0)
+    const row = String.fromCharCode(p.firstRow.charCodeAt(0) + r)
+    SEATS.push({ id: `${row}${s + 1}`, row, num: s + 1, x, y, z })
+    m.makeTranslation(...V(x, y, z).toArray()); mesh.setMatrixAt(n, m); mesh.setColorAt(n, white); n++
+  }
+  mesh.computeBoundingSphere()
+  seatMesh = mesh
+  return mesh
+}
+// House tabs: two pleated halves on a draw track; `open` 0 = closed in, 1 = drawn to the sides.
+function buildDrape(el) {
+  if (el.params.role !== 'tabs') return buildObject(el)
+  const g = place(new THREE.Group(), el), half = el.widthM / 2 + 0.1, h = el.heightM
+  const geo = new THREE.PlaneGeometry(half, h, 40, 1), pa = geo.attributes.position
+  for (let i = 0; i < pa.count; i++) pa.setZ(i, Math.sin((pa.getX(i) / half) * Math.PI * 14) * 0.05)
+  geo.computeVertexNormals()
+  const mat = recv(el.finish.colour); mat.side = THREE.DoubleSide
+  const halves = [-1, 1].map((sgn) => { const m = new THREE.Mesh(geo, mat); m.position.y = h / 2; g.add(m); return { m, sgn } })
+  SCENERY_APPLY[el.name] = (st) => {
+    const sx = 1 - 0.84 * st.open
+    for (const { m, sgn } of halves) { m.scale.x = sx; m.position.x = sgn * (el.widthM / 2 - (half * sx) / 2 + 0.05) }
+  }
+  return g
+}
+const BUILD = { room: buildRoom, flat: buildFlat, proscenium: buildProscenium, platform: buildPlatform, object: buildObject, drape: buildDrape, seating: buildSeating }
+for (const el of SCENE) {
+  const obj = BUILD[el.kind](el)
+  obj.userData.el = el
+  ;(el.kind === 'seating' ? layers.seating : layers[el.layer]).add(obj)
+  if (el.kind !== 'room') sectionTagged.push(obj)
+}
+
+// Rigging bars, drawn by kind (a Proscenium "OTHER" is the ring's mount — nothing to draw).
+const pipeMat = new THREE.MeshBasicMaterial({ color: '#50565e' })
+for (const r of RIGGINGS) {
+  if (r.kind === 'OTHER' || STAND_KINDS.has(r.kind)) continue
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, r.len, 8), pipeMat)
+  m.rotation.z = Math.PI / 2
+  const g = new THREE.Group().add(m); g.position.copy(V(r.x, r.y, r.z)); g.rotation.y = r.yaw * D2R
+  layers.rigging.add(g)
+}
+
+// ─── Fixture bodies: built per lantern or type, lens dark until the dimmer is up ─────────────
+// Housings are matt black and lit like any surface, plus a small fill so they read against the
+// dark. The lens is a flat disc of dark glass that takes the beam colour only with level — no
+// glowing ball, nothing lit at zero. Geometry is shared per body descriptor.
+const HOUSING = recv('#2a2d33', 'plain', 0.9), HOUSING_SEL = recv('#4262d0', 'plain', 1.6)
+const LENS_OFF = new THREE.Color('#0c0d10')
+const GEO = new Map(), GEO_MUZZLES = new Map()
+const Mx = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1))
+const cyl = (rt, rb, h, seg = 20) => new THREE.CylinderGeometry(rt, rb, h, seg)
+const bx = (w, h, d) => new THREE.BoxGeometry(w, h, d)
+function merge(parts) {
+  if (!parts.length) return null
+  const pos = [], nor = []
+  for (const [g, m] of parts) { const n = (g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(m); pos.push(...n.attributes.position.array); nor.push(...n.attributes.normal.array) }
+  const out = new THREE.BufferGeometry()
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3))
+  return out
+}
+const disc = (r, x, y, z) => [new THREE.CircleGeometry(r, 28), Mx(x, y, z, Math.PI / 2)]
+function frame(side, y) { const t = 0.012, h = side / 2
+  return [[bx(side, 0.012, t), Mx(0, y, h)], [bx(side, 0.012, t), Mx(0, y, -h)], [bx(t, 0.012, side), Mx(h, y, 0)], [bx(t, 0.012, side), Mx(-h, y, 0)]] }
+// Returns { yoke, head, lens, front, arm } geometries in the body frame: pivot at the origin, the
+// head emitting along −Y at rest, `front` the lens plane's distance from the pivot.
+function bodyGeometry(b) {
+  const key = JSON.stringify(b)
+  if (GEO.has(key)) return GEO.get(key)
+  const { len: L, dia: D, lensR: R } = b
+  const head = [], lens = [], yoke = [], base = [], cells = []
+  let front = L / 2, arm = D / 2 + 0.09, yokeW = D / 2 + 0.035
+  if (b.shape === 'profile' || b.head === 'profile') {
+    head.push([cyl(D * 0.3, D * 0.42, L * 0.2), Mx(0, L * 0.4)], [cyl(D * 0.5, D * 0.5, L * 0.3), Mx(0, L * 0.15)], [cyl(R * 1.25, R * 1.25, L * 0.5), Mx(0, -L * 0.25)])
+    if (b.shutters) for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) head.push([bx(x ? 0.07 : 0.022, 0.018, z ? 0.07 : 0.022), Mx(x * (D * 0.5 + 0.03), -0.01, z * (D * 0.5 + 0.03))])
+    if (b.frame) head.push(...frame(R * 2.9, -L / 2 - 0.006))
+    lens.push(disc(R, 0, -L / 2 - 0.001, 0))
+  } else if (b.shape === 'fresnel') {
+    head.push([cyl(D * 0.34, D * 0.46, L * 0.25), Mx(0, L * 0.38)], [cyl(D * 0.5, D * 0.5, L * 0.75), Mx(0, -L * 0.12)])
+    if (b.frame) head.push(...frame(D * 0.95, -L / 2 - 0.006))
+    if (b.barnDoors) { const l = D * 0.42, a = 0.45, hy = -L / 2 - 0.012
+      head.push([bx(0.005, l, D * 0.95), Mx(D * 0.47 + Math.sin(a) * l / 2, hy - Math.cos(a) * l / 2, 0, 0, 0, a)],
+        [bx(0.005, l, D * 0.95), Mx(-D * 0.47 - Math.sin(a) * l / 2, hy - Math.cos(a) * l / 2, 0, 0, 0, -a)],
+        [bx(D * 0.6, l * 0.8, 0.005), Mx(0, hy - Math.cos(a) * l * 0.4, D * 0.47 + Math.sin(a) * l * 0.4, -a)],
+        [bx(D * 0.6, l * 0.8, 0.005), Mx(0, hy - Math.cos(a) * l * 0.4, -D * 0.47 - Math.sin(a) * l * 0.4, a)]) }
+    lens.push(disc(R, 0, -L / 2 - 0.001, 0))
+  } else if (b.shape === 'par') {
+    head.push([cyl(D * 0.4, D * 0.5, L), Mx(0, 0)], [cyl(D * 0.18, D * 0.38, L * 0.25), Mx(0, L * 0.6)])
+    if (b.frame) head.push(...frame(D * 1.02, -L / 2 - 0.006))
+    lens.push(disc(R, 0, -L / 2 - 0.001, 0))
+  } else if (b.shape === 'flood') {
+    head.push([bx(D, L, D * 0.85), Mx(0, 0)])
+    if (b.frame) head.push(...frame(D * 1.02, -L / 2 - 0.006))
+    lens.push([new THREE.PlaneGeometry(D * 0.86, D * 0.7), Mx(0, -L / 2 - 0.001, 0, Math.PI / 2)])
+  } else if (b.shape === 'downlight') {
+    head.push([cyl(D * 0.5, D * 0.5, L), Mx(0, 0)], [cyl(D * 0.62, D * 0.62, 0.012), Mx(0, L / 2)])
+    lens.push(disc(R, 0, -L / 2 - 0.001, 0)); arm = 0; yokeW = 0
+  } else if (b.shape === 'mover') {
+    if (b.head === 'wash') head.push([cyl(D * 0.44, D * 0.5, L), Mx(0, 0)])
+    else if (b.head === 'spot') head.push([cyl(D * 0.5, D * 0.5, L * 0.65), Mx(0, L * 0.17)], [cyl(R * 1.4, D * 0.45, L * 0.35), Mx(0, -L * 0.33)])
+    lens.push(disc(R, 0, -L / 2 - 0.001, 0))
+    arm = Math.max(D, L * 0.55) / 2 + 0.06
+    base.push([bx(D + 0.16, 0.13, (D + 0.16) * 0.75), Mx(0, arm + 0.1)])
+  } else if (b.shape === 'cannon') {
+    // Twin confetti launcher: a low base with two tubes splayed either side of the head's axis.
+    head.push([bx(D, 0.14, D * 0.72), Mx(0, 0.07)])
+    const muzzles = []
+    for (const sgn of [-1, 1]) {
+      const th = sgn * 0.21, root = new THREE.Vector3(sgn * 0.075, 0, 0), m = Mx(root.x - Math.sin(th) * L / 2, -Math.cos(th) * L / 2, 0, 0, 0, th)
+      head.push([cyl(R, R * 1.08, L, 16), m], [cyl(R * 1.25, R * 1.25, 0.03, 16), Mx(root.x - Math.sin(th) * L, -Math.cos(th) * L, 0, 0, 0, th)])
+      muzzles.push({ pos: new THREE.Vector3(root.x - Math.sin(th) * L, -Math.cos(th) * L, 0), dir: new THREE.Vector3(-Math.sin(th), -Math.cos(th), 0) })
+    }
+    front = L; GEO_MUZZLES.set(JSON.stringify(b), muzzles)
+  } else if (b.shape === 'batten' || b.shape === 'blinder' || b.shape === 'effect') {
+    const w = b.shape === 'batten' ? L : b.len, d = b.shape === 'batten' ? 0.12 : b.dia
+    head.push([bx(w, b.shape === 'batten' ? 0.09 : 0.12, d), Mx(0, 0)])
+    front = (b.shape === 'batten' ? 0.09 : 0.12) / 2
+    const pitch = w / b.cells
+    for (let c = 0; c < b.cells; c++) {
+      const x = (c - (b.cells - 1) / 2) * pitch
+      const seg = b.cellShape === 'segment'
+      cells.push({ x, r: R, rect: seg, hw: pitch * 0.44, hh: d * 0.31, parts: [seg ? [new THREE.PlaneGeometry(pitch * 0.88, d * 0.62), Mx(x, -front - 0.001, 0, Math.PI / 2)] : disc(R, x, -front - 0.001, 0)] })
+    }
+    yokeW = w / 2 + 0.02; arm = d / 2 + 0.07
+  }
+  if (yokeW) {
+    yoke.push([bx(0.022, arm, 0.05), Mx(yokeW, arm / 2)], [bx(0.022, arm, 0.05), Mx(-yokeW, arm / 2)], [bx(yokeW * 2 + 0.022, 0.022, 0.05), Mx(0, arm)])
+    if (b.shape !== 'mover') yoke.push([bx(0.05, 0.07, 0.05), Mx(0, arm + 0.045)])
+  }
+  // Where the lamp sits in the head, measured back from the pivot (the head's +Y). The beam is drawn
+  // from here: the housing hides the part of the cone inside the body, and with honest dimensions
+  // the cone's radius at the lens comes out close to the lens's own.
+  const LAMP = { profile: 0.4, fresnel: 0.2, par: 0.35, flood: 0.1, downlight: 0.25 }
+  const lamp = b.shape === 'mover' ? L * (b.head === 'wash' ? 0.15 : b.head === 'profile' ? 0.4 : 0.3)
+    : b.shape in LAMP ? L * LAMP[b.shape] : -front * 0.5
+  if (!cells.length && b.shape !== 'cannon') cells.push(b.shape === 'flood' ? { x: 0, rect: true, hw: D * 0.43, hh: D * 0.35, parts: lens } : { x: 0, r: R, parts: lens })
+  const g = { head: merge(head), cells: cells.map((c) => ({ ...c, parts: undefined, geo: merge(c.parts) })), yoke: merge(yoke), base: merge(base), front, lamp, top: b.shape === 'mover' ? arm + 0.17 : arm + 0.08 }
+  GEO.set(key, g)
+  return g
+}
+const rigZ = Object.fromEntries(RIGGINGS.map((r) => [r.name, r.z]))
+const bodyRoot = new THREE.Group(); scene.add(bodyRoot)
+const beamP = P.filter((p) => p.s.cls !== 'strip')
+const stripP = P.filter((p) => p.s.cls === 'strip')
+function buildBody(p) {
+  if (p.body) bodyRoot.remove(p.body.group)
+  const g = bodyGeometry(p.s.body), group = new THREE.Group(), yoke = new THREE.Group(), head = new THREE.Group()
+  group.position.copy(p.posV); group.add(yoke); yoke.add(head)
+  if (p.mount === 'stand') { group.rotation.x = Math.PI; group.position.y += g.top - 0.03 }
+  const housings = []
+  const mesh = (geo, mat, parent) => { if (!geo) return null; const m = new THREE.Mesh(geo, mat); m.userData.pi = p.i; parent.add(m); return m }
+  housings.push(mesh(g.base, HOUSING, group), mesh(g.yoke, HOUSING, yoke), mesh(g.head, HOUSING, head))
+  // One lens per cell, each with its own material: a cell takes its own colour and level.
+  const cells = g.cells.map((c) => { const mat = new THREE.MeshBasicMaterial({ color: LENS_OFF.clone(), side: THREE.DoubleSide }); mesh(c.geo, mat, head); return { ...c, geo: undefined, mat } })
+  const barZ = rigZ[p.rig]
+  if (p.mount !== 'stand' && barZ != null && barZ > p.pos[2] + g.top) {
+    const h = barZ - p.pos[2] - g.top
+    housings.push(mesh(cyl(0.012, 0.012, h, 6), HOUSING, group)); housings.at(-1).position.y = g.top + h / 2
+  }
+  p.body = { group, yoke, head, cells, housings: housings.filter(Boolean), front: g.front, lamp: g.lamp, muzzles: GEO_MUZZLES.get(JSON.stringify(p.s.body)) || [] }
+  if (!p.cur.cells || p.cur.cells.length !== cells.length) p.cur.cells = cells.map(() => p.cur.col.clone())
+  bodyRoot.add(group)
+}
+beamP.forEach(buildBody)
+const tmpD = new THREE.Vector3()
+// Pan about the vertical, then tilt: the same rig for a static lantern (yaw, pitch) and a mover.
+function orient(p, d) {
+  if (p.mount === 'stand') d = tmpD.set(d.x, -d.y, -d.z)   // into the turned-over body's frame
+  const t = Math.acos(Math.max(-1, Math.min(1, -d.y))), s = Math.hypot(d.x, d.z)
+  if (s > 1e-4) p.body.yoke.rotation.y = Math.atan2(-d.x, -d.z)
+  p.body.head.rotation.x = t
+}
+// ─── Beams in haze ────────────────────────────────────────────────────────────────────────────
+// A beam leaves the APERTURE — the lens, or an LED cell's face — at the aperture's own size and
+// shape, and spreads at the field angle. Its apex sits aperture-radius / tan(half-field) behind
+// the lens: at the lamp for a lantern (the geometry agrees), far behind for a wide LED face, whose
+// beam leaves as a column rather than from a point. Round apertures throw a cone, segments a
+// rectangular pyramid, both clipped where the aperture is.
+//
+// The haze is raymarched through the volume, so shutters, iris and soft edges shape it the way
+// they shape the pool: a hollow shell cannot show a flat shutter cut.
+const coneGeo = new THREE.CylinderGeometry(0, 1, 1, 32, 1, true); coneGeo.translate(0, -0.5, 0)
+const pyrGeo = new THREE.CylinderGeometry(0, 1, 1, 4, 1, true); pyrGeo.rotateY(Math.PI / 4); pyrGeo.translate(0, -0.5, 0)
+const BEAM_VS = `attribute vec3 aCol; attribute vec4 aShut; attribute vec4 aShutA; attribute vec3 aOpt;
+  varying vec3 vCol; varying vec3 vP; varying vec3 vCam; varying vec4 vSD; varying vec4 vSA; varying vec3 vOpt; varying float vScale;
+  void main() {
+    vP = position; vCol = aCol; vSD = aShut; vSA = aShutA; vOpt = aOpt;
+    vCam = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;
+    vScale = length(instanceMatrix[0].xyz);
+    gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+  }`
+const beamFS = (rect) => `uniform float uHaze;
+  varying vec3 vCol; varying vec3 vP; varying vec3 vCam; varying vec4 vSD; varying vec4 vSA; varying vec3 vOpt; varying float vScale;
+  ${BEAM_MASK}
+  bool inside(vec3 p) { float t = -p.y; if (t <= 0.0 || t > 1.0) return false;
+    ${rect ? 'vec2 q = abs(p.xz) * 1.41421356; return max(q.x, q.y) < t;' : 'return length(p.xz) < t;'} }
+  void main() {
+    bool camIn = inside(vCam);
+    if (!gl_FrontFacing && !camIn) discard;
+    vec3 ro, rd; float len;
+    if (camIn) { ro = vCam; rd = vP - vCam; len = length(rd); rd /= len; }
+    else { ro = vP; rd = normalize(vP - vCam); len = 2.4 * max(-vP.y, 0.03); }
+    const int N = 20;
+    float stepL = len / float(N), acc = 0.0;
+    for (int i = 0; i < N; i++) {
+      vec3 p = ro + rd * (float(i) + 0.5) * stepL;
+      float t = -p.y;
+      if (t < vOpt.x || t > 1.0) continue;
+      vec2 uv = p.xz / t;
+      ${rect ? 'vec2 q = abs(uv) * 1.41421356; float m = 1.0 - smoothstep(1.0 - mix(0.05, 0.5, vOpt.z), 1.0, max(q.x, q.y));'
+             : 'float m = beamMask(uv, vSD, vSA, vOpt.y, vOpt.z);'}
+      acc += m * (1.0 - t * 0.55) / (0.15 + t * vScale * 2.5);
+    }
+    acc *= stepL * vScale;
+    vec3 c = 1.0 - exp(-vCol * uHaze * acc * 0.11);
+    gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+  }`
+const beamMaterial = (rect) => new THREE.ShaderMaterial({ uniforms: { uHaze: { value: 0.5 } }, vertexShader: BEAM_VS, fragmentShader: beamFS(rect),
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })
+const beamMat = beamMaterial(false), beamMatRect = beamMaterial(true)
+beamMatRect.uniforms.uHaze = beamMat.uniforms.uHaze
+// One emitter per cell: a batten's three cells and a twin shot's two heads each throw their own
+// beam and their own light, from their own aperture, in their own colour.
+const EM = beamP.flatMap((p) => p.body.cells.map((c, k) => ({ p, k })))
+function beamLayer(geo, mat, count) {
+  const g = geo.clone(), mesh = new THREE.InstancedMesh(g, mat, count)
+  const attr = (n) => { const a = new THREE.InstancedBufferAttribute(new Float32Array(count * n), n); a.setUsage(THREE.DynamicDrawUsage); return a }
+  const at = { aCol: attr(3), aShut: attr(4), aShutA: attr(4), aOpt: attr(3) }
+  for (const [k, a] of Object.entries(at)) g.setAttribute(k, a)
+  mesh.frustumCulled = false; scene.add(mesh)
+  return { mesh, ...at }
+}
+const beamsRound = beamLayer(coneGeo, beamMat, EM.length), beamsRect = beamLayer(pyrGeo, beamMatRect, EM.length)
+
+// Focus data: physical, so it lives on the placement, not in a look. Blades are named for the edge
+// of the light they cut (the image through a profile's lens is inverted, but nobody thinks that way).
+const SOFT = { Profile: 0.1, Fresnel: 0.85, PC: 0.55, PAR: 0.7, Flood: 0.95, House: 0.9, 'Spot mover': 0.2, 'Wash mover': 0.85,
+  'Automated profile': 0.12, 'LED batten': 0.9, Blinder: 0.9, Effect: 0.6, Pinspot: 0.15 }
+const BLADES = [['Top', -Math.PI / 2], ['Right', 0], ['Bottom', Math.PI / 2], ['Left', Math.PI]]
+function initShape(p) {
+  p.shape = { d: [0, 0, 0, 0], a: [0, 0, 0, 0], rot: 0, iris: 1, soft: SOFT[p.s.family] ?? 0.5, zoom: null }
+  if (p.key.startsWith('adv2-front')) p.shape.d[0] = 0.28           // off the pros header
+  if (p.key === 'adv2-front-outer') { p.shape.d[1] = 0.35; p.shape.d[3] = 0.35 } // off the pros returns
+}
+P.forEach(initShape)
+
+// ─── Confetti: the Twin Shot's two tubes ────────────────────────────────────────────────────
+// A fire is an event, not a level: it happens once, on a GO or a button, and spends a cartridge.
+const CONF_N = 1600, CONF_COLS = ['#f2c14e', '#e8e8f0', '#ff4fa3', '#39c6f4', '#b388ff', '#ffd98a'].map((h) => new THREE.Color(h))
+const confPos = new Float32Array(CONF_N * 3).fill(-999), confCol = new Float32Array(CONF_N * 3), confSeed = new Float32Array(CONF_N)
+const confVel = new Float32Array(CONF_N * 3), confLife = new Float32Array(CONF_N).fill(-1)
+const confGeo = new THREE.BufferGeometry()
+confGeo.setAttribute('position', new THREE.BufferAttribute(confPos, 3).setUsage(THREE.DynamicDrawUsage))
+confGeo.setAttribute('aCol', new THREE.BufferAttribute(confCol, 3)); confGeo.setAttribute('aSeed', new THREE.BufferAttribute(confSeed, 1))
+const confMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uScale: { value: 800 } },
+  vertexShader: `attribute vec3 aCol; attribute float aSeed; uniform float uTime; uniform float uScale; varying vec3 vC; varying float vA; varying float vPx;
+    void main() { vC = aCol; vec4 mv = modelViewMatrix * vec4(position, 1.0); vA = aSeed * 6.283 + uTime * (4.0 + aSeed * 5.0);
+      vPx = max(2.0, 0.045 * uScale / -mv.z * (0.4 + 0.6 * abs(sin(vA)))); gl_PointSize = vPx; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `varying vec3 vC; varying float vA; varying float vPx;
+    void main() { vec2 q = gl_PointCoord - 0.5; float c = cos(vA), s = sin(vA); q = vec2(c * q.x - s * q.y, s * q.x + c * q.y);
+      if (vPx > 5.0 && (abs(q.x) > 0.45 || abs(q.y) > 0.22)) discard; gl_FragColor = vec4(pow(vC * (0.55 + 0.45 * abs(sin(vA * 1.7))), vec3(1.0 / 2.2)), 1.0); }`,
+})
+const confetti = new THREE.Points(confGeo, confMat); confetti.frustumCulled = false; scene.add(confetti)
+let confNext = 0
+function fireTube(p, t) {
+  const m = p.body.muzzles[t]; if (!m) return
+  p.body.head.updateMatrixWorld(true)
+  const at = p.body.head.localToWorld(m.pos.clone()), dir = m.dir.clone().transformDirection(p.body.head.matrixWorld)
+  for (let n = 0; n < 380; n++) {
+    const i = confNext; confNext = (confNext + 1) % CONF_N
+    const v = dir.clone().add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(0.34)).normalize().multiplyScalar(7 + Math.random() * 6)
+    confPos.set([at.x, at.y, at.z], i * 3); confVel.set([v.x, v.y, v.z], i * 3); confLife[i] = 0; confSeed[i] = Math.random()
+    const c = CONF_COLS[(Math.random() * CONF_COLS.length) | 0]; confCol.set([c.r, c.g, c.b], i * 3)
+  }
+  confGeo.attributes.aCol.needsUpdate = true; confGeo.attributes.aSeed.needsUpdate = true
+}
+function stepConfetti(dt, now) {
+  confMat.uniforms.uTime.value = now / 1000
+  confMat.uniforms.uScale.value = renderer.domElement.height / (cam.isPerspectiveCamera ? 2 * Math.tan((cam.fov * D2R) / 2) : (cam.top - cam.bottom) / cam.zoom * 0.08)
+  let any = false
+  for (let i = 0; i < CONF_N; i++) {
+    if (confLife[i] < 0) continue
+    any = true; confLife[i] += dt
+    const k = i * 3, drag = Math.exp(-1.7 * dt), sd = confSeed[i]
+    let vx = confVel[k] * drag, vy = (confVel[k + 1] - 9.8 * dt) * drag, vz = confVel[k + 2] * drag
+    if (vy < -0.85) vy = -0.85                                   // paper flutters down, it does not drop
+    vx += Math.sin(now / 300 + sd * 40) * 0.6 * dt; vz += Math.cos(now / 370 + sd * 30) * 0.6 * dt
+    let x = confPos[k] + vx * dt, y = confPos[k + 1] + vy * dt, z = confPos[k + 2] + vz * dt
+    const ly = -z, floor = Math.abs(x) <= 3.15 && ly >= 0 && ly <= 11 ? 0.004 : -0.946
+    if (y < floor) { y = floor; vx = vy = vz = 0 }
+    confPos[k] = x; confPos[k + 1] = y; confPos[k + 2] = z; confVel[k] = vx; confVel[k + 1] = vy; confVel[k + 2] = vz
+    if (confLife[i] > 60) { confLife[i] = -1; confPos[k + 1] = -999 }
+  }
+  if (any) confGeo.attributes.position.needsUpdate = true
+}
+// Arming: firing needs the desk armed, which lapses after a minute. A cue event on an unarmed desk
+// is skipped and said so; it never waits and fires later.
+const ARM = { until: 0, spent: {} }
+const armed = () => performance.now() < ARM.until
+function fire(p, t, why) {
+  const spent = (ARM.spent[p.key] ||= [false, false])
+  if (!armed()) { toast(`${why}: ${p.name} is not armed, so it did not fire.`); return false }
+  if (spent[t]) { toast(`${p.name} tube ${'AB'[t]} is spent. Reload it first.`); return false }
+  spent[t] = true; fireTube(p, t); if (selectedKey === p.key) select(p.key); return true
+}
+let toastTimer = 0
+function toast(msg) { const el = document.getElementById('toast'); el.textContent = msg; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true }, 4200) }
+
+const ringMat = stripP.map(() => new THREE.MeshBasicMaterial({ color: '#111' }))
+stripP.forEach((p, i) => {
+  const vertical = p.yaw === -90
+  const m = new THREE.Mesh(new THREE.BoxGeometry(vertical ? 0.04 : p.length, vertical ? p.length : 0.04, 0.03), ringMat[i])
+  m.position.copy(V(p.pos[0], p.pos[1] - 0.23, p.pos[2]))
+  scene.add(m)
+})
+
+// Beam reach: first surface along the axis. Stands in for the shadow test the quality tier adds.
+let setVisible = true
+function beamRange(origin, dir) {
+  const o = { x: origin.x, y: -origin.z, z: origin.y }, d = { x: dir.x, y: -dir.z, z: dir.y }
+  let best = 30
+  const hit = (t, ok) => { if (t > 0.05 && t < best) { const h = { x: o.x + d.x * t, y: o.y + d.y * t, z: o.z + d.z * t }; if (ok(h)) best = t } }
+  const plane = (axis, v, ok) => { if (Math.abs(d[axis]) > 1e-6) hit((v - o[axis]) / d[axis], ok) }
+  plane('z', 0, (h) => Math.abs(h.x) <= 3.15 && h.y >= 0 && h.y <= 11)
+  plane('z', -0.95, () => true)
+  plane('z', 4.6, () => true)
+  plane('x', -4.3, () => true); plane('x', 4.3, () => true)
+  plane('y', -18.4, () => true); plane('y', 11, () => true)
+  plane('y', 0.35, (h) => Math.abs(h.x) <= 4.3 && !(Math.abs(h.x) < 2.55 && h.z >= 0 && h.z <= 2.9))
+  if (SCEN['House tabs'] && layerState.venue) { const cover = 2.9 * (1 - 0.84 * SCEN['House tabs'].cur.open)
+    plane('y', 0.62, (h) => h.z >= 0 && h.z <= 3.1 && Math.abs(h.x) <= 2.85 && Math.abs(h.x) >= 2.85 - cover) }
+  if (setVisible) {
+    plane('y', 4.3, (h) => Math.abs(h.x) <= 2.3 && h.z >= 0 && h.z <= 2.8 && !(h.x >= 0.25 && h.x <= 1.45 && h.z <= 2.35))
+    plane('x', -2.42, (h) => h.y >= 0.65 && h.y <= 4.3 && h.z >= 0 && h.z <= 2.8)
+    plane('x', 2.42, (h) => h.y >= 0.65 && h.y <= 4.3 && h.z >= 0 && h.z <= 2.8)
+    plane('y', 5.6, (h) => Math.abs(h.x - 0.85) <= 1.3 && h.z >= 0 && h.z <= 3.2)
+  }
+  return Math.max(0.4, best)
+}
+
+// ─── Looks: what the output would be, faded over 1.5 s ────────────────────────────────────────
+const WARM = '#ffcf94'
+const L = (level, hex = WARM, aim = null, cells = null, opts = {}) => ({ level, col: lin(hex), aim, cells: cells && cells.map(lin), ...opts })
+const side = (p, a, b) => (p.pos[0] < 0 ? a : b)
+const LOOKS = {
+  Afternoon: (p) => {
+    const k = p.key
+    if (k.startsWith('adv2-front')) return L(0.85)
+    if (k === 'lx1-fresnel' || k === 'lx1-fresnel-c') return L(0.7, '#ffd9a8')
+    if (k === 'lx2-fresnel' || k === 'lx2-fresnel-c') return L(0.45, '#ffd9a8')
+    if (k === 'adv1-cans') return L(0.4)
+    if (k.includes('shehds')) return L(0.4, '#c4d6ff', [p.pos[0] * 0.8, p.pos[1] - 2.2, 0])
+    if (k.startsWith('lx3-robe575')) return L(0.95, '#ffe6b8', side(p, [1.25, 2.6, 0], [0.5, 2.2, 0]))
+    if (k.includes('liteobar')) return L(0.6, '#86d38f', null, ['#6fcf7f', '#b8e07a', '#6fcf7f'])
+    if (k.startsWith('wall-sr-orbit')) return L(0.45, '#ffc890', [-0.6, 1.6, 1.1])
+    if (k.startsWith('wall-sl-orbit')) return L(0.45, '#ffc890', [0.8, 1.6, 1.1])
+    if (k.startsWith('foh-balcony-s4rev')) return L(0.55, WARM, side(p, [-0.9, 1.7, 1.3], [0.9, 1.7, 1.3]))
+    return L(0)
+  },
+  Night: (p) => {
+    const k = p.key
+    if (k.startsWith('adv2-front')) return L(0.14, '#ffb070')
+    if (k.startsWith('lx1-fresnel')) return L(0.1, '#ffd9a8')
+    if (k.includes('shehds')) return L(0.8, '#2848ff', [p.pos[0] * 0.8, p.pos[1] - 2.2, 0])
+    if (k.startsWith('lx3-robe575')) return L(0.9, '#86a8ff', side(p, [1.25, 2.6, 0], [0.5, 2.2, 0]))
+    if (k.startsWith('lx2-mac250')) return L(0.5, '#3654ff', [p.pos[0] * 1.3, 2.3, 0])
+    if (k.includes('liteobar')) return L(0.75, '#1c2fb0', null, ['#1c2fb0', '#3a1ca8', '#1c2fb0'])
+    if (k.startsWith('wall-sr-orbit')) return L(0.3, '#3050ff', [-0.6, 1.6, 1.1])
+    if (k.startsWith('wall-sl-orbit')) return L(0.3, '#3050ff', [0.8, 1.6, 1.1])
+    if (k.startsWith('foh-balcony-s4rev')) return L(0.3, '#9fb4ff', side(p, [-0.9, 1.7, 1.3], [0.9, 1.7, 1.3]), null, { iris: 0.42 })
+    return L(0)
+  },
+  'Walk-in': (p) => {
+    const k = p.key
+    if (k.startsWith('house')) return L(1)
+    if (k === 'ring') return L(0.85, '#ff8a2a')
+    if (k.startsWith('lx2-shehds')) return L(0.45, '#2b3dff', [p.pos[0] * 1.2, 4.25, 1.4])
+    if (k.includes('wash42')) return L(0.55, '#ff8a2a', side(p, [-3.3, 0.15, 2.2], [3.3, 0.15, 2.2]))
+    if (k.startsWith('foh-balcony-s4rev')) return L(0.3, '#6b7cff', side(p, [-1.1, 4.2, 1.6], [1.1, 4.2, 1.6]))
+    return L(0)
+  },
+  'Curtain call': (p) => {
+    const k = p.key
+    if (k.startsWith('adv2-front')) return L(0.75)
+    if (k.startsWith('lx1-fresnel') || k.startsWith('lx2-fresnel')) return L(0.55, '#ffd9a8')
+    if (k.startsWith('adv1-blinder')) return L(0.45, '#ffcf94', null, ['#ffcf94', '#ffb070'])
+    if (k === 'ring') return L(1, '#ff9a3c')
+    if (k.includes('liteobar')) return L(0.8, '#ffb070', null, ['#ff9a3c', '#ffd98a', '#ff9a3c'])
+    if (k.startsWith('wall-sr-orbit')) return L(0.7, '#ffc890', [-0.6, 1.6, 1.1])
+    if (k.startsWith('wall-sl-orbit')) return L(0.7, '#ffc890', [0.8, 1.6, 1.1])
+    if (k.startsWith('foh-balcony-s4rev')) return L(0.55, WARM, side(p, [-0.9, 1.7, 1.3], [0.9, 1.7, 1.3]))
+    if (k.startsWith('house')) return L(0.15)
+    return L(0)
+  },
+  Blackout: () => L(0),
+}
+// A cue list with scenery attached. Lighting in this prototype comes from the cue's Look; scenery
+// is its own record on the cue, and it TRACKS: the state at a cue is every change from the top of
+// the list down to it, so GO TO any cue lands the set correctly and Blackout leaves the tabs alone.
+// Each change carries its own time — tabs take 4 s whatever the lighting fade is.
+const CUES = [
+  { num: '1', name: 'Walk-in', look: 'Walk-in', scenery: { 'House tabs': { open: 0 }, Moon: { trimM: 5.2 } } },
+  { num: '2', name: 'Tabs out', look: 'Afternoon', scenery: { 'House tabs': { open: 1 } }, times: { 'House tabs': 4000 } },
+  { num: '3', name: 'Night falls', look: 'Night', scenery: { Moon: { trimM: 1.7 } }, times: { Moon: 6000 } },
+  { num: '4', name: 'Blackout', look: 'Blackout', scenery: {} },
+  // A cue EVENT: it happens on GO into this cue only (events do not track), and only if armed.
+  { num: '5', name: 'Curtain call', look: 'Curtain call', scenery: {}, events: [{ atMs: 600, fire: ['adv1-twinshot', 0] }, { atMs: 750, fire: ['adv1-twinshot', 1] }, { atMs: 900, fire: ['foh-balcony-twinshot', 0] }, { atMs: 1100, fire: ['foh-balcony-twinshot', 1] }] },
+]
+const SCEN = {}
+for (const el of SCENE) if (el.params && el.params.states) { SCEN[el.name] = { base: { ...el.params.states }, cur: { ...el.params.states }, from: null, to: null, t0: 0, dur: 1 }; SCENERY_APPLY[el.name]?.(SCEN[el.name].cur) }
+function trackedScenery(i) {
+  const out = Object.fromEntries(Object.entries(SCEN).map(([n, sc]) => [n, { ...sc.base }]))
+  for (let j = 0; j <= i; j++) for (const [n, st] of Object.entries(CUES[j].scenery)) Object.assign(out[n], st)
+  return out
+}
+let activeCue = -1
+function goCue(i, instant = false) {
+  const cue = CUES[i]
+  applyLook(cue.look, instant)
+  const want = trackedScenery(i)
+  for (const [n, st] of Object.entries(want)) {
+    const sc = SCEN[n]
+    if (Object.keys(st).every((k) => Math.abs(st[k] - sc.cur[k]) < 1e-3)) continue
+    sc.from = { ...sc.cur }; sc.to = st; sc.t0 = performance.now()
+    sc.dur = instant || reduceMotion ? 1 : (cue.times && cue.times[n]) || 3000
+  }
+  activeCue = i
+  if (!instant) for (const ev of cue.events || []) setTimeout(() => { const q = P.find((x) => x.key === ev.fire[0]); if (q) fire(q, ev.fire[1], `Q${cue.num}`) }, ev.atMs)
+  document.querySelectorAll('#looks button[data-cue]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.cue === i)))
+}
+const cueForLook = (lk) => Math.max(0, CUES.findIndex((c) => c.look === lk))
+let fade = { t0: 0, dur: 1 }
+function applyLook(name, instant = false) {
+  for (const p of P) {
+    const to = LOOKS[name](p)
+    let dir = p.cur.dir.clone()
+    if (to.aim) dir = V(...to.aim).sub(p.posV).normalize()
+    else if (to.level > 0) dir = p.home.clone()
+    p.from = { level: p.cur.level, col: p.cur.col.clone(), dir: p.cur.dir.clone() }
+    const n = p.cur.cells ? p.cur.cells.length : 1
+    const cells = to.level > 0 ? Array.from({ length: n }, (_, c) => (to.cells && to.cells[c % to.cells.length]) || to.col) : (p.cur.cells || [p.cur.col]).map((v) => v.clone())
+    p.from.cells = (p.cur.cells || [p.cur.col]).map((v) => v.clone())
+    p.to = { level: to.level, col: to.level > 0 ? to.col : p.cur.col.clone(), dir, cells }
+    // DMX iris (the Revolutions have one): from the look, open when the look says nothing
+    if (p.type.includes('source4-revolution')) { p.from.iris = p.cur.iris ?? 1; p.to.iris = to.iris ?? 1 }
+  }
+  fade = { t0: performance.now(), dur: instant || reduceMotion ? 1 : 1500 }
+}
+function stepFade(now) {
+  const f = Math.min(1, (now - fade.t0) / fade.dur), e = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2
+  for (const p of P) {
+    if (!p.to) continue
+    p.cur.level = p.from.level + (p.to.level - p.from.level) * e
+    p.cur.col.lerpVectors(p.from.col, p.to.col, e)
+    if (p.to.iris != null) p.cur.iris = p.from.iris + (p.to.iris - p.from.iris) * e
+    if (p.cur.cells && p.to.cells) p.cur.cells.forEach((v, c) => v.lerpVectors(p.from.cells[c] || p.from.col, p.to.cells[c] || p.to.col, e))
+    p.cur.dir.lerpVectors(p.from.dir, p.to.dir, e).normalize()
+  }
+  for (const [el, sc] of Object.entries(SCEN)) {
+    if (!sc.to) continue
+    const g = Math.min(1, (now - sc.t0) / sc.dur), k = g < 0.5 ? 2 * g * g : 1 - (-2 * g + 2) ** 2 / 2
+    for (const key of Object.keys(sc.to)) sc.cur[key] = sc.from[key] + (sc.to[key] - sc.from[key]) * k
+    SCENERY_APPLY[el]?.(sc.cur)
+    if (g >= 1) sc.to = null
+  }
+  return f < 1
+}
+
+// ─── Per-frame: pack lights, move beams, colour lenses ───────────────────────────────────────
+let selectedKey = null
+const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), tmpS = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0), tmpC = new THREE.Color()
+const displayCol = (p) => { const k = Math.min(1, p.cur.level * 1.3); const c = p.cur.col
+  return tmpC.setRGB(0.13 + (c.x ** (1 / 2.2) - 0.13) * k, 0.14 + (c.y ** (1 / 2.2) - 0.14) * k, 0.16 + (c.z ** (1 / 2.2) - 0.16) * k) }
+const lensCol = (p) => { const c = p.cur.col, k = Math.min(1, p.cur.level) ** 0.6
+  return tmpC.setRGB(LENS_OFF.r + (c.x ** (1 / 2.2) - LENS_OFF.r) * k, LENS_OFF.g + (c.y ** (1 / 2.2) - LENS_OFF.g) * k, LENS_OFF.b + (c.z ** (1 / 2.2) - LENS_OFF.b) * k) }
+let shownSel = null
+const lensOf = (c, level) => { const k = Math.min(1, level) ** 0.6
+  return tmpC.setRGB(LENS_OFF.r + (c.x ** (1 / 2.2) - LENS_OFF.r) * k, LENS_OFF.g + (c.y ** (1 / 2.2) - LENS_OFF.g) * k, LENS_OFF.b + (c.z ** (1 / 2.2) - LENS_OFF.b) * k) }
+const tmpV = new THREE.Vector3(), apex = new THREE.Vector3(), right = new THREE.Vector3(), headQ = new THREE.Quaternion(), ZERO4 = [0, 0, 0, 0]
+function writeBeam(layer, other, i, m, col, g, sd, sa, opt) {
+  layer.mesh.setMatrixAt(i, m); other.mesh.setMatrixAt(i, tmpM.makeScale(0, 0, 0))
+  layer.aCol.setXYZ(i, col.x * g, col.y * g, col.z * g); layer.aShut.setXYZW(i, ...sd); layer.aShutA.setXYZW(i, ...sa); layer.aOpt.setXYZ(i, ...opt)
+}
+function updateRig() {
+  let n = 0
+  for (const p of beamP) orient(p, p.cur.dir)
+  bodyRoot.updateMatrixWorld(true)
+  EM.forEach(({ p, k }, i) => {
+    const lvl = p.cur.level, cell = p.body.cells[k], col = p.cur.cells ? p.cur.cells[k] : p.cur.col, cells = p.body.cells.length
+    const dir = p.cur.dir, sh = p.shape
+    p.body.head.getWorldQuaternion(headQ); right.set(1, 0, 0).applyQuaternion(headQ)
+    // The aperture: this cell's lens face, at its x across the head.
+    p.body.head.localToWorld(tmpV.set(cell.x, -p.body.front - 0.002, 0))
+    const field = sh.zoom ?? p.s.field, outer = (field / 2) * D2R, inner = ((p.s.beam * field) / p.s.field / 2) * D2R, tanO = Math.tan(outer)
+    const aper = cell.rect ? cell.hw : cell.r, apexDist = aper / tanO
+    apex.copy(tmpV).addScaledVector(dir, -apexDist)
+    const iris = p.cur.iris ?? sh.iris
+    const sd = cells > 1 ? ZERO4 : sh.d, sa = cells > 1 ? ZERO4 : BLADES.map(([, a], b) => a + (sh.rot + sh.a[b]) * D2R)
+    const sel = selectedKey == null ? 1 : p.key === selectedKey ? 1.9 : 0.4
+    if (lvl > 0.003) {
+      const range = beamRange(tmpV, dir), L = apexDist + range
+      if (n < MAXL) {
+        LU.uLPos.value[n].copy(apex); LU.uLDir.value[n].copy(dir); LU.uLRight.value[n].copy(right)
+        LU.uLCol.value[n].copy(col).multiplyScalar((lvl * p.s.power) / cells)
+        LU.uLCone.value[n].set(Math.cos(outer), Math.cos(inner)); LU.uLRange.value[n] = L
+        LU.uLShut.value[n].set(...sd); LU.uLShutA.value[n].set(...sa); LU.uLOpt.value[n].set(apexDist, iris, sh.soft); n++
+      }
+      const far = L * tanO, g = (lvl * (p.s.power / 40) * sel) / Math.sqrt(cells), opt = [apexDist / L, iris, sh.soft]
+      if (cell.rect) writeBeam(beamsRect, beamsRound, i, tmpM.compose(apex, headQ, tmpS.set(far * Math.SQRT2, L, far * (cell.hh / cell.hw) * Math.SQRT2)), col, g, sd, sa, opt)
+      else writeBeam(beamsRound, beamsRect, i, tmpM.compose(apex, headQ, tmpS.set(far, L, far)), col, g, sd, sa, opt)
+    } else {
+      beamsRound.mesh.setMatrixAt(i, tmpM.makeScale(0, 0, 0)); beamsRect.mesh.setMatrixAt(i, tmpM)
+    }
+    cell.mat.color.copy(lensOf(col, lvl))
+  })
+  if (shownSel !== selectedKey) {
+    for (const p of beamP) for (const m of p.body.housings) m.material = p.key === selectedKey ? HOUSING_SEL : HOUSING
+    shownSel = selectedKey
+  }
+  LU.uCount.value = n
+  for (const l of [beamsRound, beamsRect]) { l.mesh.instanceMatrix.needsUpdate = true; for (const a of [l.aCol, l.aShut, l.aShutA, l.aOpt]) a.needsUpdate = true }
+  stripP.forEach((p, i) => ringMat[i].color.copy(lensOf(p.cur.col, p.cur.level)))
+  return n
+}
+
+// ─── Cameras: orbit, eye (a person standing or sitting somewhere), and orthographic sections ──
+const orbit = new OrbitControls(persp, canvas); orbit.enableDamping = true
+const orthoCtl = new OrbitControls(ortho, canvas); orthoCtl.enableRotate = false; orthoCtl.screenSpacePanning = true; orthoCtl.enabled = false
+let mode = 'orbit', activeVp = 'orbit', savedOrbit = { pos: V(-10.5, -24, 11), target: V(0, -2.5, 0.4) }
+persp.position.copy(savedOrbit.pos); orbit.target.copy(savedOrbit.target)
+const look = { eye: new THREE.Vector3(), yaw: 0, pitch: 0 }
+let tween = null
+const ORTHO = {
+  plan: { pos: [0, -4, 30], target: [0, -4, 0], up: [0, 0, -1], fit: [10.5, 31], cut: () => false, note: 'looking down, ceilings cut away' },
+  front: { pos: [0, -15.9, 1.9], target: [0, 5, 1.9], up: [0, 1, 0], fit: [10.5, 6.4], cut: (el) => el.y < -16, note: 'from the back of the stalls, balcony cut away' },
+  side: { pos: [14, -4, 1.9], target: [0, -4, 1.9], up: [0, 1, 0], fit: [31, 6.4], cut: (el) => el.x > 3.6, note: 'from stage left, the SL wall cut away' },
+}
+let orthoCfg = null
+function aspect() { return Math.max(0.1, stageEl.clientWidth / Math.max(1, stageEl.clientHeight)) }
+function fitOrtho() {
+  if (!orthoCfg) return
+  const a = aspect(), [fw, fh] = orthoCfg.fit, hh = Math.max(fh / 2, fw / 2 / a)
+  Object.assign(ortho, { left: -hh * a, right: hh * a, top: hh, bottom: -hh }); ortho.updateProjectionMatrix()
+}
+function seatEye(id) {
+  const s = SEATS.find((q) => q.id === id)
+  return { eye: V(s.x, s.y - 0.05, s.z + 1.15), target: V(s.x * 0.35, 2.4, 0.9), fov: 52, label: `Row ${s.row}, seat ${s.num}`, note: 'seated eye height' }
+}
+function setSection(cut) {
+  for (const o of sectionTagged) o.visible = !cut || !cut(o.userData.el)
+  applyLayerVisibility()
+}
+function goTo(vpId, custom) {
+  const vp = custom || VIEWPOINTS.find((v) => v.id === vpId)
+  if (mode === 'orbit') savedOrbit = { pos: persp.position.clone(), target: orbit.target.clone() }
+  activeVp = vp.id
+  document.querySelectorAll('#views button[data-vp]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.vp === vp.id)))
+  if (vp.kind === 'ortho') {
+    orthoCfg = ORTHO[vp.id]; mode = 'ortho'; cam = ortho; tween = null
+    ortho.position.copy(V(...orthoCfg.pos)); ortho.up.set(...orthoCfg.up); ortho.zoom = 1
+    orthoCtl.target.copy(V(...orthoCfg.target)); ortho.lookAt(orthoCtl.target); fitOrtho()
+    orbit.enabled = false; orthoCtl.enabled = true; setSection(orthoCfg.cut)
+    setCaption(vp.name, `orthographic · ${orthoCfg.note}`)
+    return
+  }
+  setSection(null); orthoCtl.enabled = false
+  const wasOrtho = mode === 'ortho'
+  cam = persp
+  let to
+  if (vp.kind === 'orbit') to = { pos: savedOrbit.pos, target: savedOrbit.target, fov: 45, then: 'orbit' }
+  else if (vp.kind === 'seat') { const s = seatEye(vp.seat); to = { ...s, pos: s.eye, then: 'look' } }
+  else to = { pos: V(...vp.eye), target: V(...vp.target), fov: vp.fov, then: 'look', note: vp.note }
+  const from = { pos: persp.position.clone(), target: mode === 'look' ? lookTarget() : orbit.target.clone(), fov: persp.fov }
+  orbit.enabled = false; mode = 'tween'
+  tween = { from, to, t0: performance.now(), dur: wasOrtho || reduceMotion ? 1 : 750 }
+  const title = to.label || vp.name
+  setCaption(title, to.then === 'orbit' ? 'turntable · drag to orbit, right-drag to pan' : `perspective ${to.fov}° · ${to.note || ''} · drag to look around, scroll to zoom`)
+}
+function lookDir() { return new THREE.Vector3(Math.sin(look.yaw) * Math.cos(look.pitch), Math.sin(look.pitch), -Math.cos(look.yaw) * Math.cos(look.pitch)) }
+function lookTarget() { return look.eye.clone().addScaledVector(lookDir(), 6) }
+function stepTween(now) {
+  if (!tween) return
+  const f = Math.min(1, (now - tween.t0) / tween.dur), e = 1 - (1 - f) ** 3
+  const { from, to } = tween
+  persp.position.lerpVectors(from.pos, to.pos, e)
+  const tgt = new THREE.Vector3().lerpVectors(from.target, to.target, e)
+  persp.fov = from.fov + (to.fov - from.fov) * e; persp.updateProjectionMatrix(); persp.lookAt(tgt)
+  if (f >= 1) {
+    if (to.then === 'orbit') { orbit.target.copy(to.target); orbit.enabled = true; mode = 'orbit' }
+    else { look.eye.copy(to.pos); const d = to.target.clone().sub(to.pos).normalize(); look.yaw = Math.atan2(d.x, -d.z); look.pitch = Math.asin(d.y); mode = 'look' }
+    tween = null
+  }
+}
+function frameSelection() {
+  if (!selectedKey) return
+  const pts = P.filter((p) => p.key === selectedKey).map((p) => p.posV)
+  const c = pts.reduce((a, b) => a.add(b), new THREE.Vector3()).multiplyScalar(1 / pts.length)
+  if (mode === 'orbit') {
+    const off = persp.position.clone().sub(orbit.target).normalize().multiplyScalar(6.5)
+    const from = { pos: persp.position.clone(), target: orbit.target.clone(), fov: persp.fov }
+    orbit.enabled = false; mode = 'tween'
+    tween = { from, to: { pos: c.clone().add(off), target: c, fov: persp.fov, then: 'orbit' }, t0: performance.now(), dur: reduceMotion ? 1 : 650 }
+  } else if (mode === 'look') {
+    const d = c.clone().sub(look.eye).normalize(); look.yaw = Math.atan2(d.x, -d.z); look.pitch = Math.asin(d.y)
+  } else if (mode === 'ortho') {
+    const delta = c.clone().sub(orthoCtl.target); if (activeVp === 'plan') delta.y = 0; else if (activeVp === 'front') delta.z = 0; else delta.x = 0
+    orthoCtl.target.add(delta); ortho.position.add(delta)
+  }
+}
+
+// ─── Labels: one DOM layer, positioned once per frame, decluttered in screen space ───────────
+const labelLayer = document.getElementById('labelLayer')
+const LABELS = []
+const shortName = (p) => { const r = p.rig || (p.key.startsWith('house') ? 'House' : ''); const n = r && p.name.startsWith(r + ' ') ? p.name.slice(r.length + 1) : p.name; return /^\d+$/.test(n) ? p.name : n }
+function addLabel(text, world, prio, cls, key) {
+  const el = document.createElement('div'); el.className = 'lbl ' + cls; el.textContent = text; labelLayer.appendChild(el)
+  LABELS.push({ el, world, prio, cls, key, w: 0, h: 0 })
+}
+for (const r of RIGGINGS) if (r.kind !== 'OTHER') addLabel(r.name, V(r.x, r.y, r.z + 0.3), 2, 'pos')
+addLabel('Pros', V(0, 0.4, 3.15), 2, 'pos')
+addLabel('House', V(0, -4.6, 3.35), 2, 'pos')
+{ const seen = new Set(); for (const p of beamP) { if (seen.has(p.key)) continue; seen.add(p.key); addLabel(shortName(p), p.posV.clone().add(new THREE.Vector3(0, -0.28, 0)), 1, 'fx', p.key) } }
+for (const l of LABELS) { l.w = l.el.offsetWidth || 60; l.h = l.el.offsetHeight || 16 }
+let labelMode = 'positions'
+const proj = new THREE.Vector3()
+function updateLabels() {
+  const W = stageEl.clientWidth, H = stageEl.clientHeight, placed = []
+  const want = LABELS.filter((l) => (l.cls === 'pos' ? labelMode !== 'none' : labelMode === 'all' || l.key === selectedKey || l.key === hoverKey))
+  const order = want.map((l) => ({ l, p: l.key && (l.key === selectedKey || l.key === hoverKey) ? 3 : l.prio })).sort((a, b) => b.p - a.p)
+  const shown = new Set()
+  for (const { l } of order) {
+    proj.copy(l.world).project(cam)
+    if (proj.z > 1 || proj.z < -1) continue
+    const x = (proj.x * 0.5 + 0.5) * W, y = (-proj.y * 0.5 + 0.5) * H
+    if (!l.w) { l.w = l.el.offsetWidth || 60; l.h = l.el.offsetHeight || 16 }
+    const r = { x: x - l.w / 2, y: y - l.h / 2, w: l.w, h: l.h }
+    if (r.x < -r.w || r.y < -r.h || r.x > W || r.y > H) continue
+    if (placed.some((q) => r.x < q.x + q.w + 2 && r.x + r.w + 2 > q.x && r.y < q.y + q.h + 1 && r.y + r.h + 1 > q.y)) continue
+    placed.push(r); shown.add(l)
+    l.el.style.transform = `translate(${r.x.toFixed(1)}px, ${r.y.toFixed(1)}px)`
+  }
+  for (const l of LABELS) { l.el.style.display = shown.has(l) ? '' : 'none'; l.el.classList.toggle('sel', l.key != null && l.key === selectedKey) }
+}
+
+// ─── Picking: fixtures to select, seats to sit in ────────────────────────────────────────────
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2()
+let hoverKey = null, hoverSeat = -1, pickingSeat = false
+const tip = document.getElementById('tip')
+function pickAt(ev) {
+  const r = canvas.getBoundingClientRect(); ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1)
+  ray.setFromCamera(ndc, cam)
+  if (pickingSeat) { const h = layers.seating.visible ? ray.intersectObject(seatMesh)[0] : null; return { seat: h ? h.instanceId : -1 } }
+  const h = ray.intersectObject(bodyRoot, true)[0]
+  const p = h ? P[h.object.userData.pi] : null
+  return { key: p ? p.key : null, p }
+}
+function setSeatHover(i) {
+  if (i === hoverSeat) return
+  if (hoverSeat >= 0) seatMesh.setColorAt(hoverSeat, new THREE.Color(1, 1, 1))
+  if (i >= 0) seatMesh.setColorAt(i, new THREE.Color(3, 2.6, 1.4))
+  hoverSeat = i; seatMesh.instanceColor.needsUpdate = true
+}
+let downAt = null, dragLook = null
+canvas.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; if (mode === 'look') { dragLook = { x: e.clientX, y: e.clientY, yaw: look.yaw, pitch: look.pitch }; canvas.setPointerCapture(e.pointerId) } })
+canvas.addEventListener('pointermove', (e) => {
+  if (dragLook && mode === 'look') {
+    look.yaw = dragLook.yaw - (e.clientX - dragLook.x) * 0.0035
+    look.pitch = Math.max(-1.2, Math.min(1.2, dragLook.pitch + (e.clientY - dragLook.y) * 0.0035))
+    return
+  }
+  if (e.buttons) return
+  const hit = pickAt(e), r = stageEl.getBoundingClientRect()
+  if (pickingSeat) {
+    setSeatHover(hit.seat)
+    if (hit.seat >= 0) { const s = SEATS[hit.seat]; showTip(e, r, `<b>Row ${s.row}, seat ${s.num}</b> <span class="m">· click to sit here</span>`) } else tip.hidden = true
+    return
+  }
+  hoverKey = hit.key
+  canvas.style.cursor = hit.key ? 'pointer' : ''
+  if (hit.p) showTip(e, r, `<b>${hit.p.name}</b> <span class="m">· ${hit.p.s.label} · ${hit.p.rig || 'free-standing'} · ${Math.round(hit.p.cur.level * 100)}%</span>`)
+  else tip.hidden = true
+})
+function showTip(e, r, html) { tip.innerHTML = html; tip.hidden = false; tip.style.left = `${Math.min(e.clientX - r.left + 14, r.width - tip.offsetWidth - 8)}px`; tip.style.top = `${e.clientY - r.top + 14}px` }
+canvas.addEventListener('pointerleave', () => { tip.hidden = true; hoverKey = null; if (pickingSeat) setSeatHover(-1) })
+canvas.addEventListener('pointerup', (e) => {
+  dragLook = null
+  if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 5) return
+  const hit = pickAt(e)
+  if (pickingSeat) {
+    if (hit.seat >= 0) { const s = SEATS[hit.seat]; setPicking(false); setSeatHover(-1); tip.hidden = true; sitIn(s.id) }
+    return
+  }
+  select(hit.key)
+})
+canvas.addEventListener('wheel', (e) => { if (mode !== 'look') return; e.preventDefault(); persp.fov = Math.max(18, Math.min(80, persp.fov + e.deltaY * 0.03)); persp.updateProjectionMatrix() }, { passive: false })
+function sitIn(id) {
+  let b = document.querySelector('#views button[data-vp="seat-picked"]')
+  const s = SEATS.find((q) => q.id === id)
+  if (!b) { b = document.createElement('button'); b.type = 'button'; b.dataset.vp = 'seat-picked'; document.getElementById('seatSeg').prepend(b); b.addEventListener('click', () => goTo(null, b._vp)) }
+  b.textContent = `Row ${s.row}, ${s.num}`; b._vp = { id: 'seat-picked', kind: 'seat', seat: id, name: b.textContent }
+  goTo(null, b._vp)
+}
+function setPicking(on) {
+  pickingSeat = on; canvas.style.cursor = on ? 'crosshair' : ''
+  document.getElementById('pickSeat').setAttribute('aria-pressed', String(on))
+  if (on) { if (!layers.seating.visible) toggleLayer('seating', true); if (mode === 'look' || mode === 'ortho') goTo('orbit') }
+}
+
+// ─── Selection, shared by the 3D view and the Positions sheet ────────────────────────────────
+const selbar = document.getElementById('selbar')
+function select(key) {
+  selectedKey = key
+  document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(c.dataset.key === key)))
+  if (!key) { selbar.hidden = true; if (focusEl) focusEl.hidden = true; return }
+  const ps = P.filter((p) => p.key === key), p = ps[0]
+  if (p.s.cls === 'cannon') {
+    const sp = ARM.spent[key] || [false, false], a = armed()
+    selbar.innerHTML = `<b>${p.name}</b><span class="m">Confetti cannon · A ${sp[0] ? 'spent' : 'loaded'} · B ${sp[1] ? 'spent' : 'loaded'}</span>`
+      + `<button type="button" id="armBtn" class="${a ? 'danger' : ''}">${a ? 'Disarm' : 'Arm'}</button>`
+      + `<button type="button" id="fireA" ${!a || sp[0] ? 'disabled' : ''}>Fire A</button><button type="button" id="fireB" ${!a || sp[1] ? 'disabled' : ''}>Fire B</button>`
+      + `<button type="button" id="reloadBtn">Reload</button><button type="button" id="clearBtn">Clear</button>`
+    selbar.hidden = false
+    document.getElementById('armBtn').onclick = () => { ARM.until = armed() ? 0 : performance.now() + 60000; select(key) }
+    document.getElementById('fireA').onclick = () => fire(p, 0, 'Fire A')
+    document.getElementById('fireB').onclick = () => fire(p, 1, 'Fire B')
+    document.getElementById('reloadBtn').onclick = () => { ARM.spent[key] = [false, false]; select(key) }
+    document.getElementById('clearBtn').onclick = () => select(null)
+    if (focusEl) focusEl.hidden = true
+    return
+  }
+  const picker = p.s.lantern ? `<label class="m" for="lanternPick">Lantern</label><select id="lanternPick">${
+    [...new Set(Object.values(LANTERNS).map((l) => l.family))].map((fam) => `<optgroup label="${fam}">${
+      Object.entries(LANTERNS).filter(([, l]) => l.family === fam).map(([id, l]) => `<option value="${id}"${id === p.s.lantern ? ' selected' : ''}>${l.name}</option>`).join('')}</optgroup>`).join('')}</select>` : `<span class="m">${p.s.label}</span>`
+  selbar.innerHTML = `<b>${p.name}</b>${picker}<span class="m">${p.s.field}°${p.s.zoom ? ` (zoom ${p.s.zoom.join('–')}°)` : ''}${ps.length > 1 ? ` · ${ps.length} lanterns` : ''} · ${p.rig || 'free-standing'}</span><button type="button" id="focusBtn">Focus</button><button type="button" id="frameBtn">Frame</button><button type="button" id="clearBtn">Clear</button>`
+  selbar.hidden = false
+  document.getElementById('focusBtn').onclick = () => openFocus(key)
+  if (focusEl && !focusEl.hidden) openFocus(key)
+  const pick = document.getElementById('lanternPick')
+  if (pick) pick.addEventListener('change', () => {
+    for (const q of ps) { q.s = specFor(q.type, q.kind, pick.value); q.shape.zoom = null; buildBody(q) }
+    shownSel = null; select(key); buildFixturesPane()
+  })
+  document.getElementById('frameBtn').onclick = frameSelection
+  document.getElementById('clearBtn').onclick = () => select(null)
+}
+
+// ─── Focus card: shutters, barn doors, gate rotation, iris, sharp ↔ soft, zoom ───────────────
+// Per placement (a pair on one dimmer are two lanterns, focused separately). DMX fixtures show
+// what their channels are doing instead: their zoom, focus and iris are the desk's to drive.
+const focusEl = document.getElementById('focus')
+let focusIdx = 0
+function bladePreview(sh, fixedIris) {
+  const blades = BLADES.map(([, a], b) => { const lim = 1 - sh.d[b], deg = (a / D2R) + sh.rot + sh.a[b]
+    return `<rect x="${lim}" y="-2" width="2" height="4" fill="#1a1b1f" transform="rotate(${deg})"/>` }).join('')
+  const iris = fixedIris ?? sh.iris
+  return `<svg viewBox="-1.25 -1.25 2.5 2.5" role="img" aria-label="Beam cross-section"><defs><clipPath id="fc"><circle r="1"/></clipPath></defs>
+    <circle r="1" fill="#f2b86e" opacity="0.28"/><g clip-path="url(#fc)"><circle r="${iris}" fill="#f2b86e" opacity="0.55"/>${blades}</g>
+    <circle r="1" fill="none" stroke="#6b6f78" stroke-width="0.02"/><text y="-1.1" font-size="0.13" fill="#9aa" text-anchor="middle">top of the beam</text></svg>`
+}
+function openFocus(key) {
+  const ps = P.filter((p) => p.key === key && p.s.cls !== 'strip')
+  if (!ps.length) return
+  if (focusIdx >= ps.length) focusIdx = 0
+  const p = ps[focusIdx], sh = p.shape, b = p.s.body, generic = !!p.s.lantern
+  const tabs = ps.length > 1 ? `<div class="tabs2">${ps.map((q, i) => `<button type="button" data-fi="${i}" aria-pressed="${i === focusIdx}">Lantern ${i + 1} · x ${q.pos[0].toFixed(1)} m</button>`).join('')}</div>` : ''
+  let rows = ''
+  const row = (id, label, v, min, max, step, show) => `<div class="frow one"><label for="${id}">${label}</label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${v}"><span class="val" id="${id}-v">${show(v)}</span></div>`
+  if (generic && (b.shutters || b.barnDoors)) {
+    const what = b.shutters ? 'Shutter' : 'Barn door'
+    rows += `<p class="note">${what}s: depth, then angle. Named for the edge of the light they cut.</p>`
+    rows += BLADES.map(([name], i) => `<div class="frow"><label>${name}</label><input id="fd${i}" type="range" min="0" max="0.9" step="0.01" value="${sh.d[i]}" aria-label="${name} ${what.toLowerCase()} depth"><input id="fa${i}" type="range" min="-30" max="30" step="1" value="${sh.a[i]}" aria-label="${name} ${what.toLowerCase()} angle"></div>`).join('')
+    if (b.shutters) rows += row('frot', 'Rotate', sh.rot, -45, 45, 1, (v) => `${v}°`) + row('firis', 'Iris', sh.iris, 0.2, 1, 0.01, (v) => (v >= 1 ? 'open' : `${Math.round(v * 100)}%`))
+  }
+  if (generic) {
+    rows += row('fsoft', 'Focus', sh.soft, 0, 1, 0.01, (v) => (v < 0.2 ? 'sharp' : v > 0.7 ? 'soft' : 'medium'))
+    if (p.s.zoom) rows += row('fzoom', 'Zoom', sh.zoom ?? p.s.field, p.s.zoom[0], p.s.zoom[1], 1, (v) => `${v}°`)
+  } else {
+    rows += `<p class="note">${p.s.label}: zoom, focus${p.type.includes('source4-revolution') ? ', iris' : ''} come from its channels, so the look drives them. ${p.body.cells.length > 1 ? `${p.body.cells.length} cells, each with its own beam.` : ''}</p>`
+  }
+  focusEl.innerHTML = `<div class="fh"><b>Focus</b><span class="val">${p.name}</span><button type="button" aria-label="Close focus">×</button></div>${tabs}<div id="fprev">${bladePreview(sh, generic ? null : p.cur.iris ?? 1)}</div>${rows}`
+  focusEl.hidden = false
+  focusEl.querySelector('.fh button').onclick = () => { focusEl.hidden = true }
+  focusEl.querySelectorAll('[data-fi]').forEach((btn) => btn.addEventListener('click', () => { focusIdx = +btn.dataset.fi; openFocus(key) }))
+  const refresh = () => { focusEl.querySelector('#fprev').innerHTML = bladePreview(sh, generic ? null : p.cur.iris ?? 1) }
+  const bind = (id, fn, show) => { const el = focusEl.querySelector('#' + id); if (!el) return
+    el.addEventListener('input', () => { fn(+el.value); const v = focusEl.querySelector('#' + id + '-v'); if (v && show) v.textContent = show(+el.value); refresh() }) }
+  BLADES.forEach((_, i) => { bind('fd' + i, (v) => { sh.d[i] = v }); bind('fa' + i, (v) => { sh.a[i] = v }) })
+  bind('frot', (v) => { sh.rot = v }, (v) => `${v}°`)
+  bind('firis', (v) => { sh.iris = v }, (v) => (v >= 1 ? 'open' : `${Math.round(v * 100)}%`))
+  bind('fsoft', (v) => { sh.soft = v }, (v) => (v < 0.2 ? 'sharp' : v > 0.7 ? 'soft' : 'medium'))
+  bind('fzoom', (v) => { sh.zoom = v }, (v) => `${v}°`)
+}
+
+// ─── Positions sheet: the 2D surface, derived from riggings and x, never a stored layout ─────
+function buildPositions() {
+  const pane = document.getElementById('pane-positions')
+  const rows = new Map()
+  for (const p of P) {
+    const r = p.rig === 'Proscenium' ? 'Pros' : p.rig || (p.key.startsWith('house') ? 'House' : 'Other')
+    if (!rows.has(r)) rows.set(r, { name: r, ys: [], keys: new Map() })
+    const row = rows.get(r); row.ys.push(p.pos[1])
+    if (!row.keys.has(p.key)) row.keys.set(p.key, { key: p.key, p, n: 0, minX: Infinity })
+    const k = row.keys.get(p.key); k.n++; k.minX = Math.min(k.minX, p.pos[0])
+  }
+  const list = [...rows.values()].map((r) => ({ ...r, y: r.ys.reduce((a, b) => a + b, 0) / r.ys.length })).sort((a, b) => b.y - a.y)
+  let html = '<p class="hint">Every position from upstage to the back of the hall; units in rig order as you see them from the desk. Tap one to select it here and in 3D.</p>'
+  let frontDrawn = false
+  for (const r of list) {
+    if (!frontDrawn && r.y < 0.2) { html += '<div class="stagefront">STAGE EDGE</div>'; frontDrawn = true }
+    const chips = [...r.keys.values()].sort((a, b) => a.minX - b.minX).map((k) =>
+      `<button type="button" class="chip" data-key="${k.key}" aria-pressed="false"><span class="sw"></span><span class="nm">${shortName(k.p)}</span>${k.n > 1 ? `<span class="x2">×${k.n}</span>` : ''}<span class="lv"></span></button>`).join('')
+    html += `<div class="prow"><div class="pn">${r.name}<small>${r.y.toFixed(1)} m</small></div><div class="chips">${chips}</div></div>`
+  }
+  pane.innerHTML = html
+  pane.querySelectorAll('.chip').forEach((c) => c.addEventListener('click', () => { select(selectedKey === c.dataset.key ? null : c.dataset.key); if (selectedKey) frameSelection() }))
+}
+function updateChips() {
+  document.querySelectorAll('.chip').forEach((c) => {
+    const p = P.find((q) => q.key === c.dataset.key)
+    c.querySelector('.sw').style.background = `#${displayCol(p).getHexString()}`
+    c.querySelector('.lv').textContent = p.cur.level > 0.005 ? `${Math.round(p.cur.level * 100)}` : ''
+  })
+}
+
+// ─── Scene tab: the document, layer toggles, and the MCP call that wrote it ──────────────────
+const layerState = { venue: true, set: true, seating: true, rigging: true }
+function applyLayerVisibility() { for (const k in layers) layers[k].visible = layerState[k]; setVisible = layerState.set }
+function toggleLayer(k, on) { layerState[k] = on; applyLayerVisibility(); const cb = document.getElementById(`layer-${k}`); if (cb) cb.checked = on }
+function buildScenePane() {
+  const pane = document.getElementById('pane-scene')
+  const row = (el) => `<div class="el"><span class="kind">${el.kind}</span><span>${el.name}</span><span class="dim">${el.kind === 'seating' ? `${el.params.rows}×${el.params.seatsPerRow}` : `${el.widthM}×${el.depthM ?? '–'}×${el.heightM}`}</span></div>`
+  const venue = SCENE.filter((e) => e.layer === 'venue'), set = SCENE.filter((e) => e.layer === 'set')
+  const sample = { name: 'Proscenium', kind: 'proscenium', layer: 'venue', x: 0, y: 0.35, z: -0.95, widthM: 8.6, depthM: 0.3, heightM: 5.55,
+    finish: { colour: '#6a5d52', pattern: 'panels' }, params: { openingWidthM: 5.1, openingHeightM: 2.9, openingSillM: 0.95, surroundM: 0.18 } }
+  pane.innerHTML = `
+    <p class="hint">The venue as a document of named, parametric elements. Claude writes it with one <code>set_scene</code> call; you adjust it in Edit.</p>
+    <div class="layers">
+      <label><input type="checkbox" id="layer-venue" checked> Venue architecture · ${venue.length}</label>
+      <label><input type="checkbox" id="layer-set" checked> Set for this production · ${set.length}</label>
+      <label><input type="checkbox" id="layer-seating" checked> Seating · ${SEATS.length} seats</label>
+      <label><input type="checkbox" id="layer-rigging" checked> Rigging · ${RIGGINGS.length}</label>
+    </div>
+    <div class="eyebrow grp">Venue</div>${venue.map(row).join('')}
+    <div class="eyebrow grp">Set</div>${set.map(row).join('')}
+    <div class="eyebrow grp">Scenery on the cues of Act 1</div>
+    ${CUES.map((c) => `<div class="el"><span class="kind">Q${c.num}</span><span>${c.name}<br><span class="dim">${Object.entries(c.scenery).map(([el, st]) => `${el}: ${Object.entries(st).map(([k, v]) => `${k} ${v}`).join(', ')}${c.times && c.times[el] ? ` in ${c.times[el] / 1000} s` : ''}`).join(' · ') || 'no change, the set tracks'}${(c.events || []).map((ev) => ` · fires ${ev.fire[0]} tube ${'AB'[ev.fire[1]]} at +${ev.atMs / 1000} s, if armed`).join('')}</span></span><span></span></div>`).join('')}
+    <div class="eyebrow grp">One element, as the tool takes it</div>
+    <pre>${JSON.stringify({ tool: 'set_scene', elements: [sample] }, null, 2)}</pre>`
+  for (const k of Object.keys(layerState)) document.getElementById(`layer-${k}`).addEventListener('change', (e) => toggleLayer(k, e.target.checked))
+}
+function buildFixturesPane() {
+  const used = new Map()
+  for (const p of beamP) { const k = p.s.lantern || p.s.name || p.s.label; if (!used.has(k)) used.set(k, new Set()); used.get(k).add(p.key) }
+  const feat = (b) => [b.shutters && 'shutters', b.barnDoors && 'barn doors', b.frame && 'colour frame', b.head && `${b.head} head`, b.cells && `${b.cells} cells`].filter(Boolean).join(' · ')
+  const row = (id, l) => `<div class="el"><span class="kind">${l.family}</span><span>${l.name}<br><span class="dim">${l.zoom ? `zoom ${l.zoom.join('–')}°` : `${l.beam}° beam · ${l.field}° field`}${l.oval ? ` · oval ${l.oval.join('×')}°` : ''} · ${feat(l.body)}</span></span><span class="dim">${used.has(id) ? `${used.get(id).size} in rig` : ''}</span></div>`
+  document.getElementById('pane-fixtures').innerHTML = `
+    <p class="hint">A generic dimmer picks its lantern here, and so does each extra placement: a pair on one dimmer can be a profile and a fresnel. Select a dimmer on stage or in Positions to change it.</p>
+    <div class="eyebrow grp">Lantern library</div>${Object.entries(LANTERNS).map(([id, l]) => row(id, l)).join('')}
+    <div class="eyebrow grp">DMX fixture types in this rig</div>${TYPE_BODIES.map(([, v]) => row(v.name, v)).join('')}`
+}
+function buildNotes() {
+  document.getElementById('pane-notes').innerHTML = `
+    <h3>What this is</h3>
+    <p>A throwaway prototype for the stage-view design record. The rig is project 15's real placements. The venue and the set are estimated from the FOH video, written as the proposed scene document (Scene tab).</p>
+    <h3>Try</h3>
+    <ul>
+      <li><b>Balcony · desk</b> is the angle the video was shot from.</li>
+      <li><b>Act 1</b> is a cue list with scenery on the cues. Q1 closes the house tabs, Q2 draws them over 4 s, Q3 flies the moon in over 6 s, and Q4 leaves both where they are, because scenery tracks. Jump to any cue and the set lands as if you had run the list.</li>
+      <li>Select any conventional and pick its lantern from the library. Lenses stay dark glass until the dimmer is up.</li>
+      <li>Select a lantern and press <b>Focus</b>. Profiles have four shutters (depth and angle), gate rotation and an iris; fresnels have barn doors; every conventional has sharp ↔ soft, and zoom where the lantern has one. The ADV2 fronts start shuttered off the pros.</li>
+      <li>Select a <b>Twin Shot</b> (on ADV1, or standing on the balcony ledge): arm it, fire either tube, reload. <b>Q5 Curtain call</b> fires both cannons as cue events, but only if armed; otherwise it says it skipped them.</li>
+      <li><b>Sit in a seat</b>, then click any seat in the stalls. Drag to look around; scroll to zoom.</li>
+      <li><b>Plan</b>, <b>Front</b> and <b>Side</b> are cameras on the same scene, cut as sections.</li>
+      <li><b>Positions</b> is the proposed 2D surface: rows by position, units in rig order, live colour and level.</li>
+      <li><b>Test recovery</b> drops the WebGL context the way Safari does under memory pressure.</li>
+    </ul>
+    <h3>What it leaves out</h3>
+    <p>Shadows (each beam stops at the first surface on its axis instead), gobos, oval PAR beams, the gel in the colour frame, zoom, pan/tilt limits, level of detail and editing. The desk's real beam optics would carry over; only the surface-lighting path changes.</p>`
+}
+
+// ─── Chrome ───────────────────────────────────────────────────────────────────────────────────
+function setCaption(title, sub) { document.getElementById('cap').innerHTML = `<b>${title}</b> · ${sub}` }
+{
+  const nav = document.getElementById('views')
+  const seg = (ids, extra = '') => `<div class="seg" role="group" ${extra}>${ids.map((id) => { const v = VIEWPOINTS.find((q) => q.id === id); return `<button type="button" data-vp="${id}" aria-pressed="false">${v.name}</button>` }).join('')}</div>`
+  nav.innerHTML = seg(['orbit']) + seg(['desk', 'rowf', 'rowa1', 'actor'], 'id="seatSeg" aria-label="Saved viewpoints"')
+    + seg(['plan', 'front', 'side'], 'aria-label="Sections"')
+    + '<div class="seg"><button type="button" class="pick" id="pickSeat" aria-pressed="false">Sit in a seat…</button></div>'
+  nav.querySelectorAll('button[data-vp]').forEach((b) => b.addEventListener('click', () => { setPicking(false); goTo(b.dataset.vp) }))
+  document.getElementById('pickSeat').addEventListener('click', () => setPicking(!pickingSeat))
+  const looks = document.getElementById('looks')
+  looks.innerHTML = `<button type="button" disabled style="opacity:1;color:var(--mfg)">Act 1</button>` + CUES.map((c, i) => `<button type="button" data-cue="${i}" aria-pressed="false">${c.num} ${c.name}</button>`).join('')
+    + `<button type="button" id="goBtn" style="color:var(--fg);background:var(--pri)">GO</button>`
+  looks.querySelectorAll('button[data-cue]').forEach((b) => b.addEventListener('click', () => goCue(+b.dataset.cue)))
+  document.getElementById('goBtn').addEventListener('click', () => goCue((activeCue + 1) % CUES.length))
+  document.getElementById('haze').addEventListener('input', (e) => { beamMat.uniforms.uHaze.value = +e.target.value })
+  document.getElementById('labels').addEventListener('change', (e) => { labelMode = e.target.value })
+  const tabs = ['positions', 'scene', 'fixtures', 'notes']
+  tabs.forEach((t) => document.getElementById(`tab-${t}`).addEventListener('click', () => tabs.forEach((u) => {
+    document.getElementById(`tab-${u}`).setAttribute('aria-selected', String(u === t)); document.getElementById(`pane-${u}`).hidden = u !== t })))
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (pickingSeat) setPicking(false); else select(null) } })
+}
+
+// ─── Context loss: pause, say so, and come back — never a blank canvas ────────────────────────
+let lost = false
+const lostEl = document.getElementById('lost')
+const loseExt = renderer.getContext().getExtension('WEBGL_lose_context')
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; lostEl.hidden = false })
+canvas.addEventListener('webglcontextrestored', () => { lost = false; lostEl.hidden = true })
+document.getElementById('restore').addEventListener('click', () => { if (loseExt) loseExt.restoreContext(); else location.reload() })
+
+// ─── Resize and loop ──────────────────────────────────────────────────────────────────────────
+function resize() {
+  const w = stageEl.clientWidth, h = stageEl.clientHeight
+  renderer.setSize(w, h, false); persp.aspect = w / Math.max(1, h); persp.updateProjectionMatrix(); fitOrtho()
+}
+new ResizeObserver(resize).observe(stageEl)
+const statsEl = document.getElementById('stats')
+statsEl.innerHTML = '<span id="st"></span><button type="button" id="testLoss" class="hide-s">Test recovery</button>'
+document.getElementById('testLoss').addEventListener('click', () => loseExt && loseExt.loseContext())
+let frames = 0, lastStat = performance.now(), active = 0, chipsAt = 0, lastNow = performance.now(), armShown = null
+function loop(now) {
+  requestAnimationFrame(loop)
+  if (lost) return
+  stepFade(now); stepTween(now)
+  if (mode === 'orbit') orbit.update()
+  else if (mode === 'ortho') orthoCtl.update()
+  else if (mode === 'look') { persp.position.copy(look.eye); persp.lookAt(lookTarget()) }
+  active = updateRig()
+  stepConfetti(Math.min(0.05, (now - lastNow) / 1000), now); lastNow = now
+  { const left = Math.max(0, Math.ceil((ARM.until - now) / 1000)), txt = left ? `ARMED · ${left}s` : ''
+    if (txt !== armShown) { const el = document.getElementById('armchip'); el.textContent = txt; el.hidden = !left; armShown = txt; if (!left && selectedKey && P.find((q) => q.key === selectedKey)?.s.cls === 'cannon') select(selectedKey) } }
+  renderer.render(scene, cam)
+  updateLabels()
+  if (now - chipsAt > 100) { updateChips(); chipsAt = now }
+  frames++
+  if (now - lastStat > 500) {
+    const i = renderer.info.render
+    document.getElementById('st').textContent = `${Math.round((frames * 1000) / (now - lastStat))} fps · ${i.calls} draws · ${(i.triangles / 1000).toFixed(0)}k tris · ${active} lights · DPR ${renderer.getPixelRatio().toFixed(2)}`
+    frames = 0; lastStat = now
+  }
+}
+buildPositions(); buildScenePane(); buildFixturesPane(); buildNotes(); applyLayerVisibility()
+resize()
+{ const h = location.hash.slice(1); goCue(1, true); goTo(VIEWPOINTS.some((v) => v.id === h) ? h : 'desk'); if (tween) tween.dur = 1 }
+requestAnimationFrame(loop)
+</script>
+</body>
+</html>
