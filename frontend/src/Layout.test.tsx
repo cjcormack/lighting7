@@ -26,7 +26,7 @@ vi.mock('./components/ProgrammerIndicator', () => ({ ProgrammerIndicator: () => 
 vi.mock('./ProjectSwitcher', () => ({ default: () => <div data-testid="project-switcher" /> }))
 vi.mock('./components/auth/UserMenu', () => ({ UserMenu: () => null }))
 vi.mock('./components/FixtureOverviewPanel', () => ({ FixtureOverviewPanel: () => <div data-testid="panel-fixtures" /> }))
-vi.mock('./components/StageOverviewPanel', () => ({ StageOverviewPanel: () => <div data-testid="panel-stage" /> }))
+vi.mock('./components/positions/PositionsPanel', () => ({ PositionsPanel: () => <div data-testid="panel-stage" /> }))
 vi.mock('./components/SpeedMasterOverviewPanel', () => ({ SpeedMasterOverviewPanel: () => <div data-testid="panel-speed" /> }))
 vi.mock('./components/CueSlotOverviewPanel', () => ({ CueSlotOverviewPanel: () => <div data-testid="panel-slots" /> }))
 vi.mock('./components/groups/FixtureDetailModal', () => ({ FixtureDetailModal: () => null }))

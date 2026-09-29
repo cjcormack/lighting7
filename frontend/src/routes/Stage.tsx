@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate, useNavigate } from 'react-router'
+import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -46,8 +46,21 @@ import {
   type RegionPositionUpdate,
   type RiggingPositionUpdate,
   type Selection,
+  type StageFraming,
   type StageRecovery,
 } from '../components/stage3d/Stage3D'
+import { StageViewpointPicker } from '../components/stage3d/StageViewpointPicker'
+import { deskSelectionPoints, stageSelectionPoints } from '../components/stage3d/framingPoints'
+import {
+  STAGE_VIEWPOINTS,
+  STAGE_VIEWPOINT_LABELS,
+  consumeLaunchViewpoint,
+  isOrthoViewpoint,
+  isStageViewpoint,
+  setStageViewpoint,
+  useStageViewpoint,
+} from '../lib/stageViewpoint'
+import { useDeskSelection } from '../store/selection'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu } from '../components/stage3d/StageViewMenu'
@@ -70,11 +83,7 @@ import { StageShortcutsPopover } from '../components/stage2d/StageShortcutsPopov
 import { useUnplacedPatches } from '../hooks/useUnplacedPatches'
 import { resolveBulkTargets, unplaceTargets } from '../lib/stageBulkOps'
 import { commitPlacements, type PlacementChange } from '../store/stagePlacement'
-import {
-  STAGE_PROJECTIONS,
-  isProjectionId,
-  type ProjectionId,
-} from '../lib/stageProjection'
+import { STAGE_PROJECTIONS } from '../lib/stageProjection'
 import {
   StageEditorPanel,
   StageEditorPanelStub,
@@ -91,39 +100,6 @@ import type { FixturePatch } from '../api/patchApi'
 import type { StageRegionDto } from '../api/stageRegionApi'
 import type { RiggingDto } from '../api/riggingApi'
 import { useMediaQuery, SM_BREAKPOINT } from '../hooks/useMediaQuery'
-
-/** The 3D scene, or one of the three orthographic projections. */
-type Mode = '3d' | ProjectionId
-
-const STORAGE_KEY = 'stageViewMode'
-
-function isMode(v: unknown): v is Mode {
-  return v === '3d' || isProjectionId(v)
-}
-
-function loadMode(): Mode {
-  if (typeof window === 'undefined') return '3d'
-  const v = window.localStorage.getItem(STORAGE_KEY)
-  // '2d' is the pre-projection value: the old toggle only had 3D and a top-down
-  // 2D. Migrate it to 'plan' rather than resetting the user's preference to 3D.
-  if (v === '2d') return 'plan'
-  return isMode(v) ? v : '3d'
-}
-
-// Raw string rather than JSON, so this can't use usePersistentState — the stored
-// value predates that helper and migrating the key would lose the preference.
-function useStageViewMode(): [Mode, (m: Mode) => void] {
-  const [mode, setModeState] = useState<Mode>(loadMode)
-  const setMode = (m: Mode) => {
-    setModeState(m)
-    try {
-      window.localStorage.setItem(STORAGE_KEY, m)
-    } catch {
-      // ignore quota / private mode failures
-    }
-  }
-  return [mode, setMode]
-}
 
 const REGION_DEFAULT_SIZE_M = 2
 // Fallback truss height when the project doesn't declare a stage height.
@@ -148,7 +124,11 @@ function nextDefaultName(prefix: string, existing: { name: string }[] | undefine
 export function Stage() {
   const project = useViewedProject()
   const projectId = project?.id
-  const [mode, setMode] = useStageViewMode()
+  // This window's camera (`lib/stageViewpoint.ts`): per tab, announced to the Screens sheet, and
+  // settable from another window. Plan, Front and Side are sections of the 3D scene; the SVG plot
+  // draws them only while editing, until 3D editing has parity (stage-view plan D1, session 5).
+  const viewpoint = useStageViewpoint()
+  const isOrtho = isOrthoViewpoint(viewpoint)
   // Multi-object selection. `Selection` itself stays single-valued — a dozen
   // consumers read it structurally — so everything that wants one target gets
   // `sel.primary`, and only the bulk panel and the ops look at the full set.
@@ -169,6 +149,9 @@ export function Stage() {
   const { flags: viewFlags, setFlag: setViewFlag, setLabelMode } = useStageView()
   // Filled by the 3D canvas while it is mounted; the View menu's *Test recovery* calls it.
   const recoveryRef = useRef<StageRecovery | null>(null)
+  // Filled by the 3D canvas while it is mounted; F and the picker's *Frame the selection* call it.
+  const framingRef = useRef<StageFraming | null>(null)
+  const deskSelection = useDeskSelection()
   const visSource = useVisSource()
   // Reads the same cached queries the Next GO source does, so it costs no extra request.
   const nextGoStatus = useNextGoStatus(visSource === 'nextGo')
@@ -210,6 +193,17 @@ export function Stage() {
   // the gizmos and side panels need the room.
   const showEditToggle = isTabletOrLarger
   const editingActive = editMode && isTabletOrLarger
+  // Editing on a section is still the SVG plot's job (D1); every other combination is the 3D scene.
+  const renderer2d = editingActive && isOrtho
+  const projection = isOrtho ? STAGE_PROJECTIONS[viewpoint] : STAGE_PROJECTIONS.plan
+
+  // `?viewpoint=` — a Screens row's *Copy link* carries the camera — applied once on arrival and
+  // stripped, so a reload keeps whatever the window has moved to since.
+  const [searchParams, setSearchParams] = useSearchParams()
+  useEffect(() => {
+    const next = consumeLaunchViewpoint(searchParams)
+    if (next != null) setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     if (!editingActive) {
@@ -291,7 +285,7 @@ export function Stage() {
   // Arrow keys nudge the selection by the grid step (Shift for ten times that).
   useStageNudge({
     enabled: editingActive && selectedPatches.length > 0,
-    projection: mode === '3d' ? STAGE_PROJECTIONS.plan : STAGE_PROJECTIONS[mode],
+    projection,
     stepM: snap.step,
     targets: () => resolveBulkTargets(selectedPatches, riggings ?? []),
     commit: applyBulk,
@@ -330,6 +324,39 @@ export function Stage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [placing])
+
+  // *Frame the selection*: the Stage's own selection, else the desk's — a chip pressed in Positions,
+  // the busk band or the programmer — so F frames what the operator just picked wherever they
+  // picked it. Read through a ref by the key listener, which binds once.
+  const framePointsRef = useRef<() => ReturnType<typeof stageSelectionPoints>>(() => [])
+  framePointsRef.current = () => {
+    const own = stageSelectionPoints(sel.refs, patches ?? [], riggings ?? [], regions ?? [])
+    return own.length > 0 ? own : deskSelectionPoints(deskSelection, patches ?? [], riggings ?? [])
+  }
+  const canFrame = !renderer2d && (sel.count > 0 || deskSelection.length > 0)
+  const frameSelection = useCallback(() => {
+    const points = framePointsRef.current()
+    if (points.length > 0) framingRef.current?.frame(points)
+  }, [])
+
+  // O goes back to the orbit camera and F frames the selection (`Stage.dc.html`'s picker). Bare
+  // keys only — ⇧F is full screen (`useWindowsBridge`) — and never from a field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      if (isEditableTarget(document.activeElement)) return
+      const key = e.key.toLowerCase()
+      if (key === 'o') {
+        e.preventDefault()
+        setStageViewpoint('orbit')
+      } else if (key === 'f') {
+        e.preventDefault()
+        frameSelection()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [frameSelection])
 
   // Hold Alt/Option to flip the fixture gizmo to the *other* mode while held.
   const { held: altHeld } = useModifierHeld('altKey', editingActive)
@@ -459,7 +486,7 @@ export function Stage() {
             baseYawDeg: nextBaseYaw,
             basePitchDeg: nextBasePitch,
           })
-        } else if (!rotateUpdate && mode !== '3d') {
+        } else if (!rotateUpdate && renderer2d) {
           // A 2D translate MUST write per frame: the SVG draws fixtures straight
           // from the RTK cache, so without this the dot and its label sit frozen
           // at the pre-drag position for the whole gesture and teleport on
@@ -490,7 +517,7 @@ export function Stage() {
         .unwrap()
         .catch(() => writePatchPlacement(projectId, patch.id, origin))
     },
-    [projectId, updatePatch, patchOrigin, mode],
+    [projectId, updatePatch, patchOrigin, renderer2d],
   )
 
   const handleRegionPositionChange = useCallback(
@@ -739,8 +766,30 @@ export function Stage() {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full min-h-0">
-        <header className="flex items-center gap-2 border-b px-4 py-2">
+        <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
           <h1 className="text-sm font-semibold">Stage</h1>
+          <StageViewpointPicker
+            viewpoint={viewpoint}
+            onPick={setStageViewpoint}
+            onFrame={frameSelection}
+            canFrame={canFrame}
+          />
+          {/* The camera — Orbit, Eye and the three sections of the one scene (D1). */}
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={viewpoint}
+            aria-label="Camera"
+            onValueChange={(v) => {
+              if (isStageViewpoint(v)) setStageViewpoint(v)
+            }}
+          >
+            {STAGE_VIEWPOINTS.map((v) => (
+              <ToggleGroupItem key={v} value={v} className="px-2">
+                {STAGE_VIEWPOINT_LABELS[v]}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
           <div className="flex-1" />
           {editingActive && (
             <>
@@ -766,7 +815,7 @@ export function Stage() {
           )}
           {/* 3D only: this drives drei's TransformControls, which has no 2D
               analogue — a 2D fixture drag is always a move. */}
-          {editingActive && mode === '3d' && selection?.kind === 'patch' && (
+          {editingActive && !renderer2d && selection?.kind === 'patch' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <ToggleGroup
@@ -824,15 +873,15 @@ export function Stage() {
             </Tooltip>
           )}
           {editingActive && <StageShortcutsPopover />}
-          {/* Shown in every view now — the 2D projections honour the same flags.
-              Beam cones are 3D-only, so that entry drops out there. */}
+          {/* Shown in every view now — the 2D plot honours the same flags. Beam cones are 3D-only,
+              so that entry drops out there. */}
           <StageViewMenu
             flags={viewFlags}
             setFlag={setViewFlag}
             setLabelMode={setLabelMode}
-            hide={mode === '3d' ? undefined : ['beamCones']}
+            hide={renderer2d ? ['beamCones'] : undefined}
             onTestRecovery={
-              mode === '3d' ? () => recoveryRef.current?.testContextLoss() : undefined
+              renderer2d ? undefined : () => recoveryRef.current?.testContextLoss()
             }
             visSource={visSource}
             setVisSource={setVisSource}
@@ -856,19 +905,6 @@ export function Stage() {
               </TooltipContent>
             </Tooltip>
           )}
-          <ToggleGroup
-            type="single"
-            size="sm"
-            value={mode}
-            onValueChange={(v) => {
-              if (isMode(v)) setMode(v)
-            }}
-          >
-            <ToggleGroupItem value="3d">3D</ToggleGroupItem>
-            <ToggleGroupItem value="plan">Plan</ToggleGroupItem>
-            <ToggleGroupItem value="front">Front</ToggleGroupItem>
-            <ToggleGroupItem value="side">Side</ToggleGroupItem>
-          </ToggleGroup>
         </header>
         <main className="flex flex-1 min-h-0 overflow-hidden">
           <div className="flex flex-1 min-w-0 flex-col">
@@ -876,9 +912,13 @@ export function Stage() {
                 StageFixtureControlPanel below is a live editing surface and has to keep
                 reading real output whatever the selector is previewing. */}
             <StageChannelSourceProvider>
-              {mode === '3d' ? (
+              {!renderer2d ? (
                 <Stage3D
                   projectId={projectId}
+                  viewpoint={viewpoint}
+                  persistCamera
+                  showViewpointCaption
+                  framingRef={framingRef}
                   editMode={editingActive}
                   selection={selection}
                   placing={placing}
@@ -897,7 +937,7 @@ export function Stage() {
               ) : (
                 <Stage2DView
                   projectId={projectId}
-                  projection={STAGE_PROJECTIONS[mode]}
+                  projection={projection}
                   selection={selection}
                   selectedKeys={sel.selectedKeys}
                   editMode={editingActive}
@@ -916,7 +956,7 @@ export function Stage() {
                 />
               )}
             </StageChannelSourceProvider>
-            {editingActive && mode !== '3d' && (
+            {renderer2d && (
               <UnplacedTray
                 unplaced={unplaced}
                 armedKeys={armedKeys}
@@ -946,7 +986,7 @@ export function Stage() {
             <StageBulkPanel
               patches={selectedPatches}
               riggings={riggings ?? []}
-              projection={mode === '3d' ? STAGE_PROJECTIONS.plan : STAGE_PROJECTIONS[mode]}
+              projection={projection}
               regionCount={sel.refs.filter((r) => r.kind === 'region').length}
               riggingCount={sel.refs.filter((r) => r.kind === 'rigging').length}
               onApply={applyBulk}

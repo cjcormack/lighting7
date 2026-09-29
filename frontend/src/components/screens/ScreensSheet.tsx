@@ -68,7 +68,7 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * `screensSheetState`.
  *
  * One row per registry row: an editable name, *this window*, full screen or in a browser tab, a
- * view picker over the six views, and a Full screen / Exit full screen button. Every write is a
+ * view picker over the seven views, and a Full screen / Exit full screen button. Every write is a
  * `windows.*` command by **row id** — this window's included, so a rename of this tab goes out and
  * comes back like any other and there is one path, not two. The one thing read locally is this
  * window's own full-screen state, which `fullscreenchange` knows before the registry does.
@@ -265,7 +265,7 @@ function WindowRow({
 /**
  * The row's view options, one control per descriptor entry, and the link that carries them.
  * Mounted for any view that contributes options — every live view since the Chrome segment
- * (busk-chrome plan D9) — so the two page queries are **skipped unless the descriptor carries a
+ * (busk-chrome plan D9), and the Stage view for its Viewpoint — so the two page queries are **skipped unless the descriptor carries a
  * page control**: a Programmer row draws no page picker and must not subscribe to the busk pages
  * for one.
  */
@@ -367,7 +367,7 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
         size="sm"
         className="h-7 px-2 text-xs"
         onClick={() => void copy()}
-        title="A link that opens a window on another device with this one's view, page, focus, sheet and chrome"
+        title="A link that opens a window on another device with this one's view and its options"
       >
         {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
         {copied ? 'Copied' : `Copy link for ${row.name}`}

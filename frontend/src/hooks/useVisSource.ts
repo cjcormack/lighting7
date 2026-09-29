@@ -5,7 +5,7 @@ import { createSyncStore } from '../lib/syncStore'
  * Which layer of the lighting cascade the stage views should draw.
  *
  * A `createSyncStore` singleton rather than `usePersistentState`, because two surfaces read it: the
- * Stage route's view menu and the globally-mounted stage overview panel. `usePersistentState` reads
+ * Stage route's view menu and the globally-mounted Positions panel. `usePersistentState` reads
  * its key once in a `useState` initialiser and never listens for changes, so two components sharing
  * a key would drift apart the moment one of them wrote.
  */

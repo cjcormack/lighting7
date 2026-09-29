@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+import { useThree } from '@react-three/fiber'
 import { Bloom as PpBloom, EffectComposer } from '@react-three/postprocessing'
 
 // Bloom is essential — the scene looks flat without it. Wrap EffectComposer
@@ -11,9 +13,22 @@ import { Bloom as PpBloom, EffectComposer } from '@react-three/postprocessing'
 // pools are soft additive shapes that MSAA does nothing for; the hard edges it
 // did smooth are the bodies and the grid, which the canvas's own `antialias`
 // no longer reaches once the composer draws the scene — an accepted cost.
+//
+// The composer is rebuilt — a new instance with new passes — whenever the default camera changes,
+// which is every viewpoint switch (stage-view plan session 1). The rebuild lands in an effect after
+// the switch's own frame, which the *old* composer drew through the old camera; on a `demand`
+// frameloop nothing else asks for another, so the view sat on the previous camera's picture while
+// the labels had already moved. The ref is handed each new instance, and asks for the frame.
 export function Bloom() {
+  const invalidate = useThree((s) => s.invalidate)
+  const onComposer = useCallback(
+    (composer: unknown) => {
+      if (composer != null) invalidate()
+    },
+    [invalidate],
+  )
   return (
-    <EffectComposer multisampling={0}>
+    <EffectComposer ref={onComposer} multisampling={0}>
       <PpBloom luminanceThreshold={0.15} intensity={1.7} radius={0.5} />
     </EffectComposer>
   )

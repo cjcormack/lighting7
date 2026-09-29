@@ -18,7 +18,7 @@ import { ProgrammerIndicator } from './components/ProgrammerIndicator'
 import ProjectSwitcher from "./ProjectSwitcher"
 import { UserMenu } from "./components/auth/UserMenu"
 import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
-import { StageOverviewPanel } from "./components/StageOverviewPanel"
+import { PositionsPanel } from "./components/positions/PositionsPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
 import { AiChatToggle } from "./components/ai/AiChatToggle"
@@ -269,11 +269,7 @@ export default function Layout() {
               return on exit. */}
           {!immersive && (
             <>
-              <StageOverviewPanel
-                isVisible={byId.stage.isVisible}
-                selectedFixtureKey={selectedFixture}
-                onFixtureClick={setSelectedFixture}
-              />
+              <PositionsPanel isVisible={byId.stage.isVisible} />
 
               <FixtureOverviewPanel
                 onFixtureClick={setSelectedFixture}

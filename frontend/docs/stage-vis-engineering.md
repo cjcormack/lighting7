@@ -7,7 +7,8 @@ How the stage surfaces decide **what a fixture looks like**. Two independent sea
   level.
 
 And, since the stage-view plan's session 0, how the 3D view keeps within a browser's memory and
-survives losing its graphics context — §"The 3D renderer" at the end.
+survives losing its graphics context — §"The 3D renderer"; since session 1, its cameras, the
+window's viewpoint and the Positions panel — §"Cameras and viewpoints" at the end.
 
 ## The vis source
 
@@ -30,7 +31,7 @@ stage did not.
 intensity but no position sits at pan/tilt 0 rather than borrowing a position from the wire.
 
 It is a **module store read through `useSyncExternalStore`**, not `usePersistentState`. Two surfaces
-read it — the Stage route's View menu and the globally-mounted `StageOverviewPanel` — and
+read it — the Stage route's View menu and the globally-mounted Positions panel — and
 `usePersistentState` reads its key once in a `useState` initialiser and never listens for changes,
 so two components sharing a key drift apart the moment one writes.
 
@@ -73,7 +74,7 @@ response is dropped by an `ignore` flag in the effect cleanup.
 
 **The request is a query, not a mutation, despite being a POST.** Two things follow from that, and
 both are load-bearing. Several stage surfaces can be mounted at once — the Stage route's canvas and
-the `StageOverviewPanel` Layout hangs under the header — and RTK Query collapses their identical
+the Positions panel Layout hangs under the header — and RTK Query collapses their identical
 args into one request and one cache entry, so two open surfaces cost one request and a GO produces
 one POST rather than one per surface.
 
@@ -132,7 +133,7 @@ merged map per fixture per frame to answer it. `getByKey` keeps every source O(1
 allocation-free, which is what that frame loop requires.
 
 **The provider wraps only the canvases** — the `Stage3D` / `Stage2DView` element in `routes/Stage.tsx`
-and the `StageBackdrop` in `StageOverviewPanel.tsx`. Not `<main>`: the docked
+and the Positions panel's rows and Plan tab (`components/positions/`). Not `<main>`: the docked
 `StageFixtureControlPanel` renders `FixtureDetailView`, a live editing surface that must keep
 reading and writing the real wire whatever the stage is previewing. The same reasoning keeps
 `useVirtualDimmer` on the default source — all of its consumers are editing controls.
@@ -207,7 +208,9 @@ gel fixture needs neither — so they cannot collapse behind one hook without br
 hands the result to `children`. That constraint is why the 2D plot went without live colour for so
 long, and the render prop is the way around it.
 
-Consumers — **five mounting readers**: `StageMarker` (DOM); `Stage2DShapes`' `FixtureShape` (SVG);
+Consumers — **five mounting readers**: the Positions panel's `UnitChip` (DOM — one leaf per chip,
+the swatch and the level off one subscription; it replaced `StageMarker` with the overview it
+drew); `Stage2DShapes`' `FixtureShape` (SVG);
 since the busk view's rig band, `RigTile`'s live bar and pips (`components/busking/RigTile.tsx`),
 one leaf per fixture tile, which reads a cell's colour off `segments` by the element's position in
 the patch's cell list; since the side sheet, `SideSheetFold`'s selection colour dot
@@ -356,8 +359,8 @@ which the browser never offers the context back — and the view draws **3D paus
 and **Restore 3D**. The label layer is hidden with it. A browser that restores on its own
 (`webglcontextrestored`) clears the state; **Restore** does not wait for that and remounts the canvas
 (`canvasKey`), a fresh renderer and a fresh context, because a context taken to save memory may
-never come back. The camera pose resets with the remount, as it does on any mount until the
-viewpoints session. The View menu's **Test recovery** (3D only) drops the context through
+never come back. The camera comes back where it was: the pose is in `sessionStorage` (§"Cameras and
+viewpoints" below). The View menu's **Test recovery** (3D only) drops the context through
 `WEBGL_lose_context` so the path can be exercised on purpose.
 
 ### The emitters are sized by the rig
@@ -451,3 +454,113 @@ labels (*FOH*, *upstage*) are given the Liberation Sans TTF that react-pdf's pin
 imported as an asset URL so Vite bundles it — the same transitive reach `ScriptViewer` makes for
 pdf.js's worker. If react-pdf ever drops pdf.js, the import fails the build rather than falling back
 to the network.
+
+## Cameras and viewpoints
+
+Session 1 of the stage-view plan gave the one scene five cameras and put the plan in the overview
+panel. `Stage.dc.html` and `Positions.dc.html` are the layout authority; the record's §4 "One camera,
+which forgets" and §5 "Both 2D surfaces lose to label density" are the why.
+
+### Five cameras, one scene
+
+`StageCameraRig` (in `Stage3D`'s canvas) mounts one of three rigs for the window's viewpoint:
+
+- **Orbit** — a perspective camera under drei's `OrbitControls`, as before.
+- **Eye** — a person standing somewhere. Drag turns the head, grabbing the scene as a panorama
+  does; scroll narrows or widens the lens rather than walking. It starts where the orbit camera
+  stands, looking where it looks — so *orbit there, then look around* is the gesture until session
+  2's saved points and seats. Pitch stops at ±85°, the lens at 15–90°.
+- **Plan · Front · Side** — orthographic sections under `OrbitControls` with rotation off. Their
+  screen conventions are `lib/stageProjection.ts`'s, so the camera and the SVG plot agree: Plan has
+  upstage at the top, Front has +X to the right, Side looks from +X (audience right, stage left) with
+  the house on the left.
+
+Four rules:
+
+- **A section's camera stands on its section plane.** `orthoSection` (`stageCameras.ts`) puts the
+  camera just outside the scene's bounds on its own side, with a near plane of a centimetre. What
+  lies between the section and the camera is nothing by construction, and anything beyond the
+  plane on the camera's side is clipped. The bounds are the stage, every rigging's reach, every
+  region (hanging **down** from `centerZ`) and every placed fixture, so today nothing of the rig is
+  cut. Session 3's venue is what the planes will cut through — the ceiling in plan, the balcony in
+  front, the stage-left wall in side.
+- **A section refits itself until the operator moves it** — to the canvas as it resizes, and to the
+  rig as its lists arrive — and then it is theirs. *Frame* slides it **within** the plane, so framing
+  never changes what is cut.
+- **Each camera is a plain three.js object made the default through the store**, not drei's
+  `<PerspectiveCamera makeDefault>`. drei's orthographic camera allocates a render target for a
+  feature this never uses, and R3F sizes a default camera only on the *next* resize, so
+  `useDefaultCamera` fits the frustum itself when it swaps one in.
+- **A camera swap must ask for a frame after the composer has rebuilt.** `@react-three/postprocessing`
+  rebuilds the composer (new passes, new targets) whenever the default camera changes, in an effect
+  *after* the swap's own frame — which the old composer drew through the old camera. On a `demand`
+  frameloop nothing asked again, so the view sat on the previous camera's picture while the labels
+  had already moved. `Bloom` hands the composer a ref callback that invalidates on each new instance.
+
+The volumetric beam shader built each pixel's ray from `cameraPosition`, which fans out like a
+perspective camera's. Under an orthographic camera the rays are parallel: the shader reads
+`isOrthographic` (three's built-in uniform) and casts along the camera's forward axis from the
+camera plane, so an ortho view draws the same haze as orbit, and `t >= 0` is the section's cut. The
+beam shell's rim and the pixel strip's glow take the same flag: under ortho their view vector is the
+constant view axis. The label layer needed nothing — it projects every anchor through whatever the default camera is.
+
+### The viewpoint is the window's, and the pose is kept
+
+`lib/stageViewpoint.ts` holds the viewpoint, `orbit | eye | plan | front | side`, in
+**`sessionStorage`** — per tab, `lib/immersive.ts`'s reason: the hall screen sits on Front all night
+while the desk screen orbits. It replaced the `stageViewMode` key in `localStorage`, one value per
+profile. It rides `windows.viewOptions` as `viewpoint` under the new **Stage** entry in
+`lib/windowViews.ts` (Stage is a window view but not a live view — no immersive), so the Screens row
+draws *Viewpoint · Orbit | Eye | Plan | Front | Side* and sets it on another window. A Screens row's
+*Copy link* carries `viewpoint=`, which the Stage route applies on arrival and strips. The toggle in
+the route's header is the camera segment, and the **viewpoint picker** beside it lists the built-ins
+and *Frame the selection*; session 2's saved views and seats go into the same menu.
+
+`lib/stageCameraPoses.ts` keeps the orbit pose (and the eye's, while on Eye) in `sessionStorage`,
+written as the camera moves (at most every 150 ms, and once more on unmount) and read on mount — so
+a route change, a reload and the context-loss *Restore* all land where the camera was left. Moving
+*into* Eye from another camera forgets the eye's pose, so it seeds afresh from the orbit camera; a
+remount already on Eye keeps it. The seed reads the orbit pose **noted in memory on every move**
+(`noteOrbitPose`), not storage: the eye's seed is read in the render that mounts it, before the
+orbit rig's unmount has flushed its pending write, so storage can be a move behind. An embedded camera (the Positions panel's plan) passes
+`persistCamera={false}` and never touches the Stage view's.
+
+**Stage2DView stays behind Edit** (D1). Editing on a section is still the SVG plot's job until 3D
+editing has parity (session 5): `renderer2d` in `routes/Stage.tsx` is `editing && section`, and every
+other combination is the 3D scene.
+
+### Frame the selection (F)
+
+F — bare, never from a field; ⇧F is full screen — and the picker's item bring the selection into
+view in whatever way the current camera moves: the orbit pulls in along the direction it had until
+the selection's sphere fills the lens (grandMA3's *Auto*), the eye turns its head, a section slides
+within its plane and zooms to fit. What it frames is the Stage view's own selection
+(`framingPoints.ts`: every lantern of a fixture, a region's middle, a rigging's position), and **the
+desk selection when that is empty** — so a chip pressed in Positions, the busk band or the
+programmer is framed by the Stage window that pressed nothing. A group target frames its members; a
+cell's key is opaque on this side and frames nothing, and so does a patch the view does not draw
+(`stageHidden`, infrastructure). The orbit's pull-in takes the narrower half of the lens — on a
+portrait canvas the horizontal field is the tighter. O goes back to Orbit.
+
+### Positions
+
+`components/positions/PositionsPanel.tsx` replaced `StageOverviewPanel` and `StageMarker` behind the
+header's stage toggle, on every route. The old panel placed every name by percentage in a 420 px box
+with no decluttering; no labelling scheme fixes a true-scale plan of three bars a metre apart.
+
+- **Rows are positions, upstage first**, the stage edge marked at Y = 0. `positionRows.ts` derives
+  them on every render — a unit's row is its placement's rigging, the row's depth is where the
+  rigging hangs, the unit's place is its world X — and stores nothing (`FU-BUSK-RIG-PLOT`'s rule).
+  A paired dimmer is one chip per row with its count; a unit on no rigging goes in one
+  *Free-standing* row at its units' mean depth; a rigging with nothing on it has no row.
+- **A chip is the desk selection** (`setDeskSelection`): a tap selects that unit on every window,
+  ⇧ or ⌘ toggles it, and a tap on the sole selected unit clears. The swatch is live colour at
+  level; a unit with neither a dimmer nor a colour (a hazer, the Twin Shot) shows no level.
+- **A group chip dims** the units outside it; every row keeps its place. The filter remembers the
+  project it was set in, since group ids are the desk's and would match nothing in another.
+- **The Plan tab is `Stage3D` on the plan section**, lazily imported (`PositionsPlan.tsx`) so
+  three.js stays the Stage route's weight. A fixture clicked there sets the desk selection, and a
+  click on the one fixture selected clears it, as a chip does; *Open in Stage* from the Plan tab
+  opens the Stage view on Plan.
+- **Closed costs nothing.** The tab and the group filter live above `CollapsiblePanel`; every query,
+  channel subscription and the canvas unmount with the body.

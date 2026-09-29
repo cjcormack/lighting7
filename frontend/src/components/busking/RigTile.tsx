@@ -50,7 +50,7 @@ import { useRigEdit } from './RigEditProvider'
  * at touch start. In *Edit layout* the row is inert, so a drag can start from the tile's whole face.
  *
  * **The live bar is the stage's own colour**, through `FixtureAppearanceSource` — the same
- * dispatch the 2D plot, the DOM marker and the mini-stage read (`docs/stage-vis-engineering.md`
+ * dispatch the 2D plot and the Positions panel's chips read (`docs/stage-vis-engineering.md`
  * §Fixture appearance), so a tile never disagrees with the stage about what a head is doing. One
  * leaf per fixture tile, mounted here rather than in the band, because the render prop's leaf
  * carries a fixed hook set per colour source and the band would otherwise mount one per head

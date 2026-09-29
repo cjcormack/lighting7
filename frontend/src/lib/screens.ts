@@ -28,8 +28,9 @@ export function newWindowUrl(name: string, view: string = '/', origin: string = 
  * window boots with, so a link saying so would say nothing, and `lib/immersive.ts` consumes the
  * parameter at boot rather than on the view. Opened on another device it arrives as drawn:
  * `?window=` names it (fresh id, this name), `?page=` unlinks it onto that page, `?focus=` /
- * `?sheet=` set its shape, `?immersive=on` hides the app around it. A view whose options carry
- * none of the four copies the plain link.
+ * `?sheet=` set its shape, `?immersive=on` hides the app around it. A Stage row adds its
+ * `viewpoint` (stage-view plan session 1), which the Stage view applies on arrival and strips. A
+ * view whose options carry none of the five copies the plain link.
  */
 export function windowSetupUrl(
   name: string,
@@ -38,7 +39,7 @@ export function windowSetupUrl(
   origin: string = window.location.origin,
 ): string {
   let url = newWindowUrl(name, view, origin)
-  for (const key of ['page', 'focus', 'sheet', 'immersive']) {
+  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'immersive']) {
     const value = options?.[key]
     if (value == null || value === '') continue
     if (key === 'immersive' && value !== 'on') continue

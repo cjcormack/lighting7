@@ -50,6 +50,7 @@ import { resetUnsavedSheets, setSheetUnsaved } from '@/lib/unsavedSheets'
 import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBuskSheet } from '@/lib/buskWindow'
 import { getLocalBuskPage, isFollowingBuskPage, reportShowingBuskPage, resetBuskPageFollowStores, unlinkBuskPage } from '@/lib/buskPageFollow'
 import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
+import { resetStageViewpointStore, setStageViewpoint, stageViewpoint } from '@/lib/stageViewpoint'
 import { store } from './index'
 import { restApi } from './restApi'
 import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
@@ -88,6 +89,7 @@ afterEach(() => {
   identity.name = 'Screen 1'
   identity.listeners.clear()
   window.sessionStorage.clear()
+  resetStageViewpointStore()
   resetDeskFollowStores()
   resetFullscreenState()
   resetUnsavedSheets()
@@ -228,6 +230,17 @@ describe('the announce', () => {
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ focus: 'pads' })
   })
 
+  it('carries the Stage view’s viewpoint and re-announces when it moves; the viewpoint rides no other view (stage-view plan session 1)', async () => {
+    mountBridge('/projects/1/stage')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'orbit' })
+    act(() => setStageViewpoint('side'))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side' })
+    // Six keys, never a seventh.
+    expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+  })
+
   it('keeps the five-key frame on a view that contributes no options — a library', async () => {
     mountBridge('/projects/1/looks')
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
@@ -360,6 +373,26 @@ describe('handleWindowCommand', () => {
     expect(handleWindowCommand(frame('/projects/1/busk', { focus: 'rig', immersive: 'on' }), ctx('/projects/1/busk'))).toBe('applied')
     expect(getBuskFocus()).toBe('rig')
     expect(isImmersive()).toBe(true)
+  })
+})
+
+describe('handleWindowCommand — the Stage view’s viewpoint (stage-view plan session 1)', () => {
+  const ctx = (currentView: string) => ({ myRowId: 's-1', currentView, navigate: vi.fn() })
+  const frame = (view: string, options: Record<string, string>) => ({ type: 'viewOptions' as const, targetId: 's-1', view, options })
+
+  it('moves the camera on a Stage window, and only there', () => {
+    expect(handleWindowCommand(frame('/projects/1/stage', { viewpoint: 'plan' }), ctx('/projects/1/stage'))).toBe('applied')
+    expect(stageViewpoint()).toBe('plan')
+    // A Stage frame arriving on the busk view is a statement about a view this window left.
+    expect(handleWindowCommand(frame('/projects/1/stage', { viewpoint: 'front' }), ctx('/projects/1/busk'))).toBe('ignored')
+    expect(stageViewpoint()).toBe('plan')
+  })
+
+  it('ignores a value outside the vocabulary, and takes no immersive — Stage is not a live view', () => {
+    setStageViewpoint('side')
+    expect(handleWindowCommand(frame('/projects/1/stage', { viewpoint: 'row-f', immersive: 'on' }), ctx('/projects/1/stage'))).toBe('applied')
+    expect(stageViewpoint()).toBe('side')
+    expect(isImmersive()).toBe(false)
   })
 })
 

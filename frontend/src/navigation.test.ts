@@ -265,11 +265,14 @@ describe("window commands", () => {
     const labels = commands.map((c) => c.label)
     expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
     expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
-    // Six views × two other windows (the iPad on an install route takes the viewed project),
+    // Seven views × two other windows (the iPad on an install route takes the viewed project),
     // plus the focus arm on each Busk show and the immersive arm on each live-view show.
     const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id) && !/-immersive$/.test(c.id))
-    expect(shows).toHaveLength(12)
+    expect(shows).toHaveLength(14)
     expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
+    // The Stage view (a hall screen on a viewpoint) is a view like any other, with no immersive arm.
+    expect(shows.map((c) => c.label)).toContain("Show Stage on Screen 2")
+    expect(commands.some((c) => c.id.endsWith("-stage-immersive"))).toBe(false)
     expect(shows.map((c) => c.label)).toContain("Show Prompt Book on iPad")
     // Never this window: the Navigation group already moves it.
     expect(labels.some((l) => l.endsWith("on Screen 1"))).toBe(false)
@@ -307,6 +310,7 @@ describe("window commands", () => {
       "Open Show on another display",
       "Open Prompt Book on another display",
       "Open Busk on another display",
+      "Open Stage on another display",
       "Open Looks on another display",
       "Open Templates on another display",
     ])

@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 0 ([PR #27](https://github.com/cjcormack/lighting7/pull/27)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 1.** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -169,7 +169,7 @@ The prototype's Notes tab lists what it does and leaves out.
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
 engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
 
-### Session 0 — the renderer, fixed first (frontend)
+### ~~Session 0 — the renderer, fixed first (frontend)~~ — done, `af5beca` ([PR #27](https://github.com/cjcormack/lighting7/pull/27))
 
 - **Composer and pixel ratio.** `Bloom.tsx`: `multisampling={0}`, or drop the composer and keep
   bloom only for lit lenses. `Stage3D.tsx`: DPR capped at 1.5, `antialias` kept.

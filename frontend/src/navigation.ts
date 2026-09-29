@@ -525,7 +525,7 @@ const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus p
  *   immersive window, which draws no user menu, still has it (busk-chrome plan D10: "theme, full
  *   screen and Screens… are ⌘K's"); the label names the theme it will switch *to*, as the menu
  *   row does;
- * - *Show <view> on <window>* for every **other** window × the six views — this window has the
+ * - *Show <view> on <window>* for every **other** window × the seven views — this window has the
  *   Navigation group already, and a row whose view names no project is skipped rather than sent
  *   somewhere half-addressed;
  * - … and a *· Immersive* arm on every live view, the same two frames with `{immersive: 'on'}`

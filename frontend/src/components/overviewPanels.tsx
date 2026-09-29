@@ -31,8 +31,11 @@ interface OverviewPanelDescriptor {
 const DESCRIPTORS: readonly OverviewPanelDescriptor[] = [
   {
     id: 'stage',
-    label: 'Stage Overview',
-    noun: 'stage',
+    // Positions replaced the stage overview behind the same toggle (stage-view plan session 1): rows
+    // by rigging rather than a plot, with the plan as its second tab. The id and storage key are
+    // the panel's, not its name's, so an operator who left it open finds it open.
+    label: 'Positions',
+    noun: 'positions',
     // lucide `Theater`, which is what the command palette always used. The toolbar had a
     // hand-rolled stage-and-spotlight SVG; two glyphs for one panel is worse than either.
     icon: Theater,

@@ -1,14 +1,37 @@
 import { describe, expect, it } from 'vitest'
-import { IMMERSIVE_OPTION, PAGE_FOLLOWS_OPTION, WINDOW_VIEWS, projectIdOfPath, windowViewLabel, windowViewOf, windowViewPath } from './windowViews'
+import {
+  IMMERSIVE_OPTION,
+  PAGE_FOLLOWS_OPTION,
+  STAGE_VIEWPOINT_OPTION,
+  WINDOW_VIEWS,
+  projectIdOfPath,
+  windowViewLabel,
+  windowViewOf,
+  windowViewPath,
+} from './windowViews'
 
 /**
- * The six views one window can put on another: the four live views in `ViewSwitcher` order, then
- * the two libraries. Matching is segment-aware, so the legacy `/program` and the old `/fx` never
- * answer for a view.
+ * The seven views one window can put on another: the four live views in `ViewSwitcher` order, the
+ * Stage view, then the two libraries. Matching is segment-aware, so the legacy `/program` and the
+ * old `/fx` never answer for a view.
  */
 describe('WINDOW_VIEWS', () => {
-  it('is the four live views in ViewSwitcher order, then Looks and Templates', () => {
-    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'looks', 'templates'])
+  it('is the four live views in ViewSwitcher order, then Stage, then Looks and Templates', () => {
+    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'templates'])
+  })
+
+  it('gives Stage its viewpoint and nothing else — no immersive, it is not a live view (stage-view plan session 1)', () => {
+    const stage = WINDOW_VIEWS.find((v) => v.id === 'stage')!
+    expect(stage.segment).toBe('/stage')
+    expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION])
+    expect(STAGE_VIEWPOINT_OPTION).toMatchObject({
+      key: 'viewpoint',
+      label: 'Viewpoint',
+      kind: 'enum',
+      values: ['orbit', 'eye', 'plan', 'front', 'side'],
+      valueLabels: { orbit: 'Orbit', eye: 'Eye', plan: 'Plan', front: 'Front', side: 'Side' },
+    })
+    expect(windowViewOf('/projects/3/stage')?.id).toBe('stage')
   })
 
   it('mints a project route per view', () => {
@@ -23,8 +46,8 @@ describe('WINDOW_VIEWS', () => {
     expect(IMMERSIVE_OPTION).toMatchObject({ label: 'Chrome', kind: 'enum', values: ['off', 'on'], valueLabels: { off: 'App', on: 'Immersive' } })
     // Busk keeps its own and takes Chrome last, so the segment sits at the row's end everywhere.
     expect(WINDOW_VIEWS[3]!.options!.map((o) => o.key)).toEqual(['focus', 'sheet', 'pageFollows', 'page', 'immersive'])
-    expect(WINDOW_VIEWS[4]!.options).toBeUndefined()
-    expect(WINDOW_VIEWS[5]!.options).toBeUndefined()
+    expect(WINDOW_VIEWS.find((v) => v.id === 'looks')!.options).toBeUndefined()
+    expect(WINDOW_VIEWS.find((v) => v.id === 'templates')!.options).toBeUndefined()
   })
 })
 
