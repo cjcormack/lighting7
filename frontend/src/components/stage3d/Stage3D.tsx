@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { RotateCcw } from 'lucide-react'
 import { Edges, OrbitControls, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useProjectQuery } from '../../store/projects'
@@ -15,6 +16,16 @@ import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
+import { buildEmitterLayout } from './emitterLayout'
+import { emitterNeedsFor } from './emitterNeeds'
+import { StageLabelContext, StageLabelDriver } from './StageLabel'
+import { StageLabelStore } from './stageLabels'
+import { StageInvalidateProvider } from './stageInvalidate'
+// drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
+// reach. This is the Liberation Sans that react-pdf's pinned pdf.js ships; importing it as an
+// asset URL bundles it with the app (the precedent is ScriptViewer's pdf.js worker).
+import stageTextFont from 'pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf?url'
+import { Button } from '../ui/button'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import { lanternsFor } from './lanterns'
@@ -57,6 +68,15 @@ export type {
 
 export type GizmoMode = 'translate' | 'rotate'
 
+/**
+ * The 3D view's recovery handle, for the View menu's *Test recovery*: drops the WebGL context the
+ * way Safari does under memory pressure, so the paused state and *Restore* can be exercised on
+ * purpose. A no-op where the browser offers no `WEBGL_lose_context`.
+ */
+export interface StageRecovery {
+  testContextLoss(): void
+}
+
 interface Stage3DProps {
   projectId: number
   editMode: boolean
@@ -79,6 +99,8 @@ interface Stage3DProps {
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
   onRegionPositionChange?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
+  /** Filled while the canvas is mounted; see [StageRecovery]. */
+  recoveryRef?: React.RefObject<StageRecovery | null>
 }
 
 export function Stage3D({
@@ -96,6 +118,7 @@ export function Stage3D({
   onPatchPlacementChange,
   onRegionPositionChange,
   onRiggingPositionChange,
+  recoveryRef,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
   const stageW = project?.stageWidthM ?? 10
@@ -218,6 +241,52 @@ export function Stage3D({
   // patch's channels. Memoised so each lantern's patch object is stable across renders.
   const lanterns = useMemo(() => lanternsFor(visiblePatches), [visiblePatches])
 
+  // What each emitter slot needs — fixtures first, then lanterns, in the slot order below. A
+  // fresh layout every render is fine: StageEmitters rebuilds only when its signature changes.
+  const emitterLayout = useMemo(
+    () =>
+      buildEmitterLayout(
+        [...visiblePatches, ...lanterns.map((l) => l.patch)].map((patch) => {
+          const fixture = fixtureByKey.get(patch.key)
+          const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
+          return emitterNeedsFor(patch, fixture, fixtureType)
+        }),
+      ),
+    [visiblePatches, lanterns, fixtureByKey, typeByKey],
+  )
+
+  // The label layer: one store per Stage3D, one DOM layer over the canvas (see stageLabels.ts).
+  const [labelStore] = useState(() => new StageLabelStore())
+  // A stable ref callback: an inline one is called with null and then the element on every
+  // render, which would detach every label and throw away its measured box each time.
+  const labelContainerRef = useCallback(
+    (el: HTMLDivElement | null) => labelStore.setContainer(el),
+    [labelStore],
+  )
+  useEffect(() => {
+    labelStore.setMode(view.labels)
+  }, [labelStore, view.labels])
+
+  // Context loss. `canvasKey` remounts the canvas — a fresh renderer and a fresh context — which
+  // is *Restore*: a context the browser took back to save memory may never be offered again, so
+  // waiting on `webglcontextrestored` alone could leave the view paused for good.
+  const [canvasKey, setCanvasKey] = useState(0)
+  const [contextLost, setContextLost] = useState(false)
+  const loseContextRef = useRef<WEBGL_lose_context | null>(null)
+  const restore = useCallback(() => {
+    setContextLost(false)
+    setCanvasKey((k) => k + 1)
+  }, [])
+  useEffect(() => {
+    if (!recoveryRef) return
+    recoveryRef.current = {
+      testContextLoss: () => loseContextRef.current?.loseContext(),
+    }
+    return () => {
+      recoveryRef.current = null
+    }
+  }, [recoveryRef])
+
   const fixtureNodes = visiblePatches.map((patch, slot) => {
     const fixture = fixtureByKey.get(patch.key)
     const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
@@ -232,7 +301,6 @@ export function Stage3D({
         slot={slot}
         selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
         editMode={interactable}
-        showLabel={view.labels}
         onClick={interactable ? () => handleFixtureClick(patch) : undefined}
         onEditFocus={editMode ? handleFixtureEditFocus : undefined}
       />
@@ -255,7 +323,6 @@ export function Stage3D({
         slot={visiblePatches.length + i}
         selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
         editMode={interactable}
-        showLabel={view.labels}
         onClick={interactable ? () => handleFixtureClick(source) : undefined}
       />
     )
@@ -267,14 +334,29 @@ export function Stage3D({
       className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}
       onPointerDown={(e) => { pointerDownRef.current = { x: e.clientX, y: e.clientY } }}
     >
+      {/* `dpr` capped at 1.5: at 2 a Retina full-window canvas and every target behind it hold
+          four times the pixels of 1× (the stage-view plan's memory finding), and 1.5 is where the
+          beams stop looking soft. `frameloop="demand"`: the canvas renders while something moves —
+          a channel the scene reads, the camera, a drag, a spinning gobo — and not at all when the
+          stage is still. What asks for a frame is spelled out in stage-vis-engineering.md. */}
       <Canvas
+        key={canvasKey}
         flat
-        dpr={[1, 2]}
+        dpr={[1, 1.5]}
+        frameloop="demand"
         gl={{ toneMapping: NoToneMapping, antialias: true }}
         camera={{ position: [0, stageH * 0.7, cameraDistance], fov: 45 }}
         style={{ background: '#0b0e14' }}
         onPointerMissed={handlePointerMissed}
       >
+        <ContextLossWatcher
+          loseContextRef={loseContextRef}
+          onLost={() => setContextLost(true)}
+          onRestored={() => setContextLost(false)}
+        />
+        <StageLabelDriver store={labelStore} paused={contextLost} />
+        <StageInvalidateProvider>
+        <StageLabelContext.Provider value={labelStore}>
         <ambientLight intensity={0.5} />
         <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />
         <StageFloor width={stageW} depth={stageD} />
@@ -289,7 +371,6 @@ export function Stage3D({
             regions={safeRegions}
             selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
             editMode={interactable}
-            showLabel={view.labels}
             onClick={interactable ? handleRegionClick : undefined}
             onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
             snapActiveRef={snapActiveRef}
@@ -302,7 +383,6 @@ export function Stage3D({
             riggings={safeRiggings}
             selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
             editMode={interactable}
-            showLabel={view.labels}
             onClick={interactable ? handleRiggingClick : undefined}
             onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
             snapActiveRef={snapActiveRef}
@@ -312,7 +392,7 @@ export function Stage3D({
         )}
         {view.fixtures && (view.beamCones ? (
           <StageEmitters
-            fixtureCount={visiblePatches.length + lanterns.length}
+            layout={emitterLayout}
             regionGeometry={regionGeometry}
             stage={stageDims}
           >
@@ -350,7 +430,16 @@ export function Stage3D({
           onPatchPlacementChange={onPatchPlacementChange}
         />
         <Bloom />
+        </StageLabelContext.Provider>
+        </StageInvalidateProvider>
       </Canvas>
+      {/* The label layer: every label's <div>, owned and positioned by the store. */}
+      <div
+        ref={labelContainerRef}
+        aria-hidden
+        className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
+      />
+      {contextLost && <ContextLostOverlay onRestore={restore} />}
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
           Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
@@ -709,6 +798,7 @@ function OriginMarkers({ depth }: { depth: number }) {
       <arrowHelper args={[AXIS_UPSTAGE, ORIGIN, len, 0x6cc36c, 0.12, 0.08]} />
       <arrowHelper args={[AXIS_UP, ORIGIN, len, 0x6ba8e8, 0.12, 0.08]} />
       <Text
+        font={stageTextFont}
         position={[0, 0.002, 0.3]}
         rotation={[-Math.PI / 2, 0, 0]}
         fontSize={0.35}
@@ -720,6 +810,7 @@ function OriginMarkers({ depth }: { depth: number }) {
         FOH
       </Text>
       <Text
+        font={stageTextFont}
         position={[0, 0.002, -depth - 0.3]}
         rotation={[-Math.PI / 2, 0, 0]}
         fontSize={0.28}
@@ -738,3 +829,65 @@ const ORIGIN = new Vector3(0, 0, 0)
 const AXIS_X = new Vector3(1, 0, 0)
 const AXIS_UPSTAGE = new Vector3(0, 0, -1)
 const AXIS_UP = new Vector3(0, 1, 0)
+
+/**
+ * Watches the canvas for `webglcontextlost` / `webglcontextrestored`. On loss it cancels the
+ * default (without which the browser never offers the context back), and the parent draws the
+ * paused state instead of the blank canvas WebKit otherwise leaves. It also hands up
+ * `WEBGL_lose_context` for *Test recovery*.
+ */
+function ContextLossWatcher({
+  loseContextRef,
+  onLost,
+  onRestored,
+}: {
+  loseContextRef: React.RefObject<WEBGL_lose_context | null>
+  onLost: () => void
+  onRestored: () => void
+}) {
+  const gl = useThree((s) => s.gl)
+  const invalidate = useThree((s) => s.invalidate)
+  const onLostRef = useRef(onLost)
+  onLostRef.current = onLost
+  const onRestoredRef = useRef(onRestored)
+  onRestoredRef.current = onRestored
+  useEffect(() => {
+    const canvas = gl.domElement
+    loseContextRef.current = gl.getContext().getExtension('WEBGL_lose_context')
+    const lost = (e: Event) => {
+      e.preventDefault()
+      onLostRef.current()
+    }
+    const restored = () => {
+      onRestoredRef.current()
+      invalidate()
+    }
+    canvas.addEventListener('webglcontextlost', lost)
+    canvas.addEventListener('webglcontextrestored', restored)
+    return () => {
+      canvas.removeEventListener('webglcontextlost', lost)
+      canvas.removeEventListener('webglcontextrestored', restored)
+      loseContextRef.current = null
+    }
+  }, [gl, invalidate, loseContextRef])
+  return null
+}
+
+/** What the view shows while it has no context: never a blank canvas. */
+function ContextLostOverlay({ onRestore }: { onRestore: () => void }) {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+      <div role="status" className="max-w-xs space-y-2 rounded-md border bg-background p-4 text-center shadow-md">
+        <p className="text-sm font-semibold">3D paused</p>
+        <p className="text-xs text-muted-foreground">
+          The browser took the graphics context back to save memory. Everything else on the desk
+          carries on.
+        </p>
+        <Button size="sm" onClick={onRestore}>
+          <RotateCcw className="mr-1 size-3.5" />
+          Restore 3D
+        </Button>
+      </div>
+    </div>
+  )
+}

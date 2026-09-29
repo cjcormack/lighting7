@@ -148,13 +148,19 @@ function unsigned(v: number): number {
   return v === 0 ? 0 : v
 }
 
-/** The stage envelope's bounds in this projection's screen-metre space. */
-export function projectionExtent(proj: StageProjection, dims: StageDims): Extent {
+/**
+ * The stage envelope's bounds in this projection's screen-metre space.
+ *
+ * `floorZ` extends the envelope below the stage floor: a region hangs down from its `centerZ`
+ * (the deck), so a deck at 0 or a pit reaches below 0, and an elevation fitted to `[0, height]`
+ * would cut it off. Values above 0 are ignored.
+ */
+export function projectionExtent(proj: StageProjection, dims: StageDims, floorZ = 0): Extent {
   const halfW = dims.widthM / 2
   const axisRange: Record<LightingAxis, [number, number]> = {
     x: [-halfW, halfW],
     y: [0, dims.depthM],
-    z: [0, dims.heightM],
+    z: [Math.min(0, floorZ), dims.heightM],
   }
   const [hLo, hHi] = axisRange[proj.h.axis]
   const [vLo, vHi] = axisRange[proj.v.axis]

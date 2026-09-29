@@ -103,7 +103,7 @@ describe("localCorners / localEdgeMidpoints / localRotationOffsets", () => {
 
 describe("worldCornersFor", () => {
   it("returns 4 floor corners then 4 directly above them", () => {
-    const c = worldCornersFor(baseRegion({ centerZ: 1, heightM: 3 }))
+    const c = worldCornersFor(baseRegion({ centerZ: 4, heightM: 3 }))
     expect(c).toHaveLength(8)
     for (let i = 0; i < 4; i++) {
       expect(c[i][2]).toBe(1)
@@ -114,10 +114,17 @@ describe("worldCornersFor", () => {
     }
   })
 
-  it("treats centerZ as the floor of the box, not its midpoint", () => {
+  it("treats centerZ as the top surface of the box, not its floor or midpoint", () => {
     const c = worldCornersFor(baseRegion({ centerZ: 2, heightM: 5 }))
-    expect(Math.min(...c.map((p) => p[2]))).toBe(2)
-    expect(Math.max(...c.map((p) => p[2]))).toBe(7)
+    expect(Math.min(...c.map((p) => p[2]))).toBe(-3)
+    expect(Math.max(...c.map((p) => p[2]))).toBe(2)
+  })
+
+  it("draws a deck at 0 flush with the stage, hanging below it", () => {
+    // Project 15's "Main stage": top at 0, 0.95 m thick.
+    const c = worldCornersFor(baseRegion({ centerZ: 0, heightM: 0.95 }))
+    expect(Math.max(...c.map((p) => p[2]))).toBe(0)
+    expect(Math.min(...c.map((p) => p[2]))).toBeCloseTo(-0.95, 12)
   })
 
   it("offsets by the region centre", () => {
@@ -145,7 +152,7 @@ describe("worldCornersFor", () => {
     )
     const xs = c.map((p) => p[0])
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(1, 12)
-    expect(Math.max(...c.map((p) => p[2]))).toBeCloseTo(1, 12)
+    expect(Math.min(...c.map((p) => p[2]))).toBeCloseTo(-1, 12)
   })
 })
 

@@ -23,17 +23,18 @@ import { VOLUMETRIC_STEPS } from './washConfig'
 import {
   COOKIE_LIFT_M,
   MAX_BEAM_REGIONS,
-  MAX_PRISM_LOBES,
-  MAX_WASH_PIXELS,
   beamCapacity,
   beamInstanceIndex,
+  lobesFor,
   regionCapacity,
   regionDivisor,
   regionInstanceIndex,
   washFloorCapacity,
   washPixelIndex,
+  washPixelsFor,
   washRegionCapacity,
   washRegionInstanceIndex,
+  type EmitterLayout,
 } from './emitterLayout'
 
 export {
@@ -50,7 +51,8 @@ export interface RegionGeometry {
   depthM: number
   heightM: number
   yawRad: number
-  // OBB lifted to h/2 — feeds shader uRegion* uniforms for ray-OBB shadow tests.
+  // OBB centre, half a thickness below the deck — feeds the shaders' uRegion* uniforms, which
+  // both place the region receivers and run the ray-OBB shadow tests.
   obbCenter: Vector3
   obbHalfX: number
   obbHalfY: number
@@ -68,8 +70,9 @@ export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry
     const w = r.widthM ?? 1
     const d = r.depthM ?? 1
     const h = r.heightM ?? 1
+    // `centerZ` is the top surface; the box hangs below it (see worldCornersFor).
     const cz = r.centerZ ?? 0
-    const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz + h / 2)
+    const obbCenter = toThree(r.centerX ?? 0, r.centerY ?? 0, cz - h / 2)
     return {
       uuid: r.uuid,
       widthM: w,
@@ -103,8 +106,17 @@ export interface WallGeometry {
 // controller's own useFrame flips needsUpdate on the dirty groups once at the
 // end of the frame, so the caller never handles a buffer flag itself.
 export interface EmittersHandle {
-  fixtureCount: number
+  /** Fixture slots the layout knows. A write for any other slot is dropped. */
+  slotCount: number
   regionCount: number
+  /**
+   * Beam lobes this slot was given — 0 (no beam), 1, or `MAX_PRISM_LOBES` for a prism fixture.
+   * A director draws no more lobes than this; a write past it is dropped rather than landing in
+   * the next slot's block.
+   */
+  lobesFor(slot: number): number
+  /** Wash pixels this slot was given — 0 unless it is a pixel strip. Writes past it are dropped. */
+  washPixelsFor(slot: number): number
   /** Null when the stage has no wall (shouldn't happen — stage dims always exist). */
   wall: WallGeometry | null
 
@@ -202,9 +214,9 @@ export interface EmittersHandle {
   ): void
 
   // — per-pixel wash pools (strip/bar fixtures) —————————————————————
-  // A strip slot owns a block of MAX_WASH_PIXELS pool instances on the floor
-  // and (× regionCount) on region boxes. Each pixel is independent: its own
-  // origin, direction, colour, opacity and footprint matrix.
+  // A strip slot owns a block of `washPixelsFor(slot)` pool instances on the
+  // floor and (× regionCount) on region boxes. Each pixel is independent: its
+  // own origin, direction, colour, opacity and footprint matrix.
   writeWashFloorMatrix(
     slot: number,
     pixelIdx: number,
@@ -243,7 +255,7 @@ export interface EmittersHandle {
   // Zero-scale all of a slot's matrices + clear all its visibilities.
   // Called when a fixture is functionally off.
   hideSlot(slot: number): void
-  // Same, for a strip slot's whole wash block (all MAX_WASH_PIXELS pixels).
+  // Same, for a strip slot's whole wash block.
   hideWashSlot(slot: number): void
 }
 
@@ -253,8 +265,8 @@ export interface EmittersHandle {
 // controller's flush at the end of the frame. Flipping `needsUpdate` is indeed cheap; what
 // isn't is what it schedules — three re-uploads the *whole* flagged attribute buffer, so a
 // group nothing wrote costs a full bufferSubData for zero changed bytes. The wash groups are
-// the clearest case: `washFloorMesh.instanceMatrix` alone is 16 floats × MAX_WASH_PIXELS per
-// fixture, and on a show with no pixel strips no byte of it ever changes.
+// the clearest case: `washFloorMesh.instanceMatrix` is 16 floats per strip pixel, and most frames
+// no byte of it changes.
 //
 // Groups follow the writers, not the meshes, so each `EmittersHandle` method sets exactly one
 // bit — add a writer, give it a bit, and add its buffers to the table below.
@@ -404,7 +416,8 @@ export interface StageDims {
 }
 
 interface StageEmittersProps {
-  fixtureCount: number
+  /** Per-slot instance blocks, from `emitterNeedsFor` over the drawn rig, in slot order. */
+  layout: EmitterLayout
   regionGeometry: ReadonlyArray<RegionGeometry>
   stage: StageDims
   children: React.ReactNode
@@ -416,7 +429,7 @@ interface StageEmittersProps {
 // imperative write handle so each FixtureModel can populate its slot without
 // taking on the mesh state itself.
 export function StageEmitters({
-  fixtureCount,
+  layout,
   regionGeometry,
   stage,
   children,
@@ -428,81 +441,97 @@ export function StageEmitters({
   // remount of the Stage view must not rebuild it (and must not dispose it).
   const goboTexture = getGoboTexture()
   const poolMaterial = useMemo(() => makePoolMaterial(true, goboTexture), [goboTexture])
+  const regionPoolMaterial = useMemo(
+    () => makePoolMaterial(true, goboTexture, { regionReceiver: true }),
+    [goboTexture],
+  )
   const volumeMaterial = useMemo(() => makeVolumeMaterial(goboTexture), [goboTexture])
   // Wash pools reuse the pool shader but drop the white hotspot boost so a bar's
   // overlapping per-pixel colours blend as colour, not white.
-  const washPoolMaterial = useMemo(() => {
-    const m = makePoolMaterial(false)
-    m.uniforms.uCoreBoost.value = 0
-    return m
-  }, [])
+  const washPoolMaterial = useMemo(() => makeWashPoolMaterial(false), [])
+  const washRegionPoolMaterial = useMemo(() => makeWashPoolMaterial(true), [])
   useEffect(() => () => coneMaterial.dispose(), [coneMaterial])
   useEffect(() => () => poolMaterial.dispose(), [poolMaterial])
+  useEffect(() => () => regionPoolMaterial.dispose(), [regionPoolMaterial])
   useEffect(() => () => volumeMaterial.dispose(), [volumeMaterial])
   useEffect(() => () => washPoolMaterial.dispose(), [washPoolMaterial])
+  useEffect(() => () => washRegionPoolMaterial.dispose(), [washRegionPoolMaterial])
 
-  // March depth trades against fill: dpr 2 quadruples the shaded area, so
-  // drop a third of the samples there. Set once per pixel-ratio change.
+  // March depth trades against fill: a high pixel ratio multiplies the shaded
+  // area (2.25× at the canvas's 1.5 cap), so drop a third of the samples there.
+  // Set once per pixel-ratio change.
   const gl = useThree((s) => s.gl)
   useEffect(() => {
     const dpr = gl.getPixelRatio()
     volumeMaterial.uniforms.uVolSteps.value =
-      dpr > 1.5 ? Math.max(6, VOLUMETRIC_STEPS - 4) : VOLUMETRIC_STEPS
+      dpr > 1 ? Math.max(6, VOLUMETRIC_STEPS - 4) : VOLUMETRIC_STEPS
   }, [gl, volumeMaterial])
 
   // Shared region OBB uniforms — sync into all materials whenever the region
-  // layout changes. Pre-bake yaw into a cos/sin pair so the shader skips
+  // layout changes. They place the region receivers (the two region-receiver
+  // materials build each box from them in the vertex shader) as well as
+  // drive the shadow tests, so a region drag is a uniform write and no longer
+  // rebuilds a buffer. Pre-bake yaw into a cos/sin pair so the shader skips
   // per-fragment trig. The wall plane rides along: it clips beams and pools
   // at the upstage boundary.
+  const invalidate = useThree((s) => s.invalidate)
+  const materials = useMemo(
+    () => [
+      coneMaterial,
+      poolMaterial,
+      regionPoolMaterial,
+      volumeMaterial,
+      washPoolMaterial,
+      washRegionPoolMaterial,
+    ],
+    [
+      coneMaterial,
+      poolMaterial,
+      regionPoolMaterial,
+      volumeMaterial,
+      washPoolMaterial,
+      washRegionPoolMaterial,
+    ],
+  )
   useEffect(() => {
-    for (const mat of [coneMaterial, poolMaterial, volumeMaterial, washPoolMaterial]) {
-      const u = mat.uniforms
-      const centers = u.uRegionCenter.value as Vector3[]
-      const halves = u.uRegionHalf.value as Vector3[]
-      const yawCs = u.uRegionYawCs.value as Vector2[]
-      for (let i = 0; i < regionCount; i++) {
-        const r = regionGeometry[i]
-        centers[i].copy(r.obbCenter)
-        halves[i].set(r.obbHalfX, r.obbHalfY, r.obbHalfZ)
-        yawCs[i].set(Math.cos(-r.yawRad), Math.sin(-r.yawRad))
-      }
-      u.uNumRegions.value = regionCount
-      u.uWallZ.value = -stage.depth
-    }
-  }, [
-    coneMaterial,
-    poolMaterial,
-    volumeMaterial,
-    washPoolMaterial,
-    regionGeometry,
-    regionCount,
-    stage.depth,
-  ])
+    writeRegionUniforms(materials, regionGeometry, regionCount, stage.depth)
+    // A uniform write is not a prop change, so the `demand` frameloop has to be asked.
+    invalidate()
+  }, [materials, regionGeometry, regionCount, stage.depth, invalidate])
 
-  // Pre-allocate buffers + InstancedMesh objects sized by emitterLayout.
-  // Rebuilds when the counts or stage change; in practice this only happens
-  // when patches, regions or the stage size are edited.
+  // Pre-allocate buffers + InstancedMesh objects sized by the layout. Rebuilds
+  // when the rig's needs, the region count or the stage change — a patch edit,
+  // a region added or removed. A region *moved* is a uniform write (above).
+  // Keyed on the layout's signature, not its identity: the layout is rebuilt
+  // with every render of the rig, and equal signatures address identically.
+  const layoutKey = layout.signature
   const built = useMemo(
     () =>
       buildEmitters(
-        fixtureCount,
+        layout,
         regionCount,
-        regionGeometry,
         stage,
         coneMaterial,
         volumeMaterial,
         poolMaterial,
+        regionPoolMaterial,
         washPoolMaterial,
+        washRegionPoolMaterial,
       ),
+    // `layout` is read only through its signature's content: two layouts with one signature
+    // produce identical buffers, so rebuilding on a fresh-but-equal layout would throw away
+    // every slot's written state for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
-      fixtureCount,
+      layoutKey,
       regionCount,
-      regionGeometry,
       stage,
       coneMaterial,
       volumeMaterial,
       poolMaterial,
+      regionPoolMaterial,
       washPoolMaterial,
+      washRegionPoolMaterial,
     ],
   )
 
@@ -552,7 +581,7 @@ export function StageEmitters({
 }
 
 export interface BuiltEmitters {
-  fixtureCount: number
+  layout: EmitterLayout
   regionCount: number
   wall: WallGeometry
 
@@ -590,7 +619,9 @@ export interface BuiltEmitters {
   floorCosHalfAngle: InstancedBufferAttribute
 
   // Per-(slot, lobe) attribute buffers — divisor=regionCount so each lobe's
-  // value applies to all regionCount of its cookie instances.
+  // value applies to all regionCount of its cookie instances. The receivers
+  // carry no instance matrices: the vertex shader builds each box from the
+  // region uniforms (instance index modulo regionCount).
   regionOrigin: InstancedBufferAttribute
   regionFx: InstancedBufferAttribute
   regionRight: InstancedBufferAttribute
@@ -634,18 +665,20 @@ export interface BuiltEmitters {
 }
 
 export function buildEmitters(
-  fixtureCount: number,
+  layout: EmitterLayout,
   regionCount: number,
-  regionGeometry: ReadonlyArray<RegionGeometry>,
   stage: StageDims,
   coneMaterial: ShaderMaterial,
   volumeMaterial: ShaderMaterial,
   poolMaterial: ShaderMaterial,
+  regionPoolMaterial: ShaderMaterial,
   washPoolMaterial: ShaderMaterial,
+  washRegionPoolMaterial: ShaderMaterial,
 ): BuiltEmitters {
-  const beamCap = beamCapacity(fixtureCount)
+  const beamCap = beamCapacity(layout)
+  const lobeCount = layout.totalLobes
   const regDivisor = regionDivisor(regionCount)
-  const regCap = regionCapacity(fixtureCount, regionCount)
+  const regCap = regionCapacity(layout, regionCount)
 
   const coneGeo = new ConeGeometry(1, 1, 48, 1, true)
   // Closed + coarse: the volume hull is only a conservative fragment
@@ -657,7 +690,8 @@ export function buildEmitters(
   // The region receiver is the region's own (slightly inflated) box: the pool
   // shader shades any world-space fragment from the beam's geometry, so side
   // faces work exactly like the old top-face quad did — the shader's
-  // self-OBB shadow test discards back/far faces.
+  // self-OBB shadow test discards back/far faces. A unit box; the region
+  // uniforms scale, turn and place it per instance.
   const regionGeo = new BoxGeometry(1, 1, 1)
   // Wall receiver quad faces downstage (+z) — PlaneGeometry's natural facing.
   const wallGeo = new PlaneGeometry(1, 1)
@@ -762,19 +796,19 @@ export function buildEmitters(
 
   const coneMesh = new InstancedMesh(coneGeo, coneMaterial, beamCap)
   coneMesh.frustumCulled = false
-  coneMesh.count = fixtureCount * MAX_PRISM_LOBES
+  coneMesh.count = lobeCount
 
   const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
   volumeMesh.frustumCulled = false
-  volumeMesh.count = fixtureCount * MAX_PRISM_LOBES
+  volumeMesh.count = lobeCount
 
   const floorMesh = new InstancedMesh(floorGeo, poolMaterial, beamCap)
   floorMesh.frustumCulled = false
-  floorMesh.count = fixtureCount * MAX_PRISM_LOBES
+  floorMesh.count = lobeCount
 
   const wallMesh = new InstancedMesh(wallGeo, poolMaterial, beamCap)
   wallMesh.frustumCulled = false
-  wallMesh.count = fixtureCount * MAX_PRISM_LOBES
+  wallMesh.count = lobeCount
 
   // Start every beam instance parked — the directors only write lobes they
   // use, and an unwritten instance would otherwise draw at identity scale.
@@ -789,41 +823,14 @@ export function buildEmitters(
   floorMesh.instanceMatrix.needsUpdate = true
   wallMesh.instanceMatrix.needsUpdate = true
 
-  const regionMesh = new InstancedMesh(regionGeo, poolMaterial, regCap)
+  const regionMesh = new InstancedMesh(regionGeo, regionPoolMaterial, regCap)
   regionMesh.frustumCulled = false
-  regionMesh.count = fixtureCount * MAX_PRISM_LOBES * regionCount
-
-  // Bake one matrix per region (placement is constant across fixtures), then
-  // stamp it into every (slot, lobe) block for that region. The box is
-  // inflated by the cookie lift on every axis so its skin sits just off the
-  // region's own faces.
-  const pos = new Vector3()
-  const quat = new Quaternion()
-  const scale = new Vector3()
-  const regionMats: Matrix4[] = []
-  for (let r = 0; r < regionCount; r++) {
-    const rg = regionGeometry[r]
-    const m = new Matrix4()
-    pos.copy(rg.obbCenter)
-    quat.setFromAxisAngle(UNIT_Y, rg.yawRad)
-    scale.set(
-      rg.widthM + 2 * COOKIE_LIFT_M,
-      rg.heightM + 2 * COOKIE_LIFT_M,
-      rg.depthM + 2 * COOKIE_LIFT_M,
-    )
-    m.compose(pos, quat, scale)
-    regionMats.push(m)
-  }
-  for (let beam = 0; beam < fixtureCount * MAX_PRISM_LOBES; beam++) {
-    for (let r = 0; r < regionCount; r++) {
-      regionMesh.setMatrixAt(beam * regionCount + r, regionMats[r])
-    }
-  }
-  regionMesh.instanceMatrix.needsUpdate = true
+  regionMesh.count = lobeCount * regionCount
 
   // — wash pools (per-pixel strip footprint) —————————————————————————
-  const washFloorCap = washFloorCapacity(fixtureCount)
-  const washRegionCap = washRegionCapacity(fixtureCount, regionCount)
+  const washFloorCap = washFloorCapacity(layout)
+  const washRegionCap = washRegionCapacity(layout, regionCount)
+  const washCount = layout.totalWashPixels
 
   const washFloorGeo = new PlaneGeometry(1, 1)
   washFloorGeo.rotateX(-Math.PI / 2)
@@ -843,7 +850,7 @@ export function buildEmitters(
 
   const washFloorMesh = new InstancedMesh(washFloorGeo, washPoolMaterial, washFloorCap)
   washFloorMesh.frustumCulled = false
-  washFloorMesh.count = fixtureCount * MAX_WASH_PIXELS
+  washFloorMesh.count = washCount
   // Start hidden — unwritten instances would otherwise draw at identity scale.
   for (let i = 0; i < washFloorCap; i++) washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
   washFloorMesh.instanceMatrix.needsUpdate = true
@@ -867,20 +874,11 @@ export function buildEmitters(
   washRegionGeo.setAttribute('aCosHalfAngle', washRegionCosHalfAngle)
   washRegionGeo.setAttribute('aVisible', washRegionVisible)
 
-  const washRegionMesh = new InstancedMesh(washRegionGeo, washPoolMaterial, washRegionCap)
+  const washRegionMesh = new InstancedMesh(washRegionGeo, washRegionPoolMaterial, washRegionCap)
   washRegionMesh.frustumCulled = false
-  washRegionMesh.count = fixtureCount * MAX_WASH_PIXELS * regionCount
-  // Bake region placement into every (fixture, pixel) block; visibility
-  // (default 0) gates which actually draw, like the beam region cookies.
-  for (let slot = 0; slot < fixtureCount; slot++) {
-    for (let p = 0; p < MAX_WASH_PIXELS; p++) {
-      const block = (slot * MAX_WASH_PIXELS + p) * regionCount
-      for (let r = 0; r < regionCount; r++) {
-        washRegionMesh.setMatrixAt(block + r, regionMats[r])
-      }
-    }
-  }
-  washRegionMesh.instanceMatrix.needsUpdate = true
+  // Placement comes from the region uniforms, like the beam receivers;
+  // visibility (default 0) gates which actually draw.
+  washRegionMesh.count = washCount * regionCount
 
   const wall: WallGeometry = {
     z: -stage.depth,
@@ -889,7 +887,7 @@ export function buildEmitters(
   }
 
   return {
-    fixtureCount,
+    layout,
     regionCount,
     wall,
     // The build-time writes above flag their own buffers directly; the frame loop starts clean.
@@ -967,44 +965,101 @@ function vec4InstAttr(count: number): InstancedBufferAttribute {
   return new InstancedBufferAttribute(new Float32Array(count * 4), 4)
 }
 
-const UNIT_Y = new Vector3(0, 1, 0)
 const ZERO_MATRIX = new Matrix4().makeScale(0, 0, 0)
 const FLOOR_POS = new Vector3()
 const FLOOR_QUAT = new Quaternion()
 const FLOOR_SCALE = new Vector3()
 const FLOOR_MAT = new Matrix4()
 
+/**
+ * Write the region layout into every emitter material's region uniforms.
+ *
+ * The yaw pair is `(cos yaw, sin yaw)`, the region's own rotation, and both shader readers use it
+ * that way round: `rayObbT` rotates a world ray *into* the box by −yaw, the receiver vertex shader
+ * rotates the unit box *out* by +yaw — the same turn as `StageRegionMeshes`' `rotation={[0, yaw,
+ * 0]}`. The pair was `(cos −yaw, sin −yaw)` until the receivers were placed from it, which had the
+ * shadow test turning a yawed region the wrong way: harmless at 0° and 90°, where a box is its own
+ * mirror image, and shadowing the wrong footprint at any other angle.
+ */
+export function writeRegionUniforms(
+  materials: ReadonlyArray<ShaderMaterial>,
+  regionGeometry: ReadonlyArray<RegionGeometry>,
+  regionCount: number,
+  stageDepth: number,
+): void {
+  for (const mat of materials) {
+    const u = mat.uniforms
+    const centers = u.uRegionCenter.value as Vector3[]
+    const halves = u.uRegionHalf.value as Vector3[]
+    const yawCs = u.uRegionYawCs.value as Vector2[]
+    for (let i = 0; i < regionCount; i++) {
+      const r = regionGeometry[i]
+      centers[i].copy(r.obbCenter)
+      halves[i].set(r.obbHalfX, r.obbHalfY, r.obbHalfZ)
+      yawCs[i].set(Math.cos(r.yawRad), Math.sin(r.yawRad))
+    }
+    u.uNumRegions.value = regionCount
+    u.uWallZ.value = -stageDepth
+  }
+}
+
 export function makeHandle(b: BuiltEmitters): EmittersHandle {
+  const layout = b.layout
+
+  // Index of a (slot, lobe) on the beam meshes, or -1 for one this slot was not given — which a
+  // writer then drops. Every writer goes through this, so a director that asks for more lobes
+  // than its slot holds (a prism on a fixture whose layout predates it) parks nothing and
+  // writes nothing, rather than drawing into the next fixture's block. The arithmetic itself is
+  // emitterLayout's, the one tested copy; the receiver vertex shader holds the other half of the
+  // region layout (`gl_InstanceID % uNumRegions`).
+  function beamIndex(slot: number, lobe: number): number {
+    return lobe >= 0 && lobe < lobesFor(layout, slot) ? beamInstanceIndex(layout, slot, lobe) : -1
+  }
+  function washIndex(slot: number, pixelIdx: number): number {
+    return pixelIdx >= 0 && pixelIdx < washPixelsFor(layout, slot)
+      ? washPixelIndex(layout, slot, pixelIdx)
+      : -1
+  }
+  function inRegions(regionIdx: number): boolean {
+    return regionIdx >= 0 && regionIdx < b.regionCount
+  }
+
   // A named closure rather than a `this`-call so the handle survives
   // destructuring (the tests stub methods individually).
   function hideLobes(slot: number, fromLobe: number): void {
+    const count = lobesFor(layout, slot)
+    if (fromLobe >= count) return
     b.dirty |= DIRTY_BEAM_MATRIX | DIRTY_FLOOR_MATRIX | DIRTY_WALL_MATRIX | DIRTY_REGION_VISIBLE
-    for (let lobe = fromLobe; lobe < MAX_PRISM_LOBES; lobe++) {
-      const i = beamInstanceIndex(slot, lobe)
+    for (let lobe = Math.max(0, fromLobe); lobe < count; lobe++) {
+      const i = beamInstanceIndex(layout, slot, lobe)
       b.coneMesh.setMatrixAt(i, ZERO_MATRIX)
       b.volumeMesh.setMatrixAt(i, ZERO_MATRIX)
       b.floorMesh.setMatrixAt(i, ZERO_MATRIX)
       b.wallMesh.setMatrixAt(i, ZERO_MATRIX)
       for (let r = 0; r < b.regionCount; r++) {
-        b.regionVisible.setX(regionInstanceIndex(slot, lobe, b.regionCount, r), 0)
+        b.regionVisible.setX(regionInstanceIndex(layout, slot, lobe, b.regionCount, r), 0)
       }
     }
   }
 
   return {
-    fixtureCount: b.fixtureCount,
+    slotCount: layout.slotCount,
     regionCount: b.regionCount,
     wall: b.wall,
+    lobesFor: (slot) => lobesFor(layout, slot),
+    washPixelsFor: (slot) => washPixelsFor(layout, slot),
 
     writeBeamMatrix(slot, lobe, matrix, volumetric) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_BEAM_MATRIX
-      const i = beamInstanceIndex(slot, lobe)
       b.coneMesh.setMatrixAt(i, volumetric ? ZERO_MATRIX : matrix)
       b.volumeMesh.setMatrixAt(i, volumetric ? matrix : ZERO_MATRIX)
     },
     writeConeAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_CONE_ATTRS
-      const i = beamInstanceIndex(slot, lobe)
       b.coneOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.coneColor.setXYZ(i, color.r, color.g, color.b)
       b.coneOpacity.setX(i, opacity)
@@ -1016,8 +1071,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeBeamFx(slot, lobe, edge, goboSlot, goboAngle, focusDist, right) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_BEAM_FX
-      const i = beamInstanceIndex(slot, lobe)
       // The cone shell reads only .x (edge) — it has no interior to project
       // into, so the gobo/focus payload matters on the pool meshes (and the
       // volumetric cone, which shares this fx layout).
@@ -1033,8 +1089,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeShadowMask(slot, lobe, mask) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_SHADOW_MASK
-      const i = beamInstanceIndex(slot, lobe)
       b.volumeMask.setX(i, mask)
       b.floorMask.setX(i, mask)
       b.regionMask.setX(i, mask)
@@ -1042,8 +1099,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeFloorMatrix(slot, lobe, visible, cx, cz, side) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_FLOOR_MATRIX
-      const i = beamInstanceIndex(slot, lobe)
       if (!visible) {
         b.floorMesh.setMatrixAt(i, ZERO_MATRIX)
         return
@@ -1055,8 +1113,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.floorMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeFloorAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_FLOOR_ATTRS
-      const i = beamInstanceIndex(slot, lobe)
       b.floorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.floorDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.floorColor.setXYZ(i, color.r, color.g, color.b)
@@ -1065,15 +1124,17 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeRegionVisibility(slot, lobe, regionIdx, visible) {
+      if (beamIndex(slot, lobe) < 0 || !inRegions(regionIdx)) return
       b.dirty |= DIRTY_REGION_VISIBLE
       b.regionVisible.setX(
-        regionInstanceIndex(slot, lobe, b.regionCount, regionIdx),
+        regionInstanceIndex(layout, slot, lobe, b.regionCount, regionIdx),
         visible ? 1 : 0,
       )
     },
     writeRegionAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_REGION_ATTRS
-      const i = beamInstanceIndex(slot, lobe)
       b.regionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.regionDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.regionColor.setXYZ(i, color.r, color.g, color.b)
@@ -1082,8 +1143,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeWallMatrix(slot, lobe, visible, cx, cy, sideX, sideY) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_WALL_MATRIX
-      const i = beamInstanceIndex(slot, lobe)
       if (!visible) {
         b.wallMesh.setMatrixAt(i, ZERO_MATRIX)
         return
@@ -1095,8 +1157,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.wallMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeWallAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
+      const i = beamIndex(slot, lobe)
+      if (i < 0) return
       b.dirty |= DIRTY_WALL_ATTRS
-      const i = beamInstanceIndex(slot, lobe)
       b.wallOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.wallDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.wallColor.setXYZ(i, color.r, color.g, color.b)
@@ -1105,8 +1168,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
     },
 
     writeWashFloorMatrix(slot, pixelIdx, visible, cx, cz, side) {
+      const i = washIndex(slot, pixelIdx)
+      if (i < 0) return
       b.dirty |= DIRTY_WASH_FLOOR_MATRIX
-      const i = washPixelIndex(slot, pixelIdx)
       if (!visible) {
         b.washFloorMesh.setMatrixAt(i, ZERO_MATRIX)
         return
@@ -1118,8 +1182,9 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorMesh.setMatrixAt(i, FLOOR_MAT)
     },
     writeWashFloorAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      const i = washIndex(slot, pixelIdx)
+      if (i < 0) return
       b.dirty |= DIRTY_WASH_FLOOR_ATTRS
-      const i = washPixelIndex(slot, pixelIdx)
       b.washFloorOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washFloorDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.washFloorColor.setXYZ(i, color.r, color.g, color.b)
@@ -1127,15 +1192,17 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
       b.washFloorCosHalfAngle.setX(i, cosHalfAngle)
     },
     writeWashRegionVisibility(slot, pixelIdx, regionIdx, visible) {
+      if (washIndex(slot, pixelIdx) < 0 || !inRegions(regionIdx)) return
       b.dirty |= DIRTY_WASH_REGION_VISIBLE
       b.washRegionVisible.setX(
-        washRegionInstanceIndex(slot, pixelIdx, b.regionCount, regionIdx),
+        washRegionInstanceIndex(layout, slot, pixelIdx, b.regionCount, regionIdx),
         visible ? 1 : 0,
       )
     },
     writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, cosHalfAngle) {
+      const i = washIndex(slot, pixelIdx)
+      if (i < 0) return
       b.dirty |= DIRTY_WASH_REGION_ATTRS
-      const i = washPixelIndex(slot, pixelIdx)
       b.washRegionOrigin.setXYZ(i, origin.x, origin.y, origin.z)
       b.washRegionDir.setXYZ(i, dir.x, dir.y, dir.z)
       b.washRegionColor.setXYZ(i, color.r, color.g, color.b)
@@ -1148,14 +1215,25 @@ export function makeHandle(b: BuiltEmitters): EmittersHandle {
       hideLobes(slot, 0)
     },
     hideWashSlot(slot) {
+      const count = washPixelsFor(layout, slot)
+      if (count === 0) return
       b.dirty |= DIRTY_WASH_FLOOR_MATRIX | DIRTY_WASH_REGION_VISIBLE
-      for (let p = 0; p < MAX_WASH_PIXELS; p++) {
-        const pix = washPixelIndex(slot, p)
-        b.washFloorMesh.setMatrixAt(pix, ZERO_MATRIX)
+      for (let p = 0; p < count; p++) {
+        b.washFloorMesh.setMatrixAt(washPixelIndex(layout, slot, p), ZERO_MATRIX)
         for (let r = 0; r < b.regionCount; r++) {
-          b.washRegionVisible.setX(washRegionInstanceIndex(slot, p, b.regionCount, r), 0)
+          b.washRegionVisible.setX(washRegionInstanceIndex(layout, slot, p, b.regionCount, r), 0)
         }
       }
     },
   }
+}
+
+/**
+ * The wash pool shader: the pool program without the gobo path, and without the white hotspot
+ * boost, so a bar's overlapping per-pixel colours blend as colour rather than white.
+ */
+function makeWashPoolMaterial(regionReceiver: boolean): ShaderMaterial {
+  const m = makePoolMaterial(false, undefined, { regionReceiver })
+  m.uniforms.uCoreBoost.value = 0
+  return m
 }

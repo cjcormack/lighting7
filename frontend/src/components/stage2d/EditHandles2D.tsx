@@ -285,9 +285,10 @@ function RegionPlanHandles({
 /**
  * Top-face and floor handles, for the elevations where height is in-plane.
  *
- * Dragging the top changes `heightM`; dragging the floor moves `centerZ` and
- * compensates `heightM` so the top face stays put — the same split as the 3D
- * handles, and the reason `centerZ` is documented as the box's floor.
+ * `centerZ` is the box's top surface (the deck) and the box hangs below it, so
+ * dragging the top moves `centerZ` and compensates `heightM` to keep the floor
+ * put, and dragging the floor changes `heightM` alone — the same split as the 3D
+ * handles.
  */
 function RegionHeightHandles({
   region,
@@ -305,26 +306,26 @@ function RegionHeightHandles({
   const r = HANDLE_PX * mPerPx
 
   const onHeightDown = (tier: 'top' | 'floor') => (e: React.PointerEvent) => {
-    const start: LightingPoint = { x: cx, y: cy, z: tier === 'top' ? cz + h : cz }
+    const start: LightingPoint = { x: cx, y: cy, z: tier === 'top' ? cz : cz - h }
     const anchor = project(start, projection)
     const lockedCz = cz
-    const lockedTopZ = cz + h
+    const lockedFloorZ = cz - h
 
     const emit = (p: ScreenPoint, settled: boolean) => {
       // Only the vertical axis matters; lock h to the anchor so the box can't
       // slide sideways while the user is setting a height.
       const world = unproject({ h: anchor.h, v: snap.snapValue(p.v) }, projection, start)
       if (tier === 'top') {
-        const heightM = Math.max(MIN_HEIGHT_M, world.z - lockedCz)
-        onChange({ centerX: cx, centerY: cy, centerZ: lockedCz, yawDeg, heightM }, settled)
-      } else {
         let centerZ = world.z
-        let heightM = lockedTopZ - centerZ
+        let heightM = centerZ - lockedFloorZ
         if (heightM < MIN_HEIGHT_M) {
           heightM = MIN_HEIGHT_M
-          centerZ = lockedTopZ - MIN_HEIGHT_M
+          centerZ = lockedFloorZ + MIN_HEIGHT_M
         }
         onChange({ centerX: cx, centerY: cy, centerZ, yawDeg, heightM }, settled)
+      } else {
+        const heightM = Math.max(MIN_HEIGHT_M, lockedCz - world.z)
+        onChange({ centerX: cx, centerY: cy, centerZ: lockedCz, yawDeg, heightM }, settled)
       }
     }
 
@@ -340,8 +341,8 @@ function RegionHeightHandles({
   }
 
   const tiers: Array<{ tier: 'top' | 'floor'; z: number }> = [
-    { tier: 'top', z: cz + h },
-    { tier: 'floor', z: cz },
+    { tier: 'top', z: cz },
+    { tier: 'floor', z: cz - h },
   ]
 
   return (

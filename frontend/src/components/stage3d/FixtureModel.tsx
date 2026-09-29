@@ -93,18 +93,22 @@ import {
 } from './beamCookies'
 import {
   BEAM_LENGTH,
-  MAX_WASH_PIXELS,
   useEmitters,
   type EmittersHandle,
   type RegionGeometry,
 } from './StageEmitters'
+import { isPixelStrip as isPixelStripKind, pixelCountOf } from './emitterNeeds'
+import { useStageInvalidate } from './stageInvalidate'
 import { FixtureBody } from './fixtureBodies'
+import { paintLens } from './fixtureBodies/palette'
 import { STRIP_HEIGHT, STRIP_LEN } from './fixtureBodies/StripBody'
 import type { FixtureBodyDims, PixelColorWriter } from './fixtureBodies/types'
 import { drawnLengthM } from '../../lib/fixtureLength'
 import { WASH_ANGLE_DEG, WASH_OPACITY } from './washConfig'
 
 const DEFAULT_BEAM_DEG = 30
+// Above the fixture's own origin, in its unrotated placement group.
+const FIXTURE_LABEL_OFFSET: [number, number, number] = [0, 0.18, 0]
 const COLOR_TMP = new Color()
 const PIXEL_COLOR = new Color()
 const WASH_COLOR = new Color()
@@ -180,7 +184,6 @@ interface FixtureModelProps {
   slot: number
   selected: boolean
   editMode?: boolean
-  showLabel?: boolean
   onClick?: (group: Group) => void
   /** Called when this fixture becomes the edit-mode selection target, so the
    *  parent can bind TransformControls to its group. Lets picker-based and
@@ -197,7 +200,6 @@ export function FixtureModel({
   slot,
   selected,
   editMode,
-  showLabel,
   onClick,
   onEditFocus,
 }: FixtureModelProps) {
@@ -212,12 +214,13 @@ export function FixtureModel({
   )
   // Per-element colour control of a multi-element fixture (e.g. a pixel bar).
   const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
-  const pixelCount = groupColour ? groupColour.memberColourChannels.length : 0
+  const pixelCount = pixelCountOf(fixture)
   const pixelColorsRef = useRef<PixelColorWriter | null>(null)
   const kind = resolveFixtureKind(patch.kindOverride, fixtureType?.kind)
   // Only the STRIP body lays pixels out linearly (PixelStrip); that's where a
-  // per-pixel wash makes sense.
-  const isPixelStrip = kind === 'STRIP' && pixelCount > 1
+  // per-pixel wash makes sense. The same rule sizes this slot's wash block
+  // (`emitterNeedsFor`), so the two cannot disagree.
+  const isPixelStrip = isPixelStripKind(kind, pixelCount)
 
   // Per-pixel colour+intensity snapshot: MultiPixelColourSync writes it on every
   // channel change; useWashDirector reads it each frame (same event-driven-colour
@@ -353,21 +356,30 @@ export function FixtureModel({
     poolOpacity: 0,
   })
 
+  // The canvas renders on demand, and an effect writing straight into the
+  // emitter buffers changes no prop — so each of these asks for the frame
+  // that uploads the write.
+  const invalidate = useStageInvalidate()
+
   // Slot zeroing — emitter slots persist across renders. If a fixture loses
   // its beam (or showCone otherwise turns off), the per-frame writes stop;
   // hide the slot once so its last frame doesn't ghost on screen.
   useEffect(() => {
     if (!emitters || showCone) return
     emitters.hideSlot(slot)
-  }, [emitters, showCone, slot])
+    invalidate()
+  }, [emitters, showCone, slot, invalidate])
 
   // Unmount cleanup — same reason. A slot belongs to whichever FixtureModel
   // owns it; vacate before re-allocation can give it to a different fixture.
   useEffect(() => {
     return () => {
-      if (emitters) emitters.hideSlot(slot)
+      if (emitters) {
+        emitters.hideSlot(slot)
+        invalidate()
+      }
     }
-  }, [emitters, slot])
+  }, [emitters, slot, invalidate])
 
   useBeamDirector({
     panProp,
@@ -401,12 +413,16 @@ export function FixtureModel({
   useEffect(() => {
     if (!emitters || isPixelStrip) return
     emitters.hideWashSlot(slot)
-  }, [emitters, isPixelStrip, slot])
+    invalidate()
+  }, [emitters, isPixelStrip, slot, invalidate])
   useEffect(() => {
     return () => {
-      if (emitters) emitters.hideWashSlot(slot)
+      if (emitters) {
+        emitters.hideWashSlot(slot)
+        invalidate()
+      }
     }
-  }, [emitters, slot])
+  }, [emitters, slot, invalidate])
 
   useWashDirector({
     enabled: isPixelStrip,
@@ -450,7 +466,9 @@ export function FixtureModel({
         </mesh>
       )}
 
-      {showLabel && <StageLabel position={[0, 0.18, 0]}>{patch.displayName}</StageLabel>}
+      <StageLabel position={FIXTURE_LABEL_OFFSET} kind="fixture" emphasised={active}>
+        {patch.displayName}
+      </StageLabel>
 
       <ColourSync
         hasFixture={!!fixture}
@@ -620,6 +638,50 @@ function useBeamDirector({
   // exactly once instead of every frame.
   const litLobesRef = useRef(1)
 
+  // The canvas renders on demand. Everything this director reads per frame is
+  // a channel, so a change on any of them asks for a frame — on the active
+  // source, which is what makes a programmer-only or Next GO preview move the
+  // heads too. (The colour channels ask through ColourSync.)
+  // Through [subscribeToChannels], so a batch that moves several of them asks once.
+  const invalidate = useStageInvalidate()
+  const beamChannels = useMemo(
+    () =>
+      [
+        panProp,
+        tiltProp,
+        panFineProp,
+        tiltFineProp,
+        focusProp,
+        zoomProp,
+        goboProp,
+        goboProp2,
+        goboRotProp,
+        prismProp,
+        prismRotProp,
+        ledMacroProp,
+        moveMacroProp,
+      ].flatMap((p) => (p ? [p.channel] : [])),
+    [
+      panProp,
+      tiltProp,
+      panFineProp,
+      tiltFineProp,
+      focusProp,
+      zoomProp,
+      goboProp,
+      goboProp2,
+      goboRotProp,
+      prismProp,
+      prismRotProp,
+      ledMacroProp,
+      moveMacroProp,
+    ],
+  )
+  useEffect(() => {
+    invalidate()
+    return subscribeToChannels(beamChannels, invalidate, source)
+  }, [beamChannels, source, invalidate])
+
   useFrame((state, delta) => {
     const elapsed = state.clock.elapsedTime
     // Through a ref, not the closed-over value: the frame callback outlives the render that
@@ -641,6 +703,10 @@ function useBeamDirector({
     // A movement macro is an offset on top of the live pan/tilt, so both the
     // head model and the beam pick it up — they read from the same two values.
     const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(channelSource, beamKeys.moveMacro))
+    // A macro, a spinning gobo or a turning prism moves with time rather than
+    // with DMX, so while one runs this frame asks for the next — the one case
+    // where the `demand` frameloop keeps rendering with no channel moving.
+    let animating = moveMacro > 0
     if (moveMacro > 0) {
       evalMovementMacro(moveMacro, elapsed, SCRATCH_MOVE_MACRO)
       panDeg += SCRATCH_MOVE_MACRO.panDeg
@@ -661,7 +727,11 @@ function useBeamDirector({
       )
     }
 
-    if (!emitters) return
+    if (!emitters) {
+      // A movement macro still swings a beamless head.
+      if (animating) invalidate()
+      return
+    }
 
     const colorState = colorStateRef.current
 
@@ -670,6 +740,7 @@ function useBeamDirector({
     // folding the macro in would leave the fixture permanently tinted once the
     // macro stops.
     const ledMacro = resolveMacroIndex(ledMacroProp, readChannel(channelSource, beamKeys.ledMacro))
+    if (ledMacro > 0) animating = true
     let beamColor = colorState.color
     let poolOpacity = colorState.poolOpacity
     let coneOpacity = colorState.coneOpacity
@@ -699,6 +770,7 @@ function useBeamDirector({
     // every lobe, so a prism split can't ghost after a blackout.
     if (colorState.poolOpacity < LIGHT_OFF_OPACITY) {
       emitters.hideSlot(slot)
+      if (animating) invalidate()
       return
     }
 
@@ -737,9 +809,11 @@ function useBeamDirector({
     if (goboSlot > 0) {
       const spin = resolveGoboSpin(goboRotProp, readChannel(channelSource, beamKeys.goboRot))
       if (spin !== 0) {
+        animating = true
         // Wrapped, not free-running: an unbounded accumulator loses float
         // precision within the hour and the pattern starts visibly stepping.
-        // delta is clamped because a backgrounded tab hands back seconds.
+        // delta is clamped because a backgrounded tab (or an idle `demand`
+        // canvas) hands back seconds.
         goboAngleRef.current =
           (goboAngleRef.current + spin * TAU * Math.min(delta, 0.1)) % TAU
       }
@@ -748,7 +822,10 @@ function useBeamDirector({
     }
 
     const group = groupRef.current
-    if (!group) return
+    if (!group) {
+      if (animating) invalidate()
+      return
+    }
     // One walk of this fixture's subtree, after the rotations above, so the lens
     // and head matrices read below are this frame's.
     group.updateMatrixWorld()
@@ -785,6 +862,7 @@ function useBeamDirector({
         readChannel(channelSource, beamKeys.prism),
       )
       if (prismSpin !== 0) {
+        animating = true
         prismAngleRef.current =
           (prismAngleRef.current + prismSpin * TAU * Math.min(delta, 0.1)) % TAU
       }
@@ -797,7 +875,10 @@ function useBeamDirector({
       prismAngleRef.current = 0
     }
 
-    const lobes = prismFacets > 0 ? prismFacets : 1
+    // Never more lobes than the slot was given: a fixture's prism is known when
+    // the layout is built (`emitterNeedsFor`), so this only bites on a frame
+    // where the two disagree, and then the extra facets are simply not drawn.
+    const lobes = Math.min(prismFacets > 0 ? prismFacets : 1, emitters.lobesFor(slot))
     // A prism redistributes the beam's flux, it doesn't add any: each lobe
     // carries 1/N (plus a little overlap compensation) so swinging the prism
     // in reads as a split, not a brightness jump.
@@ -926,6 +1007,7 @@ function useBeamDirector({
       emitters.hideLobes(slot, lobes)
     }
     litLobesRef.current = lobes
+    if (animating) invalidate()
   })
 }
 
@@ -993,14 +1075,15 @@ interface ColourApplyRefs {
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   COLOR_TMP.set(hex)
   // The lens is the lamp face (the colour indicator) and is never culled, so it
-  // gets the perceptual curve — a linear opacity crushes a dim-but-lit lamp to
-  // near-invisible. `hex` is already a full-brightness hue. The lens also stays
-  // partially visible at idle (it's the lamp body, not the beam).
+  // gets the perceptual curve — a linear level crushes a dim-but-lit lamp to
+  // near-invisible. `hex` is already a full-brightness hue. At level 0 it is dark
+  // glass: a lamp at dimmer zero shows nothing, and nothing for bloom to catch.
   if (refs.lensRef.current) {
-    const mat = refs.lensRef.current.material as MeshBasicMaterial
-    mat.color.copy(COLOR_TMP)
-    mat.opacity = 0.5 + 0.5 * perceptualBrightness(intensity)
-    mat.transparent = true
+    paintLens(
+      refs.lensRef.current.material as MeshBasicMaterial,
+      COLOR_TMP,
+      perceptualBrightness(intensity),
+    )
   }
   // Beam cone/pool opacities stay LINEAR: they double as the LIGHT_OFF_OPACITY
   // cull signal downstream, so curving them would resurrect near-off fixtures
@@ -1031,11 +1114,15 @@ function liveDimmerFactor(
 function useLiveColour(channels: ChannelRef[], apply: () => void, source: ChannelSource) {
   const applyRef = useRef(apply)
   applyRef.current = apply
+  // The writes `apply` makes are imperative — a material colour, the beam's colour state — so on
+  // the canvas's `demand` frameloop each one has to ask for the frame that shows it.
+  const invalidate = useStageInvalidate()
   // Re-apply after every render. These components no longer subscribe through
   // React, so renders only happen on config/selection changes — cheap to redo,
   // and it covers inputs (gel hex, dimmer prop) that aren't channel values.
   useEffect(() => {
     applyRef.current()
+    invalidate()
   })
   // Live path: write straight to the scene from the channel callback, bypassing
   // React entirely so beat-rate changes can't be dropped by the reconciler.
@@ -1046,8 +1133,16 @@ function useLiveColour(channels: ChannelRef[], apply: () => void, source: Channe
   // batch, for every fixture on the stage. The coalesced wake-up still lands in the same frame
   // (a microtask drains before paint), so the reconciler is no more involved than it was.
   useEffect(
-    () => subscribeToChannels(channels, () => applyRef.current(), source),
-    [channels, source],
+    () =>
+      subscribeToChannels(
+        channels,
+        () => {
+          applyRef.current()
+          invalidate()
+        },
+        source,
+      ),
+    [channels, source, invalidate],
   )
 }
 
@@ -1276,7 +1371,10 @@ function useWashDirector({
 
     const pitch = lengthM / pixelCount
     const lensY = -heightM / 2 - 0.001
-    const live = Math.min(pixelCount, wash.count, MAX_WASH_PIXELS)
+    // The slot's wash block is sized to the pixel count (capped) when the
+    // layout is built; never write past it.
+    const block = emitters.washPixelsFor(slot)
+    const live = Math.min(pixelCount, wash.count, block)
     const regionCount = regionGeometry.length
 
     for (let i = 0; i < live; i++) {
@@ -1305,8 +1403,8 @@ function useWashDirector({
         WASH_GEOM,
       )
     }
-    // Hide the unused tail of this slot's block (fewer pixels than the cap).
-    for (let i = live; i < MAX_WASH_PIXELS; i++) {
+    // Hide the unused tail of this slot's block (fewer live pixels than it holds).
+    for (let i = live; i < block; i++) {
       emitters.writeWashFloorMatrix(slot, i, false, 0, 0, 0)
       for (let r = 0; r < regionCount; r++) emitters.writeWashRegionVisibility(slot, i, r, false)
     }

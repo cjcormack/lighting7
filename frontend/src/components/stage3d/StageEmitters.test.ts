@@ -17,21 +17,28 @@ import {
   dirtyGroups,
   flushDirty,
   makeHandle,
+  writeRegionUniforms,
   type BuiltEmitters,
   type EmittersHandle,
 } from './StageEmitters'
+import { makePoolMaterial } from './beamShaders'
+import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
 
 const STAGE = { width: 10, height: 6, depth: 8 }
-const FIXTURES = 2
+// Two slots with a prism and a wash block each, so every writer below has room to write.
+const LAYOUT = buildEmitterLayout([
+  { lobes: MAX_PRISM_LOBES, washPixels: 4 },
+  { lobes: MAX_PRISM_LOBES, washPixels: 4 },
+])
 const REGIONS = computeRegionGeometry([
   { uuid: 'r1', centerX: 1, centerY: 0, centerZ: 0, widthM: 2, depthM: 2, heightM: 1, yawDeg: 0 },
   { uuid: 'r2', centerX: -1, centerY: 0, centerZ: 0, widthM: 2, depthM: 2, heightM: 1, yawDeg: 0 },
 ] as Parameters<typeof computeRegionGeometry>[0])
 
-function build(): BuiltEmitters {
+function build(layout: EmitterLayout = LAYOUT): BuiltEmitters {
   // Bare materials: buildEmitters only hands them to the meshes, and nothing here draws.
   const mat = () => new ShaderMaterial()
-  return buildEmitters(FIXTURES, REGIONS.length, REGIONS, STAGE, mat(), mat(), mat(), mat())
+  return buildEmitters(layout, REGIONS.length, STAGE, mat(), mat(), mat(), mat(), mat(), mat())
 }
 
 /**
@@ -179,13 +186,80 @@ describe('emitter dirty groups', () => {
   it('covers every buffer of the build in exactly one group', () => {
     // A buffer in no group can never be uploaded after the first frame; a buffer in two is a
     // sign the groups have stopped following the writers. The two exceptions are the region
-    // cookie placements, baked at build time from the region layout and never written again —
-    // a region move rebuilds the whole emitter set.
+    // receivers' instance matrices, which nothing reads: the receiver shader places each box
+    // from the region uniforms, so a region move is a uniform write and rebuilds nothing.
     const BAKED_ONCE = ['regionMesh.instanceMatrix', 'washRegionMesh.instanceMatrix']
     const grouped = dirtyGroups(built).flatMap((g) => g.buffers)
     for (const { name, attr } of allBuffers(built)) {
       const hits = grouped.filter((buffer) => buffer === attr).length
       expect(`${name}:${hits}`).toBe(`${name}:${BAKED_ONCE.includes(name) ? 0 : 1}`)
     }
+  })
+})
+
+describe('emitter layout bounds', () => {
+  // A par (one lobe, no wash) beside a prism mover.
+  const layout = buildEmitterLayout([
+    { lobes: 1, washPixels: 0 },
+    { lobes: MAX_PRISM_LOBES, washPixels: 0 },
+  ])
+
+  it('sizes the meshes by the rig, not by slots × the worst case', () => {
+    const b = build(layout)
+    expect(b.coneMesh.count).toBe(1 + MAX_PRISM_LOBES)
+    expect(b.regionMesh.count).toBe((1 + MAX_PRISM_LOBES) * REGIONS.length)
+    expect(b.washFloorMesh.count).toBe(0)
+    expect(b.washRegionMesh.count).toBe(0)
+  })
+
+  it('drops a write past a slot\'s block rather than landing in the next slot', () => {
+    const b = build(layout)
+    const { mutated } = writeAndFlush(b, (h) => {
+      // Lobe 1 of the par would be lobe 0 of the mover.
+      h.writeBeamMatrix(0, 1, MATRIX, false)
+      h.writeConeAttrs(0, 1, ORIGIN, DIR, COLOUR, 0.4, 0.97)
+      h.writeRegionVisibility(0, 1, 0, true)
+      // A region index past the count, a pixel on a slot with no wash block, a slot that isn't.
+      h.writeRegionVisibility(1, 0, REGIONS.length, true)
+      h.writeWashFloorMatrix(0, 0, true, 2, -3, 5)
+      h.writeBeamMatrix(7, 0, MATRIX, false)
+    })
+    expect(mutated).toEqual([])
+    expect(b.dirty).toBe(0)
+  })
+
+  it('reports each slot\'s block to the directors', () => {
+    const h = makeHandle(build(layout))
+    expect(h.lobesFor(0)).toBe(1)
+    expect(h.lobesFor(1)).toBe(MAX_PRISM_LOBES)
+    expect(h.lobesFor(2)).toBe(0)
+    expect(h.washPixelsFor(1)).toBe(0)
+  })
+})
+
+describe('region uniforms', () => {
+  it('carry each region\'s own turn, as the region mesh draws it', () => {
+    const regions = computeRegionGeometry([
+      { uuid: 'r', centerX: 2, centerY: 3, centerZ: 0.5, widthM: 4, depthM: 1, heightM: 0.5, yawDeg: 30 },
+    ] as Parameters<typeof computeRegionGeometry>[0])
+    const mat = makePoolMaterial(false, undefined, { regionReceiver: true })
+    writeRegionUniforms([mat], regions, 1, 8)
+    const yaw = (30 * Math.PI) / 180
+    const cs = (mat.uniforms.uRegionYawCs.value as Array<{ x: number; y: number }>)[0]
+    // (cos yaw, sin yaw): the receiver shader turns the box out by +yaw and rayObbT turns a ray
+    // in by −yaw. It was (cos −yaw, sin −yaw), which mirrored every yawed shadow box.
+    expect(cs.x).toBeCloseTo(Math.cos(yaw), 12)
+    expect(cs.y).toBeCloseTo(Math.sin(yaw), 12)
+    expect(mat.uniforms.uNumRegions.value).toBe(1)
+    expect(mat.uniforms.uWallZ.value).toBe(-8)
+    expect(mat.defines).toHaveProperty('REGION_RECEIVER')
+  })
+
+  it('centre a region half its thickness below its deck', () => {
+    // `centerZ` is the top surface: a 0.95 m deck at 0 is centred at -0.475, below the stage.
+    const [r] = computeRegionGeometry([
+      { uuid: 'r', centerX: 0, centerY: 0, centerZ: 0, widthM: 2, depthM: 2, heightM: 0.95, yawDeg: 0 },
+    ] as Parameters<typeof computeRegionGeometry>[0])
+    expect(r.obbCenter.y).toBeCloseTo(-0.475, 12)
   })
 })

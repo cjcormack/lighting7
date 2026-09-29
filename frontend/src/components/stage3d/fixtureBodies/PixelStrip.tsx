@@ -10,7 +10,8 @@ import {
   ShaderMaterial,
 } from 'three'
 import { HAZE_LEVEL, WASH_ANGLE_DEG } from '../washConfig'
-import { BODY_LENS_COLOR, housingColor } from './palette'
+import { perceptualBrightness } from '../../../lib/colourMath'
+import { BODY_LENS_COLOR, housingColor, paintLens } from './palette'
 import type { PixelColorWriter } from './types'
 
 interface PixelStripProps {
@@ -142,13 +143,9 @@ export function PixelStrip({
     (): PixelColorWriter => {
       const paint = (i: number, color: Color, intensity: number) => {
         const lens = lensRefs[i]?.current
-        if (lens) {
-          const mat = lens.material as MeshBasicMaterial
-          mat.color.copy(color)
-          // Lens face stays half-lit at idle (it's the lamp body, not the beam).
-          mat.opacity = 0.5 + 0.5 * intensity
-          mat.transparent = true
-        }
+        // Dark glass until the head is lit, and only as bright as its level —
+        // the same lens rule as every other body (palette.paintLens).
+        if (lens) paintLens(lens.material as MeshBasicMaterial, color, perceptualBrightness(intensity))
         const gm = glowMats[i]
         if (gm) {
           ;(gm.uniforms.uColor.value as Color).copy(color)
@@ -191,7 +188,7 @@ export function PixelStrip({
               position={[x, lensY, 0]}
             >
               <boxGeometry args={[segLen, 0.01, segDepth]} />
-              <meshBasicMaterial color={BODY_LENS_COLOR} transparent />
+              <meshBasicMaterial color={BODY_LENS_COLOR} />
             </mesh>
             <mesh geometry={glowGeo} material={glowMats[i]} position={[x, lensY - GLOW_LEN / 2, 0]} />
           </group>

@@ -14,7 +14,6 @@ interface RiggingMeshesProps {
   riggings: RiggingDto[]
   selectedUuid?: string | null
   editMode?: boolean
-  showLabel?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
   /** Body drag emits a horizontal move (positionX/Y change). Absent in
    *  view/placement mode disables body drag. */
@@ -31,13 +30,13 @@ interface RiggingMeshesProps {
 // re-exported here because this is where consumers already import it from.
 export { DEFAULT_RIGGING_LENGTH_M }
 const RIGGING_THICKNESS_M = 0.18
+const RIGGING_LABEL_OFFSET: [number, number, number] = [0, RIGGING_THICKNESS_M / 2 + 0.05, 0]
 const PLANE_NORMAL_UP = new Vector3(0, 1, 0)
 
 export function RiggingMeshes({
   riggings,
   selectedUuid,
   editMode,
-  showLabel,
   onClick,
   onMove,
   snapActiveRef,
@@ -52,7 +51,6 @@ export function RiggingMeshes({
           rig={rig}
           selected={rig.uuid === selectedUuid}
           editMode={editMode}
-          showLabel={showLabel}
           onClick={onClick}
           onMove={onMove}
           snapActiveRef={snapActiveRef}
@@ -68,7 +66,6 @@ interface RiggingMeshProps {
   rig: RiggingDto
   selected: boolean
   editMode?: boolean
-  showLabel?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
   onMove?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
   snapActiveRef?: React.RefObject<boolean>
@@ -80,7 +77,6 @@ function RiggingMesh({
   rig,
   selected,
   editMode,
-  showLabel,
   onClick,
   onMove,
   snapActiveRef,
@@ -164,11 +160,9 @@ function RiggingMesh({
         emissive={selected ? '#3a4a5a' : '#000'}
         emissiveIntensity={selected ? 0.4 : 0}
       />
-      {showLabel && (
-        <StageLabel position={[0, RIGGING_THICKNESS_M / 2 + 0.05, 0]}>
-          {rig.name}
-        </StageLabel>
-      )}
+      <StageLabel position={RIGGING_LABEL_OFFSET} kind="position" emphasised={active}>
+        {rig.name}
+      </StageLabel>
     </mesh>
   )
 }

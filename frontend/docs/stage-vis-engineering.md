@@ -1,10 +1,13 @@
-# Stage visualisation: sources and appearance
+# Stage visualisation: sources, appearance and the renderer
 
 How the stage surfaces decide **what a fixture looks like**. Two independent seams:
 
 - a **channel source** — which layer of the lighting cascade the numbers come from;
 - a **fixture appearance** — how a fixture's colour source turns those numbers into a colour and a
   level.
+
+And, since the stage-view plan's session 0, how the 3D view keeps within a browser's memory and
+survives losing its graphics context — §"The 3D renderer" at the end.
 
 ## The vis source
 
@@ -302,3 +305,149 @@ paired lanterns holds for a side: lit from the patch, selects the patch, never d
 - **The form**: *Length* sits under the fixture's placement, and the extra-placements section reads
   *Other sides of this run*, each side with its own *Length*. An out-of-range value is kept and
   flagged, never clamped mid-keystroke, and the form will not save it.
+
+## The 3D renderer
+
+Session 0 of `../docs/plans/stage-view-plan.md` fixed the Stage view's renderer before anything is
+added to it. The findings are in the design record (`stage-view-design/INDEX.md` §"What is wrong
+today"); what follows is what the code does now and why, since each piece is easy to undo by
+"tidying".
+
+### Memory: no MSAA in the composer, DPR at 1.5
+
+`Bloom.tsx` passes `multisampling={0}`. `@react-three/postprocessing` defaults to 8× MSAA on
+half-float targets, and at a Retina full-window size that colour target alone ran to hundreds of MB —
+the likeliest cause of Safari's "reloaded because it was using significant memory". Beams and pools
+are soft additive shapes MSAA does nothing for. The canvas keeps `antialias`, but once the composer
+draws the scene it no longer reaches the bodies' edges; that is accepted.
+
+The canvas's `dpr` is `[1, 1.5]`: at 2 every target behind the canvas holds four times the pixels of
+1×. `StageEmitters` drops the volumetric march by a third above 1×, since 1.5 is still 2.25× the
+shaded area.
+
+### The frameloop renders on demand
+
+`frameloop="demand"`: the canvas draws while something moves and not at all when the stage is still.
+The rule for anything new in the scene is **a write that is not an R3F prop must ask for a frame**.
+R3F already invalidates on an applied prop change, and drei's `OrbitControls` and
+`TransformControls` on their own `change` events (the orbit's damping included). What else asks:
+
+- **Channels.** `FixtureModel`'s beam director subscribes to the thirteen keys it reads per frame on
+  the *active* source — so a programmer-only or Next GO preview moves the heads — and `useLiveColour`
+  asks after every imperative colour write. Both go through `useStageInvalidate`
+  (`stageInvalidate.tsx`), a context rather than `useThree`, because the colour syncs are rendered
+  outside a canvas by their tests.
+- **Time.** A movement or LED macro, a spinning gobo and a turning prism move with the clock, not with
+  DMX, so while one runs the director asks for the next frame itself. That is the one case where the
+  canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
+  the long gap after an idle spell.
+- **Imperative buffer writes from effects** — `hideSlot` / `hideWashSlot` when a fixture loses its
+  beam or unmounts — and the region uniforms (below).
+- **The label layer** hands the store the canvas's `invalidate`.
+
+A hidden browser pane or background tab gets no `requestAnimationFrame`, so it draws nothing until it
+is shown; that was true of the old `always` loop as well.
+
+### Context loss
+
+Nothing handled `webglcontextlost`, so WebKit taking the context back left a blank canvas under a
+layer of labels. `ContextLossWatcher` (in `Stage3D.tsx`) now cancels the event's default — without
+which the browser never offers the context back — and the view draws **3D paused** with the reason
+and **Restore 3D**. The label layer is hidden with it. A browser that restores on its own
+(`webglcontextrestored`) clears the state; **Restore** does not wait for that and remounts the canvas
+(`canvasKey`), a fresh renderer and a fresh context, because a context taken to save memory may
+never come back. The camera pose resets with the remount, as it does on any mount until the
+viewpoints session. The View menu's **Test recovery** (3D only) drops the context through
+`WEBGL_lose_context` so the path can be exercised on purpose.
+
+### The emitters are sized by the rig
+
+The shared emitter meshes (`StageEmitters`) used to give every slot `MAX_PRISM_LOBES` beam instances
+and `MAX_WASH_PIXELS` wash instances, times the region count on the receivers — at 45 fixtures and 16
+regions, 4,320 region cookies and 11,520 wash-region instances whether or not a prism or a pixel bar
+was hung, every one through the vertex shader each frame. Now `emitterNeedsFor` (`emitterNeeds.ts`)
+says per slot what it can draw — **no lobes** without a beam (`acceptsBeamAngle`, which is
+`FixtureModel`'s `showCone`), **one**, or **six** where there is a prism; a wash block only for a
+pixel strip, of its pixel count — and `buildEmitterLayout` (`emitterLayout.ts`) turns that into
+per-slot offsets. On project 15 that is 73 beam instances where there were several hundred.
+
+- **One statement of the rule.** `FixtureModel` decides whether it washes per pixel with the same
+  `isPixelStrip` and `pixelCountOf` the layout sizes by; two copies would drift, and a fixture that
+  drew more than its slot was given would write into the next fixture's block.
+- **The handle drops out-of-block writes.** Every writer bounds-checks `(slot, lobe)` and
+  `(slot, pixel)` against the layout, and the directors draw at most `lobesFor(slot)` lobes and
+  `washPixelsFor(slot)` pixels. A frame where the patch and the layout disagree draws less, never
+  into a neighbour.
+- **The rebuild keys on `layout.signature`**, not the layout object, which is fresh every render;
+  equal needs address identically, and rebuilding would throw away every slot's written state.
+
+### Region receivers are placed by uniforms
+
+A region drag writes the RTK cache per frame, and the region cookies' instance matrices were baked
+from the region geometry — so every frame of a drag rebuilt every emitter buffer. The receivers
+(beam and wash) now carry no placement: their materials compile with `REGION_RECEIVER`, and the pool
+vertex shader builds each unit box from the same `uRegionCenter` / `uRegionHalf` / `uRegionYawCs`
+uniforms the shadow tests read, the region being `gl_InstanceID % uNumRegions` (the receivers are
+laid out lobe-major). A drag is `writeRegionUniforms` and an `invalidate`; the buffers are rebuilt
+only when the region *count* changes.
+
+The yaw pair is `(cos yaw, sin yaw)`, the region's own turn: the receiver rotates its box out by
++yaw — the same turn `StageRegionMeshes` draws — and `rayObbT` rotates a ray in by −yaw. It was
+`(cos −yaw, sin −yaw)`, which turned every shadow box the wrong way; invisible at 0° and 90°, where a
+box is its own mirror image, and a mis-shadowed footprint at any other angle.
+
+A floor or wall pool fragment on or inside a region (within 5 mm, `REGION_SURFACE_EPS_M`) is
+discarded: that surface is the region receiver's to light. The shadow test cannot catch it when the
+two coincide — a deck flush with the stage at 0 has its top face in the floor pool's own plane — and
+the additive pools would light it twice.
+
+### Regions hang down from `centerZ`
+
+`centerZ` is a region's **top surface** — the deck — which is what the backend
+(`models/stageRegions.kt`), the MCP schema and the aim tool always meant. The frontend drew the box
+*up* from it, so project 15's "Main stage" (top at 0, 0.95 m thick) stood 0.95 m proud of the deck
+and pools landed on the wrong surface. Every reader agrees now: `StageRegionMeshes`,
+`computeRegionGeometry` (the emitters' OBBs), `worldCornersFor` (the 2D plot and both handle sets),
+and the height handles in 3D (`RegionEditHandles`) and 2D (`EditHandles2D`) — dragging the top
+moves `centerZ` and keeps the floor, dragging the floor changes only `heightM`. The 3D rotation
+handles sit on the deck, where a deck at 0 keeps them above the stage floor. A region placed by a
+click (`routes/Stage.tsx`) stands on the clicked height — `centerZ` is the click plus its height —
+and the 2D elevations fit down to the lowest region floor, to the whole metre so a height drag does
+not refit the view every frame. Regions authored while the frontend read `centerZ` as the floor now
+draw one thickness lower; they are re-set on the desk, not migrated (the plan's P5).
+
+### Lenses and housings
+
+Every lens was a sphere at `0.5 + 0.5 × brightness` opacity, so a lamp at dimmer zero was half-lit in
+its full hue and bloomed. `paintLens` (`fixtureBodies/palette.ts`) makes a lens dark glass at level 0
+and the hue at level 1, opaque, never brighter than its level — every body and each `PixelStrip`
+head go through it. Housings and yokes are matt near-black, as lanterns read in a hall; the active
+highlight lifts them to a slate. The torus ring still marks the selection.
+
+### The label layer
+
+Labels were a drei `<Html>` each — a React root and a `backdrop-blur` per label, sixty-odd over the
+canvas. `StageLabel` now renders an empty anchor group and registers it with a `StageLabelStore`
+(`stageLabels.ts`), which owns one plain `<div>` per label in a single layer over the canvas.
+`StageLabelDriver` lays them out once per rendered frame: project each anchor, place greedily by rank
+— hovered or selected first, then positions (rigging and regions), then fixtures — and hide whatever
+collides, with a couple of pixels' gap. Three rules:
+
+- **The mode is the store's, not the call sites'.** *Positions* (the default) shows the rigging and
+  the regions and a fixture only while hovered or selected; *All fixtures* every fixture that fits;
+  *None* nothing at all — not even the selection, unlike the prototype. So `FixtureModel`,
+  `RiggingMeshes` and `StageRegionMeshes` mount their label unconditionally and say only its `kind`
+  and whether it is `emphasised`.
+- **A label is registered once per store** and restyled in place on a rename or a hover; tearing the
+  `<div>` down on every hover was the churn the layer exists to avoid.
+- **The flag was a boolean.** `StageViewFlags.labels` is a `StageLabelMode` now, and a desk's stored
+  `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`). The 2D plot reads anything but
+  *None* as "labels on".
+
+### The 3D text font
+
+drei's `Text` loads its default font from jsdelivr, which an offline desk cannot reach. The two floor
+labels (*FOH*, *upstage*) are given the Liberation Sans TTF that react-pdf's pinned pdf.js ships,
+imported as an asset URL so Vite bundles it — the same transitive reach `ScriptViewer` makes for
+pdf.js's worker. If react-pdf ever drops pdf.js, the import fails the build rather than falling back
+to the network.
