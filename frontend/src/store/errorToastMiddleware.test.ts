@@ -118,6 +118,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./oauthGithub'),
       import('./installs'),
       import('./stageRegions'),
+      import('./stageViewpoints'),
       import('./riggings'),
       import('./patches'),
       import('./programmerOps'),

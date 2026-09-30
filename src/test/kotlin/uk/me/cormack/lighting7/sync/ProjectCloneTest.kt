@@ -15,6 +15,9 @@ import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
+import uk.me.cormack.lighting7.models.PlatformParams
+import uk.me.cormack.lighting7.models.StageElementKind
+import uk.me.cormack.lighting7.models.readElementParams
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
@@ -315,6 +318,34 @@ class ProjectCloneTest {
             )
             assertEquals(2, pads.count { it.template?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
             assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
+        }
+    }
+
+    /**
+     * The scene document's two references (v18) — a seat view's `seatElementUuid` and a platform's
+     * `regionUuid`, which lives inside the params document rather than in a column — both re-point
+     * at the clone's own records. Neither is an FK, so nothing else would notice them still naming
+     * the source's.
+     */
+    @Test
+    fun `clone rewires a seat view and a platform's region to the clone's own records`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-scene", description = null)
+
+        transaction(state.database) {
+            val clone = DaoProject.findById(result.projectId)!!
+            val source = DaoProject.findById(sourceId)!!
+            val stalls = clone.stageElements.single { it.name == "Stalls" }
+            assertNotEquals(source.stageElements.single { it.name == "Stalls" }.uuid, stalls.uuid)
+
+            val seatView = clone.stageViewpoints.single { it.name == "Row F centre" }
+            assertEquals(stalls.uuid, seatView.seatElementUuid, "the seat view sits in the clone's seating")
+            assertEquals("F5", seatView.seatId)
+
+            val deck = clone.stageElements.single { it.name == "Thrust deck" }
+            val params = readElementParams(StageElementKind.PLATFORM, deck.params) as PlatformParams
+            val thrust = clone.stageRegions.single { it.name == "thrust" }
+            assertEquals(thrust.uuid.toString(), params.regionUuid, "the deck links the clone's own region")
         }
     }
 

@@ -32,7 +32,8 @@ import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
 import { HandChip } from "./components/hand/HandChip"
-import { ScreensSheet } from "./components/screens/ScreensSheet"
+import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
+import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
 
 const DRAWER_WIDTH = 240
@@ -50,6 +51,15 @@ const DRAWER_COLLAPSED_WIDTH = 64
 const AiChatPanel = lazy(() =>
   import("./components/ai/AiChatPanel").then((m) => ({ default: m.AiChatPanel })),
 )
+
+/**
+ * The controls the Screens sheet draws for a view's `picker` options, by option key (stage-view
+ * plan session 2). The shell hands them in so the sheet never imports a view: the Stage row's
+ * viewpoint picker reads the scene queries, and is loaded only when a Stage row first draws it.
+ */
+const SCREENS_CONTROLS: WindowViewControls = {
+  [VIEW_OPTION_VIEWPOINT]: lazy(() => import("./components/stage3d/StageViewpointRowPicker")),
+}
 
 /**
  * Reserves the page area while a lazily-imported route chunk loads. Everything outside `<main>` —
@@ -340,7 +350,7 @@ export default function Layout() {
 
         {/* The Screens sheet, mounted once: opened from the user menu and from ⌘K through
             `screensSheetState`, neither of which is an ancestor of the other. */}
-        <ScreensSheet />
+        <ScreensSheet controls={SCREENS_CONTROLS} />
 
         {/* Command Palette */}
         <CommandPalette

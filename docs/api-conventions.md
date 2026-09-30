@@ -12,7 +12,7 @@ alias would only be a second spelling that never dies.
 ## Paths
 
 **Kebab-case, always.** `/speed-masters`, `/cue-stacks`, `/universe-configs`,
-`/control-surface-types`, `/stage-regions`, `/surface-bindings`. Not camelCase, not snake_case, and
+`/control-surface-types`, `/stage-regions`, `/stage-elements`, `/stage-viewpoints`, `/surface-bindings`. Not camelCase, not snake_case, and
 not a bare run-on word. Path segments are read by humans in a browser address bar and in a network
 tab; the DTO fields inside them stay `camelCase`, because those are read by TypeScript.
 
@@ -67,7 +67,7 @@ finish against a project that changed underneath it.
 
 **Persisted project data is project-scoped**, under `/projects/{projectId}/…`, where `{projectId}`
 is a numeric id or the literal `current`. Everything an operator authors and the desk stores lives
-here: cues, cue stacks, looks, templates, scripts, patches, riggings, stage regions, universe
+here: cues, cue stacks, looks, templates, scripts, patches, riggings, stage regions, scene elements and viewpoints, universe
 configs, surface bindings, speed masters, prompt books, AI conversation history.
 
 Inside that second side, mutations split again, on **whether the write is also a live-show
@@ -78,7 +78,8 @@ mutation**:
   coherent way to apply a cue belonging to a project that isn't loaded, so the request is refused
   rather than half-performed. Use `withCurrentProject`.
 * **Ungated** when the write is DB-only and the running show is re-synced afterwards *if it
-  happens to be looking at that project* — patches, riggings, patch groups, stage regions,
+  happens to be looking at that project* — patches, riggings, patch groups, stage regions, stage
+  elements and viewpoints (which the running show does not load at all),
   universe configs, surface bindings, speed masters, cloud sync, AI conversation history. These
   read `withProject` and then branch on `state.isCurrentProject(project)` to reload fixtures or
   retune the clock. Patching a rig you are not currently running is a real workflow and this is
@@ -108,8 +109,11 @@ still points at — answers 409 with a machine-readable `code` and a usage summa
 `?force=true` as the operator's "yes, I meant it". The forced path is allowed to leave dangling
 references on purpose; the resolver treats a dangling reference as absent.
 
-Current users, all deletes: `/projects/{id}/templates/{templateId}`,
-`/projects/{id}/looks/{lookId}`, `/projects/{id}/speed-masters/{masterId}`. It is a **query
+Current users: three deletes, `/projects/{id}/templates/{templateId}`,
+`/projects/{id}/looks/{lookId}`, `/projects/{id}/speed-masters/{masterId}`, and
+`/projects/{id}/stage-elements/{elementId}` for both its `DELETE` and its `PUT` — a seating that seat
+views still sit in answers `STAGE_ELEMENT_IN_USE` naming them, whether the write would delete it or
+reshape it so a named seat no longer exists (a kind change, fewer rows). It is a **query
 parameter**, never a body field, so that the destructive form of the call is visible in a server
 log. (Two `force` fields survive in `POST` bodies under `/programmer/record` and
 `/programmer/update`; those are inert leftovers of the retired `cueEdit` session — see sweep item

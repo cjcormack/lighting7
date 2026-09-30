@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  STAGE_LANDED_KEY,
   STAGE_VIEWPOINT_KEY,
   applyStageViewOptions,
+  cameraOfViewpoint,
   consumeLaunchViewpoint,
-  isOrthoViewpoint,
+  isOrthoCamera,
+  isStageViewpoint,
+  markViewpointLanded,
+  noteSavedViewpointCameras,
   resetStageViewpointStore,
   setStageViewpoint,
   stageViewOptions,
   stageViewpoint,
+  type SavedViewpointRef,
 } from './stageViewpoint'
 import {
   EYE_POSE_KEY,
@@ -79,7 +85,58 @@ describe('the Stage viewpoint (stage-view plan session 1)', () => {
   })
 
   it('knows the three sections', () => {
-    expect(['orbit', 'eye', 'plan', 'front', 'side'].filter((v) => isOrthoViewpoint(v as never))).toEqual(['plan', 'front', 'side'])
+    expect(['orbit', 'eye', 'plan', 'front', 'side'].filter((v) => isOrthoCamera(v as never))).toEqual(['plan', 'front', 'side'])
+  })
+})
+
+describe('a saved view in the viewpoint (stage-view plan session 2)', () => {
+  const ROW_F = '5b1f7a52-9c3e-4d8a-8f2e-1a2b3c4d5e6f' as SavedViewpointRef
+  const DESK = '0e9c3a11-7d2b-4f60-a1b2-c3d4e5f60718' as SavedViewpointRef
+
+  it('is in the vocabulary by its uuid, before this window has the row, and a name is not', () => {
+    expect(isStageViewpoint(ROW_F)).toBe(true)
+    expect(isStageViewpoint('row-f')).toBe(false)
+    expect(applyStageViewOptions({ viewpoint: ROW_F })).toBe(ROW_F)
+    expect(stageViewpoint()).toBe(ROW_F)
+    // It survives a reload: sessionStorage reads it back as itself, not as Orbit.
+    resetStageViewpointStore()
+    expect(stageViewpoint()).toBe(ROW_F)
+  })
+
+  it('is carried by ?viewpoint= on arrival, and stripped', () => {
+    const next = consumeLaunchViewpoint(new URLSearchParams(`window=Hall&viewpoint=${ROW_F}`))
+    expect(stageViewpoint()).toBe(ROW_F)
+    expect(next?.toString()).toBe('window=Hall')
+  })
+
+  it('lands again when picked, even when it is the view already current', () => {
+    setStageViewpoint(ROW_F)
+    markViewpointLanded({ ref: ROW_F, camera: 'eye' })
+    expect(JSON.parse(window.sessionStorage.getItem(STAGE_LANDED_KEY)!)).toEqual({ ref: ROW_F, camera: 'eye' })
+    // Picked again after looking round: the marker clears, which is what lands the camera.
+    setStageViewpoint(ROW_F)
+    expect(window.sessionStorage.getItem(STAGE_LANDED_KEY)).toBe('null')
+  })
+
+  it('answers its camera from the rows, else from the view last landed, else not at all', () => {
+    expect(cameraOfViewpoint(ROW_F)).toBeNull()
+    markViewpointLanded({ ref: ROW_F, camera: 'eye' })
+    expect(cameraOfViewpoint(ROW_F)).toBe('eye')
+    noteSavedViewpointCameras(new Map([[DESK, 'orbit']]))
+    expect(cameraOfViewpoint(DESK)).toBe('orbit')
+    expect(cameraOfViewpoint('front')).toBe('front')
+  })
+
+  it('keeps the eye’s pose moving from a saved eye view to Eye, and forgets it from a saved orbit view', () => {
+    const eye = { position: [1, 1.7, 9] as const, yaw: 0.2, pitch: -0.1, fov: 40 }
+    noteSavedViewpointCameras(new Map([[ROW_F, 'eye'], [DESK, 'orbit']]))
+    setStageViewpoint(ROW_F)
+    writeEyePose(eye)
+    setStageViewpoint('eye')
+    expect(readEyePose()).toEqual(eye)
+    setStageViewpoint(DESK)
+    setStageViewpoint('eye')
+    expect(readEyePose()).toBeNull()
   })
 })
 

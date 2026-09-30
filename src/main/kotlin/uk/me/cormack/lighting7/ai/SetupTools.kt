@@ -37,6 +37,7 @@ import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.renumberAutoCues
+import uk.me.cormack.lighting7.routes.unlinkRegionFromPlatforms
 import uk.me.cormack.lighting7.routes.validateCueChildren
 import uk.me.cormack.lighting7.routes.validateRiggingPose
 import uk.me.cormack.lighting7.routes.validateStageDimensions
@@ -72,6 +73,7 @@ class SetupTools(
     private val deskUrl: () -> String? = { null },
 ) {
     val toolDefs: List<AnthropicToolDef> = setupToolDefs
+    private val scene = SceneSetupTools(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
@@ -85,6 +87,8 @@ class SetupTools(
             patchFixturesTool.name -> patchFixtures(input)
             deleteGroupsTool.name -> deleteGroups(input)
             setStageTool.name -> setStage(input)
+            setSceneTool.name -> scene.setScene(input)
+            getSceneTool.name -> scene.getScene()
             placeFixturesTool.name -> placeFixtures(input)
             getPromptBookTool.name -> getPromptBook()
             buildCueStackTool.name -> buildCueStack(input)
@@ -897,6 +901,7 @@ class SetupTools(
         if (problems.isNotEmpty()) return rejected(problems)
 
         var detached = 0
+        var platformsUnlinked = 0
         // The stage box as stored after the write, answered so the caller sees what landed.
         var storedStage: Triple<Double?, Double?, Double?>? = null
         transaction(state.database) {
@@ -944,7 +949,10 @@ class SetupTools(
             }
             for (name in removeRegions) {
                 DaoStageRegion.find { (DaoStageRegions.project eq project.id) and (DaoStageRegions.name eq name) }
-                    .forEach { it.delete() }
+                    .forEach { region ->
+                        platformsUnlinked += unlinkRegionFromPlatforms(project, region.uuid)
+                        region.delete()
+                    }
             }
             for (name in removeRiggings) {
                 DaoRigging.find { (DaoRiggings.project eq project.id) and (DaoRiggings.name eq name) }.forEach { rigging ->
@@ -958,6 +966,7 @@ class SetupTools(
         }
         if (stage != null) state.show.fixtures.projectDetailsChanged(project.id.value)
         if (regions.isNotEmpty() || removeRegions.isNotEmpty()) state.show.fixtures.stageRegionListChanged()
+        if (platformsUnlinked > 0) state.show.fixtures.stageElementListChanged()
         if (riggings.isNotEmpty() || removeRiggings.isNotEmpty()) {
             state.show.fixtures.riggingListChanged()
             // Rig-mounted fixtures' world positions derive from the rigging pose.

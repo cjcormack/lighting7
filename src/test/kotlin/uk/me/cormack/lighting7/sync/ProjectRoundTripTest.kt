@@ -12,6 +12,12 @@ import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
+import uk.me.cormack.lighting7.sync.dto.StageElementJson
+import uk.me.cormack.lighting7.sync.dto.StageRegionJson
+import uk.me.cormack.lighting7.sync.dto.StageViewpointJson
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
@@ -294,6 +300,66 @@ class ProjectRoundTripTest {
         assertEquals("WHOLE", wash.tiles[1].cellMode)
         val text = Files.readString(Files.list(exportDirA.resolve("buskRig")).use { it.findFirst().get() })
         assertTrue(text.contains("\"sortOrder\": 0"), "a zero position is written, not omitted")
+    }
+
+    /**
+     * The scene document (v18): each element's params export as a **nested object**, keys sorted,
+     * so the clone remapper reaches a platform's `regionUuid` and a diff reads per field; a seat
+     * view names its seating by uuid. Pins what the exporter writes, as the rig test above does.
+     */
+    @Test
+    fun `the scene exports its elements with params nested and a seat view naming its seating`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val elements = Files.list(exportDirA.resolve("stageElements")).use { stream ->
+            stream.toList().map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
+        }.associateBy { it.name }
+        assertEquals(setOf("Stalls", "Thrust deck", "House tabs"), elements.keys)
+        val stalls = elements.getValue("Stalls")
+        assertEquals("SEATING" to "VENUE", stalls.kind to stalls.layer)
+        assertEquals("B", stalls.params!!["firstRow"]!!.jsonPrimitive.content)
+        assertTrue(stalls.hidden && stalls.emissive)
+        val tabs = elements.getValue("House tabs")
+        assertEquals(1.0, tabs.params!!["states"]!!.jsonObject["open"]!!.jsonPrimitive.double)
+
+        val regions = Files.list(exportDirA.resolve("stageRegions")).use { stream ->
+            stream.toList().map { canonicalDecode(StageRegionJson.serializer(), Files.readString(it)) }
+        }
+        val thrust = regions.single { it.name == "thrust" }
+        assertEquals(thrust.uuid, elements.getValue("Thrust deck").params!!["regionUuid"]!!.jsonPrimitive.content)
+
+        val text = Files.readString(exportDirA.resolve("stageElements/${stalls.uuid}.json"))
+        assertTrue(text.contains("\"params\": {"), "params travel as an object, not a string: $text")
+        assertTrue(text.indexOf("\"firstRow\"") < text.indexOf("\"rows\""), "params keys are sorted")
+
+        val views = Files.list(exportDirA.resolve("stageViewpoints")).use { stream ->
+            stream.toList().map { canonicalDecode(StageViewpointJson.serializer(), Files.readString(it)) }
+        }.associateBy { it.name }
+        val seat = views.getValue("Row F centre")
+        assertEquals("SEAT", seat.kind)
+        assertEquals(stalls.uuid to "F5", seat.seatElementUuid to seat.seatId)
+        assertEquals(null, seat.eyeX, "a seat view carries no eye of its own")
+        assertEquals(1.25, views.getValue("Balcony desk").eyeX)
+    }
+
+    /**
+     * An archive written before v18 has neither folder: it imports with an empty scene.
+     */
+    @Test
+    fun `an archive without a scene imports with an empty scene`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        exportDirA.resolve("stageElements").toFile().deleteRecursively()
+        exportDirA.resolve("stageViewpoints").toFile().deleteRecursively()
+        wipeDatabase()
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val project = DaoProject.findById(imported.projectId)!!
+            assertTrue(project.stageElements.empty() && project.stageViewpoints.empty())
+            assertEquals(2, project.stageRegions.count().toInt(), "the rest of the stage imports")
+        }
     }
 
     /**

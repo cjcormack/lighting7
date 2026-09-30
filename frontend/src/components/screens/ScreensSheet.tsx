@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, createContext, useContext, useEffect, useMemo, useState, type ComponentType } from 'react'
 import { Check, Copy, Link, Maximize2, Minimize2, MonitorUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -44,6 +44,7 @@ import {
   windowViewPath,
   type WindowView,
   type WindowViewOption,
+  type WindowViewPickerProps,
 } from '@/lib/windowViews'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { cn } from '@/lib/utils'
@@ -60,6 +61,16 @@ import {
   useDeskWindows,
 } from '@/store/windows'
 import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
+
+/**
+ * The controls a `picker` option draws, by option key — handed in by the app shell, so the sheet
+ * draws a view's own control without importing the view (§`WindowViewOption`). A key with no
+ * control draws the row's value as text.
+ */
+export type WindowViewControls = Readonly<Record<string, ComponentType<WindowViewPickerProps>>>
+
+const NO_CONTROLS: WindowViewControls = {}
+const ControlsContext = createContext<WindowViewControls>(NO_CONTROLS)
 
 /**
  * **Screens** — every window signed in to this desk, and the controls to change what one shows
@@ -127,25 +138,27 @@ import { setScreensSheetOpen, useScreensSheetOpen } from './screensSheetState'
  * The row's server-stamped `user` is drawn only where two rows share a name, which is the one
  * time it disambiguates anything. **Layouts** is `FU-SCREENS-LAYOUTS`, not built.
  */
-export function ScreensSheet() {
+export function ScreensSheet({ controls = NO_CONTROLS }: { controls?: WindowViewControls }) {
   const open = useScreensSheetOpen()
   return (
-    <Sheet open={open} onOpenChange={setScreensSheetOpen}>
-      <SheetContent className="flex flex-col sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>Screens</SheetTitle>
-          <SheetDescription>
-            Every window signed in to this desk. Change what one shows from any of the others.
-          </SheetDescription>
-        </SheetHeader>
-        <SheetBody>{open && <ScreensSheetBody />}</SheetBody>
-        <SheetFooter className="flex-row justify-end gap-2">
-          <SheetClose asChild>
-            <Button variant="outline">Close</Button>
-          </SheetClose>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+    <ControlsContext.Provider value={controls}>
+      <Sheet open={open} onOpenChange={setScreensSheetOpen}>
+        <SheetContent className="flex flex-col sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Screens</SheetTitle>
+            <SheetDescription>
+              Every window signed in to this desk. Change what one shows from any of the others.
+            </SheetDescription>
+          </SheetHeader>
+          <SheetBody>{open && <ScreensSheetBody />}</SheetBody>
+          <SheetFooter className="flex-row justify-end gap-2">
+            <SheetClose asChild>
+              <Button variant="outline">Close</Button>
+            </SheetClose>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </ControlsContext.Provider>
   )
 }
 
@@ -325,6 +338,15 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
       {view.options!.filter((option) => option.key !== PAGE_FOLLOWS_OPTION.key).map((option) =>
         option.kind === 'enum' ? (
           <EnumOption key={option.key} option={option} rowName={row.name} value={options[option.key] ?? ''} onSet={(v) => set(option.key, v)} />
+        ) : option.kind === 'picker' ? (
+          <PickerOption
+            key={option.key}
+            option={option}
+            rowName={row.name}
+            projectId={projectId}
+            value={options[option.key] ?? ''}
+            onSet={(v) => set(option.key, v)}
+          />
         ) : (
           <div key={option.key} className="flex items-center gap-1.5 text-xs" data-page-group>
             {pageFollowsOption?.kind === 'enum' && (
@@ -372,6 +394,40 @@ function ViewOptionsRows({ row, view, projectId }: { row: DeskWindow; view: Wind
         {copied ? <Check className="size-3.5" /> : <Link className="size-3.5" />}
         {copied ? 'Copied' : `Copy link for ${row.name}`}
       </Button>
+    </div>
+  )
+}
+
+/**
+ * A view's own control for one option, loaded when a row first draws it (the shell hands a lazy
+ * component). Until it has loaded, and for a key the shell has no control for, the row reads the
+ * value as text — never a blank.
+ */
+function PickerOption({
+  option,
+  rowName,
+  projectId,
+  value,
+  onSet,
+}: {
+  option: Extract<WindowViewOption, { kind: 'picker' }>
+  rowName: string
+  projectId: number | null
+  value: string
+  onSet: (value: string) => void
+}) {
+  const Control = useContext(ControlsContext)[option.key]
+  const fallback = <span className="truncate text-foreground">{value || '—'}</span>
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 text-xs">
+      <span className="text-muted-foreground">{option.label}</span>
+      {Control == null ? (
+        fallback
+      ) : (
+        <Suspense fallback={fallback}>
+          <Control value={value} onSet={onSet} label={option.label} rowName={rowName} projectId={projectId} />
+        </Suspense>
+      )}
     </div>
   )
 }

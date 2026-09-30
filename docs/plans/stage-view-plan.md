@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 1 ([PR #28](https://github.com/cjcormack/lighting7/pull/28)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 2.** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -14,7 +14,7 @@
 >
 > This document is the engineering half. Where it and the boards disagree, this plan wins on
 > behaviour and the boards on layout and copy. **Chris confirmed the sixteen design decisions as
-> recommended on 2026-09-29**; four questions remain open (§11).
+> recommended on 2026-09-29**; three questions remain open (§11).
 
 ## 1. Context
 
@@ -120,7 +120,8 @@ Cloning is derived and needs nothing extra.
 - **Armed until** is runtime (`StateFlow`, not persisted). A restart disarms.
 - **Per-window:** the current viewpoint and source ride `windows.viewOptions` under `stage`, and the
   orbit pose sits in `sessionStorage`. Neither is new on the backend: `viewOptions` is already
-  opaque to the registry.
+  opaque to the registry. The viewpoint landed in sessions 1–2; the source goes on it in session 3,
+  with the View menu's other per-window facts.
 
 ### 3.3 The wire
 
@@ -189,7 +190,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **`frameloop`** stays `always` while DMX moves, and demands a render when idle.
 - **Docs.** `frontend/docs/stage-vis-engineering.md`.
 
-### Session 1 — viewpoints, cameras, Positions (frontend)
+### ~~Session 1 — viewpoints, cameras, Positions (frontend)~~ — done, `687f67e` ([PR #28](https://github.com/cjcormack/lighting7/pull/28))
 
 - **Cameras.** Orbit, Eye (look-around from a point) and orthographic Plan / Front / Side on the
   one scene, each section cutting what lies between it and the camera. The 3D / Plan / Front /
@@ -221,8 +222,8 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   - Scene elements are read but not yet drawn beyond boxes (session 3 draws them).
 - **Docs.** `docs/sync-engineering.md` (v18), `docs/fixtures-engineering.md` §stage,
   `docs/mcp-engineering.md`, `docs/api-conventions.md`.
-- **Gate.** `FU-AUTH-ATTRIBUTION` fires on this bump. §11 Q2 decides whether the attribution columns
-  fold in here.
+- **Gate.** `FU-AUTH-ATTRIBUTION` fires on this bump; §11 Q2 passed it (v18 has no attribution
+  columns).
 
 ### Session 3 — the room, lit (frontend)
 
@@ -235,6 +236,8 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Retirement.** The region, wall and floor cookie instances go.
 - **Seats.** *Sit in a seat…* picks from the seating mesh.
 - **View menu.** Venue, Set, Seating and Haze.
+- **Source per window.** The View menu's Source rides `windows.viewOptions` beside `viewpoint`, and
+  a Stage row on the Screens sheet gains its Source segment (`Screens.dc.html` §1).
 - **Haze** follows the hazer's DMX instead of `washConfig.ts`'s constant.
 - **Docs.** `frontend/docs/stage-vis-engineering.md`.
 
@@ -441,10 +444,9 @@ Beyond the unit suites, at the desk:
 ## 11. Open questions
 
 1. ~~**Confirm D1–D16.**~~ Confirmed as recommended, Chris, 2026-09-29.
-2. **`FU-AUTH-ATTRIBUTION`** fires on session 2's `formatVersion` bump. Fold `created_by` /
-   `modified_by` into this plan, or record that v18 passed without it? Recommendation: pass. It
-   needs its own design for machine-local users, and there are three more bumps to fold it into
-   later.
+2. ~~**`FU-AUTH-ATTRIBUTION`** fires on session 2's `formatVersion` bump.~~ Passed, Chris,
+   2026-09-29: v18 went without attribution columns. It needs its own design for machine-local
+   users, and bumps 19–21 remain to fold it into.
 3. **Where do the balcony units stand?** The prototype assumes the front ledge at about 1.9 m. If
    they are on stands behind the rail, P5's heights change.
 4. **Which lanterns does the Commemoration Hall own?** The prototype's defaults (Source Four 19°

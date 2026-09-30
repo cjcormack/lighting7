@@ -1,0 +1,179 @@
+package uk.me.cormack.lighting7.models
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/**
+ * The scene document's per-kind params and seat maths (stage-view plan session 2, D2): parsed and
+ * checked at the write boundary, written canonically, and read back. The seat numbers are pinned
+ * here and again in the frontend's `lib/stageSeats.test.ts`, which must agree.
+ */
+class StageSceneTest {
+
+    private fun obj(text: String): JsonObject = Json.parseToJsonElement(text).jsonObject
+
+    private fun parse(kind: StageElementKind, text: String, width: Double = 5.0, height: Double = 3.0): Pair<ElementParams?, List<String>> {
+        val problems = mutableListOf<String>()
+        return parseElementParams(kind, obj(text), width, height, "params", problems) to problems
+    }
+
+    @Test
+    fun `params parse case-insensitively and encode canonically with defaults omitted`() {
+        val (params, problems) = parse(
+            StageElementKind.ROOM,
+            """{"omit":["upstage","stage left"],"floor":{"colour":"#2B2724","pattern":"boards"}}""",
+        )
+        assertEquals(emptyList(), problems)
+        val room = assertIs<RoomParams>(params)
+        assertEquals(listOf(StageSide.UPSTAGE, StageSide.STAGE_LEFT), room.omit)
+        assertEquals(
+            """{"floor":{"colour":"#2b2724","pattern":"BOARDS"},"omit":["UPSTAGE","STAGE_LEFT"]}""",
+            encodeElementParams(StageElementKind.ROOM, room),
+        )
+        assertEquals(room, readElementParams(StageElementKind.ROOM, encodeElementParams(StageElementKind.ROOM, room)))
+    }
+
+    @Test
+    fun `every problem in a params document is reported at once`() {
+        val (params, problems) = parse(
+            StageElementKind.FLAT,
+            """{"openings":[{"kind":"porthole","fromM":4.5,"widthM":1,"heightM":2},{"fromM":"one"}],"colour":"red"}""",
+        )
+        assertNull(params)
+        assertTrue(problems.any { "openings[0].kind must be one of" in it }, problems.toString())
+        assertTrue(problems.any { "openings[0] runs past the flat's end" in it }, problems.toString())
+        assertTrue(problems.any { "openings[1].fromM must be a number" in it }, problems.toString())
+        assertTrue(problems.any { "openings[1].kind is required" in it }, problems.toString())
+        assertTrue(problems.any { "unknown field 'colour'" in it }, problems.toString())
+    }
+
+    @Test
+    fun `a proscenium's opening must fit its wall`() {
+        val (_, problems) = parse(
+            StageElementKind.PROSCENIUM,
+            """{"openingWidthM":6,"openingHeightM":2.5,"openingSillM":1}""",
+            width = 5.0,
+            height = 3.0,
+        )
+        assertTrue(problems.any { "wider than the proscenium" in it }, problems.toString())
+        assertTrue(problems.any { "above the proscenium" in it }, problems.toString())
+        assertTrue(parse(StageElementKind.PROSCENIUM, "{}").second.any { "openingWidthM is required" in it })
+        // An exact fit is a fit, whatever a double makes of the sum: 1.1 + 2.2 is 3.3000000000000003.
+        assertEquals(
+            emptyList(),
+            parse(StageElementKind.PROSCENIUM, """{"openingWidthM":5,"openingHeightM":2.2,"openingSillM":1.1}""", width = 5.0, height = 3.3).second,
+        )
+        assertEquals(
+            emptyList(),
+            parse(StageElementKind.FLAT, """{"openings":[{"kind":"door","fromM":0.1,"widthM":0.2,"heightM":2}]}""", width = 0.3).second,
+        )
+    }
+
+    @Test
+    fun `a state belongs to the kind that can have it`() {
+        assertTrue(parse(StageElementKind.DRAPE, """{"role":"tabs","operation":"draw","states":{"open":0.5}}""").second.isEmpty())
+        assertTrue(parse(StageElementKind.DRAPE, """{"role":"leg","states":{"open":0.5}}""").second.any { "drawn drape" in it })
+        assertTrue(parse(StageElementKind.OBJECT, """{"shape":"disc","flies":true,"states":{"trimM":5.2}}""").second.isEmpty())
+        assertTrue(parse(StageElementKind.OBJECT, """{"states":{"trimM":5.2}}""").second.any { "flown piece" in it })
+        assertTrue(parse(StageElementKind.OBJECT, """{"states":{"visible":false}}""").second.isEmpty())
+    }
+
+    @Test
+    fun `a platform's rail comes with its edge, and seating's rows stay inside the alphabet`() {
+        assertTrue(parse(StageElementKind.PLATFORM, """{"railHeightM":1}""").second.any { "go together" in it })
+        assertTrue(parse(StageElementKind.PLATFORM, """{"railHeightM":1,"railEdge":"upstage"}""").second.isEmpty())
+        val seating = """{"rows":12,"seatsPerRow":12,"rowPitchM":0.95,"seatPitchM":0.52,"firstRow":"R"}"""
+        assertTrue(parse(StageElementKind.SEATING, seating).second.any { "run past row Z" in it })
+    }
+
+    @Test
+    fun `an element is checked whole — sizes by kind, and a platform's region by the project's`() {
+        val base = StageElementFields(
+            name = "Stalls", kind = StageElementKind.SEATING, layer = StageElementLayer.VENUE,
+            positionX = 0.0, positionY = -2.4, positionZ = -0.95, yawDeg = 0.0,
+            widthM = 8.0, depthM = 0.0, heightM = 0.0,
+            finishColour = null, finishPattern = null, emissive = false,
+            params = obj("""{"rows":12,"seatsPerRow":12,"rowPitchM":0.95,"seatPitchM":0.52}"""),
+            hidden = false,
+        )
+        val problems = mutableListOf<String>()
+        assertNull(validateStageElement(base, emptySet(), "", problems))
+        assertTrue(problems.single().contains("size comes from its rows"), problems.toString())
+
+        problems.clear()
+        assertNotNull(validateStageElement(base.copy(widthM = 0.0), emptySet(), "", problems))
+
+        problems.clear()
+        val deck = base.copy(
+            name = "Main stage", kind = StageElementKind.PLATFORM, widthM = 6.3, depthM = 11.0, heightM = 0.95,
+            params = obj("""{"regionUuid":"4b6e1f1c-58ab-4e5e-9a54-0e2b5d0c9f11"}"""),
+        )
+        assertNull(validateStageElement(deck, emptySet(), "", problems))
+        assertTrue(problems.single().contains("names no stage region"), problems.toString())
+        problems.clear()
+        assertNotNull(validateStageElement(deck, setOf("4b6e1f1c-58ab-4e5e-9a54-0e2b5d0c9f11"), "", problems))
+        problems.clear()
+        assertNull(validateStageElement(deck.copy(depthM = 0.0), emptySet(), "", problems))
+        assertTrue(problems.any { "depthM must be greater than 0" in it }, problems.toString())
+    }
+
+    /**
+     * The prototype's stalls (`stage-view-design/prototype.html`): 12 × 12 from the element's
+     * origin, row A nearest the stage. `lib/stageSeats.test.ts` pins the same seat.
+     */
+    @Test
+    fun `seats run away from the stage from row A, seat 1 at the stage-right end`() {
+        val stalls = SeatingParams(rows = 12, seatsPerRow = 12, rowPitchM = 0.95, seatPitchM = 0.52)
+        val pose = ElementPose(0.0, -2.4, -0.95, 0.0)
+        val a1 = stalls.seat(pose, "A1")!!
+        assertEquals(-2.86, a1.base.x, 1e-9)
+        assertEquals(-2.4, a1.base.y, 1e-9)
+        val f6 = stalls.seat(pose, "f6")!!
+        assertEquals("F6", f6.id)
+        assertEquals(-0.26, f6.base.x, 1e-9)
+        assertEquals(-2.4 - 5 * 0.95, f6.base.y, 1e-9)
+        val eye = f6.eye(pose)
+        assertEquals(f6.base.y - 0.05, eye.y, 1e-9)
+        assertEquals(-0.95 + SEATED_EYE_HEIGHT_M, eye.z, 1e-9)
+        assertNull(stalls.seat(pose, "M1"), "past the last row")
+        assertNull(stalls.seat(pose, "A13"), "past the last seat")
+        assertNull(stalls.seat(pose, "6F"), "not a seat id")
+    }
+
+    @Test
+    fun `a turned seating turns its seats about its origin, and a rake lifts each row`() {
+        val raked = SeatingParams(rows = 3, seatsPerRow = 1, rowPitchM = 1.0, seatPitchM = 0.5, rakeM = 0.2)
+        val pose = ElementPose(1.0, -2.0, 0.0, 90.0)
+        val c1 = raked.seat(pose, "C1")!!
+        // Row C is two rows back: local (0, −2) turned 90° anticlockwise is (+2, 0).
+        assertEquals(3.0, c1.base.x, 1e-9)
+        assertEquals(-2.0, c1.base.y, 1e-9)
+        assertEquals(0.4, c1.base.z, 1e-9)
+    }
+
+    @Test
+    fun `a viewpoint is checked by its kind`() {
+        val seating = SeatingElement("Stalls", ElementPose(0.0, -2.4, -0.95, 0.0), SeatingParams(12, 12, 0.95, 0.52))
+        val uuid = java.util.UUID.randomUUID()
+        fun check(fields: StageViewpointFields): List<String> =
+            mutableListOf<String>().also { validateStageViewpoint(fields, { if (it == uuid) seating else null }, "", it) }
+        val eye = StageViewpointFields("Desk", StageViewpointKind.EYE, StagePoint(1.25, -17.0, 2.6), StagePoint(0.0, 2.6, 0.8), 50.0, null, null)
+        assertEquals(emptyList(), check(eye))
+        assertTrue(check(eye.copy(kind = StageViewpointKind.ORBIT)).any { "orbit camera's lens" in it })
+        assertTrue(check(eye.copy(target = null)).any { "needs a target" in it })
+        assertTrue(check(eye.copy(fovDeg = 120.0)).any { "fovDeg must be between" in it })
+
+        val seat = StageViewpointFields("Row F", StageViewpointKind.SEAT, null, null, null, uuid, "F6")
+        assertEquals(emptyList(), check(seat))
+        assertTrue(check(seat.copy(seatId = "Q1")).single().contains("has no seat 'Q1' (rows A–L, seats 1–12)"))
+        assertTrue(check(seat.copy(seatElementUuid = java.util.UUID.randomUUID())).any { "not a seating element" in it })
+        assertTrue(check(seat.copy(eye = StagePoint(0.0, 0.0, 1.0))).any { "leave eye out" in it })
+    }
+}

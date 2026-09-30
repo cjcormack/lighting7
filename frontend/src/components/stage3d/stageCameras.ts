@@ -1,4 +1,4 @@
-import type { OrthoViewpoint } from '../../lib/stageViewpoint'
+import type { OrthoCamera } from '../../lib/stageViewpoint'
 import type { EyePose, OrbitPose, Vec3 } from '../../lib/stageCameraPoses'
 import type { LightingPoint } from '../../lib/stageProjection'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -94,7 +94,7 @@ export interface OrthoSection {
  * audience right, which is stage left in actor terms (lighting7 `docs/fixtures-engineering.md`'s
  * axis table) — with the house to the left and upstage to the right.
  */
-export function orthoSection(view: OrthoViewpoint, b: LightingBounds): OrthoSection {
+export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection {
   const cx = (b.min.x + b.max.x) / 2
   const cy = (b.min.y + b.max.y) / 2
   const cz = (b.min.z + b.max.z) / 2

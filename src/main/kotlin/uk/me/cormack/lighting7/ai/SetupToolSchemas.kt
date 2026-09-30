@@ -7,6 +7,10 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fixture.FixtureKind
+import uk.me.cormack.lighting7.models.StageElementKind
+import uk.me.cormack.lighting7.models.StageElementLayer
+import uk.me.cormack.lighting7.models.StageViewpointKind
+import uk.me.cormack.lighting7.models.SurfacePattern
 
 // ─── Show-setup tool schemas (MCP only) ─────────────────────────────────
 //
@@ -53,7 +57,8 @@ private val stringArray = buildJsonObject {
     put("items", buildJsonObject { put("type", "string") })
 }
 
-internal val RIGGING_KINDS = listOf("TRUSS", "BAR", "BOOM", "PIPE", "FLOOR_STAND", "OTHER")
+/** LEDGE (stage-view plan session 2): stood on rather than hung from — a balcony front, a wall shelf. */
+internal val RIGGING_KINDS = listOf("TRUSS", "BAR", "BOOM", "PIPE", "FLOOR_STAND", "LEDGE", "OTHER")
 
 private const val COORDINATES =
     "Stage coordinates are metres, FOH-relative, Z-up: origin = centre of the downstage edge at deck level; " +
@@ -225,6 +230,99 @@ internal val setStageTool = AnthropicToolDef(
     },
 )
 
+private val pointSchema = objectSchema(required = listOf("x", "y", "z")) {
+    prop("x", "number")
+    prop("y", "number")
+    prop("z", "number")
+}
+
+private val sceneElementSchema = objectSchema(required = listOf("name")) {
+    prop("name", "string", "Unique name: 'Hall', 'Proscenium', 'Stalls', 'SR wall', 'Sofa'. An existing name updates that element — fields you send overwrite, fields you omit keep.")
+    enumProp("kind", StageElementKind.entries.map { it.name }, "Required for a new element. ROOM: an inward-facing shell. PROSCENIUM: a wall with an opening. FLAT: a panel with doors and windows. DRAPE: soft goods. PLATFORM: a deck, rostrum or balcony. SEATING: rows of seats (viewpoints sit in them). OBJECT: furniture, plants, signs, a flown piece.")
+    enumProp("layer", StageElementLayer.entries.map { it.name }, "VENUE outlives a production (the hall, the proscenium, the seating); SET is this show's. Default VENUE.")
+    prop("x", "number", "Metres. The element's origin: the centre of its footprint (for SEATING, the centre of the first row).")
+    prop("y", "number", "Metres.")
+    prop("z", "number", "Metres. The element's base — except a PLATFORM, whose z is its top surface (the deck hangs down from it), as a region's centerZ is. A hall floor below a raised stage is negative.")
+    prop("yawDeg", "number", "Rotation about Z at the origin, −360–360; +yaw turns anticlockwise seen from above (0 = square to the audience).")
+    prop("widthM", "number", "Size along the element's own x. Every kind but SEATING needs all three sizes; SEATING's comes from its rows and seats.")
+    prop("depthM", "number", "Size along its own y.")
+    prop("heightM", "number", "Size along z. A PLATFORM's thickness below its top.")
+    put("finish", objectSchema {
+        prop("colour", "string", "#rrggbb.")
+        enumProp("pattern", SurfacePattern.entries.map { it.name })
+        prop("emissive", "boolean", "Glows by itself (an exit sign, a lamp shade).")
+    })
+    put("params", buildJsonObject {
+        put("type", "object")
+        put(
+            "description",
+            "Per kind, replaced whole when sent. ROOM: {omit: [DOWNSTAGE|UPSTAGE|STAGE_LEFT|STAGE_RIGHT|FLOOR|CEILING], floor: {colour, pattern}, ceiling: {colour, pattern}}. " +
+                "PROSCENIUM: {openingWidthM, openingHeightM, openingSillM, surroundM}. " +
+                "FLAT: {openings: [{kind: DOOR|WINDOW|FRENCH_WINDOW|ARCH, fromM (from the stage-right end), widthM, heightM, sillM}]}. " +
+                "DRAPE: {role: LEG|BORDER|TABS|CYC|BACKCLOTH, operation: DEAD|DRAW|FLY}. " +
+                "PLATFORM: {railHeightM and railEdge together, region: a stage region's name when the platform is that region's deck}. " +
+                "SEATING: {rows (≤26), seatsPerRow, rowPitchM, seatPitchM, firstRow ('A'), rakeM (rise per row)} — rows run away from the stage (−y), seat 1 at the stage-right end. " +
+                "OBJECT: {shape: BOX|CYLINDER|SHADE|DISC, flies}. " +
+                "Any kind: states: {visible}, a DRAW drape's {open: 0–1}, a flown piece's {trimM}.",
+        )
+    })
+    prop("hidden", "boolean", "Stored but not drawn.")
+}
+
+private val sceneViewpointSchema = objectSchema(required = listOf("name")) {
+    prop("name", "string", "Unique name as the operator would say it: 'Balcony · desk', 'Row F centre', 'Centre stage'. An existing name updates that viewpoint.")
+    enumProp("kind", StageViewpointKind.entries.map { it.name }, "Required for a new viewpoint. ORBIT: the turntable camera placed at eye, circling target. EYE: a person standing at eye, looking at target. SEAT: sitting in a seat — the eye is the seat's, at seated height.")
+    put("eye", pointSchema)
+    put("target", pointSchema)
+    prop("fovDeg", "number", "Lens, 15–90. EYE and SEAT only; default 50 standing, 52 seated.")
+    prop("seating", "string", "SEAT: the seating element's name. May be omitted when the scene has one.")
+    prop("seat", "string", "SEAT: row letter and number, e.g. 'F6'.")
+}
+
+internal const val PROSCENIUM_HALL_TEMPLATE = "proscenium-hall"
+
+internal val setSceneTool = AnthropicToolDef(
+    name = "set_scene",
+    description = "Model the venue and the set for the Stage view — the room, the proscenium, masking, platforms, seating, furniture — from photos, a ground plan or a video frame, and save viewpoints (a seat, the desk's position, an actor's eye line). " +
+        "Elements and viewpoints are upserted by name, and everything is validated before anything is written. " +
+        "Start a hall with template '$PROSCENIUM_HALL_TEMPLATE' and its templateParams, which expand into named elements (Hall, Stage house, Main stage, Proscenium, Stalls, Balcony) you then correct with elements rows of the same names; the Stage view draws them, and get_scene reads the document back. " +
+        "This is presentational: it changes no DMX output. Regions and riggings stay set_stage's. " + COORDINATES,
+    inputSchema = objectSchema {
+        enumProp("template", listOf(PROSCENIUM_HALL_TEMPLATE))
+        put("templateParams", objectSchema {
+            prop("hallWidthM", "number", "Required. Wall to wall.")
+            prop("hallDepthM", "number", "Required. From the stage edge to the back wall.")
+            prop("hallHeightM", "number", "Required. Floor to ceiling.")
+            prop("stageWidthM", "number", "Required. The deck's width.")
+            prop("stageDepthM", "number", "Required. From the stage edge to the back wall of the stage.")
+            prop("prosWidthM", "number", "Required. The proscenium opening's width.")
+            prop("prosHeightM", "number", "Required. The opening's height above the deck.")
+            prop("deckHeightM", "number", "The deck above the hall floor; the opening's sill. Default 0.")
+            prop("apronM", "number", "The proscenium wall's distance upstage of the edge. Default 0.3.")
+            prop("stageHouseHeightM", "number", "Default: the hall's height above the deck.")
+            prop("rows", "integer", "Rows of stalls seating, 0–26. Default 0 (none).")
+            prop("seatsPerRow", "integer", "Required with rows.")
+            prop("rowPitchM", "number", "Default 0.9.")
+            prop("seatPitchM", "number", "Default 0.5.")
+            prop("firstRowM", "number", "Row A's distance from the stage edge. Default 2.")
+            prop("balconyDepthM", "number", "A balcony across the back wall; 0 (the default) for none.")
+            prop("balconyHeightM", "number", "The balcony's floor above the hall floor. Default 2.5.")
+            prop("railHeightM", "number", "The balcony's front rail. Default 1.")
+        })
+        arrayProp("elements", sceneElementSchema)
+        arrayProp("viewpoints", sceneViewpointSchema)
+        put("removeElements", stringArray)
+        put("removeViewpoints", stringArray)
+        prop("dryRun", "boolean", "Validate and report without writing. Default false.")
+    },
+)
+
+internal val getSceneTool = AnthropicToolDef(
+    name = "get_scene",
+    description = "Read the current project's scene document: every venue and set element (in set_scene's shape, so a row can be corrected and sent back) and every saved viewpoint, a seat view with the eye it resolves to. " + COORDINATES,
+    inputSchema = objectSchema {},
+)
+
 private val placementSchema = objectSchema(required = listOf("key")) {
     prop("key", "string", "Patched fixture key, from get_patch or describe_rig.")
     placementProps()
@@ -324,6 +422,8 @@ internal val setupToolDefs: List<AnthropicToolDef> = listOf(
     patchFixturesTool,
     deleteGroupsTool,
     setStageTool,
+    setSceneTool,
+    getSceneTool,
     placeFixturesTool,
     getPromptBookTool,
     buildCueStackTool,
@@ -331,4 +431,4 @@ internal val setupToolDefs: List<AnthropicToolDef> = listOf(
 )
 
 internal val readOnlySetupToolNames: Set<String> =
-    setOf(listProjectsTool.name, listFixtureTypesTool.name, getPatchTool.name, getPromptBookTool.name)
+    setOf(listProjectsTool.name, listFixtureTypesTool.name, getPatchTool.name, getPromptBookTool.name, getSceneTool.name)

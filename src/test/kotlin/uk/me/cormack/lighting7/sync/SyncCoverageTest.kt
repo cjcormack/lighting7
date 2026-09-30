@@ -6,6 +6,8 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoAiConversations
+import uk.me.cormack.lighting7.models.DaoStageElements
+import uk.me.cormack.lighting7.models.DaoStageViewpoints
 import uk.me.cormack.lighting7.models.DaoBuskBanks
 import uk.me.cormack.lighting7.models.DaoBuskColumns
 import uk.me.cormack.lighting7.models.DaoBuskPads
@@ -137,6 +139,10 @@ class SyncCoverageTest {
         DaoUniverseConfigs to Disposition.Portable("universeConfigs"),
         DaoRiggings to Disposition.Portable("riggings"),
         DaoStageRegions to Disposition.Portable("stageRegions"),
+        // v18: the scene document (stage-view plan session 2). Portable, both: "Row F" is the
+        // venue's, not this Mac's (D6).
+        DaoStageElements to Disposition.Portable("stageElements"),
+        DaoStageViewpoints to Disposition.Portable("stageViewpoints"),
         DaoFixturePatches to Disposition.Portable("fixturePatches"),
         // A paired dimmer's other lanterns, embedded in list order in their patch's document.
         DaoFixturePatchPlacements to Disposition.Portable("fixturePatches", "extraPlacements"),

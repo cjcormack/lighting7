@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.extraPlacementsOf
+import uk.me.cormack.lighting7.models.storedParamsObject
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
@@ -45,7 +46,9 @@ import uk.me.cormack.lighting7.sync.dto.PromptBookJson
 import uk.me.cormack.lighting7.sync.dto.SpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
+import uk.me.cormack.lighting7.sync.dto.StageElementJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
+import uk.me.cormack.lighting7.sync.dto.StageViewpointJson
 import uk.me.cormack.lighting7.sync.dto.TombstoneJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
@@ -72,6 +75,8 @@ import java.util.UUID
  * /universeConfigs/{uuid}.json     -- omits machine-local `address` field
  * /riggings/{uuid}.json
  * /stageRegions/{uuid}.json
+ * /stageElements/{uuid}.json
+ * /stageViewpoints/{uuid}.json
  * /fixtureGroups/{uuid}.json       -- members embedded inline
  * /looks/{uuid}.json               -- rows and effects embedded inline
  * /templates/{uuid}.json           -- rows, or one effect, embedded inline
@@ -248,6 +253,48 @@ class ProjectExporter(private val state: State) {
                     heightM = s.heightM,
                     yawDeg = s.yawDeg,
                     sortOrder = s.sortOrder,
+                )
+            }
+
+            // v18: the scene document. Params travel as a nested object, so the canonical encoder
+            // sorts them and the clone remapper reaches a platform's `regionUuid`.
+            count += writeAll(targetDir, "stageElements", project.stageElements.toList(), StageElementJson.serializer(), { it.uuid }, liveKeys) { e ->
+                StageElementJson(
+                    uuid = e.uuid.toString(),
+                    name = e.name,
+                    kind = e.kind,
+                    layer = e.layer,
+                    positionX = e.positionX,
+                    positionY = e.positionY,
+                    positionZ = e.positionZ,
+                    yawDeg = e.yawDeg,
+                    widthM = e.widthM,
+                    depthM = e.depthM,
+                    heightM = e.heightM,
+                    finishColour = e.finishColour,
+                    finishPattern = e.finishPattern,
+                    emissive = e.emissive,
+                    params = storedParamsObject(e.params).takeIf { it.isNotEmpty() },
+                    hidden = e.hidden,
+                    sortOrder = e.sortOrder,
+                )
+            }
+
+            count += writeAll(targetDir, "stageViewpoints", project.stageViewpoints.toList(), StageViewpointJson.serializer(), { it.uuid }, liveKeys) { v ->
+                StageViewpointJson(
+                    uuid = v.uuid.toString(),
+                    name = v.name,
+                    kind = v.kind,
+                    eyeX = v.eyeX,
+                    eyeY = v.eyeY,
+                    eyeZ = v.eyeZ,
+                    targetX = v.targetX,
+                    targetY = v.targetY,
+                    targetZ = v.targetZ,
+                    fovDeg = v.fovDeg,
+                    seatElementUuid = v.seatElementUuid?.toString(),
+                    seatId = v.seatId,
+                    sortOrder = v.sortOrder,
                 )
             }
 

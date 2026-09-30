@@ -50,16 +50,34 @@ import {
   type StageRecovery,
 } from '../components/stage3d/Stage3D'
 import { StageViewpointPicker } from '../components/stage3d/StageViewpointPicker'
+import { SaveViewpointSheet } from '../components/stage3d/SaveViewpointSheet'
+import {
+  resolveSavedViewpoint,
+  savedViewCamera,
+  savedViewCameras,
+  savedViewCaption,
+  viewpointFromCamera,
+} from '../components/stage3d/savedViewpoints'
+import { defaultOrbitPose } from '../components/stage3d/stageCameras'
 import { deskSelectionPoints, stageSelectionPoints } from '../components/stage3d/framingPoints'
 import {
-  STAGE_VIEWPOINTS,
-  STAGE_VIEWPOINT_LABELS,
+  STAGE_CAMERAS,
+  STAGE_CAMERA_LABELS,
+  STAGE_CAMERA_NOTES,
+  cameraOfViewpoint,
   consumeLaunchViewpoint,
-  isOrthoViewpoint,
-  isStageViewpoint,
+  isOrthoCamera,
+  isStageCamera,
+  noteSavedViewpointCameras,
+  markViewpointLanded,
   setStageViewpoint,
   useStageViewpoint,
+  type SavedViewpointRef,
 } from '../lib/stageViewpoint'
+import { readEyePose, readOrbitPose } from '../lib/stageCameraPoses'
+import { useStageViewpointListQuery } from '../store/stageViewpoints'
+import { useStageElementListQuery } from '../store/stageElements'
+import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
 import { useDeskSelection } from '../store/selection'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
@@ -128,7 +146,6 @@ export function Stage() {
   // settable from another window. Plan, Front and Side are sections of the 3D scene; the SVG plot
   // draws them only while editing, until 3D editing has parity (stage-view plan D1, session 5).
   const viewpoint = useStageViewpoint()
-  const isOrtho = isOrthoViewpoint(viewpoint)
   // Multi-object selection. `Selection` itself stays single-valued — a dozen
   // consumers read it structurally — so everything that wants one target gets
   // `sel.primary`, and only the bulk panel and the ops look at the full set.
@@ -178,6 +195,55 @@ export function Stage() {
   const { data: stagePatches } = useVisiblePatchListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: regions } = useStageRegionListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: riggings } = useRiggingListQuery(projectId ?? 0, { skip: projectId == null })
+  // The scene document (session 2): saved views and seats for the picker, and the elements a seat
+  // view's eye is read off.
+  const { data: savedViews, isFetching: savedViewsFetching } = useStageViewpointListQuery(projectId ?? 0, {
+    skip: projectId == null,
+  })
+  const { data: sceneElements } = useStageElementListQuery(projectId ?? 0, { skip: projectId == null })
+
+  // Which camera the viewpoint draws through, and — for a saved view — where it lands. A saved view
+  // whose rows have not arrived yet takes the camera it last landed with (a reload), else Orbit.
+  useEffect(() => {
+    noteSavedViewpointCameras(savedViewCameras(savedViews ?? []))
+  }, [savedViews])
+  const savedRow = useMemo(
+    () => (isStageCamera(viewpoint) ? null : (savedViews ?? []).find((row) => row.uuid === viewpoint) ?? null),
+    [viewpoint, savedViews],
+  )
+  const landing = useMemo(
+    () => (savedRow == null ? null : resolveSavedViewpoint(savedRow, sceneElements ?? [])),
+    [savedRow, sceneElements],
+  )
+  const camera = isStageCamera(viewpoint)
+    ? viewpoint
+    : savedRow != null
+      ? savedViewCamera(savedRow)
+      : (cameraOfViewpoint(viewpoint) ?? 'orbit')
+  const isOrtho = isOrthoCamera(camera)
+  const caption = useMemo(
+    () =>
+      savedRow != null
+        ? { name: savedRow.name, note: savedViewCaption(savedRow) }
+        : { name: STAGE_CAMERA_LABELS[camera], note: STAGE_CAMERA_NOTES[camera] },
+    [savedRow, camera],
+  )
+  // A saved view this project does not have — the window was on another project's, or the row was
+  // deleted — is let go once the list has settled, back to the camera it was drawing through, so the
+  // window neither names a view that resolves to nothing nor announces one.
+  useEffect(() => {
+    if (savedViews == null || savedViewsFetching || isStageCamera(viewpoint)) return
+    if (savedViews.some((row) => row.uuid === viewpoint)) return
+    setStageViewpoint(cameraOfViewpoint(viewpoint) ?? 'orbit')
+  }, [savedViews, savedViewsFetching, viewpoint])
+  const landable = useCallback(
+    (row: Parameters<typeof resolveSavedViewpoint>[0]) => resolveSavedViewpoint(row, sceneElements ?? []) != null,
+    [sceneElements],
+  )
+
+  // *Save this view…*: the request is built when the sheet opens, from where the camera is then.
+  const [saveRequest, setSaveRequest] = useState<Omit<CreateStageViewpointRequest, 'name'> | null>(null)
+  const [saveOpen, setSaveOpen] = useState(false)
 
   const { unplaced } = useUnplacedPatches(projectId)
   // Patches armed in the tray, waiting for a click on the canvas to place them.
@@ -195,7 +261,7 @@ export function Stage() {
   const editingActive = editMode && isTabletOrLarger
   // Editing on a section is still the SVG plot's job (D1); every other combination is the 3D scene.
   const renderer2d = editingActive && isOrtho
-  const projection = isOrtho ? STAGE_PROJECTIONS[viewpoint] : STAGE_PROJECTIONS.plan
+  const projection = isOrthoCamera(camera) ? STAGE_PROJECTIONS[camera] : STAGE_PROJECTIONS.plan
 
   // `?viewpoint=` — a Screens row's *Copy link* carries the camera — applied once on arrival and
   // stripped, so a reload keeps whatever the window has moved to since.
@@ -338,6 +404,24 @@ export function Stage() {
     const points = framePointsRef.current()
     if (points.length > 0) framingRef.current?.frame(points)
   }, [])
+
+  const openSaveSheet = useCallback(() => {
+    if (camera === 'orbit') {
+      const pose = readOrbitPose() ?? defaultOrbitPose({
+        width: projectData?.stageWidthM ?? 10,
+        depth: projectData?.stageDepthM ?? 8,
+        height: projectData?.stageHeightM ?? 6,
+      })
+      setSaveRequest(viewpointFromCamera('', { kind: 'orbit', pose }))
+    } else if (camera === 'eye') {
+      const pose = readEyePose()
+      if (pose == null) return
+      setSaveRequest(viewpointFromCamera('', { kind: 'eye', pose, seat: savedRow }))
+    } else {
+      return
+    }
+    setSaveOpen(true)
+  }, [camera, savedRow, projectData])
 
   // O goes back to the orbit camera and F frames the selection (`Stage.dc.html`'s picker). Bare
   // keys only — ⇧F is full screen (`useWindowsBridge`) — and never from a field.
@@ -770,23 +854,28 @@ export function Stage() {
           <h1 className="text-sm font-semibold">Stage</h1>
           <StageViewpointPicker
             viewpoint={viewpoint}
+            camera={camera}
+            saved={savedViews ?? []}
+            landable={landable}
             onPick={setStageViewpoint}
             onFrame={frameSelection}
             canFrame={canFrame}
+            onSave={openSaveSheet}
+            canSave={!renderer2d && !isOrtho && projectId != null}
           />
           {/* The camera — Orbit, Eye and the three sections of the one scene (D1). */}
           <ToggleGroup
             type="single"
             size="sm"
-            value={viewpoint}
+            value={camera}
             aria-label="Camera"
             onValueChange={(v) => {
-              if (isStageViewpoint(v)) setStageViewpoint(v)
+              if (isStageCamera(v)) setStageViewpoint(v)
             }}
           >
-            {STAGE_VIEWPOINTS.map((v) => (
+            {STAGE_CAMERAS.map((v) => (
               <ToggleGroupItem key={v} value={v} className="px-2">
-                {STAGE_VIEWPOINT_LABELS[v]}
+                {STAGE_CAMERA_LABELS[v]}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
@@ -915,9 +1004,11 @@ export function Stage() {
               {!renderer2d ? (
                 <Stage3D
                   projectId={projectId}
-                  viewpoint={viewpoint}
+                  camera={camera}
+                  landing={landing}
                   persistCamera
-                  showViewpointCaption
+                  caption={caption}
+                  showScene
                   framingRef={framingRef}
                   editMode={editingActive}
                   selection={selection}
@@ -1031,6 +1122,24 @@ export function Stage() {
           )}
         </main>
       </div>
+      {projectId != null && (
+        <SaveViewpointSheet
+          open={saveOpen}
+          onOpenChange={setSaveOpen}
+          projectId={projectId}
+          request={saveRequest}
+          seatingName={
+            (sceneElements ?? []).find((e) => e.uuid === saveRequest?.seatElementUuid)?.name ?? null
+          }
+          onSaved={(row) => {
+            // The camera already stands where the view was saved from: move onto it and mark it
+            // landed, so nothing re-lands or swaps rig while the list catches up.
+            const ref = row.uuid as SavedViewpointRef
+            setStageViewpoint(ref)
+            markViewpointLanded({ ref, camera: savedViewCamera(row) })
+          }}
+        />
+      )}
     </TooltipProvider>
   )
 }

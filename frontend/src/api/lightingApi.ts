@@ -18,6 +18,8 @@ import {createBuskWsApi, BuskWsApi} from "./buskWsApi";
 import {createPatchApi, PatchApi} from "./patchApi";
 import {createRiggingApi, RiggingApi} from "./riggingApi";
 import {createStageRegionApi, StageRegionApi} from "./stageRegionApi";
+import {createStageElementApi, StageElementApi} from "./stageElementApi";
+import {createStageViewpointApi, StageViewpointApi} from "./stageViewpointApi";
 import {createParkApi, ParkApi} from "./parkApi";
 import {createPromptBooksWsApi, PromptBooksWsApi} from "./promptBooksWsApi";
 import {createBootStatusWsApi, BootStatusWsApi} from "./bootStatusWsApi";
@@ -61,6 +63,8 @@ interface LightingApi {
   patches: PatchApi
   riggings: RiggingApi
   stageRegions: StageRegionApi
+  stageElements: StageElementApi
+  stageViewpoints: StageViewpointApi
   park: ParkApi
   promptBooks: PromptBooksWsApi
   surfaces: SurfacesWsApi
@@ -122,6 +126,8 @@ function createLightingApi(): LightingApi {
   const patchApi = createPatchApi(connection)
   const riggingApi = createRiggingApi(connection)
   const stageRegionApi = createStageRegionApi(connection)
+  const stageElementApi = createStageElementApi(connection)
+  const stageViewpointApi = createStageViewpointApi(connection)
   const parkApi = createParkApi(connection)
   const promptBooksWsApi = createPromptBooksWsApi(connection)
   const surfacesWsApi = createSurfacesWsApi(connection)
@@ -160,6 +166,8 @@ function createLightingApi(): LightingApi {
     patches: patchApi,
     riggings: riggingApi,
     stageRegions: stageRegionApi,
+    stageElements: stageElementApi,
+    stageViewpoints: stageViewpointApi,
     park: parkApi,
     promptBooks: promptBooksWsApi,
     surfaces: surfacesWsApi,

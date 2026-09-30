@@ -3,13 +3,21 @@ import { useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
-import type { OrthoViewpoint, StageViewpoint } from '../../lib/stageViewpoint'
 import {
+  markViewpointLanded,
+  useLandedViewpoint,
+  type OrthoCamera,
+  type SavedViewpointRef,
+  type StageCamera,
+} from '../../lib/stageViewpoint'
+import {
+  noteEyePose,
   noteOrbitPose,
   readEyePose,
   readOrbitPose,
   writeEyePose,
   writeOrbitPose,
+  type EyePose,
   type OrbitPose,
   type Vec3,
 } from '../../lib/stageCameraPoses'
@@ -41,8 +49,20 @@ export interface StageCameraHandle {
   frame(points: readonly Vec3[]): void
 }
 
+/**
+ * A saved view for the rig to land on (stage-view plan session 2): the row's uuid and the pose its
+ * camera takes, in three.js space. Resolved by the Stage view from the rows
+ * (`savedViewpoints.ts`); the rig decides *whether* to land — once per pick, never on a remount
+ * that already has (`lib/stageViewpoint.ts`'s landed marker).
+ */
+export type StageCameraLanding =
+  | { ref: SavedViewpointRef; camera: 'orbit'; pose: OrbitPose }
+  | { ref: SavedViewpointRef; camera: 'eye'; pose: EyePose }
+
 interface StageCameraRigProps {
-  viewpoint: StageViewpoint
+  camera: StageCamera
+  /** A saved view to land on, when the viewpoint is one and its rows have resolved it. */
+  landing?: StageCameraLanding | null
   /** Where the orbit camera starts when nothing is stored — and what an eye with no pose seeds from. */
   defaultOrbit: OrbitPose
   /** The whole scene, for the orthographic sections' planes and their fit. */
@@ -72,10 +92,25 @@ interface StageCameraRigProps {
  * `OrbitControls` invalidates on its own `change`; the eye and the fits call `invalidate` themselves.
  */
 export function StageCameraRig(props: StageCameraRigProps) {
-  const { viewpoint } = props
-  if (viewpoint === 'orbit') return <OrbitRig {...props} />
-  if (viewpoint === 'eye') return <EyeRig {...props} />
-  return <OrthoRig key={viewpoint} {...props} view={viewpoint} />
+  const { camera } = props
+  if (camera === 'orbit') return <OrbitRig {...props} />
+  if (camera === 'eye') return <EyeRig {...props} />
+  return <OrthoRig key={camera} {...props} view={camera} />
+}
+
+/**
+ * The landing this rig should take now: one of its own camera's, on the Stage route's canvas (the
+ * Positions plan never lands), and not the one the window has already landed on.
+ */
+function usePendingLanding<C extends 'orbit' | 'eye'>(
+  camera: C,
+  landing: StageCameraLanding | null | undefined,
+  persist: boolean,
+): Extract<StageCameraLanding, { camera: C }> | null {
+  const landed = useLandedViewpoint()
+  if (!persist || landing == null || landing.camera !== camera) return null
+  if (landed?.ref === landing.ref && landed.camera === landing.camera) return null
+  return landing as Extract<StageCameraLanding, { camera: C }>
 }
 
 const ORBIT_FOV_DEG = 45
@@ -155,8 +190,9 @@ function useLend<T>(ref: React.RefObject<T | null> | undefined, value: T | null)
 
 // — orbit ————————————————————————————————————————————————————————————————
 
-function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef }: StageCameraRigProps) {
-  const [initial] = useState(() => (persist ? readOrbitPose() : null) ?? defaultOrbit)
+function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: StageCameraRigProps) {
+  const pending = usePendingLanding('orbit', landing, persist)
+  const [initial] = useState(() => pending?.pose ?? (persist ? readOrbitPose() : null) ?? defaultOrbit)
   const [target] = useState(() => [...initial.target] as [number, number, number])
   const [camera] = useState(() => {
     const c = new PerspectiveCamera(ORBIT_FOV_DEG, 1, NEAR_M, FAR_M)
@@ -203,6 +239,18 @@ function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef }: StageCamera
   }, [camera, controls, invalidate, onChange])
   useLend(handleRef, handle)
 
+  // Land a saved orbit view: on mount the initial pose already is it, so this only marks it; while
+  // mounted (another saved orbit view, or the same one picked again) it moves the camera there.
+  useEffect(() => {
+    if (pending == null || controls == null) return
+    camera.position.set(...pending.pose.position)
+    controls.target.set(...pending.pose.target)
+    controls.update()
+    invalidate()
+    onChange()
+    markViewpointLanded({ ref: pending.ref, camera: 'orbit' })
+  }, [pending, controls, camera, invalidate, onChange])
+
   return <OrbitControls ref={setControls} camera={camera} makeDefault target={target} onChange={onChange} />
 }
 
@@ -211,9 +259,13 @@ function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef }: StageCamera
 /** Radians of head turn per pixel of drag at a 50° lens; a narrower lens turns slower. */
 const LOOK_RAD_PER_PX = 0.004
 
-function EyeRig({ defaultOrbit, persist, controlsRef, handleRef }: StageCameraRigProps) {
+function EyeRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: StageCameraRigProps) {
+  const pending = usePendingLanding('eye', landing, persist)
   const [initial] = useState(
-    () => (persist ? readEyePose() : null) ?? eyeFromOrbit((persist ? readOrbitPose() : null) ?? defaultOrbit),
+    () =>
+      pending?.pose ??
+      (persist ? readEyePose() : null) ??
+      eyeFromOrbit((persist ? readOrbitPose() : null) ?? defaultOrbit),
   )
   const pose = useRef({ yaw: initial.yaw, pitch: initial.pitch, fov: initial.fov })
   const [camera] = useState(() => {
@@ -239,11 +291,23 @@ function EyeRig({ defaultOrbit, persist, controlsRef, handleRef }: StageCameraRi
       camera.updateProjectionMatrix()
     }
     camera.lookAt(...eyeTarget({ position: toVec3(camera.position), yaw, pitch }))
+    if (persist) noteEyePose({ position: toVec3(camera.position), yaw, pitch, fov })
     invalidate()
     save()
-  }, [camera, invalidate, save])
+  }, [camera, invalidate, save, persist])
 
   useLayoutEffect(() => apply(), [apply])
+
+  // Land a saved eye or seat view: stand where it stands and look where it looks. On mount the
+  // initial pose already is it; while mounted it moves the eye — a seat picked after a standing
+  // view, or the same seat picked again after looking round.
+  useEffect(() => {
+    if (pending == null) return
+    camera.position.set(...pending.pose.position)
+    pose.current = { yaw: pending.pose.yaw, pitch: pending.pose.pitch, fov: pending.pose.fov }
+    apply()
+    markViewpointLanded({ ref: pending.ref, camera: 'eye' })
+  }, [pending, camera, apply])
 
   // Drag turns the head, grabbing the scene: drag right and the view turns left, as a panorama
   // does. Scroll (and a trackpad pinch, which arrives as a ctrl-wheel) narrows or widens the lens —
@@ -322,7 +386,7 @@ function OrthoRig({
   bounds,
   controlsRef,
   handleRef,
-}: StageCameraRigProps & { view: OrthoViewpoint }) {
+}: StageCameraRigProps & { view: OrthoCamera }) {
   const section = useMemo(() => orthoSection(view, bounds), [view, bounds])
   const [camera] = useState(() => {
     const c = new OrthographicCamera(-1, 1, 1, -1, 0.01, section.far)

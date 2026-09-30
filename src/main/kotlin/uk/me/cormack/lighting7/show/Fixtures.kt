@@ -93,6 +93,10 @@ interface FixturesChangeListener {
     fun patchListChanged() {}
     fun riggingListChanged() {}
     fun stageRegionListChanged() {}
+    /** A scene element was created, edited or deleted — through REST or `set_scene`. */
+    fun stageElementListChanged() {}
+    /** A saved viewpoint was created, edited or deleted. */
+    fun stageViewpointListChanged() {}
     /** A script was created, renamed, edited or deleted. */
     fun scriptListChanged() {}
     /** An FX definition (user-created effect) was created, edited or deleted. */
@@ -520,6 +524,18 @@ class Fixtures {
     fun stageRegionListChanged() {
         changeListeners.forEach {
             it.stageRegionListChanged()
+        }
+    }
+
+    fun stageElementListChanged() {
+        changeListeners.forEach {
+            it.stageElementListChanged()
+        }
+    }
+
+    fun stageViewpointListChanged() {
+        changeListeners.forEach {
+            it.stageViewpointListChanged()
         }
     }
 

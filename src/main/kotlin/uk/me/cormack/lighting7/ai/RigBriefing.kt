@@ -58,6 +58,15 @@ class RigBriefing(private val state: State) {
         }
         sb.appendLine()
 
+        // The stage, in a paragraph (stage-view plan session 2): enough for a model to know where
+        // the riggings are and that a scene exists, without the whole document every turn —
+        // get_scene is the detail, and this goes into the chat's prompt on every turn too.
+        stageSummary()?.let {
+            sb.appendLine("## Stage")
+            sb.append(it)
+            sb.appendLine()
+        }
+
         // Effect library summary
         sb.appendLine("## Effect Library (for create_look)")
         for (effect in state.show.fxRegistry.getLibrary()) {
@@ -263,6 +272,50 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- **Standby and GO**: what the next GO fires is the desk's, not the caller's — an armed standby if one is set, else the cue after the live one. set_standby arms (or, with no cueId, disarms) it without moving a light, so \"stand by cue 5\" and \"go\" stay two gestures; get_current_state's `cue_run` reports what each stack has on deck.")
 
         return sb.toString()
+    }
+
+    /**
+     * The stage box, the regions, the riggings upstage first with their kind and trim, and a count
+     * of the scene's elements and viewpoints. Null when the project has none of it.
+     */
+    private fun stageSummary(): String? {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val p = DaoProject.findById(project.id) ?: return@transaction null
+            val regions = DaoStageRegion.find { DaoStageRegions.project eq project.id }
+                .orderBy(DaoStageRegions.sortOrder to SortOrder.ASC).map { it.name }
+            val riggings = DaoRigging.find { DaoRiggings.project eq project.id }.toList()
+                .sortedByDescending { it.positionY ?: Double.NEGATIVE_INFINITY }
+            val elements = DaoStageElement.find { DaoStageElements.project eq project.id }.toList()
+            val viewpoints = DaoStageViewpoint.find { DaoStageViewpoints.project eq project.id }
+                .orderBy(DaoStageViewpoints.sortOrder to SortOrder.ASC).map { it.name }
+            val box = listOf(p.stageWidthM, p.stageDepthM, p.stageHeightM)
+            if (box.all { it == null } && regions.isEmpty() && riggings.isEmpty() && elements.isEmpty() && viewpoints.isEmpty()) {
+                return@transaction null
+            }
+            // Locale-free, and no "−0.0" for a value that rounds to nothing.
+            fun m(v: Double?): String {
+                val r = Math.round((v ?: return "?") * 10) / 10.0
+                return String.format(java.util.Locale.ROOT, "%.1f", if (r == 0.0) 0.0 else r).replace("-", "−")
+            }
+            buildString {
+                appendLine("Metres, FOH-relative and Z-up: origin at the centre of the stage's downstage edge at deck level, +y upstage, +x audience right.")
+                if (box.any { it != null }) appendLine("Stage box ${m(p.stageWidthM)} × ${m(p.stageDepthM)} × ${m(p.stageHeightM)} m (width × depth × trim).")
+                if (regions.isNotEmpty()) appendLine("Regions: ${regions.joinToString()}.")
+                if (riggings.isNotEmpty()) {
+                    appendLine(
+                        "Riggings, upstage first: " + riggings.joinToString { r ->
+                            "${r.name} (${r.kind?.lowercase()?.replace('_', ' ') ?: "rigging"}, y ${m(r.positionY)}, z ${m(r.positionZ)})"
+                        } + ".",
+                    )
+                }
+                if (elements.isNotEmpty()) {
+                    val venue = elements.count { it.layer == StageElementLayer.VENUE.name }
+                    appendLine("Scene: $venue venue and ${elements.size - venue} set element(s) — get_scene lists them.")
+                }
+                if (viewpoints.isNotEmpty()) appendLine("Saved viewpoints: ${viewpoints.joinToString()}.")
+            }
+        }
     }
 
     /** Every patched head's number in the current project, by fixture key; unnumbered heads absent. */

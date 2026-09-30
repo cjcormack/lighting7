@@ -21,13 +21,16 @@ import { emitterNeedsFor } from './emitterNeeds'
 import { StageLabelContext, StageLabelDriver } from './StageLabel'
 import { StageLabelStore } from './stageLabels'
 import { StageInvalidateProvider } from './stageInvalidate'
-import { StageCameraRig, type StageCameraControls, type StageCameraHandle } from './StageCameraRig'
-import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
 import {
-  STAGE_VIEWPOINT_LABELS,
-  STAGE_VIEWPOINT_NOTES,
-  type StageViewpoint,
-} from '../../lib/stageViewpoint'
+  StageCameraRig,
+  type StageCameraControls,
+  type StageCameraHandle,
+  type StageCameraLanding,
+} from './StageCameraRig'
+import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
+import { StageSceneBoxes } from './StageSceneBoxes'
+import type { StageCamera } from '../../lib/stageViewpoint'
+import { useStageElementListQuery } from '../../store/stageElements'
 import type { LightingPoint } from '../../lib/stageProjection'
 // drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
 // reach. This is the Liberation Sans that react-pdf's pinned pdf.js ships; importing it as an
@@ -131,15 +134,22 @@ interface Stage3DProps {
   /** Filled while the canvas is mounted; see [StageRecovery]. */
   recoveryRef?: React.RefObject<StageRecovery | null>
   /** Which camera draws the scene (`lib/stageViewpoint.ts`). */
-  viewpoint?: StageViewpoint
+  camera?: StageCamera
+  /** A saved view for the camera to land on (session 2); see `StageCameraRig`. */
+  landing?: StageCameraLanding | null
   /**
    * Keep this window's camera poses in `sessionStorage`, so a remount — a route change, *Restore* —
    * lands where the camera was left. The Stage route's canvas only; an embedded view (the Positions
    * panel's plan) is a second camera and must not move the Stage view's.
    */
   persistCamera?: boolean
-  /** Draw the viewpoint's name and how to drive it over the canvas, top right. */
-  showViewpointCaption?: boolean
+  /** The viewpoint's name and how to drive it, drawn over the canvas's top right; none when absent. */
+  caption?: { name: string; note: string } | null
+  /**
+   * Read the scene document and draw its elements as boxes (session 2). The Stage route's canvas
+   * only: the Positions panel's plan is the rig's, and must not subscribe to the scene.
+   */
+  showScene?: boolean
   /** Filled while the canvas is mounted; see [StageFraming]. */
   framingRef?: React.RefObject<StageFraming | null>
 }
@@ -160,9 +170,11 @@ export function Stage3D({
   onRegionPositionChange,
   onRiggingPositionChange,
   recoveryRef,
-  viewpoint = 'orbit',
+  camera = 'orbit',
+  landing = null,
   persistCamera = false,
-  showViewpointCaption = false,
+  caption = null,
+  showScene = false,
   framingRef,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
@@ -175,6 +187,8 @@ export function Stage3D({
     stageD,
     stageH,
   )
+
+  const { data: sceneElements } = useStageElementListQuery(projectId, { skip: !showScene })
 
   const gridSize = Math.max(stageW, stageD) * 1.6
   // Stable identity: StageEmitters rebuilds its instance buffers when this
@@ -488,8 +502,12 @@ export function Stage3D({
             onDragEnd={enableOrbit}
           />
         )}
+        {showScene && sceneElements != null && sceneElements.length > 0 && (
+          <StageSceneBoxes elements={sceneElements} />
+        )}
         <StageCameraRig
-          viewpoint={viewpoint}
+          camera={camera}
+          landing={landing}
           defaultOrbit={defaultOrbit}
           bounds={sceneBounds}
           persist={persistCamera}
@@ -517,7 +535,7 @@ export function Stage3D({
         aria-hidden
         className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
       />
-      {showViewpointCaption && !contextLost && <ViewpointCaption viewpoint={viewpoint} />}
+      {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
@@ -570,12 +588,12 @@ function SelectionInfo({
   )
 }
 
-/** The camera's name and how to drive it, over the canvas's top-right corner (`Stage.dc.html`). */
-function ViewpointCaption({ viewpoint }: { viewpoint: StageViewpoint }) {
+/** The viewpoint's name and how to drive it, over the canvas's top-right corner (`Stage.dc.html`). */
+function ViewpointCaption({ name, note }: { name: string; note: string }) {
   return (
     <div className="pointer-events-none absolute right-3 top-3 max-w-[calc(100%-1.5rem)] truncate rounded-md bg-background/70 px-2 py-1 text-xs backdrop-blur">
-      <span className="font-semibold">{STAGE_VIEWPOINT_LABELS[viewpoint]}</span>
-      <span className="ml-1.5 text-muted-foreground">{STAGE_VIEWPOINT_NOTES[viewpoint]}</span>
+      <span className="font-semibold">{name}</span>
+      <span className="ml-1.5 text-muted-foreground">{note}</span>
     </div>
   )
 }

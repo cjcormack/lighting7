@@ -506,15 +506,16 @@ constant view axis. The label layer needed nothing — it projects every anchor 
 
 ### The viewpoint is the window's, and the pose is kept
 
-`lib/stageViewpoint.ts` holds the viewpoint, `orbit | eye | plan | front | side`, in
-**`sessionStorage`** — per tab, `lib/immersive.ts`'s reason: the hall screen sits on Front all night
+`lib/stageViewpoint.ts` holds the viewpoint — a camera, `orbit | eye | plan | front | side`, or
+since session 2 a saved view's uuid (below) — in **`sessionStorage`** — per tab, `lib/immersive.ts`'s reason: the hall screen sits on Front all night
 while the desk screen orbits. It replaced the `stageViewMode` key in `localStorage`, one value per
 profile. It rides `windows.viewOptions` as `viewpoint` under the new **Stage** entry in
 `lib/windowViews.ts` (Stage is a window view but not a live view — no immersive), so the Screens row
-draws *Viewpoint · Orbit | Eye | Plan | Front | Side* and sets it on another window. A Screens row's
+draws a *Viewpoint* picker over the cameras, saved views and seats (a segment over the five cameras
+until session 2) and sets it on another window. A Screens row's
 *Copy link* carries `viewpoint=`, which the Stage route applies on arrival and strips. The toggle in
 the route's header is the camera segment, and the **viewpoint picker** beside it lists the built-ins
-and *Frame the selection*; session 2's saved views and seats go into the same menu.
+and *Frame the selection*; session 2 added saved views and seats (below).
 
 `lib/stageCameraPoses.ts` keeps the orbit pose (and the eye's, while on Eye) in `sessionStorage`,
 written as the camera moves (at most every 150 ms, and once more on unmount) and read on mount — so
@@ -524,6 +525,55 @@ remount already on Eye keeps it. The seed reads the orbit pose **noted in memory
 (`noteOrbitPose`), not storage: the eye's seed is read in the render that mounts it, before the
 orbit rig's unmount has flushed its pending write, so storage can be a move behind. An embedded camera (the Positions panel's plan) passes
 `persistCamera={false}` and never touches the Stage view's.
+
+### Saved views and seats (session 2)
+
+A viewpoint can also be a **saved view** — a `stage_viewpoints` row, by its uuid, in the same
+`viewpoint` key and the same `sessionStorage` slot. `isStageViewpoint` accepts a camera or a uuid, so
+`applyStageViewOptions`, `consumeLaunchViewpoint` and the stored value all take one whether or not
+this window has fetched the row yet (a reload, or a view another window names). A name that is
+neither is still ignored. `components/stage3d/savedViewpoints.ts` is the pure half:
+
+- **An `ORBIT` row lands the orbit camera** at its eye, circling its target; **an `EYE` row lands the
+  eye** where it stands, facing its target, through its lens; **a `SEAT` row lands the eye at the
+  seat's seated eye** (`lib/stageSeats.ts`, the backend's seat maths — 1.15 m up, 5 cm back), facing
+  its target or the stage's centre line when it has none. So the three-way camera split of session 1
+  holds: a saved view draws through the orbit or the eye rig, never a camera of its own.
+- **Landing is once per pick, not per mount.** The rig is keyed by *camera*, and it lands a saved
+  view when the window has not already landed on it — `lib/stageViewpoint.ts`'s **landed marker**
+  (`stage.landedViewpoint`, per tab), which the rig writes once it has landed and a pick clears. So a
+  remount (a route change, *Restore*, a reload) keeps wherever the operator has looked since, and
+  picking the view again — even the one already current — lands it afresh. Two saved orbit views in
+  a row move the mounted rig rather than remount it. Every landing moves the camera imperatively and
+  invalidates; the bloom composer's rebuild on a *camera swap* is `Bloom`'s as before.
+- **Moving into Eye from a saved eye or seat view keeps the pose** — you are already standing there;
+  from a saved orbit view, or any camera but the eye, it forgets it and seeds from the orbit camera,
+  as session 1 did. Which camera a uuid draws through is noted from the rows
+  (`noteSavedViewpointCameras`), falling back to the landed marker until they arrive.
+- **A view that cannot be landed** — its seating deleted or reshaped so the seat is gone — is listed
+  disabled (*seat gone*) in both pickers, and a window sitting on one keeps its camera where it was.
+
+**The picker** (`StageViewpointPicker`, `Stage.dc.html` §4) lists the built-ins, then *Saved views*,
+then *Seats*, *Frame the selection* and ***Save this view…***. Saving reads the live pose
+(`readOrbitPose`, and `readEyePose`, which now prefers a pose noted in memory as the eye moves, for
+the orbit's reason) and builds the row with `viewpointFromCamera`: the orbit saves an `ORBIT` view, the
+eye an `EYE` view — or, sitting in a seat view, a `SEAT` view of the same seat with the head turned
+where it now is, so it keeps following the seat. A section cannot be saved. The window moves onto the
+new view, which is what announces it. *Sit in a seat…* is session 3's.
+
+**The Screens row's Viewpoint is a picker now** (`Screens.dc.html` §1): `lib/windowViews.ts`'s
+`STAGE_VIEWPOINT_OPTION` is a `picker` kind, and the control is `StageViewpointRowPicker` — the Stage
+view's own, handed to the sheet by `Layout` through `ScreensSheet`'s `controls` and loaded lazily, so
+the sheet never imports the Stage view (it never learns the word) and nothing loads the scene queries
+until a Stage row is on screen. It lists the cameras, the target project's saved views and its seats,
+and writes the value as `windows.viewOptions {viewpoint}`.
+
+**Scene elements are drawn as boxes, for now** (`StageSceneBoxes`): one unlit, see-through box per
+element with its edges, a room as its edges alone, a platform hanging down from its top surface, a
+flown piece at its trim, a seating block from row A back — deaf to the pointer, so they take no click.
+Only the Stage route's canvas reads the scene (`showScene`); the Positions plan does not, so the
+collapsed panel stays as cheap as it was. **The ortho sections stay rig-derived**: `sceneBoundsLighting`
+ignores elements, so a section may cut the venue; session 3 teaches the planes to cut it on purpose.
 
 **Stage2DView stays behind Edit** (D1). Editing on a section is still the SVG plot's job until 3D
 editing has parity (session 5): `renderer2d` in `routes/Stage.tsx` is `editing && section`, and every

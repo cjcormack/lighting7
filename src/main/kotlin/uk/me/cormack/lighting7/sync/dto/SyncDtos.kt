@@ -4,6 +4,7 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
@@ -26,6 +27,16 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v18: the scene document (stage-view plan session 2). Two new record folders,
+    // `stageElements/` and `stageViewpoints/`: named venue and set elements with each kind's
+    // `params` as a nested object, and saved viewpoints, a seat view naming its seating element by
+    // `seatElementUuid`. `minReader` stays at **5** — both folders read as empty when missing, so
+    // every older archive imports with no scene. The writer's number moves by the sharp-edge rule:
+    // a v17 reader imports no scene and its next wipe-then-export push writes none back, deleting
+    // every peer's venue. Went without `FU-AUTH-ATTRIBUTION`'s columns (plan §11 Q2: passed).
+    //
+    // v17: a body's roll. See `docs/sync-engineering.md` §"Version 17 — fixture roll".
+    //
     // v16: the operator's head number. `FixturePatchJson.headNumber` carries it (null — omitted —
     // when a head is unnumbered, so an export with none is byte-identical to v15). It bumps for
     // v14's reason: a v15 reader imports every patch unnumbered and writes the numbers away on its
@@ -139,7 +150,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 17,
+    val formatVersion: Int = 18,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -464,6 +475,54 @@ data class StageRegionJson(
     val depthM: Double? = null,
     val heightM: Double? = null,
     val yawDeg: Double? = null,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * One scene element (v18). [params] is the kind's document as the desk stores it — a nested object,
+ * so the canonical encoder sorts its keys and a platform's `regionUuid` is remapped on clone like
+ * any other reference. Absent when the kind has nothing to say (an empty document). The pose and
+ * size default to 0, and are omitted then.
+ */
+@Serializable
+data class StageElementJson(
+    val uuid: String,
+    val name: String,
+    val kind: String,
+    val layer: String,
+    val positionX: Double = 0.0,
+    val positionY: Double = 0.0,
+    val positionZ: Double = 0.0,
+    val yawDeg: Double = 0.0,
+    val widthM: Double = 0.0,
+    val depthM: Double = 0.0,
+    val heightM: Double = 0.0,
+    val finishColour: String? = null,
+    val finishPattern: String? = null,
+    val emissive: Boolean = false,
+    val params: JsonObject? = null,
+    val hidden: Boolean = false,
+    val sortOrder: Int = 0,
+)
+
+/**
+ * One saved viewpoint (v18). A seat view carries [seatElementUuid] and [seatId] instead of an eye;
+ * the reference is to a `stageElements/` record, and a dangling one reads as no seat.
+ */
+@Serializable
+data class StageViewpointJson(
+    val uuid: String,
+    val name: String,
+    val kind: String,
+    val eyeX: Double? = null,
+    val eyeY: Double? = null,
+    val eyeZ: Double? = null,
+    val targetX: Double? = null,
+    val targetY: Double? = null,
+    val targetZ: Double? = null,
+    val fovDeg: Double? = null,
+    val seatElementUuid: String? = null,
+    val seatId: String? = null,
     val sortOrder: Int = 0,
 )
 

@@ -1,7 +1,7 @@
 import { pathHasSegment } from './navMatch'
 import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskWindow'
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
-import { STAGE_VIEWPOINTS, STAGE_VIEWPOINT_LABELS, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
+import { VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
@@ -39,9 +39,12 @@ export interface WindowView {
 /**
  * One row control. An `enum` draws a segmented control over `values` — labelled by `valueLabels`
  * where a value is not its own label — and a `page` draws a picker over the target project's busk
- * pages, resolved against the fetched list. Both are things a remote set cannot lose anything by
- * (D13's test): what the operator at that window *built* is never on the row, only how the window
- * shows it.
+ * pages, resolved against the fetched list. A `picker` draws a control the *view* supplies
+ * (stage-view plan session 2, the Stage row's viewpoint over saved views and seats): the sheet is
+ * handed one per option key by the app shell (`ScreensSheet`'s `controls`), so it never imports —
+ * or learns the name of — the view whose vocabulary the picker offers. All three are things a
+ * remote set cannot lose anything by (D13's test): what the operator at that window *built* is
+ * never on the row, only how the window shows it.
  */
 export type WindowViewOption =
   | {
@@ -60,6 +63,20 @@ export type WindowViewOption =
       name?: string
     }
   | { key: string; label: string; kind: 'page' }
+  | { key: string; label: string; kind: 'picker' }
+
+/**
+ * What a `picker` control is given: the row's value for its key, the write, and enough to name
+ * itself and resolve its choices — the row's project, since a window may be on another project's
+ * view.
+ */
+export interface WindowViewPickerProps {
+  value: string
+  onSet: (value: string) => void
+  label: string
+  rowName: string
+  projectId: number | null
+}
 
 /**
  * *Page · Paged with the desk | Own page* (desk-follow plan D6, D9): whether that window pages with
@@ -96,16 +113,16 @@ export const IMMERSIVE_OPTION: WindowViewOption = {
 }
 
 /**
- * The Stage view's camera, *Viewpoint · Orbit | Eye | Plan | Front | Side* on the row (stage-view
- * plan session 1; `Screens.dc.html` §1). The target applies it through `lib/stageViewpoint.ts`.
- * Session 2 adds saved views and seats, and the segment becomes a picker then.
+ * The Stage view's viewpoint, *Viewpoint · Row F centre ▾* on the row (stage-view plan session 2;
+ * `Screens.dc.html` §1): a picker over the five cameras, the project's saved views and its seats.
+ * It was a segmented control over the five while there were no rows (session 1). The control is
+ * the Stage view's (`StageViewpointRowPicker`); the target applies the value through
+ * `lib/stageViewpoint.ts`.
  */
 export const STAGE_VIEWPOINT_OPTION: WindowViewOption = {
   key: VIEW_OPTION_VIEWPOINT,
   label: 'Viewpoint',
-  kind: 'enum',
-  values: STAGE_VIEWPOINTS,
-  valueLabels: STAGE_VIEWPOINT_LABELS,
+  kind: 'picker',
 }
 
 export const WINDOW_VIEWS: readonly WindowView[] = [

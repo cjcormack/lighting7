@@ -330,9 +330,9 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 `viewOptions` is a window's **per-view options** — for the busk view its `focus`,
 `sheet` and page facts (busk-further plan D13), and under every live view `immersive` (`on` |
 `off`, busk-chrome plan D9: a window's fact, riding here because a top-level announce key would
-drop the frame), and for the Stage view its camera, `viewpoint` (`orbit` | `eye` | `plan` |
-`front` | `side`, stage-view plan session 1; the Stage view is not a live view and carries no
-`immersive`) — announced as a free `String → String` map and carried back on `windows.state`
+drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | `eye` | `plan` |
+`front` | `side`, stage-view plan session 1) or a saved `stage_viewpoints` row by its uuid
+(session 2); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how
@@ -536,6 +536,8 @@ payload-free, since one project has one rig).
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
 | `stageRegionListChanged` | — | Stage-region CRUD |
+| `stageElementListChanged` | — | Scene-element CRUD (stage-view plan session 2), through REST or the `set_scene` MCP tool. The client invalidates `StageElement` |
+| `stageViewpointListChanged` | — | Saved-viewpoint CRUD, through REST or `set_scene`. The client invalidates `StageViewpoint`; a window sitting on a view that changed lands on it again only when it is picked again |
 | `projectDetailsChanged` | `projectId` | A project's own row changed — name, description or stage box — through `PUT /projects/{id}` or the `set_stage` MCP tool. The client invalidates its `Project` / `ProjectList` caches, which is what redraws the Stage view's box |
 | `speedMasters.listChanged` | — | Speed-master CRUD only; live BPM rides `speedMasters.changed` |
 | `scriptListChanged` | — | A script was created, renamed, edited or deleted |
