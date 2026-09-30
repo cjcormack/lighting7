@@ -9,6 +9,7 @@ import io.ktor.serialization.kotlinx.KotlinxWebsocketSerializationConverter
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.ApplicationTestBuilder
 import uk.me.cormack.lighting7.plugins.OutMessage
+import kotlin.reflect.KClass
 
 /**
  * Build an HTTP client wired for both JSON content-negotiation and WebSockets, using the
@@ -46,6 +47,25 @@ suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitO
         if (msg is T && where(msg)) return msg
     }
     error("Never saw a matching ${T::class.simpleName} after $maxFrames frames")
+}
+
+/**
+ * Read inbound frames until one of each of [types] has arrived, in whatever order, and answer the
+ * first of each. For two snapshots of the connect burst: they come from two `setupXxx` collectors,
+ * so [awaitOfType] one after the other skips the second whenever it happens to arrive first, and
+ * the next read then waits for a frame that never comes.
+ */
+suspend fun DefaultClientWebSocketSession.awaitEachOf(
+    vararg types: KClass<out OutMessage>,
+    maxFrames: Int = 100,
+): Map<KClass<out OutMessage>, OutMessage> {
+    val seen = mutableMapOf<KClass<out OutMessage>, OutMessage>()
+    repeat(maxFrames) {
+        val msg = receiveDeserialized<OutMessage>()
+        types.firstOrNull { it.isInstance(msg) && it !in seen }?.let { seen[it] = msg }
+        if (seen.size == types.size) return seen
+    }
+    error("Never saw ${types.filter { it !in seen }.map { it.simpleName }} after $maxFrames frames")
 }
 
 /**

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 import { writeEyePose } from './stageCameraPoses'
+import { isVisSource, setVisSource, type VisSource } from '../hooks/useVisSource'
 
 /**
  * Where this window's Stage view looks from (stage-view plan sessions 1 and 2; `Stage.dc.html` is
@@ -15,6 +16,12 @@ import { writeEyePose } from './stageCameraPoses'
  *   the orbit camera on its pose; an `EYE` or `SEAT` row lands the eye (`savedViewpoints.ts` in
  *   `components/stage3d/` resolves a row to its camera and pose). *Frame the selection* is neither:
  *   it moves whichever camera is current and is never announced.
+ * - **A seat not yet saved** — `seat:<seating uuid>:<seat id>`, what *Sit in a seat…* picks
+ *   (session 3). It lands the eye at the seat's seated eye, as a saved `SEAT` row with no target
+ *   does, and *Save this view…* from it saves that row. It rides the same `viewpoint` key — so a
+ *   window sitting in an unsaved seat announces it, keeps it across a reload and can be put there by
+ *   another window, with **no new key on the wire** (the announce's key set is pinned) and no row
+ *   written until the operator asks for one.
  *
  * Three rules, each with a reason:
  *
@@ -38,7 +45,11 @@ export type SavedViewCamera = Extract<StageCamera, 'orbit' | 'eye'>
 
 /** A saved view, by its row's uuid. */
 export type SavedViewpointRef = `${string}-${string}-${string}-${string}-${string}`
-export type StageViewpoint = StageCamera | SavedViewpointRef
+/** A seat picked but not saved: its seating element's uuid and its id (`F6`). */
+export type SeatViewpointRef = `seat:${string}:${string}`
+/** What a camera lands on: a saved view or a picked seat. */
+export type LandingRef = SavedViewpointRef | SeatViewpointRef
+export type StageViewpoint = StageCamera | LandingRef
 
 export const STAGE_CAMERA_LABELS: Readonly<Record<StageCamera, string>> = {
   orbit: 'Orbit',
@@ -63,6 +74,23 @@ export const STAGE_LANDED_KEY = 'stage.landedViewpoint'
 export const VIEW_OPTION_VIEWPOINT = 'viewpoint'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const SEAT_REF = /^seat:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([A-Z][1-9][0-9]{0,2})$/i
+
+/** The viewpoint for sitting in seat [seatId] of seating [elementUuid], unsaved. */
+export function seatViewpointRef(elementUuid: string, seatId: string): SeatViewpointRef {
+  return `seat:${elementUuid}:${seatId.trim().toUpperCase()}`
+}
+
+/** A picked seat's seating and seat id, or null for anything else. */
+export function parseSeatViewpointRef(value: unknown): { elementUuid: string; seatId: string } | null {
+  if (typeof value !== 'string') return null
+  const m = SEAT_REF.exec(value)
+  return m == null ? null : { elementUuid: m[1], seatId: m[2].toUpperCase() }
+}
+
+export function isSeatViewpointRef(value: unknown): value is SeatViewpointRef {
+  return parseSeatViewpointRef(value) != null
+}
 
 export function isStageCamera(value: unknown): value is StageCamera {
   return typeof value === 'string' && (STAGE_CAMERAS as readonly string[]).includes(value)
@@ -72,9 +100,14 @@ export function isSavedViewpointRef(value: unknown): value is SavedViewpointRef 
   return typeof value === 'string' && UUID.test(value)
 }
 
-/** Whether [value] is in the vocabulary: a camera, or a saved view's uuid. */
+/** Whether [value] lands a camera: a saved view's uuid or a picked seat. */
+export function isLandingRef(value: unknown): value is LandingRef {
+  return isSavedViewpointRef(value) || isSeatViewpointRef(value)
+}
+
+/** Whether [value] is in the vocabulary: a camera, a saved view's uuid, or a picked seat. */
 export function isStageViewpoint(value: unknown): value is StageViewpoint {
-  return isStageCamera(value) || isSavedViewpointRef(value)
+  return isStageCamera(value) || isLandingRef(value)
 }
 
 export function isOrthoCamera(value: StageCamera): value is OrthoCamera {
@@ -96,7 +129,7 @@ const store = createSyncStore<StageViewpoint>({
  * has landed (`StageCameraRig`).
  */
 export interface LandedViewpoint {
-  ref: SavedViewpointRef
+  ref: LandingRef
   camera: SavedViewCamera
 }
 
@@ -105,7 +138,7 @@ const landedStore = createSyncStore<LandedViewpoint | null>({
   fallback: null,
   parse: (parsed) => {
     const p = parsed as Partial<LandedViewpoint> | null
-    return p != null && isSavedViewpointRef(p.ref) && (p.camera === 'orbit' || p.camera === 'eye')
+    return p != null && isLandingRef(p.ref) && (p.camera === 'orbit' || p.camera === 'eye')
       ? { ref: p.ref, camera: p.camera }
       : null
   },
@@ -127,6 +160,8 @@ export function noteSavedViewpointCameras(cameras: ReadonlyMap<string, SavedView
 /** The camera [viewpoint] draws through, or null for a saved view this window cannot place yet. */
 export function cameraOfViewpoint(viewpoint: StageViewpoint): StageCamera | null {
   if (isStageCamera(viewpoint)) return viewpoint
+  // A seat is always sat in with the eye.
+  if (isSeatViewpointRef(viewpoint)) return 'eye'
   const known = savedCameras.get(viewpoint)
   if (known != null) return known
   const landed = landedStore.getSnapshot()
@@ -157,44 +192,71 @@ export function markViewpointLanded(landed: LandedViewpoint): void {
  * - Moving *into* the Eye camera from a camera that is not the eye forgets the eye's stored pose, so
  *   the eye is seeded afresh from wherever the orbit camera stands. From a saved eye or seat view it
  *   keeps it — you are already standing there — and a remount already on Eye keeps it too.
- * - Picking a saved view clears the landed marker, so the camera lands on it — again, if it is the
- *   view already current and the operator has looked around since.
+ * - Picking a saved view or a seat clears the landed marker, so the camera lands on it — again, if
+ *   it is the view already current and the operator has looked around since.
  */
 export function setStageViewpoint(next: StageViewpoint): void {
   if (next === 'eye' && cameraOfViewpoint(store.getSnapshot()) !== 'eye') writeEyePose(null)
-  if (isSavedViewpointRef(next)) landedStore.set(null)
+  if (isLandingRef(next)) landedStore.set(null)
   store.set(next)
 }
 
 /**
- * A `windows.viewOptions` frame's Stage keys, applied to this tab. A value outside the vocabulary is
- * ignored rather than read as Orbit. Returns what was applied.
+ * The Stage view's other per-window fact: which layer of the lighting cascade it draws — **Source**,
+ * Output · Output + Programmer · Programmer only · Next GO (`hooks/useVisSource.ts`). It rides
+ * `viewOptions` beside the viewpoint (stage-view plan §3.2, session 3), so a hall screen can sit on
+ * Row F showing what the next GO will look like.
  */
-export function applyStageViewOptions(options: Readonly<Record<string, string>>): StageViewpoint | undefined {
-  const value = options[VIEW_OPTION_VIEWPOINT]
-  if (!isStageViewpoint(value)) return undefined
-  setStageViewpoint(value)
-  return value
+export const VIEW_OPTION_SOURCE = 'source'
+
+/** What a Stage window's options set, when a frame or an arrival sets anything. */
+export interface AppliedStageOptions {
+  viewpoint?: StageViewpoint
+  source?: VisSource
 }
 
 /**
- * `?viewpoint=` on arrival — a Screens row's *Copy link* carries it: apply a value in the
- * vocabulary, and answer the search with the parameter stripped, so a reload keeps whatever the
- * window has moved to since. Null when there is no parameter, so the caller writes nothing. A value
- * outside the vocabulary is stripped and not applied, as a `windows.viewOptions` frame's is.
+ * A `windows.viewOptions` frame's Stage keys, applied to this tab: the viewpoint and the source,
+ * each only when its value is in its vocabulary — a value outside it is ignored rather than read as
+ * Orbit or as Output, so a frame from a later build cannot move the window somewhere it did not
+ * mean. Returns what was applied.
  */
-export function consumeLaunchViewpoint(search: URLSearchParams): URLSearchParams | null {
-  const value = search.get(VIEW_OPTION_VIEWPOINT)
-  if (value == null) return null
-  if (isStageViewpoint(value)) setStageViewpoint(value)
+export function applyStageViewOptions(options: Readonly<Record<string, string>>): AppliedStageOptions {
+  const applied: AppliedStageOptions = {}
+  const viewpoint = options[VIEW_OPTION_VIEWPOINT]
+  if (isStageViewpoint(viewpoint)) {
+    setStageViewpoint(viewpoint)
+    applied.viewpoint = viewpoint
+  }
+  const source = options[VIEW_OPTION_SOURCE]
+  if (isVisSource(source)) {
+    setVisSource(source)
+    applied.source = source
+  }
+  return applied
+}
+
+/**
+ * `?viewpoint=` and `?source=` on arrival — a Screens row's *Copy link* carries both: apply the
+ * values in their vocabularies, and answer the search with both parameters stripped, so a reload
+ * keeps whatever the window has moved to since. Null when there is neither, so the caller writes
+ * nothing. A value outside its vocabulary is stripped and not applied, as a frame's is.
+ */
+export function consumeLaunchStageOptions(search: URLSearchParams): URLSearchParams | null {
+  const viewpoint = search.get(VIEW_OPTION_VIEWPOINT)
+  const source = search.get(VIEW_OPTION_SOURCE)
+  if (viewpoint == null && source == null) return null
+  if (isStageViewpoint(viewpoint)) setStageViewpoint(viewpoint)
+  if (isVisSource(source)) setVisSource(source)
   const next = new URLSearchParams(search)
   next.delete(VIEW_OPTION_VIEWPOINT)
+  next.delete(VIEW_OPTION_SOURCE)
   return next
 }
 
-/** What the Stage view announces as its `viewOptions`. */
-export function stageViewOptions(viewpoint: StageViewpoint): Record<string, string> {
-  return { [VIEW_OPTION_VIEWPOINT]: viewpoint }
+/** What the Stage view announces as its `viewOptions`: the viewpoint and the source. */
+export function stageViewOptions(viewpoint: StageViewpoint, source: VisSource): Record<string, string> {
+  return { [VIEW_OPTION_VIEWPOINT]: viewpoint, [VIEW_OPTION_SOURCE]: source }
 }
 
 /** Test seam: the stores back to Orbit and nothing landed, with no listeners. */

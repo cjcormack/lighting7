@@ -68,6 +68,26 @@ describe('orthoSection — the three sections agree with the 2D plot’s convent
     expect(s.far).toBeGreaterThan(26)
   })
 
+  it('keeps the plane where the rig puts it, and sees back to the venue beyond it (session 3)', () => {
+    // A hall reaching past the rig on every far side: 2 m lower, 5 m further upstage, 3 m further
+    // stage right — and nearer on the camera's side, which must not move the plane.
+    const venue: LightingBounds = { min: { x: -9, y: -20, z: -3 }, max: { x: 9, y: 14, z: 9 } }
+    for (const view of ['plan', 'front', 'side'] as const) {
+      const rigOnly = orthoSection(view, BOUNDS)
+      const withVenue = orthoSection(view, BOUNDS, venue)
+      close(withVenue.position, rigOnly.position)
+      close(withVenue.target, rigOnly.target)
+      expect(withVenue.width).toBe(rigOnly.width)
+      expect(withVenue.height).toBe(rigOnly.height)
+    }
+    expect(orthoSection('plan', BOUNDS, venue).far - orthoSection('plan', BOUNDS).far).toBeCloseTo(2, 9)
+    expect(orthoSection('front', BOUNDS, venue).far - orthoSection('front', BOUNDS).far).toBeCloseTo(5, 9)
+    expect(orthoSection('side', BOUNDS, venue).far - orthoSection('side', BOUNDS).far).toBeCloseTo(3, 9)
+    // A venue inside the rig's bounds changes nothing.
+    const inside: LightingBounds = { min: { x: -1, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }
+    expect(orthoSection('front', BOUNDS, inside).far).toBe(orthoSection('front', BOUNDS).far)
+  })
+
   it('Side stands at +X — audience right, stage left — looking across, the house to the left', () => {
     const s = orthoSection('side', BOUNDS)
     close(s.position, [6 + SECTION_MARGIN_M, 3, 4])

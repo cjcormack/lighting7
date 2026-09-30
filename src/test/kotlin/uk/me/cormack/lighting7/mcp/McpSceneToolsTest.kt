@@ -163,6 +163,31 @@ class McpSceneToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a seat view left dangling by a forced delete still takes a new lens, as REST's PUT does`() {
+        assertTrue(call("set_scene", "{$hall}").success)
+        assertTrue(call("set_scene", """{"viewpoints":[{"name":"Row F centre","kind":"seat","seat":"F6"}]}""").success)
+        // What `DELETE stage-elements/{id}?force=true` leaves: the seating gone, the view naming it.
+        transaction(state.database) {
+            DaoStageElement.find { DaoStageElements.project eq projectId }.single { it.name == "Stalls" }.delete()
+        }
+
+        val lens = call("set_scene", """{"viewpoints":[{"name":"Row F centre","fovDeg":40}]}""")
+        assertTrue(lens.success, lens.result)
+        // Naming another seat of the gone seating is a new reference, and is refused.
+        val moved = call("set_scene", """{"viewpoints":[{"name":"Row F centre","seat":"G6"}]}""")
+        assertFalse(moved.success)
+    }
+
+    @Test
+    fun `a call that removes a seating cannot keep a view in it by restating the view`() {
+        assertTrue(call("set_scene", "{$hall}").success)
+        assertTrue(call("set_scene", """{"viewpoints":[{"name":"Row F centre","kind":"seat","seat":"F6"}]}""").success)
+        val both = call("set_scene", """{"removeElements":["Stalls"],"viewpoints":[{"name":"Row F centre","fovDeg":40}]}""")
+        assertFalse(both.success, both.result)
+        assertTrue("Stalls" in elementNames())
+    }
+
+    @Test
     fun `a platform names its region by name, and a dry run writes nothing`() {
         assertTrue(call("set_stage", """{"regions":[{"name":"Main stage","centerY":5.5,"widthM":6.3,"depthM":11}]}""").success)
         val dry = call(

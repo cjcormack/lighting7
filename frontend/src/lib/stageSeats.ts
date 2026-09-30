@@ -92,15 +92,34 @@ export function seatEye(pose: Pose, base: LightingPoint3): LightingPoint3 {
   return { x: base.x + 0.05 * Math.sin(yaw), y: base.y - 0.05 * Math.cos(yaw), z: base.z + SEATED_EYE_HEIGHT_M }
 }
 
-/**
- * The seating block's footprint in its own frame — width across the seats, depth from row A back —
- * with a seat's half-pitch round it, for drawing it as a box before session 3 draws seats. [riseM]
- * is the last row's height over row A: negative for a bank that steps down (the rake runs −1…1).
- */
-export function seatingExtent(params: SeatingParams): { widthM: number; depthM: number; riseM: number } {
-  return {
-    widthM: params.seatsPerRow * params.seatPitchM,
-    depthM: params.rows * params.rowPitchM,
-    riseM: (params.rows - 1) * params.rakeM,
-  }
+/** One seat of a seating element: its id (`F6`), its row letter and number, and its base. */
+export interface SeatPoint {
+  id: string
+  row: string
+  number: number
+  base: LightingPoint3
 }
+
+/** A row's letter, [index] rows back from [firstRow]. */
+function rowLetter(params: SeatingParams, index: number): string {
+  return String.fromCharCode(params.firstRow.charCodeAt(0) + index)
+}
+
+/**
+ * Every seat of a seating element, row by row from the stage and seat 1 first — the seats the Stage
+ * view draws and *Sit in a seat…* picks from (session 3). Each is [seatBase] of its own id, so the
+ * drawn seat, the picked seat and a saved seat view's seat are one computation, not three.
+ */
+export function seatList(pose: Pose, params: SeatingParams): SeatPoint[] {
+  const out: SeatPoint[] = []
+  for (let r = 0; r < params.rows; r++) {
+    const row = rowLetter(params, r)
+    for (let n = 1; n <= params.seatsPerRow; n++) {
+      const id = `${row}${n}`
+      const base = seatBase(pose, params, id)
+      if (base != null) out.push({ id, row, number: n, base })
+    }
+  }
+  return out
+}
+

@@ -64,6 +64,9 @@ describe('the announce', () => {
     const busk = { focus: 'pads', sheet: 'none', pageFollows: 'true' }
     const options = announcedViewOptions(windowViewOf('/projects/1/stage'), busk, 'on', { viewpoint: 'front' })
     expect(options).toEqual({ viewpoint: 'front' })
+    // Session 3's source rides the same map, beside the viewpoint — never a key of the frame.
+    expect(announcedViewOptions(windowViewOf('/projects/1/stage'), busk, 'on', { viewpoint: 'front', source: 'nextGo' }))
+      .toEqual({ viewpoint: 'front', source: 'nextGo' })
     const frame = announceFrame({ ...ME, view: '/projects/1/stage', viewOptions: options })
     expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
     // …and the viewpoint rides nowhere else.

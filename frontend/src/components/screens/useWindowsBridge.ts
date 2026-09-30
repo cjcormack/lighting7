@@ -15,6 +15,7 @@ import { WINDOW_VIEWS, announcedViewOptions, windowViewLabel, windowViewOf } fro
 import { applyBuskViewOptions, getBuskFocus, useBuskViewOptions } from '@/lib/buskWindow'
 import { VIEW_OPTION_IMMERSIVE, applyImmersiveViewOption, useImmersive } from '@/lib/immersive'
 import { applyStageViewOptions, stageViewOptions, useStageViewpoint } from '@/lib/stageViewpoint'
+import { useVisSource } from '@/hooks/useVisSource'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
 import { unlinkFromDeskNow } from '@/store/selection'
@@ -93,11 +94,12 @@ export function useWindowsBridge(): void {
   const buskOptions = useBuskViewOptions()
   const immersive = useImmersive()
   const stageViewpoint = useStageViewpoint()
+  const stageSource = useVisSource()
   const announced = announcedViewOptions(
     windowViewOf(view),
     buskOptions,
     immersive ? 'on' : 'off',
-    stageViewOptions(stageViewpoint),
+    stageViewOptions(stageViewpoint, stageSource),
   )
   // A string key rather than the object: the hook mints a fresh map per render, and the effect
   // must re-run only when a value moves.
@@ -165,8 +167,8 @@ function reannounceThisWindow(): void {
 
 /**
  * Apply a frame's options for [viewId]: `immersive` on a view whose descriptor carries it (every
- * live view — not Stage, which has no immersive), the busk facts on the busk view, the viewpoint on
- * the Stage view. False for a view that contributes none, so a frame aimed at a library is ignored
+ * live view — not Stage, which has no immersive), the busk facts on the busk view, the viewpoint and
+ * the source on the Stage view. False for a view that contributes none, so a frame aimed at a library is ignored
  * rather than half-applied.
  */
 function applyViewOptionsFor(viewId: string, options: Readonly<Record<string, string>>): boolean {

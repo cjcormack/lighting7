@@ -10,10 +10,12 @@ import {
 } from './useVisSource'
 import { act, renderHook } from '@testing-library/react'
 
-const STORAGE_KEY = 'stageVisSource'
+const STORAGE_KEY = 'stage.source'
+const LEGACY_KEY = 'stageVisSource'
 
 afterEach(() => {
   window.localStorage.clear()
+  window.sessionStorage.clear()
   resetVisSourceStore()
 })
 
@@ -39,18 +41,34 @@ describe('useVisSource', () => {
     expect(result.current).toBe('output')
   })
 
-  it('reads a stored preference', () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify('programmer'))
+  it('reads this window\'s stored source', () => {
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify('programmer'))
     const { result } = renderHook(() => useVisSource())
     expect(result.current).toBe('programmer')
   })
 
+  it('starts a window with nothing of its own from the profile-wide value it had before session 3', () => {
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify('nextGo'))
+    resetVisSourceStore()
+    expect(renderHook(() => useVisSource()).result.current).toBe('nextGo')
+    // The window's own value wins once it has one.
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify('programmer'))
+    resetVisSourceStore()
+    expect(renderHook(() => useVisSource()).result.current).toBe('programmer')
+  })
+
   it('falls back to the default for an unrecognised stored value', () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify('cueOnly'))
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify('cueOnly'))
     expect(renderHook(() => useVisSource()).result.current).toBe('output')
 
     resetVisSourceStore()
-    window.localStorage.setItem(STORAGE_KEY, 'not json at all')
+    window.sessionStorage.setItem(STORAGE_KEY, 'not json at all')
+    expect(renderHook(() => useVisSource()).result.current).toBe('output')
+
+    resetVisSourceStore()
+    window.sessionStorage.clear()
+    window.localStorage.setItem(LEGACY_KEY, JSON.stringify('cueOnly'))
+    resetVisSourceStore()
     expect(renderHook(() => useVisSource()).result.current).toBe('output')
   })
 
@@ -68,9 +86,11 @@ describe('useVisSource', () => {
     expect(two.result.current).toBe('outputProgrammer')
   })
 
-  it('persists the choice', () => {
+  it('persists the choice per window: sessionStorage, never the profile-wide localStorage', () => {
     renderHook(() => useVisSource())
     act(() => setVisSource('programmer'))
-    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify('programmer'))
+    expect(window.sessionStorage.getItem(STORAGE_KEY)).toBe(JSON.stringify('programmer'))
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull()
+    expect(window.localStorage.getItem(LEGACY_KEY)).toBeNull()
   })
 })

@@ -961,7 +961,13 @@ the block turned by the element's yaw. A seated eye is 1.15 m above the seat, 5 
 Plan, Front and Side are built in and never rows. The seat reference is a uuid, not an FK: deleting
 or reshaping a seating that a seat view still sits in is **409 `STAGE_ELEMENT_IN_USE`**, naming the
 views, and `?force=true` goes ahead and leaves them dangling (`docs/api-conventions.md`
-§"Guard overrides"); a reader treats a dangling one as no seat.
+§"Guard overrides"); a reader treats a dangling one as no seat. A `PUT` on such a view — or a
+`set_scene` row naming it — still succeeds while it leaves the seat as it was — a rename, a new
+target or lens — because the merged row's seat is the stored one, unchanged
+(`validateStageViewpoint`'s `storedSeat`, as `validateStageElement` tolerates a platform's unchanged
+region); naming a different seat, or the same seating with another seat id, is checked as a new
+one. `set_scene` passes the stored seat only when it already dangled before the call, so a call
+that removes or reshapes the seating cannot keep a view in it by restating the view.
 
 CRUD: `GET`/`POST` `/api/rest/projects/{projectId}/stage-elements` and `/stage-viewpoints`, and
 `GET`/`PUT`/`DELETE` on `…/{id}`. Stored data only, so ungated by the current project, like regions.

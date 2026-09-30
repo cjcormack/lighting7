@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 2 ([PR #29](https://github.com/cjcormack/lighting7/pull/29)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 3 ([PR #30](https://github.com/cjcormack/lighting7/pull/30)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -209,7 +209,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   - Derived, never stored (`FU-BUSK-RIG-PLOT`).
 - **Docs.** CLAUDE.md §Windows (the `stage` view option) and the frontend CLAUDE.md.
 
-### Session 2 — the scene document (backend + frontend client)
+### ~~Session 2 — the scene document (backend + frontend client)~~ — done, `a05472a` ([PR #29](https://github.com/cjcormack/lighting7/pull/29))
 
 - **Backend.**
   - `stage_elements` and `stage_viewpoints` (§3.1): models, routes and `formatVersion` 18.
@@ -389,6 +389,9 @@ before 8.
 - `FU-STAGE-FOCUS-ON-POOL` — drag blades on the pool itself.
 - `FU-STAGE-INDEPENDENT-HEADS` — a tilt node per head for multi-head movers.
 - `FU-LANTERNS-CUSTOM` — per-project lanterns (D8).
+- `FU-STAGE-HAZE-FOLLOWS-HAZER` — the haze level follows the hazer's DMX, once a rig can say which
+  fixture is its hazer (session 3 found no typed identity: the Commemoration Hall's is a generic
+  dimmer).
 - The stale docs noted in the record's §"Noticed on the way" are fixed in the sessions that touch
   them; they are not follow-ups.
 

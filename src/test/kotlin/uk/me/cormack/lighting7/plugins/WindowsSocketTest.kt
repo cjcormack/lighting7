@@ -8,6 +8,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.awaitEachOf
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
@@ -205,8 +206,8 @@ class WindowsSocketTest : RouteIntegrationTest() {
         val client = createWsClient()
 
         client.webSocket("/api") {
-            awaitOfType<WindowsStateOutMessage>()
-            awaitOfType<SelectionStateOutMessage>()
+            // Both connect snapshots, in either order: two collectors push them.
+            awaitEachOf(WindowsStateOutMessage::class, SelectionStateOutMessage::class)
 
             sendSerialized<InMessage>(announce(name = "Screen 2"))
             val row = awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }.windows.single()

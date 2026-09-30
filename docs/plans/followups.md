@@ -107,6 +107,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SELECTION-NAMED`](#fu-selection-named) | Trigger | Desk | a second operator works the desk from their own screen |
 | [`FU-SURFACE-SELECTION-FOLLOW-SET`](#fu-surface-selection-follow-set) | Trigger | MIDI | a desk button should take a named window off the desk selection, or put it back |
 | [`FU-SCRIPT-USED-BY`](#fu-script-used-by) | Trigger | FE | an operator needs to know which cues hook a script before editing or deleting it |
+| [`FU-STAGE-HAZE-FOLLOWS-HAZER`](#fu-stage-haze-follows-hazer) | Trigger | Stage | a rig can say which fixture is its hazer |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2075,6 +2076,25 @@ file deliberately declines to quote a crossover figure, because two sweeps of it
 depending on how the width was forced.
 
 ---
+
+### `FU-STAGE-HAZE-FOLLOWS-HAZER`
+
+**The Stage view's haze is a constant, not the hazer's output** · Trigger · stage-view plan
+session 3, 2026-09-30
+
+Session 3 was to make the beams' haze follow the hazer's DMX instead of `washConfig.ts`'s
+`HAZE_LEVEL`. Nothing in a rig says which fixture is the hazer: the Commemoration Hall's is a
+`GenericDimmerFixture` (the class's docblock lists "1-channel hazers" beside PARs and house
+lights), and no patch, group or fixture type carries
+a hazer role. Picking one by key or name would be inventing an identity, so the session left the
+level alone and gave each window a *Haze* toggle in the View menu instead
+(`frontend/src/components/stage3d/scene/sceneView.ts`).
+
+**Trigger**: a rig can name its hazer — a typed fixture (a hazer mode with an output and a fan
+channel), or a role on a patch. **Then**: the volume shader's haze level reads that fixture's output
+on the window's vis source (so Blind and Next GO preview it), with the constant as the fallback for
+a rig that names none; the View menu's toggle stays as the window's override. The haze governor
+(`scene/hazeGovernor.ts`) is unaffected — it scales march steps, not the level.
 
 ## Completed
 

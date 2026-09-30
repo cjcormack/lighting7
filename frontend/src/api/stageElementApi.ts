@@ -8,9 +8,9 @@ import { createChangeSignalApi } from './wsSubscriptionFactory'
  * (FOH-relative, Z-up). `positionZ` is the element's base, except a `PLATFORM`'s, which is its top
  * surface — as a region's `centerZ` is.
  *
- * Enumerations are the backend's upper-case names. `params` is left loosely typed here: session 2
- * reads only seating's (`lib/stageSeats.ts`) and draws every element as a box; session 3's builders
- * read the rest.
+ * Enumerations are the backend's upper-case names. `params` is left loosely typed here: each kind's
+ * builder in `components/stage3d/scene/builders/` reads its own (seating's through
+ * `lib/stageSeats.ts`), and a value it cannot read falls back to its default.
  */
 export type StageElementKind = 'ROOM' | 'PROSCENIUM' | 'FLAT' | 'DRAPE' | 'PLATFORM' | 'SEATING' | 'OBJECT'
 export type StageElementLayer = 'VENUE' | 'SET'

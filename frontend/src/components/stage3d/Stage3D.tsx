@@ -16,6 +16,18 @@ import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
+import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
+import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
+import { DEFAULT_SCENE_LAYERS, type SceneLayers } from './scene/sceneView'
+import { DEFAULT_LIGHT_BUDGET } from './scene/lightTable'
+import { HAZE_TIERS, HazeGovernor, type HazeQuality } from './scene/hazeGovernor'
+import {
+  beamClipFor,
+  drawsRoom,
+  sceneBuilds,
+  sceneColliders,
+  sceneElementBounds,
+} from './scene/stageSurfaces'
 import { buildEmitterLayout } from './emitterLayout'
 import { emitterNeedsFor } from './emitterNeeds'
 import { StageLabelContext, StageLabelDriver } from './StageLabel'
@@ -28,7 +40,6 @@ import {
   type StageCameraLanding,
 } from './StageCameraRig'
 import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
-import { StageSceneBoxes } from './StageSceneBoxes'
 import type { StageCamera } from '../../lib/stageViewpoint'
 import { useStageElementListQuery } from '../../store/stageElements'
 import type { LightingPoint } from '../../lib/stageProjection'
@@ -146,10 +157,16 @@ interface Stage3DProps {
   /** The viewpoint's name and how to drive it, drawn over the canvas's top right; none when absent. */
   caption?: { name: string; note: string } | null
   /**
-   * Read the scene document and draw its elements as boxes (session 2). The Stage route's canvas
+   * Read the scene document and draw its elements (session 3's builders). The Stage route's canvas
    * only: the Positions panel's plan is the rig's, and must not subscribe to the scene.
    */
   showScene?: boolean
+  /** Which of the scene this window draws, and whether the air shows the beams (`scene/sceneView.ts`). */
+  layers?: SceneLayers
+  /** How many lights the surfaces take (`scene/lightTable.ts`). */
+  lightBudget?: number
+  /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
+  seatPicking?: SeatPicking | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
   framingRef?: React.RefObject<StageFraming | null>
 }
@@ -175,6 +192,9 @@ export function Stage3D({
   persistCamera = false,
   caption = null,
   showScene = false,
+  layers = DEFAULT_SCENE_LAYERS,
+  lightBudget = DEFAULT_LIGHT_BUDGET,
+  seatPicking = null,
   framingRef,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
@@ -209,6 +229,60 @@ export function Stage3D({
     () => computeRegionGeometry(safeRegions).slice(0, MAX_BEAM_REGIONS),
     [safeRegions],
   )
+
+  // The scene document, built per kind (`scene/builders/`) for the layers this window draws. A
+  // platform linked to a region the view draws is that region's deck (D5), so the regions drawn are
+  // part of the build.
+  const drawnRegionUuids = useMemo(
+    () => new Set(view.regions ? safeRegions.map((r) => r.uuid) : []),
+    [view.regions, safeRegions],
+  )
+  const builds = useMemo(
+    () =>
+      showScene && sceneElements != null
+        ? sceneBuilds(sceneElements, layers, { drawnRegionUuids })
+        : [],
+    [showScene, sceneElements, layers, drawnRegionUuids],
+  )
+  const roomDrawn = useMemo(() => drawsRoom(builds), [builds])
+  // Every surface a beam stops at — the axial reach (`scene/beamReach.ts`). Regions stop a beam
+  // only while they are drawn; the beam shaders' own region shadows still test all of them.
+  const colliders = useMemo(
+    () =>
+      sceneColliders({
+        stage: stageDims,
+        regions: view.regions ? regionGeometry : [],
+        builds,
+        catchSizeM: gridSize,
+      }),
+    [stageDims, view.regions, regionGeometry, builds, gridSize],
+  )
+  const beamClip = useMemo(() => beamClipFor(stageDims, builds), [stageDims, builds])
+  const venueBounds = useMemo(() => sceneElementBounds(builds), [builds])
+  // Haze degrades before frame rate (`scene/hazeGovernor.ts`): the governor in the canvas steps it.
+  const [hazeQuality, setHazeQuality] = useState<HazeQuality>(HAZE_TIERS[0])
+
+  // The canvas's container, which the emitters stamp with the light table's counts (`data-lights`).
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  // *Sit in a seat…*: the seat under the pointer, named in the hint while the pick is armed.
+  const [hoverSeat, setHoverSeat] = useState<string | null>(null)
+  const picking = useMemo<SeatPicking | null>(
+    () =>
+      seatPicking == null
+        ? null
+        : {
+            onPick: seatPicking.onPick,
+            onHover: (seat) => {
+              setHoverSeat(seat?.seatId ?? null)
+              seatPicking.onHover?.(seat)
+            },
+          },
+    [seatPicking],
+  )
+  useEffect(() => {
+    if (seatPicking == null) setHoverSeat(null)
+  }, [seatPicking])
 
   // `stageHidden` patches are omitted from the scene entirely — they're real
   // DMX but not stage objects (a dimmer on hard power). The exception is the
@@ -417,7 +491,9 @@ export function Stage3D({
 
   return (
     <div
-      className={`relative h-full w-full ${placing ? 'cursor-crosshair' : ''}`}
+      ref={containerRef}
+      className={`relative h-full w-full ${placing || seatPicking ? 'cursor-crosshair' : ''}`}
+      data-haze-tier={hazeQuality.tier}
       onPointerDown={(e) => { pointerDownRef.current = { x: e.clientX, y: e.clientY } }}
     >
       {/* `dpr` capped at 1.5: at 2 a Retina full-window canvas and every target behind it hold
@@ -440,12 +516,17 @@ export function Stage3D({
           onRestored={() => setContextLost(false)}
         />
         <StageLabelDriver store={labelStore} paused={contextLost} />
+        <HazeGovernorProbe onChange={setHazeQuality} />
         <StageInvalidateProvider>
         <StageLabelContext.Provider value={labelStore}>
+        <SurfaceLightingProvider>
         <ambientLight intensity={0.5} />
-        <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />
+        {/* A modelled room is the floor the operator reads by; the grid floats at deck height over
+            the stalls. It stays while editing, where it is a measure. */}
+        {(!roomDrawn || editMode) && <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />}
         <StageFloor width={stageW} depth={stageD} />
-        <StageBackWall width={stageW} depth={stageD} height={stageH} />
+        {!roomDrawn && <CatchFloor size={gridSize} />}
+        {!roomDrawn && <StageBackWall width={stageW} depth={stageD} height={stageH} />}
         <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
         <OriginMarkers depth={stageD} />
         {placing && onPlacementClick && (
@@ -479,7 +560,12 @@ export function Stage3D({
           <StageEmitters
             layout={emitterLayout}
             regionGeometry={regionGeometry}
-            stage={stageDims}
+            colliders={colliders}
+            clip={beamClip}
+            lightBudget={lightBudget}
+            haze={layers.haze}
+            hazeQuality={hazeQuality}
+            statsRef={containerRef}
           >
             {allFixtureNodes}
           </StageEmitters>
@@ -502,14 +588,13 @@ export function Stage3D({
             onDragEnd={enableOrbit}
           />
         )}
-        {showScene && sceneElements != null && sceneElements.length > 0 && (
-          <StageSceneBoxes elements={sceneElements} />
-        )}
+        {builds.length > 0 && <StageSceneElements builds={builds} seatPicking={picking} />}
         <StageCameraRig
           camera={camera}
           landing={landing}
           defaultOrbit={defaultOrbit}
           bounds={sceneBounds}
+          beyond={venueBounds}
           persist={persistCamera}
           controlsRef={orbitRef}
           handleRef={cameraHandleRef}
@@ -526,6 +611,7 @@ export function Stage3D({
           onPatchPlacementChange={onPatchPlacementChange}
         />
         <Bloom />
+        </SurfaceLightingProvider>
         </StageLabelContext.Provider>
         </StageInvalidateProvider>
       </Canvas>
@@ -540,6 +626,14 @@ export function Stage3D({
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
           Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
+        </div>
+      )}
+      {picking != null && !contextLost && (
+        <div
+          role="status"
+          className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur"
+        >
+          {hoverSeat == null ? 'Click a seat to sit in it' : `Sit in ${seatName(hoverSeat)}`} · Esc to cancel
         </div>
       )}
       {!editMode && !placing && !(hidePatchSelectionInfo && selection?.kind === 'patch') && (
@@ -586,6 +680,12 @@ function SelectionInfo({
       <span className="ml-2 text-muted-foreground">{detail}</span>
     </div>
   )
+}
+
+/** A seat id as the hint says it: `row F, seat 6`. */
+function seatName(seatId: string): string {
+  const m = /^([A-Z])(\d+)$/.exec(seatId)
+  return m == null ? `seat ${seatId}` : `row ${m[1]}, seat ${m[2]}`
 }
 
 /** The viewpoint's name and how to drive it, over the canvas's top-right corner (`Stage.dc.html`). */
@@ -866,29 +966,39 @@ function PlacementClickCatcher({
   return null
 }
 
-// Subtle filled floor across the stage footprint so the stage area reads as
-// a solid surface rather than just a grid. Sits just below the grid lines.
+// The stage's own floor across its footprint, lit like every other surface (the retired floor
+// cookies drew pools on it). A few millimetres below the deck, so a region or a platform whose top is
+// at 0 draws over it rather than fighting it for the same depth.
+const STAGE_FLOOR_FINISH = { colour: '#1c2330', pattern: 'PLAIN', emissive: false } as const
 function StageFloor({ width, depth }: { width: number; depth: number }) {
+  const material = useSurfaceMaterial(STAGE_FLOOR_FINISH)
   return (
-    <mesh
-      position={[0, -0.002, -depth / 2]}
-      rotation={[-Math.PI / 2, 0, 0]}
-      raycast={NO_RAYCAST}
-    >
+    <mesh position={[0, -0.004, -depth / 2]} rotation={[-Math.PI / 2, 0, 0]} raycast={NO_RAYCAST} material={material}>
       <planeGeometry args={[width, depth]} />
-      <meshBasicMaterial color="#1c2330" transparent opacity={0.55} />
     </mesh>
   )
 }
 
-// The upstage back wall — a real surface, styled like StageFloor, so wall
-// cookies (gobos on the cyc) land on something visible. Placed a hair behind
-// the emitters' wall plane at z = -depth so the cookie quad draws in front.
-function StageBackWall({ width, depth, height }: { width: number; depth: number; height: number }) {
+// Round a stage with no room modelled, the grid's square catches light the way the retired floor
+// cookies did anywhere on the plane: the light alone, added over the canvas, no surface of its own.
+const CATCH_FINISH = { colour: '#ffffff', pattern: 'PLAIN', emissive: false } as const
+function CatchFloor({ size }: { size: number }) {
+  const material = useSurfaceMaterial(CATCH_FINISH, { catchOnly: true })
   return (
-    <mesh position={[0, height / 2, -depth - 0.002]} raycast={NO_RAYCAST}>
+    <mesh position={[0, -0.006, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={NO_RAYCAST} material={material}>
+      <planeGeometry args={[size, size]} />
+    </mesh>
+  )
+}
+
+// The upstage back wall — a real surface, lit, so a gobo'd cyc wash lands on something visible.
+// Drawn only while no room is modelled; a room's stage house has a back wall of its own.
+const BACK_WALL_FINISH = { colour: '#161c26', pattern: 'PLAIN', emissive: false } as const
+function StageBackWall({ width, depth, height }: { width: number; depth: number; height: number }) {
+  const material = useSurfaceMaterial(BACK_WALL_FINISH)
+  return (
+    <mesh position={[0, height / 2, -depth - 0.002]} raycast={NO_RAYCAST} material={material}>
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial color="#161c26" transparent opacity={0.55} />
     </mesh>
   )
 }
@@ -933,6 +1043,31 @@ const ORIGIN = new Vector3(0, 0, 0)
 const AXIS_X = new Vector3(1, 0, 0)
 const AXIS_UPSTAGE = new Vector3(0, 0, -1)
 const AXIS_UP = new Vector3(0, 1, 0)
+
+/**
+ * Feeds the haze governor (`scene/hazeGovernor.ts`) from the frame loop: after the frame has
+ * rendered (priority 2, past the composer's 1), the gap since the previous frame counts only when
+ * that frame asked for this one from inside the loop — R3F's `internal.frames` is 2 when a
+ * `useFrame` invalidated — so an idle canvas, or one redrawn by a fader, never reads as slow.
+ */
+function HazeGovernorProbe({ onChange }: { onChange: (quality: HazeQuality) => void }) {
+  const [governor] = useState(() => new HazeGovernor())
+  const last = useRef<{ at: number; continuing: boolean } | null>(null)
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  useFrame((state) => {
+    const now = performance.now()
+    const previous = last.current
+    if (previous?.continuing) {
+      const next = governor.sample(now - previous.at, now)
+      if (next != null) onChangeRef.current(next)
+    } else {
+      governor.endRun()
+    }
+    last.current = { at: now, continuing: state.internal.frames > 1 }
+  }, 2)
+  return null
+}
 
 /**
  * Watches the canvas for `webglcontextlost` / `webglcontextrestored`. On loss it cancels the

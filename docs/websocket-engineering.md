@@ -331,8 +331,10 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 `sheet` and page facts (busk-further plan D13), and under every live view `immersive` (`on` |
 `off`, busk-chrome plan D9: a window's fact, riding here because a top-level announce key would
 drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | `eye` | `plan` |
-`front` | `side`, stage-view plan session 1) or a saved `stage_viewpoints` row by its uuid
-(session 2); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
+`front` | `side`, stage-view plan session 1), a saved `stage_viewpoints` row by its uuid
+(session 2) or an unsaved seat, `seat:<seating uuid>:<seat id>` (session 3), and its `source` — the
+vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` (session 3; the Screens row
+offers Output and Next GO); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how

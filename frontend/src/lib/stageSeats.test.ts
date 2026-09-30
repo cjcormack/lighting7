@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SEATED_EYE_HEIGHT_M, parseSeatId, seatBase, seatEye, seatingParams } from './stageSeats'
+import { SEATED_EYE_HEIGHT_M, parseSeatId, seatBase, seatEye, seatList, seatingParams } from './stageSeats'
 import type { StageElementDto } from '../api/stageElementApi'
 
 const stalls = {
@@ -42,5 +42,19 @@ describe('the seats of a seating element', () => {
     expect(seatingParams({ kind: 'SEATING', params: { rows: 'twelve' } })).toBeNull()
     expect(parseSeatId('6F')).toBeNull()
     expect(parseSeatId(' b12 ')).toEqual({ row: 'B', number: 12 })
+  })
+
+  it('lists every seat, row A first and seat 1 first, each exactly its own id\'s base', () => {
+    const params = seatingParams(stalls)!
+    const seats = seatList(stalls, params)
+    expect(seats).toHaveLength(144)
+    expect(seats[0].id).toBe('A1')
+    expect(seats[11].id).toBe('A12')
+    expect(seats[12].id).toBe('B1')
+    expect(seats[143].id).toBe('L12')
+    for (const seat of seats) expect(seat.base).toEqual(seatBase(stalls, params, seat.id))
+    const f6 = seats.find((s) => s.id === 'F6')!
+    expect(f6.row).toBe('F')
+    expect(f6.number).toBe(6)
   })
 })

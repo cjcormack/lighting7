@@ -53,11 +53,22 @@ import { StageViewpointPicker } from '../components/stage3d/StageViewpointPicker
 import { SaveViewpointSheet } from '../components/stage3d/SaveViewpointSheet'
 import {
   resolveSavedViewpoint,
+  resolveSeatViewpoint,
   savedViewCamera,
   savedViewCameras,
   savedViewCaption,
+  seatViewpointCaption,
+  seatViewpointName,
   viewpointFromCamera,
 } from '../components/stage3d/savedViewpoints'
+import {
+  setLightBudget,
+  setSceneLayer,
+  useLightBudget,
+  useSceneLayers,
+} from '../components/stage3d/scene/sceneView'
+import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
+import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
 import { deskSelectionPoints, stageSelectionPoints } from '../components/stage3d/framingPoints'
 import {
@@ -65,16 +76,20 @@ import {
   STAGE_CAMERA_LABELS,
   STAGE_CAMERA_NOTES,
   cameraOfViewpoint,
-  consumeLaunchViewpoint,
+  consumeLaunchStageOptions,
   isOrthoCamera,
   isStageCamera,
   noteSavedViewpointCameras,
   markViewpointLanded,
+  parseSeatViewpointRef,
+  seatViewpointRef,
   setStageViewpoint,
   useStageViewpoint,
   type SavedViewpointRef,
+  type SeatViewpointRef,
 } from '../lib/stageViewpoint'
 import { readEyePose, readOrbitPose } from '../lib/stageCameraPoses'
+import { seatingParams } from '../lib/stageSeats'
 import { useStageViewpointListQuery } from '../store/stageViewpoints'
 import { useStageElementListQuery } from '../store/stageElements'
 import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
@@ -200,20 +215,37 @@ export function Stage() {
   const { data: savedViews, isFetching: savedViewsFetching } = useStageViewpointListQuery(projectId ?? 0, {
     skip: projectId == null,
   })
-  const { data: sceneElements } = useStageElementListQuery(projectId ?? 0, { skip: projectId == null })
+  const { data: sceneElements, isFetching: sceneElementsFetching } = useStageElementListQuery(projectId ?? 0, {
+    skip: projectId == null,
+  })
+  // What of the scene this window draws, and how many lights its surfaces take (session 3).
+  const sceneLayers = useSceneLayers()
+  const lightBudget = useLightBudget()
 
   // Which camera the viewpoint draws through, and — for a saved view — where it lands. A saved view
   // whose rows have not arrived yet takes the camera it last landed with (a reload), else Orbit.
   useEffect(() => {
     noteSavedViewpointCameras(savedViewCameras(savedViews ?? []))
   }, [savedViews])
+  // A seat picked with *Sit in a seat…* and not saved (session 3): the same key, `seat:<uuid>:<id>`.
+  const pickedSeat: SeatViewpointRef | null = parseSeatViewpointRef(viewpoint) != null
+    ? (viewpoint as SeatViewpointRef)
+    : null
   const savedRow = useMemo(
-    () => (isStageCamera(viewpoint) ? null : (savedViews ?? []).find((row) => row.uuid === viewpoint) ?? null),
-    [viewpoint, savedViews],
+    () =>
+      isStageCamera(viewpoint) || pickedSeat != null
+        ? null
+        : (savedViews ?? []).find((row) => row.uuid === viewpoint) ?? null,
+    [viewpoint, pickedSeat, savedViews],
   )
   const landing = useMemo(
-    () => (savedRow == null ? null : resolveSavedViewpoint(savedRow, sceneElements ?? [])),
-    [savedRow, sceneElements],
+    () =>
+      pickedSeat != null
+        ? resolveSeatViewpoint(pickedSeat, sceneElements ?? [])
+        : savedRow == null
+          ? null
+          : resolveSavedViewpoint(savedRow, sceneElements ?? []),
+    [pickedSeat, savedRow, sceneElements],
   )
   const camera = isStageCamera(viewpoint)
     ? viewpoint
@@ -223,19 +255,28 @@ export function Stage() {
   const isOrtho = isOrthoCamera(camera)
   const caption = useMemo(
     () =>
-      savedRow != null
-        ? { name: savedRow.name, note: savedViewCaption(savedRow) }
-        : { name: STAGE_CAMERA_LABELS[camera], note: STAGE_CAMERA_NOTES[camera] },
-    [savedRow, camera],
+      pickedSeat != null
+        ? { name: seatViewpointName(pickedSeat), note: seatViewpointCaption(pickedSeat) }
+        : savedRow != null
+          ? { name: savedRow.name, note: savedViewCaption(savedRow) }
+          : { name: STAGE_CAMERA_LABELS[camera], note: STAGE_CAMERA_NOTES[camera] },
+    [pickedSeat, savedRow, camera],
   )
   // A saved view this project does not have — the window was on another project's, or the row was
   // deleted — is let go once the list has settled, back to the camera it was drawing through, so the
-  // window neither names a view that resolves to nothing nor announces one.
+  // window neither names a view that resolves to nothing nor announces one. A picked seat whose
+  // seating has gone, or no longer has the seat, is let go the same way once the elements settle.
   useEffect(() => {
-    if (savedViews == null || savedViewsFetching || isStageCamera(viewpoint)) return
+    if (isStageCamera(viewpoint)) return
+    if (pickedSeat != null) {
+      if (sceneElements == null || sceneElementsFetching) return
+      if (resolveSeatViewpoint(pickedSeat, sceneElements) == null) setStageViewpoint('eye')
+      return
+    }
+    if (savedViews == null || savedViewsFetching) return
     if (savedViews.some((row) => row.uuid === viewpoint)) return
     setStageViewpoint(cameraOfViewpoint(viewpoint) ?? 'orbit')
-  }, [savedViews, savedViewsFetching, viewpoint])
+  }, [savedViews, savedViewsFetching, viewpoint, pickedSeat, sceneElements, sceneElementsFetching])
   const landable = useCallback(
     (row: Parameters<typeof resolveSavedViewpoint>[0]) => resolveSavedViewpoint(row, sceneElements ?? []) != null,
     [sceneElements],
@@ -263,11 +304,11 @@ export function Stage() {
   const renderer2d = editingActive && isOrtho
   const projection = isOrthoCamera(camera) ? STAGE_PROJECTIONS[camera] : STAGE_PROJECTIONS.plan
 
-  // `?viewpoint=` — a Screens row's *Copy link* carries the camera — applied once on arrival and
-  // stripped, so a reload keeps whatever the window has moved to since.
+  // `?viewpoint=` and `?source=` — a Screens row's *Copy link* carries both — applied once on arrival
+  // and stripped, so a reload keeps whatever the window has moved to since.
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
-    const next = consumeLaunchViewpoint(searchParams)
+    const next = consumeLaunchStageOptions(searchParams)
     if (next != null) setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
@@ -416,18 +457,64 @@ export function Stage() {
     } else if (camera === 'eye') {
       const pose = readEyePose()
       if (pose == null) return
-      setSaveRequest(viewpointFromCamera('', { kind: 'eye', pose, seat: savedRow }))
+      // Sitting in a seat — saved or only picked — saves a `SEAT` view of that seat.
+      const picked = parseSeatViewpointRef(pickedSeat)
+      const seat = picked != null
+        ? { kind: 'SEAT' as const, seatElementUuid: picked.elementUuid, seatId: picked.seatId }
+        : savedRow
+      setSaveRequest(viewpointFromCamera('', { kind: 'eye', pose, seat }))
     } else {
       return
     }
     setSaveOpen(true)
-  }, [camera, savedRow, projectData])
+  }, [camera, savedRow, pickedSeat, projectData])
 
-  // O goes back to the orbit camera and F frames the selection (`Stage.dc.html`'s picker). Bare
-  // keys only — ⇧F is full screen (`useWindowsBridge`) — and never from a field.
+  // *Sit in a seat…* (session 3): armed, the seats take the pointer and a click sits in the one
+  // under it — the eye lands at its seated eye, as a saved seat view's does. Only on the 3D scene,
+  // and only where there are seats to sit in; arming it shows the seating if this window had hidden it.
+  const [sitting, setSitting] = useState(false)
+  // A seating the scene would draw — not hidden, not switched off by its `visible` state, and with
+  // params that make seats — or the pick would arm over nothing to click.
+  const hasSeats = useMemo(
+    () => (sceneElements ?? []).some((e) => e.kind === 'SEATING' && isElementShown(e) && seatingParams(e) != null),
+    [sceneElements],
+  )
+  const canSit = !renderer2d && hasSeats
+  const startSitting = useCallback(() => {
+    if (!canSit) return
+    if (!sceneLayers.seating) setSceneLayer('seating', true)
+    setSitting(true)
+  }, [canSit, sceneLayers.seating])
+  useEffect(() => {
+    if (!canSit) setSitting(false)
+  }, [canSit])
+  const seatPicking = useMemo<SeatPicking | null>(
+    () =>
+      sitting
+        ? {
+            onPick: (elementUuid, seatId) => {
+              setSitting(false)
+              setStageViewpoint(seatViewpointRef(elementUuid, seatId))
+            },
+          }
+        : null,
+    [sitting],
+  )
+
+  // O goes back to the orbit camera, F frames the selection and S sits in a seat (`Stage.dc.html`'s
+  // picker); Escape stands up from the pick. Bare keys only — ⇧F is full screen
+  // (`useWindowsBridge`) — and never from a field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      // An Escape a menu or sheet already took (Radix prevents the ones it closes on) is not this
+      // one's: closing the View menu must not stand the operator up from a pick they armed.
+      if (e.defaultPrevented) return
+      if (e.key === 'Escape' && sitting) {
+        e.preventDefault()
+        setSitting(false)
+        return
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
       if (isEditableTarget(document.activeElement)) return
       const key = e.key.toLowerCase()
       if (key === 'o') {
@@ -436,11 +523,15 @@ export function Stage() {
       } else if (key === 'f') {
         e.preventDefault()
         frameSelection()
+      } else if (key === 's' && canSit) {
+        e.preventDefault()
+        if (sitting) setSitting(false)
+        else startSitting()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [frameSelection])
+  }, [frameSelection, sitting, canSit, startSitting])
 
   // Hold Alt/Option to flip the fixture gizmo to the *other* mode while held.
   const { held: altHeld } = useModifierHeld('altKey', editingActive)
@@ -862,6 +953,9 @@ export function Stage() {
             canFrame={canFrame}
             onSave={openSaveSheet}
             canSave={!renderer2d && !isOrtho && projectId != null}
+            onSit={startSitting}
+            canSit={canSit}
+            sitting={sitting}
           />
           {/* The camera — Orbit, Eye and the three sections of the one scene (D1). */}
           <ToggleGroup
@@ -975,6 +1069,10 @@ export function Stage() {
             visSource={visSource}
             setVisSource={setVisSource}
             sourceStatus={{ nextGo: nextGoStatus }}
+            layers={renderer2d ? undefined : sceneLayers}
+            setLayer={setSceneLayer}
+            lightBudget={renderer2d ? undefined : lightBudget}
+            setLightBudget={setLightBudget}
           />
           {showEditToggle && (
             <Tooltip>
@@ -1009,6 +1107,9 @@ export function Stage() {
                   persistCamera
                   caption={caption}
                   showScene
+                  layers={sceneLayers}
+                  lightBudget={lightBudget}
+                  seatPicking={seatPicking}
                   framingRef={framingRef}
                   editMode={editingActive}
                   selection={selection}

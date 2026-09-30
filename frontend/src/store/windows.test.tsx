@@ -51,6 +51,7 @@ import { getBuskFocus, getBuskSheet, resetBuskWindowStores, setBuskFocus, setBus
 import { getLocalBuskPage, isFollowingBuskPage, reportShowingBuskPage, resetBuskPageFollowStores, unlinkBuskPage } from '@/lib/buskPageFollow'
 import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { resetStageViewpointStore, setStageViewpoint, stageViewpoint } from '@/lib/stageViewpoint'
+import { resetVisSourceStore, setVisSource, visSource } from '@/hooks/useVisSource'
 import { store } from './index'
 import { restApi } from './restApi'
 import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
@@ -90,6 +91,7 @@ afterEach(() => {
   identity.listeners.clear()
   window.sessionStorage.clear()
   resetStageViewpointStore()
+  resetVisSourceStore()
   resetDeskFollowStores()
   resetFullscreenState()
   resetUnsavedSheets()
@@ -230,15 +232,18 @@ describe('the announce', () => {
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ focus: 'pads' })
   })
 
-  it('carries the Stage view’s viewpoint and re-announces when it moves; the viewpoint rides no other view (stage-view plan session 1)', async () => {
+  it('carries the Stage view’s viewpoint and source and re-announces when either moves; neither rides another view (stage-view plan sessions 1 and 3)', async () => {
     mountBridge('/projects/1/stage')
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
-    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'orbit' })
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'orbit', source: 'output' })
     act(() => setStageViewpoint('side'))
     await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
-    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side' })
-    // Six keys, never a seventh.
-    expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'output' })
+    act(() => setVisSource('nextGo'))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(3))
+    expect((windowsWs.announced[2] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo' })
+    // Six keys, never a seventh: the source rides inside `viewOptions`.
+    expect(Object.keys(windowsWs.announced[2] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
   })
 
   it('keeps the five-key frame on a view that contributes no options — a library', async () => {
@@ -393,6 +398,15 @@ describe('handleWindowCommand — the Stage view’s viewpoint (stage-view plan 
     expect(handleWindowCommand(frame('/projects/1/stage', { viewpoint: 'row-f', immersive: 'on' }), ctx('/projects/1/stage'))).toBe('applied')
     expect(stageViewpoint()).toBe('side')
     expect(isImmersive()).toBe(false)
+  })
+
+  it("sets the vis source on a Stage window — a Screens row's Source segment — and ignores one outside the four (session 3)", () => {
+    expect(handleWindowCommand(frame('/projects/1/stage', { source: 'nextGo' }), ctx('/projects/1/stage'))).toBe('applied')
+    expect(visSource()).toBe('nextGo')
+    expect(handleWindowCommand(frame('/projects/1/stage', { source: 'preview' }), ctx('/projects/1/stage'))).toBe('applied')
+    expect(visSource()).toBe('nextGo')
+    expect(handleWindowCommand(frame('/projects/1/stage', { source: 'output' }), ctx('/projects/1/busk'))).toBe('ignored')
+    expect(visSource()).toBe('nextGo')
   })
 })
 

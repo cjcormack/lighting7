@@ -13,10 +13,11 @@ import type { StageViewpointDto } from '@/api/stageViewpointApi'
 import {
   STAGE_CAMERA_LABELS,
   isOrthoCamera,
+  isSeatViewpointRef,
   type StageCamera,
   type StageViewpoint,
 } from '@/lib/stageViewpoint'
-import { savedViewNote } from './savedViewpoints'
+import { savedViewNote, seatViewpointName } from './savedViewpoints'
 
 /** The built-ins the picker lists: Eye is a camera, but a place to stand is a saved view. */
 const BUILT_INS: readonly { id: StageCamera; note: string; shortcut?: string }[] = [
@@ -48,8 +49,9 @@ const SECTION_LABEL = 'text-[10px] uppercase tracking-wide text-muted-foreground
  * camera; this is where a place to look from is chosen.
  *
  * A saved view the window cannot land — a seat whose seating has gone, or no longer has that seat —
- * is listed disabled rather than hidden, so the operator can see what went. *Sit in a seat…*
- * (picking one on the seating) is session 3's.
+ * is listed disabled rather than hidden, so the operator can see what went. ***Sit in a seat…***
+ * (session 3, S) arms a pick on the seating mesh: the seat clicked is the viewpoint, unsaved, named
+ * on the trigger as *Row F, seat 6* until *Save this view…* makes it a row.
  */
 export function StageViewpointPicker({
   viewpoint,
@@ -61,6 +63,9 @@ export function StageViewpointPicker({
   canFrame,
   onSave,
   canSave,
+  onSit,
+  canSit = false,
+  sitting = false,
 }: {
   viewpoint: StageViewpoint
   /** The camera the viewpoint draws through — its own, or a saved view's. */
@@ -75,9 +80,22 @@ export function StageViewpointPicker({
   onSave: () => void
   /** Whether the current camera can be saved: an orbit or an eye, never a built-in section. */
   canSave: boolean
+  /** *Sit in a seat…*: arm the pick on the seating. */
+  onSit?: () => void
+  /** Whether there are seats to sit in, on a scene that can pick them (not the 2D plot). */
+  canSit?: boolean
+  /** Whether the pick is armed now. */
+  sitting?: boolean
 }) {
   const current = saved.find((row) => row.uuid === viewpoint)
-  const label = current?.name ?? (viewpoint === camera ? STAGE_CAMERA_LABELS[camera] : 'Saved view')
+  const pickedSeat = isSeatViewpointRef(viewpoint) ? viewpoint : null
+  const label =
+    current?.name ??
+    (pickedSeat != null
+      ? seatViewpointName(pickedSeat)
+      : viewpoint === camera
+        ? STAGE_CAMERA_LABELS[camera]
+        : 'Saved view')
   const views = saved.filter((row) => row.kind !== 'SEAT')
   const seats = saved.filter((row) => row.kind === 'SEAT')
 
@@ -104,6 +122,8 @@ export function StageViewpointPicker({
         <Button size="sm" variant="outline" aria-label={`Viewpoint: ${label}`} className="max-w-[14rem]">
           {current ? (
             <SavedIcon row={current} className="size-3.5 sm:mr-1" />
+          ) : pickedSeat != null ? (
+            <Armchair className="size-3.5 sm:mr-1" />
           ) : (
             <CameraIcon camera={camera} className="size-3.5 sm:mr-1" />
           )}
@@ -135,6 +155,17 @@ export function StageViewpointPicker({
           </>
         )}
         <DropdownMenuSeparator />
+        {onSit && (
+          <DropdownMenuItem
+            onSelect={onSit}
+            disabled={!canSit}
+            title={canSit ? 'Click a seat on the seating to sit in it' : 'There is no seating to sit in here'}
+          >
+            <Armchair className="size-3.5" />
+            <span className={sitting ? 'font-semibold' : undefined}>Sit in a seat…</span>
+            <DropdownMenuShortcut>S</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onFrame} disabled={!canFrame}>
           <Crosshair className="size-3.5" />
           Frame the selection

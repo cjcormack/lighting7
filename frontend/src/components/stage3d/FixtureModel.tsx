@@ -84,19 +84,16 @@ import {
   type MacroColour,
   type MacroMovement,
 } from './beamOptics'
-import {
-  computeLobeDirection,
-  coneReachesSphere,
-  cullRegionCookies,
-  updateFloorCookie,
-  updateWallCookie,
-} from './beamCookies'
+import { computeLobeDirection, regionShadowMask } from './beamLobes'
 import {
   BEAM_LENGTH,
   useEmitters,
   type EmittersHandle,
   type RegionGeometry,
+  type SurfaceHit,
 } from './StageEmitters'
+import { MAX_THROW_M } from './emitterLayout'
+import type { BeamHit } from './scene/beamReach'
 import { isPixelStrip as isPixelStripKind, pixelCountOf } from './emitterNeeds'
 import { useStageInvalidate } from './stageInvalidate'
 import { FixtureBody } from './fixtureBodies'
@@ -134,7 +131,7 @@ const LED_MACRO_MIN_SATURATION = 0.8
 const TAU = Math.PI * 2
 
 // A prism shows N displaced copies of the *whole* beam image — gobo included —
-// so each facet gets its own full lobe (cone/volume + every pool) from the
+// so each facet gets its own full lobe (cone/volume + its light) from the
 // slot's lobe block. Lobe centres sit this many beam half-angles off axis:
 // just past 1 so they separate visibly while still overlapping, which is what
 // a real 3-facet prism looks like.
@@ -147,33 +144,46 @@ const SCRATCH_PRISM_X = new Vector3()
 const SCRATCH_PRISM_Y = new Vector3()
 const SCRATCH_LOBE_DIR = new Vector3()
 
-// Slack on the cone half-angle so cookies fade in before the shader's
-// cosAngle test would clip them — masks the boundary even on a wide spot
-// at the edge of its reach.
+// Slack on the cone half-angle for the region shadow-mask cull, so a region
+// joins a lobe's shadow tests before the shader's cosAngle test would need it
+// — masks the boundary even on a wide spot at the edge of its reach.
 const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 
 // ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
 const LIGHT_OFF_OPACITY = 0.005
 
-// Wash cone trig derived from the (tuneable) full wash angle in degrees.
-interface WashGeom {
-  cosHalf: number
-  cosCull: number
-  sinCull: number
-  floorSide: number
+// A pixel's wash cone: a fixed code constant, so its cosine is computed once.
+const WASH_COS_HALF = Math.cos(MathUtils.degToRad(WASH_ANGLE_DEG / 2))
+
+/**
+ * The axial reach of a lobe or a pixel (`scene/beamReach.ts`): cast, then turned into the light
+ * table's hit. Scratch objects, since the directors call this per lobe per frame.
+ */
+const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
+const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
+
+/**
+ * Where a beam from [origin] along [dir] lands: the surface hit (in the scratch object) and the
+ * length to draw its cone — to the surface, or [BEAM_LENGTH], whichever is nearer. The light itself
+ * reaches the surface however far it is ([MAX_THROW_M]); only the drawn cone keeps the desk's
+ * stylised length, so a front-of-house wash lands on the stage without a 16 m cone of haze filling
+ * the hall between.
+ */
+function landBeam(
+  emitters: EmittersHandle,
+  origin: Vector3,
+  dir: Vector3,
+): { hit: SurfaceHit | null; length: number } {
+  if (!emitters.reach(origin, dir, MAX_THROW_M, SCRATCH_BEAM_HIT)) return { hit: null, length: BEAM_LENGTH }
+  const t = SCRATCH_BEAM_HIT.t
+  SCRATCH_SURFACE_HIT.px = origin.x + dir.x * t
+  SCRATCH_SURFACE_HIT.py = origin.y + dir.y * t
+  SCRATCH_SURFACE_HIT.pz = origin.z + dir.z * t
+  SCRATCH_SURFACE_HIT.nx = SCRATCH_BEAM_HIT.nx
+  SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
+  SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
+  return { hit: SCRATCH_SURFACE_HIT, length: Math.min(t, BEAM_LENGTH) }
 }
-function washGeomFor(angleDeg: number): WashGeom {
-  const half = MathUtils.degToRad(angleDeg / 2)
-  const cull = half + REGION_CULL_SLACK_RAD
-  return {
-    cosHalf: Math.cos(half),
-    cosCull: Math.cos(cull),
-    sinCull: Math.sin(cull),
-    floorSide: 2 * BEAM_LENGTH * Math.sin(cull),
-  }
-}
-// Wash angle is a fixed code constant, so the cone trig is computed once.
-const WASH_GEOM = washGeomFor(WASH_ANGLE_DEG)
 
 interface FixtureModelProps {
   patch: FixturePatch
@@ -432,7 +442,6 @@ export function FixtureModel({
     headRef,
     slot,
     emitters,
-    regionGeometry,
     colorStateRef,
     pixelWashStateRef,
   })
@@ -888,7 +897,6 @@ function useBeamDirector({
       prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
     const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
 
-    const wall = emitters.wall
     for (let lobe = 0; lobe < lobes; lobe++) {
       const lobeDir =
         prismFacets > 0
@@ -902,17 +910,23 @@ function useBeamDirector({
             )
           : dir
 
-      // Cone matrix: unit cone scaled to (beamRadius, BEAM_LENGTH, beamRadius),
-      // rotated so UNIT_Y → -lobeDir (apex back toward fixture), translated to
-      // the midpoint along the beam. Apex ends up at the lens in world space.
+      // Where the lobe lands: the first surface on its axis. The cone is drawn to it, and the light
+      // table carries it as the plane the surfaces stop lighting behind (the axial reach).
+      const landed = landBeam(emitters, SCRATCH_ORIGIN, lobeDir)
+      const length = landed.length
+
+      // Cone matrix: unit cone scaled to (radius, length, radius), rotated so UNIT_Y → -lobeDir
+      // (apex back toward fixture), translated to the midpoint along the beam. Apex ends up at the
+      // lens in world space; the volume shader reads its march bound back off the y scale.
       SCRATCH_NEG_DIR.copy(lobeDir).multiplyScalar(-1)
       SCRATCH_QUAT.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
       SCRATCH_CONE_POS.set(
-        SCRATCH_ORIGIN.x + (lobeDir.x * BEAM_LENGTH) / 2,
-        SCRATCH_ORIGIN.y + (lobeDir.y * BEAM_LENGTH) / 2,
-        SCRATCH_ORIGIN.z + (lobeDir.z * BEAM_LENGTH) / 2,
+        SCRATCH_ORIGIN.x + (lobeDir.x * length) / 2,
+        SCRATCH_ORIGIN.y + (lobeDir.y * length) / 2,
+        SCRATCH_ORIGIN.z + (lobeDir.z * length) / 2,
       )
-      SCRATCH_CONE_SCALE.set(geom.beamRadius, BEAM_LENGTH, geom.beamRadius)
+      const radius = (geom.beamRadius * length) / BEAM_LENGTH
+      SCRATCH_CONE_SCALE.set(radius, length, radius)
       SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
       // A gobo in the beam draws the raymarched volume (the pattern must exist
       // inside the cone); an open beam keeps the cheap silhouette shell.
@@ -935,18 +949,12 @@ function useBeamDirector({
         focusDist,
         SCRATCH_RIGHT,
       )
-
-      updateFloorCookie(
-        emitters,
+      emitters.writeShadowMask(
         slot,
         lobe,
-        SCRATCH_ORIGIN,
-        lobeDir,
-        BEAM_LENGTH,
-        geom.sinCull,
-        geom.floorSide,
+        regionShadowMask(SCRATCH_ORIGIN, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry),
       )
-      emitters.writeFloorAttrs(
+      emitters.writeLight(
         slot,
         lobe,
         SCRATCH_ORIGIN,
@@ -954,52 +962,10 @@ function useBeamDirector({
         beamColor,
         lobePoolAlpha,
         geom.cosHalfBeam,
+        edge,
+        focusDist,
+        landed.hit,
       )
-
-      const shadowMask = cullRegionCookies(
-        emitters,
-        slot,
-        lobe,
-        SCRATCH_ORIGIN,
-        lobeDir,
-        BEAM_LENGTH,
-        geom.cosCull,
-        geom.sinCull,
-        regionGeometry,
-      )
-      emitters.writeShadowMask(slot, lobe, shadowMask)
-      emitters.writeRegionAttrs(
-        slot,
-        lobe,
-        SCRATCH_ORIGIN,
-        lobeDir,
-        beamColor,
-        lobePoolAlpha,
-        geom.cosHalfBeam,
-      )
-
-      if (wall) {
-        updateWallCookie(
-          emitters,
-          slot,
-          lobe,
-          SCRATCH_ORIGIN,
-          lobeDir,
-          BEAM_LENGTH,
-          geom.sinCull,
-          geom.floorSide,
-          wall,
-        )
-        emitters.writeWallAttrs(
-          slot,
-          lobe,
-          SCRATCH_ORIGIN,
-          lobeDir,
-          beamColor,
-          lobePoolAlpha,
-          geom.cosHalfBeam,
-        )
-      }
     }
 
     // Park lobes the prism no longer lights, once, on the frame it shrinks.
@@ -1320,9 +1286,11 @@ function MultiPixelColourSync({
 //
 // A pixel bar has no tight beam — each pixel throws a wide soft wash. Every
 // frame this transforms each pixel to world space, derives the bar's wash
-// direction from its mounted orientation, and writes one floor pool (+ region
-// cookies) per pixel, coloured from the live per-pixel snapshot. Overlapping
-// per-pixel pools additively blend into a continuous coloured wash on the floor.
+// direction from its mounted orientation, lands it on the first surface along
+// that direction (`landBeam`), and writes one light-table row per pixel,
+// coloured from the live per-pixel snapshot (`writeWashLight`; a dark pixel is
+// cleared). The surface shader adds the rows up, so overlapping pixels blend
+// into a continuous coloured wash on whatever they land on.
 
 interface WashDirectorOpts {
   enabled: boolean
@@ -1332,7 +1300,6 @@ interface WashDirectorOpts {
   headRef: React.RefObject<Group | null>
   slot: number
   emitters: EmittersHandle | null
-  regionGeometry: ReadonlyArray<RegionGeometry>
   colorStateRef: React.RefObject<ColorState>
   pixelWashStateRef: React.RefObject<PixelWashState | null>
 }
@@ -1345,7 +1312,6 @@ function useWashDirector({
   headRef,
   slot,
   emitters,
-  regionGeometry,
   colorStateRef,
   pixelWashStateRef,
 }: WashDirectorOpts) {
@@ -1375,93 +1341,22 @@ function useWashDirector({
     // layout is built; never write past it.
     const block = emitters.washPixelsFor(slot)
     const live = Math.min(pixelCount, wash.count, block)
-    const regionCount = regionGeometry.length
 
     for (let i = 0; i < live; i++) {
       const intensity = wash.intensities[i]
       if (intensity < LIGHT_OFF_OPACITY) {
-        emitters.writeWashFloorMatrix(slot, i, false, 0, 0, 0)
-        for (let r = 0; r < regionCount; r++) emitters.writeWashRegionVisibility(slot, i, r, false)
+        emitters.clearWashLight(slot, i)
         continue
       }
       const x = -lengthM / 2 + pitch * (i + 0.5)
       SCRATCH_PIXEL_POS.set(x, lensY, 0).applyMatrix4(head.matrixWorld)
       WASH_COLOR.setRGB(wash.colors[i * 3], wash.colors[i * 3 + 1], wash.colors[i * 3 + 2])
-      const opacity = WASH_OPACITY * intensity
-
-      updateWashFloorCookie(emitters, slot, i, SCRATCH_PIXEL_POS, dir, WASH_GEOM)
-      emitters.writeWashFloorAttrs(slot, i, SCRATCH_PIXEL_POS, dir, WASH_COLOR, opacity, WASH_GEOM.cosHalf)
-      writeWashRegionCookies(
-        emitters,
-        slot,
-        i,
-        SCRATCH_PIXEL_POS,
-        dir,
-        regionGeometry,
-        WASH_COLOR,
-        opacity,
-        WASH_GEOM,
-      )
+      // Each pixel is its own light, landing where its own axis does.
+      const landed = landBeam(emitters, SCRATCH_PIXEL_POS, dir)
+      emitters.writeWashLight(slot, i, SCRATCH_PIXEL_POS, dir, WASH_COLOR, WASH_OPACITY * intensity, WASH_COS_HALF, landed.hit)
     }
-    // Hide the unused tail of this slot's block (fewer live pixels than it holds).
-    for (let i = live; i < block; i++) {
-      emitters.writeWashFloorMatrix(slot, i, false, 0, 0, 0)
-      for (let r = 0; r < regionCount; r++) emitters.writeWashRegionVisibility(slot, i, r, false)
-    }
+    // Take the unused tail of this slot's block off the table (fewer live pixels than it holds).
+    for (let i = live; i < block; i++) emitters.clearWashLight(slot, i)
   })
 }
 
-// Project one pixel's wash onto the floor (same maths as updateFloorCookie,
-// per-pixel). Hidden when the pixel faces up.
-function updateWashFloorCookie(
-  emitters: EmittersHandle,
-  slot: number,
-  pixelIdx: number,
-  origin: Vector3,
-  dir: Vector3,
-  geom: WashGeom,
-): void {
-  if (dir.y >= geom.sinCull) {
-    emitters.writeWashFloorMatrix(slot, pixelIdx, false, 0, 0, 0)
-    return
-  }
-  let cx = origin.x
-  let cz = origin.z
-  if (dir.y < -1e-3) {
-    const t = Math.min(-origin.y / dir.y, BEAM_LENGTH)
-    if (t > 0) {
-      cx = origin.x + t * dir.x
-      cz = origin.z + t * dir.z
-    }
-  }
-  emitters.writeWashFloorMatrix(slot, pixelIdx, true, cx, cz, geom.floorSide)
-}
-
-// Per-pixel region-top cookies: cull (conservative cone-vs-sphere, same as
-// cullRegionCookies) then write this pixel's wash attrs for the region block.
-function writeWashRegionCookies(
-  emitters: EmittersHandle,
-  slot: number,
-  pixelIdx: number,
-  origin: Vector3,
-  dir: Vector3,
-  regions: ReadonlyArray<RegionGeometry>,
-  color: Color,
-  opacity: number,
-  geom: WashGeom,
-): void {
-  for (let i = 0; i < regions.length; i++) {
-    const r = regions[i]
-    const visible = coneReachesSphere(
-      origin,
-      dir,
-      BEAM_LENGTH,
-      geom.cosCull,
-      geom.sinCull,
-      r.cookieCenter,
-      r.cookieBoundingRadius,
-    )
-    emitters.writeWashRegionVisibility(slot, pixelIdx, i, visible)
-  }
-  emitters.writeWashRegionAttrs(slot, pixelIdx, origin, dir, color, opacity, geom.cosHalf)
-}

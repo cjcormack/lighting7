@@ -8,6 +8,7 @@ import { toThree, fromThree } from '../../lib/stageCoords'
 import { useBodyDrag } from './useBodyDrag'
 import { snap, SNAP_DISTANCE_M } from './useShiftHeld'
 import { StageLabel } from './StageLabel'
+import { useSurfaceMaterial } from './scene/SurfaceLighting'
 
 interface StageRegionMeshesProps {
   regions: StageRegionDto[]
@@ -123,6 +124,9 @@ function RegionMesh({
   const edgeColor = active
     ? colorWithHueShift(BASE_EDGE_HSL_SELECTED, shift)
     : colorWithHueShift(BASE_EDGE_HSL, shift)
+  // A region is a surface a beam lands on (D5; stage-view plan session 3): lit by the light table like
+  // the venue's, so it is solid now rather than the see-through box it was while cookies lit it.
+  const material = useSurfaceMaterial({ colour: fillColor, pattern: 'PLAIN', emissive: false })
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     const mesh = e.eventObject
@@ -160,9 +164,9 @@ function RegionMesh({
       onPointerDown={onClick || onMove ? onPointerDown : undefined}
       onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={editMode ? () => setHovered(false) : undefined}
+      material={material}
     >
       <boxGeometry args={[w, h, d]} />
-      <meshStandardMaterial color={fillColor} transparent opacity={active ? 0.38 : 0.28} />
       <Edges color={edgeColor} />
       <StageLabel position={labelOffset} kind="position" emphasised={active}>
         {region.name}
