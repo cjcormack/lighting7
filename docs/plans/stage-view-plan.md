@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 4.** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 4 ([PR #31](https://github.com/cjcormack/lighting7/pull/31)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
