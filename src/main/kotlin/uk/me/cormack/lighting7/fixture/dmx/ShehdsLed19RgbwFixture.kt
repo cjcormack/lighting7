@@ -132,7 +132,7 @@ sealed class ShehdsLed19RgbwFixture(
      *         four broad bands but no clean named states beyond "self-propelled".
      * - Ch 24: Reset.
      */
-    @FixtureType("shehds-led19-rgbw-24ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD)
+    @FixtureType("shehds-led19-rgbw-24ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
     class Mode24Ch(
         universe: Universe,
         key: String,
@@ -242,7 +242,7 @@ sealed class ShehdsLed19RgbwFixture(
      *         180–255 voice).
      * - Ch 16: Reset.
      */
-    @FixtureType("shehds-led19-rgbw-16ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD)
+    @FixtureType("shehds-led19-rgbw-16ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
     class Mode16Ch(
         universe: Universe,
         key: String,

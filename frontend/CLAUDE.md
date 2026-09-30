@@ -284,7 +284,9 @@ stage-vis doc's §"Editing on the sections", which has the parity table.
 **Fixture bodies are parametric archetypes, instanced per part** (session 6):
 `stage3d/bodies/archetype.ts` turns a patch, its fixture and its type into a `BodySpec` — profile,
 box profile, fresnel, PAR, flood, downlight, mover, batten, blinder, effect, cannon or tape, chosen
-from the kind, the type's words and its tilt until session 7's lantern library — with its **cells**,
+by the **lantern** a generic dimmer is hung with (the desk's library, `GET /lanterns`, read through
+`useLanternIndex`), else the type's declared `body`, else the kind, the type's words and its tilt
+(session 7) — with its **cells**,
 one per coloured element (the Liteobar is three), each its own lens, beam and light (at most four
 lights a fixture, averaging runs of cells). `bodySpecOf` in `emitterNeeds.ts` is the one call both
 `Stage3D` (sizing) and `FixtureModel` (drawing) make. `bodies/StageBodies.tsx` instances the parts
@@ -293,7 +295,12 @@ rig (placement, mount, yoke, head) and an invisible hit proxy, and copies the ma
 instances every frame. Beams **leave the aperture** with the apex behind it (`apexDistanceM`), and
 pool and haze share `beamMask.ts`; every beam is raymarched now. A `LEDGE` or `FLOOR_STAND` stands
 its units (`bodies/mount.ts`, pinned to the desk's `STANDING_RIGGING_KINDS`), but a mover's
-orientation is still its `basePitchDeg`. See the stage-vis doc's §"Fixture bodies".
+orientation is still its `basePitchDeg`. **A conventional's focus is drawn**: shutters, the gate's
+turn, the iris and a PAR's oval are arguments to `beamMask` in the head's frame, **packed into the
+light table's six texels** (the blades 12 bits each, two to a float; a gate or lamp turn rotates the
+frame rather than the mask; an oval is a negative aspect) — the GLSL and its twin change together.
+The Stage view's **Focus** tab and the patch editor's **Lantern** box mount one `FocusCard`, and a
+pair's lanterns are focused separately. See the stage-vis doc's §"Fixture bodies".
 
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
@@ -2421,7 +2428,7 @@ Three surface rules, each pinned by its test:
   That refusal is the only overlap check there is — **the patch PUT has none today** (only the
   POST checks), and there is no bulk atomic route, so a batch is N PUTs that can half-apply on a
   network failure; both are lighting7 work and Chris's call. Clear is refused on Address, Fixture,
-  Key and Stage; offered on Mount, Angle and Gel. It is a routed page again (§List shell); row B is
+  Key and Stage; offered on Mount, Lantern, Angle and Gel. It is a routed page again (§List shell); row B is
   universe toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a
   fill bar on a 40px chrome row of their own.
   **A double click on a fixture's name opens a rename popover — the kit's `TextCell`, mounted with

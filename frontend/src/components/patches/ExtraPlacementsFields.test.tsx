@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import type { PatchPlacementInput } from '@/api/patchApi'
 import type { PlacementGeometry } from '@/lib/extraPlacements'
@@ -10,6 +10,8 @@ vi.mock('@/store/riggings', () => ({
 }))
 
 import { ExtraPlacementsFields } from './ExtraPlacementsFields'
+import libraryJson from '../../../../src/main/resources/lanterns/library.json'
+import { indexLanterns, type Lantern } from '@/lib/lanterns'
 
 afterEach(cleanup)
 
@@ -22,12 +24,23 @@ const primary: PlacementGeometry = {
   basePitchDeg: 45,
 }
 
-function Harness({ initial, onValue }: { initial: PatchPlacementInput[]; onValue: (v: PatchPlacementInput[]) => void }) {
+const lanterns = indexLanterns(libraryJson as Lantern[])
+
+function Harness({
+  initial,
+  onValue,
+  lantern,
+}: {
+  initial: PatchPlacementInput[]
+  onValue: (v: PatchPlacementInput[]) => void
+  lantern?: React.ComponentProps<typeof ExtraPlacementsFields>['lantern']
+}) {
   const [value, setValue] = useState(initial)
   return (
     <ExtraPlacementsFields
       projectId={1}
       primary={primary}
+      lantern={lantern}
       value={value}
       onChange={(next) => {
         setValue(next)
@@ -170,5 +183,55 @@ describe('ExtraPlacementsFields — the sides of a variable-length run', () => {
     render(<Harness initial={[]} onValue={vi.fn()} />)
     fireEvent.click(screen.getByRole('button', { name: /Lantern/ }))
     expect(screen.queryByLabelText('Length')).toBeNull()
+  })
+})
+
+describe('ExtraPlacementsFields — a lantern of its own (stage-view plan session 7)', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    )
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const placed: PatchPlacementInput = {
+    label: 'SR',
+    riggingUuid: 'rig-lx1',
+    stageX: 3,
+    stageY: 0,
+    stageZ: -0.4,
+    baseYawDeg: -10,
+    basePitchDeg: 45,
+  }
+  const lantern = { lanterns, kind: 'PROFILE' as const, fixtureLantern: lanterns.byId.get('s4-19')! }
+
+  it('draws a lantern picker and a focus per entry only for a type hung with a lantern', () => {
+    render(<Harness initial={[placed]} onValue={() => {}} />)
+    expect(screen.queryByRole('button', { name: 'Focus SR' })).toBeNull()
+    cleanup()
+    render(<Harness initial={[placed]} onValue={() => {}} lantern={lantern} />)
+    expect(screen.getByRole('button', { name: 'Focus SR' })).toBeTruthy()
+    // Naming none, the entry is the fixture's own lantern.
+    expect(screen.getByText(/Same as the fixture/)).toBeTruthy()
+  })
+
+  it('focuses the entry on its own, keeping everything else it holds', () => {
+    const onValue = vi.fn()
+    render(<Harness initial={[placed]} onValue={onValue} lantern={lantern} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Focus SR' }))
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'Bottom shutters depth' }), { key: 'ArrowRight' })
+    const [next] = onValue.mock.lastCall![0] as PatchPlacementInput[]
+    expect(next).toMatchObject({ label: 'SR', stageX: 3, basePitchDeg: 45 })
+    expect(next.shutters).toEqual([
+      { depth: 0, angleDeg: 0 },
+      { depth: 0.01, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+    ])
   })
 })

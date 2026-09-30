@@ -1,4 +1,5 @@
 import type { PatchPlacement, PatchPlacementInput } from '../api/patchApi'
+import { focusFields, type LanternFocus } from './lanterns'
 
 /** The geometry a placement shares with the patch's own: rigging, position and body orientation. */
 export interface PlacementGeometry {
@@ -53,7 +54,30 @@ export function toPlacementInput(p: PatchPlacement): PatchPlacementInput {
     // would clear a roll set elsewhere (the Stage view, or place_fixtures over MCP).
     baseRollDeg: p.baseRollDeg ?? null,
     lengthM: p.lengthM ?? null,
+    // The lantern and its focus (stage-view plan session 7), carried whole for the roll's reason:
+    // an entry without them would clear a focus set on the Stage view's Focus tab or over MCP.
+    ...focusFields(p),
   }
+}
+
+/** Whether two lanterns are focused alike, as the desk stores them — absent and null alike. */
+export function focusEqual(a: LanternFocus, b: LanternFocus): boolean {
+  const x = focusFields(a)
+  const y = focusFields(b)
+  return (
+    x.lanternType === y.lanternType &&
+    x.zoomDeg === y.zoomDeg &&
+    x.lampRotationDeg === y.lampRotationDeg &&
+    x.gateRotationDeg === y.gateRotationDeg &&
+    x.iris === y.iris &&
+    x.focusSoftness === y.focusSoftness &&
+    bladesEqual(x.shutters, y.shutters)
+  )
+}
+
+function bladesEqual(a: LanternFocus['shutters'], b: LanternFocus['shutters']): boolean {
+  if (a == null || b == null) return a == null && b == null
+  return a.length === b.length && a.every((x, i) => x.depth === b[i].depth && x.angleDeg === b[i].angleDeg)
 }
 
 /** The label as the desk will store it: trimmed, and blank meaning none. */
@@ -85,7 +109,8 @@ export function placementListsEqual(
       x.basePitchDeg === y.basePitchDeg &&
       (x.baseRollDeg ?? null) === (y.baseRollDeg ?? null) &&
       // Absent and null both mean "the patch's own length", as the desk stores them.
-      (x.lengthM ?? null) === (y.lengthM ?? null)
+      (x.lengthM ?? null) === (y.lengthM ?? null) &&
+      focusEqual(x, y)
     )
   })
 }

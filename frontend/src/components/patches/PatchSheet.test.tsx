@@ -52,6 +52,8 @@ vi.mock('@tanstack/react-virtual', () => ({
 
 import { PatchSheet, patchRowId, type PatchSheetRow } from './PatchSheet'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
+import { indexLanterns, type Lantern } from '@/lib/lanterns'
+import libraryJson from '../../../../src/main/resources/lanterns/library.json'
 
 function patch(id: number, name: string, startChannel: number, channelCount = 6, universe = 1): FixturePatch {
   return {
@@ -159,6 +161,7 @@ function stubFlatLayout() {
     key: [600, 740],
     mount: [240, 358],
     gel: [358, 454],
+    lantern: [358, 600],
   }
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
     if (this.hasAttribute('data-grid-name-header')) return rect(0, 240)
@@ -314,6 +317,42 @@ describe('PatchSheet', () => {
     expect(screen.queryByRole('option', { name: 'Shown' })).toBeNull()
     fireEvent.keyDown(filter, { key: 'Enter' })
     expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, stageHidden: true })
+  })
+
+  describe('the Mount and Lantern columns (stage-view plan session 7)', () => {
+    const lanterns = indexLanterns(libraryJson as Lantern[])
+
+    it('says a unit on a ledge stands, on its face and its title', () => {
+      draw({
+        rows: [{ ...rows[0], patch: { ...RIG[0], riggingUuid: 'rig-1' }, riggingName: 'Balcony', riggingKind: 'LEDGE' }],
+        riggings: [{ uuid: 'rig-1', name: 'Balcony' }],
+        visibleColumns: ['mount'],
+      })
+      expect(within(row('PAR 1')).getByText(/standing/)).toBeInTheDocument()
+      expect(row('PAR 1').querySelector('[data-cell="mount"]')!.closest('[title]')?.getAttribute('title')).toMatch(
+        /Balcony · ledge · standing/,
+      )
+    })
+
+    it('names the lantern a dimmer is hung with, and picks another from the library', async () => {
+      draw({
+        rows: [{ ...rows[0], acceptsLantern: true, lanternLabel: 'House downlight', lanternIsDefault: true }],
+        lanterns,
+        visibleColumns: ['lantern'],
+      })
+      const cell = row('PAR 1').querySelector('[data-cell="lantern"] button') as HTMLElement
+      expect(within(cell).getByText('House downlight')).toBeInTheDocument()
+      fireEvent.click(cell)
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      fireEvent.click(await screen.findByRole('option', { name: 'Source Four 19° · 19°' }))
+      expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 1, lanternType: 's4-19' })
+    })
+
+    it('reads out a DMX type’s declared body, which is not the operator’s to pick', () => {
+      draw({ rows: [{ ...rows[0], bodyLabel: 'mover · spot' }], lanterns, visibleColumns: ['lantern'] })
+      expect(within(row('PAR 1')).getByText('mover · spot')).toBeInTheDocument()
+      expect(row('PAR 1').querySelector('[data-cell="lantern"] button')).toBeNull()
+    })
   })
 
   describe('the Gel column', () => {

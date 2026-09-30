@@ -5,6 +5,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
+import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
+import uk.me.cormack.lighting7.fixture.lantern.focus
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.DaoProject
@@ -34,6 +37,15 @@ data class PatchPlacementDto(
     /** This segment's own length, for a variable-length type (a lightstrip laid in a ring); null
      *  takes the patch's `lengthM`. */
     val lengthM: Double? = null,
+    /** This lantern's library id; null takes the patch's `lanternType`. The six fields after it are
+     *  this lantern's own focus, never the patch's — see `FixturePatchDto.lanternType`. */
+    val lanternType: String? = null,
+    val zoomDeg: Double? = null,
+    val lampRotationDeg: Double? = null,
+    val shutters: List<ShutterBlade>? = null,
+    val gateRotationDeg: Double? = null,
+    val iris: Double? = null,
+    val focusSoftness: Double? = null,
 )
 
 /**
@@ -54,6 +66,9 @@ internal data class PlacementInput(
     val basePitchDeg: Double?,
     val lengthM: Double? = null,
     val baseRollDeg: Double? = null,
+    /** This lantern's focus data (stage-view plan D9, D14), range-checked; the type's and the
+     *  library's rules need the patch and run where it is known ([placementFocusRefusal]). */
+    val focus: LanternFocus = LanternFocus(),
 )
 
 /**
@@ -100,6 +115,9 @@ internal fun parseExtraPlacements(value: JsonElement?): Result<List<PlacementInp
                 basePitchDeg = entry["basePitchDeg"].nullableDouble(),
                 lengthM = entry["lengthM"].nullableDouble(),
                 baseRollDeg = entry["baseRollDeg"].nullableDouble(),
+                focus = LanternFocus.parse(entry).getOrElse {
+                    return Result.failure(IllegalArgumentException("$where: ${it.message}"))
+                },
             )
         } catch (e: IllegalArgumentException) {
             // A wrong JSON type (a string where a number goes, an object where a string goes).
@@ -181,12 +199,13 @@ internal fun applyExtraPlacements(
         row.basePitchDeg = input.basePitchDeg
         row.baseRollDeg = input.baseRollDeg
         row.lengthM = input.lengthM
+        row.focus = input.focus
         row.sortOrder = index
     }
     existing.values.filter { it.uuid !in kept }.forEach { it.delete() }
 }
 
-internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = PatchPlacementDto(
+internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = focus.let { f -> PatchPlacementDto(
     uuid = uuid.toString(),
     label = label,
     riggingUuid = rigging?.uuid?.toString(),
@@ -197,7 +216,14 @@ internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = PatchPlacemen
     basePitchDeg = basePitchDeg,
     baseRollDeg = baseRollDeg,
     lengthM = lengthM,
-)
+    lanternType = f.lanternType,
+    zoomDeg = f.zoomDeg,
+    lampRotationDeg = f.lampRotationDeg,
+    shutters = f.shutters,
+    gateRotationDeg = f.gateRotationDeg,
+    iris = f.iris,
+    focusSoftness = f.focusSoftness,
+) }
 
 /**
  * The placement's position is past the end of its rigging — the bulk route's non-fatal

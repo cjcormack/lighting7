@@ -26,14 +26,20 @@ import org.jetbrains.exposed.v1.dao.IntEntityClass
  * one address — the pair can never be told to do two different things.
  *
  * What a placement does *not* carry is the fixture's own facts — type, beam angle, gel, kind
- * override, hidden. A paired lantern is the same unit in the same colour; an override per
- * placement is additive later if a venue ever needs one.
+ * override, hidden. A paired lantern is lit from the same channels in the same colour; an override
+ * per placement is additive later if a venue ever needs one.
  *
- * The one exception is [lengthM], and it is the first such override: a variable-length type (a
+ * The exceptions are [lengthM] and the **focus data** below. [lengthM] was the first such override: a variable-length type (a
  * lightstrip, `FixtureType.acceptsLength`) laid in segments — a ring round the stage edge is one
  * run on one controller, drawn as four sides — is one patch whose placements are the segments,
  * and each side is its own length. Null takes the patch's own length. Refused, like the patch's,
  * for a type whose length is fixed.
+ *
+ * The focus data ([lanternType] and the six columns after it, stage-view plan D9 and D14) is the
+ * second: a pair on one dimmer is two lanterns, routinely a profile and a fresnel, and each is
+ * focused separately. A null [lanternType] takes the patch's own lantern; the six focus columns are
+ * this lantern's alone and are never inherited — a blade pushed in on one unit is not in on the
+ * other.
  *
  * Portable: embedded in its patch's sync document as `extraPlacements`
  * (`FixturePatchJson`), in list order, so [sortOrder] is not on the wire.
@@ -57,6 +63,14 @@ object DaoFixturePatchPlacements : IntIdTable("fixture_patch_placements") {
     val baseRollDeg = double("base_roll_deg").nullable()
     /** This segment's length in metres, for a variable-length type; null takes the patch's own. */
     val lengthM = double("length_m").nullable()
+    /** This lantern, by library id; null takes the patch's own ([DaoFixturePatches.lanternType]). */
+    val lanternType = varchar("lantern_type", MAX_LANTERN_ID_LENGTH).nullable()
+    val zoomDeg = double("zoom_deg").nullable()
+    val lampRotationDeg = double("lamp_rotation_deg").nullable()
+    val shutters = text("shutters").nullable()
+    val gateRotationDeg = double("gate_rotation_deg").nullable()
+    val iris = double("iris").nullable()
+    val focusSoftness = double("focus_softness").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -74,6 +88,13 @@ class DaoFixturePatchPlacement(id: EntityID<Int>) : IntEntity(id) {
     var basePitchDeg by DaoFixturePatchPlacements.basePitchDeg
     var baseRollDeg by DaoFixturePatchPlacements.baseRollDeg
     var lengthM by DaoFixturePatchPlacements.lengthM
+    var lanternType by DaoFixturePatchPlacements.lanternType
+    var zoomDeg by DaoFixturePatchPlacements.zoomDeg
+    var lampRotationDeg by DaoFixturePatchPlacements.lampRotationDeg
+    var shutters by DaoFixturePatchPlacements.shutters
+    var gateRotationDeg by DaoFixturePatchPlacements.gateRotationDeg
+    var iris by DaoFixturePatchPlacements.iris
+    var focusSoftness by DaoFixturePatchPlacements.focusSoftness
     var sortOrder by DaoFixturePatchPlacements.sortOrder
     var uuid by DaoFixturePatchPlacements.uuid
 }

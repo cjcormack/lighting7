@@ -11,7 +11,7 @@ import {
 } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { EDGE_SOFT_RANGE_M } from '../washConfig'
-import { LIGHT_TEXELS, MAX_LIGHT_BUDGET } from './lightTable'
+import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
 /**
@@ -119,6 +119,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 
   ${BEAM_MASK_GLSL}
   ${BEAM_HARDNESS_GLSL}
+  ${UNPACK_EDGE_IRIS_GLSL}
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -183,10 +184,12 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       vec3 bx = normalize(frame.xyz - axis.xyz * dot(frame.xyz, axis.xyz));
       vec3 by = cross(axis.xyz, bx);
       vec2 uv = vec2(dot(v, bx), dot(v, by)) / max(1e-4, axial * frame.w);
-      if (aperture.z > 0.0) uv.y /= aperture.z;
+      // A segment's rectangle, or an oval's narrow axis: the field edge at 1 on v too.
+      if (aperture.z != 0.0) uv.y /= abs(aperture.z);
+      vec2 edgeIris = unpackEdgeIris(colour.w);
       // Focus is a distance from the aperture — the lens — not from the apex behind it.
-      float hard = beamHardness(colour.w, apex.w, abs(dist - aperture.x - apex.w), uEdgeSoftRange);
-      float m = beamMask(uv, aperture.z, aperture.y, 1.0 - hard);
+      float hard = beamHardness(edgeIris.x, apex.w, abs(dist - aperture.x - apex.w), uEdgeSoftRange);
+      float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - hard, aperture.yw);
       if (m <= 0.0) continue;
       acc += colour.rgb * m * (0.3 + 0.7 * facing);
     }

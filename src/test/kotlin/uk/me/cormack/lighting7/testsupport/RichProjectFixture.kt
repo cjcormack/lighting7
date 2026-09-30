@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.testsupport
 
+import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
+import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
@@ -296,6 +298,40 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         baseYawDeg = 180.0
         baseRollDeg = 90.0
         lengthM = 12.25
+        sortOrder = 0
+    }
+    // A pair of conventionals on one dimmer (v19): a zoom profile focused off the pros, and its
+    // partner a PAR can with its lamp turned — every focus field off its default on one or the other,
+    // so a copier that lost any of them would show in the round-trip and clone tests.
+    val profile = DaoFixturePatch.new {
+        this.project = project
+        universeConfig = u0
+        fixtureTypeKey = "generic-dimmer"
+        key = "adv2-1"; displayName = "ADV2 1"; startChannel = 300; sortOrder = 7
+        stageX = 1.5; stageY = -3.0; stageZ = 4.0; baseYawDeg = 180.0; basePitchDeg = 12.0
+        kindOverride = "PROFILE"
+        lanternType = "s4-zoom-25-50"
+        zoomDeg = 31.5
+        shutters = LanternFocus.shuttersToText(
+            listOf(ShutterBlade(0.28, 0.0), ShutterBlade(0.05, 4.0), ShutterBlade(0.35, -12.5), ShutterBlade()),
+        )
+        gateRotationDeg = 7.5
+        iris = 0.8
+        focusSoftness = 0.25
+    }
+    DaoFixturePatchPlacement.new {
+        fixturePatch = profile
+        label = "SR"
+        stageX = -1.5; stageY = -3.0; stageZ = 4.0
+        lanternType = "par64-cp62"
+        lampRotationDeg = 45.0
+        zoomDeg = 44.0
+        shutters = LanternFocus.shuttersToText(
+            listOf(ShutterBlade(), ShutterBlade(0.4, 10.0), ShutterBlade(), ShutterBlade(0.15, -3.0)),
+        )
+        gateRotationDeg = -20.0
+        iris = 0.6
+        focusSoftness = 0.9
         sortOrder = 0
     }
     val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }

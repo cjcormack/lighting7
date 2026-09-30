@@ -241,7 +241,7 @@ export function Stage3D({
   const stageW = project?.stageWidthM ?? 10
   const stageD = project?.stageDepthM ?? 8
   const stageH = project?.stageHeightM ?? 6
-  const { patches, regions, riggings, fixtureByKey, typeByKey } = useStageData(
+  const { patches, regions, riggings, fixtureByKey, typeByKey, lanterns: lanternLibrary } = useStageData(
     projectId,
     stageW,
     stageD,
@@ -486,11 +486,11 @@ export function Stage3D({
       [...visiblePatches, ...lanterns.map((l) => l.patch)].map((patch) => {
         const fixture = fixtureByKey.get(patch.key)
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
-        const spec = bodySpecOf(patch, fixture, fixtureType)
+        const spec = bodySpecOf(patch, fixture, fixtureType, lanternLibrary)
         const rigging = patch.riggingUuid ? safeRiggings.find((r) => r.uuid === patch.riggingUuid) : undefined
         return { spec, mount: mountFor(rigging), needs: emitterNeedsForSpec(spec, fixture) }
       }),
-    [visiblePatches, lanterns, fixtureByKey, typeByKey, safeRiggings],
+    [visiblePatches, lanterns, fixtureByKey, typeByKey, safeRiggings, lanternLibrary],
   )
   const bodyLayout = useMemo(() => buildBodyLayout(bodySlots), [bodySlots])
   const emitterLayout = useMemo(() => buildEmitterLayout(bodySlots.map((b) => b.needs)), [bodySlots])
@@ -536,6 +536,7 @@ export function Stage3D({
         patch={patch}
         fixture={fixture}
         fixtureType={fixtureType}
+        lanterns={lanternLibrary}
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={slot}
@@ -558,6 +559,7 @@ export function Stage3D({
         patch={patch}
         fixture={fixture}
         fixtureType={fixtureType}
+        lanterns={lanternLibrary}
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={visiblePatches.length + i}

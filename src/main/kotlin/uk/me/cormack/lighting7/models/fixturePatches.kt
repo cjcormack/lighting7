@@ -63,6 +63,26 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
      *  [stageHidden] on the stage without writing it. See `docs/fixtures-engineering.md`
      *  §"Infrastructure fixtures". */
     val infrastructure = bool("infrastructure").default(false)
+    /** The lantern this unit is, by its id in the lantern library (`fixture/lantern/`), for a type
+     *  that takes one (`FixtureType.acceptsLantern` — a generic dimmer). Null draws the library's
+     *  default for the kind. When set, [kindOverride] is **derived** from it at the write boundary.
+     *  This column and the six after it are the unit's **focus data** (stage-view plan D9, D14):
+     *  physical, set with a spanner, portable, and never in a look. Presentational: the loader never
+     *  reads them. See `docs/fixtures-engineering.md` §"Lanterns and focus". */
+    val lanternType = varchar("lantern_type", MAX_LANTERN_ID_LENGTH).nullable()
+    /** The field angle the lantern is zoomed (or spot–flooded) to, within its range; null is its default. */
+    val zoomDeg = double("zoom_deg").nullable()
+    /** A PAR lamp's turn in its can, which turns its oval beam about the axis. Null is 0. */
+    val lampRotationDeg = double("lamp_rotation_deg").nullable()
+    /** The four blades — top, bottom, left, right, named for the edge of the light they cut — as
+     *  canonical JSON `[{depth, angleDeg} ×4]` (`LanternFocus`). Null is every blade out. */
+    val shutters = text("shutters").nullable()
+    /** The gate's (or barn doors') turn about the beam. Null is 0. */
+    val gateRotationDeg = double("gate_rotation_deg").nullable()
+    /** The iris's open fraction of the field, 1 open. Null is open. */
+    val iris = double("iris").nullable()
+    /** The focus knob, sharp 0 to soft 1. Null is the lantern's own edge. */
+    val focusSoftness = double("focus_softness").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -94,6 +114,13 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var lengthM by DaoFixturePatches.lengthM
     var stageHidden by DaoFixturePatches.stageHidden
     var infrastructure by DaoFixturePatches.infrastructure
+    var lanternType by DaoFixturePatches.lanternType
+    var zoomDeg by DaoFixturePatches.zoomDeg
+    var lampRotationDeg by DaoFixturePatches.lampRotationDeg
+    var shutters by DaoFixturePatches.shutters
+    var gateRotationDeg by DaoFixturePatches.gateRotationDeg
+    var iris by DaoFixturePatches.iris
+    var focusSoftness by DaoFixturePatches.focusSoftness
     var uuid by DaoFixturePatches.uuid
 }
 
@@ -106,3 +133,6 @@ const val MAX_FIXTURE_LENGTH_M = 100.0
  *  numbering in practice (MagicQ, Eos channels); zero and negatives are no one's head. */
 const val MIN_HEAD_NUMBER = 1
 const val MAX_HEAD_NUMBER = 99999
+
+/** Column width of a stored lantern id ([DaoFixturePatches.lanternType]); a longer one is refused. */
+const val MAX_LANTERN_ID_LENGTH = 64

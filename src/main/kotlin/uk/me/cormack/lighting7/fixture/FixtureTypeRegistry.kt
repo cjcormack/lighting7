@@ -78,6 +78,10 @@ object FixtureTypeRegistry {
         /** Resolved beam geometry — never [BeamShape.INHERIT]/[BeamEdge.INHERIT]. */
         val beamShape: BeamShape,
         val beamEdge: BeamEdge,
+        /** The declared body ([FixtureType.body]), or null when the view defaults it from the kind. */
+        val body: FixtureBodyInfo? = null,
+        /** Whether a patch names a lantern and carries its focus — see [FixtureType.acceptsLantern]. */
+        val acceptsLantern: Boolean = false,
     )
 
     /**
@@ -294,6 +298,8 @@ object FixtureTypeRegistry {
                 acceptsLength = annotation.acceptsLength,
                 beamShape = beamShape,
                 beamEdge = beamEdge,
+                body = annotation.body.resolve(),
+                acceptsLantern = annotation.acceptsLantern,
             )
         )
     }

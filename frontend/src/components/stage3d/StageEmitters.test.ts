@@ -2,6 +2,7 @@
 //
 // jsdom only because this module imports @react-three/fiber at top level. Nothing here renders,
 // and no WebGL context is ever created — the meshes and buffers are plain JS objects.
+import { packBlade } from './beamMask'
 import { describe, expect, it } from 'vitest'
 import {
   Color,
@@ -115,6 +116,8 @@ function beamWrite(): BeamWrite {
     near: 0.5,
     iris: 0.6,
     aspect: 0.3,
+    bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
+    bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
   }
 }
@@ -204,6 +207,20 @@ describe('emitter layout bounds', () => {
     expect(b.volumeMesh.count).toBe(13 + MAX_PRISM_LOBES)
     // A light a lobe for the par and the mover, four for the bar's twelve cells.
     expect(b.lights.capacity).toBe(5 + MAX_PRISM_LOBES)
+  })
+
+  it("keeps the haze program inside WebGL's sixteen guaranteed vertex attributes", () => {
+    // three's ShaderMaterial prefix declares position, normal and uv whatever the shader reads, and
+    // an instanced mesh's matrix takes four slots. Seventeen does not link on ANGLE ("Too many
+    // attributes") and every beam in the air goes dark — session 7's review found exactly that.
+    const b = build(layout)
+    const geometryAttrs = Object.values(b.volumeMesh.geometry.attributes)
+    const slots = geometryAttrs.reduce((n, a) => n + Math.ceil(a.itemSize / 4), 0) + 4
+    expect(slots).toBeLessThanOrEqual(16)
+    // And the haze shader itself declares no attribute the geometry does not carry.
+    const declared = [...makeVolumeMaterial(getGoboTexture()).vertexShader.matchAll(/attribute\s+\w+\s+(\w+);/g)].map((m) => m[1])
+    expect(declared.length).toBeGreaterThan(0)
+    for (const name of declared) expect(Object.keys(b.volumeMesh.geometry.attributes)).toContain(name)
   })
 
   it("drops a write past a slot's block rather than landing in the next slot", () => {

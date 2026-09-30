@@ -273,6 +273,7 @@ sealed class RobeColorSpot575Fixture(
         manufacturer = "Robe",
         model = "ColorSpot 575 AT",
         kind = FixtureKind.MOVING_HEAD,
+        body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT),
     )
     class Mode2Ch(
         universe: Universe,

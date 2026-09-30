@@ -105,6 +105,7 @@ sealed class Source4RevolutionFixture(
         manufacturer = "ETC",
         model = "Source 4 Revolution",
         kind = FixtureKind.PROFILE,
+        body = FixtureBody(BodyArchetype.MOVER, MoverHead.PROFILE),
     )
     class BaseFrame31Ch(
         universe: Universe,

@@ -138,7 +138,9 @@ which made three things visible:
   4.0 m — above its ceiling. The ceiling is a surface a beam stops at, so the LX bars' pools never
   reach the stage, and since session 6 their haze is hidden behind it too (the beam hull is
   depth-tested again).
-- Lantern types for the generic dimmers wait for session 7's library.
+- The generic dimmers name no lantern yet, so each is drawn as its kind's default from session 7's
+  library (a `PROFILE` a Source Four 19°, a `FRESNEL` a Cantata F, a `PAR` a Par 64 CP62). Naming
+  the hall's real lanterns waits on the plan's §11 Q4 (`FU-LANTERN-LIBRARY-HALL`).
 - Static lanterns now honour the documented pitch (0 level, +pitch down), where the view drew 0
   straight down. The Hall was entered level-is-zero; another show's statics left at 0 because they
   looked right under the old drawing will now throw level.

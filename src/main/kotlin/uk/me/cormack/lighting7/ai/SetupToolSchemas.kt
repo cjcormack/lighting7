@@ -7,6 +7,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fixture.FixtureKind
+import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.StageViewpointKind
@@ -77,6 +78,53 @@ private const val COORDINATES =
     "Stage coordinates are metres, FOH-relative, Z-up: origin = centre of the downstage edge at deck level; " +
         "+x = audience-right (actor's stage left), +y = upstage, +z = up."
 
+/** One framing shutter or barn door. */
+private val bladeSchema = objectSchema {
+    prop("depth", "number", "0 is out, 1 closes the whole beam: the fraction of the field's diameter it covers, so 0.5 reaches the centre.")
+    prop("angleDeg", "number", "The blade's turn about the middle of its edge, −30–30.")
+}
+
+/** The library's lanterns, one line each, for the schema text: the id to send and what it is. */
+private val LANTERN_CHOICES: String by lazy {
+    LanternLibrary.all.joinToString("; ") { l ->
+        val field = l.zoom?.let { "zoom ${deg(it.minDeg)}–${deg(it.maxDeg)}°" }
+            ?: l.oval?.let { "oval ${deg(it.wideDeg)}×${deg(it.narrowDeg)}°" }
+            ?: "${deg(l.fieldDeg)}°"
+        "${l.id} (${l.name}, $field)"
+    }
+}
+
+/** Which lantern a generic dimmer that names none is drawn as, by kind. */
+private val LANTERN_DEFAULTS: String by lazy {
+    LanternLibrary.all.flatMap { l -> l.defaultFor.map { "$it → ${l.id}" } }.joinToString(", ")
+}
+
+private fun deg(v: Double) = if (v == Math.rint(v)) v.toLong().toString() else v.toString()
+
+/**
+ * A lantern and its focus (stage-view plan session 7): the same seven fields on a fixture and on
+ * each `alsoAt` entry. Only a type that takes a lantern (list_fixture_types marks it
+ * acceptsLantern — generic-dimmer) carries them.
+ */
+private fun JsonObjectBuilder.focusProps(whose: String) {
+    prop(
+        "lanternType", "string",
+        "Which lantern this is, for $whose — only for a fixture type marked acceptsLantern (generic-dimmer). " +
+            "One of: $LANTERN_CHOICES. Null draws the library's default for the fixture's kind ($LANTERN_DEFAULTS). " +
+            "It sets the drawn body and field, and the fixture's kind follows it.",
+    )
+    prop("zoomDeg", "number", "The field angle the lantern is zoomed (or a fresnel spot–flooded) to — only within its zoom range above; refused for a fixed lantern. Null returns to its default field.")
+    prop("lampRotationDeg", "number", "A PAR lamp's turn in its can, −180–180, which turns its oval beam about the axis; 0 lays the oval's wide axis across the unit.")
+    arrayProp(
+        "shutters", bladeSchema,
+        "Exactly four blades, in the order top, bottom, left, right — named for the edge of the light each cuts as seen from behind the lantern along its beam, not for its place in the gate. " +
+            "A profile's shutters; a fresnel's barn doors in the same four slots. Null pulls them all out.",
+    )
+    prop("gateRotationDeg", "number", "The gate's (or the barn doors') turn about the beam, −180–180, which turns every blade with it.")
+    prop("iris", "number", "The iris's open fraction, 0–1 (1 open), for a lantern with an iris.")
+    prop("focusSoftness", "number", "The focus knob, 0 sharp to 1 soft. Null is the lantern's own edge.")
+}
+
 /** The fields a fixture's physical placement shares between patch_fixtures and place_fixtures. */
 private fun JsonObjectBuilder.placementProps() {
     prop("rigging", "string", "Name of the rigging (truss, bar, boom…) it hangs from, as set_stage created it. When set, x/y/z are offsets along that rigging's own frame (x along its length) rather than world coordinates.")
@@ -88,9 +136,10 @@ private fun JsonObjectBuilder.placementProps() {
     prop("rollDeg", "number", "Body roll, −180–180: tips the body sideways, lifting its own x (length) axis toward vertical; applied before pitch and yaw. A long body (a lightstrip, a bar) runs along its own x: pitch turns it about that length and yaw swings it round, so neither lifts it off level — roll 90 stands it on end (a strip running up a wall, a ring's upright side). For a moving head it lays the unit on its side; it is not a spin about the beam.")
     prop("beamAngleDeg", "integer", "Beam angle 2–120, for fixture types that accept one (profiles, generic dimmers).")
     prop("gelCode", "string", "Gel as the plot writes it, e.g. 'L201', 'R80'.")
-    enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind — e.g. PROFILE or FRESNEL for a generic dimmer.")
+    enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind. For a generic dimmer name its lanternType instead: the kind is derived from the lantern, and a different kind beside one is refused.")
     prop("lengthM", "number", "Installed length in metres along the unit's long axis (0.01–100), only for fixture types that take one (list_fixture_types marks them acceptsLength — a lightstrip, cut to its run). Refused for every other type; null returns to the type's default. A run laid round several sides (a ring round the stage edge) is one fixture: its own placement is one side, and each other side is an `alsoAt` entry with its own lengthM.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
+    focusProps("the fixture's own lantern")
     arrayProp(
         "alsoAt",
         alsoAtSchema,
@@ -111,7 +160,9 @@ private val alsoAtSchema = objectSchema {
     prop("pitchDeg", "number", "Body rotation about X, as for the fixture.")
     prop("rollDeg", "number", "Body roll, as for the fixture — 90 stands this segment on end.")
     prop("lengthM", "number", "This segment's length in metres, for a fixture type that takes one (acceptsLength); absent takes the fixture's own lengthM.")
+    focusProps("this lantern — a pair on one dimmer are two lanterns, each focused separately")
 }
+
 
 internal val listProjectsTool = AnthropicToolDef(
     name = "list_projects",
@@ -142,7 +193,7 @@ internal val switchProjectTool = AnthropicToolDef(
 
 internal val listFixtureTypesTool = AnthropicToolDef(
     name = "list_fixture_types",
-    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then.",
+    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then. A type marked acceptsLantern (generic-dimmer) is hung with a lantern from the desk's library: give each its lanternType when the plot names one.",
     inputSchema = objectSchema {
         prop("query", "string", "Optional case-insensitive filter on manufacturer, model, mode or typeKey.")
     },
@@ -390,7 +441,7 @@ private val placementSchema = objectSchema(required = listOf("key")) {
 
 internal val placeFixturesTool = AnthropicToolDef(
     name = "place_fixtures",
-    description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel. Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
+    description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel — and for a generic dimmer its lantern and how it is focused (shutters, gate, iris, focus, zoom). Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)

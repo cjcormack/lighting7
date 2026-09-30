@@ -35,6 +35,11 @@ export function lanternsFor(patches: readonly FixturePatch[]): Lantern[] {
  * where it has none. The one other field it changes is
  * `displayName`, which `FixtureModel` draws as the 3D label: a labelled lantern reads
  * "Name · SR".
+ *
+ * **A placement is its own lantern, focused separately** (stage-view plan D9, D14): its
+ * `lanternType` wins and a null one takes the patch's, and its six focus fields are its own —
+ * never the patch's, since a blade pushed in on one unit is not in on the other. The body then
+ * derives the kind from the placement's lantern, so a pair can be a profile and a fresnel.
  */
 export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement): FixturePatch {
   const label = placement.label?.trim()
@@ -49,5 +54,12 @@ export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement)
     basePitchDeg: placement.basePitchDeg,
     baseRollDeg: placement.baseRollDeg ?? null,
     lengthM: placement.lengthM ?? patch.lengthM ?? null,
+    lanternType: placement.lanternType ?? patch.lanternType ?? null,
+    zoomDeg: placement.zoomDeg ?? null,
+    lampRotationDeg: placement.lampRotationDeg ?? null,
+    shutters: placement.shutters ?? null,
+    gateRotationDeg: placement.gateRotationDeg ?? null,
+    iris: placement.iris ?? null,
+    focusSoftness: placement.focusSoftness ?? null,
   }
 }

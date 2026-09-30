@@ -105,7 +105,7 @@ sealed class ImgStageLineWash42LedFixture(
      * - Ch 12: Colour-change speed (slow → fast).
      * - Ch 13: Built-in programs.
      */
-    @FixtureType("imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD)
+    @FixtureType("imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
     class Mode13Ch(
         universe: Universe,
         key: String,

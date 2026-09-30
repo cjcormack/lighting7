@@ -58,6 +58,7 @@ const routes = {
   'projects/15': { id: 15, name: 'Hall', stageWidthM: 8, stageDepthM: 6, stageHeightM: 5 },
   'fixture-types': [],
   fixtures: [],
+  lanterns: [],
 }
 
 const request = (over: Partial<StageRenderRequest> = {}): StageRenderRequest => ({

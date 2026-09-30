@@ -134,9 +134,9 @@ class ProjectRoundTripTest {
             stream.toList().map { Files.readString(it) }
         }
         val patches = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }
-        val paired = patches.single { it.key == "hex-2" }
-        assertEquals(listOf("SR", null), paired.extraPlacements.map { it.label })
-        val sr = paired.extraPlacements.first()
+        val hex2 = patches.single { it.key == "hex-2" }
+        assertEquals(listOf("SR", null), hex2.extraPlacements.map { it.label })
+        val sr = hex2.extraPlacements.first()
         assertEquals(3.5, sr.stageX)
         assertEquals(180.0, sr.baseYawDeg)
         assertEquals(-15.0, sr.basePitchDeg)
@@ -144,10 +144,11 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(RiggingJson.serializer(), Files.readString(it)) }
         }.single { it.name == "FOH Truss" }
         assertEquals(foh.uuid, sr.riggingUuid, "a placement names its rigging by uuid")
-        assertEquals(null, paired.extraPlacements[1].riggingUuid)
+        assertEquals(null, hex2.extraPlacements[1].riggingUuid)
 
-        val unpaired = docs.filter { !it.contains("\"hex-2\"") && !it.contains("\"ring-1\"") }
-        assertEquals(patches.size - 2, unpaired.size)
+        val paired = setOf("hex-2", "ring-1", "adv2-1")
+        val unpaired = docs.filter { doc -> paired.none { doc.contains("\"$it\"") } }
+        assertEquals(patches.size - paired.size, unpaired.size)
         assertTrue(
             unpaired.none { it.contains("\"extraPlacements\"") },
             "a patch with no extra placements must not carry the key at all",
@@ -235,6 +236,46 @@ class ProjectRoundTripTest {
         }.single { it.key == "ring-1" }
         assertEquals(-12.5, back.baseRollDeg, "the importer keeps the patch's roll")
         assertEquals(90.0, back.extraPlacements.single().baseRollDeg, "and the segment's")
+    }
+
+    /**
+     * v19: a lantern and its focus, on the patch and on a placement, and absent where unset — a
+     * patch with no lantern carries none of the keys, so a lantern-less export is v18's byte for byte.
+     */
+    @Test
+    fun `a lantern and its focus export on the patch and its placement`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val adv2 = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "adv2-1" }
+        assertEquals("s4-zoom-25-50", adv2.lanternType)
+        assertEquals(31.5, adv2.zoomDeg)
+        assertEquals(listOf(0.28, 0.05, 0.35, 0.0), adv2.shutters!!.map { it.depth })
+        assertEquals(-12.5, adv2.shutters[2].angleDeg)
+        assertEquals(7.5, adv2.gateRotationDeg)
+        assertEquals(0.8, adv2.iris)
+        assertEquals(0.25, adv2.focusSoftness)
+        val sr = adv2.extraPlacements.single()
+        assertEquals("par64-cp62", sr.lanternType)
+        assertEquals(45.0, sr.lampRotationDeg)
+        assertEquals(0.9, sr.focusSoftness)
+        for (key in listOf("lanternType", "zoomDeg", "lampRotationDeg", "shutters", "gateRotationDeg", "iris", "focusSoftness")) {
+            assertTrue(
+                docs.filter { !it.contains("\"adv2-1\"") }.none { it.contains("\"$key\"") },
+                "a patch with no lantern must not carry $key",
+            )
+        }
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "adv2-1" }
+        assertEquals(adv2, back, "the importer keeps the lantern and every focus field, on the patch and the placement")
     }
 
     /**

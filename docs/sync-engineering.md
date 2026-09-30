@@ -65,7 +65,10 @@ cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
                                # dimmer's other lanterns embedded as `extraPlacements` (v14+);
                                # a lightstrip's `lengthM`, and each placement's (v15+);
-                               # the operator's `headNumber` (v16+)
+                               # the operator's `headNumber` (v16+); the lantern and its
+                               # focus — `lanternType`, `zoomDeg`, `lampRotationDeg`, `shutters`
+                               # (four `{depth, angleDeg}`), `gateRotationDeg`, `iris`,
+                               # `focusSoftness` — on the patch and on each placement (v19+)
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
@@ -197,7 +200,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 18`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 19`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -239,6 +242,34 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 19 — lanterns and focus
+
+**v19 adds seven optional fields in two places** (stage-view plan session 7, D9 and D14):
+`FixturePatchJson` and `PatchPlacementJson` each carry `lanternType` (a lantern id from the desk's
+library, `docs/fixtures-engineering.md` §"Lanterns and focus"), `zoomDeg`, `lampRotationDeg`,
+`shutters`, `gateRotationDeg`, `iris` and `focusSoftness`. Every one is null by default and omitted
+then, so a project that names no lantern exports byte-for-byte as it did at v18. Two things about
+the shape:
+
+- **`shutters` travels as a list of four objects** — `{depth, angleDeg}`, top · bottom · left ·
+  right — not as the JSON text the column stores, so a diff reads per blade. The exporter parses the
+  column and the importer writes it back as compact JSON; a column that will not parse exports as
+  no shutters, the same tolerance every reader of it has.
+- **A placement's fields are its own.** A null `lanternType` there means *the fixture's lantern*,
+  but the six focus fields are never inherited — each lantern of a pair is focused separately — so
+  the round trip carries each placement's values as it stands.
+
+**`kindOverride` is unchanged on the wire** but is now derived at the write boundary from a patch's
+lantern (a Source Four makes it a `PROFILE`); the importer writes it verbatim, as it writes every
+record, and does not re-derive it — the archive already holds what the writing desk derived.
+
+**It bumped `formatVersion`** by the sharp-edge rule, for v17's reason: a v18 reader ignores the
+keys, imports every unit as its kind's default lantern with no focus, and its next wipe-then-export
+push rewrites the patch files without them — unfocusing every peer's rig. `minReader` stays at 5: a
+missing lantern is the kind's default and missing focus is open. A lantern id this desk's library
+does not hold (an archive from a newer desk) is imported as stored and drawn as the kind's default.
+It went without `FU-AUTH-ATTRIBUTION`'s columns, as v18 did (stage-view plan §11 Q2).
 
 ### Version 18 — the scene document
 

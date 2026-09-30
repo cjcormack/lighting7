@@ -57,6 +57,7 @@ fun Application.configureRouting(state: State) {
                     routeApiRestStatus(state)
                     routeApiRestProjects(state)
                     routeApiRestLightsFixtures(state)
+                    routeApiRestLanterns()
                     routeApiRestFx(state)
                     routeApiRestFxDefinitions(state)
                     routeApiRestGroups(state)

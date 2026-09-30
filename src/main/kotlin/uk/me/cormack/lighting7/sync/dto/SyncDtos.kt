@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync.dto
 
+import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -27,6 +28,15 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v19: the lantern and its focus (stage-view plan session 7). `FixturePatchJson` and
+    // `PatchPlacementJson` each gain `lanternType`, `zoomDeg`, `lampRotationDeg`, `shutters` (four
+    // `{depth, angleDeg}`, nested, not a string), `gateRotationDeg`, `iris` and `focusSoftness`,
+    // every one null by default and omitted then, so a patch with no lantern exports byte-for-byte as
+    // at v18. The writer's number moves by the sharp-edge rule: a v18 reader imports every lantern as
+    // its kind's default with its blades out, and its next wipe-then-export push writes the focus
+    // away for every peer. `minReader` stays at **5** — a missing focus is an unfocused lantern.
+    // See `docs/sync-engineering.md` §"Version 19 — lanterns and focus".
+    //
     // v18: the scene document (stage-view plan session 2). Two new record folders,
     // `stageElements/` and `stageViewpoints/`: named venue and set elements with each kind's
     // `params` as a nested object, and saved viewpoints, a seat view naming its seating element by
@@ -150,7 +160,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 18,
+    val formatVersion: Int = 19,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -404,6 +414,15 @@ data class FixturePatchJson(
     val lengthM: Double? = null,
     val stageHidden: Boolean = false,
     val infrastructure: Boolean = false,
+    /** The lantern, by library id, and its focus (v19); every field null is an unfocused lantern of
+     *  the kind's default. See `docs/sync-engineering.md` §"Version 19 — lanterns and focus". */
+    val lanternType: String? = null,
+    val zoomDeg: Double? = null,
+    val lampRotationDeg: Double? = null,
+    val shutters: List<ShutterBlade>? = null,
+    val gateRotationDeg: Double? = null,
+    val iris: Double? = null,
+    val focusSoftness: Double? = null,
     /**
      * The other places this fixture hangs — a paired dimmer's second lantern. Embedded in
      * list order (so no `sortOrder`), like a group's `members`, and omitted by canonical JSON
@@ -435,6 +454,15 @@ data class PatchPlacementJson(
     /** This segment's own length (v15), for a variable-length type laid in segments; null takes
      *  the patch's `lengthM`. */
     val lengthM: Double? = null,
+    /** This lantern (v19); null takes the patch's `lanternType`. The six after it are this
+     *  lantern's own focus, never inherited. */
+    val lanternType: String? = null,
+    val zoomDeg: Double? = null,
+    val lampRotationDeg: Double? = null,
+    val shutters: List<ShutterBlade>? = null,
+    val gateRotationDeg: Double? = null,
+    val iris: Double? = null,
+    val focusSoftness: Double? = null,
 )
 
 /**

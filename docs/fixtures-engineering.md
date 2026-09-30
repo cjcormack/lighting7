@@ -229,13 +229,28 @@ The `valueForLevel()` method finds the appropriate enum value for a raw DMX leve
 
 ```kotlin
 @Target(AnnotationTarget.CLASS)
-annotation class FixtureType(val typeKey: String)
+annotation class FixtureType(
+    val typeKey: String,
+    // … kind, lengthM, acceptsLength …
+    val body: FixtureBody = FixtureBody(),   // the 3D body the Stage view draws
+    val acceptsLantern: Boolean = false,     // hung with a lantern from the library
+)
 ```
 
 Marks a fixture class with a unique type identifier. Used for:
 - REST API fixture type filtering
 - Serialization/deserialization
 - UI grouping
+
+`body` (`fixture/FixtureBody.kt`) says what the type *looks like*: an `archetype` (profile, box
+profile, fresnel, PAR, flood, downlight, mover, batten, blinder, effect, cannon, tape), a mover's
+`head` (spot, wash, profile, bar) and a `lensDiameterM`. Every field defaults to *inherit*, and a
+type that declares none answers `body: null` on `GET /fixture-types` — the Stage view then chooses
+from the kind, the type's words and its tilt axis, as it did before a type could say. It is
+presentational only, like every stage field. `acceptsLantern` is the other half: a type whose body
+is **the lantern the operator hangs it with** (§"Lanterns and focus"), which today is the generic
+dimmer alone. A type declares one or the other; `LanternLibraryTest` pins that every declared
+mover body agrees with the desk's own mover test (`RigBriefing.isMovingHead`).
 
 ### @FixtureProperty
 
@@ -764,7 +779,9 @@ columns above, and lists its other lanterns in `fixture_patch_placements`
 (`models/fixturePatchPlacements.kt`): per entry a `rigging_id`, `stage_x/y/z`, `base_yaw_deg`,
 `base_pitch_deg`, `base_roll_deg`, a short `label` (e.g. "SR") and a `sort_order`. The geometry follows the patch's
 rules exactly, rigging-relative offsets included. A placement carries none of the fixture's own facts
-(type, beam angle, gel, kind override, hidden), which a paired lantern shares.
+(type, beam angle, gel, kind override, hidden), which a paired lantern shares — except its
+**lantern and focus** (§"Lanterns and focus"): a pair can be two different lanterns, and each is
+focused on its own.
 
 Why placements and not two patches at one address: two patches would be two fixtures the desk can
 set to different values while only one channel exists, the overlap check would have to be relaxed,
@@ -844,6 +861,69 @@ bolted**. The live aim is the base orientation composed with runtime
 `pan` / `tilt` (already in fixture state and broadcast over the WebSocket
 `channelState` updates). The frontend animates moving-head beams by reading
 both: base from the patch, current pan/tilt from the live channel feed.
+
+### Lanterns and focus
+
+A conventional's body is not a fact of its type: a generic dimmer is whatever lantern is plugged
+into it. So a type that says so (`@FixtureType(acceptsLantern = true)`) is hung with a lantern from
+the desk's **lantern library**, and each unit carries how it was focused (stage-view plan session 7,
+D9 and D14). A DMX fixture never takes either — its body is its type's `body`, and its zoom, focus
+and iris are its channels, which its looks drive.
+
+**The library** is a desk resource, `src/main/resources/lanterns/library.json`, shipped the way the
+`.fx.kts` effects are and read once by `fixture/lantern/LanternLibrary.kt`; `GET /lanterns` answers
+it whole. About 25 entries — Source Fours at each fixed angle and the two zooms, Silhouette,
+Patt 23, Cantata, Prelude, SL, Acclaim, Cantata F, Rama, Patt 743, Quartet, the PCs, the four Par 64
+lamps and a Par 16, a Coda flood, an Iris cyc and a house downlight. Each carries an id, a name and
+maker, a **family** (`PROFILE · FRESNEL · PC · PAR · FLOOD · CYC · DOWNLIGHT`, whose kind the patch
+takes — a PC is a `FRESNEL`, a flood and a cyc a `WASH`, a downlight `GENERIC`), the static
+**archetype** it is drawn as, beam and field angles, a zoom range, a PAR lamp's **oval** (wide ×
+narrow, the wide being the field), the lens diameter, the frame size, its dimensions, its
+accessories (shutters *or* barn doors, an iris, a colour frame) and the kinds it is the **default
+for**. The seed is from datasheets as remembered, with each entry's `source` naming the sheet; the
+hall's own list and a verification pass are `FU-LANTERN-LIBRARY-HALL` in the follow-ups.
+
+`parse` refuses a library that would draw wrong — an id not `[a-z0-9-]`, a field outside 1–180°, a
+beam wider than its field, a zoom range not containing the field, an oval that is not a PAR's or
+whose wide angle is not the field or that zooms, a mover archetype, dimensions outside 0–3 m,
+shutters *and* barn doors, two defaults for one kind, a repeated id — so a bad edit fails the first
+test run, not a render. **The defaults** answer a dimmer that names no lantern: `PROFILE` → Source
+Four 19°, `FRESNEL` → Cantata F, `PAR` → Par 64 CP62, `WASH` → Coda 500, `GENERIC` → the downlight
+(`LanternLibrary.effective(lanternType, kind)`; an id the library does not hold falls back the same
+way, so an archive from a newer desk still draws).
+
+**The focus** is seven nullable fields, on `fixture_patches` and on each `fixture_patch_placements`
+row alike (`fixture/lantern/LanternFocus.kt`):
+
+| Field               | Meaning                                                                    |
+|---------------------|----------------------------------------------------------------------------|
+| `lantern_type`      | A library id; null is the kind's default (the patch's lantern, on a placement). |
+| `zoom_deg`          | The field angle a zoom lantern is set to, within its range; null is its own field. |
+| `lamp_rotation_deg` | A PAR lamp's turn about the beam, ±180 — which way the oval lies.         |
+| `shutters`          | Four blades, top · bottom · left · right, each `{depth, angleDeg}`: depth 0 out to 1 closed as a fraction of the field's diameter (0.5 reaches the centre), angle ±30° turning the blade about the middle of its edge. JSON text in the column. |
+| `gate_rotation_deg` | The barrel's turn, ±180: the four blades turn together about the beam.   |
+| `iris`              | 0 closed to 1 open; null is open.                                         |
+| `focus_softness`    | The focus knob, 0 sharp to 1 soft; null is the family's own edge.         |
+
+The blades are named for the edge of the light each cuts, seen from behind the lantern down the
+beam: *top* cuts the top of the pool, *left* its left. They sit in the **head's frame**, so they turn
+with the lantern's own roll and with its gate — a level lantern's top blade is up whichever way it is
+yawed. `kind_override` is **derived from the lantern** at the write boundary: a patch naming a
+lantern takes its family's kind, so the mover test (`effectiveKind`, which `RigBriefing` and the
+Stage view both read, lantern first) and the Stage view's archetype agree about what the unit is,
+and an explicit, different kind beside a lantern is refused (*kindOverride is derived from the
+lantern*). `beam_angle_deg` stays what it was — an override that beats the lantern's field.
+
+The write boundary is `routes/patchFocus.kt`'s `resolvePatchFocus`, which `POST` and `PUT /patches`,
+the bulk `PUT /patches/placements` and the MCP tools all call: it overlays the keys a request sends
+on what is stored (a key absent is kept, `null` clears), refuses a range problem, a type that takes
+no lantern, an unknown id, or a zoom outside the lantern's range, and **drops a stored zoom when the
+lantern changes and the request sent none** — a zoom that fitted the old lantern need not fit the new.
+A placement is checked against its own lantern, else the patch's (`placementFocusRefusal`). All seven
+are in `METADATA_ONLY_PUT_KEYS`: `DbFixtureLoader` never reads them, so a focus write never rebuilds
+the rig. They round-trip through sync on `formatVersion` 19 (`docs/sync-engineering.md`
+§"Version 19 — lanterns and focus"). The frontend reads the library through `useLanternIndex` and
+draws the lantern, the cut and the oval — `frontend/docs/stage-vis-engineering.md` §"Fixture bodies".
 
 ### Per-project fields (stage dimensions)
 
