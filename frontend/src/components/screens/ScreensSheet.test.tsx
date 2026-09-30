@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { DeskWindow } from '@/api/windowsApi'
+import type { WindowViewPickerProps } from '@/lib/windowViews'
 
 const registry: { windows: DeskWindow[] } = { windows: [] }
 const sent: unknown[] = []
@@ -295,17 +296,33 @@ describe('ScreensSheet', () => {
       expect(within(rowFor('Screen 1')).queryByRole('radiogroup', { name: /Focus|Sheet/ })).toBeNull()
     })
 
-    it('draws a Stage row’s Viewpoint from what it announced, sets it by a viewOptions frame, and no Chrome segment (stage-view plan session 1)', () => {
+    it('draws a Stage row’s Viewpoint through the control the shell hands it, sets it by a viewOptions frame, and no Chrome segment (stage-view plan session 2)', () => {
+      const ROW_F = '5b1f7a52-9c3e-4d8a-8f2e-1a2b3c4d5e6f'
       registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'front' } })
-      render(<ScreensSheet />)
+      const seen: WindowViewPickerProps[] = []
+      // A stand-in for the Stage view's own picker: the sheet must draw whatever it is handed,
+      // passing the row's value, name and project, and never learn the vocabulary itself.
+      const Control = (props: WindowViewPickerProps) => {
+        seen.push(props)
+        return (
+          <button type="button" onClick={() => props.onSet(ROW_F)}>
+            {`${props.label} on ${props.rowName}: ${props.value}`}
+          </button>
+        )
+      }
+      render(<ScreensSheet controls={{ viewpoint: Control }} />)
       const hall = rowFor('Hall')
-      const viewpoint = within(hall).getByRole('radiogroup', { name: 'Viewpoint on Hall' })
-      expect(within(viewpoint).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Orbit', 'Eye', 'Plan', 'Front', 'Side'])
-      expect(within(viewpoint).getByRole('radio', { name: 'Front' })).toHaveAttribute('aria-checked', 'true')
+      expect(seen.at(-1)).toMatchObject({ value: 'front', rowName: 'Hall', label: 'Viewpoint', projectId: 1 })
       // Stage is not a live view: no immersive to set.
       expect(within(hall).queryByRole('radiogroup', { name: 'Chrome on Hall' })).toBeNull()
-      fireEvent.click(within(viewpoint).getByRole('radio', { name: 'Plan' }))
-      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { viewpoint: 'plan' } }])
+      fireEvent.click(within(hall).getByRole('button', { name: 'Viewpoint on Hall: front' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { viewpoint: ROW_F } }])
+    })
+
+    it('reads a picker option as text where the shell has no control for it', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'side' } })
+      render(<ScreensSheet />)
+      expect(rowFor('Hall')).toHaveTextContent('Viewpointside')
     })
 
     it('draws nothing at all on a library row', () => {

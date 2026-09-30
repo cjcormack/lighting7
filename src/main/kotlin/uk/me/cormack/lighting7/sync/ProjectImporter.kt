@@ -50,7 +50,10 @@ import uk.me.cormack.lighting7.models.checkPromptBookRegion
 import uk.me.cormack.lighting7.models.layerSourceShape
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.DaoStageElement
 import uk.me.cormack.lighting7.models.DaoStageRegion
+import uk.me.cormack.lighting7.models.DaoStageViewpoint
+import uk.me.cormack.lighting7.models.storedParamsText
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.routes.deleteBuskPage
 import uk.me.cormack.lighting7.routes.deleteBuskRig
@@ -84,7 +87,9 @@ import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
+import uk.me.cormack.lighting7.sync.dto.StageElementJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
+import uk.me.cormack.lighting7.sync.dto.StageViewpointJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import java.nio.file.Files
 import java.nio.file.Path
@@ -143,7 +148,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 17
+internal const val SUPPORTED_FORMAT_VERSION = 18
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -306,6 +311,8 @@ class ProjectImporter(private val state: State) {
             project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
             project.riggings.forEach { it.delete() }
             project.stageRegions.forEach { it.delete() }
+            project.stageViewpoints.forEach { it.delete() }
+            project.stageElements.forEach { it.delete() }
             project.universeConfigs.forEach { it.delete() }
             project.parkedChannels.forEach { it.delete() }
             project.fxDefinitions.forEach { it.delete() }
@@ -376,6 +383,9 @@ class ProjectImporter(private val state: State) {
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
+        // Elements before the viewpoints whose seats name them (v18).
+        importStageElements(sourceDir, project)
+        importStageViewpoints(sourceDir, project)
         val patchMap = importFixturePatches(sourceDir, project, universeMap, riggingMap)
         val groupMap = importFixtureGroups(sourceDir, project, patchMap)
         // The rig after the groups and patches its tiles name (v12).
@@ -580,6 +590,64 @@ class ProjectImporter(private val state: State) {
                 heightM = s.heightM
                 yawDeg = s.yawDeg
                 sortOrder = s.sortOrder
+                this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    /**
+     * v18. Stored as the archive has it, params included, without reparsing: an import restores a
+     * record, it does not re-author one (the same posture as a head number, `docs/sync-engineering.md`
+     * §"Version 16"). Readers of the params tolerate a document they cannot read.
+     */
+    private fun importStageElements(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("stageElements")) { json ->
+            val e = canonicalDecode(StageElementJson.serializer(), json)
+            val uuid = UUID.fromString(e.uuid)
+            DaoStageElement.new {
+                this.project = project
+                name = e.name
+                kind = e.kind
+                layer = e.layer
+                positionX = e.positionX
+                positionY = e.positionY
+                positionZ = e.positionZ
+                yawDeg = e.yawDeg
+                widthM = e.widthM
+                depthM = e.depthM
+                heightM = e.heightM
+                finishColour = e.finishColour
+                finishPattern = e.finishPattern
+                emissive = e.emissive
+                params = e.params?.let { storedParamsText(it) } ?: "{}"
+                hidden = e.hidden
+                sortOrder = e.sortOrder
+                this.uuid = uuid
+            }
+            uuid to Unit
+        }
+    }
+
+    /** v18. A seat view's element reference is kept verbatim; one the archive lacks dangles. */
+    private fun importStageViewpoints(dir: Path, project: DaoProject) {
+        readDir(dir.resolve("stageViewpoints")) { json ->
+            val v = canonicalDecode(StageViewpointJson.serializer(), json)
+            val uuid = UUID.fromString(v.uuid)
+            DaoStageViewpoint.new {
+                this.project = project
+                name = v.name
+                kind = v.kind
+                eyeX = v.eyeX
+                eyeY = v.eyeY
+                eyeZ = v.eyeZ
+                targetX = v.targetX
+                targetY = v.targetY
+                targetZ = v.targetZ
+                fovDeg = v.fovDeg
+                seatElementUuid = v.seatElementUuid?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                seatId = v.seatId
+                sortOrder = v.sortOrder
                 this.uuid = uuid
             }
             uuid to Unit

@@ -1287,6 +1287,10 @@ time. That's a `formatVersion` question for `docs/sync-engineering.md` — see
 `formatVersion` bump is already planned, in which case fold the column in rather than paying for a
 second migration.
 
+**v18 passed without it** (stage-view plan §11 Q2, Chris, 2026-09-29): the scene document's bump
+carries no attribution columns. The design for machine-local users is still owed, and the plan has
+three more bumps (19–21) it can fold into; the gate stays open for each.
+
 ### `FU-AUTH-AUDIT-LOG`
 
 **A `user_audit` table for logins, resets and user changes** · Trigger · Multi-user-auth §out of

@@ -73,6 +73,12 @@ function write(key: string, value: unknown): void {
  */
 let liveOrbitPose: OrbitPose | null = null
 
+/**
+ * The eye's pose as it last moved, in memory — the orbit's reason, for *Save this view…*: storage
+ * trails the head by up to 150 ms, and a save must record where the eye looks now.
+ */
+let liveEyePose: EyePose | null = null
+
 /** Note where the orbit camera is now, without touching storage. */
 export function noteOrbitPose(pose: OrbitPose): void {
   liveOrbitPose = pose
@@ -90,12 +96,19 @@ export function writeOrbitPose(pose: OrbitPose): void {
   write(ORBIT_POSE_KEY, pose)
 }
 
-/** Test seam: forget the in-memory pose, so the next read is storage's. */
+/** Test seam: forget the in-memory poses, so the next read is storage's. */
 export function resetLiveOrbitPose(): void {
   liveOrbitPose = null
+  liveEyePose = null
+}
+
+/** Note where the eye is now, without touching storage. */
+export function noteEyePose(pose: EyePose): void {
+  liveEyePose = pose
 }
 
 export function readEyePose(): EyePose | null {
+  if (liveEyePose != null) return liveEyePose
   const value = read(EYE_POSE_KEY) as Partial<EyePose> | null
   if (
     value == null ||
@@ -110,5 +123,6 @@ export function readEyePose(): EyePose | null {
 }
 
 export function writeEyePose(pose: EyePose | null): void {
+  liveEyePose = pose
   write(EYE_POSE_KEY, pose)
 }

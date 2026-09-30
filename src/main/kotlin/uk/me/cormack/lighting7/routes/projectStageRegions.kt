@@ -166,17 +166,20 @@ internal fun Route.routeApiRestProjectStageRegions(state: State) {
 
     delete<ProjectStageRegionResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
-            val deleted = transaction(state.database) {
-                val region = DaoStageRegion.findById(resource.regionId) ?: return@transaction false
-                if (region.project.id != project.id) return@transaction false
+            // null: not found; else how many platforms lost their link to it.
+            val unlinked = transaction(state.database) {
+                val region = DaoStageRegion.findById(resource.regionId) ?: return@transaction null
+                if (region.project.id != project.id) return@transaction null
+                val count = unlinkRegionFromPlatforms(project, region.uuid)
                 region.delete()
-                true
+                count
             }
-            if (!deleted) {
+            if (unlinked == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Stage region not found"))
                 return@withProject
             }
             state.show.fixtures.stageRegionListChanged()
+            if (unlinked > 0) state.show.fixtures.stageElementListChanged()
             call.respond(HttpStatusCode.NoContent)
         }
     }

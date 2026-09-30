@@ -20,17 +20,13 @@ describe('WINDOW_VIEWS', () => {
     expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'templates'])
   })
 
-  it('gives Stage its viewpoint and nothing else — no immersive, it is not a live view (stage-view plan session 1)', () => {
+  it('gives Stage its viewpoint and nothing else — no immersive, it is not a live view (stage-view plan sessions 1, 2)', () => {
     const stage = WINDOW_VIEWS.find((v) => v.id === 'stage')!
     expect(stage.segment).toBe('/stage')
     expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION])
-    expect(STAGE_VIEWPOINT_OPTION).toMatchObject({
-      key: 'viewpoint',
-      label: 'Viewpoint',
-      kind: 'enum',
-      values: ['orbit', 'eye', 'plan', 'front', 'side'],
-      valueLabels: { orbit: 'Orbit', eye: 'Eye', plan: 'Plan', front: 'Front', side: 'Side' },
-    })
+    // A picker since session 2: the cameras, saved views and seats are the Stage view's control,
+    // handed to the Screens sheet by the shell — the descriptor names no vocabulary of its own.
+    expect(STAGE_VIEWPOINT_OPTION).toEqual({ key: 'viewpoint', label: 'Viewpoint', kind: 'picker' })
     expect(windowViewOf('/projects/3/stage')?.id).toBe('stage')
   })
 

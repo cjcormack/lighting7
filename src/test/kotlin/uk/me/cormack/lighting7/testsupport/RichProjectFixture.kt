@@ -5,6 +5,20 @@ import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
+import uk.me.cormack.lighting7.models.DaoStageElement
+import uk.me.cormack.lighting7.models.DaoStageViewpoint
+import uk.me.cormack.lighting7.models.DrapeOperation
+import uk.me.cormack.lighting7.models.DrapeParams
+import uk.me.cormack.lighting7.models.DrapeRole
+import uk.me.cormack.lighting7.models.ElementStates
+import uk.me.cormack.lighting7.models.PlatformParams
+import uk.me.cormack.lighting7.models.SeatingParams
+import uk.me.cormack.lighting7.models.StageElementKind
+import uk.me.cormack.lighting7.models.StageElementLayer
+import uk.me.cormack.lighting7.models.StageSide
+import uk.me.cormack.lighting7.models.StageViewpointKind
+import uk.me.cormack.lighting7.models.SurfacePattern
+import uk.me.cormack.lighting7.models.encodeElementParams
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.BuskFlow
@@ -131,12 +145,73 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         yawDeg = 0.0
         sortOrder = 0
     }
-    DaoStageRegion.new {
+    val thrust = DaoStageRegion.new {
         this.project = project
         name = "thrust"
         centerY = -5.0
         widthM = 4.0; depthM = 2.0
         sortOrder = 1
+    }
+
+    // v18: the scene document. The seating carries every non-default column (a yaw, a finish, a
+    // hidden flag, a sort order); the platform links the thrust by uuid, so a clone must re-point
+    // it; the drape carries a state. Params go through the real encoder, as a write would.
+    val stalls = DaoStageElement.new {
+        this.project = project
+        name = "Stalls"
+        kind = StageElementKind.SEATING.name
+        layer = StageElementLayer.VENUE.name
+        positionX = 0.5; positionY = -3.0; positionZ = -0.9; yawDeg = 5.0
+        finishColour = "#6a2733"; finishPattern = SurfacePattern.PLAIN.name; emissive = true
+        params = encodeElementParams(
+            StageElementKind.SEATING,
+            SeatingParams(rows = 8, seatsPerRow = 10, rowPitchM = 0.95, seatPitchM = 0.52, firstRow = "B", rakeM = 0.1),
+        )
+        hidden = true
+        sortOrder = 2
+    }
+    DaoStageElement.new {
+        this.project = project
+        name = "Thrust deck"
+        kind = StageElementKind.PLATFORM.name
+        layer = StageElementLayer.SET.name
+        positionY = -5.0; positionZ = 0.4
+        widthM = 4.0; depthM = 2.0; heightM = 0.4
+        params = encodeElementParams(
+            StageElementKind.PLATFORM,
+            PlatformParams(railHeightM = 0.9, railEdge = StageSide.DOWNSTAGE, regionUuid = thrust.uuid.toString()),
+        )
+        sortOrder = 1
+    }
+    DaoStageElement.new {
+        this.project = project
+        name = "House tabs"
+        kind = StageElementKind.DRAPE.name
+        layer = StageElementLayer.VENUE.name
+        positionY = 0.6
+        widthM = 5.6; depthM = 0.12; heightM = 3.1
+        params = encodeElementParams(
+            StageElementKind.DRAPE,
+            DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0)),
+        )
+    }
+    DaoStageViewpoint.new {
+        this.project = project
+        name = "Row F centre"
+        kind = StageViewpointKind.SEAT.name
+        seatElementUuid = stalls.uuid
+        seatId = "F5"
+        targetX = 0.0; targetY = 2.4; targetZ = 0.9
+        fovDeg = 55.0
+        sortOrder = 1
+    }
+    DaoStageViewpoint.new {
+        this.project = project
+        name = "Balcony desk"
+        kind = StageViewpointKind.EYE.name
+        eyeX = 1.25; eyeY = -17.0; eyeZ = 2.6
+        targetX = 0.0; targetY = 2.6; targetZ = 0.8
+        fovDeg = 50.0
     }
 
     val patches = (1..4).map { i ->

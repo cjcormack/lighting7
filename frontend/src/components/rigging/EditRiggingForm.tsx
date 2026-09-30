@@ -22,7 +22,7 @@ import { formatError } from '@/lib/formatError'
 import { parseNullableNumber } from '@/lib/utils'
 import { FieldGroup, NumberField } from '@/components/ui/form-fields'
 
-const KIND_OPTIONS = ['TRUSS', 'BAR', 'BOOM', 'PIPE', 'FLOOR_STAND', 'OTHER'] as const
+const KIND_OPTIONS = ['TRUSS', 'BAR', 'BOOM', 'PIPE', 'FLOOR_STAND', 'LEDGE', 'OTHER'] as const
 type Kind = typeof KIND_OPTIONS[number]
 
 interface EditRiggingFormProps {

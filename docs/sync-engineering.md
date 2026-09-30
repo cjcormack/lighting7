@@ -69,6 +69,10 @@ fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUu
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
+stageElements/{uuid}.json      # v18+: the scene document — venue and set elements, each kind's
+                               # `params` a nested object (a platform's `regionUuid` inside it)
+stageViewpoints/{uuid}.json    # v18+: saved views and seats; a seat view names its seating by
+                               # `seatElementUuid`
 fixtureGroups/{uuid}.json      # members embedded inline
 looks/{uuid}.json              # rows and effects embedded inline
 templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
@@ -193,7 +197,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 17`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 18`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -235,6 +239,39 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 18 — the scene document
+
+**v18 adds two record folders** (stage-view plan session 2, D2 and D6): `stageElements/{uuid}.json`,
+the named venue and set elements the Stage view draws, and `stageViewpoints/{uuid}.json`, the saved
+views and seats. Both tables are portable — the venue is show content, and "Row F" is the venue's,
+not this Mac's — so both are wired through the exporter and importer, `SyncCoverageTest` records
+them `Portable`, and `RichProjectFixture` seeds a seating, a platform and a drape with every optional
+column off its default.
+
+Three things about the shape:
+
+- **An element's `params` travels as a nested object**, not a string. The canonical encoder sorts its
+  keys like any other object's, a diff reads per field, and — the reason it had to be an object — the
+  clone remapper's blind uuid substitution reaches a platform's `regionUuid` inside it. The desk
+  stores it as canonical compact JSON (`models/stageScene.kt`); the importer stores what the archive
+  holds **without reparsing it**, as it stores every other record verbatim, and every reader of the
+  params tolerates a document it cannot read (a seating that will not parse simply has no seats).
+- **A seat view names its seating by `seatElementUuid`**, a uuid rather than an FK, like every other
+  cross-record reference here. Elements are imported before viewpoints, and a reference the archive
+  lacks is kept and dangles; a reader treats it as no seat, and the Stage view's picker lists such a
+  view disabled.
+- **Pose and size default to 0 and are omitted then**, so a seating (whose size comes from its rows)
+  carries no `widthM` / `depthM` / `heightM` at all.
+
+**It bumped `formatVersion`** by the sharp-edge rule: a v17 reader ignores both folders, imports every
+project with no scene, and its next wipe-then-export push writes none back — deleting every peer's
+venue. `minReader` stays at 5: both folders read as empty when missing, so every older archive
+imports with an empty scene (`ProjectRoundTripTest` pins that).
+
+**It went without `FU-AUTH-ATTRIBUTION`'s columns** (stage-view plan §11 Q2, passed on 2026-09-29):
+attribution needs its own design for machine-local users, and the plan's three later bumps (19–21)
+are still there to fold it into.
 
 ### Version 17 — fixture roll
 

@@ -119,6 +119,16 @@ data object RiggingListChangedOutMessage : BroadcastOutMessage()
 @SerialName("stageRegionListChanged")
 data object StageRegionListChangedOutMessage : BroadcastOutMessage()
 
+/** Scene-element CRUD (stage-view plan session 2), from the REST routes and `set_scene` alike. */
+@Serializable
+@SerialName("stageElementListChanged")
+data object StageElementListChangedOutMessage : BroadcastOutMessage()
+
+/** Saved-viewpoint CRUD, from the REST routes and `set_scene` alike. */
+@Serializable
+@SerialName("stageViewpointListChanged")
+data object StageViewpointListChangedOutMessage : BroadcastOutMessage()
+
 /**
  * Speed-master CRUD only — created, renamed, deleted. Live BPM changes stream over the
  * `speedMasters.*` family instead, for the same storm rationale as [LookListChangedOutMessage]:
@@ -257,6 +267,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         override fun patchListChanged() = fire(PatchListChangedOutMessage)
         override fun riggingListChanged() = fire(RiggingListChangedOutMessage)
         override fun stageRegionListChanged() = fire(StageRegionListChangedOutMessage)
+        override fun stageElementListChanged() = fire(StageElementListChangedOutMessage)
+        override fun stageViewpointListChanged() = fire(StageViewpointListChangedOutMessage)
         override fun speedMasterListChanged() = fire(SpeedMasterListChangedOutMessage)
         override fun scriptListChanged() = fire(ScriptListChangedOutMessage)
         override fun fxDefinitionListChanged() = fire(FxDefinitionListChangedOutMessage)

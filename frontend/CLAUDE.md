@@ -233,7 +233,11 @@ editing parity). The viewpoint is **per window**, `lib/stageViewpoint.ts` in `se
 rides `windows.viewOptions` (§Windows, full screen and the hand); the orbit and eye poses are kept in
 `sessionStorage` too (`lib/stageCameraPoses.ts`), so a reload or a context-loss *Restore* lands where
 the camera was. F frames the selection — the Stage's own, else the desk's — and O goes back to
-Orbit. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
+Orbit. **A viewpoint can also be a saved view or a seat** (session 2): a `stage_viewpoints` row by
+its uuid in the same key, landed on the orbit or eye rig **once per pick** (a per-tab landed marker,
+so a remount keeps where the operator has looked since and a re-pick lands again), picked from the
+header's picker, and saved from it with *Save this view…*. Scene elements (`stage_elements`) are
+read only by the Stage route's canvas and drawn as boxes until session 3. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
 `useDefaultCamera`, and the bloom composer rebuilds after the swap's frame, so `Bloom` invalidates on
 each new composer or the view sits on the old camera's picture.
 
@@ -4048,10 +4052,14 @@ Plan | Front | Side*), and **no immersive** — it is a window view, not a live 
 `ShowHeader` to leave standing. `announcedViewOptions` takes the viewpoint as its fourth argument and
 sends it only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose descriptor
 carries it and the viewpoint only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`, which
-ignores a value outside the vocabulary). The Screens row draws the segment generically, ⌘K gains
+ignores a value outside the vocabulary — a camera, or a saved view's uuid since session 2). ⌘K gains
 *Show Stage on <window>* and *Open Stage on another display* from the same list, and
-`windowSetupUrl` carries `viewpoint=`, which the Stage route applies on arrival and strips. Session 2
-turns the segment into a picker over saved views and seats.
+`windowSetupUrl` carries `viewpoint=`, which the Stage route applies on arrival and strips. **Since
+session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
+supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
+`StageViewpointRowPicker` for `viewpoint`), so the sheet draws the cameras, saved views and seats
+without importing the Stage view or learning its vocabulary, and the scene queries load only when a
+Stage row is drawn. A key with no control reads its value as text.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
 which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
 applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving

@@ -268,15 +268,17 @@ the specials on DSC": a model reading a plot knows where a region or a mark is i
 (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
-answers `isError` with "still starting". `describe_rig`, `get_current_state` and the four setup
-readers below carry `readOnlyHint`.
+answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup
+readers below (`list_projects`, `list_fixture_types`, `get_patch`, `get_prompt_book`, `get_scene`)
+carry `readOnlyHint`.
 
 ### Show-setup tools
 
-`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds twelve tools that **build** a show
-rather than run one, for three jobs: a project and patch from another console's patch export, the
-Stage view (stage, regions, riggings, fixture placement) from plots or photos, and the show's cue
-stacks and prompt-book markup from a script and lighting notes.
+`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds fourteen tools that **build** a show
+rather than run one, for four jobs: a project and patch from another console's patch export, the
+Stage view (stage, regions, riggings, fixture placement) from plots or photos, the venue and set
+around it (the scene document) from photos or a video frame, and the show's cue stacks and
+prompt-book markup from a script and lighting notes.
 
 | Tool | Does |
 |------|------|
@@ -286,6 +288,8 @@ stacks and prompt-book markup from a script and lighting notes.
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` included |
 | `delete_groups` | Delete groups by name; the fixtures stay patched. A group that still has members is refused unless `force`, so a typo cannot take apart a group looks and cues address. Shares `deleteFixtureGroupRows` with the REST delete (memberships and busk rig tiles go with it) |
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
+| `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things |
+| `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, and the built-in viewpoints. Read-only |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
@@ -310,7 +314,8 @@ Four decisions shape them:
   stand* — rows being updated leave their old address — so a re-addressing list lands in one call.
   Upsert by key / name and refusing a duplicate stack name or cue number make a retried call safe.
 - **Writes broadcast as the routes do** (`patchListChanged` after a `DbFixtureLoader` reload,
-  `riggingListChanged`, `stageRegionListChanged`, `projectDetailsChanged` for the stage box,
+  `riggingListChanged`, `stageRegionListChanged`, `stageElementListChanged`,
+  `stageViewpointListChanged`, `projectDetailsChanged` for the stage box,
   `buskRigChanged` when `delete_groups` takes rig tiles off, `cueListChanged` /
   `cueStackListChanged`, `promptBookChanged`), so the desk's views follow along live. `place_fixtures` writes only the
   metadata columns `METADATA_ONLY_PUT_KEYS` names, so it skips the fixture reload the same way —
@@ -329,7 +334,18 @@ written `Q<number>` (else the cue name), as the view writes them. Cue times are 
 this surface (`fadeSeconds`, `followSeconds`) because lighting notes are written that way;
 `followSeconds` is the cue's auto-advance delay.
 
-Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt`.
+**Why a template, and why it is expanded server-side.** The research the design record cites is
+that a model filling in a template's parameters does far better than one writing free-form
+geometry. The template's origin is the desk's — the centre of the stage's downstage edge at deck
+level — so the hall floor sits at −`deckHeightM` and the hall runs from the edge back to
+−`hallDepthM`; what it produces is ordinary named elements the operator (or a later call) edits.
+
+**`describe_rig` gains a stage summary** (`RigBriefing.stageSummary`): the coordinate frame, the
+stage box, the regions, the riggings upstage first with their kind and trim, a count of the scene's
+venue and set elements, and the saved viewpoints — a paragraph, not the document, because the
+briefing is also the in-app chat's prompt on every turn. Omitted for a project with none of it.
+
+Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`.
 
 ## Tests
 

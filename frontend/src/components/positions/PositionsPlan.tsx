@@ -38,7 +38,7 @@ export default function PositionsPlan({
     <StageChannelSourceProvider>
       <Stage3D
         projectId={projectId}
-        viewpoint="plan"
+        camera="plan"
         editMode={false}
         selection={selection}
         hidePatchSelectionInfo

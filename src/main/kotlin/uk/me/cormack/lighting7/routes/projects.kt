@@ -252,6 +252,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.fixturePatches.forEach { deletePlacementsOf(it); it.delete() }
                 project.riggings.forEach { it.delete() }
                 project.stageRegions.forEach { it.delete() }
+                project.stageViewpoints.forEach { it.delete() }
+                project.stageElements.forEach { it.delete() }
                 project.universeConfigs.forEach { it.delete() }
                 project.parkedChannels.forEach { it.delete() }
                 project.aiConversations.forEach { it.delete() }
@@ -351,6 +353,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)
+        routeApiRestProjectStageScene(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)

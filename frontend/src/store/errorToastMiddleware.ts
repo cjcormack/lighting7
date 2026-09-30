@@ -30,6 +30,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'deleteProject', // src/routes/Projects.tsx
   // BUSK_PAGE_NAME_TAKEN is an ordinary step in naming a page, shown beside the field.
   'createBuskPage', // src/components/busking/BuskPageStrip.tsx
+  // A saved view's duplicate name is an ordinary step in naming it, shown beside the field.
+  'createStageViewpoint', // src/components/stage3d/SaveViewpointSheet.tsx
   'renameBuskPage', // src/components/busking/BuskPageStrip.tsx
   // The rig's commit queue reports its own refusal **by code** (`rigWriteFailureMessage`) after
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.

@@ -872,7 +872,7 @@ local frame.
 | Column        | Meaning                                                                     |
 |---------------|-----------------------------------------------------------------------------|
 | `name`        | Operator-facing label, unique per project (e.g. `"FOH"`, `"LX1"`, `"Boom-SL"`). |
-| `kind`        | Optional advisory label (`TRUSS`, `BAR`, `BOOM`, `PIPE`, `FLOOR_STAND`, `OTHER`). Renderers may use this to pick a default mesh; not enforced. |
+| `kind`        | Optional advisory label (`TRUSS`, `BAR`, `BOOM`, `PIPE`, `FLOOR_STAND`, `LEDGE`, `OTHER`). Renderers may use this to pick a default mesh; not enforced on REST, checked by `set_stage`. `FLOOR_STAND` and `LEDGE` are **stood on** rather than hung from — a ledge is a balcony front or a shelf the units sit on (stage-view plan session 2; session 6 draws them base-down). |
 | `position_x/y/z` | Origin in world coordinates (metres). Nullable; null = treat as 0.       |
 | `yaw_deg`     | Rotation about Z (up). Stored ±360°.                                        |
 | `pitch_deg`   | Rotation about X (audience-right). Stored ±180°.                            |
@@ -906,6 +906,69 @@ Regions are additive — the union of all regions is the playable surface. A
 plain rectangular stage is a single region whose `width_m`/`depth_m` match
 the project's bounding box. CRUD endpoints mirror riggings under
 `/api/rest/projects/{projectId}/stage-regions`.
+
+### The scene document (`DaoStageElements`, `DaoStageViewpoints`)
+
+The venue and the set, as named elements the Stage view draws (stage-view plan session 2, D2): the
+room, the proscenium, masking, platforms, seating, furniture. Nothing composes them and nothing
+here reaches DMX — they are what the light lands on. Regions stay separate (D5): a region is the
+playing surface, an aim target and a beam receiver, and a platform may **link** to one rather than
+duplicate it. The design record is `docs/plans/stage-view-design/INDEX.md` §"2. A scene document".
+
+| Column | Meaning |
+|---|---|
+| `name` | Unique per project: `Hall`, `Proscenium`, `Stalls`, `SR wall`. |
+| `kind` | `ROOM`, `PROSCENIUM`, `FLAT`, `DRAPE`, `PLATFORM`, `SEATING`, `OBJECT` — the RP-2 minimum. |
+| `layer` | `VENUE` outlives a production; `SET` is this show's. |
+| `position_x/y/z` | The origin (metres, the frame above): the centre of the footprint; for `SEATING`, the centre of the first row. **Z is the base**, except a **`PLATFORM`'s, which is its top surface** with the deck hanging below — as a region's `center_z` is. A hall floor under a raised stage is negative. |
+| `yaw_deg` | Rotation about Z at the origin, anticlockwise from above — the desk's yaw everywhere. |
+| `width_m` / `depth_m` / `height_m` | Size along the element's own axes; all three > 0 for every kind but `SEATING`, whose size comes from its rows and seats (all three 0). |
+| `finish_colour` / `finish_pattern` / `emissive` | `#rrggbb`, `PLAIN · PANELS · TILES · BOARDS`, and whether it glows (an exit sign). |
+| `params` | What only one kind means — a sealed `ElementParams` per kind, canonical JSON. |
+| `hidden`, `sort_order` | Stored but not drawn; display order. |
+
+**`params` is validated per kind at the write boundary** (`models/stageScene.kt`'s
+`parseElementParams`, used by REST and `set_scene` alike through `validateStageElement`): every
+problem at once, unknown keys refused, enumerations read case-insensitively and stored upper-case.
+
+| Kind | Params |
+|---|---|
+| `ROOM` | `omit` (sides not drawn: `DOWNSTAGE · UPSTAGE · STAGE_LEFT · STAGE_RIGHT · FLOOR · CEILING`), `floor` and `ceiling` finishes. |
+| `PROSCENIUM` | `openingWidthM`, `openingHeightM` (required), `openingSillM`, `surroundM` — the opening must fit the wall. |
+| `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. |
+| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`). |
+| `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
+| `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row). |
+| `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`. |
+
+Every kind may carry `states`, the base values session 8's scenery tracks from: `visible` on any,
+`open` (0–1) on a `DRAW` drape, `trimM` (replacing Z while set) on a flown piece.
+
+**Seats** are derived, never stored: row `firstRow` is nearest the stage at the origin, each later row
+a `rowPitchM` further from the stage (local −Y) and `rakeM` higher, seat 1 at the stage-right end,
+the block turned by the element's yaw. A seated eye is 1.15 m above the seat, 5 cm towards its back.
+`SeatingParams.seat` in Kotlin and `lib/stageSeats.ts` in the frontend are the same maths, and
+`StageSceneTest` and `stageSeats.test.ts` pin the same seats.
+
+**Viewpoints** (D6) are saved places to look from, portable because "Row F" is the venue's:
+
+| Kind | Carries |
+|---|---|
+| `ORBIT` | `eye_*` and `target_*`: the orbit camera placed at the eye, circling the target. No lens — the orbit camera's is fixed. |
+| `EYE` | `eye_*`, `target_*` and `fov_deg` (15–90, default 50): a person standing there. |
+| `SEAT` | `seat_element_uuid` and `seat_id` (`F6`), optionally `target_*` and `fov_deg` (default 52): sitting in a seat. No eye — it is the seat's, so a moved seating moves the view. With no target it looks at the stage's centre line, 2.4 m upstage and 0.9 m up. |
+
+Plan, Front and Side are built in and never rows. The seat reference is a uuid, not an FK: deleting
+or reshaping a seating that a seat view still sits in is **409 `STAGE_ELEMENT_IN_USE`**, naming the
+views, and `?force=true` goes ahead and leaves them dangling (`docs/api-conventions.md`
+§"Guard overrides"); a reader treats a dangling one as no seat.
+
+CRUD: `GET`/`POST` `/api/rest/projects/{projectId}/stage-elements` and `/stage-viewpoints`, and
+`GET`/`PUT`/`DELETE` on `…/{id}`. Stored data only, so ungated by the current project, like regions.
+A `PUT` is partial and the merged element is checked whole. Each write fires
+`stageElementListChanged` or `stageViewpointListChanged`. The MCP surface is `set_scene` and
+`get_scene` (`docs/mcp-engineering.md` §"Show-setup tools"); sync is v18
+(`docs/sync-engineering.md`).
 
 ### Aiming a head at a point
 
