@@ -275,6 +275,43 @@ export function resolveFocusParam(
   return Math.max(0, Math.min(1, (level - prop.min) / span))
 }
 
+/**
+ * The smallest a DMX iris closes a beam to, as a fraction of its field: a real iris at its
+ * last step still passes a pinspot, and a mask at zero would draw nothing at all.
+ */
+export const IRIS_MIN_OPEN = 0.12
+
+/**
+ * A DMX iris as the open fraction of the field (1 = fully open), or 1 where the fixture has no
+ * iris channel. The desk's iris channels run open → closed — the Source Four Revolution's says so
+ * in its name, and the Robe ColorSpot's is the same way round — so the channel's minimum is open.
+ */
+export function resolveIris(prop: SliderPropertyDescriptor | undefined, level: number): number {
+  if (!prop) return 1
+  const span = prop.max - prop.min
+  if (span <= 0) return 1
+  const closed = Math.max(0, Math.min(1, (level - prop.min) / span))
+  return 1 - (1 - IRIS_MIN_OPEN) * closed
+}
+
+/**
+ * A beam's edge softness with its frost channel applied: frost moves it from the family's own
+ * softness towards fully soft, in proportion to the channel. A fixture with no frost channel keeps
+ * the family's.
+ */
+export function resolveSoftness(
+  familySoftness: number,
+  frostProp: SliderPropertyDescriptor | undefined,
+  frostLevel: number,
+): number {
+  const base = Math.max(0, Math.min(1, familySoftness))
+  if (!frostProp) return base
+  const span = frostProp.max - frostProp.min
+  if (span <= 0) return base
+  const frost = Math.max(0, Math.min(1, (frostLevel - frostProp.min) / span))
+  return base + (1 - base) * frost
+}
+
 /** "Always in focus" sentinel — a fixture with no focus channel renders with
  *  zero defocus everywhere, which is byte-identical to the pre-focal look. */
 export const FOCUS_ALWAYS_SHARP = -1

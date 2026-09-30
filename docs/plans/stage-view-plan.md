@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 5 ([PR #32](https://github.com/cjcormack/lighting7/pull/32)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 6 ([PR #34](https://github.com/cjcormack/lighting7/pull/34)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -250,7 +250,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   what the Stage view shows.
 - **Docs.** `docs/mcp-engineering.md`; `docs/desk-screens.md` (a window can be asked to render).
 
-### Session 5 — edit in 3D, then retire the SVG plan (frontend)
+### ~~Session 5 — edit in 3D, then retire the SVG plan (frontend)~~ — done, `898c40e` ([PR #32](https://github.com/cjcormack/lighting7/pull/32))
 
 - **Parity in the ortho cameras:** marquee, snap-to-rigging, alignment guides, the unplaced tray,
   nudging, duplicate, and the region and rigging handles.

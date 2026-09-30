@@ -1,49 +1,42 @@
 import type { FixturePatch } from '../../api/patchApi'
-import {
-  findGroupColourSource,
-  findPrismProperty,
-  resolveFixtureKind,
-  type Fixture,
-  type FixtureKind,
-  type FixtureTypeInfo,
-} from '../../store/fixtures'
-import { MAX_PRISM_LOBES, MAX_WASH_PIXELS, type SlotNeeds } from './emitterLayout'
+import { drawnLengthM } from '../../lib/fixtureLength'
+import { findPrismProperty, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
+import { bodyInputFor, bodySpecFor, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec } from './bodies/archetype'
+import { MAX_PRISM_LOBES, type SlotNeeds } from './emitterLayout'
 
 /**
- * How many independently coloured pixels a fixture has — its element-group colour's members,
- * or 0 for a fixture without one.
+ * The body a patch is drawn as — its archetype, size and cells (`bodies/archetype.ts`). The one
+ * statement of it, read by `Stage3D` to size the emitters and the body instances and by
+ * `FixtureModel` to draw, so the two cannot disagree about how many cells a fixture has.
  */
-export function pixelCountOf(fixture: Fixture | undefined): number {
-  const groupColour = findGroupColourSource(fixture)
-  return groupColour ? groupColour.memberColourChannels.length : 0
+export function bodySpecOf(
+  patch: Pick<FixturePatch, 'kindOverride' | 'lengthM'>,
+  fixture: Fixture | undefined,
+  fixtureType: FixtureTypeInfo | undefined,
+): BodySpec {
+  const lengthM = drawnLengthM(
+    fixtureType ? { acceptsLength: fixtureType.acceptsLength, lengthM: fixtureType.lengthM } : undefined,
+    { lengthM: patch.lengthM ?? null },
+  )
+  return bodySpecFor(bodyInputFor(patch, fixture, fixtureType, lengthM))
 }
 
 /**
- * Whether a fixture washes per pixel. Only the STRIP body lays its pixels out along a line
- * (PixelStrip), so that is the one shape a per-pixel wash makes sense for.
- */
-export function isPixelStrip(kind: FixtureKind, pixelCount: number): boolean {
-  return kind === 'STRIP' && pixelCount > 1
-}
-
-/**
- * What a fixture slot needs from the shared emitters — the one statement of it, read both by
- * `Stage3D` to size the buffers and by `FixtureModel` to decide what it draws. Two copies would
+ * What a fixture slot needs from the shared emitters, for its body — the one statement of it, read
+ * by `Stage3D` to size the buffers, and so the bound `FixtureModel` draws within. Two copies would
  * drift, and a fixture that drew more lobes than its slot was given would write into the next
  * fixture's block.
  *
- * A beam comes from `acceptsBeamAngle` (FixtureModel's `showCone`); six lobes only where there
- * is a prism to split it; a wash block only for a pixel strip.
+ * A body that does not emit needs nothing. One cell is one lobe — six where there is a prism to
+ * split it — each landing as its own light; several cells are a lobe each and a light per run of
+ * cells, at most [MAX_LIGHTS_PER_FIXTURE].
  */
-export function emitterNeedsFor(
-  patch: Pick<FixturePatch, 'kindOverride'>,
-  fixture: Fixture | undefined,
-  fixtureType: FixtureTypeInfo | undefined,
-): SlotNeeds {
-  const beam = !!fixtureType?.acceptsBeamAngle
-  const lobes = beam ? (findPrismProperty(fixture?.properties) ? MAX_PRISM_LOBES : 1) : 0
-  const kind = resolveFixtureKind(patch.kindOverride, fixtureType?.kind)
-  const pixels = pixelCountOf(fixture)
-  const washPixels = isPixelStrip(kind, pixels) ? Math.min(pixels, MAX_WASH_PIXELS) : 0
-  return { lobes, washPixels }
+export function emitterNeedsForSpec(spec: BodySpec, fixture: Fixture | undefined): SlotNeeds {
+  const cells = spec.cells.length
+  if (!spec.emits || cells === 0) return { lobes: 0, lights: 0 }
+  if (cells === 1) {
+    const lobes = findPrismProperty(fixture?.properties) ? MAX_PRISM_LOBES : 1
+    return { lobes, lights: lobes }
+  }
+  return { lobes: cells, lights: lightRuns(cells, MAX_LIGHTS_PER_FIXTURE).length }
 }

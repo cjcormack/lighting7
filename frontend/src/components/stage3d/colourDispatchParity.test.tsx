@@ -12,7 +12,6 @@ import type { ChannelSource } from '../../api/channelSource'
 import {
   findColourSource,
   findDimmerProperty,
-  findGroupColourSource,
   type Fixture,
   type FixtureTypeInfo,
 } from '../../store/fixtures'
@@ -85,8 +84,6 @@ function resolve3D(scenario: Scenario): Resolved {
   // rather than exported, because the seam under test is the *dispatch*, not the lookups.
   const { patch, fixture, fixtureType } = scenario
   const colourSource = fixture?.properties ? findColourSource(fixture.properties) : undefined
-  const groupColour = findGroupColourSource(fixture)
-  const pixelCount = groupColour ? groupColour.memberColourChannels.length : 0
   const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
 
   const colorStateRef = {
@@ -97,12 +94,10 @@ function resolve3D(scenario: Scenario): Resolved {
       <ColourSync
         hasFixture={!!fixture}
         colourSource={colourSource}
-        groupColour={pixelCount > 1 ? groupColour : undefined}
         gel={gel}
         dimmerProp={findDimmerProperty(fixture?.properties)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
-        pixelColorsRef={{ current: null }}
       />
     </ChannelSourceProvider>,
   )

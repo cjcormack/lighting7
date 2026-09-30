@@ -281,6 +281,20 @@ also has **`+ Scenery`**, which places a scene element like a region and opens
 `PUT`, and the desk's 400 problems drawn beside the fields they name (`elementProblems.ts`). See the
 stage-vis doc's §"Editing on the sections", which has the parity table.
 
+**Fixture bodies are parametric archetypes, instanced per part** (session 6):
+`stage3d/bodies/archetype.ts` turns a patch, its fixture and its type into a `BodySpec` — profile,
+box profile, fresnel, PAR, flood, downlight, mover, batten, blinder, effect, cannon or tape, chosen
+from the kind, the type's words and its tilt until session 7's lantern library — with its **cells**,
+one per coloured element (the Liteobar is three), each its own lens, beam and light (at most four
+lights a fixture, averaging runs of cells). `bodySpecOf` in `emitterNeeds.ts` is the one call both
+`Stage3D` (sizing) and `FixtureModel` (drawing) make. `bodies/StageBodies.tsx` instances the parts
+across the rig with a simple mesh and a billboard at distance; `FixtureModel` keeps an empty node
+rig (placement, mount, yoke, head) and an invisible hit proxy, and copies the matrices onto the
+instances every frame. Beams **leave the aperture** with the apex behind it (`apexDistanceM`), and
+pool and haze share `beamMask.ts`; every beam is raymarched now. A `LEDGE` or `FLOOR_STAND` stands
+its units (`bodies/mount.ts`, pinned to the desk's `STANDING_RIGGING_KINDS`), but a mover's
+orientation is still its `basePitchDeg`. See the stage-vis doc's §"Fixture bodies".
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group

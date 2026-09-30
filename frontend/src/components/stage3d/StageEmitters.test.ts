@@ -18,16 +18,19 @@ import {
   flushDirty,
   makeHandle,
   writeRegionUniforms,
+  type BeamWrite,
   type BuiltEmitters,
   type EmittersHandle,
 } from './StageEmitters'
-import { makeConeMaterial } from './beamShaders'
+import { makeVolumeMaterial } from './beamShaders'
+import { getGoboTexture } from './goboAtlas'
+import { makeLightRow, type LightRow } from './scene/lightTable'
 import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
 
-// Two slots with a prism and a wash block each, so every writer below has room to write.
+// Two slots with a prism each, so every writer below has room to write.
 const LAYOUT = buildEmitterLayout([
-  { lobes: MAX_PRISM_LOBES, washPixels: 4 },
-  { lobes: MAX_PRISM_LOBES, washPixels: 4 },
+  { lobes: MAX_PRISM_LOBES, lights: MAX_PRISM_LOBES },
+  { lobes: MAX_PRISM_LOBES, lights: MAX_PRISM_LOBES },
 ])
 const REGIONS = computeRegionGeometry([
   { uuid: 'r1', centerX: 1, centerY: 0, centerZ: 0, widthM: 2, depthM: 2, heightM: 1, yawDeg: 0 },
@@ -36,8 +39,7 @@ const REGIONS = computeRegionGeometry([
 
 function build(layout: EmitterLayout = LAYOUT): BuiltEmitters {
   // Bare materials: buildEmitters only hands them to the meshes, and nothing here draws.
-  const mat = () => new ShaderMaterial()
-  return buildEmitters(layout, REGIONS.length, mat(), mat())
+  return buildEmitters(layout, REGIONS.length, new ShaderMaterial())
 }
 
 /**
@@ -96,18 +98,44 @@ const RIGHT = new Vector3(1, 0, 0)
 const COLOUR = new Color('#3fa9f5')
 const MATRIX = new Matrix4().makeScale(2, 3, 4)
 
-// One entry per EmittersHandle write method, with arguments chosen so every value it stores is
-// non-zero and distinguishable from the zeroed initial buffers — otherwise a write that happens
-// to store what was already there would look like no write at all.
+/** A beam whose every field is non-zero, so a write that stores it reaches every buffer. */
+function beamWrite(): BeamWrite {
+  return {
+    matrix: MATRIX,
+    apex: ORIGIN,
+    dir: DIR,
+    right: RIGHT,
+    color: COLOUR,
+    opacity: 0.4,
+    cosHalf: 0.97,
+    edge: 0.7,
+    goboSlot: 3,
+    goboAngle: 1.2,
+    focusDist: 6,
+    near: 0.5,
+    iris: 0.6,
+    aspect: 0.3,
+    shadowMask: 0b11,
+  }
+}
+
+function lightRow(level = 1, hit: LightRow['hit'] = null): LightRow {
+  return {
+    ...makeLightRow(),
+    ax: ORIGIN.x,
+    ay: ORIGIN.y,
+    az: ORIGIN.z,
+    cosBound: 0.97,
+    r: COLOUR.r * level,
+    g: COLOUR.g * level,
+    b: COLOUR.b * level,
+    hit,
+  }
+}
+
+// One entry per EmittersHandle write method that touches a buffer.
 const WRITERS: Array<{ name: string; write: (h: EmittersHandle) => void }> = [
-  { name: 'writeBeamMatrix (shell)', write: (h) => h.writeBeamMatrix(1, 0, MATRIX, false) },
-  { name: 'writeBeamMatrix (volumetric)', write: (h) => h.writeBeamMatrix(1, 0, MATRIX, true) },
-  {
-    name: 'writeConeAttrs',
-    write: (h) => h.writeConeAttrs(1, 0, ORIGIN, DIR, COLOUR, 0.4, 0.97),
-  },
-  { name: 'writeBeamFx', write: (h) => h.writeBeamFx(1, 0, 0.7, 3, 1.2, 6, RIGHT) },
-  { name: 'writeShadowMask', write: (h) => h.writeShadowMask(1, 0, 0b11) },
+  { name: 'writeBeam', write: (h) => h.writeBeam(1, 0, beamWrite()) },
 ]
 
 describe('emitter dirty groups', () => {
@@ -120,11 +148,17 @@ describe('emitter dirty groups', () => {
     expect(mutated.filter((name) => !flagged.includes(name))).toEqual([])
   })
 
-  it('flags the matrices and visibilities hideLobes parks', () => {
+  it('reaches every beam buffer with one write — nothing is left for a second writer', () => {
+    const b = build()
+    const { mutated } = writeAndFlush(b, (h) => h.writeBeam(0, 0, beamWrite()))
+    expect(mutated.sort()).toEqual(allBuffers(b).map((x) => x.name).sort())
+  })
+
+  it('flags the matrices hideLobes parks', () => {
     // Light a slot first, so parking it is a real change rather than a write of the zeros
     // already there.
     const h = makeHandle(built)
-    h.writeBeamMatrix(0, 0, MATRIX, false)
+    h.writeBeam(0, 0, beamWrite())
     flushDirty(built, dirtyGroups(built))
 
     const { mutated, flagged } = writeAndFlush(built, (handle) => handle.hideSlot(0))
@@ -140,7 +174,7 @@ describe('emitter dirty groups', () => {
 
   it('clears the dirty field so a group is not re-uploaded on the next frame', () => {
     const handle = makeHandle(built)
-    handle.writeConeAttrs(0, 0, ORIGIN, DIR, COLOUR, 0.5, 0.9)
+    handle.writeBeam(0, 0, beamWrite())
     expect(built.dirty).not.toBe(0)
     flushDirty(built, dirtyGroups(built))
     expect(built.dirty).toBe(0)
@@ -158,74 +192,71 @@ describe('emitter dirty groups', () => {
 })
 
 describe('emitter layout bounds', () => {
-  // A par (one lobe, no wash) beside a prism mover.
+  // A par (one lobe, one light) beside a prism mover and a 12-cell bar.
   const layout = buildEmitterLayout([
-    { lobes: 1, washPixels: 0 },
-    { lobes: MAX_PRISM_LOBES, washPixels: 0 },
+    { lobes: 1, lights: 1 },
+    { lobes: MAX_PRISM_LOBES, lights: MAX_PRISM_LOBES },
+    { lobes: 12, lights: 4 },
   ])
 
-  it('sizes the meshes and the light table by the rig, not by slots × the worst case', () => {
+  it('sizes the mesh and the light table by the rig, not by slots × the worst case', () => {
     const b = build(layout)
-    expect(b.coneMesh.count).toBe(1 + MAX_PRISM_LOBES)
-    expect(b.volumeMesh.count).toBe(1 + MAX_PRISM_LOBES)
-    // One row per lobe; no wash block, so no wash rows.
-    expect(b.lights.capacity).toBe(1 + MAX_PRISM_LOBES)
-    expect(build(LAYOUT).lights.capacity).toBe(2 * MAX_PRISM_LOBES + 2 * 4)
+    expect(b.volumeMesh.count).toBe(13 + MAX_PRISM_LOBES)
+    // A light a lobe for the par and the mover, four for the bar's twelve cells.
+    expect(b.lights.capacity).toBe(5 + MAX_PRISM_LOBES)
   })
 
-  it('drops a write past a slot\'s block rather than landing in the next slot', () => {
+  it("drops a write past a slot's block rather than landing in the next slot", () => {
     const b = build(layout)
     const { mutated } = writeAndFlush(b, (h) => {
       // Lobe 1 of the par would be lobe 0 of the mover.
-      h.writeBeamMatrix(0, 1, MATRIX, false)
-      h.writeConeAttrs(0, 1, ORIGIN, DIR, COLOUR, 0.4, 0.97)
-      h.writeLight(0, 1, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, null)
-      // A pixel on a slot with no wash block, a slot that isn't.
-      h.writeWashLight(0, 0, ORIGIN, DIR, COLOUR, 1, 0.9, null)
-      h.writeBeamMatrix(7, 0, MATRIX, false)
-      h.writeLight(7, 0, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, null)
+      h.writeBeam(0, 1, beamWrite())
+      h.writeLight(0, 1, lightRow())
+      // The bar's fifth light would be the next slot's; a slot that isn't.
+      h.writeLight(2, 4, lightRow())
+      h.writeBeam(7, 0, beamWrite())
+      h.writeLight(7, 0, lightRow())
     })
     expect(mutated).toEqual([])
     expect(b.dirty).toBe(0)
     expect(b.lights.litCount()).toBe(0)
   })
 
-  it('reports each slot\'s block to the directors', () => {
+  it("reports each slot's block to the directors", () => {
     const h = makeHandle(build(layout))
     expect(h.lobesFor(0)).toBe(1)
     expect(h.lobesFor(1)).toBe(MAX_PRISM_LOBES)
-    expect(h.lobesFor(2)).toBe(0)
-    expect(h.washPixelsFor(1)).toBe(0)
+    expect(h.lobesFor(2)).toBe(12)
+    expect(h.lightsFor(2)).toBe(4)
+    expect(h.lobesFor(3)).toBe(0)
   })
 })
 
 describe('the light table rows', () => {
   const layout = buildEmitterLayout([
-    { lobes: 1, washPixels: 0 },
-    { lobes: MAX_PRISM_LOBES, washPixels: 0 },
-    { lobes: 0, washPixels: 4 },
+    { lobes: 1, lights: 1 },
+    { lobes: MAX_PRISM_LOBES, lights: MAX_PRISM_LOBES },
+    { lobes: 8, lights: 4 },
   ])
 
-  it('puts every lobe first and every washing pixel after it, and takes a dark slot off the table', () => {
+  it("addresses each slot's lights in its own block, and takes a dark slot off the table", () => {
     const b = build(layout)
     const h = makeHandle(b)
-    h.writeLight(1, 2, ORIGIN, DIR, COLOUR, 1, 0.97, 0.5, 6, null)
-    h.writeWashLight(2, 3, ORIGIN, DIR, COLOUR, 0.5, 0.7, null)
-    // Lobe 2 of slot 1 is row 1 + 2; pixel 3 of slot 2 is after all seven lobes.
+    h.writeLight(1, 2, lightRow())
+    h.writeLight(2, 3, lightRow(0.5))
+    // Light 2 of slot 1 is row 1 + 2; light 3 of slot 2 is after the mover's six.
     expect(b.lights.weight[3]).toBeGreaterThan(0)
     expect(b.lights.weight[1 + MAX_PRISM_LOBES + 3]).toBeGreaterThan(0)
     expect(b.lights.litCount()).toBe(2)
     h.hideSlot(1)
-    h.clearWashLight(2, 3)
+    h.clearLight(2, 3)
     expect(b.lights.litCount()).toBe(0)
   })
 
   it('writes a surface hit as the plane the surfaces stop lighting behind', () => {
     const b = build(layout)
-    makeHandle(b).writeLight(0, 0, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, {
-      px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0,
-    })
-    const row = b.lights.staged.subarray(0, 16)
+    makeHandle(b).writeLight(0, 0, lightRow(1, { px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0 }))
+    const row = b.lights.staged.subarray(0, 24)
     expect(Array.from(row.subarray(12, 16))).toEqual([0, 1, 0, 0])
   })
 
@@ -246,7 +277,7 @@ describe('region uniforms', () => {
     const regions = computeRegionGeometry([
       { uuid: 'r', centerX: 2, centerY: 3, centerZ: 0.5, widthM: 4, depthM: 1, heightM: 0.5, yawDeg: 30 },
     ] as Parameters<typeof computeRegionGeometry>[0])
-    const mat = makeConeMaterial()
+    const mat = makeVolumeMaterial(getGoboTexture())
     writeRegionUniforms([mat], regions, 1, 8)
     const yaw = (30 * Math.PI) / 180
     const cs = (mat.uniforms.uRegionYawCs.value as Array<{ x: number; y: number }>)[0]

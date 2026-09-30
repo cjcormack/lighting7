@@ -875,7 +875,7 @@ local frame.
 | Column        | Meaning                                                                     |
 |---------------|-----------------------------------------------------------------------------|
 | `name`        | Operator-facing label, unique per project (e.g. `"FOH"`, `"LX1"`, `"Boom-SL"`). |
-| `kind`        | Optional advisory label (`TRUSS`, `BAR`, `BOOM`, `PIPE`, `FLOOR_STAND`, `LEDGE`, `OTHER`). Renderers may use this to pick a default mesh; not enforced on REST, checked by `set_stage`. `FLOOR_STAND` and `LEDGE` are **stood on** rather than hung from — a ledge is a balcony front or a shelf the units sit on (stage-view plan session 2; session 6 draws them base-down). |
+| `kind`        | Optional advisory label (`TRUSS`, `BAR`, `BOOM`, `PIPE`, `FLOOR_STAND`, `LEDGE`, `OTHER`). Renderers may use this to pick a default mesh; not enforced on REST, checked by `set_stage`. `FLOOR_STAND` and `LEDGE` are **stood on** rather than hung from — a ledge is a balcony front or a shelf the units sit on (stage-view plan session 2). Since session 6 the Stage view draws a body on one base down with no hanger, and a hung one with a hanger up to its bar; the list is `STANDING_RIGGING_KINDS` (`ai/SetupToolSchemas.kt`) — see §"Aiming a head at a point" for why it never turns an aim. |
 | `position_x/y/z` | Origin in world coordinates (metres). Nullable; null = treat as 0.       |
 | `yaw_deg`     | Rotation about Z (up). Stored ±360°.                                        |
 | `pitch_deg`   | Rotation about X (audience-right). Stored ±180°.                            |
@@ -1003,6 +1003,19 @@ solve does not turn it either. At DMX mid-travel a head's beam runs up the body'
 hung mover is `basePitchDeg = 180` and a floor-standing one 0; pan turns about that axis and tilt
 leans away from it. `beamDirection` is the forward half, pinned against the view's `panTiltToDir`
 vectors in `FixtureAimTest`.
+
+**Standing mounts** (stage-view plan session 6). A rigging of kind `LEDGE` or `FLOOR_STAND` is stood
+on — `STANDING_RIGGING_KINDS` — and the Stage view draws its units base down with no hanger. That is
+how a body is *carried*, and nothing more: a moving head's mount is its own `basePitchDeg`, 0
+standing and 180 hung, which is what the view draws and what this solve reads, so the rigging's kind
+never turns an aim. A moving head stood on a ledge at 180 is therefore drawn and aimed upside down
+under it — the Commemoration Hall's balcony Revolutions until the plan's P5 sets them to 0 — and
+`describe_rig` names every head whose `basePitchDeg` disagrees with its rigging's kind, one way
+(180 on a ledge: hung under it) or the other (0 on a bar: standing on top of it), on a *Mounts:*
+line in its stage summary. Which way a body faces is read as the view reads it — its own axis
+through yaw, pitch and roll (`beamDirection` at pan and tilt 0), up or down past 60° — so a head
+rolled over hangs, and a head on its side is neither and is not flagged. A static lantern's
+`basePitchDeg` is its focus, not its mount, so it is never flagged.
 
 - **Travel degrees come from the annotation.** A head aims only where both its pan and tilt carry
   `@FixtureProperty(degMin =, degMax =)`; the mechanical centre is the middle of the range, as the

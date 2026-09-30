@@ -60,6 +60,19 @@ private val stringArray = buildJsonObject {
 /** LEDGE (stage-view plan session 2): stood on rather than hung from — a balcony front, a wall shelf. */
 internal val RIGGING_KINDS = listOf("TRUSS", "BAR", "BOOM", "PIPE", "FLOOR_STAND", "LEDGE", "OTHER")
 
+/**
+ * The rigging kinds a fixture **stands on** rather than hangs from (stage-view plan session 6):
+ * the Stage view draws a body on one base down with no hanger, and `describe_rig` says so and flags
+ * a moving head whose base orientation disagrees. It decides only how a body is carried — a moving
+ * head's mount is its own `basePitchDeg` (0 stands, 180 hangs), which [aimAt] solves from, so the
+ * kind never turns an aim. Mirrored by the Stage view's `bodies/mount.ts`; the two are pinned
+ * against `src/test/resources/stage/standingRiggingKinds.json`.
+ */
+internal val STANDING_RIGGING_KINDS: Set<String> = setOf("FLOOR_STAND", "LEDGE")
+
+/** Whether a rigging of [kind] is stood on. Case-blind, as `set_stage` stores kinds upper-case. */
+internal fun standsOn(kind: String?): Boolean = kind != null && kind.uppercase() in STANDING_RIGGING_KINDS
+
 private const val COORDINATES =
     "Stage coordinates are metres, FOH-relative, Z-up: origin = centre of the downstage edge at deck level; " +
         "+x = audience-right (actor's stage left), +y = upstage, +z = up."

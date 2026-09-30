@@ -9,9 +9,10 @@ How the stage surfaces decide **what a fixture looks like**. Two independent sea
 And, since the stage-view plan's session 0, how the 3D view keeps within a browser's memory and
 survives losing its graphics context — §"The 3D renderer"; since session 1, its cameras, the
 window's viewpoint and the Positions panel — §"Cameras and viewpoints"; since session 4, how a
-window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`"; and since session 5,
+window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`"; since session 5,
 editing on the Plan, Front and Side sections, which retired the SVG plot — §"Editing on the
-sections" at the end.
+sections"; and since session 6, the fixture bodies, their cells and beams that leave the aperture —
+§"Fixture bodies" at the end.
 
 ## The vis source
 
@@ -329,8 +330,9 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   DMX, so while one runs the director asks for the next frame itself. That is the one case where the
   canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
-- **Imperative buffer writes from effects** — `hideSlot` / `hideWashSlot` when a fixture loses its
-  beam or unmounts — and the region uniforms (below). The light table is packed in the emitters'
+- **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
+  unmounts, a body's `hide` and `setActive` — and the region uniforms (below). A body's parts are
+  written from its own frame loop (§"Fixture bodies"), so they need no request of their own. The light table is packed in the emitters'
   flush, which runs inside a frame (`EMITTER_FLUSH_PRIORITY`, before the composer), so it needs no
   request of its own; a budget change does ask.
 - **The label layer** hands the store the canvas's `invalidate`.
@@ -356,19 +358,22 @@ The shared emitter meshes (`StageEmitters`) used to give every slot `MAX_PRISM_L
 and `MAX_WASH_PIXELS` wash instances, times the region count on the receivers — at 45 fixtures and 16
 regions, 4,320 region cookies and 11,520 wash-region instances whether or not a prism or a pixel bar
 was hung, every one through the vertex shader each frame. (Session 3 retired the receivers
-altogether — §"Light lands through one surface shader" below.) Now `emitterNeedsFor` (`emitterNeeds.ts`)
-says per slot what it can draw — **no lobes** without a beam (`acceptsBeamAngle`, which is
-`FixtureModel`'s `showCone`), **one**, or **six** where there is a prism; a wash block only for a
-pixel strip, of its pixel count — and `buildEmitterLayout` (`emitterLayout.ts`) turns that into
-per-slot offsets. On project 15 that is 73 beam instances where there were several hundred.
+altogether — §"Light lands through one surface shader" below.) Now `emitterNeedsForSpec` (`emitterNeeds.ts`)
+says per slot what it can draw, from the fixture's **body** (§"Fixture bodies"): **no lobes** for a
+body that does not emit, **one** for a single cell, **six** where it has a prism, or **one per cell**
+for a body of several (a batten, a blinder, a bar of heads); and **lights**, a row of the light table
+for each lobe of a single cell and at most four for a body of several, each averaging a run of cells
+(`lightRuns`). `buildEmitterLayout` (`emitterLayout.ts`) turns that into per-slot offsets for the
+two blocks. The per-pixel wash block a pixel strip had until session 6 is gone: a bar's cells are
+beams now.
 
-- **One statement of the rule.** `FixtureModel` decides whether it washes per pixel with the same
-  `isPixelStrip` and `pixelCountOf` the layout sizes by; two copies would drift, and a fixture that
-  drew more than its slot was given would write into the next fixture's block.
+- **One statement of the rule.** `FixtureModel` draws from the same `bodySpecOf` the layout sizes
+  by; two copies would drift, and a fixture that drew more than its slot was given would write into
+  the next fixture's block.
 - **The handle drops out-of-block writes.** Every writer bounds-checks `(slot, lobe)` and
-  `(slot, pixel)` against the layout, and the directors draw at most `lobesFor(slot)` lobes and
-  `washPixelsFor(slot)` pixels. A frame where the patch and the layout disagree draws less, never
-  into a neighbour.
+  `(slot, light)` against the layout, and the directors draw at most `lobesFor(slot)` lobes and
+  `lightsFor(slot)` lights. A frame where the patch and the layout disagree draws less, never into a
+  neighbour.
 - **The rebuild keys on `layout.signature`**, not the layout object, which is fresh every render;
   equal needs address identically, and rebuilding would throw away every slot's written state.
 
@@ -383,12 +388,14 @@ the pool shaders and `makePoolMaterial`. Light lands through **one receiver shad
 without a room — the back wall and the catch floor:
 
 - **The lights are a data texture, not a uniform array** (`scene/lightTable.ts`). The prototype's
-  48-light ceiling was the uniform budget; a float `DataTexture` of four texels a light
+  48-light ceiling was the uniform budget; a float `DataTexture` of six texels a light
   (`MAX_LIGHT_BUDGET` = 256 rows, read with `texelFetch` in a GLSL3 loop over `uLightCount`) has
-  none. Every beam lobe and every washing pixel has a slot in the `LightTable`, sized from the
-  emitter layout; the directors write their slot each frame (`writeLight`, `writeWashLight`,
-  `clearWashLight`), and the emitters' flush packs the **budget**'s worth of the brightest lit slots
-  into the texture, in slot order.
+  none. Every light has a slot in the `LightTable`, sized from the emitter layout; the directors
+  write their slot each frame (`writeLight`, `clearLight`), and the emitters' flush packs the
+  **budget**'s worth of the brightest lit slots into the texture, in slot order. Since session 6 a
+  light carries its beam's **apex** (behind the aperture), its frame (the head's right axis and the
+  tangent of the half-field) and its aperture (the apex → aperture distance, the iris and a
+  segment's aspect) — what the surface shader's `beamMask` shapes the pool with.
 - **The light budget is the viewer's** — the View menu's *Light budget*, 32 · 64 · 128 · 256, default
   64, per browser in `localStorage` (`stage.lightBudget`, `scene/sceneView.ts`): the shader's cost is
   pixels × lights, and what a machine's GPU affords is the machine's fact, not a window's. A light
@@ -404,7 +411,9 @@ without a room — the back wall and the catch floor:
   stylised `BEAM_LENGTH` (8 m) — the light reaches further than the cone is drawn, and a hall-length
   throw no longer draws a 40 m spear across the house.
 - **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
-  disagree with the uniform cone above it. The lit colour is the finish × (fill + an exponential
+  disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
+  a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the
+  **focus** is measured from instead (§"Fixture bodies"). The lit colour is the finish × (fill + an exponential
   roll-off of the light) plus a little of the light itself (`uSheen`), so a pool still reads as the
   beam's colour on the near-black finishes a hall is painted in, and a rig at full does not clip to
   white. Gobos show in the air, not yet on surfaces.
@@ -426,7 +435,8 @@ upstage wall (`beamClipFor`). The stage floor stays; a room's faces sit 4 mm out
 ### Haze degrades before frame rate
 
 The raymarched beam volumes are the costliest thing drawn per pixel and the least essential — a gobo
-through fewer march steps is grainier, not wrong — so `HazeGovernorProbe` (in `Stage3D`) feeds
+through fewer march steps is grainier, not wrong — and since session 6 **every** beam marches
+(§"Fixture bodies"), so `HazeGovernorProbe` (in `Stage3D`) feeds
 `scene/hazeGovernor.ts` the time between frames of a **continuous run** (a frame counts only when the
 frame before asked for it from inside the loop, R3F's `internal.frames > 1`; on demand, the gap is
 otherwise how long nothing moved). A run averaging over 28 ms steps the march down a tier (step
@@ -461,10 +471,12 @@ draw one thickness lower; they are re-set on the desk, not migrated (the plan's 
 ### Lenses and housings
 
 Every lens was a sphere at `0.5 + 0.5 × brightness` opacity, so a lamp at dimmer zero was half-lit in
-its full hue and bloomed. `paintLens` (`fixtureBodies/palette.ts`) makes a lens dark glass at level 0
-and the hue at level 1, opaque, never brighter than its level — every body and each `PixelStrip`
-head go through it. Housings and yokes are matt near-black, as lanterns read in a hall; the active
-highlight lifts them to a slate. The torus ring still marks the selection.
+its full hue and bloomed. `lensColour` (`bodies/palette.ts`, `paintLens` until session 6) makes a
+lens dark glass at level 0 and the hue at level 1, never brighter than its level — every cell of
+every body goes through it. Since session 6 a lens is a flat disc or segment on the barrel's face,
+one instance per cell, and housings, yokes and hangers are matt near-black **lit by the surface
+shader** like any surface, so a beam crossing a lantern lights it; the active highlight tints them
+to a slate. The torus ring still marks the selection.
 
 ### The label layer
 
@@ -891,3 +903,177 @@ asks about (*Save anyway* forces). *Moves with* is read-only and empty until ses
 element endpoints are in `SILENT_ENDPOINTS`, so the route's placement and drag toast their own
 failures. The design record's two builders (*Proscenium hall from measurements…*, *Ask Claude*) are
 not built: the template is `set_scene`'s over MCP, which the in-app chat does not carry.
+
+## Fixture bodies
+
+Session 6 of the stage-view plan replaced the eight kind bodies (`stage3d/fixtureBodies/`, deleted)
+with parametric **archetypes** built from parts, gave every coloured element its own lens and beam,
+started every beam at its **aperture**, and shaped pool and haze with one **beam mask**. The design
+is the record's §"Fixture bodies and the lantern library", items 1–3, 8, 9, 11 and 12; the
+prototype proved the maths and is not the code.
+
+### The archetype, from what the desk knows today
+
+`bodies/archetype.ts` is pure and node-tested: a patch, its fixture and its type in, a `BodySpec`
+out — the archetype, its size, its **cells**, whether it emits, its field angle and its edge
+softness. `emitterNeeds.ts`'s `bodySpecOf` is the one call, read by `Stage3D` (to size the emitters
+and the body instances) and by `FixtureModel` (to draw), so the two cannot disagree about a cell.
+
+Until session 7 gives a generic dimmer a lantern and `@FixtureType` a `body` descriptor, the
+archetype comes from what the desk already sends:
+
+- **A mover** is anything with a tilt axis, or of kind `MOVING_HEAD` / `SCANNER` — so a Source Four
+  Revolution, a `PROFILE` that tilts, is a mover with a profile head. The head is a spot, a wash or a
+  profile by the words in the type key and model (`spot`, `beam`, `mac-250`, `wash`), else by the
+  type's beam edge; a mover with several coloured elements is a bar of heads (the Slender Beam Bar
+  Quad — its heads tilt together until `FU-STAGE-INDEPENDENT-HEADS`).
+- **A Twin Shot** is the cannon.
+- **Otherwise the kind** — the patch's `kindOverride` over the type's: `PROFILE` a profile barrel (a
+  box profile where the type names a Cantata, Prelude or Harmony; none does today), `FRESNEL` a
+  fresnel (a PC is the same archetype without the barn doors, and nothing tells the two apart yet),
+  `PAR` a can, `WASH` a flood, `STRIP` a batten — a strip of **tape** where the type takes a
+  per-install length (`acceptsLength`) — `BLINDER` a blinder, `LASER` and `EFFECT` an effect box,
+  `GENERIC` a house downlight (the prototype's default for a generic dimmer).
+
+The field angle is the patch's `beamAngleDeg`, then a zoom channel, then the **family's**
+(`FIELD_DEG`: a profile 26°, a fresnel 45°, a PAR 32°, a spot 16°, a wash 25°, a batten 30°, a
+blinder 60°…) — it was 30° for everything. Which bodies emit: a batten and a blinder always (their
+types have no beam angle to set, so `acceptsBeamAngle` could not say), tape and the cannon never,
+everything else as `acceptsBeamAngle` said before.
+
+### Parts, instanced; three levels of detail
+
+`bodies/bodyGeometry.ts` builds each archetype from parts — the **base** (a mover's), the **yoke**
+that pans, the **head** that tilts with its accessories (shutter handles, barn doors, a colour
+frame), a **lens** per cell and a **hanger** — in two levels, `full` and `simple`, shared by spec,
+mount and level and **reference-counted by the canvases that draw them**: a key no canvas holds is
+disposed, so every length a strip of tape is dragged through does not stay behind (a new layout
+takes its hold before the old one lets go, or a key both share would be disposed mid-swap). The
+numbers a body is placed by — its pivot, a standing lantern's lift, where a hanger attaches, the hit
+box — are `bodyFrames`, which builds no geometry. `bodies/StageBodies.tsx` instances them **per part across the
+rig**: one `InstancedMesh` per (geometry, level, part), one for every disc lens and one for every
+segment lens in the rig, one for the hangers and one for the billboards. Sized by a `BodyLayout`
+(each slot's spec key and mount) built beside the emitter layout in the same slot order, and rebuilt
+only when its signature changes, as the emitters are — a drag, a pan or a tilt rebuilds nothing.
+
+- **The fixture is still a node rig.** `FixtureModel` keeps its placement group (which
+  TransformControls drags), a mount, a yoke and a head as empty groups, and its body director copies
+  their world matrices onto the instanced parts every frame it renders, at the level its size on
+  screen calls for (`bodyShownFor`: under 44 px the simple mesh, under 9 px a billboard glyph — a
+  dark dot in its lens colour). It runs after the beam director, so a head's tilt is this frame's.
+  A write that stores what the instance buffer already holds is dropped, so a still rig flags
+  nothing for upload however often the canvas draws.
+- **The pointer presses an invisible hit proxy** — a box round the body at rest, `visible: false`
+  on its material so it still raycasts — so the click, the hover and the gizmo keep their plumbing.
+  The instanced meshes take no pointer (`NO_RAYCAST`), and the section edit layer's hit radii never
+  touched meshes.
+- **Housings are lit by the surface shader**, tinted per instance (the selection's slate), so a
+  beam that crosses a lantern lights it. That surfaced a bug from session 3: three defines
+  `USE_INSTANCING_COLOR` in the vertex stage only (the fragment stage gets `USE_COLOR`), so the
+  receiver never tinted any instance — the seat pick's hover tint included. It now tests both.
+
+**A static lantern keeps the mover's rig** (item 3). Its yoke turns by its yaw about the vertical and
+its head by its pitch, then roll, inside it, then a fixed quarter-turn that lays the barrel level
+(`staticHeadQuaternion`) — so the yoke hangs or stands plumb whatever the lantern is focused at.
+
+**Pitch 0 is level, and +pitch aims down**, as `docs/fixtures-engineering.md` defines
+`base_pitch_deg` and the MCP schema states it (yaw 0 facing the audience, +yaw towards audience
+right). Until session 6 the view drew a static lantern 90° of pitch off: pitch 0 straight down, and
++pitch tilting it *upstage* at yaw 0 — while the rigs authored through the schema, the Commemoration
+Hall's among them, were entered level-is-zero (its ADV2 fronts at pitch 10–14, its house lights at
+90, its Liteobars at 60). The quarter-turn is about the body's own X, the long axis, so
+`longAxisLighting` (`lib/fixtureLength.ts`) is unchanged and roll still stands a strip on end; roll now
+turns a static lantern about its own beam. Movers are untouched — their mount is their base
+orientation, 0 standing and 180 hung, which `FixtureAim` solves from. `FixtureModel.test.tsx` pins the
+documented directions, the long axis and the roll.
+
+### Mounts: hung or standing
+
+`bodies/mount.ts` (item 11): a fixture on a `LEDGE` or `FLOOR_STAND` **stands**, on anything else it
+hangs, and on no rigging it hangs from nothing. The kinds are the desk's `STANDING_RIGGING_KINDS`,
+which `describe_rig` reads to say a unit stands on its rigging and to flag a moving head whose base
+orientation disagrees with it; `src/test/resources/stage/standingRiggingKinds.json` pins the two
+lists (`mount.test.ts`, `StandingRiggingKindsTest`).
+
+**The kind decides how a body is carried, never which way it points.** A moving head's mount is
+already its `basePitchDeg` — 0 stands, 180 hangs — and `FixtureAim` solves from that, so turning a
+mover over by its rigging's kind would draw a beam `aim_fixtures` does not aim. So: a standing static
+lantern's yoke runs down to a plate, its pivot lifted by the yoke's height so the plate rests on the
+ledge; a hung one's runs up to a clamp and a **hanger** up to the bar, drawn when the bar is more
+than 2 cm above it. A mover hangs from its base only while its base is up (`basePitchDeg` about 180);
+one at 0 on a bar stands on top of it. The Commemoration Hall's balcony Revolutions draw and aim
+hung under a pipe until P5 makes the balcony a ledge and sets them to 0 — which `describe_rig` now
+says.
+
+### Cells
+
+A body's **cells** (item 9) are its apertures, in the head's frame: one lens for a lantern or a
+mover, and for a batten, a blinder or a bar of heads one per element that has a colour or a level of
+its own — a colour property, a colour-wheel setting, a white or amber slider, or a dimmer (the
+2-cell blinder's cells are warm and cold white sliders). The Kam Liteobar 252 is three segments, as
+its type declares (`KamLiteobar252Fixture.kt:117`), not twelve. Cells without elements share the
+fixture's colour. At most `MAX_CELLS` (16).
+
+- **Every cell is its own lens, level, beam and light.** `CellColourSync` (in `FixtureModel`) reads
+  each cell's element — its colour, its own dimmer, and the fixture's master — paints its lens and
+  writes its beam's colour and opacity; a body of one cell keeps `ColourSync`, the fixture's own
+  dispatch. Cells are 3D only: the 2D dispatch answers one colour a fixture, folding a pixel bar's
+  elements into one in its multi-element arm. `ColourSync` lost that arm (and `MultiPixelColourSync`)
+  with session 6, since a bar is drawn as cells; its single-colour arms still mirror the 2D ones,
+  which `colourDispatchParity.test.tsx` pins.
+- **Lights on the surfaces are capped at four a fixture** (`MAX_LIGHTS_PER_FIXTURE`), each averaging
+  a contiguous run of cells (`lightRuns`) — its aperture the run's span, its colour × level their
+  mean — so a 12-pixel bar takes four of the surface shader's lights, not twelve. The air keeps a
+  beam per cell.
+
+### A beam leaves its aperture
+
+Item 8: a beam leaves the **aperture** — the lens, or a cell's face — at the aperture's own size and
+shape, and spreads at the field angle, so its **apex** sits `aperture radius / tan(half-field)`
+behind it (`apexDistanceM`). For a 19° Source Four's 170 mm lens that is half a metre back — the
+lamp — and the cone passes the lens at the lens's width; for a wide LED face it is far behind, so a
+batten segment or a wash leaves as a column. It replaced the lens-point origin (`lensRef ?? head ??
+group`).
+
+- **The volume is a frustum**: the hull is laid from the apex (`composeBeamHull`, built from the
+  head's own axes so a segment's rectangle lines up with the head), and the march runs from the
+  aperture (`near`) to where the beam lands. A disc throws a cone frustum; a **segment** a
+  rectangular one, whose chord is four half-spaces through the apex, each linear in the ray.
+- **The light on the surfaces uses the same apex** for its cone test and measures its focus from
+  the aperture; its reach is cast from the aperture.
+- **Edge softness is data**: the family's (`SOFTNESS` — profiles and spots hard, everything else
+  soft), moved towards soft by a **frost** channel (`resolveSoftness`); a focus channel still
+  sharpens the edge at its focal distance. `FixtureTypeInfo.beamEdge` still only picks a mover's
+  head.
+- **A DMX iris is drawn** (`resolveIris`: the channel runs open → closed, down to 12 % of the field).
+
+### One beam mask, and every beam marched
+
+`beamMask.ts` is the cross-section both the surfaces and the haze shape a beam by — the field circle
+or a segment's rectangle, the iris, the softness — in the head's frame, with the field edge at 1;
+session 7's blades are arguments in the same frame. The GLSL and a TypeScript twin are written from
+one set of constants and the twin is pinned by `beamMask.test.ts`.
+
+**Every beam in the air is raymarched** now, round or rectangular: the hollow cone shell an open beam
+used to be could not show a soft edge, an iris or a shutter cut, so it went, with `makeConeMaterial`
+and the shell's buffers. Three things keep the march honest:
+
+- **The beam's opacity is the ceiling.** The alpha is `opacity × (1 − exp(−gain × density × chord))`,
+  so side-on a beam sits at the opacity the shell drew it at, and a long chord — the camera looking
+  down a barrel — never adds up past it. A full look on the Commemoration Hall is as bright as it was
+  on `main`.
+- **The air thins as a beam spreads** (`VOL_SPREAD`): the same light over a wider cross-section.
+- **The hull is depth-tested again**, face by face: its front face while the view ray starts outside
+  the beam, so the stalls, a pros wall or a flat in front of a beam hide it as they hid the shell,
+  and its back face while the ray starts inside (the camera in a beam, or a section's plane cutting
+  one) — the prototype's rule. With `depthTest` off, as the gobo volume had it, every beam drew over
+  the seats in front of it.
+
+**Budget.** The march is the costliest thing per pixel and the haze governor is its only brake: 12
+steps (8 above DPR 1), stepped down to a quarter before the frame rate gives. Measured once, on
+2026-09-30, in the desktop app's Chromium pane on the operator's Mac — **not Safari, and not an
+iPad**, which §10 of the plan still asks for — on the Commemoration Hall at a full look with haze
+on (every dimmer up but the house lights, 58 of 58 lights packed, a 1606 × 2236 px canvas at the 1.5
+DPR cap): an orbit drag ran at a median of 17–21 ms a frame and the governor held tier 0. So the
+sizes stay as they were — 12 steps, a 64-light default budget — until the Safari and iPad passes.
+`data-lights` and `data-haze-tier` on the container are what to read.

@@ -245,7 +245,60 @@ class McpSceneToolsTest : RouteIntegrationTest() {
         assertTrue(call("set_scene", "{$hall}").success)
         val briefing = RigBriefing(state).describeRig()
         assertTrue("## Stage" in briefing, briefing)
-        assertTrue("LX1 (bar, y 3.7, z 4.0), FOH Balcony (ledge, y −16.2, z 1.9)" in briefing, briefing)
+        assertTrue("LX1 (bar, y 3.7, z 4.0), FOH Balcony (ledge, y −16.2, z 1.9, units stand on it)" in briefing, briefing)
         assertTrue("Scene: 6 venue and 0 set element(s)" in briefing, briefing)
+        assertFalse("Mounts:" in briefing, "nothing on the rig disagrees with its mount yet")
+    }
+
+    @Test
+    fun `describe_rig flags a moving head whose base orientation disagrees with its mount`() {
+        assertTrue(
+            call("set_stage", """{"riggings":[{"name":"FOH Balcony","kind":"LEDGE","y":-16.24,"z":1.9,"lengthM":8.6},{"name":"LX2","kind":"BAR","y":6.7,"z":4}]}""").success,
+        )
+        assertTrue(
+            call(
+                "patch_fixtures",
+                """{"fixtures":[
+                    {"key":"rev-sr","name":"Balcony Rev SR","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":1},
+                    {"key":"rev-sl","name":"Balcony Rev SL","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":20},
+                    {"key":"lx2-1","name":"LX2 mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":40},
+                    {"key":"lx2-2","name":"LX2 standing mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":60},
+                    {"key":"profile","name":"Balcony profile","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":80},
+                    {"key":"side","name":"LX2 side mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":100},
+                    {"key":"rolled","name":"Balcony rolled mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":120},
+                    {"key":"override","name":"Balcony override mover","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":140}
+                ]}""",
+            ).success,
+        )
+        assertTrue(
+            call(
+                "place_fixtures",
+                """{"placements":[
+                    {"key":"rev-sr","rigging":"FOH Balcony","x":-0.9,"pitchDeg":180},
+                    {"key":"rev-sl","rigging":"FOH Balcony","x":0.9,"pitchDeg":0},
+                    {"key":"lx2-1","rigging":"LX2","x":0,"pitchDeg":180},
+                    {"key":"lx2-2","rigging":"LX2","x":1,"pitchDeg":0},
+                    {"key":"profile","rigging":"FOH Balcony","x":0,"pitchDeg":180},
+                    {"key":"side","rigging":"LX2","x":2,"pitchDeg":90},
+                    {"key":"rolled","rigging":"FOH Balcony","x":2,"pitchDeg":0,"rollDeg":180},
+                    {"key":"override","rigging":"FOH Balcony","x":3,"pitchDeg":180,"kind":"MOVING_HEAD"}
+                ]}""",
+            ).success,
+        )
+        val briefing = RigBriefing(state).describeRig()
+        // Hung at 180 on a ledge: drawn and aimed upside down, which is what P5's data fix is for.
+        assertTrue("Balcony Rev SR is on FOH Balcony, which it stands on, but its basePitchDeg 180 hangs it" in briefing, briefing)
+        // Standing at 0 on a bar: drawn on top of it.
+        assertTrue("LX2 standing mover hangs from LX2 but its basePitchDeg 0 stands it on top" in briefing, briefing)
+        // Agreeing with their mounts — and a static lantern, whose pitch is its focus — say nothing.
+        assertFalse("Balcony Rev SL" in briefing.substringAfter("Mounts:", ""), briefing)
+        assertFalse("LX2 mover " in briefing.substringAfter("Mounts:", ""), briefing)
+        assertFalse("Balcony profile" in briefing.substringAfter("Mounts:", ""), briefing)
+        // A head on its side is neither standing nor hung, so it is not advice-worthy either way.
+        assertFalse("LX2 side mover" in briefing.substringAfter("Mounts:", ""), briefing)
+        // Read through roll as the view reads it: rolled over, a head at pitch 0 hangs.
+        assertTrue("Balcony rolled mover is on FOH Balcony, which it stands on" in briefing, briefing)
+        // A mover by the patch's kind override, as the view draws it, though its type is a dimmer.
+        assertTrue("Balcony override mover is on FOH Balcony, which it stands on" in briefing, briefing)
     }
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCursor } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, type RootState } from '@react-three/fiber'
 import { StageLabel } from './StageLabel'
 import {
   Color,
@@ -8,7 +8,6 @@ import {
   Group,
   MathUtils,
   Matrix4,
-  Mesh,
   MeshBasicMaterial,
   Quaternion,
   Vector3,
@@ -18,9 +17,9 @@ import type { RiggingDto } from '../../api/riggingApi'
 import {
   findColourSource,
   findDimmerProperty,
-  findGroupColourSource,
   type ChannelRef,
   type ColourPropertyDescriptor,
+  type ElementDescriptor,
   type Fixture,
   type FixtureTypeInfo,
   type SettingPropertyDescriptor,
@@ -31,15 +30,15 @@ import {
   findTiltFineProperty,
   findFocusProperty,
   findZoomProperty,
+  findIrisProperty,
+  findFrostProperty,
   findGoboProperties,
   findGoboRotationProperty,
   findPrismProperty,
   findPrismRotationProperty,
   findLedMacroProperty,
   findMovementMacroProperty,
-  resolveFixtureKind,
 } from '../../store/fixtures'
-import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import {
   channelKey,
   getChannelValue,
@@ -48,7 +47,6 @@ import {
 } from '../../hooks/usePropertyValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
-import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import {
   computeNormalizedHue,
@@ -61,12 +59,7 @@ import {
   PLACEHOLDER_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_INTENSITY,
 } from '../fixtures/fixtureAppearance'
-import {
-  dmxToDegrees,
-  dmxToSignedDegrees,
-  headQuaternionFor,
-  worldPositionFor,
-} from '../../lib/stageCoords'
+import { dmxToDegrees, dmxToSignedDegrees, worldPositionFor } from '../../lib/stageCoords'
 import {
   computeBeamGeom,
   evalLedMacro,
@@ -76,9 +69,11 @@ import {
   resolveFocusParam,
   resolveGoboSlot,
   resolveGoboSpin,
+  resolveIris,
   resolveMacroIndex,
   resolvePrismFacets,
   resolvePrismSpin,
+  resolveSoftness,
   type BeamGeom,
   type ByteDescriptor,
   type MacroColour,
@@ -88,40 +83,37 @@ import { computeLobeDirection, regionShadowMask } from './beamLobes'
 import {
   BEAM_LENGTH,
   useEmitters,
+  type BeamWrite,
   type EmittersHandle,
   type RegionGeometry,
   type SurfaceHit,
 } from './StageEmitters'
 import { MAX_THROW_M } from './emitterLayout'
 import type { BeamHit } from './scene/beamReach'
-import { isPixelStrip as isPixelStripKind, pixelCountOf } from './emitterNeeds'
+import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
-import { FixtureBody } from './fixtureBodies'
-import { paintLens } from './fixtureBodies/palette'
-import { STRIP_HEIGHT, STRIP_LEN } from './fixtureBodies/StripBody'
-import type { FixtureBodyDims, PixelColorWriter } from './fixtureBodies/types'
-import { drawnLengthM } from '../../lib/fixtureLength'
-import { WASH_ANGLE_DEG, WASH_OPACITY } from './washConfig'
+import { bodySpecOf } from './emitterNeeds'
+import { apexDistanceM, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec, type Cell } from './bodies/archetype'
+import { bodyFrames } from './bodies/bodyGeometry'
+import { hangerLengthM, mountFor, type Mount } from './bodies/mount'
+import { lensColour } from './bodies/palette'
+import { bodyShownFor, makeBodyPose, useBodies, type BodiesHandle } from './bodies/StageBodies'
 
-const DEFAULT_BEAM_DEG = 30
 // Above the fixture's own origin, in its unrotated placement group.
 const FIXTURE_LABEL_OFFSET: [number, number, number] = [0, 0.18, 0]
 const COLOR_TMP = new Color()
-const PIXEL_COLOR = new Color()
-const WASH_COLOR = new Color()
-const UNIT_Y = new Vector3(0, 1, 0)
+const LENS_TMP = new Color()
 const SCRATCH_DIR = new Vector3()
-const SCRATCH_NEG_DIR = new Vector3()
-const SCRATCH_ORIGIN = new Vector3()
-const SCRATCH_QUAT = new Quaternion()
-const SCRATCH_QUAT_EULER = new Euler()
-const SCRATCH_CONE_POS = new Vector3()
-const SCRATCH_CONE_SCALE = new Vector3()
-const SCRATCH_CONE_MAT = new Matrix4()
-const SCRATCH_WASH_DIR = new Vector3()
-const SCRATCH_PIXEL_POS = new Vector3()
+const SCRATCH_APERTURE = new Vector3()
+const SCRATCH_APEX = new Vector3()
 const SCRATCH_RIGHT = new Vector3()
+const SCRATCH_BX = new Vector3()
+const SCRATCH_BY = new Vector3()
+const SCRATCH_CENTRE = new Vector3()
+const SCRATCH_ATTACH = new Vector3()
+const SCRATCH_UP = new Vector3()
 const SCRATCH_MACRO_COLOR = new Color()
+const SCRATCH_RUN_COLOR = new Color()
 const SCRATCH_MOVE_MACRO: MacroMovement = { panDeg: 0, tiltDeg: 0 }
 const SCRATCH_LED_MACRO: MacroColour = { hueShift: 0, intensityScale: 1 }
 const SCRATCH_HSL = { h: 0, s: 0, l: 0 }
@@ -131,7 +123,7 @@ const LED_MACRO_MIN_SATURATION = 0.8
 const TAU = Math.PI * 2
 
 // A prism shows N displaced copies of the *whole* beam image — gobo included —
-// so each facet gets its own full lobe (cone/volume + its light) from the
+// so each facet gets its own full lobe (volume + its light) from the
 // slot's lobe block. Lobe centres sit this many beam half-angles off axis:
 // just past 1 so they separate visibly while still overlapping, which is what
 // a real 3-facet prism looks like.
@@ -152,12 +144,27 @@ const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 // ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
 const LIGHT_OFF_OPACITY = 0.005
 
-// A pixel's wash cone: a fixed code constant, so its cosine is computed once.
-const WASH_COS_HALF = Math.cos(MathUtils.degToRad(WASH_ANGLE_DEG / 2))
+// Beam opacity in the air and on the surfaces, per unit of linear intensity.
+const CONE_SCALE = 0.32
+const POOL_SCALE = 0.55
 
 /**
- * The axial reach of a lobe or a pixel (`scene/beamReach.ts`): cast, then turned into the light
- * table's hit. Scratch objects, since the directors call this per lobe per frame.
+ * The hull a beam's march is drawn inside is a closed cone scaled round the beam: this much wider
+ * than the field so its coarse polygon never cuts into the analytic edge, and a segment's is the
+ * ellipse through its rectangle's corners (√2 on each half-axis).
+ */
+const HULL_SLACK = 1.04
+const RECT_HULL = Math.SQRT2 * HULL_SLACK
+
+/** How far a lens face sits proud of its housing, so the two do not z-fight. */
+const LENS_PROUD_M = 0.002
+
+/** A hit proxy is never drawn: it is what the pointer presses, where the instanced parts are not. */
+const HIT_PROXY_MATERIAL = new MeshBasicMaterial({ visible: false })
+
+/**
+ * The axial reach of a beam: cast, then turned into the light table's hit. Scratch objects, since
+ * the directors call this per lobe per frame.
  */
 const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
 const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
@@ -167,7 +174,7 @@ const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz:
  * length to draw its cone — to the surface, or [BEAM_LENGTH], whichever is nearer. The light itself
  * reaches the surface however far it is ([MAX_THROW_M]); only the drawn cone keeps the desk's
  * stylised length, so a front-of-house wash lands on the stage without a 16 m cone of haze filling
- * the hall between.
+ * the hall between. Cast from the **aperture**, not the apex behind it.
  */
 function landBeam(
   emitters: EmittersHandle,
@@ -183,6 +190,63 @@ function landBeam(
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
   return { hit: SCRATCH_SURFACE_HIT, length: Math.min(t, BEAM_LENGTH) }
+}
+
+/**
+ * A beam's hull: the unit cone (apex at +y 0.5) laid from [apex] down [dir] for [length] (apex to
+ * far end), its radius [radiusX] along the frame's `bx` and [radiusZ] along its `by`. Built from the
+ * frame's own axes rather than a shortest-arc quaternion, so a segment's rectangle lines up with the
+ * head; `bx × −dir = by` keeps it right-handed, so back faces stay back faces.
+ */
+export function composeBeamHull(
+  apex: Vector3,
+  dir: Vector3,
+  bx: Vector3,
+  by: Vector3,
+  length: number,
+  radiusX: number,
+  radiusZ: number,
+  out: Matrix4,
+): Matrix4 {
+  const cx = apex.x + (dir.x * length) / 2
+  const cy = apex.y + (dir.y * length) / 2
+  const cz = apex.z + (dir.z * length) / 2
+  return out.set(
+    bx.x * radiusX, -dir.x * length, by.x * radiusZ, cx,
+    bx.y * radiusX, -dir.y * length, by.y * radiusZ, cy,
+    bx.z * radiusX, -dir.z * length, by.z * radiusZ, cz,
+    0, 0, 0, 1,
+  )
+}
+
+/** A quarter-turn about X: a static body's barrel from hanging down to lying level. */
+const STATIC_LEVEL = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
+
+/**
+ * A static lantern's head turn inside its yoke: `Rx(pitch) · Rz(roll)`, then the quarter-turn that
+ * lays the barrel level — so pitch 0 throws **horizontally** towards the yaw's facing and +pitch
+ * aims down, as `docs/fixtures-engineering.md` defines the columns and the MCP schema states them,
+ * and as the rigs authored through it are entered. With the yoke's `Ry(yaw)` the whole turn is the
+ * YXZ Euler of (pitch, yaw, roll) the body was always drawn with, then that quarter-turn, which is
+ * about the body's own X: the long axis — `longAxisLighting` — is untouched, and roll still stands a
+ * strip on end. Until session 6 the quarter-turn was missing and every static lantern was drawn 90°
+ * of pitch off: pitch 0 straight down, and +pitch tilting it upstage at yaw 0. A mover's head is the
+ * identity here: pan and tilt drive it, and its base orientation is its mount's.
+ */
+export function staticHeadQuaternion(pitchRad: number, rollRad: number, isStatic: boolean, out = new Quaternion()): Quaternion {
+  if (!isStatic) return out.identity()
+  return out.setFromEuler(new Euler(pitchRad, 0, rollRad, 'XYZ')).multiply(STATIC_LEVEL)
+}
+
+/** A lens face's matrix in the head's frame: the unit disc or 2 × 2 square, turned to face the beam. */
+export function lensLocalMatrix(cell: Cell, emitAxis: 1 | -1, out: Matrix4): Matrix4 {
+  // The unit face lies in XY facing +Z; Rx(−e·90°) turns +Z onto e·Y and keeps X along the head's X.
+  const q = new Quaternion().setFromEuler(new Euler(-emitAxis * (Math.PI / 2), 0, 0))
+  return out.compose(
+    new Vector3(cell.x, cell.y + emitAxis * LENS_PROUD_M, cell.z),
+    q,
+    new Vector3(Math.max(1e-4, cell.halfWidthM), Math.max(1e-4, cell.halfDepthM), 1),
+  )
 }
 
 interface FixtureModelProps {
@@ -201,6 +265,22 @@ interface FixtureModelProps {
   onEditFocus?: (group: Group) => void
 }
 
+/**
+ * One fixture on the stage: its body (`bodies/`), its beams and its lights.
+ *
+ * The body is a node rig of empty groups — the placement, the **mount**, the **yoke** that pans and
+ * the **head** that tilts — whose world matrices are copied every frame into the canvas's instanced
+ * parts (`StageBodies`); what the pointer presses is an invisible hit proxy on it. A mover's mount is
+ * its base orientation (`basePitchDeg` 180 hangs it) and its yoke and head take pan and tilt. A
+ * static lantern keeps the same rig: its yoke turns by its yaw about the vertical and its head by
+ * its pitch (and roll) inside it, `Ry(yaw) · Rx(pitch) · Rz(roll)` and a quarter-turn that lays the
+ * barrel level (`staticHeadQuaternion`: pitch 0 is horizontal, +pitch aims down, as documented) —
+ * so `longAxisLighting` is unchanged and `FixtureAim`, which aims movers, is untouched — and its yoke
+ * hangs from its bar, or stands on a ledge (`bodies/mount.ts`).
+ *
+ * Every **cell** (`bodies/archetype.ts`) is its own lens and beam, leaving its aperture with the
+ * apex behind it; a body with several lands at most four lights, averaging runs of cells.
+ */
 export function FixtureModel({
   patch,
   fixture,
@@ -217,45 +297,35 @@ export function FixtureModel({
   useCursor(!!editMode && hovered)
   const active = selected || (!!editMode && hovered)
   const emitters = useEmitters()
+  const bodies = useBodies()
+
+  const spec = useMemo(
+    () => bodySpecOf({ kindOverride: patch.kindOverride, lengthM: patch.lengthM }, fixture, fixtureType),
+    [patch.kindOverride, patch.lengthM, fixture, fixtureType],
+  )
+  const rigging = useMemo(
+    () => (patch.riggingUuid ? riggings.find((r) => r.uuid === patch.riggingUuid) ?? null : null),
+    [patch.riggingUuid, riggings],
+  )
+  const mount = mountFor(rigging)
+  const geometry = useMemo(() => bodyFrames(spec, mount), [spec, mount])
+  const cellCount = spec.cells.length
+  const multiCell = cellCount > 1
 
   const colourSource = useMemo(
     () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
     [fixture?.properties],
   )
-  // Per-element colour control of a multi-element fixture (e.g. a pixel bar).
-  const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
-  const pixelCount = pixelCountOf(fixture)
-  const pixelColorsRef = useRef<PixelColorWriter | null>(null)
-  const kind = resolveFixtureKind(patch.kindOverride, fixtureType?.kind)
-  // Only the STRIP body lays pixels out linearly (PixelStrip); that's where a
-  // per-pixel wash makes sense. The same rule sizes this slot's wash block
-  // (`emitterNeedsFor`), so the two cannot disagree.
-  const isPixelStrip = isPixelStripKind(kind, pixelCount)
-
-  // Per-pixel colour+intensity snapshot: MultiPixelColourSync writes it on every
-  // channel change; useWashDirector reads it each frame (same event-driven-colour
-  // / per-frame-geometry split as the beam path's colorStateRef). Cached in the
-  // render body so it's ready before the child colour-sync's mount effect runs.
-  const pixelWashStateRef = useRef<PixelWashState | null>(null)
-  if (isPixelStrip) {
-    if (pixelWashStateRef.current?.count !== pixelCount) {
-      pixelWashStateRef.current = {
-        count: pixelCount,
-        colors: new Float32Array(pixelCount * 3),
-        intensities: new Float32Array(pixelCount),
-      }
-    }
-  } else if (pixelWashStateRef.current) {
-    pixelWashStateRef.current = null
-  }
   const dimmerProp = useMemo(
     () => findDimmerProperty(fixture?.properties),
     [fixture?.properties],
   )
-  // Beam-shaping channels. All undefined against a backend that predates the
-  // categories, which is what makes the optics below degrade to the old look.
+  // Beam-shaping channels. All undefined against a backend that predates the categories,
+  // which is what makes the optics below degrade to the old look.
   const focusProp = useMemo(() => findFocusProperty(fixture?.properties), [fixture?.properties])
   const zoomProp = useMemo(() => findZoomProperty(fixture?.properties), [fixture?.properties])
+  const irisProp = useMemo(() => findIrisProperty(fixture?.properties), [fixture?.properties])
+  const frostProp = useMemo(() => findFrostProperty(fixture?.properties), [fixture?.properties])
   const goboProps = useMemo(() => findGoboProperties(fixture?.properties), [fixture?.properties])
   const goboRotProp = useMemo(
     () => findGoboRotationProperty(fixture?.properties),
@@ -282,22 +352,6 @@ export function FixtureModel({
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
 
-  // Real physical size for body scaling; undefined when the backend didn't send
-  // dimensions, so bodies keep their hard-coded design size. The length is the patch's own for a
-  // type whose length is set per install (a lightstrip) — and a lantern's `patch` already carries
-  // its segment's, from `patchAtPlacement`.
-  const acceptsPatchLength = fixtureType?.acceptsLength
-  const bodyDims = useMemo<FixtureBodyDims | undefined>(() => {
-    const l = drawnLengthM(
-      { acceptsLength: acceptsPatchLength, lengthM: fixtureType?.lengthM },
-      { lengthM: patch.lengthM },
-    )
-    const w = fixtureType?.widthM
-    const h = fixtureType?.heightM
-    if (l == null || w == null || h == null) return undefined
-    return { lengthM: l, widthM: w, heightM: h }
-  }, [acceptsPatchLength, patch.lengthM, fixtureType?.lengthM, fixtureType?.widthM, fixtureType?.heightM])
-
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)
     return [v.x, v.y, v.z] as const
@@ -312,45 +366,39 @@ export function FixtureModel({
     patch.riggingUuid,
     riggings,
   ])
+  // Where the hanger meets the bar: the rigging's own line at this fixture's offset along it.
+  const barY = useMemo(() => {
+    if (!rigging) return null
+    return worldPositionFor({ ...patch, stageZ: 0 }, riggings).y
+    // As fixturePos: worldPositionFor reads only the placement fields listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rigging, patch.stageX, patch.stageY, patch.riggingUuid, riggings])
 
-  // Fallback beam angle. A ZOOM channel overrides this per frame inside the
-  // director, which is why none of the derived trig can live in a React memo
-  // any more — see BeamGeom in beamOptics.
-  const baseBeamDeg = patch.beamAngleDeg ?? DEFAULT_BEAM_DEG
-  const showCone = !!fixtureType?.acceptsBeamAngle && !!emitters
+  // Fallback beam angle. A ZOOM channel overrides this per frame inside the director. The patch's
+  // own angle first, then the family's (`bodies/archetype.ts`).
+  const baseBeamDeg = patch.beamAngleDeg ?? spec.fieldDeg
+  const showCone = spec.emits && cellCount > 0 && !!emitters
 
   const groupRef = useRef<Group>(null)
+  const mountRef = useRef<Group>(null)
   const yokeRef = useRef<Group>(null)
   const headRef = useRef<Group>(null)
-  const lensRef = useRef<Mesh>(null)
 
-  // A fixture with a tilt axis has a head that rests along +Y — mid-DMX tilt
-  // points up the body, away from the base. Anything else is a rigid body whose
-  // lens faces -Y and which is aimed entirely by baseYaw/basePitch. Keyed off
-  // the tilt descriptor rather than `kind`, because a Source 4 Revolution is a
-  // PROFILE that tilts and a Scantastic 4 is a SCANNER that does.
-  //
-  // `kind === 'MOVING_HEAD'` is the second half of the test, not a substitute
-  // for the first: a Slender Beam Bar Quad in 1CH or 6CH mode is registered as
-  // MOVING_HEAD but declares pan/tilt only on its element heads, so `tiltProp`
-  // is undefined. Without this it would draw its head hanging below the yoke
-  // pivot and fire straight down through its own base disc.
-  const emitAxis: 1 | -1 = tiltProp || kind === 'MOVING_HEAD' ? 1 : -1
-
-  // Mount orientation for the body. Kept on an inner group so groupRef itself
-  // stays axis-aligned: TransformControls and the placement raycaster write
-  // through it, and the label should stay upright above a fixture hung upside
-  // down. YXZ matches rigEuler's convention.
-  const baseRotation = useMemo(
-    () =>
-      new Euler(
-        MathUtils.degToRad(patch.basePitchDeg ?? 0),
-        MathUtils.degToRad(patch.baseYawDeg ?? 0),
-        MathUtils.degToRad(patch.baseRollDeg ?? 0),
-        'YXZ',
-      ),
-    [patch.basePitchDeg, patch.baseYawDeg, patch.baseRollDeg],
+  const isMover = spec.archetype === 'mover'
+  const yawRad = MathUtils.degToRad(patch.baseYawDeg ?? 0)
+  const pitchRad = MathUtils.degToRad(patch.basePitchDeg ?? 0)
+  const rollRad = MathUtils.degToRad(patch.baseRollDeg ?? 0)
+  // A mover's base orientation turns its whole body (YXZ, rigEuler's convention), and its yoke and
+  // head take pan and tilt. A static lantern's mount stays upright and its yoke and head carry the
+  // same turn split in two — yaw on the yoke, pitch then roll on the head — so the yoke hangs (or
+  // stands) plumb whatever the lantern is focused at.
+  const mountRotation = useMemo(
+    () => (isMover ? new Euler(pitchRad, yawRad, rollRad, 'YXZ') : new Euler()),
+    [isMover, pitchRad, yawRad, rollRad],
   )
+  const yokeRotation = useMemo(() => new Euler(0, isMover ? 0 : yawRad, 0), [isMover, yawRad])
+  const headQuaternion = useMemo(() => staticHeadQuaternion(pitchRad, rollRad, !isMover), [isMover, pitchRad, rollRad])
+  const mountLift = geometry.standLiftM
 
   useEffect(() => {
     if (selected && editMode && onEditFocus && groupRef.current) {
@@ -358,18 +406,31 @@ export function FixtureModel({
     }
   }, [selected, editMode, onEditFocus])
 
-  // Shared per-fixture color state. ColourSync writes here (React-rate);
-  // useBeamDirector reads here (per-frame) and pushes to the emitter slot.
+  // Shared per-fixture colour state. The colour syncs write here (React-rate);
+  // the beam director reads here (per-frame) and pushes to the emitter slot. Cell 0 of a
+  // single-cell body is the fixture's colour; a body of several has one entry per cell.
   const colorStateRef = useRef<ColorState>({
     color: new Color(DEFAULT_FIXTURE_COLOUR),
     coneOpacity: 0,
     poolOpacity: 0,
   })
+  const cellStateRef = useRef<CellState | null>(null)
+  if (multiCell) {
+    if (cellStateRef.current?.count !== cellCount) cellStateRef.current = makeCellState(cellCount)
+  } else if (cellStateRef.current) {
+    cellStateRef.current = null
+  }
 
   // The canvas renders on demand, and an effect writing straight into the
   // emitter buffers changes no prop — so each of these asks for the frame
   // that uploads the write.
   const invalidate = useStageInvalidate()
+
+  // Paint a cell's lens on the instanced parts: dark glass at 0, the hue at its perceptual level.
+  const lensRef = useRef<LensPainter | null>(null)
+  lensRef.current = bodies
+    ? (cell, hue, level) => bodies.setLens(slot, cell, lensColour(LENS_TMP, hue, level))
+    : null
 
   // Slot zeroing — emitter slots persist across renders. If a fixture loses
   // its beam (or showCone otherwise turns off), the per-frame writes stop;
@@ -390,8 +451,24 @@ export function FixtureModel({
       }
     }
   }, [emitters, slot, invalidate])
+  useEffect(() => {
+    return () => {
+      if (bodies) {
+        bodies.hide(slot)
+        invalidate()
+      }
+    }
+  }, [bodies, slot, invalidate])
+
+  // The selection tints the housing.
+  useEffect(() => {
+    if (!bodies) return
+    bodies.setActive(slot, active)
+    invalidate()
+  }, [bodies, slot, active, invalidate])
 
   useBeamDirector({
+    spec,
     panProp,
     tiltProp,
     panFineProp,
@@ -399,6 +476,8 @@ export function FixtureModel({
     baseBeamDeg,
     focusProp,
     zoomProp,
+    irisProp,
+    frostProp,
     goboProp: goboProps[0],
     goboProp2: goboProps[1],
     goboRotProp,
@@ -409,42 +488,21 @@ export function FixtureModel({
     groupRef,
     yokeRef,
     headRef,
-    lensRef,
-    emitAxis,
     slot,
     emitters: showCone ? emitters : null,
     regionGeometry,
     colorStateRef,
+    cellStateRef,
   })
 
-  // Wash-slot zeroing — mirror the beam path. Vacate the wash block when this
-  // fixture isn't a per-pixel strip (slots persist across renders), and on
-  // unmount before the slot can be reused by a different fixture.
-  useEffect(() => {
-    if (!emitters || isPixelStrip) return
-    emitters.hideWashSlot(slot)
-    invalidate()
-  }, [emitters, isPixelStrip, slot, invalidate])
-  useEffect(() => {
-    return () => {
-      if (emitters) {
-        emitters.hideWashSlot(slot)
-        invalidate()
-      }
-    }
-  }, [emitters, slot, invalidate])
+  useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies })
 
-  useWashDirector({
-    enabled: isPixelStrip,
-    pixelCount,
-    lengthM: bodyDims?.lengthM ?? STRIP_LEN,
-    heightM: bodyDims?.heightM ?? STRIP_HEIGHT,
-    headRef,
-    slot,
-    emitters,
-    colorStateRef,
-    pixelWashStateRef,
-  })
+  const hit = geometry.hitBox
+  const hitProxy = (
+    <mesh position={hit.centre} material={HIT_PROXY_MATERIAL}>
+      <boxGeometry args={hit.size} />
+    </mesh>
+  )
 
   return (
     <group
@@ -454,18 +512,13 @@ export function FixtureModel({
       onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
       onPointerOut={editMode ? () => setHovered(false) : undefined}
     >
-      <group rotation={baseRotation}>
-        <FixtureBody
-          kind={kind}
-          active={active}
-          headRef={headRef}
-          yokeRef={yokeRef}
-          lensRef={lensRef}
-          emitAxis={emitAxis}
-          dims={bodyDims}
-          pixelCount={pixelCount > 1 ? pixelCount : undefined}
-          pixelColorsRef={pixelColorsRef}
-        />
+      <group ref={mountRef} rotation={mountRotation} position={[0, mountLift, 0]}>
+        <group ref={yokeRef} rotation={yokeRotation}>
+          <group ref={headRef} position={[0, geometry.pivotY, 0]} quaternion={headQuaternion}>
+            {hit.frame === 'head' && hitProxy}
+          </group>
+        </group>
+        {hit.frame === 'mount' && hitProxy}
       </group>
 
       {active && (
@@ -479,20 +532,31 @@ export function FixtureModel({
         {patch.displayName}
       </StageLabel>
 
-      <ColourSync
-        hasFixture={!!fixture}
-        colourSource={colourSource}
-        groupColour={pixelCount > 1 ? groupColour : undefined}
-        gel={gel}
-        dimmerProp={dimmerProp}
-        lensRef={lensRef}
-        colorStateRef={colorStateRef}
-        pixelColorsRef={pixelColorsRef}
-        pixelWashStateRef={pixelWashStateRef}
-      />
+      {multiCell ? (
+        <CellColourSync
+          elements={fixture?.elements}
+          cells={spec.cells}
+          dimmerProp={dimmerProp}
+          fallbackHex={gel?.color ?? DEFAULT_FIXTURE_COLOUR}
+          lensRef={lensRef}
+          cellStateRef={cellStateRef}
+        />
+      ) : (
+        <ColourSync
+          hasFixture={!!fixture}
+          colourSource={colourSource}
+          gel={gel}
+          dimmerProp={dimmerProp}
+          lensRef={lensRef}
+          colorStateRef={colorStateRef}
+        />
+      )}
     </group>
   )
 }
+
+/** Paints a cell's lens: its full-brightness hue and its perceptual 0..1 level. */
+export type LensPainter = (cell: number, hue: Color, level: number) => void
 
 interface ColorState {
   color: Color
@@ -500,15 +564,102 @@ interface ColorState {
   poolOpacity: number
 }
 
-// Per-pixel colour (0..1 RGB, packed) + effective intensity (0..1), written by
-// MultiPixelColourSync and read each frame by useWashDirector.
-interface PixelWashState {
+/** Each cell's colour (linear, full brightness) and its air and surface opacities. */
+interface CellState {
   count: number
   colors: Float32Array
-  intensities: Float32Array
+  cone: Float32Array
+  pool: Float32Array
 }
 
+function makeCellState(count: number): CellState {
+  return {
+    count,
+    colors: new Float32Array(count * 3),
+    cone: new Float32Array(count),
+    pool: new Float32Array(count),
+  }
+}
+
+interface BodyDirectorOpts {
+  spec: BodySpec
+  mount: Mount
+  barY: number | null
+  groupRef: React.RefObject<Group | null>
+  mountRef: React.RefObject<Group | null>
+  yokeRef: React.RefObject<Group | null>
+  headRef: React.RefObject<Group | null>
+  slot: number
+  bodies: BodiesHandle | null
+}
+
+/** Pixels a metre covers on the canvas at [distance] — the camera's own, perspective or section. */
+export function pixelsPerMetre(
+  camera: RootState['camera'],
+  canvasHeightPx: number,
+  distance: number,
+): number {
+  if ('isOrthographicCamera' in camera && camera.isOrthographicCamera) {
+    const span = (camera.top - camera.bottom) / Math.max(1e-6, camera.zoom)
+    return canvasHeightPx / Math.max(1e-6, span)
+  }
+  const fov = 'fov' in camera ? (camera.fov as number) : 50
+  return canvasHeightPx / (2 * Math.max(1e-3, distance) * Math.tan(MathUtils.degToRad(fov) / 2))
+}
+
+// Per-frame: copy the body's frames onto its instanced parts, at the level of detail its size on
+// screen calls for. Runs after the beam director (registered after it), so the yoke and head are
+// already this frame's.
+function useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies }: BodyDirectorOpts) {
+  const pose = useMemo(() => makeBodyPose(), [])
+  const lensLocal = useMemo(
+    () => spec.cells.map((cell) => lensLocalMatrix(cell, spec.emitAxis, new Matrix4())),
+    [spec],
+  )
+  const geometry = useMemo(() => bodyFrames(spec, mount), [spec, mount])
+  const sizeM = Math.max(spec.lengthM, spec.widthM, spec.heightM)
+  useFrame((state) => {
+    if (!bodies) return
+    const group = groupRef.current
+    const mountNode = mountRef.current
+    const yoke = yokeRef.current
+    const head = headRef.current
+    if (!group || !mountNode || !yoke || !head) return
+    group.updateMatrixWorld()
+    SCRATCH_CENTRE.setFromMatrixPosition(head.matrixWorld)
+    const distance = state.camera.position.distanceTo(SCRATCH_CENTRE)
+    pose.shown = bodyShownFor(sizeM * pixelsPerMetre(state.camera, state.size.height, distance))
+    pose.mount.copy(mountNode.matrixWorld)
+    pose.yoke.copy(yoke.matrixWorld)
+    pose.head.copy(head.matrixWorld)
+    while (pose.lenses.length < lensLocal.length) pose.lenses.push(new Matrix4())
+    for (let c = 0; c < lensLocal.length; c++) pose.lenses[c].multiplyMatrices(head.matrixWorld, lensLocal[c])
+    pose.hanger = null
+    const attach = geometry.hangerAttach
+    if (attach && mount === 'hang' && barY != null) {
+      const frame = attach.frame === 'yoke' ? yoke : mountNode
+      // A mover hangs only while its base is up — basePitchDeg 180. One at 0 stands on its bar.
+      const baseUp = attach.frame === 'yoke' || SCRATCH_UP.set(0, 1, 0).transformDirection(mountNode.matrixWorld).y < -0.5
+      if (baseUp) {
+        SCRATCH_ATTACH.set(0, attach.y, 0).applyMatrix4(frame.matrixWorld)
+        const length = hangerLengthM(mount, SCRATCH_ATTACH.y, barY)
+        if (length > 0) {
+          pose.hanger = HANGER_MATRIX.makeScale(1, length, 1).setPosition(SCRATCH_ATTACH)
+        }
+      }
+    }
+    pose.centreX = SCRATCH_CENTRE.x
+    pose.centreY = SCRATCH_CENTRE.y
+    pose.centreZ = SCRATCH_CENTRE.z
+    pose.sizeM = Math.max(0.12, sizeM * 0.6)
+    bodies.writePose(slot, pose)
+  })
+}
+
+const HANGER_MATRIX = new Matrix4()
+
 interface BeamDirectorOpts {
+  spec: BodySpec
   panProp: SliderPropertyDescriptor | undefined
   tiltProp: SliderPropertyDescriptor | undefined
   panFineProp: SliderPropertyDescriptor | undefined
@@ -516,6 +667,8 @@ interface BeamDirectorOpts {
   baseBeamDeg: number
   focusProp: SliderPropertyDescriptor | undefined
   zoomProp: SliderPropertyDescriptor | undefined
+  irisProp: SliderPropertyDescriptor | undefined
+  frostProp: SliderPropertyDescriptor | undefined
   goboProp: ByteDescriptor | undefined
   /** Second gobo wheel where one exists (Robe: static + rotating). Drawn when
    *  the first wheel sits at open — see the resolve fallback in the director. */
@@ -528,12 +681,11 @@ interface BeamDirectorOpts {
   groupRef: React.RefObject<Group | null>
   yokeRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
-  lensRef: React.RefObject<Mesh | null>
-  emitAxis: 1 | -1
   slot: number
   emitters: EmittersHandle | null
   regionGeometry: ReadonlyArray<RegionGeometry>
   colorStateRef: React.RefObject<ColorState>
+  cellStateRef: React.RefObject<CellState | null>
 }
 
 // 8-bit fine DMX channel divides one coarse step into 256 sub-steps.
@@ -561,12 +713,37 @@ function combineFine(
   return fineProp ? coarseRaw + fineRaw / FINE_STEPS : coarseRaw
 }
 
-// Per-frame: decode pan/tilt, articulate the model, then read the beam back off
+const SCRATCH_BEAM: BeamWrite = {
+  matrix: new Matrix4(),
+  apex: SCRATCH_APEX,
+  dir: new Vector3(),
+  right: SCRATCH_RIGHT,
+  color: new Color(),
+  opacity: 0,
+  cosHalf: 1,
+  edge: 0,
+  goboSlot: 0,
+  goboAngle: 0,
+  focusDist: -1,
+  near: 0,
+  iris: 1,
+  aspect: 0,
+  shadowMask: 0,
+}
+const SCRATCH_LIGHT: LightRow = makeLightRow()
+
+/** A cell's aperture in world space: its centre on the head's face. */
+function apertureWorld(cell: Cell, head: Group, out: Vector3): Vector3 {
+  return out.set(cell.x, cell.y, cell.z).applyMatrix4(head.matrixWorld)
+}
+
+// Per-frame: decode pan/tilt, articulate the model, then read the beams back off
 // the model's own matrices and push the fixture's slot in the shared instanced
 // emitters. Origin has to come from the THREE objects (not the React
 // `fixturePos` prop) — TransformControls mutates the group position directly
 // during drag and React state lags.
 function useBeamDirector({
+  spec,
   panProp,
   tiltProp,
   panFineProp,
@@ -574,6 +751,8 @@ function useBeamDirector({
   baseBeamDeg,
   focusProp,
   zoomProp,
+  irisProp,
+  frostProp,
   goboProp,
   goboProp2,
   goboRotProp,
@@ -584,12 +763,11 @@ function useBeamDirector({
   groupRef,
   yokeRef,
   headRef,
-  lensRef,
-  emitAxis,
   slot,
   emitters,
   regionGeometry,
   colorStateRef,
+  cellStateRef,
 }: BeamDirectorOpts) {
   const source = useChannelSource()
   const sourceRef = useRef(source)
@@ -607,6 +785,8 @@ function useBeamDirector({
       tiltFine: tiltFineProp ? channelKey(tiltFineProp.channel) : null,
       focus: focusProp ? channelKey(focusProp.channel) : null,
       zoom: zoomProp ? channelKey(zoomProp.channel) : null,
+      iris: irisProp ? channelKey(irisProp.channel) : null,
+      frost: frostProp ? channelKey(frostProp.channel) : null,
       gobo: goboProp ? channelKey(goboProp.channel) : null,
       gobo2: goboProp2 ? channelKey(goboProp2.channel) : null,
       goboRot: goboRotProp ? channelKey(goboRotProp.channel) : null,
@@ -622,6 +802,8 @@ function useBeamDirector({
       tiltFineProp,
       focusProp,
       zoomProp,
+      irisProp,
+      frostProp,
       goboProp,
       goboProp2,
       goboRotProp,
@@ -646,11 +828,16 @@ function useBeamDirector({
   // Lobes written last frame, so a shrinking facet count parks the excess
   // exactly once instead of every frame.
   const litLobesRef = useRef(1)
+  // The light runs of a body of several cells: fixed by its cell count.
+  const runs = useMemo(
+    () => (spec.cells.length > 1 ? lightRuns(spec.cells.length, MAX_LIGHTS_PER_FIXTURE) : []),
+    [spec],
+  )
 
   // The canvas renders on demand. Everything this director reads per frame is
   // a channel, so a change on any of them asks for a frame — on the active
   // source, which is what makes a programmer-only or Next GO preview move the
-  // heads too. (The colour channels ask through ColourSync.)
+  // heads too. (The colour channels ask through the colour syncs.)
   // Through [subscribeToChannels], so a batch that moves several of them asks once.
   const invalidate = useStageInvalidate()
   const beamChannels = useMemo(
@@ -662,6 +849,8 @@ function useBeamDirector({
         tiltFineProp,
         focusProp,
         zoomProp,
+        irisProp,
+        frostProp,
         goboProp,
         goboProp2,
         goboRotProp,
@@ -677,6 +866,8 @@ function useBeamDirector({
       tiltFineProp,
       focusProp,
       zoomProp,
+      irisProp,
+      frostProp,
       goboProp,
       goboProp2,
       goboRotProp,
@@ -697,43 +888,42 @@ function useBeamDirector({
     // created it, and flipping the vis source must take effect on the next frame rather than
     // waiting for whatever re-registers useFrame.
     const channelSource = sourceRef.current
-    const panRaw = readChannel(channelSource, beamKeys.pan)
-    const tiltRaw = readChannel(channelSource, beamKeys.tilt)
+    const yoke = yokeRef.current
+    const head = headRef.current
 
-    const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(channelSource, beamKeys.panFine))
-    const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(channelSource, beamKeys.tiltFine))
-
-    // Signed about each axis's own centre. No base angles here: baseYaw and
-    // basePitch are the body's mount orientation and are carried by the body
-    // group, so folding them in again would apply them twice.
-    let panDeg = panProp ? dmxToSignedDegrees(panCombined, panProp) ?? 0 : 0
-    let tiltDeg = tiltProp ? dmxToSignedDegrees(tiltCombined, tiltProp) ?? 0 : 0
-
-    // A movement macro is an offset on top of the live pan/tilt, so both the
-    // head model and the beam pick it up — they read from the same two values.
-    const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(channelSource, beamKeys.moveMacro))
     // A macro, a spinning gobo or a turning prism moves with time rather than
     // with DMX, so while one runs this frame asks for the next — the one case
     // where the `demand` frameloop keeps rendering with no channel moving.
-    let animating = moveMacro > 0
-    if (moveMacro > 0) {
-      evalMovementMacro(moveMacro, elapsed, SCRATCH_MOVE_MACRO)
-      panDeg += SCRATCH_MOVE_MACRO.panDeg
-      tiltDeg += SCRATCH_MOVE_MACRO.tiltDeg
-    }
+    let animating = false
+    if (spec.archetype === 'mover') {
+      const panRaw = readChannel(channelSource, beamKeys.pan)
+      const tiltRaw = readChannel(channelSource, beamKeys.tilt)
+      const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(channelSource, beamKeys.panFine))
+      const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(channelSource, beamKeys.tiltFine))
 
-    const yoke = yokeRef.current
-    const head = headRef.current
-    if (yoke && head) {
-      // Split drive: the yoke pans, carrying the arms, and the head tilts
-      // between them. Composed this equals headQuaternionFor(pan, tilt), which
-      // stageCoords.test asserts so the two drive paths can't drift.
-      yoke.rotation.set(0, MathUtils.degToRad(panDeg), 0)
-      head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
-    } else if (head) {
-      head.quaternion.copy(
-        headQuaternionFor(panDeg, tiltDeg, SCRATCH_QUAT, SCRATCH_QUAT_EULER),
-      )
+      // Signed about each axis's own centre. No base angles here: baseYaw and
+      // basePitch are the body's mount orientation and are carried by the mount
+      // group, so folding them in again would apply them twice.
+      let panDeg = panProp ? dmxToSignedDegrees(panCombined, panProp) ?? 0 : 0
+      let tiltDeg = tiltProp ? dmxToSignedDegrees(tiltCombined, tiltProp) ?? 0 : 0
+
+      // A movement macro is an offset on top of the live pan/tilt, so both the
+      // head model and the beam pick it up — they read from the same two values.
+      const moveMacro = resolveMacroIndex(moveMacroProp, readChannel(channelSource, beamKeys.moveMacro))
+      if (moveMacro > 0) {
+        animating = true
+        evalMovementMacro(moveMacro, elapsed, SCRATCH_MOVE_MACRO)
+        panDeg += SCRATCH_MOVE_MACRO.panDeg
+        tiltDeg += SCRATCH_MOVE_MACRO.tiltDeg
+      }
+
+      if (yoke && head) {
+        // Split drive: the yoke pans, carrying the arms, and the head tilts
+        // between them. Composed this equals headQuaternionFor(pan, tilt), which
+        // stageCoords.test asserts so the two drive paths can't drift.
+        yoke.rotation.set(0, MathUtils.degToRad(panDeg), 0)
+        head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
+      }
     }
 
     if (!emitters) {
@@ -743,12 +933,29 @@ function useBeamDirector({
     }
 
     const colorState = colorStateRef.current
+    const cells = cellStateRef.current
+    const cellCount = spec.cells.length
+    const multi = cellCount > 1 && cells != null
 
-    // An LED macro modulates on top of the base colour. Written to a scratch
-    // colour, never back into colorState: that field belongs to ColourSync, and
-    // folding the macro in would leave the fixture permanently tinted once the
-    // macro stops.
-    const ledMacro = resolveMacroIndex(ledMacroProp, readChannel(channelSource, beamKeys.ledMacro))
+    // Cull on the *base* opacity, not the macro-scaled one, so a pulsing macro
+    // doesn't vacate and re-take the emitter slot every cycle. hideSlot parks
+    // every lobe and light, so a prism split can't ghost after a blackout.
+    let lit = false
+    if (multi) {
+      for (let c = 0; c < cells.count; c++) if (cells.pool[c] >= LIGHT_OFF_OPACITY) lit = true
+    } else {
+      lit = colorState.poolOpacity >= LIGHT_OFF_OPACITY
+    }
+    if (!lit) {
+      emitters.hideSlot(slot)
+      if (animating) invalidate()
+      return
+    }
+
+    // An LED macro modulates on top of the base colour (a single-cell body). Written to a scratch
+    // colour, never back into colorState: that field belongs to ColourSync, and folding the macro
+    // in would leave the fixture permanently tinted once the macro stops.
+    const ledMacro = multi ? 0 : resolveMacroIndex(ledMacroProp, readChannel(channelSource, beamKeys.ledMacro))
     if (ledMacro > 0) animating = true
     let beamColor = colorState.color
     let poolOpacity = colorState.poolOpacity
@@ -774,45 +981,31 @@ function useBeamDirector({
       coneOpacity *= SCRATCH_LED_MACRO.intensityScale
     }
 
-    // Cull on the *base* opacity, not the macro-scaled one, so a pulsing macro
-    // doesn't vacate and re-take the emitter slot every cycle. hideSlot parks
-    // every lobe, so a prism split can't ghost after a blackout.
-    if (colorState.poolOpacity < LIGHT_OFF_OPACITY) {
-      emitters.hideSlot(slot)
-      if (animating) invalidate()
-      return
-    }
-
-    // Zoom overrides the patch's static beam angle. dmxToDegrees is reused
-    // as-is: on a ZOOM slider degMin/degMax are the beam angle at each end, and
-    // it returns null when the fixture declares no range (Robe, Source 4), which
-    // falls back to the patch value.
+    // Zoom overrides the static field angle. dmxToDegrees is reused as-is: on a ZOOM slider
+    // degMin/degMax are the beam angle at each end, and it returns null when the fixture declares
+    // no range (Robe, Source 4), which falls back to the patch's or the family's.
     const zoomDeg = zoomProp ? dmxToDegrees(readChannel(channelSource, beamKeys.zoom), zoomProp) : null
     const beamDeg = zoomDeg ?? baseBeamDeg
     const geom = geomRef.current
     if (beamDeg !== geom.beamDeg) {
       computeBeamGeom(beamDeg, BEAM_LENGTH, REGION_CULL_SLACK_RAD, geom)
     }
+    const tanHalf = Math.tan(MathUtils.degToRad(beamDeg) / 2)
 
-    // Focus maps to a focal-plane distance; the pool shaders derive both the
-    // pattern blur and the rim hardness from a surface's distance to it. A
-    // fixture with no focus channel gets the "always sharp" sentinel plus
-    // edge 0, which is byte-for-byte the pre-focus falloff.
-    //
-    // Deliberately NOT seeded from fixtureType.beamEdge: beamDefaults() marks
-    // every SCANNER and PROFILE as HARD, so honouring it here would re-skin the
-    // pools of fixtures nobody touched — a Source 4 in an existing show would
-    // render crisper than it did yesterday with no DMX change. beamEdge is
-    // documented as anticipatory; switching it on is its own decision.
+    // Focus maps to a focal-plane distance from the aperture; the shaders soften the edge by how
+    // far a surface or a sample sits from it. Without a focus channel the edge is the family's
+    // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
     const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
-    const edge = focusParam ?? 0
     const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
+    const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
+    const edge = 1 - softness
+    const iris = resolveIris(irisProp, readChannel(channelSource, beamKeys.iris))
 
     // A fixture can carry two gobo wheels in series (Robe: static + rotating);
     // the renderer projects one pattern, so draw whichever wheel currently
     // selects one — descriptor order decides only the tie when both do.
-    let goboSlot = resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
-    if (goboSlot === 0 && goboProp2) {
+    let goboSlot = multi ? 0 : resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
+    if (!multi && goboSlot === 0 && goboProp2) {
       goboSlot = resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
     }
     if (goboSlot > 0) {
@@ -831,38 +1024,28 @@ function useBeamDirector({
     }
 
     const group = groupRef.current
-    if (!group) {
+    if (!group || !head) {
       if (animating) invalidate()
       return
     }
-    // One walk of this fixture's subtree, after the rotations above, so the lens
-    // and head matrices read below are this frame's.
+    // One walk of this fixture's subtree, after the rotations above, so the head matrices read
+    // below are this frame's.
     group.updateMatrixWorld()
 
-    // The beam leaves the lens, not the base of the yoke. Fallback chain covers
-    // PixelStrip (renders per-pixel meshes, never assigns lensRef) and any body
-    // with no head node.
-    const originObj = lensRef.current ?? head ?? group
-    SCRATCH_ORIGIN.setFromMatrixPosition(originObj.matrixWorld)
+    // Direction read straight off the model's matrix rather than recomputed in JS. This whole bug
+    // family was the beam and the geometry disagreeing; reading one from the other makes that
+    // unrepresentable, and it picks up the mount rotation and any rig pose above it for free.
+    // transformDirection normalises, so a scaled body doesn't skew the beam.
+    const dir = SCRATCH_DIR.set(0, spec.emitAxis, 0).transformDirection(head.matrixWorld)
 
-    // Direction read straight off the model's matrix rather than recomputed in
-    // JS. This whole bug family was the beam and the geometry disagreeing;
-    // reading one from the other makes that unrepresentable, and it picks up the
-    // mount rotation and any rig pose above it for free. transformDirection
-    // normalises, so a scaled body doesn't skew the beam.
-    const dir = SCRATCH_DIR.set(0, emitAxis, 0).transformDirection(
-      (head ?? group).matrixWorld,
-    )
-
-    // The head's world X axis gives the gobo a stable cross-section frame, and
-    // the prism lobes their splay basis.
-    SCRATCH_RIGHT.set(1, 0, 0).transformDirection((head ?? group).matrixWorld)
+    // The head's world X axis gives the beam its cross-section frame — the gobo's, the mask's, a
+    // segment's width — and the prism lobes their splay basis.
+    SCRATCH_RIGHT.set(1, 0, 0).transformDirection(head.matrixWorld)
 
     // A prism shows N displaced copies of the whole beam — gobo, focus, volume
     // and all — so each engaged facet takes one lobe of the slot's block and
-    // gets the complete write set below. Disengaged, lobe 0 is the beam.
-    // resolvePrismFacets clamps to MAX_PRISM_LOBES, so this indexes in-block.
-    const prismFacets = resolvePrismFacets(prismProp, readChannel(channelSource, beamKeys.prism))
+    // gets the complete write set below. Disengaged, lobe 0 is the beam. Single-cell bodies only.
+    const prismFacets = multi ? 0 : resolvePrismFacets(prismProp, readChannel(channelSource, beamKeys.prism))
     if (prismFacets > 0) {
       const prismSpin = resolvePrismSpin(
         prismRotProp,
@@ -884,20 +1067,22 @@ function useBeamDirector({
       prismAngleRef.current = 0
     }
 
-    // Never more lobes than the slot was given: a fixture's prism is known when
-    // the layout is built (`emitterNeedsFor`), so this only bites on a frame
-    // where the two disagree, and then the extra facets are simply not drawn.
-    const lobes = Math.min(prismFacets > 0 ? prismFacets : 1, emitters.lobesFor(slot))
-    // A prism redistributes the beam's flux, it doesn't add any: each lobe
-    // carries 1/N (plus a little overlap compensation) so swinging the prism
-    // in reads as a split, not a brightness jump.
-    const lobeConeAlpha =
-      prismFacets > 0 ? (coneOpacity / prismFacets) * PRISM_OVERLAP_GAIN : coneOpacity
-    const lobePoolAlpha =
-      prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
+    // Never more lobes than the slot was given: a fixture's prism and cells are known when the
+    // layout is built (`emitterNeedsForSpec`), so this only bites on a frame where the two disagree,
+    // and then the extra lobes are simply not drawn.
+    const lobes = Math.min(multi ? cellCount : prismFacets > 0 ? prismFacets : 1, emitters.lobesFor(slot))
     const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
 
+    const beam = SCRATCH_BEAM
+    beam.cosHalf = geom.cosHalfBeam
+    beam.edge = edge
+    beam.focusDist = focusDist
+    beam.iris = iris
+    beam.goboSlot = goboSlot
+    beam.goboAngle = goboAngleRef.current
+
     for (let lobe = 0; lobe < lobes; lobe++) {
+      const cell = spec.cells[multi ? lobe : 0]
       const lobeDir =
         prismFacets > 0
           ? computeLobeDirection(
@@ -910,71 +1095,151 @@ function useBeamDirector({
             )
           : dir
 
-      // Where the lobe lands: the first surface on its axis. The cone is drawn to it, and the light
-      // table carries it as the plane the surfaces stop lighting behind (the axial reach).
-      const landed = landBeam(emitters, SCRATCH_ORIGIN, lobeDir)
-      const length = landed.length
+      let opacity: number
+      if (multi) {
+        opacity = cells.cone[lobe]
+        beam.color.setRGB(cells.colors[lobe * 3], cells.colors[lobe * 3 + 1], cells.colors[lobe * 3 + 2])
+        if (cells.pool[lobe] < LIGHT_OFF_OPACITY) {
+          emitters.hideLobes(slot, lobe)
+          // hideLobes parks from here to the end; the cells after this one are rewritten below.
+        }
+      } else {
+        // A prism redistributes the beam's flux, it doesn't add any: each lobe carries 1/N (plus a
+        // little overlap compensation) so swinging the prism in reads as a split, not a jump.
+        opacity = prismFacets > 0 ? (coneOpacity / prismFacets) * PRISM_OVERLAP_GAIN : coneOpacity
+        beam.color.copy(beamColor)
+      }
 
-      // Cone matrix: unit cone scaled to (radius, length, radius), rotated so UNIT_Y → -lobeDir
-      // (apex back toward fixture), translated to the midpoint along the beam. Apex ends up at the
-      // lens in world space; the volume shader reads its march bound back off the y scale.
-      SCRATCH_NEG_DIR.copy(lobeDir).multiplyScalar(-1)
-      SCRATCH_QUAT.setFromUnitVectors(UNIT_Y, SCRATCH_NEG_DIR)
-      SCRATCH_CONE_POS.set(
-        SCRATCH_ORIGIN.x + (lobeDir.x * length) / 2,
-        SCRATCH_ORIGIN.y + (lobeDir.y * length) / 2,
-        SCRATCH_ORIGIN.z + (lobeDir.z * length) / 2,
-      )
-      const radius = (geom.beamRadius * length) / BEAM_LENGTH
-      SCRATCH_CONE_SCALE.set(radius, length, radius)
-      SCRATCH_CONE_MAT.compose(SCRATCH_CONE_POS, SCRATCH_QUAT, SCRATCH_CONE_SCALE)
-      // A gobo in the beam draws the raymarched volume (the pattern must exist
-      // inside the cone); an open beam keeps the cheap silhouette shell.
-      emitters.writeBeamMatrix(slot, lobe, SCRATCH_CONE_MAT, goboSlot > 0)
-      emitters.writeConeAttrs(
-        slot,
-        lobe,
-        SCRATCH_ORIGIN,
+      // The beam leaves the cell's aperture, at the aperture's own size; its apex sits the
+      // aperture's radius over tan(half-field) behind it (`bodies/archetype.ts`).
+      apertureWorld(cell, head, SCRATCH_APERTURE)
+      const aspect = cell.shape === 'segment' ? cell.halfDepthM / Math.max(1e-4, cell.halfWidthM) : 0
+      const near = apexDistanceM(cell.halfWidthM, beamDeg)
+      SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(lobeDir, -near)
+
+      // Where the lobe lands: the first surface on its axis, from the aperture. The volume is drawn
+      // to it, and the light table carries it as the plane the surfaces stop lighting behind.
+      const landed = landBeam(emitters, SCRATCH_APERTURE, lobeDir)
+      const length = near + landed.length
+      SCRATCH_BX.copy(SCRATCH_RIGHT).addScaledVector(lobeDir, -SCRATCH_RIGHT.dot(lobeDir)).normalize()
+      SCRATCH_BY.crossVectors(lobeDir, SCRATCH_BX)
+      const far = length * tanHalf
+      composeBeamHull(
+        SCRATCH_APEX,
         lobeDir,
-        beamColor,
-        lobeConeAlpha,
-        geom.cosHalfBeam,
+        SCRATCH_BX,
+        SCRATCH_BY,
+        length,
+        far * (aspect > 0 ? RECT_HULL : HULL_SLACK),
+        far * (aspect > 0 ? RECT_HULL * aspect : HULL_SLACK),
+        beam.matrix,
       )
-      emitters.writeBeamFx(
-        slot,
-        lobe,
-        edge,
-        goboSlot,
-        goboAngleRef.current,
-        focusDist,
-        SCRATCH_RIGHT,
-      )
-      emitters.writeShadowMask(
-        slot,
-        lobe,
-        regionShadowMask(SCRATCH_ORIGIN, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry),
-      )
-      emitters.writeLight(
-        slot,
-        lobe,
-        SCRATCH_ORIGIN,
-        lobeDir,
-        beamColor,
-        lobePoolAlpha,
-        geom.cosHalfBeam,
-        edge,
-        focusDist,
-        landed.hit,
-      )
+      beam.dir.copy(lobeDir)
+      beam.opacity = opacity
+      beam.near = near
+      beam.aspect = aspect
+      // A segment's frustum reaches past the field circle at its corners, so its cull cone is the one
+      // through them — or a region lying in a corner would never be shadow-tested.
+      if (aspect > 0) {
+        const cull = Math.atan(tanHalf * Math.hypot(1, aspect)) + REGION_CULL_SLACK_RAD
+        beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, Math.cos(cull), Math.sin(cull), regionGeometry)
+      } else {
+        beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry)
+      }
+      if (!multi || cells.pool[lobe] >= LIGHT_OFF_OPACITY) emitters.writeBeam(slot, lobe, beam)
+
+      if (!multi) {
+        // A single cell: each lobe lands as its own light.
+        const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit)
+        emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
+      }
     }
 
-    // Park lobes the prism no longer lights, once, on the frame it shrinks.
-    if (lobes < litLobesRef.current) {
+    if (multi) {
+      // Several cells land at most four lights, each averaging a run of cells: the run's
+      // aperture is the cells' span, its colour × level their mean.
+      for (let r = 0; r < runs.length; r++) {
+        const [from, to] = runs[r]
+        let red = 0
+        let green = 0
+        let blue = 0
+        for (let c = from; c < to; c++) {
+          const pool = cells.pool[c]
+          red += cells.colors[c * 3] * pool
+          green += cells.colors[c * 3 + 1] * pool
+          blue += cells.colors[c * 3 + 2] * pool
+        }
+        const n = to - from
+        red /= n
+        green /= n
+        blue /= n
+        const level = Math.max(red, green, blue)
+        if (level < LIGHT_OFF_OPACITY) {
+          emitters.clearLight(slot, r)
+          continue
+        }
+        SCRATCH_RUN_COLOR.setRGB(red / level, green / level, blue / level)
+        const first = spec.cells[from]
+        const last = spec.cells[to - 1]
+        // The run's aperture: centred between its end cells, as wide as they span.
+        SCRATCH_APERTURE.set((first.x + last.x) / 2, (first.y + last.y) / 2, (first.z + last.z) / 2).applyMatrix4(head.matrixWorld)
+        const halfWidth = n === 1 ? first.halfWidthM : (Math.abs(last.x - first.x) + first.halfWidthM + last.halfWidthM) / 2
+        const halfDepth = first.halfDepthM
+        const aspect = n === 1 && first.shape === 'disc' ? 0 : halfDepth / Math.max(1e-4, halfWidth)
+        const near = apexDistanceM(halfWidth, beamDeg)
+        SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(dir, -near)
+        const landed = landBeam(emitters, SCRATCH_APERTURE, dir)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit)
+        emitters.writeLight(slot, r, SCRATCH_LIGHT)
+      }
+    } else if (lobes < litLobesRef.current) {
+      // Park lobes the prism no longer lights, once, on the frame it shrinks.
       emitters.hideLobes(slot, lobes)
+      emitters.hideLights(slot, lobes)
     }
     litLobesRef.current = lobes
     if (animating) invalidate()
   })
+}
+
+/** Fill a light row. [cosHalf] is the field's; a segment's bound is the cone through its corners. */
+function writeLightRow(
+  row: LightRow,
+  apex: Vector3,
+  dir: Vector3,
+  right: Vector3,
+  color: Color,
+  level: number,
+  cosHalf: number,
+  tanHalf: number,
+  edge: number,
+  focusDist: number,
+  near: number,
+  iris: number,
+  aspect: number,
+  hit: SurfaceHit | null,
+): void {
+  row.ax = apex.x
+  row.ay = apex.y
+  row.az = apex.z
+  row.dx = dir.x
+  row.dy = dir.y
+  row.dz = dir.z
+  row.cosBound = aspect > 0 ? Math.cos(Math.atan(tanHalf * Math.hypot(1, aspect))) : cosHalf
+  row.r = color.r * level
+  row.g = color.g * level
+  row.b = color.b * level
+  row.edge = edge
+  row.focusDist = focusDist
+  row.hit = hit
+  row.rx = right.x
+  row.ry = right.y
+  row.rz = right.z
+  row.tanHalf = tanHalf
+  row.near = near
+  row.iris = iris
+  row.aspect = aspect
 }
 
 // — colour sync (event-driven via live channel subscriptions) —————————
@@ -984,15 +1249,14 @@ function useBeamDirector({
 // (a separate reconciler root) those store-driven re-renders flush on the loop's
 // own cadence and drop beat-rate changes; the subscription callback fires
 // synchronously from the channel store, outside React, so every change lands.
-// The lens material is written here directly; the beam's colorStateRef is read
-// each frame by useBeamDirector and pushed to the emitter buffers.
+// The lens is painted here directly (through the body's instanced lens, `LensPainter`); the beam's
+// colorStateRef is read each frame by useBeamDirector and pushed to the emitter buffers.
 
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
-  lensRef: React.RefObject<Mesh | null>
+  /** Paints the body's lens; null outside a canvas (the tests) and before the bodies exist. */
+  lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
-  pixelColorsRef: React.RefObject<PixelColorWriter | null>
-  pixelWashStateRef?: React.RefObject<PixelWashState | null>
 }
 
 /** Exported for the unit test — the arms are the interesting part and the enclosing
@@ -1000,7 +1264,6 @@ interface ColourSyncBaseProps {
 export function ColourSync({
   hasFixture,
   colourSource,
-  groupColour,
   gel,
   ...refs
 }: ColourSyncBaseProps & {
@@ -1010,7 +1273,6 @@ export function ColourSync({
     | { type: 'colour'; property: ColourPropertyDescriptor }
     | { type: 'setting'; property: SettingPropertyDescriptor }
     | undefined
-  groupColour: GroupColourPropertyDescriptor | undefined
   gel: { color: string } | null
 }) {
   // First, and above the gel arm, exactly as FixtureAppearanceSource orders it: a patch with no
@@ -1020,10 +1282,8 @@ export function ColourSync({
   if (!hasFixture) {
     return <PlaceholderBeamSync {...refs} />
   }
-  // Multi-element fixtures drive per-pixel bodies + one aggregate beam.
-  if (groupColour) {
-    return <MultiPixelColourSync groupColour={groupColour} {...refs} />
-  }
+  // A body of several cells never reaches here: `FixtureModel` draws it through `CellColourSync`,
+  // one colour and level per cell. This dispatch is the fixture's one colour, as the 2D one is.
   if (colourSource?.type === 'colour') {
     return <ColourBeamSync colourProp={colourSource.property} {...refs} />
   }
@@ -1034,7 +1294,7 @@ export function ColourSync({
 }
 
 interface ColourApplyRefs {
-  lensRef: React.RefObject<Mesh | null>
+  lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
 }
 
@@ -1044,20 +1304,14 @@ function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   // gets the perceptual curve — a linear level crushes a dim-but-lit lamp to
   // near-invisible. `hex` is already a full-brightness hue. At level 0 it is dark
   // glass: a lamp at dimmer zero shows nothing, and nothing for bloom to catch.
-  if (refs.lensRef.current) {
-    paintLens(
-      refs.lensRef.current.material as MeshBasicMaterial,
-      COLOR_TMP,
-      perceptualBrightness(intensity),
-    )
-  }
+  refs.lensRef.current?.(0, COLOR_TMP, perceptualBrightness(intensity))
   // Beam cone/pool opacities stay LINEAR: they double as the LIGHT_OFF_OPACITY
   // cull signal downstream, so curving them would resurrect near-off fixtures
   // into ghost beams.
   const state = refs.colorStateRef.current
   state.color.copy(COLOR_TMP)
-  state.coneOpacity = 0.32 * intensity
-  state.poolOpacity = 0.55 * intensity
+  state.coneOpacity = CONE_SCALE * intensity
+  state.poolOpacity = POOL_SCALE * intensity
 }
 
 // 0..1 dimmer factor from the given channel source; 1 when the fixture has no dimmer
@@ -1205,7 +1459,7 @@ function FixedColourBeamSync({
 // Patch with no matching fixture. The one arm of this dispatch with no channels to watch, so it
 // holds no subscription at all — but it keeps the fixed-hook-set-per-branch shape the others have
 // (one hook, unconditionally) and re-applies after every render, because the lens material is
-// created by the body rendered as this component's sibling and doesn't exist on the first pass.
+// painted through the bodies' handle, which may not exist on the first pass.
 function PlaceholderBeamSync({ lensRef, colorStateRef }: ColourSyncBaseProps) {
   const refs = { lensRef, colorStateRef }
   useEffect(() => {
@@ -1214,149 +1468,157 @@ function PlaceholderBeamSync({ lensRef, colorStateRef }: ColourSyncBaseProps) {
   return null
 }
 
-// Multi-element fixture: drive each pixel's body lens from its own colour, and
-// feed the single aggregate beam (intensity-weighted hue + peak-blended level).
-function MultiPixelColourSync({
-  groupColour,
+// — cells ————————————————————————————————————————————————————————————————
+//
+// A body of several cells (a batten, a blinder, a bar of heads — stage-view plan session 6): each
+// cell takes its own element's colour and level — the element's colour × its own dimmer × the
+// fixture's master — and paints its own lens. What an element's colour is, the fixture dispatch's
+// own arms decide per element: an RGB(W/A/UV) colour, a colour-wheel setting's preview, or warm and
+// cold white sliders mixed by level (the 2-cell blinder's cells), else the fixture's gel or default.
+// A cell whose element carries none of those shares the fixture's colour. 3D only: the 2D dispatch
+// answers one colour per fixture, which the aggregate arms above still mirror.
+
+/** Warm and cold white, as a two-white cell mixes them. */
+const WARM_WHITE = new Color('#ffb46b')
+const COLD_WHITE = new Color('#e4ecff')
+const NEUTRAL_WHITE = new Color('#ffffff')
+const CELL_COLOR = new Color()
+
+interface CellSource {
+  colour: ColourPropertyDescriptor | undefined
+  setting: SettingPropertyDescriptor | undefined
+  dimmer: SliderPropertyDescriptor | undefined
+  /** White or amber sliders: each with the colour it adds. */
+  whites: Array<{ slider: SliderPropertyDescriptor; colour: Color }>
+}
+
+function whiteColourOf(p: SliderPropertyDescriptor): Color {
+  if (p.category === 'amber') return new Color('#ffbf00')
+  const words = `${p.name} ${p.displayName}`.toLowerCase()
+  if (words.includes('warm')) return WARM_WHITE
+  if (words.includes('cold') || words.includes('cool')) return COLD_WHITE
+  return NEUTRAL_WHITE
+}
+
+function cellSourceOf(element: ElementDescriptor | undefined): CellSource {
+  const props = element?.properties ?? []
+  const cs = findColourSource(props)
+  return {
+    colour: cs?.type === 'colour' ? cs.property : undefined,
+    setting: cs?.type === 'setting' ? cs.property : undefined,
+    dimmer: findDimmerProperty(props),
+    whites: props
+      .filter((p): p is SliderPropertyDescriptor => p.type === 'slider' && (p.category === 'white' || p.category === 'amber'))
+      .map((slider) => ({ slider, colour: whiteColourOf(slider) })),
+  }
+}
+
+/**
+ * One cell's hue (into [out], full brightness) and its linear level, from its element — exported
+ * for the test, which pins that the Liteobar's three cells take their own elements' colours.
+ */
+export function resolveCellColour(
+  src: CellSource,
+  fallback: Color,
+  source: ChannelSource,
+  out: Color,
+): number {
+  let level = 1
+  if (src.colour) {
+    const c = src.colour
+    const r = getChannelValue(c.redChannel, source)
+    const g = getChannelValue(c.greenChannel, source)
+    const b = getChannelValue(c.blueChannel, source)
+    const w = c.whiteChannel ? getChannelValue(c.whiteChannel, source) : undefined
+    const a = c.amberChannel ? getChannelValue(c.amberChannel, source) : undefined
+    const uv = c.uvChannel ? getChannelValue(c.uvChannel, source) : undefined
+    const hue = computeNormalizedHue(r, g, b, w, a, uv)
+    out.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
+    level = colourFactor(r, g, b, w, a, uv)
+  } else if (src.setting) {
+    const preview = resolveSettingOption(src.setting.options, getChannelValue(src.setting.channel, source))?.colourPreview
+    out.set(preview ?? '#888888')
+    level = preview ? 1 : 0
+  } else if (src.whites.length > 0) {
+    // Mixed by level: each white adds its colour in proportion, and the cell is as bright as its
+    // brightest white.
+    let total = 0
+    let peak = 0
+    out.setRGB(0, 0, 0)
+    for (const { slider, colour } of src.whites) {
+      const v = getChannelValue(slider.channel, source) / 255
+      total += v
+      if (v > peak) peak = v
+      out.r += colour.r * v
+      out.g += colour.g * v
+      out.b += colour.b * v
+    }
+    if (total > 0) out.multiplyScalar(1 / total)
+    else out.copy(NEUTRAL_WHITE)
+    level = peak
+  } else {
+    out.copy(fallback)
+  }
+  if (src.dimmer) level *= Math.max(0, Math.min(1, getChannelValue(src.dimmer.channel, source) / 255))
+  return Math.max(0, Math.min(1, level))
+}
+
+function CellColourSync({
+  elements,
+  cells,
   dimmerProp,
-  colorStateRef,
-  pixelColorsRef,
-  pixelWashStateRef,
-}: ColourSyncBaseProps & { groupColour: GroupColourPropertyDescriptor }) {
+  fallbackHex,
+  lensRef,
+  cellStateRef,
+}: {
+  elements: ElementDescriptor[] | undefined
+  cells: Cell[]
+  dimmerProp: SliderPropertyDescriptor | undefined
+  fallbackHex: string
+  lensRef: React.RefObject<LensPainter | null>
+  cellStateRef: React.RefObject<CellState | null>
+}) {
   const source = useChannelSource()
+  const sources = useMemo(
+    () => cells.map((cell) => cellSourceOf(cell.element != null ? elements?.[cell.element] : undefined)),
+    [cells, elements],
+  )
+  const fallback = useMemo(() => new Color(fallbackHex), [fallbackHex])
   const channels = useMemo(() => {
     const cs: ChannelRef[] = []
-    groupColour.memberColourChannels.forEach((m) => {
-      cs.push(m.redChannel, m.greenChannel, m.blueChannel)
-      if (m.whiteChannel) cs.push(m.whiteChannel)
-      if (m.amberChannel) cs.push(m.amberChannel)
-      if (m.uvChannel) cs.push(m.uvChannel)
-    })
+    for (const src of sources) {
+      if (src.colour) {
+        cs.push(src.colour.redChannel, src.colour.greenChannel, src.colour.blueChannel)
+        if (src.colour.whiteChannel) cs.push(src.colour.whiteChannel)
+        if (src.colour.amberChannel) cs.push(src.colour.amberChannel)
+        if (src.colour.uvChannel) cs.push(src.colour.uvChannel)
+      }
+      if (src.setting) cs.push(src.setting.channel)
+      if (src.dimmer) cs.push(src.dimmer.channel)
+      for (const w of src.whites) cs.push(w.slider.channel)
+    }
     if (dimmerProp) cs.push(dimmerProp.channel)
     return cs
-  }, [groupColour, dimmerProp])
+  }, [sources, dimmerProp])
 
   useLiveColour(
     channels,
     () => {
-      const group = computeGroupColourValues(groupColour, source)
-      const dimmerFactor = liveDimmerFactor(dimmerProp, source)
-      const writer = pixelColorsRef.current
-      const wash = pixelWashStateRef?.current ?? null
-      // reset() first so a pixel that just dropped to zero is explicitly driven
-      // dark — imperative material writes get no React default.
-      if (writer) writer.reset()
-      for (let i = 0; i < group.members.length; i++) {
-        const m = group.members[i]
-        // Full-brightness hue so a dim pixel still reads as its colour; the level
-        // stays LINEAR because it feeds the LIGHT_OFF_OPACITY wash cull below.
-        const ci = colourFactor(m.r, m.g, m.b, m.w, m.a, m.uv) * dimmerFactor
-        const hue = computeNormalizedHue(m.r, m.g, m.b, m.w, m.a, m.uv)
-        if (writer) {
-          PIXEL_COLOR.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
-          writer.setPixel(i, PIXEL_COLOR, ci)
-        }
-        if (wash && i < wash.count) {
-          wash.colors[i * 3] = hue.r / 255
-          wash.colors[i * 3 + 1] = hue.g / 255
-          wash.colors[i * 3 + 2] = hue.b / 255
-          wash.intensities[i] = ci
+      const state = cellStateRef.current
+      const master = liveDimmerFactor(dimmerProp, source)
+      for (let i = 0; i < sources.length; i++) {
+        const level = resolveCellColour(sources[i], fallback, source, CELL_COLOR) * master
+        lensRef.current?.(i, CELL_COLOR, perceptualBrightness(level))
+        if (state && i < state.count) {
+          state.colors[i * 3] = CELL_COLOR.r
+          state.colors[i * 3 + 1] = CELL_COLOR.g
+          state.colors[i * 3 + 2] = CELL_COLOR.b
+          state.cone[i] = CONE_SCALE * level
+          state.pool[i] = POOL_SCALE * level
         }
       }
-      // Zero any wash pixels past the live member count (mode change shrinking it).
-      if (wash) {
-        for (let i = group.members.length; i < wash.count; i++) wash.intensities[i] = 0
-      }
-      // Aggregate beam state — only consumed when a multi-element fixture also
-      // projects an emitter beam (beamShape ≠ NONE). Strips render per-head glows
-      // instead, so this is dormant for them.
-      const eff = group.beamIntensity * dimmerFactor
-      const beamHue = computeNormalizedHue(group.beamR, group.beamG, group.beamB)
-      const state = colorStateRef.current
-      state.color.set(`rgb(${beamHue.r}, ${beamHue.g}, ${beamHue.b})`)
-      state.coneOpacity = 0.32 * eff
-      state.poolOpacity = 0.55 * eff
     },
     source,
   )
   return null
 }
-
-// — per-pixel wash director (strips/bars) ————————————————————————————
-//
-// A pixel bar has no tight beam — each pixel throws a wide soft wash. Every
-// frame this transforms each pixel to world space, derives the bar's wash
-// direction from its mounted orientation, lands it on the first surface along
-// that direction (`landBeam`), and writes one light-table row per pixel,
-// coloured from the live per-pixel snapshot (`writeWashLight`; a dark pixel is
-// cleared). The surface shader adds the rows up, so overlapping pixels blend
-// into a continuous coloured wash on whatever they land on.
-
-interface WashDirectorOpts {
-  enabled: boolean
-  pixelCount: number
-  lengthM: number
-  heightM: number
-  headRef: React.RefObject<Group | null>
-  slot: number
-  emitters: EmittersHandle | null
-  colorStateRef: React.RefObject<ColorState>
-  pixelWashStateRef: React.RefObject<PixelWashState | null>
-}
-
-function useWashDirector({
-  enabled,
-  pixelCount,
-  lengthM,
-  heightM,
-  headRef,
-  slot,
-  emitters,
-  colorStateRef,
-  pixelWashStateRef,
-}: WashDirectorOpts) {
-  useFrame(() => {
-    if (!enabled || !emitters) return
-    const wash = pixelWashStateRef.current
-    const agg = colorStateRef.current
-    // Whole-bar off (aggregate below threshold) → drop the block in one go.
-    if (!wash || !agg || agg.poolOpacity < LIGHT_OFF_OPACITY) {
-      emitters.hideWashSlot(slot)
-      return
-    }
-    const head = headRef.current
-    if (!head) return
-
-    // Wash direction = the bar's local down (its emitting face) in world space.
-    // A strip is never a mover, so emitAxis is always -1 here. Read off the
-    // matrix, matching useBeamDirector; transformDirection normalises. This hook
-    // keeps its own updateWorldMatrix because useBeamDirector returns early when
-    // there are no emitters — which is exactly the strip case.
-    head.updateWorldMatrix(true, false)
-    const dir = SCRATCH_WASH_DIR.set(0, -1, 0).transformDirection(head.matrixWorld)
-
-    const pitch = lengthM / pixelCount
-    const lensY = -heightM / 2 - 0.001
-    // The slot's wash block is sized to the pixel count (capped) when the
-    // layout is built; never write past it.
-    const block = emitters.washPixelsFor(slot)
-    const live = Math.min(pixelCount, wash.count, block)
-
-    for (let i = 0; i < live; i++) {
-      const intensity = wash.intensities[i]
-      if (intensity < LIGHT_OFF_OPACITY) {
-        emitters.clearWashLight(slot, i)
-        continue
-      }
-      const x = -lengthM / 2 + pitch * (i + 0.5)
-      SCRATCH_PIXEL_POS.set(x, lensY, 0).applyMatrix4(head.matrixWorld)
-      WASH_COLOR.setRGB(wash.colors[i * 3], wash.colors[i * 3 + 1], wash.colors[i * 3 + 2])
-      // Each pixel is its own light, landing where its own axis does.
-      const landed = landBeam(emitters, SCRATCH_PIXEL_POS, dir)
-      emitters.writeWashLight(slot, i, SCRATCH_PIXEL_POS, dir, WASH_COLOR, WASH_OPACITY * intensity, WASH_COS_HALF, landed.hit)
-    }
-    // Take the unused tail of this slot's block off the table (fewer live pixels than it holds).
-    for (let i = live; i < block; i++) emitters.clearWashLight(slot, i)
-  })
-}
-

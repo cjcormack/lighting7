@@ -9,6 +9,7 @@ import {
   RGBAFormat,
   ShaderMaterial,
 } from 'three'
+import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { EDGE_SOFT_RANGE_M } from '../washConfig'
 import { LIGHT_TEXELS, MAX_LIGHT_BUDGET } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
@@ -21,10 +22,12 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * budget caps; it has no cap on receivers, which the cookie instances had (16 regions, and a floor
  * and one wall).
  *
- * Per light and fragment: inside the cone, facing the light, and not behind the plane of the first
- * surface on the beam's axis (the axial reach, which stands in for occlusion) — then the pool's own
- * radial falloff, sharpened by the edge or by how close the surface sits to the focal plane, exactly
- * as the retired pool shader did. **No falloff with distance**, for `washConfig.ts`'s reason: the
+ * Per light and fragment: inside the cone from the beam's **apex** (behind its aperture — stage-view
+ * plan session 6), facing the light, and not behind the plane of the first surface on the beam's axis
+ * (the axial reach, which stands in for occlusion) — then the beam's cross-section, `beamMask`
+ * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
+ * iris, and an edge softened by the family and by how far the surface sits from the focal plane,
+ * which is measured from the aperture. **No falloff with distance**, for `washConfig.ts`'s reason: the
  * desk draws a stylised, consistent beam, and a pool that dimmed with throw would disagree with the
  * uniform cone above it. Gobos land in the air but not on surfaces until the quality tier
  * (`FU-STAGE-QUALITY-TIER`).
@@ -107,9 +110,15 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
-  #ifdef USE_INSTANCING_COLOR
+  // three defines USE_INSTANCING_COLOR in the vertex stage only; the fragment stage gets USE_COLOR
+  // for it (no receiver uses vertex colours, so here the two mean one thing). Testing the vertex
+  // stage's name here compiled the tint out, and no instance was ever tinted.
+  #if defined(USE_INSTANCING_COLOR) || defined(USE_COLOR)
   varying vec3 vTint;
   #endif
+
+  ${BEAM_MASK_GLSL}
+  ${BEAM_HARDNESS_GLSL}
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -140,7 +149,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     vec3 n = normalize(vWorldNormal);
     if (!gl_FrontFacing) n = -n;
     vec3 albedo = uAlbedo * finishPattern(vWorldPos, n);
-    #ifdef USE_INSTANCING_COLOR
+    #if defined(USE_INSTANCING_COLOR) || defined(USE_COLOR)
     albedo *= vTint;
     #endif
 
@@ -152,8 +161,8 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     vec3 acc = vec3(0.0);
     for (int i = 0; i < uLightCount; i++) {
       vec4 axis = texelFetch(uLights, ivec2(1, i), 0);
-      vec4 origin = texelFetch(uLights, ivec2(0, i), 0);
-      vec3 v = vWorldPos - origin.xyz;
+      vec4 apex = texelFetch(uLights, ivec2(0, i), 0);
+      vec3 v = vWorldPos - apex.xyz;
       float dist = length(v);
       if (dist < 1e-3) continue;
       vec3 L = v / dist;
@@ -163,13 +172,23 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if (facing <= 0.0) continue;
       vec4 reach = texelFetch(uLights, ivec2(3, i), 0);
       if (dot(reach.xyz, vWorldPos) - reach.w < -REACH_EPS) continue;
+      vec4 aperture = texelFetch(uLights, ivec2(5, i), 0);
+      float axial = dist * c;
+      // Behind the aperture is inside the lantern: nothing there is lit by it.
+      if (axial <= aperture.x) continue;
+      vec4 frame = texelFetch(uLights, ivec2(4, i), 0);
       vec4 colour = texelFetch(uLights, ivec2(2, i), 0);
-      float t = (c - axis.w) / max(1e-4, 1.0 - axis.w);
-      float edge = origin.w < 0.0
-        ? colour.w
-        : 1.0 - smoothstep(0.0, uEdgeSoftRange, abs(dist - origin.w));
-      float radial = mix(pow(t, 0.7), smoothstep(0.0, 0.12, t), edge);
-      acc += colour.rgb * radial * (0.3 + 0.7 * facing);
+      // Where the point sits in the beam's cross-section, the field edge at 1 — the frame the haze
+      // uses, so a soft edge and an iris shape the pool along the same line as the air.
+      vec3 bx = normalize(frame.xyz - axis.xyz * dot(frame.xyz, axis.xyz));
+      vec3 by = cross(axis.xyz, bx);
+      vec2 uv = vec2(dot(v, bx), dot(v, by)) / max(1e-4, axial * frame.w);
+      if (aperture.z > 0.0) uv.y /= aperture.z;
+      // Focus is a distance from the aperture — the lens — not from the apex behind it.
+      float hard = beamHardness(colour.w, apex.w, abs(dist - aperture.x - apex.w), uEdgeSoftRange);
+      float m = beamMask(uv, aperture.z, aperture.y, 1.0 - hard);
+      if (m <= 0.0) continue;
+      acc += colour.rgb * m * (0.3 + 0.7 * facing);
     }
 
     #ifdef CATCH

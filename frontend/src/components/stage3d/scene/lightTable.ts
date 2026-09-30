@@ -11,14 +11,21 @@
  * viewer's to set (`sceneView.ts`); a light it drops still draws its beam, it just lands on
  * nothing this frame.
  *
- * Four RGBA texels a light, in three.js space:
+ * Six RGBA texels a light, in three.js space. A light is a beam leaving an **aperture** (stage-view
+ * plan session 6): its cone's apex sits behind the aperture, at its radius over the tangent of the
+ * half-field, so a lantern's apex is its lamp and a wide LED face's is far behind it.
  *
  * | texel | rgb | a |
  * |---|---|---|
- * | 0 | origin | focal distance (m; < 0 is always sharp) |
- * | 1 | axis (unit) | cos of the half-angle |
+ * | 0 | the apex | focal distance from the aperture (m; < 0 is always sharp) |
+ * | 1 | axis (unit) | cos of the bounding half-angle — the field, or a segment's corner |
  * | 2 | colour × level | edge hardness 0..1 |
  * | 3 | the reach plane's normal, towards the light | the plane's offset `n · p` |
+ * | 4 | the head's right axis, the beam frame's `u` | tan of the half-field along `u` |
+ * | 5 | apex → aperture distance, iris open fraction, aspect (0 a disc, else a segment's depth over its width) | — |
+ *
+ * Texels 4 and 5 are what the surface shader's `beamMask` reads, as the haze's does, so a soft edge
+ * and an iris shape the pool exactly as they shape the air.
  *
  * Texel 3 is the axial reach ([`beamReach.ts`](./beamReach.ts)): a fragment behind the plane of the
  * first surface on the axis is not lit. A light that reaches nothing carries a zero normal and a
@@ -27,7 +34,7 @@
  * Pure and three.js-free, so the packing is pinned by a node test.
  */
 
-export const LIGHT_TEXELS = 4
+export const LIGHT_TEXELS = 6
 const FLOATS = LIGHT_TEXELS * 4
 
 /** The texture's rows — the most any budget can ask for. */
@@ -39,6 +46,43 @@ export const DEFAULT_LIGHT_BUDGET = 64
 
 /** A light whose colour × level peaks below this lands nothing worth drawing. */
 const DARK = 1e-3
+
+/** One light as the directors write it (a scratch object, reused per frame). */
+export interface LightRow {
+  /** The apex. */
+  ax: number
+  ay: number
+  az: number
+  /** The axis, unit. */
+  dx: number
+  dy: number
+  dz: number
+  cosBound: number
+  /** Colour already scaled by the level. */
+  r: number
+  g: number
+  b: number
+  edge: number
+  focusDist: number
+  hit: { nx: number; ny: number; nz: number; px: number; py: number; pz: number } | null
+  /** The head's right axis — the beam frame's `u`. */
+  rx: number
+  ry: number
+  rz: number
+  tanHalf: number
+  /** Apex → aperture. */
+  near: number
+  iris: number
+  aspect: number
+}
+
+/** A fresh row, for a caller's scratch. */
+export function makeLightRow(): LightRow {
+  return {
+    ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1,
+    hit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0,
+  }
+}
 
 export class LightTable {
   readonly capacity: number
@@ -57,41 +101,24 @@ export class LightTable {
     this.order = new Int32Array(this.capacity)
   }
 
-  /**
-   * Write slot [i]. [r], [g], [b] are the colour already scaled by the level. A [hit] of null is a
-   * beam that reaches nothing.
-   */
-  set(
-    i: number,
-    ox: number,
-    oy: number,
-    oz: number,
-    dx: number,
-    dy: number,
-    dz: number,
-    cosHalf: number,
-    r: number,
-    g: number,
-    b: number,
-    edge: number,
-    focusDist: number,
-    hit: { nx: number; ny: number; nz: number; px: number; py: number; pz: number } | null,
-  ): void {
+  /** Write slot [i]. A [LightRow.hit] of null is a beam that reaches nothing. */
+  set(i: number, row: LightRow): void {
     if (i < 0 || i >= this.capacity) return
     const o = i * FLOATS
     const s = this.staged
-    s[o] = ox
-    s[o + 1] = oy
-    s[o + 2] = oz
-    s[o + 3] = focusDist
-    s[o + 4] = dx
-    s[o + 5] = dy
-    s[o + 6] = dz
-    s[o + 7] = cosHalf
-    s[o + 8] = r
-    s[o + 9] = g
-    s[o + 10] = b
-    s[o + 11] = edge
+    s[o] = row.ax
+    s[o + 1] = row.ay
+    s[o + 2] = row.az
+    s[o + 3] = row.focusDist
+    s[o + 4] = row.dx
+    s[o + 5] = row.dy
+    s[o + 6] = row.dz
+    s[o + 7] = row.cosBound
+    s[o + 8] = row.r
+    s[o + 9] = row.g
+    s[o + 10] = row.b
+    s[o + 11] = row.edge
+    const hit = row.hit
     if (hit == null) {
       s[o + 12] = 0
       s[o + 13] = 0
@@ -103,7 +130,15 @@ export class LightTable {
       s[o + 14] = hit.nz
       s[o + 15] = hit.nx * hit.px + hit.ny * hit.py + hit.nz * hit.pz
     }
-    const w = Math.max(r, g, b)
+    s[o + 16] = row.rx
+    s[o + 17] = row.ry
+    s[o + 18] = row.rz
+    s[o + 19] = row.tanHalf
+    s[o + 20] = row.near
+    s[o + 21] = row.iris
+    s[o + 22] = row.aspect
+    s[o + 23] = 0
+    const w = Math.max(row.r, row.g, row.b)
     this.weight[i] = w > DARK ? w : 0
     this.dirty = true
   }

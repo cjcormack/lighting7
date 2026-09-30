@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
-import { LightTable } from './lightTable'
+import { LIGHT_TEXELS, LightTable, makeLightRow } from './lightTable'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
 import { DEFAULT_SCENE_LAYERS, elementInLayers } from './sceneView'
@@ -67,17 +67,19 @@ describe('the axial reach (stage-view plan session 3)', () => {
 describe('the light table', () => {
   it('packs every lit slot while they fit, and the brightest under the budget, in slot order', () => {
     const table = new LightTable(4)
-    const set = (i: number, level: number) => table.set(i, 0, 0, 0, 0, -1, 0, 0.9, level, level, level, 0, -1, null)
+    const set = (i: number, level: number) =>
+      table.set(i, { ...makeLightRow(), cosBound: 0.9, r: level, g: level, b: level })
     set(0, 0.2)
     set(1, 0.9)
     set(3, 0.5)
-    const out = new Float32Array(4 * 16)
+    const floats = LIGHT_TEXELS * 4
+    const out = new Float32Array(4 * floats)
     expect(table.pack(64, out)).toBe(3)
     expect(table.dirty).toBe(false)
     // Two under a budget of two: slots 1 and 3, the brightest, kept in slot order.
     expect(table.pack(2, out)).toBe(2)
     expect(out[8]).toBeCloseTo(0.9, 6)
-    expect(out[16 + 8]).toBeCloseTo(0.5, 6)
+    expect(out[floats + 8]).toBeCloseTo(0.5, 6)
     table.clear(1)
     expect(table.dirty).toBe(true)
     expect(table.litCount()).toBe(2)
@@ -85,15 +87,22 @@ describe('the light table', () => {
 
   it("carries no reach plane for a beam that reaches nothing, and the hit's plane for one that does", () => {
     const table = new LightTable(1)
-    table.set(0, 0, 4, 0, 0, -1, 0, 0.9, 1, 1, 1, 0, -1, null)
+    const lit = { ...makeLightRow(), ay: 4, cosBound: 0.9, r: 1, g: 1, b: 1 }
+    table.set(0, lit)
     expect(Array.from(table.staged.subarray(12, 16))).toEqual([0, 0, 0, -1])
-    table.set(0, 0, 4, 0, 0, -1, 0, 0.9, 1, 1, 1, 0, -1, { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 })
+    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 } })
     expect(Array.from(table.staged.subarray(12, 16))).toEqual([0, 1, 0, 0.5])
+  })
+
+  it("carries the beam's frame and aperture for the surfaces' mask: right axis, tan, near, iris, aspect", () => {
+    const table = new LightTable(1)
+    table.set(0, { ...makeLightRow(), r: 1, rx: 0, ry: 0, rz: 1, tanHalf: 0.17, near: 0.5, iris: 0.4, aspect: 0.25 })
+    expect(Array.from(table.staged.subarray(16, 24))).toEqual([0, 0, 1, Math.fround(0.17), 0.5, Math.fround(0.4), 0.25, 0])
   })
 
   it('treats a dark light as off', () => {
     const table = new LightTable(1)
-    table.set(0, 0, 4, 0, 0, -1, 0, 0.9, 0, 0, 0, 0, -1, null)
+    table.set(0, { ...makeLightRow(), ay: 4, cosBound: 0.9 })
     expect(table.litCount()).toBe(0)
   })
 })

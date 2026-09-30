@@ -2,10 +2,15 @@ package uk.me.cormack.lighting7.ai
 
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fixture.FixtureKind
+import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.show.beamDirection
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -305,10 +310,12 @@ class RigBriefing(private val state: State) {
                 if (riggings.isNotEmpty()) {
                     appendLine(
                         "Riggings, upstage first: " + riggings.joinToString { r ->
-                            "${r.name} (${r.kind?.lowercase()?.replace('_', ' ') ?: "rigging"}, y ${m(r.positionY)}, z ${m(r.positionZ)})"
+                            val stood = if (standsOn(r.kind)) ", units stand on it" else ""
+                            "${r.name} (${r.kind?.lowercase()?.replace('_', ' ') ?: "rigging"}, y ${m(r.positionY)}, z ${m(r.positionZ)}$stood)"
                         } + ".",
                     )
                 }
+                mountMismatches(project.id)?.let { appendLine(it) }
                 if (elements.isNotEmpty()) {
                     val venue = elements.count { it.layer == StageElementLayer.VENUE.name }
                     appendLine("Scene: $venue venue and ${elements.size - venue} set element(s) — get_scene lists them.")
@@ -317,6 +324,64 @@ class RigBriefing(private val state: State) {
             }
         }
     }
+
+    /**
+     * The moving heads whose base orientation disagrees with how their rigging carries them, in a
+     * sentence, or null when none does. A head's mount is its base orientation — at 0 its body stands
+     * up, at `basePitchDeg` 180 it hangs — and that is what the view draws and `aim_fixtures` solves
+     * from, so a head hung at 180 on a ledge is drawn and aimed upside down under it (the Commemoration
+     * Hall's balcony Revolutions, until stage-view plan P5 sets them to 0). Which way a body faces is
+     * read exactly as the view reads it: its own up axis through yaw, pitch *and* roll
+     * ([beamDirection] at pan and tilt 0, the body axis), up or down past 60°; a head on its side is
+     * neither and is not flagged. Read inside the caller's transaction, after it has loaded the
+     * riggings, so each patch's rigging is the entity cache's.
+     */
+    private fun mountMismatches(projectId: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>): String? {
+        data class MountedUnit(val name: String, val rigging: DaoRigging?, val yaw: Double?, val pitch: Double?, val roll: Double?)
+        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey, it.kindOverride) }
+        if (heads.isEmpty()) return null
+        val placements = DaoFixturePatchPlacement
+            .find { DaoFixturePatchPlacements.fixturePatch inList heads.map { it.id } }
+            .groupBy { it.fixturePatch.id }
+        val units = heads.flatMap { p ->
+            val name = p.displayName.ifBlank { p.key }
+            listOf(MountedUnit(name, p.rigging, p.baseYawDeg, p.basePitchDeg, p.baseRollDeg)) +
+                placements[p.id].orEmpty().map { pl ->
+                    MountedUnit(
+                        pl.label?.takeIf { it.isNotBlank() }?.let { "$name · $it" } ?: name,
+                        pl.rigging, pl.baseYawDeg, pl.basePitchDeg, pl.baseRollDeg,
+                    )
+                }
+        }
+        val notes = units.mapNotNull { u ->
+            val rig = u.rigging ?: return@mapNotNull null
+            val up = beamDirection(u.yaw, u.pitch, 0.0, 0.0, u.roll).z
+            val kind = rig.kind?.lowercase()?.replace('_', ' ') ?: "rigging"
+            when {
+                standsOn(rig.kind) && up < -UPRIGHT ->
+                    "${u.name} is on ${rig.name}, which it stands on, but its basePitchDeg ${m1(u.pitch)} hangs it: it is drawn and aimed upside down under the $kind (0 stands a moving head)"
+                !standsOn(rig.kind) && up > UPRIGHT ->
+                    "${u.name} hangs from ${rig.name} but its basePitchDeg ${m1(u.pitch)} stands it on top (180 hangs a moving head)"
+                else -> null
+            }
+        }
+        return if (notes.isEmpty()) null else "Mounts: " + notes.joinToString("; ") + "."
+    }
+
+    /**
+     * Whether the view draws this patch as a mover: its kind — the patch's `kindOverride` first,
+     * then the type's, as the view's `resolveFixtureKind` reads it — is a moving head or a scanner,
+     * or the type has a tilt axis (`archetypeFor` in the frontend's `bodies/archetype.ts`).
+     */
+    private fun isMovingHead(typeKey: String, kindOverride: String?): Boolean {
+        val info = FixtureTypeRegistry.typeInfoForKey(typeKey) ?: return false
+        val kind = kindOverride?.let { k -> FixtureKind.entries.firstOrNull { it.name == k } } ?: info.kind
+        return kind == FixtureKind.MOVING_HEAD || kind == FixtureKind.SCANNER ||
+            info.properties.any { it is SliderPropertyDescriptor && it.axis == "TILT" }
+    }
+
+    private fun m1(v: Double?): String =
+        String.format(java.util.Locale.ROOT, "%.0f", v ?: 0.0).replace("-", "−")
 
     /** Every patched head's number in the current project, by fixture key; unnumbered heads absent. */
     private fun patchHeadNumbers(): Map<String, Int> {
@@ -331,3 +396,6 @@ class RigBriefing(private val state: State) {
     private fun headLabel(headNumbers: Map<String, Int>, key: String): String =
         headNumbers[key]?.let { "head $it, " } ?: ""
 }
+
+/** The body's up axis past 60° from level: it stands up, or hangs down. Between, it is on its side. */
+private const val UPRIGHT = 0.5

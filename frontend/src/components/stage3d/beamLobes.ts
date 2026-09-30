@@ -70,7 +70,7 @@ export function coneReachesSphere(
 
 /**
  * The bits of the regions a lobe can reach (bit i set = region i is within [beamLength] and inside
- * the slacked cone), for `EmittersHandle.writeShadowMask`: the volume shader shadow-tests only
+ * the slacked cone), stored as the beam's `BeamWrite.shadowMask`: the volume shader shadow-tests only
  * those, so the common case runs 0–2 ray-OBB tests instead of 16.
  */
 export function regionShadowMask(
