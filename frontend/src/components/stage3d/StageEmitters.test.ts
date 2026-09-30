@@ -21,10 +21,9 @@ import {
   type BuiltEmitters,
   type EmittersHandle,
 } from './StageEmitters'
-import { makePoolMaterial } from './beamShaders'
+import { makeConeMaterial } from './beamShaders'
 import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
 
-const STAGE = { width: 10, height: 6, depth: 8 }
 // Two slots with a prism and a wash block each, so every writer below has room to write.
 const LAYOUT = buildEmitterLayout([
   { lobes: MAX_PRISM_LOBES, washPixels: 4 },
@@ -38,7 +37,7 @@ const REGIONS = computeRegionGeometry([
 function build(layout: EmitterLayout = LAYOUT): BuiltEmitters {
   // Bare materials: buildEmitters only hands them to the meshes, and nothing here draws.
   const mat = () => new ShaderMaterial()
-  return buildEmitters(layout, REGIONS.length, STAGE, mat(), mat(), mat(), mat(), mat(), mat())
+  return buildEmitters(layout, REGIONS.length, mat(), mat())
 }
 
 /**
@@ -109,28 +108,6 @@ const WRITERS: Array<{ name: string; write: (h: EmittersHandle) => void }> = [
   },
   { name: 'writeBeamFx', write: (h) => h.writeBeamFx(1, 0, 0.7, 3, 1.2, 6, RIGHT) },
   { name: 'writeShadowMask', write: (h) => h.writeShadowMask(1, 0, 0b11) },
-  { name: 'writeFloorMatrix', write: (h) => h.writeFloorMatrix(1, 0, true, 2, -3, 5) },
-  {
-    name: 'writeFloorAttrs',
-    write: (h) => h.writeFloorAttrs(1, 0, ORIGIN, DIR, COLOUR, 0.5, 0.97),
-  },
-  { name: 'writeRegionVisibility', write: (h) => h.writeRegionVisibility(1, 0, 1, true) },
-  {
-    name: 'writeRegionAttrs',
-    write: (h) => h.writeRegionAttrs(1, 0, ORIGIN, DIR, COLOUR, 0.6, 0.97),
-  },
-  { name: 'writeWallMatrix', write: (h) => h.writeWallMatrix(1, 0, true, 1, 2, 3, 4) },
-  { name: 'writeWallAttrs', write: (h) => h.writeWallAttrs(1, 0, ORIGIN, DIR, COLOUR, 0.7, 0.97) },
-  { name: 'writeWashFloorMatrix', write: (h) => h.writeWashFloorMatrix(1, 2, true, 2, -3, 5) },
-  {
-    name: 'writeWashFloorAttrs',
-    write: (h) => h.writeWashFloorAttrs(1, 2, ORIGIN, DIR, COLOUR, 0.8, 0.9),
-  },
-  { name: 'writeWashRegionVisibility', write: (h) => h.writeWashRegionVisibility(1, 2, 1, true) },
-  {
-    name: 'writeWashRegionAttrs',
-    write: (h) => h.writeWashRegionAttrs(1, 2, ORIGIN, DIR, COLOUR, 0.9, 0.9),
-  },
 ]
 
 describe('emitter dirty groups', () => {
@@ -148,23 +125,9 @@ describe('emitter dirty groups', () => {
     // already there.
     const h = makeHandle(built)
     h.writeBeamMatrix(0, 0, MATRIX, false)
-    h.writeFloorMatrix(0, 0, true, 2, -3, 5)
-    h.writeWallMatrix(0, 0, true, 1, 2, 3, 4)
-    h.writeRegionVisibility(0, 0, 0, true)
     flushDirty(built, dirtyGroups(built))
 
     const { mutated, flagged } = writeAndFlush(built, (handle) => handle.hideSlot(0))
-    expect(mutated.length).toBeGreaterThan(0)
-    expect(mutated.filter((name) => !flagged.includes(name))).toEqual([])
-  })
-
-  it('flags the wash block hideWashSlot parks', () => {
-    const h = makeHandle(built)
-    h.writeWashFloorMatrix(0, 0, true, 2, -3, 5)
-    h.writeWashRegionVisibility(0, 0, 0, true)
-    flushDirty(built, dirtyGroups(built))
-
-    const { mutated, flagged } = writeAndFlush(built, (handle) => handle.hideWashSlot(0))
     expect(mutated.length).toBeGreaterThan(0)
     expect(mutated.filter((name) => !flagged.includes(name))).toEqual([])
   })
@@ -177,7 +140,7 @@ describe('emitter dirty groups', () => {
 
   it('clears the dirty field so a group is not re-uploaded on the next frame', () => {
     const handle = makeHandle(built)
-    handle.writeWashFloorAttrs(0, 0, ORIGIN, DIR, COLOUR, 0.5, 0.9)
+    handle.writeConeAttrs(0, 0, ORIGIN, DIR, COLOUR, 0.5, 0.9)
     expect(built.dirty).not.toBe(0)
     flushDirty(built, dirtyGroups(built))
     expect(built.dirty).toBe(0)
@@ -185,14 +148,11 @@ describe('emitter dirty groups', () => {
 
   it('covers every buffer of the build in exactly one group', () => {
     // A buffer in no group can never be uploaded after the first frame; a buffer in two is a
-    // sign the groups have stopped following the writers. The two exceptions are the region
-    // receivers' instance matrices, which nothing reads: the receiver shader places each box
-    // from the region uniforms, so a region move is a uniform write and rebuilds nothing.
-    const BAKED_ONCE = ['regionMesh.instanceMatrix', 'washRegionMesh.instanceMatrix']
+    // sign the groups have stopped following the writers.
     const grouped = dirtyGroups(built).flatMap((g) => g.buffers)
     for (const { name, attr } of allBuffers(built)) {
       const hits = grouped.filter((buffer) => buffer === attr).length
-      expect(`${name}:${hits}`).toBe(`${name}:${BAKED_ONCE.includes(name) ? 0 : 1}`)
+      expect(`${name}:${hits}`).toBe(`${name}:1`)
     }
   })
 })
@@ -204,12 +164,13 @@ describe('emitter layout bounds', () => {
     { lobes: MAX_PRISM_LOBES, washPixels: 0 },
   ])
 
-  it('sizes the meshes by the rig, not by slots × the worst case', () => {
+  it('sizes the meshes and the light table by the rig, not by slots × the worst case', () => {
     const b = build(layout)
     expect(b.coneMesh.count).toBe(1 + MAX_PRISM_LOBES)
-    expect(b.regionMesh.count).toBe((1 + MAX_PRISM_LOBES) * REGIONS.length)
-    expect(b.washFloorMesh.count).toBe(0)
-    expect(b.washRegionMesh.count).toBe(0)
+    expect(b.volumeMesh.count).toBe(1 + MAX_PRISM_LOBES)
+    // One row per lobe; no wash block, so no wash rows.
+    expect(b.lights.capacity).toBe(1 + MAX_PRISM_LOBES)
+    expect(build(LAYOUT).lights.capacity).toBe(2 * MAX_PRISM_LOBES + 2 * 4)
   })
 
   it('drops a write past a slot\'s block rather than landing in the next slot', () => {
@@ -218,14 +179,15 @@ describe('emitter layout bounds', () => {
       // Lobe 1 of the par would be lobe 0 of the mover.
       h.writeBeamMatrix(0, 1, MATRIX, false)
       h.writeConeAttrs(0, 1, ORIGIN, DIR, COLOUR, 0.4, 0.97)
-      h.writeRegionVisibility(0, 1, 0, true)
-      // A region index past the count, a pixel on a slot with no wash block, a slot that isn't.
-      h.writeRegionVisibility(1, 0, REGIONS.length, true)
-      h.writeWashFloorMatrix(0, 0, true, 2, -3, 5)
+      h.writeLight(0, 1, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, null)
+      // A pixel on a slot with no wash block, a slot that isn't.
+      h.writeWashLight(0, 0, ORIGIN, DIR, COLOUR, 1, 0.9, null)
       h.writeBeamMatrix(7, 0, MATRIX, false)
+      h.writeLight(7, 0, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, null)
     })
     expect(mutated).toEqual([])
     expect(b.dirty).toBe(0)
+    expect(b.lights.litCount()).toBe(0)
   })
 
   it('reports each slot\'s block to the directors', () => {
@@ -237,22 +199,64 @@ describe('emitter layout bounds', () => {
   })
 })
 
+describe('the light table rows', () => {
+  const layout = buildEmitterLayout([
+    { lobes: 1, washPixels: 0 },
+    { lobes: MAX_PRISM_LOBES, washPixels: 0 },
+    { lobes: 0, washPixels: 4 },
+  ])
+
+  it('puts every lobe first and every washing pixel after it, and takes a dark slot off the table', () => {
+    const b = build(layout)
+    const h = makeHandle(b)
+    h.writeLight(1, 2, ORIGIN, DIR, COLOUR, 1, 0.97, 0.5, 6, null)
+    h.writeWashLight(2, 3, ORIGIN, DIR, COLOUR, 0.5, 0.7, null)
+    // Lobe 2 of slot 1 is row 1 + 2; pixel 3 of slot 2 is after all seven lobes.
+    expect(b.lights.weight[3]).toBeGreaterThan(0)
+    expect(b.lights.weight[1 + MAX_PRISM_LOBES + 3]).toBeGreaterThan(0)
+    expect(b.lights.litCount()).toBe(2)
+    h.hideSlot(1)
+    h.clearWashLight(2, 3)
+    expect(b.lights.litCount()).toBe(0)
+  })
+
+  it('writes a surface hit as the plane the surfaces stop lighting behind', () => {
+    const b = build(layout)
+    makeHandle(b).writeLight(0, 0, ORIGIN, DIR, COLOUR, 1, 0.97, 0, -1, {
+      px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0,
+    })
+    const row = b.lights.staged.subarray(0, 16)
+    expect(Array.from(row.subarray(12, 16))).toEqual([0, 1, 0, 0])
+  })
+
+  it('answers the axial reach from the colliders it is handed', () => {
+    const b = build(layout)
+    const floor = [{ cx: 0, cy: -0.01, cz: 0, hx: 10, hy: 0.01, hz: 10, cos: 1, sin: 0 }]
+    const h = makeHandle(b, () => floor)
+    const hit = { t: 0, nx: 0, ny: 0, nz: 0 }
+    expect(h.reach(ORIGIN, DIR, 40, hit)).toBe(true)
+    expect(hit.t).toBeCloseTo(4, 9)
+    expect(hit.ny).toBe(1)
+    expect(makeHandle(b).reach(ORIGIN, DIR, 40, hit)).toBe(false)
+  })
+})
+
 describe('region uniforms', () => {
   it('carry each region\'s own turn, as the region mesh draws it', () => {
     const regions = computeRegionGeometry([
       { uuid: 'r', centerX: 2, centerY: 3, centerZ: 0.5, widthM: 4, depthM: 1, heightM: 0.5, yawDeg: 30 },
     ] as Parameters<typeof computeRegionGeometry>[0])
-    const mat = makePoolMaterial(false, undefined, { regionReceiver: true })
+    const mat = makeConeMaterial()
     writeRegionUniforms([mat], regions, 1, 8)
     const yaw = (30 * Math.PI) / 180
     const cs = (mat.uniforms.uRegionYawCs.value as Array<{ x: number; y: number }>)[0]
-    // (cos yaw, sin yaw): the receiver shader turns the box out by +yaw and rayObbT turns a ray
-    // in by −yaw. It was (cos −yaw, sin −yaw), which mirrored every yawed shadow box.
+    // (cos yaw, sin yaw): rayObbT turns a ray in by −yaw, undoing the region mesh's +yaw. It was
+    // (cos −yaw, sin −yaw), which mirrored every yawed shadow box.
     expect(cs.x).toBeCloseTo(Math.cos(yaw), 12)
     expect(cs.y).toBeCloseTo(Math.sin(yaw), 12)
     expect(mat.uniforms.uNumRegions.value).toBe(1)
+    // The wall the beams clip to, in three's −z: 8 m upstage.
     expect(mat.uniforms.uWallZ.value).toBe(-8)
-    expect(mat.defines).toHaveProperty('REGION_RECEIVER')
   })
 
   it('centre a region half its thickness below its deck', () => {

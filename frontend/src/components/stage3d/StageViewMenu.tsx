@@ -25,6 +25,16 @@ import {
   isStageLabelMode,
   type StageLabelMode,
 } from './stageLabels'
+import type { SceneLayer, SceneLayers } from './scene/sceneView'
+import { LIGHT_BUDGETS } from './scene/lightTable'
+
+/** The scene's per-window layers, in the order `Stage.dc.html`'s View menu lists them under Show. */
+const SCENE_LAYER_ITEMS: ReadonlyArray<{ layer: SceneLayer; label: string; hint: string }> = [
+  { layer: 'venue', label: 'Venue', hint: 'The room: walls, proscenium, the house' },
+  { layer: 'set', label: 'Set', hint: "This show's scenery" },
+  { layer: 'seating', label: 'Seating', hint: 'The seats, whichever layer they are in' },
+  { layer: 'haze', label: 'Haze', hint: 'Beams in the air; off leaves only the light that lands' },
+]
 
 interface StageViewMenuProps {
   flags: StageViewFlags
@@ -45,6 +55,15 @@ interface StageViewMenuProps {
    * back to plain output when nothing is on deck, and the operator has to be told.
    */
   sourceStatus?: Partial<Record<VisSource, string | null>>
+  /**
+   * The scene's layers — Venue, Set, Seating, Haze (stage-view plan session 3) — per window. Absent
+   * where they mean nothing (the 2D plot draws no scene).
+   */
+  layers?: SceneLayers
+  setLayer?: (layer: SceneLayer, on: boolean) => void
+  /** How many lights the surfaces take, per browser; absent where there are no lit surfaces. */
+  lightBudget?: number
+  setLightBudget?: (budget: number) => void
 }
 
 export function StageViewMenu({
@@ -56,6 +75,10 @@ export function StageViewMenu({
   visSource,
   setVisSource,
   sourceStatus,
+  layers,
+  setLayer,
+  lightBudget,
+  setLightBudget,
 }: StageViewMenuProps) {
   const hidden = (key: StageViewToggle) => hide?.includes(key) ?? false
   return (
@@ -118,6 +141,18 @@ export function StageViewMenu({
         >
           Regions
         </DropdownMenuCheckboxItem>
+        {layers != null &&
+          setLayer != null &&
+          SCENE_LAYER_ITEMS.map(({ layer, label, hint }) => (
+            <DropdownMenuCheckboxItem
+              key={layer}
+              checked={layers[layer]}
+              onCheckedChange={(v) => setLayer(layer, !!v)}
+              title={hint}
+            >
+              {label}
+            </DropdownMenuCheckboxItem>
+          ))}
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Labels</DropdownMenuLabel>
         <DropdownMenuRadioGroup
@@ -132,6 +167,31 @@ export function StageViewMenu({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        {lightBudget != null && setLightBudget != null && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>
+              <span className="flex flex-col gap-0.5">
+                <span>Light budget</span>
+                {/* The surface shader's cost is pixels × lights; the brightest this many light the
+                    room, and the rest still draw their beams. This machine's, not this window's. */}
+                <span className="text-xs font-normal text-muted-foreground">
+                  The brightest lights the surfaces take, on this machine
+                </span>
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={String(lightBudget)}
+              onValueChange={(v) => setLightBudget(Number(v))}
+            >
+              {LIGHT_BUDGETS.map((budget) => (
+                <DropdownMenuRadioItem key={budget} value={String(budget)}>
+                  {budget} lights
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
         {onTestRecovery && (
           <>
             <DropdownMenuSeparator />

@@ -12,7 +12,12 @@ import {
   seatingParams,
   type LightingPoint3,
 } from '../../lib/stageSeats'
-import type { SavedViewCamera, SavedViewpointRef } from '../../lib/stageViewpoint'
+import {
+  parseSeatViewpointRef,
+  type SavedViewCamera,
+  type SavedViewpointRef,
+  type SeatViewpointRef,
+} from '../../lib/stageViewpoint'
 import type { StageCameraLanding } from './StageCameraRig'
 import { EYE_DEFAULT_FOV_DEG, clampFov, eyeTarget, lookAngles } from './stageCameras'
 
@@ -49,16 +54,48 @@ export function savedViewCameras(rows: readonly StageViewpointDto[]): Map<string
   return new Map(rows.map((row) => [row.uuid, savedViewCamera(row)]))
 }
 
-/** A seat view's seated eye and the seat's element, or null when the seat cannot be found. */
-function seatOf(row: StageViewpointDto, elements: readonly StageElementDto[]) {
-  if (row.seatElementUuid == null || row.seatId == null) return null
-  const element = elements.find((e) => e.uuid === row.seatElementUuid)
+/** A seat's seated eye and its element, or null when the seat cannot be found. */
+function seatOf(seatElementUuid: string | null, seatId: string | null, elements: readonly StageElementDto[]) {
+  if (seatElementUuid == null || seatId == null) return null
+  const element = elements.find((e) => e.uuid === seatElementUuid)
   if (element == null) return null
   const params = seatingParams(element)
   if (params == null) return null
-  const base = seatBase(element, params, row.seatId)
+  const base = seatBase(element, params, seatId)
   if (base == null) return null
   return { element, eye: seatEye(element, base) }
+}
+
+/**
+ * Landing in a picked seat (session 3's *Sit in a seat…*), or null when its seating is gone or no
+ * longer has the seat: the eye at the seat's seated eye, facing the stage, through a seat view's
+ * lens — exactly what a saved `SEAT` row with no target of its own lands.
+ */
+export function resolveSeatViewpoint(
+  ref: SeatViewpointRef,
+  elements: readonly StageElementDto[],
+): StageCameraLanding | null {
+  const parsed = parseSeatViewpointRef(ref)
+  if (parsed == null) return null
+  const seat = seatOf(parsed.elementUuid, parsed.seatId, elements)
+  if (seat == null) return null
+  const position = toThreeVec(seat.eye)
+  const angles = lookAngles(position, toThreeVec(DEFAULT_SEAT_TARGET))
+  return { ref, camera: 'eye', pose: { position, ...angles, fov: clampFov(DEFAULT_SEAT_FOV_DEG) } }
+}
+
+/** A picked seat's name, as the picker and the caption say it: `Row F, seat 6`. */
+export function seatViewpointName(ref: SeatViewpointRef): string {
+  const parsed = parseSeatViewpointRef(ref)
+  if (parsed == null) return 'Seat'
+  const m = /^([A-Z])(\d+)$/.exec(parsed.seatId)
+  return m == null ? `Seat ${parsed.seatId}` : `Row ${m[1]}, seat ${m[2]}`
+}
+
+/** The canvas caption's note for a picked seat, after its name. */
+export function seatViewpointCaption(ref: SeatViewpointRef): string {
+  const parsed = parseSeatViewpointRef(ref)
+  return `seat ${parsed?.seatId ?? '?'} · unsaved · drag to look around, scroll to zoom`
 }
 
 /**
@@ -72,7 +109,7 @@ export function resolveSavedViewpoint(
   const ref = row.uuid as SavedViewpointRef
   const target = point(row.targetX, row.targetY, row.targetZ)
   if (row.kind === 'SEAT') {
-    const seat = seatOf(row, elements)
+    const seat = seatOf(row.seatElementUuid, row.seatId, elements)
     if (seat == null) return null
     const position = toThreeVec(seat.eye)
     const angles = lookAngles(position, toThreeVec(target ?? DEFAULT_SEAT_TARGET))
@@ -111,11 +148,14 @@ const round = (n: number) => Math.round(n * 1000) / 1000
  * *Save this view…*: the row a create sends for where this window's camera is now. The orbit
  * camera saves an `ORBIT` view; the eye saves an `EYE` view — or, while it is sitting in a seat
  * view, a `SEAT` view of the same seat with the head turned where it now is, so "Row F, looking
- * stage left" keeps following the seat if the seating moves.
+ * stage left" keeps following the seat if the seating moves. A seat picked but not yet saved (session
+ * 3's *Sit in a seat…*) is handed in the same shape, and saves the same row.
  */
 export function viewpointFromCamera(
   name: string,
-  camera: { kind: 'orbit'; pose: OrbitPose } | { kind: 'eye'; pose: EyePose; seat?: StageViewpointDto | null },
+  camera:
+    | { kind: 'orbit'; pose: OrbitPose }
+    | { kind: 'eye'; pose: EyePose; seat?: Pick<StageViewpointDto, 'kind' | 'seatElementUuid' | 'seatId'> | null },
 ): CreateStageViewpointRequest {
   if (camera.kind === 'orbit') {
     const eye = fromThreeVec(camera.pose.position)

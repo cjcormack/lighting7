@@ -75,8 +75,14 @@ export function sceneBoundsLighting(
  * plane of a centimetre — so what lies between the section and the camera is nothing by
  * construction, and anything beyond it on the camera's side is clipped by the frustum. That is the
  * cut: ceilings above the plan, the house in front of the front elevation, the stage-left wall
- * beside the side one. Today the desk models only the stage and the rig, all of which is inside
- * the bounds, so nothing of it is cut; the venue (session 3) is what these planes will cut through.
+ * beside the side one.
+ *
+ * **The plane is the rig's; the depth is the scene's** (session 3, decided). The plane stands just
+ * outside the rig's bounds, never the venue's, so a section cuts through the modelled room — a
+ * section fitted to the hall would stand outside its walls and show their backs, or nothing: the
+ * room faces inward, so from outside only its far side draws. How deep the section sees reaches the
+ * venue too ([orthoSection]'s `beyond`), so the hall floor under a raised stage and the stage
+ * house's back wall are not clipped by the far plane.
  */
 export interface OrthoSection {
   position: Vec3
@@ -94,7 +100,7 @@ export interface OrthoSection {
  * audience right, which is stage left in actor terms (lighting7 `docs/fixtures-engineering.md`'s
  * axis table) — with the house to the left and upstage to the right.
  */
-export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection {
+export function orthoSection(view: OrthoCamera, b: LightingBounds, beyond: LightingBounds | null = null): OrthoSection {
   const cx = (b.min.x + b.max.x) / 2
   const cy = (b.min.y + b.max.y) / 2
   const cz = (b.min.z + b.max.z) / 2
@@ -102,6 +108,10 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection
   const spanY = b.max.y - b.min.y
   const spanZ = b.max.z - b.min.z
   const m = SECTION_MARGIN_M
+  // The far side of everything drawn, rig and venue alike — the depth each section sees to.
+  const lowZ = Math.min(b.min.z, beyond?.min.z ?? Infinity)
+  const backY = Math.max(b.max.y, beyond?.max.y ?? -Infinity)
+  const rightX = Math.min(b.min.x, beyond?.min.x ?? Infinity)
   switch (view) {
     case 'plan': {
       const eyeZ = b.max.z + m
@@ -110,7 +120,7 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection
         target: [cx, b.min.z, -cy],
         // Screen-up is three's −z, which is lighting +Y: upstage at the top.
         up: [0, 0, -1],
-        far: eyeZ - b.min.z + m,
+        far: eyeZ - lowZ + m,
         width: spanX + 2 * FIT_MARGIN_M,
         height: spanY + 2 * FIT_MARGIN_M,
       }
@@ -121,7 +131,7 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection
         position: [cx, cz, -eyeY],
         target: [cx, cz, -b.max.y],
         up: [0, 1, 0],
-        far: b.max.y - eyeY + m,
+        far: backY - eyeY + m,
         width: spanX + 2 * FIT_MARGIN_M,
         height: spanZ + 2 * FIT_MARGIN_M,
       }
@@ -132,7 +142,7 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds): OrthoSection
         position: [eyeX, cz, -cy],
         target: [b.min.x, cz, -cy],
         up: [0, 1, 0],
-        far: eyeX - b.min.x + m,
+        far: eyeX - rightX + m,
         width: spanY + 2 * FIT_MARGIN_M,
         height: spanZ + 2 * FIT_MARGIN_M,
       }

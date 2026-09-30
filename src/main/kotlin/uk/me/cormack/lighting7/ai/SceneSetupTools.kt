@@ -146,8 +146,9 @@ internal class SceneSetupTools(private val state: State) {
 
             val viewWrites = mutableListOf<StageViewpointFields>()
             for ((where, name, row) in viewpointRows) {
-                val fields = viewpointFields(row, storedViews[name]?.toFields(), name, seatingByName, where, problems) ?: continue
-                validateStageViewpoint(fields, { seatingByUuid[it] }, where, problems)
+                val storedView = storedViews[name]
+                val fields = viewpointFields(row, storedView?.toFields(), name, seatingByName, where, problems) ?: continue
+                validateStageViewpoint(fields, { seatingByUuid[it] }, where, problems, storedSeat = danglingSeatOf(storedView, stored.values))
                 viewWrites += fields
             }
             // A seat view this call leaves alone must still find its seat in the scene it leaves — if it
@@ -210,7 +211,7 @@ internal class SceneSetupTools(private val state: State) {
                 if (template != null) {
                     putJsonArray("templateElements") { templateRows.forEach { add(it.first) } }
                 }
-                put("note", "get_scene reads the document back. The Stage view draws each element as a box until its scene rendering lands.")
+                put("note", "get_scene reads the document back. The Stage view draws each element by its kind, lit by the rig.")
             },
         )
     }
@@ -398,6 +399,24 @@ internal class SceneSetupTools(private val state: State) {
             problems += "$where.params: region and regionUuid name different regions — send one"
         }
         return JsonObject(rest + ("regionUuid" to JsonPrimitive(uuid)))
+    }
+
+    /**
+     * The seat [view] names when it was **already** dangling before this call — its seating deleted
+     * or reshaped by a forced REST write — so a row that leaves it as it was (a new lens, a new
+     * target) is let through, as `PUT stage-viewpoints/{id}` lets it. A seat that resolved in the
+     * scene as stored is not passed: a call that deletes or reshapes the seating and keeps the view
+     * must still be refused, which is the loop over untouched views' rule too.
+     */
+    private fun danglingSeatOf(view: DaoStageViewpoint?, before: Collection<DaoStageElement>): Pair<UUID, String>? {
+        val uuid = view?.seatElementUuid ?: return null
+        val id = view.seatId ?: return null
+        val element = before.firstOrNull { it.uuid == uuid }
+        if (element != null) {
+            val fields = element.toFields()
+            if (seatResolves(seatingOf(fields, readElementParams(fields.kind, element.params)), id)) return null
+        }
+        return uuid to id
     }
 
     private fun viewpointFields(

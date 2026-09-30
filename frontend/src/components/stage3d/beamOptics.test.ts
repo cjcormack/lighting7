@@ -417,7 +417,8 @@ describe('computeBeamGeom', () => {
     const g = computeBeamGeom(30, LEN, SLACK, makeBeamGeom())
     expect(g.beamRadius).toBeCloseTo(LEN * Math.tan(Math.PI / 12), 9)
     expect(g.cosHalfBeam).toBeCloseTo(Math.cos(Math.PI / 12), 9)
-    expect(g.floorSide).toBeCloseTo(2 * LEN * Math.sin(Math.PI / 12 + SLACK), 9)
+    expect(g.cosCull).toBeCloseTo(Math.cos(Math.PI / 12 + SLACK), 9)
+    expect(g.sinCull).toBeCloseTo(Math.sin(Math.PI / 12 + SLACK), 9)
   })
 
   it('widens monotonically with the beam angle', () => {

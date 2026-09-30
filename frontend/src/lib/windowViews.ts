@@ -1,7 +1,7 @@
 import { pathHasSegment } from './navMatch'
 import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskWindow'
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
-import { VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
+import { VIEW_OPTION_SOURCE, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
@@ -13,7 +13,7 @@ import { VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
  * this view called" once (`/templates` carries four ⌘K entries on one `pathMatch`). The order is
  * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
  * viewpoint), then the two libraries. Stage is not a live view — it has no `ShowHeader` and no
- * immersive — so it carries its viewpoint and nothing else.
+ * immersive — so it carries its viewpoint and its source and nothing else.
  *
  * Matching is [pathHasSegment], never `startsWith`: `/programmer` must not answer for `/program`
  * (the legacy redirect) and `/fx-library` must not answer for `/busk`'s old `/fx`.
@@ -31,7 +31,7 @@ export interface WindowView {
    * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
    * (busk-chrome plan D9): immersive is a window's fact, but it rides *here* because a top-level
    * announce key would drop the frame, and it is drawn on the row as the view's Chrome segment.
-   * Stage carries [STAGE_VIEWPOINT_OPTION].
+   * Stage carries [STAGE_VIEWPOINT_OPTION] and [STAGE_SOURCE_OPTION].
    */
   options?: readonly WindowViewOption[]
 }
@@ -125,6 +125,22 @@ export const STAGE_VIEWPOINT_OPTION: WindowViewOption = {
   kind: 'picker',
 }
 
+/**
+ * The Stage view's source, *Source · Output | Next GO* on the row (stage-view plan session 3;
+ * `Screens.dc.html` §1: "its Source can be Output or Next GO — a screen that shows what the next GO
+ * will look like from row F"). Two of the four on purpose: the board draws the two a hall screen is
+ * set to, and the View menu on the window itself still offers all four — a row whose window is on
+ * Output + Programmer or Programmer only shows neither pressed, which is the truth: it is on neither.
+ * The target applies the value through `lib/stageViewpoint.ts`'s `applyStageViewOptions`.
+ */
+export const STAGE_SOURCE_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_SOURCE,
+  label: 'Source',
+  kind: 'enum',
+  values: ['output', 'nextGo'],
+  valueLabels: { output: 'Output', nextGo: 'Next GO' },
+}
+
 export const WINDOW_VIEWS: readonly WindowView[] = [
   { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION] },
   { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION] },
@@ -141,14 +157,20 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
       IMMERSIVE_OPTION,
     ],
   },
-  { id: 'stage', label: 'Stage', segment: '/stage', options: [STAGE_VIEWPOINT_OPTION] },
+  {
+    id: 'stage',
+    label: 'Stage',
+    segment: '/stage',
+    options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION],
+  },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'templates', label: 'Templates', segment: '/templates' },
 ]
 
 /**
  * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
- * on the busk view, the viewpoint on the Stage view, and `immersive` under every live view; nothing
+ * on the busk view, the viewpoint and the source on the Stage view, and `immersive` under every
+ * live view; nothing
  * at all — the key absent, not an empty map — for a view that contributes none, so a window on a
  * library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which
  * views carry the key without a router.

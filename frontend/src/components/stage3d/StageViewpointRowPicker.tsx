@@ -10,10 +10,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { WindowViewPickerProps } from '@/lib/windowViews'
-import { STAGE_CAMERAS, STAGE_CAMERA_LABELS } from '@/lib/stageViewpoint'
+import { STAGE_CAMERAS, STAGE_CAMERA_LABELS, isSeatViewpointRef } from '@/lib/stageViewpoint'
 import { useStageViewpointListQuery } from '@/store/stageViewpoints'
 import { useStageElementListQuery } from '@/store/stageElements'
-import { resolveSavedViewpoint, savedViewNote } from './savedViewpoints'
+import { resolveSavedViewpoint, savedViewNote, seatViewpointName } from './savedViewpoints'
 
 /**
  * A Stage row's *Viewpoint* on the Screens sheet (`Screens.dc.html` §1, stage-view plan session 2):
@@ -23,14 +23,17 @@ import { resolveSavedViewpoint, savedViewNote } from './savedViewpoints'
  * The Stage view's control, handed to the sheet by the app shell and loaded when a Stage row first
  * draws it, so neither the sheet nor the shell pulls the scene queries until one is on screen.
  * A saved view that cannot be landed (its seat is gone) is listed disabled, as the header's picker
- * lists it.
+ * lists it. A window sitting in a seat it picked but has not saved (session 3) shows that seat, as
+ * the row's value and as the one item it can be set back to; a seat is picked on the window itself.
  */
 export default function StageViewpointRowPicker({ value, onSet, label, rowName, projectId }: WindowViewPickerProps) {
   const { data: saved } = useStageViewpointListQuery(projectId ?? 0, { skip: projectId == null })
   const { data: elements } = useStageElementListQuery(projectId ?? 0, { skip: projectId == null })
   const views = useMemo(() => (saved ?? []).filter((row) => row.kind !== 'SEAT'), [saved])
   const seats = useMemo(() => (saved ?? []).filter((row) => row.kind === 'SEAT'), [saved])
-  const known = STAGE_CAMERAS.some((c) => c === value) || (saved ?? []).some((row) => row.uuid === value)
+  const pickedSeat = isSeatViewpointRef(value) ? value : null
+  const known =
+    pickedSeat != null || STAGE_CAMERAS.some((c) => c === value) || (saved ?? []).some((row) => row.uuid === value)
 
   const item = (row: NonNullable<typeof saved>[number]) => {
     const ok = resolveSavedViewpoint(row, elements ?? []) != null
@@ -65,11 +68,17 @@ export default function StageViewpointRowPicker({ value, onSet, label, rowName, 
             </SelectGroup>
           </>
         )}
-        {seats.length > 0 && (
+        {(seats.length > 0 || pickedSeat != null) && (
           <>
             <SelectSeparator />
             <SelectGroup>
               <SelectLabel>Seats</SelectLabel>
+              {pickedSeat != null && (
+                <SelectItem value={pickedSeat}>
+                  {seatViewpointName(pickedSeat)}
+                  <span className="ml-2 text-muted-foreground">unsaved</span>
+                </SelectItem>
+              )}
               {seats.map(item)}
             </SelectGroup>
           </>

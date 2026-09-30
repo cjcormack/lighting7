@@ -35,6 +35,18 @@ read it — the Stage route's View menu and the globally-mounted Positions panel
 `usePersistentState` reads its key once in a `useState` initialiser and never listens for changes,
 so two components sharing a key drift apart the moment one writes.
 
+**It is the window's, since stage-view plan session 3** — `sessionStorage` (`stage.source`), where it
+was one `localStorage` value per profile (`stageVisSource`). A hall screen on Next GO and a desk
+screen on Output are two facts, so the source rides `windows.viewOptions` as `source` beside
+`viewpoint` under the Stage view (`stageViewOptions` in `lib/stageViewpoint.ts`), and the Screens
+sheet's Stage row draws a **Source** segment from `lib/windowViews.ts`'s `STAGE_SOURCE_OPTION` —
+*Output · Next GO*, the two `Screens.dc.html` §1 draws; a window on either programmer source shows
+neither lit, and the View menu still offers all four. The sheet stays generic: the segment is the
+descriptor's `enum` kind. A Screens row's *Copy link* carries `source=`, which the Stage route applies
+on arrival and strips with `viewpoint=` (`consumeLaunchStageOptions`); `applyStageViewOptions` and
+that consumer ignore a value outside the four. A window with nothing of its own starts from the
+legacy profile value, so a desk keeps the source it had across the change.
+
 The stored value is narrowed through `isVisSource` on read. A value written by a later build must
 not reach code that has no case for it.
 
@@ -345,7 +357,9 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
 - **Imperative buffer writes from effects** — `hideSlot` / `hideWashSlot` when a fixture loses its
-  beam or unmounts — and the region uniforms (below).
+  beam or unmounts — and the region uniforms (below). The light table is packed in the emitters'
+  flush, which runs inside a frame (`EMITTER_FLUSH_PRIORITY`, before the composer), so it needs no
+  request of its own; a budget change does ask.
 - **The label layer** hands the store the canvas's `invalidate`.
 
 A hidden browser pane or background tab gets no `requestAnimationFrame`, so it draws nothing until it
@@ -368,7 +382,8 @@ viewpoints" below). The View menu's **Test recovery** (3D only) drops the contex
 The shared emitter meshes (`StageEmitters`) used to give every slot `MAX_PRISM_LOBES` beam instances
 and `MAX_WASH_PIXELS` wash instances, times the region count on the receivers — at 45 fixtures and 16
 regions, 4,320 region cookies and 11,520 wash-region instances whether or not a prism or a pixel bar
-was hung, every one through the vertex shader each frame. Now `emitterNeedsFor` (`emitterNeeds.ts`)
+was hung, every one through the vertex shader each frame. (Session 3 retired the receivers
+altogether — §"Light lands through one surface shader" below.) Now `emitterNeedsFor` (`emitterNeeds.ts`)
 says per slot what it can draw — **no lobes** without a beam (`acceptsBeamAngle`, which is
 `FixtureModel`'s `showCone`), **one**, or **six** where there is a prism; a wash block only for a
 pixel strip, of its pixel count — and `buildEmitterLayout` (`emitterLayout.ts`) turns that into
@@ -384,25 +399,76 @@ per-slot offsets. On project 15 that is 73 beam instances where there were sever
 - **The rebuild keys on `layout.signature`**, not the layout object, which is fresh every render;
   equal needs address identically, and rebuilding would throw away every slot's written state.
 
-### Region receivers are placed by uniforms
+### Light lands through one surface shader
 
-A region drag writes the RTK cache per frame, and the region cookies' instance matrices were baked
-from the region geometry — so every frame of a drag rebuilt every emitter buffer. The receivers
-(beam and wash) now carry no placement: their materials compile with `REGION_RECEIVER`, and the pool
-vertex shader builds each unit box from the same `uRegionCenter` / `uRegionHalf` / `uRegionYawCs`
-uniforms the shadow tests read, the region being `gl_InstanceID % uNumRegions` (the receivers are
-laid out lobe-major). A drag is `writeRegionUniforms` and an `invalidate`; the buffers are rebuilt
-only when the region *count* changes.
+Until session 3 a beam drew its pool as instanced **cookies** — one per lobe per receiver: the stage
+floor, the back wall, and every region (the region and wall and floor instances, beam and wash). A
+receiver the cookies did not know about took no light, which is why the plan capped regions at 16,
+and a venue made of rooms, flats and drapes would have needed cookies for each. They are gone, with
+the pool shaders and `makePoolMaterial`. Light lands through **one receiver shader** instead
+(`scene/surfaceShader.ts`), on every venue and set surface, every region, the stage floor, and —
+without a room — the back wall and the catch floor:
 
-The yaw pair is `(cos yaw, sin yaw)`, the region's own turn: the receiver rotates its box out by
-+yaw — the same turn `StageRegionMeshes` draws — and `rayObbT` rotates a ray in by −yaw. It was
-`(cos −yaw, sin −yaw)`, which turned every shadow box the wrong way; invisible at 0° and 90°, where a
-box is its own mirror image, and a mis-shadowed footprint at any other angle.
+- **The lights are a data texture, not a uniform array** (`scene/lightTable.ts`). The prototype's
+  48-light ceiling was the uniform budget; a float `DataTexture` of four texels a light
+  (`MAX_LIGHT_BUDGET` = 256 rows, read with `texelFetch` in a GLSL3 loop over `uLightCount`) has
+  none. Every beam lobe and every washing pixel has a slot in the `LightTable`, sized from the
+  emitter layout; the directors write their slot each frame (`writeLight`, `writeWashLight`,
+  `clearWashLight`), and the emitters' flush packs the **budget**'s worth of the brightest lit slots
+  into the texture, in slot order.
+- **The light budget is the viewer's** — the View menu's *Light budget*, 32 · 64 · 128 · 256, default
+  64, per browser in `localStorage` (`stage.lightBudget`, `scene/sceneView.ts`): the shader's cost is
+  pixels × lights, and what a machine's GPU affords is the machine's fact, not a window's. A light
+  the budget drops still draws its beam; it lands on nothing that frame. The container carries
+  `data-lights="<packed>/<lit>"` for measurement.
+- **Axial beam reach stands in for occlusion** (`scene/beamReach.ts`), until the quality tier's
+  shadow maps (`FU-STAGE-QUALITY-TIER`). The director casts each lobe's axis against the scene's
+  **colliders** — oriented boxes in three.js space turned about y, the regions' OBB maths: a wall a
+  2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m) and writes the first
+  hit's plane into the light's fourth texel. The surface shader lights nothing behind that plane
+  (`REACH_EPS` 3 cm), so a pool on the floor lands whole however oblique the beam, while the floor
+  under a deck the beam landed on stays dark. The **cone** is drawn to the hit, capped at the desk's
+  stylised `BEAM_LENGTH` (8 m) — the light reaches further than the cone is drawn, and a hall-length
+  throw no longer draws a 40 m spear across the house.
+- **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
+  disagree with the uniform cone above it. The lit colour is the finish × (fill + an exponential
+  roll-off of the light) plus a little of the light itself (`uSheen`), so a pool still reads as the
+  beam's colour on the near-black finishes a hall is painted in, and a rig at full does not clip to
+  white. Gobos show in the air, not yet on surfaces.
+- **The beam volumes still shadow on regions** — `regionShadowMask` (`beamLobes.ts`, which was
+  `beamCookies.ts`) and the region uniforms below. Only the receivers went.
 
-A floor or wall pool fragment on or inside a region (within 5 mm, `REGION_SURFACE_EPS_M`) is
-discarded: that surface is the region receiver's to light. The shadow test cannot catch it when the
-two coincide — a deck flush with the stage at 0 has its top face in the floor pool's own plane — and
-the additive pools would light it twice.
+The region uniforms survive for that: a region drag writes the RTK cache per frame, so the volume
+shaders read each region from `uRegionCenter` / `uRegionHalf` / `uRegionYawCs` rather than a baked
+buffer, and a drag is `writeRegionUniforms` and an `invalidate`. The yaw pair is `(cos yaw, sin yaw)`,
+the region's own turn — `rayObbT` rotates a ray in by −yaw, and `beamReach` makes the same turn. It
+was `(cos −yaw, sin −yaw)` once, which turned every shadow box the wrong way; invisible at 0° and 90°.
+
+**A modelled room replaces the stage's own shell** (`scene/stageSurfaces.ts`). While a `ROOM` is
+drawn the stage box's back wall, the catch floor and the grid (outside edit mode, where it is a
+measure) give way to it, and the beams in the air clip to the lowest room floor and the furthest
+upstage wall (`beamClipFor`). The stage floor stays; a room's faces sit 4 mm outside its box
+(`ROOM_FACE_INSET_M`) so a region's top at the room's floor does not z-fight it.
+
+### Haze degrades before frame rate
+
+The raymarched beam volumes are the costliest thing drawn per pixel and the least essential — a gobo
+through fewer march steps is grainier, not wrong — so `HazeGovernorProbe` (in `Stage3D`) feeds
+`scene/hazeGovernor.ts` the time between frames of a **continuous run** (a frame counts only when the
+frame before asked for it from inside the loop, R3F's `internal.frames > 1`; on demand, the gap is
+otherwise how long nothing moved). A run averaging over 28 ms steps the march down a tier (step
+scale 1 → 0.66 → 0.42 → 0.25); one under 19 ms for three seconds takes a tier back; 24 frames hold a
+tier before it may move. Each run is judged on its own frames: when one ends the governor drops
+what it measured (`endRun`), so the recovery clock never counts through idle time and a new run
+never steps on the last one's average; the tier itself is kept. A gap over a second is a pause, not
+a frame — deliberately far above any frame worth governing, because a software renderer at ~700 ms
+a frame is exactly the case the rule is for. The light budget is the viewer's and never touched by
+it. The View menu's **Haze** switches the air off for the window — the cone and volume meshes are
+then not drawn at all, rather than marched to nothing; the container carries `data-haze-tier`.
+
+The haze *level* is still `washConfig.ts`'s constant. The plan wanted it to follow the hazer's DMX,
+but nothing in a rig says which fixture is the hazer (the Commemoration Hall's is a generic dimmer),
+so that waits for a typed identity (`FU-STAGE-HAZE-FOLLOWS-HAZER`).
 
 ### Regions hang down from `centerZ`
 
@@ -530,7 +596,7 @@ orbit rig's unmount has flushed its pending write, so storage can be a move behi
 
 A viewpoint can also be a **saved view** — a `stage_viewpoints` row, by its uuid, in the same
 `viewpoint` key and the same `sessionStorage` slot. `isStageViewpoint` accepts a camera or a uuid, so
-`applyStageViewOptions`, `consumeLaunchViewpoint` and the stored value all take one whether or not
+`applyStageViewOptions`, `consumeLaunchStageOptions` and the stored value all take one whether or not
 this window has fetched the row yet (a reload, or a view another window names). A name that is
 neither is still ignored. `components/stage3d/savedViewpoints.ts` is the pure half:
 
@@ -559,7 +625,19 @@ then *Seats*, *Frame the selection* and ***Save this view…***. Saving reads th
 the orbit's reason) and builds the row with `viewpointFromCamera`: the orbit saves an `ORBIT` view, the
 eye an `EYE` view — or, sitting in a seat view, a `SEAT` view of the same seat with the head turned
 where it now is, so it keeps following the seat. A section cannot be saved. The window moves onto the
-new view, which is what announces it. *Sit in a seat…* is session 3's.
+new view, which is what announces it.
+
+**Sit in a seat…** (session 3; the picker's item, or S — Escape cancels) arms a pick on the seating:
+the seating mesh takes the pointer while armed, the seat under it is tinted and named (*Sit in row F,
+seat 6*), and a click lands the Eye rig at that seat's seated eye facing the stage. Arming turns the
+window's Seating layer on, since a pick needs seats to click. **An unsaved seat is a viewpoint of its
+own, in the same key**: `seat:<seating uuid>:<seat id>` (`seatViewpointRef`, `parseSeatViewpointRef`),
+in the same `sessionStorage` slot and announced as `viewpoint` like any other — no new top-level
+announce key, which the desk's bare Json would drop. It lands through the same landed marker as a
+saved view, the trigger reads *Row F, seat 6* with an *unsaved* caption, and the Screens row's picker
+lists it as unsaved. *Save this view…* from there saves a `SEAT` row (`viewpointFromCamera` already
+built one from a seat), and the window moves onto the new row. A seat whose seating has gone is
+dropped once the scene has loaded, as a deleted saved view is.
 
 **The Screens row's Viewpoint is a picker now** (`Screens.dc.html` §1): `lib/windowViews.ts`'s
 `STAGE_VIEWPOINT_OPTION` is a `picker` kind, and the control is `StageViewpointRowPicker` — the Stage
@@ -568,12 +646,43 @@ the sheet never imports the Stage view (it never learns the word) and nothing lo
 until a Stage row is on screen. It lists the cameras, the target project's saved views and its seats,
 and writes the value as `windows.viewOptions {viewpoint}`.
 
-**Scene elements are drawn as boxes, for now** (`StageSceneBoxes`): one unlit, see-through box per
-element with its edges, a room as its edges alone, a platform hanging down from its top surface, a
-flown piece at its trim, a seating block from row A back — deaf to the pointer, so they take no click.
-Only the Stage route's canvas reads the scene (`showScene`); the Positions plan does not, so the
-collapsed panel stays as cheap as it was. **The ortho sections stay rig-derived**: `sceneBoundsLighting`
-ignores elements, so a section may cut the venue; session 3 teaches the planes to cut it on purpose.
+### The scene, built by kind (session 3)
+
+**Each element kind has a builder** in `components/stage3d/scene/builders/`, one file each, replacing
+`StageSceneBoxes`. A builder is pure — an element in, **parts** out (`scene/sceneParts.ts`: boxes,
+quads, cylinders, discs and pleated cloth in the element's own lighting frame, each with a finish and
+whether it stops a beam) — so `builders.test.ts` pins each kind without a canvas, and one renderer
+(`StageSceneElements.tsx`) turns parts into meshes on the surface shader. The group is placed at the
+element's origin — its base, a platform's top, a flown piece's trim — and turned by its yaw.
+
+- **Room**: inward-facing quads — floor, ceiling and four walls, leaving out the sides `omit` names —
+  so a camera outside still sees in. The floor and ceiling take their own finishes.
+- **Proscenium**: the opening centred across the wall above its sill — two piers, a sill and a head
+  that stop beams — and a surround that does not.
+- **Flat**: a wall with its openings cut from its stage-right end, a pier before each and a sill and
+  head around it (a door has no sill); an arch is drawn square-topped.
+- **Drape**: one pleated cloth, or for a `DRAW` operation two halves gathered to their sides by the
+  `open` state (closed when unstated), each hanging from its own edge. A cyc defaults pale.
+- **Platform**: the deck hangs **below** its Z, which is its top; a rail on the edge it names. A
+  platform linked to a drawn region leaves the deck to the region.
+- **Seating**: no parts, only seats — `seatList` in `lib/stageSeats.ts`, the same seat maths the
+  backend's `SeatingParams.seat` is mirrored from, so the seats drawn are exactly the seats a `SEAT`
+  view can name. One `InstancedMesh` for the block; it raycasts only while a seat pick is armed.
+- **Object**: a box, cylinder, shade or disc by its `shape`. **Flown** pieces stand at `trimM`.
+  **Emissive** finishes glow at their colour.
+- **`hidden` and `states.visible: false`** build nothing, for every kind.
+
+**The View menu's Venue · Set · Seating layers** choose which elements a window draws — per window in
+`sessionStorage` (`stage.sceneLayers`, `scene/sceneView.ts`), not announced; a seating element
+follows **Seating** whatever its layer. Only the Stage route's canvas reads the scene (`showScene`);
+the Positions plan does not, so the collapsed panel stays as cheap as it was.
+
+**The ortho sections cut on purpose now.** The section plane stays **rig-derived** — Front cuts at
+the rig's downstage edge, so the house and its seats in front of the plane are not drawn over the
+stage — but the far plane reaches the drawn venue's bounds (`orthoSection`'s `beyond`,
+`sceneElementBounds`), so a room's back wall, a balcony and the upstage flats stay in the picture
+behind it. The plan section cuts the ceiling away by the same rule. Rooms face inward, so a section
+camera outside the hall sees in through the side it cuts.
 
 **Stage2DView stays behind Edit** (D1). Editing on a section is still the SVG plot's job until 3D
 editing has parity (session 5): `renderer2d` in `routes/Stage.tsx` is `editing && section`, and every

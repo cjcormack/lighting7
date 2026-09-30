@@ -186,6 +186,40 @@ class StageSceneRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a seat view whose seating was force-deleted still takes a rename, but not a seat that does not exist`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val seating = client.send("POST", "stage-elements", stalls).body<StageElementDto>()
+        val rowF = client.send(
+            "POST", "stage-viewpoints",
+            """{"name":"Row F centre","kind":"seat","seatElementUuid":"${seating.uuid}","seatId":"F6"}""",
+        ).body<StageViewpointDto>()
+        assertEquals(HttpStatusCode.NoContent, client.send("DELETE", "stage-elements/${seating.id}?force=true").status)
+
+        // The seat it already names dangles, and the write leaves it as it is: a rename and a new lens land.
+        val rename = client.send("PUT", "stage-viewpoints/${rowF.id}", """{"name":"Row F (old stalls)","fovDeg":40}""")
+        assertEquals(HttpStatusCode.OK, rename.status, rename.bodyAsText())
+        val renamed = rename.body<StageViewpointDto>()
+        assertEquals("Row F (old stalls)", renamed.name)
+        assertEquals(seating.uuid, renamed.seatElementUuid, "the dangling seat is kept, not dropped")
+        assertEquals("F6", renamed.seatId)
+        // Restating the same seat, in any case, is still leaving it as it is.
+        val restated = client.send("PUT", "stage-viewpoints/${rowF.id}", """{"seatElementUuid":"${seating.uuid}","seatId":"f6"}""")
+        assertEquals(HttpStatusCode.OK, restated.status, restated.bodyAsText())
+
+        // Naming another seat of the gone seating is a new reference, checked as any is: refused.
+        val moved = client.send("PUT", "stage-viewpoints/${rowF.id}", """{"seatId":"G6"}""")
+        assertEquals(HttpStatusCode.BadRequest, moved.status)
+        assertTrue("not a seating element" in moved.bodyAsText(), moved.bodyAsText())
+        // And a new view cannot be made to dangle from the start.
+        val fresh = client.send(
+            "POST", "stage-viewpoints",
+            """{"name":"Row G","kind":"seat","seatElementUuid":"${seating.uuid}","seatId":"G6"}""",
+        )
+        assertEquals(HttpStatusCode.BadRequest, fresh.status)
+    }
+
+    @Test
     fun `a kind change forgets what only the old kind carried`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

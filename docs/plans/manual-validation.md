@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open | Stage view S3, 2026-09-30 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S4`](#fu-manual-multi-screen-s4) | a record dragged off one screen's edge arrives on the next — the gesture is two windows by construction, so every step of it is the desk's; what one window proved is recorded in the entry | Multi-screen S4, 2026-09-17 |
@@ -67,6 +68,48 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-STAGE-LIGHT-BUDGET`
+
+**What it proves**: *the room, lit, runs at a frame rate on the desk's own hardware*. Session 3 of
+[`stage-view-plan.md`](stage-view-plan.md) put every surface on one receiver shader that loops over
+the live lights (cost: pixels × lights, capped by the View menu's **Light budget**, default 64), and
+gave the raymarched haze a governor that gives up march steps when a continuous run averages over
+28 ms a frame (back up under 19 ms for 3 s). The plan's §10 fixed the rule and left the numbers to
+be measured in Safari on the operator's Mac and an iPad.
+
+**Why it is here**: the session could only measure Chromium on a software renderer (SwiftShader, no
+GPU), which prices every pixel on the CPU and so says nothing about the budget's real cost. What it
+did measure, on the Commemoration Hall built from `set_scene`'s `proscenium-hall` template plus a
+set, at 1440×900 and DPR 1.5, orbiting continuously, the programmer in Blind with every dimmer at
+full and the vis source on Output + Programmer (32 of 32 lights packed and lit):
+
+| Chromium · SwiftShader | median frame | p95 |
+|---|---|---|
+| rig dark (0 lights) | 300 ms | 400 ms |
+| whole rig lit, haze on | 683–750 ms | 0.97–1.22 s |
+| whole rig lit, haze off | 717 ms | 1.18 s |
+
+So on that renderer the lit surfaces cost ~400 ms a frame and the haze nothing measurable; the
+governor stepped down to its last tier (it had first read every such frame as a pause — fixed in the
+session, a gap now counts up to a second). None of these numbers is a GPU's.
+
+**Test**: the hall scene (or the show's real one), the Stage view full screen on the desk Mac in
+**Safari**, then the iPad, with the rig lit in Blind (never live output) and the source on Output +
+Programmer. The container carries `data-lights="<packed>/<lit>"` and `data-haze-tier` for the Web
+Inspector.
+
+1. Orbit continuously for ten seconds at each light budget, 32 · 64 · 128 · 256: note the frame rate
+   (Safari's Timelines → Rendering Frames) and whether `data-haze-tier` leaves 0.
+2. Sit in *Row F centre* and repeat at the default budget: the seated view is most of the screen in
+   lit surfaces.
+3. Turn **Haze** off in the View menu and orbit again: the difference is the volume's cost.
+4. Record the numbers here and, if the default budget or the governor's 28 / 19 ms thresholds
+   (`scene/hazeGovernor.ts`) should move, move them in the same commit.
+
+30 minutes; all of it is the desk's.
 
 ---
 

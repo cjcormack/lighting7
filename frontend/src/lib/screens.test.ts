@@ -41,6 +41,12 @@ describe('windowSetupUrl', () => {
     )
   })
 
+  it('carries a Stage row’s source beside its viewpoint (stage-view plan session 3)', () => {
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'front', source: 'nextGo' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=front&source=nextGo',
+    )
+  })
+
   it('carries immersive only while it is on — off is what every window boots with (busk-chrome D9)', () => {
     expect(windowSetupUrl('Screen 2', '/projects/1/show', { immersive: 'on' }, 'http://desk')).toBe(
       'http://desk/projects/1/show?window=Screen%202&immersive=on',

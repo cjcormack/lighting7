@@ -387,8 +387,9 @@ export function evalLedMacro(index: number, t: number, out: MacroColour): MacroC
  * makes the angle a per-frame value, so this can no longer be a React memo;
  * it's a mutable struct the director owns and refreshes behind a dirty check.
  *
- * `cullSlackRad` widens the cull half-angle so cookies fade in before the
- * shader's own cosAngle test would clip them.
+ * `cullSlackRad` widens the cull half-angle for the region shadow mask
+ * (`beamLobes.ts`'s `regionShadowMask`), so a region the cone's soft edge
+ * only grazes still shadows it.
  */
 export interface BeamGeom {
   beamDeg: number
@@ -396,7 +397,6 @@ export interface BeamGeom {
   cosHalfBeam: number
   cosCull: number
   sinCull: number
-  floorSide: number
 }
 
 export function makeBeamGeom(): BeamGeom {
@@ -406,7 +406,6 @@ export function makeBeamGeom(): BeamGeom {
     cosHalfBeam: 1,
     cosCull: 1,
     sinCull: 0,
-    floorSide: 0,
   }
 }
 
@@ -423,6 +422,5 @@ export function computeBeamGeom(
   out.cosHalfBeam = Math.cos(half)
   out.cosCull = Math.cos(cull)
   out.sinCull = Math.sin(cull)
-  out.floorSide = 2 * beamLength * Math.sin(cull)
   return out
 }

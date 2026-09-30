@@ -5,17 +5,20 @@ import {
   STAGE_VIEWPOINT_KEY,
   applyStageViewOptions,
   cameraOfViewpoint,
-  consumeLaunchViewpoint,
+  consumeLaunchStageOptions,
   isOrthoCamera,
   isStageViewpoint,
   markViewpointLanded,
   noteSavedViewpointCameras,
+  parseSeatViewpointRef,
   resetStageViewpointStore,
+  seatViewpointRef,
   setStageViewpoint,
   stageViewOptions,
   stageViewpoint,
   type SavedViewpointRef,
 } from './stageViewpoint'
+import { resetVisSourceStore, visSource } from '../hooks/useVisSource'
 import {
   EYE_POSE_KEY,
   noteOrbitPose,
@@ -30,6 +33,7 @@ afterEach(() => {
   window.sessionStorage.clear()
   window.localStorage.clear()
   resetStageViewpointStore()
+  resetVisSourceStore()
   resetLiveOrbitPose()
 })
 
@@ -52,25 +56,25 @@ describe('the Stage viewpoint (stage-view plan session 1)', () => {
 
   it('applies a windows.viewOptions viewpoint, and ignores one outside the vocabulary rather than reading it as Orbit', () => {
     setStageViewpoint('side')
-    expect(applyStageViewOptions({ viewpoint: 'plan' })).toBe('plan')
+    expect(applyStageViewOptions({ viewpoint: 'plan' })).toEqual({ viewpoint: 'plan' })
     expect(stageViewpoint()).toBe('plan')
-    expect(applyStageViewOptions({ viewpoint: 'row-f' })).toBeUndefined()
-    expect(applyStageViewOptions({ focus: 'pads' })).toBeUndefined()
+    expect(applyStageViewOptions({ viewpoint: 'row-f' })).toEqual({})
+    expect(applyStageViewOptions({ focus: 'pads' })).toEqual({})
     expect(stageViewpoint()).toBe('plan')
   })
 
   it('applies ?viewpoint= on arrival and answers the search without it, keeping every other parameter', () => {
-    const next = consumeLaunchViewpoint(new URLSearchParams('viewpoint=side&cue=4'))
+    const next = consumeLaunchStageOptions(new URLSearchParams('viewpoint=side&cue=4'))
     expect(stageViewpoint()).toBe('side')
     expect(next?.toString()).toBe('cue=4')
     // A value outside the vocabulary is stripped and not applied; no parameter writes nothing.
-    expect(consumeLaunchViewpoint(new URLSearchParams('viewpoint=row-f'))?.toString()).toBe('')
+    expect(consumeLaunchStageOptions(new URLSearchParams('viewpoint=row-f'))?.toString()).toBe('')
     expect(stageViewpoint()).toBe('side')
-    expect(consumeLaunchViewpoint(new URLSearchParams('cue=4'))).toBeNull()
+    expect(consumeLaunchStageOptions(new URLSearchParams('cue=4'))).toBeNull()
   })
 
-  it('announces the viewpoint under its one key', () => {
-    expect(stageViewOptions('eye')).toEqual({ viewpoint: 'eye' })
+  it('announces the viewpoint and the source, each under its own key', () => {
+    expect(stageViewOptions('eye', 'nextGo')).toEqual({ viewpoint: 'eye', source: 'nextGo' })
   })
 
   it('forgets the eye’s pose when moving into Eye from another camera, and keeps it on a remount already on Eye', () => {
@@ -96,7 +100,7 @@ describe('a saved view in the viewpoint (stage-view plan session 2)', () => {
   it('is in the vocabulary by its uuid, before this window has the row, and a name is not', () => {
     expect(isStageViewpoint(ROW_F)).toBe(true)
     expect(isStageViewpoint('row-f')).toBe(false)
-    expect(applyStageViewOptions({ viewpoint: ROW_F })).toBe(ROW_F)
+    expect(applyStageViewOptions({ viewpoint: ROW_F })).toEqual({ viewpoint: ROW_F })
     expect(stageViewpoint()).toBe(ROW_F)
     // It survives a reload: sessionStorage reads it back as itself, not as Orbit.
     resetStageViewpointStore()
@@ -104,7 +108,7 @@ describe('a saved view in the viewpoint (stage-view plan session 2)', () => {
   })
 
   it('is carried by ?viewpoint= on arrival, and stripped', () => {
-    const next = consumeLaunchViewpoint(new URLSearchParams(`window=Hall&viewpoint=${ROW_F}`))
+    const next = consumeLaunchStageOptions(new URLSearchParams(`window=Hall&viewpoint=${ROW_F}`))
     expect(stageViewpoint()).toBe(ROW_F)
     expect(next?.toString()).toBe('window=Hall')
   })
@@ -139,6 +143,57 @@ describe('a saved view in the viewpoint (stage-view plan session 2)', () => {
     expect(readEyePose()).toBeNull()
   })
 })
+
+describe('a seat picked and not saved (stage-view plan session 3)', () => {
+  const STALLS = '9d3c1e2a-4b5f-4a6d-8e7f-0a1b2c3d4e5f'
+
+  it('is spelt seat:<seating>:<seat> in the one viewpoint key, and read back only in that shape', () => {
+    const ref = seatViewpointRef(STALLS, 'f6')
+    expect(ref).toBe(`seat:${STALLS}:F6`)
+    expect(parseSeatViewpointRef(ref)).toEqual({ elementUuid: STALLS, seatId: 'F6' })
+    expect(isStageViewpoint(ref)).toBe(true)
+    expect(isStageViewpoint(`seat:${STALLS}:6F`)).toBe(false)
+    expect(isStageViewpoint('seat:stalls:F6')).toBe(false)
+  })
+
+  it('draws through the eye, lands afresh when picked, and survives a reload', () => {
+    const ref = seatViewpointRef(STALLS, 'F6')
+    markViewpointLanded({ ref, camera: 'eye' })
+    setStageViewpoint(ref)
+    expect(window.sessionStorage.getItem(STAGE_LANDED_KEY)).toBe('null')
+    expect(cameraOfViewpoint(ref)).toBe('eye')
+    resetStageViewpointStore()
+    expect(stageViewpoint()).toBe(ref)
+  })
+
+  it('rides a windows.viewOptions frame and ?viewpoint= like any viewpoint — no new key', () => {
+    const ref = seatViewpointRef(STALLS, 'A1')
+    expect(applyStageViewOptions({ viewpoint: ref })).toEqual({ viewpoint: ref })
+    expect(stageOptionsKeys(stageViewOptions(ref, 'output'))).toEqual(['source', 'viewpoint'])
+  })
+})
+
+describe('the Stage source per window (stage-view plan session 3)', () => {
+  it('is applied by a windows.viewOptions frame beside the viewpoint, and a value outside the four is ignored', () => {
+    expect(applyStageViewOptions({ source: 'nextGo' })).toEqual({ source: 'nextGo' })
+    expect(visSource()).toBe('nextGo')
+    expect(applyStageViewOptions({ source: 'blind', viewpoint: 'plan' })).toEqual({ viewpoint: 'plan' })
+    expect(visSource()).toBe('nextGo')
+  })
+
+  it('is taken from ?source= on arrival and stripped with the viewpoint, and junk is stripped unapplied', () => {
+    const next = consumeLaunchStageOptions(new URLSearchParams('viewpoint=front&source=programmer&cue=4'))
+    expect(stageViewpoint()).toBe('front')
+    expect(visSource()).toBe('programmer')
+    expect(next?.toString()).toBe('cue=4')
+    expect(consumeLaunchStageOptions(new URLSearchParams('source=cueOnly'))?.toString()).toBe('')
+    expect(visSource()).toBe('programmer')
+  })
+})
+
+function stageOptionsKeys(options: Record<string, string>): string[] {
+  return Object.keys(options).sort()
+}
 
 describe('the camera poses', () => {
   it('round-trips the orbit and eye poses through sessionStorage', () => {

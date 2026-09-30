@@ -6,8 +6,8 @@ import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import {
   markViewpointLanded,
   useLandedViewpoint,
+  type LandingRef,
   type OrthoCamera,
-  type SavedViewpointRef,
   type StageCamera,
 } from '../../lib/stageViewpoint'
 import {
@@ -50,14 +50,14 @@ export interface StageCameraHandle {
 }
 
 /**
- * A saved view for the rig to land on (stage-view plan session 2): the row's uuid and the pose its
- * camera takes, in three.js space. Resolved by the Stage view from the rows
- * (`savedViewpoints.ts`); the rig decides *whether* to land — once per pick, never on a remount
- * that already has (`lib/stageViewpoint.ts`'s landed marker).
+ * A saved view or a picked seat for the rig to land on (stage-view plan sessions 2 and 3): its
+ * reference and the pose its camera takes, in three.js space. Resolved by the Stage view from the
+ * rows and the seating (`savedViewpoints.ts`); the rig decides *whether* to land — once per pick,
+ * never on a remount that already has (`lib/stageViewpoint.ts`'s landed marker).
  */
 export type StageCameraLanding =
-  | { ref: SavedViewpointRef; camera: 'orbit'; pose: OrbitPose }
-  | { ref: SavedViewpointRef; camera: 'eye'; pose: EyePose }
+  | { ref: LandingRef; camera: 'orbit'; pose: OrbitPose }
+  | { ref: LandingRef; camera: 'eye'; pose: EyePose }
 
 interface StageCameraRigProps {
   camera: StageCamera
@@ -65,8 +65,13 @@ interface StageCameraRigProps {
   landing?: StageCameraLanding | null
   /** Where the orbit camera starts when nothing is stored — and what an eye with no pose seeds from. */
   defaultOrbit: OrbitPose
-  /** The whole scene, for the orthographic sections' planes and their fit. */
+  /** The rig, for the orthographic sections' planes and their fit. */
   bounds: LightingBounds
+  /**
+   * The modelled venue and set, for how deep a section sees — never where its plane stands, which
+   * is the rig's, so a section cuts the room (`stageCameras.ts`'s `orthoSection`).
+   */
+  beyond?: LightingBounds | null
   /**
    * Read and write this window's poses in `sessionStorage` (`lib/stageCameraPoses.ts`). The Stage
    * route's canvas does; the Positions panel's embedded plan does not — it is a second camera on
@@ -384,10 +389,11 @@ const ORTHO_FIT_FILL = 0.94
 function OrthoRig({
   view,
   bounds,
+  beyond = null,
   controlsRef,
   handleRef,
 }: StageCameraRigProps & { view: OrthoCamera }) {
-  const section = useMemo(() => orthoSection(view, bounds), [view, bounds])
+  const section = useMemo(() => orthoSection(view, bounds, beyond), [view, bounds, beyond])
   const [camera] = useState(() => {
     const c = new OrthographicCamera(-1, 1, 1, -1, 0.01, section.far)
     // Before the controls are built: `OrbitControls` reads the camera's up once, at construction.
@@ -414,6 +420,16 @@ function OrthoRig({
     controls.update()
     invalidate()
   }, [camera, controls, section, size.width, size.height, invalidate])
+
+  // How deep the section sees follows the scene even after the operator has moved it: a pan or a
+  // frame slides the camera within its plane, never along the view axis, so the far plane measured
+  // from the section still holds — and a venue that loads late must not stay clipped.
+  useLayoutEffect(() => {
+    if (camera.far === section.far) return
+    camera.far = section.far
+    camera.updateProjectionMatrix()
+    invalidate()
+  }, [camera, section.far, invalidate])
 
   const handle = useMemo<StageCameraHandle | null>(() => {
     if (controls == null) return null

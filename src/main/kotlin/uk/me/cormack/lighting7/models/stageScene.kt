@@ -599,11 +599,19 @@ data class StageViewpointFields(
 /** A seating element as a viewpoint's check needs it: its seats. */
 class SeatingElement(val name: String, val pose: ElementPose, val params: SeatingParams)
 
+/**
+ * [fields] checked whole. [storedSeat] is the seat the view already names, which may dangle — its
+ * seating force-deleted (`?force=true`) or reshaped since. It is let stand while the write leaves it
+ * unchanged, as [validateStageElement] lets a platform's stored region stand: a dangling seat reads as
+ * no seat, and a rename or a new lens must not be refused for a reference the write does not touch.
+ * Naming a different seat is checked as any new one is.
+ */
 fun validateStageViewpoint(
     fields: StageViewpointFields,
     seating: (UUID) -> SeatingElement?,
     where: String,
     problems: MutableList<String>,
+    storedSeat: Pair<UUID, String>? = null,
 ) {
     val p = if (where.isEmpty()) "" else "$where: "
     if (fields.name.isEmpty() || fields.name.length > 100) problems += "${p}name must be 1–100 characters"
@@ -636,6 +644,8 @@ fun validateStageViewpoint(
             val id = fields.seatId
             if (uuid == null || id == null) {
                 problems += "${p}a SEAT view names a seating element and a seat"
+            } else if (storedSeat != null && storedSeat.first == uuid && storedSeat.second.equals(id.trim(), ignoreCase = true)) {
+                // The seat it already names, unchanged: let stand even if its seating has gone.
             } else {
                 val element = seating(uuid)
                 if (element == null) {

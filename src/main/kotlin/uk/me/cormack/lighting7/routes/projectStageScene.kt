@@ -538,7 +538,14 @@ private fun writeStageViewpoint(project: DaoProject, viewpoint: DaoStageViewpoin
         seatId = seatId,
     )
     val seating = seatingElementsOf(project)
-    validateStageViewpoint(fields, { seating[it] }, "", problems)
+    // A seat view whose seating was force-deleted still takes a rename or a new lens: the seat it
+    // already names is let stand while the write leaves it as it is.
+    val storedSeat = start?.takeIf { it.kind == StageViewpointKind.SEAT }?.let { s ->
+        val uuid = s.seatElementUuid
+        val id = s.seatId
+        if (uuid != null && id != null) uuid to id else null
+    }
+    validateStageViewpoint(fields, { seating[it] }, "", problems, storedSeat)
     if (problems.isNotEmpty()) return ViewpointWrite.Invalid(problems)
 
     val collision = DaoStageViewpoint.find {

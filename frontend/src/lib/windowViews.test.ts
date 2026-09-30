@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   IMMERSIVE_OPTION,
   PAGE_FOLLOWS_OPTION,
+  STAGE_SOURCE_OPTION,
   STAGE_VIEWPOINT_OPTION,
   WINDOW_VIEWS,
   projectIdOfPath,
@@ -20,10 +21,12 @@ describe('WINDOW_VIEWS', () => {
     expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'templates'])
   })
 
-  it('gives Stage its viewpoint and nothing else — no immersive, it is not a live view (stage-view plan sessions 1, 2)', () => {
+  it('gives Stage its viewpoint and its source and nothing else — no immersive, it is not a live view (stage-view plan sessions 1–3)', () => {
     const stage = WINDOW_VIEWS.find((v) => v.id === 'stage')!
     expect(stage.segment).toBe('/stage')
-    expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION])
+    expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION])
+    // Source is the board's two (`Screens.dc.html` §1): what a hall screen is set to.
+    expect(STAGE_SOURCE_OPTION).toMatchObject({ key: 'source', kind: 'enum', values: ['output', 'nextGo'] })
     // A picker since session 2: the cameras, saved views and seats are the Stage view's control,
     // handed to the Screens sheet by the shell — the descriptor names no vocabulary of its own.
     expect(STAGE_VIEWPOINT_OPTION).toEqual({ key: 'viewpoint', label: 'Viewpoint', kind: 'picker' })

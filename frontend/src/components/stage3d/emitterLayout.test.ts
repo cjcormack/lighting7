@@ -6,13 +6,8 @@ import {
   beamInstanceIndex,
   buildEmitterLayout,
   lobesFor,
-  regionCapacity,
-  regionInstanceIndex,
-  washFloorCapacity,
   washPixelIndex,
   washPixelsFor,
-  washRegionCapacity,
-  washRegionInstanceIndex,
 } from './emitterLayout'
 
 // A par, a prism mover, a pixel bar with no beam, a par again.
@@ -34,31 +29,20 @@ describe('emitter layout', () => {
     expect(lobesFor(RIG, 2)).toBe(0)
   })
 
-  it('lays region instances out lobe-major within a slot', () => {
-    const R = 16
-    expect(regionInstanceIndex(RIG, 0, 0, R, 0)).toBe(0)
-    expect(regionInstanceIndex(RIG, 0, 0, R, R - 1)).toBe(R - 1)
-    expect(regionInstanceIndex(RIG, 1, 0, R, 0)).toBe(R)
-    expect(regionInstanceIndex(RIG, 1, 3, R, 5)).toBe((1 + 3) * R + 5)
-  })
-
   it('keeps wash blocks per-pixel, only for the slots that wash', () => {
     expect(washPixelsFor(RIG, 0)).toBe(0)
     expect(washPixelsFor(RIG, 2)).toBe(12)
     expect(washPixelIndex(RIG, 2, 0)).toBe(0)
     expect(washPixelIndex(RIG, 2, 11)).toBe(11)
-    expect(washRegionInstanceIndex(RIG, 2, 3, 16, 7)).toBe(3 * 16 + 7)
     expect(RIG.totalWashPixels).toBe(12)
   })
 
   it('sizes capacities by what the rig has, not by fixtures × the worst case', () => {
-    // 45 plain fixtures and 16 regions: the stage-view record's finding was 45 × 6 × 16 region
-    // cookies and 45 × 16 × 16 wash-region instances, nearly all of them invisible.
+    // 45 plain fixtures: the stage-view record's finding was 45 × 6 beam instances (and the region
+    // cookies × 16 on top, gone since session 3), nearly all of them invisible.
     const plain = buildEmitterLayout(Array.from({ length: 45 }, () => ({ lobes: 1, washPixels: 0 })))
     expect(beamCapacity(plain)).toBe(45)
-    expect(regionCapacity(plain, 16)).toBe(45 * 16)
-    expect(washFloorCapacity(plain)).toBe(1)
-    expect(washRegionCapacity(plain, 16)).toBe(16)
+    expect(plain.totalWashPixels).toBe(0)
   })
 
   it('clamps a slot to the per-slot caps', () => {
@@ -78,9 +62,6 @@ describe('emitter layout', () => {
   it('never sizes a zero-capacity buffer', () => {
     const empty = buildEmitterLayout([])
     expect(beamCapacity(empty)).toBeGreaterThan(0)
-    expect(regionCapacity(empty, 0)).toBeGreaterThan(0)
-    expect(washFloorCapacity(empty)).toBeGreaterThan(0)
-    expect(washRegionCapacity(empty, 0)).toBeGreaterThan(0)
   })
 
   it('gives equal needs an equal signature, and different needs a different one', () => {

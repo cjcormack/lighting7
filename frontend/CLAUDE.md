@@ -223,8 +223,12 @@ changes the picture without changing an R3F prop — an imperative material writ
 write, a uniform — must call `invalidate` (`useStageInvalidate` from `stage3d/stageInvalidate.tsx`),
 or it shows only when something else happens to draw a frame. The same doc's §"The 3D renderer"
 lists what already asks, and covers the other renderer rules: no MSAA in the composer, DPR at 1.5,
-context-loss recovery, emitters sized by the rig, region receivers placed by uniforms, regions
-hanging down from `centerZ` (the top surface), dark-glass lenses, and the one DOM label layer.
+context-loss recovery, emitters sized by the rig, regions hanging down from `centerZ` (the top
+surface), dark-glass lenses, and the one DOM label layer. **Light lands through one surface shader**
+(session 3): every venue, set and region surface loops over a float data texture of the live lights
+(`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, with the
+first surface on each beam's axis standing in for occlusion (`scene/beamReach.ts`); the region,
+wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
@@ -236,8 +240,14 @@ the camera was. F frames the selection — the Stage's own, else the desk's — 
 Orbit. **A viewpoint can also be a saved view or a seat** (session 2): a `stage_viewpoints` row by
 its uuid in the same key, landed on the orbit or eye rig **once per pick** (a per-tab landed marker,
 so a remount keeps where the operator has looked since and a re-pick lands again), picked from the
-header's picker, and saved from it with *Save this view…*. Scene elements (`stage_elements`) are
-read only by the Stage route's canvas and drawn as boxes until session 3. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
+header's picker, and saved from it with *Save this view…*. **Or an unsaved seat** (session 3):
+*Sit in a seat…* (S) picks one from the seating mesh and holds it as `seat:<uuid>:<seat id>` in the
+same key — no new announce key — until *Save this view…* makes it a `SEAT` row. Scene elements
+(`stage_elements`) are read only by the Stage route's canvas and built per kind in
+`components/stage3d/scene/builders/` — pure functions a node test pins, one per kind, the seats
+exactly `lib/stageSeats.ts`'s. The View menu's Venue · Set · Seating · Haze are per window
+(`sessionStorage`), and so is the **vis source** now, riding `windows.viewOptions` as `source` beside
+`viewpoint`. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
 `useDefaultCamera`, and the bloom composer rebuilds after the swap's frame, so `Bloom` invalidates on
 each new composer or the view sits on the old camera's picture.
 
@@ -4047,14 +4057,17 @@ Programmer, Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `op
 (`IMMERSIVE_OPTION`) and Busk carries it fourth — because the desk's Json is bare and a sixth
 top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
-the libraries, carrying one option, `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
-Plan | Front | Side*), and **no immersive** — it is a window view, not a live view, so it has no
-`ShowHeader` to leave standing. `announcedViewOptions` takes the viewpoint as its fourth argument and
-sends it only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose descriptor
-carries it and the viewpoint only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`, which
-ignores a value outside the vocabulary — a camera, or a saved view's uuid since session 2). ⌘K gains
-*Show Stage on <window>* and *Open Stage on another display* from the same list, and
-`windowSetupUrl` carries `viewpoint=`, which the Stage route applies on arrival and strips. **Since
+the libraries, carrying two options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
+Plan | Front | Side*) and, since session 3, `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
+GO*, an `enum` segment) — and **no immersive** — it is a window view, not a live view, so it has no
+`ShowHeader` to leave standing. `announcedViewOptions` takes the Stage options (`stageViewOptions`:
+the viewpoint and the source) as its fourth argument and sends them only under Stage;
+`applyViewOptionsFor` applies `immersive` only on a view whose descriptor carries it and the two
+only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`, which ignores a value outside each
+vocabulary — a camera, a saved view's uuid since session 2 or an unsaved seat since session 3; one
+of the four vis sources). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
+the same list, and `windowSetupUrl` carries `viewpoint=` and `source=`, which the Stage route applies
+on arrival and strips (`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
 `StageViewpointRowPicker` for `viewpoint`), so the sheet draws the cameras, saved views and seats
