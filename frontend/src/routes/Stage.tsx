@@ -68,6 +68,7 @@ import {
   useSceneLayers,
 } from '../components/stage3d/scene/sceneView'
 import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
+import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
 import { deskSelectionPoints, stageSelectionPoints } from '../components/stage3d/framingPoints'
 import {
@@ -88,6 +89,7 @@ import {
   type SeatViewpointRef,
 } from '../lib/stageViewpoint'
 import { readEyePose, readOrbitPose } from '../lib/stageCameraPoses'
+import { seatingParams } from '../lib/stageSeats'
 import { useStageViewpointListQuery } from '../store/stageViewpoints'
 import { useStageElementListQuery } from '../store/stageElements'
 import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
@@ -471,8 +473,10 @@ export function Stage() {
   // under it — the eye lands at its seated eye, as a saved seat view's does. Only on the 3D scene,
   // and only where there are seats to sit in; arming it shows the seating if this window had hidden it.
   const [sitting, setSitting] = useState(false)
+  // A seating the scene would draw — not hidden, not switched off by its `visible` state, and with
+  // params that make seats — or the pick would arm over nothing to click.
   const hasSeats = useMemo(
-    () => (sceneElements ?? []).some((e) => e.kind === 'SEATING' && !e.hidden),
+    () => (sceneElements ?? []).some((e) => e.kind === 'SEATING' && isElementShown(e) && seatingParams(e) != null),
     [sceneElements],
   )
   const canSit = !renderer2d && hasSeats
