@@ -13,6 +13,8 @@ export function selectionKey(ref: SelectionRef): string {
       return `region:${ref.uuid}`
     case 'rigging':
       return `rigging:${ref.uuid}`
+    case 'element':
+      return `element:${ref.uuid}`
   }
 }
 

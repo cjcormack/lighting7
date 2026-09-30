@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronUp, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { FixturePatch } from '../../api/patchApi'
+import type { FixturePatch } from '../../../api/patchApi'
 
 interface UnplacedTrayProps {
   unplaced: FixturePatch[]
@@ -28,8 +28,10 @@ interface UnplacedTrayProps {
  * bulk panel, and the tray needs to be visible *at the same time* as the form for
  * click-to-place to make sense.
  *
- * Placement is click-to-arm then click-on-canvas, not HTML5 drag-and-drop, which
- * is unreliable as a drop target over SVG.
+ * Placement is click-to-arm then click-on-canvas, not HTML5 drag-and-drop, and it
+ * is offered on the Plan, Front and Side sections while editing, where a click
+ * lands exactly where it says (the section edit layer places it, snapped to the
+ * grid). On the orbit camera a click has no plane to mean, so the tray is not drawn.
  */
 export function UnplacedTray({
   unplaced,

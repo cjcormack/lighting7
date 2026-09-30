@@ -1,8 +1,8 @@
 import { Maximize2, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { ScreenPoint, StageProjection } from '../../lib/stageProjection'
+import type { ScreenPoint, StageProjection } from '../../../lib/stageProjection'
 
-interface Stage2DHudProps {
+interface SectionHudProps {
   projection: StageProjection
   /** Pointer position in screen-metres, or null when the pointer is outside. */
   cursor: ScreenPoint | null
@@ -16,17 +16,17 @@ interface Stage2DHudProps {
 }
 
 /**
- * Chrome over the canvas: the axis legend, a live cursor readout in metres, the
+ * Chrome over a section while editing: the axis legend, a live cursor readout in metres, the
  * snap step, and the zoom controls.
  *
- * DOM rather than SVG, so text isn't subject to the metre viewBox and needs no
- * inverse scaling.
+ * DOM rather than the layer's SVG, so text isn't subject to the metre viewBox and needs no
+ * inverse scaling. Kept clear of the viewpoint caption, which the canvas draws top right.
  *
  * The axis legend is not decoration. The side elevation looks along −X, and
  * whether "upstage" runs left or right in a section is exactly the sort of thing
  * that's ambiguous in prose but obvious once labelled on the axis.
  */
-export function Stage2DHud({
+export function SectionHud({
   projection,
   cursor,
   snapStepM,
@@ -34,7 +34,7 @@ export function Stage2DHud({
   onZoomIn,
   onZoomOut,
   notice,
-}: Stage2DHudProps) {
+}: SectionHudProps) {
   return (
     <>
       <div className="pointer-events-none absolute left-2 top-2 flex flex-col gap-1">
@@ -66,7 +66,7 @@ export function Stage2DHud({
         <Button size="icon" variant="outline" className="size-7" onClick={onZoomIn} aria-label="Zoom in">
           <Plus className="size-3.5" />
         </Button>
-        <Button size="icon" variant="outline" className="size-7" onClick={onFit} aria-label="Fit to stage">
+        <Button size="icon" variant="outline" className="size-7" onClick={onFit} aria-label="Fit to the rig">
           <Maximize2 className="size-3.5" />
         </Button>
       </div>

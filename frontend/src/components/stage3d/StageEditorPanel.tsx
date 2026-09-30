@@ -4,14 +4,18 @@ import { Button } from '@/components/ui/button'
 import { EditPatchForm, type EditPatchFormHandle } from '@/components/patches/EditPatchForm'
 import { EditStageRegionForm, type EditStageRegionFormHandle } from '@/components/stage/EditStageRegionForm'
 import { EditRiggingForm, type EditRiggingFormHandle } from '@/components/rigging/EditRiggingForm'
+import { EditSceneElementForm, type EditSceneElementFormHandle } from '@/components/stage/EditSceneElementForm'
 import type { FixturePatch } from '@/api/patchApi'
 import type { StageRegionDto } from '@/api/stageRegionApi'
 import type { RiggingDto } from '@/api/riggingApi'
+import type { StageElementDto } from '@/api/stageElementApi'
 
 export type StageEditorTarget =
   | { kind: 'patch'; patch: FixturePatch }
   | { kind: 'region'; region: StageRegionDto | null }
   | { kind: 'rigging'; rigging: RiggingDto | null }
+  /** A scene element: scenery or the venue (stage-view plan session 5). */
+  | { kind: 'element'; element: StageElementDto }
 
 interface StageEditorPanelProps {
   target: StageEditorTarget
@@ -22,6 +26,7 @@ interface StageEditorPanelProps {
   patchRef?: Ref<EditPatchFormHandle>
   regionRef?: Ref<EditStageRegionFormHandle>
   riggingRef?: Ref<EditRiggingFormHandle>
+  elementRef?: Ref<EditSceneElementFormHandle>
 }
 
 export function StageEditorPanel({
@@ -33,6 +38,7 @@ export function StageEditorPanel({
   patchRef,
   regionRef,
   riggingRef,
+  elementRef,
 }: StageEditorPanelProps) {
   return (
     <aside className="relative flex w-full flex-col border-l bg-background sm:w-[360px]">
@@ -71,6 +77,15 @@ export function StageEditorPanel({
           ref={riggingRef}
           key={`rigging-${target.rigging?.uuid ?? 'new'}`}
           rigging={target.rigging}
+          projectId={projectId}
+          onClose={onDismiss}
+        />
+      )}
+      {target.kind === 'element' && (
+        <EditSceneElementForm
+          ref={elementRef}
+          key={`element-${target.element.uuid}`}
+          element={target.element}
           projectId={projectId}
           onClose={onDismiss}
         />

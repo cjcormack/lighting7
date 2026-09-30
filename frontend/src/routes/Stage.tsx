@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Grid2x2, Loader2, Move, Pencil, Plus, RotateCw } from 'lucide-react'
+import { ChevronDown, Grid2x2, Loader2, Move, Pencil, Plus, RotateCw } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -13,6 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { useViewedProject } from '../ProjectSwitcher'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useUpdatePatchMutation, usePatchListQuery, useVisiblePatchListQuery } from '../store/patches'
@@ -29,9 +36,11 @@ import {
 import {
   placementUnchanged,
   useDragOrigin,
+  writeElementPlacement,
   writePatchPlacement,
   writeRegionPlacement,
   writeRiggingPlacement,
+  type ElementPlacementValues,
   type PatchPlacementValues,
   type RegionPlacementValues,
   type RiggingPlacementValues,
@@ -40,6 +49,7 @@ import { formatError } from '../lib/formatError'
 import { isEditableTarget } from '../lib/domUtils'
 import {
   Stage3D,
+  type ElementPositionUpdate,
   type GizmoMode,
   type PatchPlacementUpdate,
   type PlacementPoint,
@@ -91,7 +101,11 @@ import {
 import { readEyePose, readOrbitPose } from '../lib/stageCameraPoses'
 import { seatingParams } from '../lib/stageSeats'
 import { useStageViewpointListQuery } from '../store/stageViewpoints'
-import { useStageElementListQuery } from '../store/stageElements'
+import {
+  useCreateStageElementMutation,
+  useStageElementListQuery,
+  useUpdateStageElementMutation,
+} from '../store/stageElements'
 import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
 import { useDeskSelection } from '../store/selection'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
@@ -102,17 +116,23 @@ import { setVisSource, useVisSource } from '../hooks/useVisSource'
 import { useNextGoStatus } from '../hooks/useNextGoPreview'
 import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { useModifierHeld } from '../components/stage3d/useShiftHeld'
-import { useSnapGrid, SNAP_STEPS_M, type SnapStep } from '../components/stage2d/useSnapGrid'
-import { Stage2DView } from '../components/stage2d/Stage2DView'
+import { useSnapGrid, SNAP_STEPS_M, type SnapStep } from '../components/stage3d/edit/useSnapGrid'
 import {
   useStageSelection,
   type SelectIntent,
   type SelectionRef,
 } from '../components/stage3d/useStageSelection'
-import { useStageNudge } from '../components/stage2d/useStageNudge'
-import { StageBulkPanel } from '../components/stage2d/StageBulkPanel'
-import { UnplacedTray } from '../components/stage2d/UnplacedTray'
-import { StageShortcutsPopover } from '../components/stage2d/StageShortcutsPopover'
+import { useStageNudge } from '../components/stage3d/edit/useStageNudge'
+import { StageBulkPanel } from '../components/stage3d/edit/StageBulkPanel'
+import { UnplacedTray } from '../components/stage3d/edit/UnplacedTray'
+import { StageShortcutsPopover } from '../components/stage3d/edit/StageShortcutsPopover'
+import {
+  SCENERY_PRESETS,
+  sceneryNoun,
+  sceneryPreset,
+  sceneryRequest,
+  type SceneryPreset,
+} from '../components/stage3d/edit/sceneryKinds'
 import { useUnplacedPatches } from '../hooks/useUnplacedPatches'
 import { resolveBulkTargets, unplaceTargets } from '../lib/stageBulkOps'
 import { commitPlacements, type PlacementChange } from '../store/stagePlacement'
@@ -129,12 +149,21 @@ import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
 import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
 import type { EditRiggingFormHandle } from '../components/rigging/EditRiggingForm'
+import type { EditSceneElementFormHandle } from '../components/stage/EditSceneElementForm'
 import type { FixturePatch } from '../api/patchApi'
 import type { StageRegionDto } from '../api/stageRegionApi'
 import type { RiggingDto } from '../api/riggingApi'
+import type { StageElementDto } from '../api/stageElementApi'
 import { useMediaQuery, SM_BREAKPOINT } from '../hooks/useMediaQuery'
 
 const REGION_DEFAULT_SIZE_M = 2
+
+/** What a click on the stage will place: a region, a rigging, or a piece of scenery (`+ Scenery`). */
+type Placing = { kind: 'region' } | { kind: 'rigging' } | { kind: 'scenery'; preset: SceneryPreset }
+
+function placingNoun(placing: Placing): string {
+  return placing.kind === 'scenery' ? sceneryNoun(placing.preset) : placing.kind
+}
 // Fallback truss height when the project doesn't declare a stage height.
 const FALLBACK_TRUSS_HEIGHT_M = 4.5
 
@@ -154,12 +183,23 @@ function nextDefaultName(prefix: string, existing: { name: string }[] | undefine
   return `${prefix} ${max + 1}`
 }
 
+/** `Hall copy`, then `Hall copy 2`… — an element's name is unique in its project. */
+function nextCopyName(name: string, existing: { name: string }[] | undefined): string {
+  const taken = new Set((existing ?? []).map((e) => e.name))
+  const first = `${name} copy`
+  if (!taken.has(first)) return first
+  for (let n = 2; ; n++) {
+    const candidate = `${name} copy ${n}`
+    if (!taken.has(candidate)) return candidate
+  }
+}
+
 export function Stage() {
   const project = useViewedProject()
   const projectId = project?.id
   // This window's camera (`lib/stageViewpoint.ts`): per tab, announced to the Screens sheet, and
-  // settable from another window. Plan, Front and Side are sections of the 3D scene; the SVG plot
-  // draws them only while editing, until 3D editing has parity (stage-view plan D1, session 5).
+  // settable from another window. Plan, Front and Side are sections of the 3D scene, and editing on
+  // one is the edit layer over it (stage-view plan D1, session 5).
   const viewpoint = useStageViewpoint()
   // Multi-object selection. `Selection` itself stays single-valued — a dozen
   // consumers read it structurally — so everything that wants one target gets
@@ -175,7 +215,7 @@ export function Stage() {
     reconcile: reconcileSelection,
   } = sel
   const [editMode, setEditMode] = useState(false)
-  const [placing, setPlacing] = useState<'region' | 'rigging' | null>(null)
+  const [placing, setPlacing] = useState<Placing | null>(null)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   const [gizmoModeManual, setGizmoModeManual] = useState<GizmoMode>('translate')
   const { flags: viewFlags, setFlag: setViewFlag, setLabelMode } = useStageView()
@@ -188,19 +228,21 @@ export function Stage() {
   // Reads the same cached queries the Next GO source does, so it costs no extra request.
   const nextGoStatus = useNextGoStatus(visSource === 'nextGo')
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
-  // One snap preference for both views — see useSnapGrid on why Shift now
+  // One snap preference for every camera — see useSnapGrid on why Shift
   // *disables* snapping rather than enabling it.
   const snap = useSnapGrid(editMode && isTabletOrLarger)
 
   const patchFormRef = useRef<EditPatchFormHandle>(null)
   const regionFormRef = useRef<EditStageRegionFormHandle>(null)
   const riggingFormRef = useRef<EditRiggingFormHandle>(null)
+  const elementFormRef = useRef<EditSceneElementFormHandle>(null)
 
   // Pre-drag state per object, so a settle can tell a real move from a bare
   // click and a rejected write can be rolled back to where the drag started.
   const patchOrigin = useDragOrigin<PatchPlacementValues>()
   const regionOrigin = useDragOrigin<RegionPlacementValues>()
   const riggingOrigin = useDragOrigin<RiggingPlacementValues>()
+  const elementOrigin = useDragOrigin<ElementPlacementValues>()
 
   const { data: projectData } = useProjectQuery(projectId ?? 0, { skip: projectId == null })
   const { data: patches } = usePatchListQuery(projectId ?? 0, { skip: projectId == null })
@@ -295,13 +337,16 @@ export function Stage() {
   const [updateRigging] = useUpdateRiggingMutation()
   const [createRegion] = useCreateStageRegionMutation()
   const [createRigging] = useCreateRiggingMutation()
+  const [createElement] = useCreateStageElementMutation()
+  const [updateElement] = useUpdateStageElementMutation()
 
   // Editing works in every view now — only the tablet+ width gate remains, since
   // the gizmos and side panels need the room.
   const showEditToggle = isTabletOrLarger
   const editingActive = editMode && isTabletOrLarger
-  // Editing on a section is still the SVG plot's job (D1); every other combination is the 3D scene.
-  const renderer2d = editingActive && isOrtho
+  // Editing on a section: the edit layer over the canvas takes the pointer — marquee, snap, guides,
+  // handles, the tray's placements — and draws in the section's metres (D1, session 5).
+  const sectionEditing = editingActive && isOrtho
   const projection = isOrthoCamera(camera) ? STAGE_PROJECTIONS[camera] : STAGE_PROJECTIONS.plan
 
   // `?viewpoint=` and `?source=` — a Screens row's *Copy link* carries both — applied once on arrival
@@ -324,6 +369,7 @@ export function Stage() {
       patchOrigin.clear()
       regionOrigin.clear()
       riggingOrigin.clear()
+      elementOrigin.clear()
     }
     // Keys off editingActive rather than [mode, editMode], so it now also clears
     // when the viewport drops below the tablet breakpoint — which is correct,
@@ -331,18 +377,24 @@ export function Stage() {
     // Narrowed to the stable callbacks rather than the whole `sel` object, which
     // is a fresh literal each render and would re-run this on every selection
     // change.
-  }, [editingActive, clearSelection, patchOrigin, regionOrigin, riggingOrigin])
+  }, [editingActive, clearSelection, patchOrigin, regionOrigin, riggingOrigin, elementOrigin])
 
   useEffect(() => {
     if (!isTabletOrLarger && editMode) setEditMode(false)
   }, [isTabletOrLarger, editMode])
+
+  // The tray is a section's (a click there lands exactly where it says): leaving the section, or
+  // editing, puts back whatever was armed rather than leaving it armed out of sight.
+  useEffect(() => {
+    if (!sectionEditing) setArmedKeys((prev) => (prev.size === 0 ? prev : new Set()))
+  }, [sectionEditing])
 
   // Drop selection entries whose object has gone. The lists refetch on every
   // WebSocket change — including other operators' deletes — so without this a
   // multi-selection would either strand a dead ref or have to be thrown away
   // wholesale on any change.
   useEffect(() => {
-    if (patches == null && regions == null && riggings == null) return
+    if (patches == null && regions == null && riggings == null && sceneElements == null) return
     reconcileSelection((ref) => {
       switch (ref.kind) {
         case 'patch':
@@ -351,9 +403,11 @@ export function Stage() {
           return (regions ?? []).some((r) => r.uuid === ref.uuid)
         case 'rigging':
           return (riggings ?? []).some((r) => r.uuid === ref.uuid)
+        case 'element':
+          return (sceneElements ?? []).some((e) => e.uuid === ref.uuid)
       }
     })
-  }, [patches, regions, riggings, reconcileSelection])
+  }, [patches, regions, riggings, sceneElements, reconcileSelection])
 
   // — bulk operations ————————————————————————————————————————————————
 
@@ -437,10 +491,10 @@ export function Stage() {
   // picked it. Read through a ref by the key listener, which binds once.
   const framePointsRef = useRef<() => ReturnType<typeof stageSelectionPoints>>(() => [])
   framePointsRef.current = () => {
-    const own = stageSelectionPoints(sel.refs, patches ?? [], riggings ?? [], regions ?? [])
+    const own = stageSelectionPoints(sel.refs, patches ?? [], riggings ?? [], regions ?? [], sceneElements ?? [])
     return own.length > 0 ? own : deskSelectionPoints(deskSelection, patches ?? [], riggings ?? [])
   }
-  const canFrame = !renderer2d && (sel.count > 0 || deskSelection.length > 0)
+  const canFrame = sel.count > 0 || deskSelection.length > 0
   const frameSelection = useCallback(() => {
     const points = framePointsRef.current()
     if (points.length > 0) framingRef.current?.frame(points)
@@ -479,7 +533,9 @@ export function Stage() {
     () => (sceneElements ?? []).some((e) => e.kind === 'SEATING' && isElementShown(e) && seatingParams(e) != null),
     [sceneElements],
   )
-  const canSit = !renderer2d && hasSeats
+  // Not while editing on a section: the edit layer holds the pointer there, and a pick would hand
+  // it back to the scene mid-edit — the route and the canvas must agree on which one has it.
+  const canSit = hasSeats && !sectionEditing
   const startSitting = useCallback(() => {
     if (!canSit) return
     if (!sceneLayers.seating) setSceneLayer('seating', true)
@@ -538,7 +594,7 @@ export function Stage() {
   const flippedGizmoMode: GizmoMode = gizmoModeManual === 'translate' ? 'rotate' : 'translate'
   const gizmoMode: GizmoMode = altHeld ? flippedGizmoMode : gizmoModeManual
 
-  // ⌘D / Ctrl+D duplicates the selected region or rigging, offset by 1m on X.
+  // ⌘D / Ctrl+D duplicates the selected region, rigging or piece of scenery, offset by 1m on X.
   // Live data is read through refs so the listener doesn't re-bind on every
   // optimistic store update (which would mean add/remove per drag frame).
   const selectionRef = useRef(selection)
@@ -547,13 +603,15 @@ export function Stage() {
   regionsRef.current = regions
   const riggingsRef = useRef(riggings)
   riggingsRef.current = riggings
+  const elementsRef = useRef(sceneElements)
+  elementsRef.current = sceneElements
   useEffect(() => {
     if (!editingActive || projectId == null) return
     const onKey = async (e: KeyboardEvent) => {
       const isDuplicateShortcut = e.key.toLowerCase() === 'd' && (e.metaKey || e.ctrlKey)
       if (!isDuplicateShortcut) return
       const target = selectionRef.current
-      if (target?.kind !== 'region' && target?.kind !== 'rigging') return
+      if (target?.kind !== 'region' && target?.kind !== 'rigging' && target?.kind !== 'element') return
       // Don't hijack when the user is typing into a form field.
       if (isEditableTarget(document.activeElement)) return
       e.preventDefault()
@@ -573,6 +631,28 @@ export function Stage() {
             yawDeg: source.yawDeg,
           }).unwrap()
           selectOne({ kind: 'region', uuid: created.uuid })
+        } else if (target.kind === 'element') {
+          const source = elementsRef.current?.find((e) => e.uuid === target.uuid)
+          if (!source) return
+          const created = await createElement({
+            projectId,
+            name: nextCopyName(source.name, elementsRef.current),
+            kind: source.kind,
+            layer: source.layer,
+            positionX: source.positionX + 1,
+            positionY: source.positionY,
+            positionZ: source.positionZ,
+            yawDeg: source.yawDeg,
+            widthM: source.widthM,
+            depthM: source.depthM,
+            heightM: source.heightM,
+            finishColour: source.finishColour,
+            finishPattern: source.finishPattern,
+            emissive: source.emissive,
+            params: source.params,
+            hidden: source.hidden,
+          }).unwrap()
+          selectOne({ kind: 'element', uuid: created.uuid })
         } else {
           const source = riggingsRef.current?.find((r) => r.uuid === target.uuid)
           if (!source) return
@@ -596,7 +676,7 @@ export function Stage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editingActive, projectId, createRegion, createRigging, selectOne])
+  }, [editingActive, projectId, createRegion, createRigging, createElement, selectOne])
 
   // — drag persistence ————————————————————————————————————————————————
   //
@@ -661,16 +741,17 @@ export function Stage() {
             baseYawDeg: nextBaseYaw,
             basePitchDeg: nextBasePitch,
           })
-        } else if (!rotateUpdate && renderer2d) {
-          // A 2D translate MUST write per frame: the SVG draws fixtures straight
-          // from the RTK cache, so without this the dot and its label sit frozen
-          // at the pre-drag position for the whole gesture and teleport on
+        } else if (!rotateUpdate && sectionEditing) {
+          // A drag on a section MUST write per frame: the fixture is drawn from
+          // the RTK cache, so without this the body and its label sit frozen at
+          // the pre-drag position for the whole gesture and teleport on
           // pointerup — while the guides and the truss drop-target highlight
-          // track the cursor, so the feedback actively contradicts itself.
+          // track the pointer, so the feedback actively contradicts itself.
           //
-          // 3D translate is deliberately excluded: Stage3D mirrors its drag proxy
-          // onto the body imperatively, so a store write per frame would re-render
-          // the whole scene to move the mesh somewhere it already is.
+          // The orbit camera's gizmo is deliberately excluded: Stage3D mirrors
+          // its drag proxy onto the body imperatively, so a store write per frame
+          // would re-render the whole scene to move the mesh somewhere it
+          // already is.
           writePatchPlacement(projectId, patch.id, values)
         }
         return
@@ -692,7 +773,7 @@ export function Stage() {
         .unwrap()
         .catch(() => writePatchPlacement(projectId, patch.id, origin))
     },
-    [projectId, updatePatch, patchOrigin, renderer2d],
+    [projectId, updatePatch, patchOrigin, sectionEditing],
   )
 
   const handleRegionPositionChange = useCallback(
@@ -798,6 +879,38 @@ export function Stage() {
     [projectId, updateRigging, riggingOrigin],
   )
 
+  const handleElementPositionChange = useCallback(
+    (element: StageElementDto, next: ElementPositionUpdate, settled: boolean) => {
+      if (projectId == null) return
+      const snapshot: ElementPlacementValues = {
+        positionX: element.positionX,
+        positionY: element.positionY,
+        positionZ: element.positionZ,
+      }
+      elementOrigin.remember(element.id, snapshot)
+      const values: ElementPlacementValues = { ...next }
+      elementFormRef.current?.setPosition(values)
+      // Every frame, so the piece follows the pointer: the scene builds it from the cache.
+      writeElementPlacement(projectId, element.id, values)
+      if (!settled) return
+
+      const origin = elementOrigin.take(element.id) ?? snapshot
+      if (placementUnchanged(values, origin)) {
+        writeElementPlacement(projectId, element.id, origin)
+        return
+      }
+      // updateStageElement is in SILENT_ENDPOINTS (the element form draws its refusals beside
+      // its fields), so this call site has to raise its own.
+      updateElement({ projectId, elementId: element.id, ...values })
+        .unwrap()
+        .catch((err) => {
+          writeElementPlacement(projectId, element.id, origin)
+          toast.error(`Failed to move ${element.name}: ${formatError(err)}`)
+        })
+    },
+    [projectId, updateElement, elementOrigin],
+  )
+
   if (projectId == null) {
     return (
       <Card className="m-4 p-4 flex items-center justify-center">
@@ -808,7 +921,7 @@ export function Stage() {
 
   // Patch key may point at a stale id during list refetches — drop the target
   // until the new row arrives so the form doesn't render against missing data.
-  const panelTarget = resolvePanelTarget(selection, patches, regions, riggings)
+  const panelTarget = resolvePanelTarget(selection, patches, regions, riggings, sceneElements)
 
   // Multi-selection takes the rail: the single-target edit form has no meaning
   // for several objects at once, and mixed-value fields aren't what makes rigging
@@ -832,8 +945,8 @@ export function Stage() {
     setPanelCollapsed(false)
   }
 
-  const togglePlacing = (kind: 'region' | 'rigging') => {
-    setPlacing((prev) => (prev === kind ? null : kind))
+  const togglePlacing = (next: Placing) => {
+    setPlacing((prev) => (prev != null && placingNoun(prev) === placingNoun(next) ? null : next))
     clearSelection()
   }
 
@@ -844,7 +957,8 @@ export function Stage() {
 
   // Match the placement-click raycast plane to the height the new object lives
   // at, so the user sees the new object exactly where they clicked.
-  const placementZ = placing === 'rigging' ? trussZ : 0
+  const placementZ =
+    placing?.kind === 'rigging' ? trussZ : placing?.kind === 'scenery' ? sceneryPreset(placing.preset).placementZ : 0
 
   // Fallback for whichever axis the active view can't learn from a click. Each
   // view fills its own out-of-plane coordinate from this, so the point arriving
@@ -852,6 +966,16 @@ export function Stage() {
   //   plan       → learns X and Y, takes Z from here
   //   front      → learns X and Z, takes Y from here (mid-stage)
   //   side       → learns Y and Z, takes X from here (centre line)
+  // What the canvas's hint says a click will place: the armed create, or the tray's fixtures.
+  const placingLabel =
+    placing != null
+      ? placingNoun(placing)
+      : sectionEditing && armedKeys.size > 0
+        ? armedKeys.size === 1
+          ? 'the fixture'
+          : `${armedKeys.size} fixtures`
+        : null
+
   const placementDefault = {
     x: 0,
     y: (projectData?.stageDepthM ?? DEFAULT_STAGE_DIMS.depthM) / 2,
@@ -892,10 +1016,16 @@ export function Stage() {
     if (placing == null || projectId == null) return
     // Clear placing eagerly so a quick second click during the in-flight create
     // doesn't fire a duplicate placement.
-    const kind = placing
+    const armed = placing
     setPlacing(null)
     try {
-      if (kind === 'region') {
+      if (armed.kind === 'scenery') {
+        const created = await createElement({
+          projectId,
+          ...sceneryRequest(armed.preset, p, nextDefaultName(sceneryPreset(armed.preset).label, sceneElements)),
+        }).unwrap()
+        selectOne({ kind: 'element', uuid: created.uuid })
+      } else if (armed.kind === 'region') {
         const created = await createRegion({
           projectId,
           name: nextDefaultName('Region', regions),
@@ -952,7 +1082,7 @@ export function Stage() {
             onFrame={frameSelection}
             canFrame={canFrame}
             onSave={openSaveSheet}
-            canSave={!renderer2d && !isOrtho && projectId != null}
+            canSave={!isOrtho && projectId != null}
             onSit={startSitting}
             canSit={canSit}
             sitting={sitting}
@@ -978,27 +1108,55 @@ export function Stage() {
             <>
               <Button
                 size="sm"
-                variant={placing === 'region' ? 'default' : 'outline'}
-                onClick={() => togglePlacing('region')}
-                aria-pressed={placing === 'region'}
+                variant={placing?.kind === 'region' ? 'default' : 'outline'}
+                onClick={() => togglePlacing({ kind: 'region' })}
+                aria-pressed={placing?.kind === 'region'}
               >
                 <Plus className="size-3.5 mr-1" />
                 Region
               </Button>
               <Button
                 size="sm"
-                variant={placing === 'rigging' ? 'default' : 'outline'}
-                onClick={() => togglePlacing('rigging')}
-                aria-pressed={placing === 'rigging'}
+                variant={placing?.kind === 'rigging' ? 'default' : 'outline'}
+                onClick={() => togglePlacing({ kind: 'rigging' })}
+                aria-pressed={placing?.kind === 'rigging'}
               >
                 <Plus className="size-3.5 mr-1" />
                 Rigging
               </Button>
+              {/* `Edit.dc.html` §1: the seven kinds, tabs and a flown piece, each armed to be placed
+                  with a click on the stage like a region, then edited in the element form. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant={placing?.kind === 'scenery' ? 'default' : 'outline'}
+                    aria-pressed={placing?.kind === 'scenery'}
+                  >
+                    <Plus className="size-3.5 mr-1" />
+                    {placing?.kind === 'scenery' ? sceneryPreset(placing.preset).label : 'Scenery'}
+                    <ChevronDown className="size-3.5 ml-1 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-60">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Add to the scene</DropdownMenuLabel>
+                  {SCENERY_PRESETS.map((preset) => (
+                    <DropdownMenuItem
+                      key={preset.id}
+                      onSelect={() => togglePlacing({ kind: 'scenery', preset: preset.id })}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span>{preset.label}</span>
+                      <span className="text-xs text-muted-foreground">{preset.hint}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
-          {/* 3D only: this drives drei's TransformControls, which has no 2D
-              analogue — a 2D fixture drag is always a move. */}
-          {editingActive && !renderer2d && selection?.kind === 'patch' && (
+          {/* The orbit and eye cameras only: this drives drei's TransformControls,
+              which a section does not use — a fixture drag on a section is always a move. */}
+          {editingActive && !sectionEditing && selection?.kind === 'patch' && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <ToggleGroup
@@ -1056,22 +1214,17 @@ export function Stage() {
             </Tooltip>
           )}
           {editingActive && <StageShortcutsPopover />}
-          {/* Shown in every view now — the 2D plot honours the same flags. Beam cones are 3D-only,
-              so that entry drops out there. */}
           <StageViewMenu
             flags={viewFlags}
             setFlag={setViewFlag}
             setLabelMode={setLabelMode}
-            hide={renderer2d ? ['beamCones'] : undefined}
-            onTestRecovery={
-              renderer2d ? undefined : () => recoveryRef.current?.testContextLoss()
-            }
+            onTestRecovery={() => recoveryRef.current?.testContextLoss()}
             visSource={visSource}
             setVisSource={setVisSource}
             sourceStatus={{ nextGo: nextGoStatus }}
-            layers={renderer2d ? undefined : sceneLayers}
+            layers={sceneLayers}
             setLayer={setSceneLayer}
-            lightBudget={renderer2d ? undefined : lightBudget}
+            lightBudget={lightBudget}
             setLightBudget={setLightBudget}
           />
           {showEditToggle && (
@@ -1099,56 +1252,42 @@ export function Stage() {
                 StageFixtureControlPanel below is a live editing surface and has to keep
                 reading real output whatever the selector is previewing. */}
             <StageChannelSourceProvider>
-              {!renderer2d ? (
-                <Stage3D
-                  projectId={projectId}
-                  camera={camera}
-                  landing={landing}
-                  persistCamera
-                  caption={caption}
-                  showScene
-                  layers={sceneLayers}
-                  lightBudget={lightBudget}
-                  seatPicking={seatPicking}
-                  framingRef={framingRef}
-                  editMode={editingActive}
-                  selection={selection}
-                  placing={placing}
-                  placementZ={placementZ}
-                  view={viewFlags}
-                  gizmoMode={gizmoMode}
-                  snap={snap}
-                  hidePatchSelectionInfo={showControlPanel}
-                  onSelectionChange={handleSelectionChange}
-                  onPlacementClick={handlePlacementClick}
-                  onPatchPlacementChange={handlePatchPlacementChange}
-                  onRegionPositionChange={handleRegionPositionChange}
-                  onRiggingPositionChange={handleRiggingPositionChange}
-                  recoveryRef={recoveryRef}
-                />
-              ) : (
-                <Stage2DView
-                  projectId={projectId}
-                  projection={projection}
-                  selection={selection}
-                  selectedKeys={sel.selectedKeys}
-                  editMode={editingActive}
-                  view={viewFlags}
-                  snap={snap}
-                  // A canvas click also lands tray-armed fixtures, so the view must
-                  // treat it as a placement click even when no create is armed.
-                  placing={placing ?? (armedKeys.size > 0 ? 'region' : null)}
-                  placementDefault={placementDefault}
-                  onSelectionChange={handleSelectionChange}
-                  onMarqueeSelect={(refs, intent) => sel.selectMany(refs, intent)}
-                  onPlacementClick={handlePlacementClick}
-                  onPatchPlacementChange={handlePatchPlacementChange}
-                  onRegionPositionChange={handleRegionPositionChange}
-                  onRiggingPositionChange={handleRiggingPositionChange}
-                />
-              )}
+              <Stage3D
+                projectId={projectId}
+                camera={camera}
+                landing={landing}
+                persistCamera
+                caption={caption}
+                showScene
+                layers={sceneLayers}
+                lightBudget={lightBudget}
+                seatPicking={seatPicking}
+                framingRef={framingRef}
+                editMode={editingActive}
+                selection={selection}
+                selectedKeys={sel.selectedKeys}
+                // A click on the stage also lands tray-armed fixtures, so the canvas must treat it as
+                // a placement even when no create is armed.
+                placing={placingLabel}
+                placementZ={placementZ}
+                placementDefault={placementDefault}
+                view={viewFlags}
+                gizmoMode={gizmoMode}
+                snap={snap}
+                hidePatchSelectionInfo={showControlPanel}
+                onSelectionChange={handleSelectionChange}
+                onMarqueeSelect={(refs, intent) => sel.selectMany(refs, intent)}
+                onPlacementClick={handlePlacementClick}
+                onPatchPlacementChange={handlePatchPlacementChange}
+                onRegionPositionChange={handleRegionPositionChange}
+                onRiggingPositionChange={handleRiggingPositionChange}
+                onElementPositionChange={handleElementPositionChange}
+                recoveryRef={recoveryRef}
+              />
             </StageChannelSourceProvider>
-            {renderer2d && (
+            {/* On a section, where a click lands exactly where it says: the tray arms fixtures and
+                the next click on the stage places them. */}
+            {sectionEditing && (
               <UnplacedTray
                 unplaced={unplaced}
                 armedKeys={armedKeys}
@@ -1181,6 +1320,7 @@ export function Stage() {
               projection={projection}
               regionCount={sel.refs.filter((r) => r.kind === 'region').length}
               riggingCount={sel.refs.filter((r) => r.kind === 'rigging').length}
+              elementCount={sel.refs.filter((r) => r.kind === 'element').length}
               onApply={applyBulk}
               onDismiss={() => clearSelection()}
             />
@@ -1195,6 +1335,7 @@ export function Stage() {
               patchRef={patchFormRef}
               regionRef={regionFormRef}
               riggingRef={riggingFormRef}
+              elementRef={elementFormRef}
             />
           )}
           {showPanelStub && <StageEditorPanelStub onExpand={() => setPanelCollapsed(false)} />}
@@ -1203,6 +1344,7 @@ export function Stage() {
               patches={stagePatches ?? []}
               regions={regions ?? []}
               riggings={riggings ?? []}
+              elements={sceneElements ?? []}
               onSelect={handleSelectionChange}
             />
           )}
@@ -1250,6 +1392,7 @@ function resolvePanelTarget(
   patches: FixturePatch[] | undefined,
   regions: StageRegionDto[] | undefined,
   riggings: RiggingDto[] | undefined,
+  elements: StageElementDto[] | undefined,
 ): StageEditorTarget | null {
   if (selection?.kind === 'patch') {
     const p = patches?.find((x) => x.key === selection.patchKey)
@@ -1260,6 +1403,11 @@ function resolvePanelTarget(
   }
   if (selection?.kind === 'rigging') {
     return { kind: 'rigging', rigging: findByUuid(riggings, selection.uuid) }
+  }
+  if (selection?.kind === 'element') {
+    // Like a patch: no form against a row that has gone mid-refetch.
+    const element = findByUuid(elements, selection.uuid)
+    return element ? { kind: 'element', element } : null
   }
   return null
 }

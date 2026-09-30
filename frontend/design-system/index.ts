@@ -63,6 +63,6 @@ export { PromptBookToolbar } from "../src/components/promptbook/PromptBookToolba
 export { ToolPalette } from "../src/components/promptbook/ToolPalette"
 export { FloatingSelectionToolbar } from "../src/components/promptbook/FloatingSelectionToolbar"
 
-// Stage 2D
-export { Stage2DHud } from "../src/components/stage2d/Stage2DHud"
-export { StageShortcutsPopover } from "../src/components/stage2d/StageShortcutsPopover"
+// Stage editing (the Plan, Front and Side sections)
+export { SectionHud } from "../src/components/stage3d/edit/SectionHud"
+export { StageShortcutsPopover } from "../src/components/stage3d/edit/StageShortcutsPopover"

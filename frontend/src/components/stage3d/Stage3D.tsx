@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { RotateCcw } from 'lucide-react'
 import { Edges, Text, TransformControls } from '@react-three/drei'
@@ -12,7 +12,10 @@ import { FixtureModel } from './FixtureModel'
 import { RegionEditHandles } from './RegionEditHandles'
 import { RiggingEndpointHandles } from './RiggingEndpointHandles'
 import { SNAP_ANGLE_DEG } from './useShiftHeld'
-import type { SnapGrid } from '../stage2d/useSnapGrid'
+import type { SnapGrid } from './edit/useSnapGrid'
+import { SectionEditLayer } from './edit/SectionEditLayer'
+import { createSectionViewStore } from './edit/sectionView'
+import { selectionKey, type SelectIntent, type SelectionRef } from './useStageSelection'
 import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
@@ -28,6 +31,7 @@ import {
   sceneBuilds,
   sceneColliders,
   sceneElementBounds,
+  type SceneBuildCache,
 } from './scene/stageSurfaces'
 import { buildEmitterLayout } from './emitterLayout'
 import { emitterNeedsFor } from './emitterNeeds'
@@ -41,7 +45,7 @@ import {
   type StageCameraLanding,
 } from './StageCameraRig'
 import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
-import type { StageCamera } from '../../lib/stageViewpoint'
+import { isOrthoCamera, type StageCamera } from '../../lib/stageViewpoint'
 import { useStageElementListQuery } from '../../store/stageElements'
 import type { LightingPoint } from '../../lib/stageProjection'
 // drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
@@ -53,6 +57,7 @@ import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
 import { lanternsFor } from './lanterns'
 import type { StageRegionDto } from '../../api/stageRegionApi'
+import type { StageElementDto } from '../../api/stageElementApi'
 import {
   fromThree,
   normaliseSignedDeg,
@@ -61,6 +66,7 @@ import {
   worldPositionLighting,
 } from '../../lib/stageCoords'
 import type {
+  ElementPositionUpdate,
   PatchPlacementUpdate,
   PlacementPoint,
   RegionPositionUpdate,
@@ -85,17 +91,20 @@ const NO_SNAP: SnapGrid = {
 }
 const EMPTY_PATCHES: FixturePatch[] = []
 const EMPTY_REGIONS: StageRegionDto[] = []
+const EMPTY_ELEMENTS: StageElementDto[] = []
+const PLACEMENT_ORIGIN: PlacementPoint = { x: 0, y: 0, z: 0 }
 
 // TC translate handles named with >1 letter combine multiple axes (XY/XZ/YZ
 // plane drags, XYZ centre free-drag). We strip them at mount so the only
 // reachable interaction is a single-axis drag.
 const PLANE_HANDLE_NAMES = new Set(['XY', 'XZ', 'YZ', 'XYZ'])
 
-// The view-agnostic editing types live in ../stage/stageEditing so the 2D
-// editor can name them without importing this module (and with it, three.js).
-// Re-exported here so existing import sites are unaffected.
+// The view-agnostic editing types live in ../stage/stageEditing so a module that
+// only names a selection can do so without importing this one (and with it,
+// three.js). Re-exported here so existing import sites are unaffected.
 export type {
   Selection,
+  ElementPositionUpdate,
   PatchPlacementUpdate,
   RegionPositionUpdate,
   RiggingPositionUpdate,
@@ -126,25 +135,40 @@ interface Stage3DProps {
   projectId: number
   editMode: boolean
   selection: Selection
-  placing?: 'region' | 'rigging' | null
+  /** Every selected object's key (`useStageSelection`), so a multi-selection lights as one. */
+  selectedKeys?: ReadonlySet<string>
+  /**
+   * What a click on the stage will place, as the hint names it (`region`, `flat`, `3 fixtures`),
+   * or null. While set, a click places rather than selects.
+   */
+  placing?: string | null
   view?: StageViewFlags
   /** Lighting-Z (up) height of the plane the placement click should land on.
    *  Matches the new object's anchor height so the click projects WYSIWYG. */
   placementZ?: number
+  /**
+   * On a section, the axis a click cannot learn — Z in plan, Y in front, X in side — for the point a
+   * placement click lands on (`PlacementPoint`).
+   */
+  placementDefault?: PlacementPoint
   /** Which TransformControls mode the fixture gizmo runs in. The parent owns
    *  this so it can drive both a manual toggle button and a held-Alt key. */
   gizmoMode?: GizmoMode
-  /** Grid-snap state, owned by the route and shared with the 2D editor. Absent for a view that
-   *  cannot edit (the Positions panel's plan), which snaps nothing. */
+  /** Grid-snap state, owned by the route and shared by every camera's editing. Absent for a view
+   *  that cannot edit (the Positions panel's plan), which snaps nothing. */
   snap?: SnapGrid
   /** Suppress the bottom-center patch info overlay — set when the parent shows
    *  the right-hand fixture control card, so the name isn't shown twice. */
   hidePatchSelectionInfo?: boolean
-  onSelectionChange: (s: Selection) => void
+  onSelectionChange: (s: Selection, intent?: SelectIntent) => void
+  /** A marquee on a section while editing: the fixtures inside it, and how they join the selection. */
+  onMarqueeSelect?: (refs: SelectionRef[], intent: SelectIntent) => void
   onPlacementClick?: (p: PlacementPoint) => void
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
   onRegionPositionChange?: (region: StageRegionDto, next: RegionPositionUpdate, settled: boolean) => void
   onRiggingPositionChange?: (rig: RiggingDto, next: RiggingPositionUpdate, settled: boolean) => void
+  /** A scene element dragged on a section while editing. */
+  onElementPositionChange?: (element: StageElementDto, next: ElementPositionUpdate, settled: boolean) => void
   /** Filled while the canvas is mounted; see [StageRecovery]. */
   recoveryRef?: React.RefObject<StageRecovery | null>
   /** Which camera draws the scene (`lib/stageViewpoint.ts`). */
@@ -184,17 +208,21 @@ export function Stage3D({
   projectId,
   editMode,
   selection,
+  selectedKeys,
   placing,
   view = DEFAULT_VIEW_FLAGS,
   placementZ,
+  placementDefault = PLACEMENT_ORIGIN,
   gizmoMode = 'translate',
   hidePatchSelectionInfo = false,
   snap = NO_SNAP,
   onSelectionChange,
+  onMarqueeSelect,
   onPlacementClick,
   onPatchPlacementChange,
   onRegionPositionChange,
   onRiggingPositionChange,
+  onElementPositionChange,
   recoveryRef,
   camera = 'orbit',
   landing = null,
@@ -247,14 +275,21 @@ export function Stage3D({
     () => new Set(view.regions ? safeRegions.map((r) => r.uuid) : []),
     [view.regions, safeRegions],
   )
+  const buildContext = useMemo(() => ({ drawnRegionUuids }), [drawnRegionUuids])
+  const [buildCache] = useState<SceneBuildCache>(() => new WeakMap())
   const builds = useMemo(
     () =>
       showScene && sceneElements != null
-        ? sceneBuilds(sceneElements, layers, { drawnRegionUuids })
+        ? sceneBuilds(sceneElements, layers, buildContext, buildCache)
         : [],
-    [showScene, sceneElements, layers, drawnRegionUuids],
+    [showScene, sceneElements, layers, buildContext, buildCache],
   )
   const roomDrawn = useMemo(() => drawsRoom(builds), [builds])
+  // What the section edit layer can press: the elements drawn, in draw order.
+  const drawnElements = useMemo(
+    () => (builds.length === 0 ? EMPTY_ELEMENTS : builds.map((b) => b.element)),
+    [builds],
+  )
   // Every surface a beam stops at — the axial reach (`scene/beamReach.ts`). Regions stop a beam
   // only while they are drawn; the beam shaders' own region shadows still test all of them.
   const colliders = useMemo(
@@ -311,24 +346,25 @@ export function Stage3D({
   // holds the pointer. Lent by `StageCameraRig`.
   const orbitRef = useRef<StageCameraControls | null>(null)
   const cameraHandleRef = useRef<StageCameraHandle | null>(null)
-  // Snapping state is owned by the route and shared with the 2D editor, so one
-  // header control governs both views and Shift means the same thing in each.
+  // Snapping state is owned by the route and shared by every camera's editing, so
+  // one header control governs them all and Shift means the same thing in each.
   const snapActive = snap.active
   const snapActiveRef = snap.activeRef
 
   // Compare pointerdown vs pointerup positions so an orbit-drag that releases
-  // over empty space doesn't get treated as a click-to-clear.
+  // over empty space doesn't get treated as a click-to-clear. A click on nothing
+  // clears in view mode too: the fixture card and the aim panel follow the
+  // selection, and there was no way to put them away from the canvas.
   const pointerDownRef = useRef<{ x: number; y: number } | null>(null)
   const handlePointerMissed = useCallback(
     (e: MouseEvent) => {
       if (placing) return
-      if (!editMode) return
       if (e.button !== 0) return
       const d = pointerDownRef.current
       if (d && (Math.abs(e.clientX - d.x) > DRAG_PX_THRESHOLD || Math.abs(e.clientY - d.y) > DRAG_PX_THRESHOLD)) return
       onSelectionChange(null)
     },
-    [placing, editMode, onSelectionChange],
+    [placing, onSelectionChange],
   )
 
   const disableOrbit = useCallback(() => {
@@ -366,12 +402,41 @@ export function Stage3D({
     if (!editMode || selection?.kind !== 'patch') setPatchTarget(null)
   }, [editMode, selection])
 
+  // Editing on a section (stage-view plan session 5): the edit layer over the canvas owns the
+  // pointer — it hit-tests, drags, marquees, pans and zooms in the section's own metres — so the
+  // scene's own gizmo, handles and placement plane stand down. Never in a render, which edits
+  // nothing, and not while a seat pick is armed, which needs the seats to take the pointer.
+  const sectionEditing = editMode && isOrthoCamera(camera) && capture == null && seatPicking == null
+  const [sectionViewStore] = useState(createSectionViewStore)
+  const sectionControls = useCallback(() => cameraHandleRef.current?.section ?? null, [])
+  // A view reported by one section is not another's: leaving section editing, or changing
+  // section, forgets it, so the layer waits for the new camera's first report rather than
+  // hit-testing against the old one.
+  useLayoutEffect(() => {
+    sectionViewStore.clear()
+  }, [sectionEditing, camera, sectionViewStore])
+
   // Hover/click is disabled during placement so the PlacementPlane catches the
   // click. Otherwise meshes are clickable in both edit and view modes — view
   // mode uses the click for "select to inspect" (info overlay); edit mode also
   // opens the side panel.
   const interactable = !placing
-  const canEdit = editMode && interactable
+  const canEdit = editMode && interactable && !sectionEditing
+  // A multi-selection lights as one: every selected object, not just the anchor.
+  const isSelected = useCallback(
+    (ref: SelectionRef) =>
+      selectedKeys?.has(selectionKey(ref)) ??
+      (selection != null && selectionKey(selection) === selectionKey(ref)),
+    [selectedKeys, selection],
+  )
+  const selectedRegionUuids = useMemo(
+    () => new Set(safeRegions.filter((r) => isSelected({ kind: 'region', uuid: r.uuid })).map((r) => r.uuid)),
+    [safeRegions, isSelected],
+  )
+  const selectedRiggingUuids = useMemo(
+    () => new Set(safeRiggings.filter((r) => isSelected({ kind: 'rigging', uuid: r.uuid })).map((r) => r.uuid)),
+    [safeRiggings, isSelected],
+  )
   const selectedRegion = useMemo(
     () => (selection?.kind === 'region' ? safeRegions.find((r) => r.uuid === selection.uuid) ?? null : null),
     [selection, safeRegions],
@@ -469,10 +534,10 @@ export function Stage3D({
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={slot}
-        selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
+        selected={isSelected({ kind: 'patch', patchKey: patch.key })}
         editMode={interactable}
         onClick={interactable ? () => handleFixtureClick(patch) : undefined}
-        onEditFocus={editMode ? handleFixtureEditFocus : undefined}
+        onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
       />
     )
   })
@@ -491,7 +556,7 @@ export function Stage3D({
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={visiblePatches.length + i}
-        selected={selection?.kind === 'patch' && selection.patchKey === patch.key}
+        selected={isSelected({ kind: 'patch', patchKey: patch.key })}
         editMode={interactable}
         onClick={interactable ? () => handleFixtureClick(source) : undefined}
       />
@@ -520,19 +585,20 @@ export function Stage3D({
       <ambientLight intensity={0.5} />
       {/* A modelled room is the floor the operator reads by; the grid floats at deck height over
           the stalls. It stays while editing, where it is a measure. */}
-      {(!roomDrawn || editMode) && <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />}
+      {/* On a section while editing the edit layer draws the snap grid instead. */}
+      {(!roomDrawn || editMode) && !sectionEditing && <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />}
       <StageFloor width={stageW} depth={stageD} />
       {!roomDrawn && <CatchFloor size={gridSize} />}
       {!roomDrawn && <StageBackWall width={stageW} depth={stageD} height={stageH} />}
       <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
       <OriginMarkers depth={stageD} />
-      {placing && onPlacementClick && (
+      {placing && onPlacementClick && !sectionEditing && (
         <PlacementClickCatcher targetZ={placementZ ?? 0} onClick={onPlacementClick} />
       )}
       {view.regions && (
         <StageRegionMeshes
           regions={safeRegions}
-          selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
+          selectedUuids={selectedRegionUuids}
           editMode={interactable}
           onClick={interactable ? handleRegionClick : undefined}
           onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
@@ -544,7 +610,7 @@ export function Stage3D({
       {view.riggings && (
         <RiggingMeshes
           riggings={safeRiggings}
-          selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
+          selectedUuids={selectedRiggingUuids}
           editMode={interactable}
           onClick={interactable ? handleRiggingClick : undefined}
           onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
@@ -596,10 +662,11 @@ export function Stage3D({
         oneShot={capture != null}
         controlsRef={orbitRef}
         handleRef={cameraHandleRef}
+        onSectionView={sectionEditing ? sectionViewStore.set : undefined}
       />
       <Controls
         orbitRef={orbitRef}
-        patchTarget={editMode ? patchTarget : null}
+        patchTarget={editMode && !sectionEditing ? patchTarget : null}
         selection={selection}
         patches={patches ?? null}
         riggings={safeRiggings}
@@ -619,6 +686,7 @@ export function Stage3D({
     <div
       ref={containerRef}
       className={`relative h-full w-full ${placing || seatPicking ? 'cursor-crosshair' : ''}`}
+      data-section-editing={sectionEditing || undefined}
       data-haze-tier={hazeQuality.tier}
       onPointerDown={(e) => { pointerDownRef.current = { x: e.clientX, y: e.clientY } }}
     >
@@ -650,11 +718,35 @@ export function Stage3D({
         aria-hidden
         className={`pointer-events-none absolute inset-0 overflow-hidden ${contextLost ? 'hidden' : ''}`}
       />
+      {sectionEditing && isOrthoCamera(camera) && !contextLost && (
+        <SectionEditLayer
+          projectId={projectId}
+          camera={camera}
+          viewStore={sectionViewStore}
+          controls={sectionControls}
+          selection={selection}
+          selectedKeys={selectedKeys}
+          view={view}
+          snap={snap}
+          riggings={safeRiggings}
+          regions={safeRegions}
+          elements={drawnElements}
+          placing={placing != null}
+          placementDefault={placementDefault}
+          onSelectionChange={onSelectionChange}
+          onMarqueeSelect={onMarqueeSelect}
+          onPlacementClick={onPlacementClick}
+          onPatchPlacementChange={onPatchPlacementChange}
+          onRegionPositionChange={onRegionPositionChange}
+          onRiggingPositionChange={onRiggingPositionChange}
+          onElementPositionChange={onElementPositionChange}
+        />
+      )}
       {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
-          Click on the stage to place {placing === 'region' ? 'region' : 'rigging'} · Esc to cancel
+          Click on the stage to place {placing} · Esc to cancel
         </div>
       )}
       {picking != null && !contextLost && (
@@ -697,11 +789,14 @@ function SelectionInfo({
     if (!r) return null
     label = r.name
     detail = `Region · ${formatTriple(r.widthM, r.depthM, r.heightM, ' × ')} m`
-  } else {
+  } else if (selection.kind === 'rigging') {
     const r = riggings.find((x) => x.uuid === selection.uuid)
     if (!r) return null
     label = r.name
     detail = `${r.kind ?? 'Rigging'} · ${r.lengthM == null ? '—' : r.lengthM.toFixed(1)} m`
+  } else {
+    // A scene element is selected only while editing, where this card is not drawn.
+    return null
   }
   return (
     <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">

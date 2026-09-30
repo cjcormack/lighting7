@@ -185,23 +185,6 @@ export function parseCssRgb(color: string): { r: number; g: number; b: number } 
   return m ? { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) } : null
 }
 
-/**
- * Scale a colour string to `brightness` (0..1), returning `rgb(...)`.
- *
- * The string-input equivalent of [computeAppearanceCss], for callers holding a colour they did
- * not compute from channels — a gel hex, a wheel's preview colour, or an already-normalised hue.
- * Baking the brightness into the colour rather than applying it as opacity keeps it independent
- * of whatever opacity the surface already uses for selection or filter dimming.
- *
- * Unparseable input comes back unchanged, so a colour form this doesn't know still renders.
- */
-export function dimCssColour(color: string, brightness: number): string {
-  const rgb = parseCssRgb(color)
-  if (!rgb) return color
-  const bf = clamp01(brightness)
-  return `rgb(${Math.round(rgb.r * bf)}, ${Math.round(rgb.g * bf)}, ${Math.round(rgb.b * bf)})`
-}
-
 function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n))
 }

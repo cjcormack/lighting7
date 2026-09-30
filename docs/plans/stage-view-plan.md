@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 4 ([PR #31](https://github.com/cjcormack/lighting7/pull/31)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 5 ([PR #32](https://github.com/cjcormack/lighting7/pull/32)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -241,7 +241,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Haze** follows the hazer's DMX instead of `washConfig.ts`'s constant.
 - **Docs.** `frontend/docs/stage-vis-engineering.md`.
 
-### Session 4 — `render_view` (backend + frontend)
+### ~~Session 4 — `render_view` (backend + frontend)~~ — done, `f9ee279` ([PR #31](https://github.com/cjcormack/lighting7/pull/31))
 
 - **The request.** The tool asks a signed-in window, through the window registry, to render a
   viewpoint offscreen at a fixed size and upload the frame. The answer is a PNG, or a named error

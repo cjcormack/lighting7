@@ -3,20 +3,22 @@ import type { LightingPoint } from '../../lib/stageProjection'
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
+import type { StageElementDto } from '../../api/stageElementApi'
 import type { CueTarget } from '../../api/cuesApi'
 import type { SelectionRef } from './useStageSelection'
 
 /**
  * What *Frame the selection* (F) frames, in lighting coordinates: every placement of a selected
  * fixture — a paired dimmer's other lanterns included, since the pair is one circuit — the middle
- * of a selected region (which hangs down from `centerZ`, its top surface) and a selected rigging's
- * position.
+ * of a selected region (which hangs down from `centerZ`, its top surface), a selected rigging's
+ * position and a selected scene element's origin.
  */
 export function stageSelectionPoints(
   refs: readonly SelectionRef[],
   patches: readonly FixturePatch[],
   riggings: readonly RiggingDto[],
   regions: readonly StageRegionDto[],
+  elements: readonly StageElementDto[] = [],
 ): LightingPoint[] {
   const out: LightingPoint[] = []
   for (const ref of refs) {
@@ -28,11 +30,14 @@ export function stageSelectionPoints(
       if (region?.centerX != null && region.centerY != null) {
         out.push({ x: region.centerX, y: region.centerY, z: (region.centerZ ?? 0) - (region.heightM ?? 0) / 2 })
       }
-    } else {
+    } else if (ref.kind === 'rigging') {
       const rig = riggings.find((r) => r.uuid === ref.uuid)
       if (rig?.positionX != null && rig.positionY != null) {
         out.push({ x: rig.positionX, y: rig.positionY, z: rig.positionZ ?? 0 })
       }
+    } else {
+      const element = elements.find((e) => e.uuid === ref.uuid)
+      if (element) out.push({ x: element.positionX, y: element.positionY, z: element.positionZ })
     }
   }
   return out

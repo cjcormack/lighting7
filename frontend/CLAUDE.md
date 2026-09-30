@@ -205,8 +205,9 @@ Raw DMX channel control per universe. Shows all 512 channels with current values
 
 ### Stage views
 
-Three surfaces render live fixture state: the 3D canvas, the 2D Plan/Front/Side plot (Edit only, now),
-and the **Positions** panel behind the header's stage toggle. All three read through a
+Two surfaces render live fixture state: the 3D canvas and the **Positions** panel behind the
+header's stage toggle (the SVG Plan/Front/Side plot went in stage-view plan session 5). Both read
+through a
 **`ChannelSource`** rather than
 `lightingApi.channels` directly, so the operator can point them at Output / Output + Programmer /
 Programmer only — which is what makes Blind previewable. Colour and intensity come from one shared
@@ -232,8 +233,7 @@ wall and floor cookie instances are gone. The haze governor gives up march steps
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
-switches cameras, and `Stage2DView` draws a section **only while editing** (D1, until session 5's 3D
-editing parity). The viewpoint is **per window**, `lib/stageViewpoint.ts` in `sessionStorage`, and
+switches cameras. The viewpoint is **per window**, `lib/stageViewpoint.ts` in `sessionStorage`, and
 rides `windows.viewOptions` (§Windows, full screen and the hand); the orbit and eye poses are kept in
 `sessionStorage` too (`lib/stageCameraPoses.ts`), so a reload or a context-loss *Restore* lands where
 the camera was. F frames the selection — the Stage's own, else the desk's — and O goes back to
@@ -265,6 +265,21 @@ back over REST with the request's token; both answers are silent endpoints. The 
 bridges only `ChannelSourceContext` — a scene component that starts reading another context from
 outside the canvas must be bridged there too. See `docs/stage-vis-engineering.md` §"Rendering for
 `render_view`".
+
+**Editing on a section is the 3D scene's too** (session 5, D1): with Edit on and the camera on
+Plan, Front or Side, `stage3d/edit/SectionEditLayer.tsx` — DOM over the canvas, like the label layer
+— owns the pointer and does everything the SVG plot did, in the section's metres: marquee (⇧/⌘ +
+drag), click-select, body drags with alignment guides and the snap grid, drop-onto-a-bar, sliding
+along a bar, the region and rigging handles (height handles in the elevations), placement clicks, pan
+and zoom. The section camera reports where it looks (`StageCameraRig`'s `onSectionView`) and takes
+pan, zoom and fit through `StageCameraHandle.section`; a pointer is resolved from the canvas's live
+centre, because the report lags a resize. The layer is never mounted by a render, so no edit chrome
+reaches `render_view`. The snap grid, nudge, tray, bulk panel and shortcut list moved to
+`stage3d/edit/`; `components/stage2d/` is gone and `svgPlotRetired.test.ts` keeps it so. Edit's header
+also has **`+ Scenery`**, which places a scene element like a region and opens
+`components/stage/EditSceneElementForm.tsx` in the editor panel: the kind's `params`, one partial
+`PUT`, and the desk's 400 problems drawn beside the fields they name (`elementProblems.ts`). See the
+stage-vis doc's §"Editing on the sections", which has the parity table.
 
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
@@ -1485,8 +1500,8 @@ module (`selectedCells`), so the chip and the tab cannot count cells two ways. B
 modes sit under a *Cells* heading in the band's verbs menu.
 
 **The live bar reads the stage's colour dispatch.** `RigTile` mounts one `FixtureAppearanceSource`
-leaf per fixture tile — one of **five** mounting readers of `components/fixtures/fixtureAppearance.tsx`,
-beside the DOM marker, the 2D plot, the side sheet's fold (one leaf for the selection's colour dot)
+leaf per fixture tile — one of **four** mounting readers of `components/fixtures/fixtureAppearance.tsx`,
+beside the Positions panel's chips, the side sheet's fold (one leaf for the selection's colour dot)
 and the colour editor's **hidden leaf per parent fixture of the heads it is editing**
 (`components/editor/ColourEditor.tsx`, the busk Colour tab's and the programmer's colour cell's
 alike since the editor kit's session 2), which reports into `lib/liveAppearance.ts` for *Pick*

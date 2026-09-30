@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
-import { isEditableTarget } from '../../lib/domUtils'
-import { nudgeTargets, type BulkTarget } from '../../lib/stageBulkOps'
-import type { StageProjection } from '../../lib/stageProjection'
-import type { PlacementChange } from '../../store/stagePlacement'
+import { isEditableTarget } from '../../../lib/domUtils'
+import { nudgeTargets, type BulkTarget } from '../../../lib/stageBulkOps'
+import type { StageProjection } from '../../../lib/stageProjection'
+import type { PlacementChange } from '../../../store/stagePlacement'
 
 /** Shift multiplies the step, for coarse moves. */
 const COARSE_MULTIPLIER = 10

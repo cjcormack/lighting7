@@ -1016,7 +1016,7 @@ export function ColourSync({
   // First, and above the gel arm, exactly as FixtureAppearanceSource orders it: a patch with no
   // fixture record has no channels to read, and falling through to the warm-white default painted
   // it as a fully-lit lamp — for an unmatched patch, and for every patch during the window before
-  // the fixture list resolves — while the 2D plot and markers correctly showed a placeholder.
+  // the fixture list resolves — while the DOM markers correctly showed a placeholder.
   if (!hasFixture) {
     return <PlaceholderBeamSync {...refs} />
   }
@@ -1053,7 +1053,7 @@ function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   }
   // Beam cone/pool opacities stay LINEAR: they double as the LIGHT_OFF_OPACITY
   // cull signal downstream, so curving them would resurrect near-off fixtures
-  // into ghost beams (the 2D path likewise gates its beam on the raw level).
+  // into ghost beams.
   const state = refs.colorStateRef.current
   state.color.copy(COLOR_TMP)
   state.coneOpacity = 0.32 * intensity

@@ -40,11 +40,9 @@ interface StageViewMenuProps {
   flags: StageViewFlags
   setFlag: (key: StageViewToggle, value: boolean) => void
   setLabelMode: (mode: StageLabelMode) => void
-  /** Flags with no meaning in the current view — e.g. beam cones in a 2D plot. */
-  hide?: ReadonlyArray<StageViewToggle>
   /**
    * The 3D view's *Test recovery*: drops the WebGL context the way Safari does under memory
-   * pressure, so the paused state and *Restore* can be exercised on purpose. Absent in 2D.
+   * pressure, so the paused state and *Restore* can be exercised on purpose.
    */
   onTestRecovery?: () => void
   /** Which layer of the lighting cascade the stage draws. */
@@ -57,7 +55,7 @@ interface StageViewMenuProps {
   sourceStatus?: Partial<Record<VisSource, string | null>>
   /**
    * The scene's layers — Venue, Set, Seating, Haze (stage-view plan session 3) — per window. Absent
-   * where they mean nothing (the 2D plot draws no scene).
+   * where they mean nothing.
    */
   layers?: SceneLayers
   setLayer?: (layer: SceneLayer, on: boolean) => void
@@ -70,7 +68,6 @@ export function StageViewMenu({
   flags,
   setFlag,
   setLabelMode,
-  hide,
   onTestRecovery,
   visSource,
   setVisSource,
@@ -80,7 +77,6 @@ export function StageViewMenu({
   lightBudget,
   setLightBudget,
 }: StageViewMenuProps) {
-  const hidden = (key: StageViewToggle) => hide?.includes(key) ?? false
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -121,14 +117,12 @@ export function StageViewMenu({
         >
           Fixtures
         </DropdownMenuCheckboxItem>
-        {!hidden('beamCones') && (
-          <DropdownMenuCheckboxItem
-            checked={flags.beamCones}
-            onCheckedChange={(v) => setFlag('beamCones', !!v)}
-          >
-            Beam cones
-          </DropdownMenuCheckboxItem>
-        )}
+        <DropdownMenuCheckboxItem
+          checked={flags.beamCones}
+          onCheckedChange={(v) => setFlag('beamCones', !!v)}
+        >
+          Beam cones
+        </DropdownMenuCheckboxItem>
         <DropdownMenuCheckboxItem
           checked={flags.riggings}
           onCheckedChange={(v) => setFlag('riggings', !!v)}

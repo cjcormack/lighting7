@@ -99,7 +99,7 @@
     "BeamAngleField": {
       "cardMode": "column"
     },
-    "Stage2DHud": {
+    "SectionHud": {
       "cardMode": "column"
     }
   },

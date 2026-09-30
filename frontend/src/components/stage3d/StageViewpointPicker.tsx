@@ -82,7 +82,7 @@ export function StageViewpointPicker({
   canSave: boolean
   /** *Sit in a seat…*: arm the pick on the seating. */
   onSit?: () => void
-  /** Whether there are seats to sit in, on a scene that can pick them (not the 2D plot). */
+  /** Whether there are seats to sit in. */
   canSit?: boolean
   /** Whether the pick is armed now. */
   sitting?: boolean

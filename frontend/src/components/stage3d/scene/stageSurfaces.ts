@@ -24,16 +24,27 @@ import type { SceneBuild } from './StageSceneElements'
 /** How thick the stage floor's and back wall's slabs are, below and behind their faces. */
 const SLAB_M = 0.02
 
-/** The elements a view draws: in its layers, and built. */
+/** Builds already made, by the element object they were made from and the context they were made in. */
+export type SceneBuildCache = WeakMap<StageElementDto, { context: BuildContext; build: ElementBuild }>
+
+/**
+ * The elements a view draws: in its layers, and built. With a [cache], an element the list still
+ * holds as the same object — RTK Query's cache writes keep every row they do not touch — is not
+ * built again: a drag on a section writes one element a frame, and rebuilding the whole hall,
+ * seating and all, sixty times a second to move one flat is the cost this saves.
+ */
 export function sceneBuilds(
   elements: readonly StageElementDto[],
   layers: SceneLayers,
   context: BuildContext,
+  cache?: SceneBuildCache,
 ): SceneBuild[] {
   const out: SceneBuild[] = []
   for (const element of elements) {
     if (!elementInLayers(element, layers)) continue
-    const build: ElementBuild = buildElement(element, context)
+    const cached = cache?.get(element)
+    const build: ElementBuild = cached != null && cached.context === context ? cached.build : buildElement(element, context)
+    if (cached?.build !== build) cache?.set(element, { context, build })
     if (build.parts.length === 0 && build.seats.length === 0) continue
     out.push({ element, build })
   }

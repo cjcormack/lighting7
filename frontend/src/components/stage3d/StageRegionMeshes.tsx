@@ -12,7 +12,8 @@ import { useSurfaceMaterial } from './scene/SurfaceLighting'
 
 interface StageRegionMeshesProps {
   regions: StageRegionDto[]
-  selectedUuid?: string | null
+  /** Every selected one — a multi-selection lights as one. */
+  selectedUuids?: ReadonlySet<string>
   editMode?: boolean
   onClick?: (region: StageRegionDto, mesh: Object3D) => void
   /** Body drag emits a horizontal move (centerX/Y change, everything else
@@ -27,7 +28,7 @@ interface StageRegionMeshesProps {
 
 export function StageRegionMeshes({
   regions,
-  selectedUuid,
+  selectedUuids,
   editMode,
   onClick,
   onMove,
@@ -41,7 +42,7 @@ export function StageRegionMeshes({
         <RegionMesh
           key={region.uuid}
           region={region}
-          selected={region.uuid === selectedUuid}
+          selected={selectedUuids?.has(region.uuid) ?? false}
           editMode={editMode}
           onClick={onClick}
           onMove={onMove}
