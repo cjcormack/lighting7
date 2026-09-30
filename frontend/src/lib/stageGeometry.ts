@@ -1,7 +1,7 @@
 // Pure geometry for stage regions and riggings, in **lighting coords**
 // (X = stage right, Y = upstage, Z = up; metres).
 //
-// Lifted out of the 3D edit handles so the 2D editor can share the same forward
+// Lifted out of the 3D edit handles so the section edit layer can share the same forward
 // and inverse maths — the handles differ only in how they obtain a pointer
 // position, not in what they derive from it. Everything here is a pure function
 // of a DTO plus scalars, so it is directly unit-testable; the versions that

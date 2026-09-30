@@ -1,4 +1,4 @@
-import { Stage2DHud } from 'lighting-desk-ui'
+import { SectionHud } from 'lighting-desk-ui'
 
 // StageProjection values mirror lib/stageProjection's STAGE_PROJECTIONS.
 const PLAN = {
@@ -21,10 +21,10 @@ const SIDE = {
   vAxisLabel: 'Height (Z)',
 } as const
 
-type Projection = Parameters<typeof Stage2DHud>[0]['projection']
+type Projection = Parameters<typeof SectionHud>[0]['projection']
 
-// The HUD is absolutely positioned chrome, so it sits over a stand-in for the
-// stage plot: a dark box with a metre grid and a few fixture dots. The box's
+// The HUD is absolutely positioned chrome, so it sits over a stand-in for a
+// section of the stage: a dark box with a metre grid and a few fixture dots. The box's
 // size and background are inline styles on purpose: the shipped stylesheet only
 // carries utilities the app itself uses, so preview-only classes such as
 // `h-60` / `bg-neutral-900` don't exist in it.
@@ -64,7 +64,7 @@ function Plot({ children }: { children: React.ReactNode }) {
 
 export const PlanWithCursor = () => (
   <Plot>
-    <Stage2DHud
+    <SectionHud
       projection={PLAN as unknown as Projection}
       cursor={{ h: 3.25, v: 2.5 }}
       snapStepM={0.5}
@@ -77,7 +77,7 @@ export const PlanWithCursor = () => (
 
 export const SideWithNotice = () => (
   <Plot>
-    <Stage2DHud
+    <SectionHud
       projection={SIDE as unknown as Projection}
       cursor={{ h: -1.2, v: -4.75 }}
       snapStepM={0.1}
@@ -91,7 +91,7 @@ export const SideWithNotice = () => (
 
 export const PointerOutsideSnapOff = () => (
   <Plot>
-    <Stage2DHud
+    <SectionHud
       projection={PLAN as unknown as Projection}
       cursor={null as unknown as { h: number; v: number }}
       snapStepM={null as unknown as number}

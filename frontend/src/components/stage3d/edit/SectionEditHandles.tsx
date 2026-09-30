@@ -1,18 +1,19 @@
-// Resize / rotate / endpoint overlays for the selected object in a 2D view.
+// Resize / rotate / endpoint handles for the selected object on an orthographic section, drawn in
+// the edit layer over the 3D canvas (stage-view plan session 5) — in the section's own metres, at a
+// constant size on screen, as the SVG plot drew them.
 //
-// The 3D counterparts (RegionEditHandles, RiggingEndpointHandles) drive the same
-// pure derivations from lib/stageGeometry; only the way a pointer position is
-// obtained differs. Drawn last so they paint — and therefore hit-test — above the
-// bodies they belong to.
+// The orbit camera's counterparts (RegionEditHandles, RiggingEndpointHandles) drive the same pure
+// derivations from lib/stageGeometry; only the way a pointer position is obtained differs. Drawn
+// last in the layer so they paint — and therefore hit-test — above everything else there.
 //
-// **Handle sets differ per projection, deliberately:**
+// **Handle sets differ per section, deliberately:**
 //   plan       corner resize + yaw rotation   (height is out-of-plane)
 //   front/side height (top face and floor)    (yaw is unobservable side-on)
 // That asymmetry is a property of an orthographic view, not an oversight.
 
-import type { StageRegionDto } from '../../api/stageRegionApi'
-import type { RiggingDto } from '../../api/riggingApi'
-import type { RegionPositionUpdate, RiggingPositionUpdate } from '../stage/stageEditing'
+import type { StageRegionDto } from '../../../api/stageRegionApi'
+import type { RiggingDto } from '../../../api/riggingApi'
+import type { RegionPositionUpdate, RiggingPositionUpdate } from '../../stage/stageEditing'
 import {
   deriveFromDraggedCorner,
   deriveFromEndpoints,
@@ -22,15 +23,15 @@ import {
   worldCornersFor,
   worldEndpointsFor,
   type LightingPoint,
-} from '../../lib/stageGeometry'
+} from '../../../lib/stageGeometry'
 import {
   project,
   unproject,
   type ScreenPoint,
   type StageProjection,
-} from '../../lib/stageProjection'
-import { SNAP_ANGLE_DEG } from '../stage3d/useShiftHeld'
-import type { PlaneDragOptions } from './usePlaneDrag'
+} from '../../../lib/stageProjection'
+import { SNAP_ANGLE_DEG } from '../useShiftHeld'
+import type { SectionDragOptions } from './useSectionDrag'
 import type { SnapGrid } from './useSnapGrid'
 
 const HANDLE_PX = 7
@@ -45,15 +46,15 @@ const MIN_HEIGHT_M = 0.05
  * Handles begin dragging on the *first* press — unlike bodies, which need a
  * click to select first — because a visible handle already means "grab me". The
  * implementation must therefore stop propagation, or the press also reaches the
- * background pan handler.
+ * layer's own press handler (a pan, a marquee, or a click that clears).
  */
-export type StartHandleDrag = (opts: PlaneDragOptions, e: React.PointerEvent) => void
+export type StartHandleDrag = (opts: SectionDragOptions, e: React.PointerEvent) => void
 
 interface CommonProps {
   projection: StageProjection
   mPerPx: number
   snap: SnapGrid
-  /** Begins a handle drag; the caller wires this to usePlaneDrag. */
+  /** Begins a handle drag; the caller wires this to useSectionDrag. */
   startDrag: StartHandleDrag
 }
 
@@ -73,7 +74,7 @@ interface RiggingHandlesProps extends CommonProps {
  * `deriveFromEndpoints` cannot recover pitch (a twist about the bar's own axis
  * leaves both endpoints where they are), so it reports 0, matching the 3D handles.
  */
-export function RiggingEndpointHandles2D({
+export function RiggingSectionHandles({
   rig,
   projection,
   mPerPx,
@@ -151,7 +152,7 @@ interface RegionHandlesProps extends CommonProps {
   onChange: (next: RegionPositionUpdate, settled: boolean) => void
 }
 
-export function RegionEditHandles2D(props: RegionHandlesProps) {
+export function RegionSectionHandles(props: RegionHandlesProps) {
   return props.projection.id === 'plan' ? (
     <RegionPlanHandles {...props} />
   ) : (

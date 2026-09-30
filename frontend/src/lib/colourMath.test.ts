@@ -8,7 +8,6 @@ import {
   computeNormalizedHueCss,
   computeAppearanceCss,
   parseCssRgb,
-  dimCssColour,
 } from "./colourMath"
 
 describe("perceptualBrightness", () => {
@@ -192,31 +191,5 @@ describe("parseCssRgb", () => {
     expect(parseCssRgb("#zzzzzz")).toBeNull()
     expect(parseCssRgb("hotpink")).toBeNull()
     expect(parseCssRgb("")).toBeNull()
-  })
-})
-
-describe("dimCssColour", () => {
-  it("scales either colour form to a brightness", () => {
-    expect(dimCssColour("#ffffff", 0.5)).toBe("rgb(128, 128, 128)")
-    expect(dimCssColour("rgb(200, 100, 0)", 0.5)).toBe("rgb(100, 50, 0)")
-  })
-
-  it("agrees with computeAppearanceCss on an already-normalised hue", () => {
-    // The two have to match: the 3D and DOM surfaces bake brightness from channels via
-    // computeAppearanceCss, the SVG plot bakes it from the hue string via this.
-    const hue = computeNormalizedHueCss(255, 26, 0)
-    expect(dimCssColour(hue, 0.4)).toBe(
-      computeAppearanceCss(255, 26, 0, undefined, undefined, undefined, 0.4),
-    )
-  })
-
-  it("is black at zero and clamps above one", () => {
-    expect(dimCssColour("#ff0000", 0)).toBe("rgb(0, 0, 0)")
-    expect(dimCssColour("#ff0000", 5)).toBe("rgb(255, 0, 0)")
-  })
-
-  it("passes an unrecognised colour through untouched", () => {
-    // Better a fixture drawn in the wrong brightness than one drawn with an invalid fill.
-    expect(dimCssColour("var(--color-foreground)", 0.5)).toBe("var(--color-foreground)")
   })
 })

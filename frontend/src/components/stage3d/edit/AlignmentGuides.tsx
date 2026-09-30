@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import type { Extent } from '../../lib/stageProjection'
+import type { Extent } from '../../../lib/stageProjection'
 
 interface AlignmentGuidesProps {
   /** Screen-metre h value currently snapped to, if any. */

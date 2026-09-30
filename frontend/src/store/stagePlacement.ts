@@ -5,6 +5,7 @@ import { restApi } from './restApi'
 import { patchesApi, suspendPatchInvalidation } from './patches'
 import { riggingsApi } from './riggings'
 import { stageRegionsApi } from './stageRegions'
+import { stageElementsApi } from './stageElements'
 import { formatError } from '../lib/formatError'
 
 // Optimistic cache writes and rollback for stage placement edits.
@@ -52,6 +53,13 @@ export interface RiggingPlacementValues {
   pitchDeg?: number | null
   rollDeg?: number | null
   lengthM?: number | null
+}
+
+/** A scene element's origin, which a drag on a section moves (stage-view plan session 5). */
+export interface ElementPlacementValues {
+  positionX: number
+  positionY: number
+  positionZ: number
 }
 
 /**
@@ -119,6 +127,19 @@ export function writeRiggingPlacement(
     riggingsApi.util.updateQueryData('riggingList', projectId, (draft) => {
       const r = draft.find((x) => x.id === riggingId)
       if (r) Object.assign(r, values)
+    }),
+  )
+}
+
+export function writeElementPlacement(
+  projectId: number,
+  elementId: number,
+  values: ElementPlacementValues,
+) {
+  store.dispatch(
+    stageElementsApi.util.updateQueryData('stageElementList', projectId, (draft) => {
+      const e = draft.find((x) => x.id === elementId)
+      if (e) Object.assign(e, values)
     }),
   )
 }

@@ -94,8 +94,9 @@ export interface OrthoSection {
 }
 
 /**
- * The three sections, matching `lib/stageProjection.ts`'s screen conventions so a surface drawn by
- * the SVG plot and by the camera agree: **Plan** looks down with upstage at the top and +X to the
+ * The three sections, matching `lib/stageProjection.ts`'s screen conventions, so the section edit
+ * layer's metres (`edit/sectionView.ts`) are the camera's screen axes and the cue cards'
+ * `MiniStage` agrees with them: **Plan** looks down with upstage at the top and +X to the
  * right; **Front** looks upstage from the house with +X to the right; **Side** looks from +X —
  * audience right, which is stage left in actor terms (lighting7 `docs/fixtures-engineering.md`'s
  * axis table) — with the house to the left and upstage to the right.

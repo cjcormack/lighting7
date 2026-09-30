@@ -6,7 +6,7 @@ export interface StageViewFlags {
   regions: boolean
   riggings: boolean
   fixtures: boolean
-  /** Which labels the 3D layer draws; the 2D plot reads anything but `none` as "labels on". */
+  /** Which labels the label layer draws. */
   labels: StageLabelMode
   beamCones: boolean
 }

@@ -12,7 +12,8 @@ import { StageLabel } from './StageLabel'
 
 interface RiggingMeshesProps {
   riggings: RiggingDto[]
-  selectedUuid?: string | null
+  /** Every selected one — a multi-selection lights as one. */
+  selectedUuids?: ReadonlySet<string>
   editMode?: boolean
   onClick?: (rig: RiggingDto, mesh: Object3D) => void
   /** Body drag emits a horizontal move (positionX/Y change). Absent in
@@ -26,7 +27,7 @@ interface RiggingMeshesProps {
 // Each rigging renders as a bar along its local X axis. lengthM defaults to 3 m
 // for un-set DTOs. Yaw/pitch/roll come from the DTO; rotation order 'YXZ' matches
 // the convention used by panTiltToDir in stageCoords.
-// Single-sourced in lib/stageGeometry (the pure module the 2D editor shares);
+// Single-sourced in lib/stageGeometry (the pure module the section editing shares);
 // re-exported here because this is where consumers already import it from.
 export { DEFAULT_RIGGING_LENGTH_M }
 const RIGGING_THICKNESS_M = 0.18
@@ -35,7 +36,7 @@ const PLANE_NORMAL_UP = new Vector3(0, 1, 0)
 
 export function RiggingMeshes({
   riggings,
-  selectedUuid,
+  selectedUuids,
   editMode,
   onClick,
   onMove,
@@ -49,7 +50,7 @@ export function RiggingMeshes({
         <RiggingMesh
           key={rig.uuid}
           rig={rig}
-          selected={rig.uuid === selectedUuid}
+          selected={selectedUuids?.has(rig.uuid) ?? false}
           editMode={editMode}
           onClick={onClick}
           onMove={onMove}

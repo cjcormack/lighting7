@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
-import type { Extent } from '../../lib/stageProjection'
+import type { Extent } from '../../../lib/stageProjection'
 
-interface StageGridProps {
+interface SectionGridProps {
   /** The region to cover — the *visible* extent, not the viewBox. */
   extent: Extent
   /** Grid step in metres. Matches the snap step, so what you see is what you get. */
@@ -22,18 +22,18 @@ function linesBetween(min: number, max: number, step: number): number[] {
 }
 
 /**
- * The metre grid.
+ * The metre grid over a section while editing, drawn in the edit layer over the 3D canvas.
  *
- * Unlike the decorative 24-pixel CSS gradient this replaces, these lines are at
- * real multiples of the live snap step — so the grid the user sees is the grid
- * their drags land on.
+ * The lines are at real multiples of the live snap step — so the grid the operator sees is the
+ * grid their drags land on, which the scene's own grid (20 divisions of the floor, and seen edge-on
+ * in an elevation) is not. The scene's grid gives way to this one on a section while editing.
  *
  * Minor lines are dropped when they'd be closer than a few pixels apart: a
  * 0.1 m grid across a 10 m stage at fit-zoom is ~100 lines per axis of grey
  * mush, and the decimation is also what bounds the element count as the user
  * zooms out.
  */
-export const StageGrid = memo(function StageGrid({ extent, stepM, mPerPx }: StageGridProps) {
+export const SectionGrid = memo(function SectionGrid({ extent, stepM, mPerPx }: SectionGridProps) {
   const majorStep = stepM * MAJOR_EVERY
   const showMinor = stepM / mPerPx >= MIN_MINOR_PX
 

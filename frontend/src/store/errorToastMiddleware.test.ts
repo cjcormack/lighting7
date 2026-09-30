@@ -119,6 +119,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./installs'),
       import('./stageRegions'),
       import('./stageViewpoints'),
+      import('./stageElements'),
       import('./riggings'),
       import('./patches'),
       import('./programmerOps'),

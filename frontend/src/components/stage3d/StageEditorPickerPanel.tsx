@@ -5,7 +5,9 @@ import { cn, formatTriple } from '@/lib/utils'
 import type { FixturePatch } from '@/api/patchApi'
 import type { StageRegionDto } from '@/api/stageRegionApi'
 import type { RiggingDto } from '@/api/riggingApi'
+import type { StageElementDto } from '@/api/stageElementApi'
 import type { Selection } from './Stage3D'
+import { elementKindLabel } from './edit/sceneryKinds'
 
 type RowSelection = Exclude<Selection, null>
 
@@ -29,14 +31,19 @@ interface StageEditorPickerPanelProps {
   patches: FixturePatch[]
   regions: StageRegionDto[]
   riggings: RiggingDto[]
+  /** The scene document's elements — a room is picked here, never on the canvas. */
+  elements?: StageElementDto[]
   onSelect: (s: Selection) => void
 }
+
+const EMPTY_ELEMENTS: StageElementDto[] = []
 
 function rowKey(sel: RowSelection): string {
   switch (sel.kind) {
     case 'patch': return `patch-${sel.patchKey}`
     case 'region': return `region-${sel.uuid}`
     case 'rigging': return `rigging-${sel.uuid}`
+    case 'element': return `element-${sel.uuid}`
   }
 }
 
@@ -51,6 +58,12 @@ function regionSublabel(r: StageRegionDto): string {
   return `${formatTriple(r.widthM, r.depthM, r.heightM, ' × ')} m`
 }
 
+function elementSublabel(e: StageElementDto): string {
+  const layer = e.layer === 'SET' ? 'Set' : 'Venue'
+  const size = e.kind === 'SEATING' ? '' : ` · ${formatTriple(e.widthM, e.depthM, e.heightM, ' × ')} m`
+  return `${elementKindLabel(e)} · ${layer}${size}${e.hidden ? ' · hidden' : ''}`
+}
+
 function riggingSublabel(r: RiggingDto): string {
   const kind = r.kind ?? 'Rigging'
   return r.lengthM == null ? kind : `${kind} · ${r.lengthM.toFixed(1)} m`
@@ -60,6 +73,7 @@ export function StageEditorPickerPanel({
   patches,
   regions,
   riggings,
+  elements = EMPTY_ELEMENTS,
   onSelect,
 }: StageEditorPickerPanelProps) {
   const [search, setSearch] = useState('')
@@ -89,6 +103,13 @@ export function StageEditorPickerPanel({
         label: r.name,
         sublabel: riggingSublabel(r),
       }))
+    const elementRows: Row[] = [...elements]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((e) => ({
+        selection: { kind: 'element', uuid: e.uuid },
+        label: e.name,
+        sublabel: elementSublabel(e),
+      }))
     const q = search.trim().toLowerCase()
     const filter = (rows: Row[]) =>
       !q
@@ -100,6 +121,7 @@ export function StageEditorPickerPanel({
       { title: 'Fixtures', rows: filter(fixtureRows) },
       { title: 'Regions', rows: filter(regionRows) },
       { title: 'Rigging', rows: filter(riggingRows) },
+      { title: 'Scenery', rows: filter(elementRows) },
     ].filter((s) => s.rows.length > 0)
     let offset = 0
     return nonEmpty.map((s) => {
@@ -107,7 +129,7 @@ export function StageEditorPickerPanel({
       offset += s.rows.length
       return { ...s, startIdx }
     })
-  }, [patches, regions, riggings, search])
+  }, [patches, regions, riggings, elements, search])
 
   const flat = useMemo(() => sections.flatMap((s) => s.rows), [sections])
 
@@ -149,7 +171,7 @@ export function StageEditorPickerPanel({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Search fixtures, regions, rigging…"
+          placeholder="Search fixtures, regions, rigging, scenery…"
           className="h-9 text-sm"
         />
       </div>

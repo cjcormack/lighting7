@@ -13,7 +13,7 @@ export interface MarqueeRow {
 /**
  * How far the pointer must travel before a press becomes a marquee rather than a click.
  *
- * The same number dnd-kit's `activationConstraint` and `Stage2DView`'s pan threshold already use.
+ * The same number dnd-kit's `activationConstraint` and the Stage view's section edit layer (`SectionEditLayer`) pan threshold already use.
  * A *threshold* rather than a modifier key on purpose: drag-select is the primary gesture here, and
  * hiding it behind ⌘ or Shift would make it undiscoverable.
  */
@@ -45,7 +45,7 @@ const AUTOSCROLL_SPEED_PX = 14
 /**
  * The drag-select gesture: a rubber band over the rows, resolved to cells by arithmetic.
  *
- * A **ref drives the gesture and state drives the band** — the idiom `Stage2DView` already uses.
+ * A **ref drives the gesture and state drives the band** — the idiom the Stage view's `SectionEditLayer` already uses.
  * The ref is what lets the handlers stay referentially stable through a drag; re-creating them
  * mid-gesture would detach the listener the pointer capture is bound to.
  *

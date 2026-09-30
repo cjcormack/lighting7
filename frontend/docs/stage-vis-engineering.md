@@ -8,8 +8,10 @@ How the stage surfaces decide **what a fixture looks like**. Two independent sea
 
 And, since the stage-view plan's session 0, how the 3D view keeps within a browser's memory and
 survives losing its graphics context — §"The 3D renderer"; since session 1, its cameras, the
-window's viewpoint and the Positions panel — §"Cameras and viewpoints"; and since session 4, how a
-window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`" at the end.
+window's viewpoint and the Positions panel — §"Cameras and viewpoints"; since session 4, how a
+window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`"; and since session 5,
+editing on the Plan, Front and Side sections, which retired the SVG plot — §"Editing on the
+sections" at the end.
 
 ## The vis source
 
@@ -145,7 +147,7 @@ unchanged.
 merged map per fixture per frame to answer it. `getByKey` keeps every source O(1) and
 allocation-free, which is what that frame loop requires.
 
-**The provider wraps only the canvases** — the `Stage3D` / `Stage2DView` element in `routes/Stage.tsx`
+**The provider wraps only the canvases** — the `Stage3D` element in `routes/Stage.tsx`
 and the Positions panel's rows and Plan tab (`components/positions/`). Not `<main>`: the docked
 `StageFixtureControlPanel` renders `FixtureDetailView`, a live editing surface that must keep
 reading and writing the real wire whatever the stage is previewing. The same reasoning keeps
@@ -206,8 +208,7 @@ because each medium curves them differently:
 
 - the DOM marker folds `perceptualBrightness` into a box-shadow and an opacity;
 - the 3D scene splits them — perceptual on the lens, **linear** on the cone and pool, because those
-  opacities double as the `LIGHT_OFF_OPACITY` beam cull;
-- the SVG plot bakes brightness into the fill with `dimCssColour`.
+  opacities double as the `LIGHT_OFF_OPACITY` beam cull.
 
 This is why `useColourAppearance` is not the shared piece: it returns only a pre-baked CSS string and
 drops the level. It stays as it is for the swatch callers that only want the string.
@@ -218,12 +219,12 @@ Each colour source needs a *different* set of value hooks — `useColourValue` w
 `ColourPropertyDescriptor`, `useGroupColourValues` subscribes to a variable-length channel list, a
 gel fixture needs neither — so they cannot collapse behind one hook without breaking hook order.
 `FixtureAppearanceSource` dispatches to a leaf component per source, each with a fixed hook set, and
-hands the result to `children`. That constraint is why the 2D plot went without live colour for so
-long, and the render prop is the way around it.
+hands the result to `children`. That constraint is why the SVG plot (retired in session 5) went
+without live colour for so long, and the render prop is the way around it.
 
-Consumers — **five mounting readers**: the Positions panel's `UnitChip` (DOM — one leaf per chip,
+Consumers — **four mounting readers**: the Positions panel's `UnitChip` (DOM — one leaf per chip,
 the swatch and the level off one subscription; it replaced `StageMarker` with the overview it
-drew); `Stage2DShapes`' `FixtureShape` (SVG);
+drew);
 since the busk view's rig band, `RigTile`'s live bar and pips (`components/busking/RigTile.tsx`),
 one leaf per fixture tile, which reads a cell's colour off `segments` by the element's position in
 the patch's cell list; since the side sheet, `SideSheetFold`'s selection colour dot
@@ -235,35 +236,6 @@ a reader. `FixtureModel` keeps its own **imperative** mirror of the same dispatc
 store-driven re-renders drop beat-rate changes, so the 3D path writes straight to the scene from the
 channel callback. Three copies of the shape, two of the code; changing the dispatch means changing
 `fixtureAppearance.tsx` and `FixtureModel`'s `ColourSync` together.
-
-### The 2D plot
-
-`FixtureShapes` draws fixtures in a loop, so live colour needed a per-fixture component
-(`FixtureShape`) to hang hooks on. Keeping the values *inside* that child also matters for
-performance: `FixtureShapes` is `memo`'d and runs an O(n²) label declutter, and the old
-`colourFor(patch)` callback prop would have re-run both on every DMX frame had its identity started
-changing with the values.
-
-Two traps in the SVG:
-
-- **Do not set `stroke` on an unselected fixture.** The outline comes from a Tailwind class
-  (`stroke-foreground/40`) so a pale tungsten dot stays visible on a light background, and CSS beats
-  the presentation attribute — setting the attribute would kill the theme-aware outline. The
-  attribute is for the selection highlight only.
-- **Brightness goes into the fill, not `fill-opacity`.** The fixture already sits inside a `<g>` whose
-  opacity carries group-filter dimming; a second opacity would fight it.
-- **The fill has a brightness floor** (`BODY_FLOOR`, `SEGMENT_FLOOR`). A dark rig is the normal state
-  while patching, which is most of what this plot is for, and an unfloored fill draws every dot pure
-  black — leaving only a 40%-opacity outline to find it by. The DOM marker has the same floors,
-  expressed as `0.3 + lit * 0.7` on its opacity; these are the same numbers folded into the fill.
-
-A pixel bar draws as a segmented strip (one rect per element, each at its own brightness) with a
-single outline rect over the top, rather than as one dot. Its geometry comes from `stripGeometry`,
-which reads the **element-group descriptor**, not a live appearance — so the pointer hit target can
-be sized to the strip without waiting on DMX. A bar is several times wider than a dot, and a
-dot-sized hit circle leaves the ends of a long bar unclickable. `stripGeometry`'s `count > 1` gate
-must stay in step with `FixtureAppearanceSource`'s, which decides whether an appearance carries
-`segments` at all; `Stage2DShapes.test.ts` pins them together.
 
 ## Paired lanterns (extra placements)
 
@@ -279,8 +251,8 @@ second place, never a second fixture. Four rules keep that true:
   `points` for everything a gesture does. Folding the lanterns into `points` would have made every
   drag, snap, count and bulk operation meet a fixture twice, and a drag on a lantern would move the
   fixture's own placement to where that lantern hangs.
-- **A lantern selects its fixture and is never dragged.** On the 2D plot its press calls the
-  fixture's selection with no `buildDrag`, a marquee over it selects the fixture once, and it is an
+- **A lantern selects its fixture and is never dragged.** On a section while editing its press is
+  the fixture's selection with no drag, a marquee over it selects the fixture once, and it is an
   alignment guide for the fixture it pairs with. In 3D it is a `FixtureModel` over the patch with the
   placement's seven geometry fields laid on (`patchAtPlacement` in `stage3d/lanterns.ts`), its own emitter slot after the
   fixtures', and **no `onEditFocus`**, so the translate gizmo can never bind to it. Lanterns are
@@ -291,7 +263,7 @@ second place, never a second fixture. Four rules keep that true:
 - **An unpositioned lantern is not drawn**, on either view: the 3D `worldPositionFor` reads a null
   coordinate as 0, and a lantern at the origin would be a claim about the rig.
 
-What is left for later: dragging a lantern on the plot (the bulk route already takes
+What is left for later: dragging a lantern on a section (the bulk route already takes
 `extraPlacements`, so it is a client change), and a lantern of a different type or gel from its
 fixture (additive on the backend if a venue ever needs it).
 
@@ -310,10 +282,10 @@ paired lanterns holds for a side: lit from the patch, selects the patch, never d
   is never drawn. The editors ask `acceptsLength` whether to offer the field at all.
 - **3D**: `FixtureModel` sizes its body from `drawnLengthM`, and a side's length reaches it because
   `patchAtPlacement` lays the placement's `lengthM` over the patch's.
-- **2D**: `useProjectedPatches` gives such a fixture (and each side) a `span` — its two ends,
-  projected — and `FixtureShape` draws a bar between them, to scale, with a stroke-shaped hit
-  target along it. A span that projects to a point (a run seen end-on in an elevation) falls back to
-  the dot, and a pixel bar keeps its segmented strip. The long axis is `longAxisLighting`, which
+- **On a section**: `useProjectedPatches` gives such a fixture (and each side) a `span` — its two
+  ends, projected — and the section edit layer takes a press anywhere along it
+  (`edit/sectionHits.ts`), since a long run is pressed at its ends as often as its middle. A span
+  that projects to a point (a run seen end-on in an elevation) is its point. The long axis is `longAxisLighting`, which
   mirrors `FixtureModel`'s body rotation exactly — a YXZ Euler of `(basePitchDeg, baseYawDeg,
   baseRollDeg)` in world space, so the rigging's pose places the body but does not turn it, pitch
   never moves the long axis, and roll is the only turn that lifts it off level (90 stands a run on
@@ -477,13 +449,13 @@ so that waits for a typed identity (`FU-STAGE-HAZE-FOLLOWS-HAZER`).
 (`models/stageRegions.kt`), the MCP schema and the aim tool always meant. The frontend drew the box
 *up* from it, so project 15's "Main stage" (top at 0, 0.95 m thick) stood 0.95 m proud of the deck
 and pools landed on the wrong surface. Every reader agrees now: `StageRegionMeshes`,
-`computeRegionGeometry` (the emitters' OBBs), `worldCornersFor` (the 2D plot and both handle sets),
-and the height handles in 3D (`RegionEditHandles`) and 2D (`EditHandles2D`) — dragging the top
-moves `centerZ` and keeps the floor, dragging the floor changes only `heightM`. The 3D rotation
-handles sit on the deck, where a deck at 0 keeps them above the stage floor. A region placed by a
-click (`routes/Stage.tsx`) stands on the clicked height — `centerZ` is the click plus its height —
-and the 2D elevations fit down to the lowest region floor, to the whole metre so a height drag does
-not refit the view every frame. Regions authored while the frontend read `centerZ` as the floor now
+`computeRegionGeometry` (the emitters' OBBs), `worldCornersFor` (a section's outline and both
+handle sets), and the height handles on the orbit camera (`RegionEditHandles`) and on the Front and
+Side sections (`edit/SectionEditHandles.tsx`) — dragging the top moves `centerZ` and keeps the
+floor, dragging the floor changes only `heightM`. The orbit camera's rotation handles sit on the
+deck, where a deck at 0 keeps them above the stage floor. A region placed by a click
+(`routes/Stage.tsx`) stands on the clicked height — `centerZ` is the click plus its height — and a
+section's bounds reach down to the lowest region floor (`sceneBoundsLighting`). Regions authored while the frontend read `centerZ` as the floor now
 draw one thickness lower; they are re-set on the desk, not migrated (the plan's P5).
 
 ### Lenses and housings
@@ -511,8 +483,7 @@ collides, with a couple of pixels' gap. Three rules:
 - **A label is registered once per store** and restyled in place on a rename or a hover; tearing the
   `<div>` down on every hover was the churn the layer exists to avoid.
 - **The flag was a boolean.** `StageViewFlags.labels` is a `StageLabelMode` now, and a desk's stored
-  `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`). The 2D plot reads anything but
-  *None* as "labels on".
+  `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`).
 
 ### The 3D text font
 
@@ -538,7 +509,8 @@ which forgets" and §5 "Both 2D surfaces lose to label density" are the why.
   stands, looking where it looks — so *orbit there, then look around* is the gesture until session
   2's saved points and seats. Pitch stops at ±85°, the lens at 15–90°.
 - **Plan · Front · Side** — orthographic sections under `OrbitControls` with rotation off. Their
-  screen conventions are `lib/stageProjection.ts`'s, so the camera and the SVG plot agree: Plan has
+  screen axes are exactly `lib/stageProjection.ts`'s `h` and `v` (`sectionHits.test.ts` pins all
+  three), which is what lets the section edit layer work in the projection's metres: Plan has
   upstage at the top, Front has +X to the right, Side looks from +X (audience right, stage left) with
   the house on the left.
 
@@ -685,10 +657,6 @@ stage — but the far plane reaches the drawn venue's bounds (`orthoSection`'s `
 behind it. The plan section cuts the ceiling away by the same rule. Rooms face inward, so a section
 camera outside the hall sees in through the side it cuts.
 
-**Stage2DView stays behind Edit** (D1). Editing on a section is still the SVG plot's job until 3D
-editing has parity (session 5): `renderer2d` in `routes/Stage.tsx` is `editing && section`, and every
-other combination is the 3D scene.
-
 ### Frame the selection (F)
 
 F — bare, never from a field; ⇧F is full screen — and the picker's item bring the selection into
@@ -808,3 +776,118 @@ Tests: `api/stageRenderApi.test.ts` (the frame), `savedViewpoints.test.ts` (`res
 its id and token, busy, a throwing render, and nothing toasted) and
 `stage3d/render/StageRenderJob.test.tsx` (the props `Stage3D` is handed, drawing once the scene
 reports in, giving up with a reason, and this window's viewpoint and landed marker untouched).
+
+## Editing on the sections
+
+Session 5 of the stage-view plan (D1) moved editing on Plan, Front and Side onto the 3D scene and
+deleted the SVG plot (`components/stage2d/`, about 3,100 lines). There is one renderer now: the
+scene on a section is drawn by `Stage3D`, and editing there is **`edit/SectionEditLayer.tsx`**, DOM
+over the canvas as the label layer is. `svgPlotRetired.test.ts` keeps the plot gone.
+
+**The layer owns the pointer while the view edits on a section** (`sectionEditing` in `Stage3D`:
+Edit on, a section camera, not a render, no seat pick armed). It hit-tests, drags, marquees, pans and
+zooms in the section's own metres — `lib/stageProjection.ts`'s `{h, v}`, v screen-down — and the
+scene's own gizmo, 3D handles, placement plane and grid stand down, so R3F and `OrbitControls` never
+see a press there. Three pieces make that possible:
+
+- **The section camera reports where it looks** (`StageCameraRig`'s `onSectionView`): after every
+  frame drawn, its centre in the section's metres, its zoom (pixels a metre) and the canvas's size,
+  into a small store (`edit/sectionView.ts`). A section's screen axes are the projection's `h` and
+  `v` exactly, so nothing more is needed; `sectionHits.test.ts` pins that for all three cameras.
+  The canvas draws on demand, so **the rig asks for a frame when a listener arrives** — Edit turned
+  on over a still stage draws nothing new, and without it the layer would wait, blank, for a fader —
+  and `Stage3D` clears the store when editing stops or the section changes, so a layer never
+  hit-tests against another camera's view.
+- **A pointer is resolved from the canvas's live centre** (`offsetToSection`), never its top-left
+  and the reported size. The camera keeps its centre and zoom as the canvas resizes, but the report
+  lags a frame or two — and arming `+ Scenery` folds the side panel away, widening the canvas at the
+  very moment of the click that places. Resolving against the reported width put that click 180 px
+  off; the SVG's viewBox is `xMidYMid meet` for the same reason, so the chrome stays on the scene
+  through the lag.
+- **The camera takes pan, zoom and fit from the layer** (`StageCameraHandle.section`): a pan slides
+  the camera and its target within the section plane, a zoom keeps the point under the pointer
+  still, and both mark the section moved so it stops refitting — the rule a section's own controls
+  already kept. Neither moves along the view axis, so editing never changes what a section cuts.
+
+**What a press lands on** (`edit/sectionHits.ts`, pure and node-tested): a fixture within 12 px (a
+lantern pressing as its fixture; a variable-length run along its whole span), over a bar within 7 px
+(or half its thickness), over the **areas** — regions and scenery — where the **smallest outline
+under the pointer wins**, so a prop on a deck is the prop and the deck beside it is the deck; a tie
+goes to the region. A `ROOM` is never pressed on the canvas (it is the whole hall, and a press
+anywhere would take it); it is picked from the editor's list. The plot used paint order for the
+areas, which let a region hide everything standing on it.
+
+**A drag settles exactly once, however it ends** (`useSectionDrag`). Its moves write the RTK cache
+and only the settle writes the desk or rolls back, so the layer unmounting mid-drag (a section
+left, Edit turned off, the context lost) settles it where it had got to, and so does a second
+pointer starting a drag before the first lifts. *Sit in a seat…* is not offered while editing on a
+section (`canSit`), for the same reason the SVG plot withheld it: the pick needs the pointer the
+layer holds.
+
+**Scenery on a section** is selected and dragged like a region — body drag once selected, guides and
+grid snap, out-of-plane preserved — and written per frame to the RTK cache (`writeElementPlacement`)
+so the builders redraw it as it moves — `sceneBuilds` keeps each element's build while the list
+holds the same object (`SceneBuildCache`), so only the dragged piece is rebuilt — then `PUT` once on
+release and rolled back if refused. A flown
+piece with a trim slides across only in an elevation, since its Z is not where it is drawn. The
+layer draws the selected element's outline, which the scene has no highlight for. Resize and yaw
+handles for scenery are not built; the element form takes the numbers.
+
+**Edit chrome never reaches a render.** The layer is `Stage3D`'s DOM outside the canvas, mounted only
+while `capture` is null; the section camera's report is only wired while editing on screen; a
+render's root has no event system (`events.connected` is `false` there), and nothing edit-only reads
+it. `render_view` of a section drawn from a window that is editing on one draws the scene and no
+grid, handles or guides.
+
+### Parity with the SVG plot
+
+The SVG view's gestures as they stood at the start of session 5 (plan §10), and where each lives now.
+Route-level gestures were always renderer-blind; they are listed because the claim is the whole
+list.
+
+| SVG plot (`Stage2DView` and friends) | On the sections now | Plan | Front / Side |
+|---|---|---|---|
+| Background drag pans (4 px threshold), middle button too | the layer, through `section.panBy` | ✓ | ✓ |
+| Wheel zooms about the pointer | a native non-passive listener, `section.zoomAt` | ✓ | ✓ |
+| HUD: axis legend, cursor read-out, snap step, zoom − / + / fit, edge-on notice | `edit/SectionHud.tsx` | ✓ | ✓ |
+| Snap-step grid (minor lines dropped under 6 px, major every 5, datum axes) | `edit/SectionGrid.tsx` over the canvas | ✓ | ✓ |
+| Click selects; ⇧ adds, ⌘ toggles; click on nothing clears | the layer, `selectionIntentFor` | ✓ | ✓ |
+| ⇧ / ⌘ + drag on empty space marquees fixtures (lanterns select their fixture; ⌘ adds) | `marqueeHits`, `sel.selectMany` | ✓ | ✓ |
+| Drag a selected free fixture: in-plane, out-of-plane axis kept, guides then grid | `fixtureDrag` | ✓ | ✓ |
+| Drop a free fixture on a bar within 12 px: hung on it, the bar lit green | `riggingUnderPoint`, `dropOntoRigging` | ✓ | ✓ |
+| Drag a hung fixture: slides along its bar, snapped in bar metres, clamped to its ends; refused edge-on | `localXAlongBar` | ✓ | ✓ |
+| A lantern is never dragged | `dragFor` | ✓ | ✓ |
+| Drag a selected region / bar (rigid; pitch kept); bar refused edge-on | `regionDrag`, `riggingDrag` | ✓ | ✓ |
+| Region corner resize (opposite corner pinned) and yaw handles, 15° snap | `RegionSectionHandles` | ✓ | — |
+| Region top / floor height handles (top keeps the floor), vertical only | `RegionSectionHandles` | — | ✓ |
+| Bar endpoint handles (other end pinned); hidden edge-on | `RiggingSectionHandles` | ✓ | ✓ |
+| Alignment guides drawn while snapped | `AlignmentGuides` | ✓ | ✓ |
+| Armed `+ Region` / `+ Rigging` / tray click places, snapped, the unseen axis from `placementDefault` | the layer's click | ✓ | ✓ |
+| Unplaced tray: arm (⇧/⌘ extends), Select all, Hang all on truss…, fanned along X by the step | `edit/UnplacedTray.tsx`, on the sections | ✓ | ✓ |
+| Arrow nudge by the step (⇧ ×10), coalesced, along a bar for a hung fixture | `edit/useStageNudge.ts`, the section's axes | ✓ | ✓ |
+| ⌫ removes from stage, ⌘D duplicates, Esc cancels placing | the route | ✓ | ✓ |
+| Bulk panel for a multi-selection (align, distribute, hang, set depth, mirror) | `edit/StageBulkPanel.tsx` | ✓ | ✓ |
+| ⇧ held suspends snapping; the Snap toggle and step | `edit/useSnapGrid.ts` | ✓ | ✓ |
+| Shortcut list | `edit/StageShortcutsPopover.tsx` | ✓ | ✓ |
+| View flags hide regions, rigging, fixtures (and their presses) | the scene, and `SectionScene` | ✓ | ✓ |
+
+Not carried over, on purpose: the plot's own fixture shapes, colours and label declutter (the scene
+and the label layer draw those), and its stage-envelope rectangle (the scene's box outline is it).
+Session 5 also made **a click on nothing clear the selection in view mode** too, on every camera
+(`handlePointerMissed`), which the record listed as noticed on the way.
+
+### `+ Scenery` and the element form
+
+The Edit header's `+ Scenery` (`Edit.dc.html` §1) lists the seven kinds plus tabs and a flown piece
+(`edit/sceneryKinds.ts`): each is armed and placed with a click like a region, with sizes to start
+from, and opens **`EditSceneElementForm`** (`components/stage/`) in the `StageEditorPanel`, beside
+the region's and the rigging's forms. The editor's list gains a *Scenery* section, the only way to
+pick a room. The form draws the kind's `params` fields and saves one partial `PUT`, `params` whole
+(`elementDraft.ts`); it checks nothing but a name. The desk checks it, through the
+`validateStageElement` `set_scene` uses: a 400 lists every problem, and `elementProblems.ts` files
+each beside the field it leads with (`params.openings[1]` under that opening), or the first it
+names, or at the top — none is dropped. A reshaped seating that seat views sit in is a 409 the form
+asks about (*Save anyway* forces). *Moves with* is read-only and empty until session 8. The three
+element endpoints are in `SILENT_ENDPOINTS`, so the route's placement and drag toast their own
+failures. The design record's two builders (*Proscenium hall from measurements…*, *Ask Claude*) are
+not built: the template is `set_scene`'s over MCP, which the in-app chat does not carry.

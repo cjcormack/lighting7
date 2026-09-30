@@ -1,6 +1,6 @@
 import { useMemo, useRef } from 'react'
-import { usePersistentState } from '../../hooks/usePersistentState'
-import { useModifierHeld, SNAP_DISTANCE_M } from '../stage3d/useShiftHeld'
+import { usePersistentState } from '../../../hooks/usePersistentState'
+import { useModifierHeld, SNAP_DISTANCE_M } from '../useShiftHeld'
 
 export const SNAP_STEPS_M = [0.1, 0.25, 0.5, 1] as const
 export type SnapStep = (typeof SNAP_STEPS_M)[number]
@@ -28,7 +28,8 @@ export interface SnapGrid {
 }
 
 /**
- * Grid snapping, shared by the 2D editor and the 3D scene.
+ * Grid snapping, shared by every camera's editing: the section edit layer and the orbit camera's
+ * handles and gizmo.
  *
  * **Snap is on by default and Shift temporarily disables it** — the inverse of
  * this codebase's original behaviour, where Shift *enabled* snapping. Laying out
@@ -36,11 +37,12 @@ export interface SnapGrid {
  * holding a modifier for every placement drag fights the user. Free positioning
  * is the exception, so it gets the modifier.
  *
- * The 3D handles were flipped to match rather than left as they were. Having the
- * same key mean opposite things on the same route, depending only on which view
- * is showing, would be worse than either convention.
+ * The orbit camera's handles were flipped to match rather than left as they were.
+ * Having the same key mean opposite things on the same route, depending only on
+ * which camera is showing, would be worse than either convention.
  */
 export function useSnapGrid(enabled: boolean): SnapGrid {
+  // The key keeps the SVG plot's name so a desk keeps the snap it had set; renaming it would reset it.
   const [stored, setStored] = usePersistentState<StoredSnap>('stage2dSnap', DEFAULT_SNAP, {
     merge: true,
   })

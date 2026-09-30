@@ -12,7 +12,7 @@ export interface Lantern {
 
 /**
  * Every positioned lantern of `patches`, in patch then list order. Unpositioned lanterns are
- * skipped, as on the 2D plot: `worldPositionFor` would put one at the origin, and a lantern there
+ * skipped, as on every stage surface: `worldPositionFor` would put one at the origin, and a lantern there
  * is a claim about the rig.
  */
 export function lanternsFor(patches: readonly FixturePatch[]): Lantern[] {
@@ -34,7 +34,7 @@ export function lanternsFor(patches: readonly FixturePatch[]): Lantern[] {
  * fixture (one side of a lightstrip ring) also carries its own `lengthM`, and takes the patch's
  * where it has none. The one other field it changes is
  * `displayName`, which `FixtureModel` draws as the 3D label: a labelled lantern reads
- * "Name · SR", as it does on the 2D plot and the overview panel.
+ * "Name · SR".
  */
 export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement): FixturePatch {
   const label = placement.label?.trim()

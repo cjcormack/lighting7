@@ -11,11 +11,13 @@ const SHORTCUTS: Shortcut[] = [
   { keys: '↑ ↓ ← →', what: 'Nudge selection by the grid step' },
   { keys: '⇧ + arrows', what: 'Nudge ten steps' },
   { keys: '⇧ / ⌘ + click', what: 'Add to / toggle selection' },
-  { keys: '⇧ / ⌘ + drag', what: 'Marquee-select fixtures' },
+  { keys: '⇧ / ⌘ + drag', what: 'Marquee-select fixtures (Plan, Front, Side)' },
+  { keys: 'drag / wheel', what: 'Pan and zoom a section' },
   { keys: '⌫', what: 'Remove selection from stage (keeps the patch)' },
-  { keys: '⌘ D', what: 'Duplicate the selected region or rigging' },
+  { keys: '⌘ D', what: 'Duplicate the selected region, rigging or scenery' },
   { keys: '⇧ (held)', what: 'Place off-grid — suspends snapping' },
-  { keys: '⌥ (held)', what: 'Flip the 3D gizmo between move and rotate' },
+  { keys: '⌥ (held)', what: 'Flip the orbit gizmo between move and rotate' },
+  { keys: 'F', what: 'Frame the selection' },
   { keys: 'Esc', what: 'Cancel placement' },
 ]
 

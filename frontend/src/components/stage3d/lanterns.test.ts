@@ -49,7 +49,7 @@ describe('patchAtPlacement', () => {
       stageZ: null,
       baseYawDeg: -15,
       basePitchDeg: null,
-      // The label the 3D view draws, as the 2D plot and the overview panel draw it.
+      // The label the 3D view draws.
       displayName: 'Pair · SR',
       // The fixture's own: a lantern is the same unit in the same colour, lit by the same key.
       key: 'pair',

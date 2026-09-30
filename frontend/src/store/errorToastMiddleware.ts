@@ -132,6 +132,13 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'createRigging', // src/components/rigging/EditRiggingForm.tsx
   'updateRigging', // ...and the drag handler in src/routes/Stage.tsx
   'deleteRigging',
+  // The scene element trio (stage-view plan session 5). A 400 lists every problem the desk's
+  // `validateStageElement` found, and `EditSceneElementForm` draws each beside its field; a 409
+  // (a name taken, seat views that would lose their seat) is a step in the form, not a failure. The
+  // route's `+ Scenery` placement and its section drag report their own, as the region's do.
+  'createStageElement', // src/routes/Stage.tsx (+ Scenery and ⌘D)
+  'updateStageElement', // src/components/stage/EditSceneElementForm.tsx, and the drag in src/routes/Stage.tsx
+  'deleteStageElement', // src/components/stage/EditSceneElementForm.tsx
   // NB: the script endpoints are deliberately *not* listed. `createProjectScript` has two call
   // sites — ScriptForm and CueTriggerEditor's inline-script step — and only one of them reported
   // anything, so deny-listing it made the other silent again. Both now rely on this middleware.

@@ -743,14 +743,17 @@ coordinates. World position is computed by composing the rigging's pose
 world = rigging.position + R(yaw, pitch, roll) · (stage_x, stage_y, stage_z)
 ```
 
-The REST DTO surfaces both — `stageX/Y/Z` are the raw offsets (rigging-frame
-or world, depending on `riggingUuid`); `worldPositionX/Y/Z` is the resolved
-world position, precomputed for renderers.
+The REST DTO carries only the raw offsets — `stageX/Y/Z`, rigging-frame or
+world depending on `riggingUuid` — and every reader composes the world position
+itself, by one rule: `worldPosition` in `show/StageCoords.kt` on the desk (the
+aim solve, `describe_rig`), and its mirror `worldPositionLighting` in the
+frontend's `lib/stageCoords.ts` (the Stage view, Positions, the cue cards).
 
-`base_yaw_deg` / `base_pitch_deg` continue to mean the fixture body's
-orientation; when a rigging is set, they're typically authored relative to
-the rigging frame (e.g. a fixture clamped square on a rotated truss has
-`baseYawDeg = 0` and inherits the truss's yaw from the rigging).
+`base_yaw_deg` / `base_pitch_deg` / `base_roll_deg` are the fixture body's
+orientation **in the world**, not in the rigging's frame: a rigging's pose
+**places** a fixture but does not turn it. A fixture clamped square on a truss
+yawed 20° is drawn square to the stage until its own `baseYawDeg` is set to 20
+too — the rule §"Aiming a head at a point" states and `FixtureAim` solves by.
 
 ### Extra placements (paired dimmers)
 
@@ -825,8 +828,8 @@ its declared `lengthM` becomes only the **default** drawn until a patch sets its
   `patch_fixtures` / `place_fixtures` take `lengthM` on the row and on each `alsoAt` entry, and
   `get_patch` reports both.
 - **Frontend**: the patch form offers *Length* only for such a type, and per side under *Other
-  sides of this run*; the 3D body is drawn at the length, and the 2D plot draws the fixture as a
-  bar between its two projected ends rather than a dot (`frontend/src/lib/fixtureLength.ts`,
+  sides of this run*; the 3D body is drawn at the length, and editing on a Plan, Front or Side
+  section takes a press anywhere between its two projected ends (`frontend/src/lib/fixtureLength.ts`,
   which mirrors `FixtureModel`: the long axis swings with `baseYawDeg` and tips up with
   `baseRollDeg`; pitch turns the body about it).
 
@@ -975,6 +978,13 @@ A `PUT` is partial and the merged element is checked whole. Each write fires
 `stageElementListChanged` or `stageViewpointListChanged`. The MCP surface is `set_scene` and
 `get_scene` (`docs/mcp-engineering.md` §"Show-setup tools"); sync is v18
 (`docs/sync-engineering.md`).
+
+On the desk (stage-view plan session 5) the Stage view's Edit mode places an element with
+`+ Scenery` and edits it in its element form, both over these routes: a 400 lists every problem
+`validateStageElement` found, joined with `"; "`, each leading with the field it is about as the
+REST body spells it (`widthM`, `params.openings[1]`, `params.states.open`), and the form draws each
+beside that field. Keep that spelling if a message is reworded — it is how a refusal finds its
+field (`frontend/src/components/stage/elementProblems.ts`).
 
 ### Aiming a head at a point
 

@@ -16,8 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { FixturePatch } from '../../api/patchApi'
-import type { RiggingDto } from '../../api/riggingApi'
+import type { FixturePatch } from '../../../api/patchApi'
+import type { RiggingDto } from '../../../api/riggingApi'
 import {
   alignTargets,
   arrayAlongRigging,
@@ -27,9 +27,9 @@ import {
   setDepthTargets,
   unplaceTargets,
   type AlignEdge,
-} from '../../lib/stageBulkOps'
-import type { StageProjection } from '../../lib/stageProjection'
-import type { PlacementChange } from '../../store/stagePlacement'
+} from '../../../lib/stageBulkOps'
+import type { StageProjection } from '../../../lib/stageProjection'
+import type { PlacementChange } from '../../../store/stagePlacement'
 
 interface StageBulkPanelProps {
   patches: FixturePatch[]
@@ -38,6 +38,8 @@ interface StageBulkPanelProps {
   /** Non-patch objects in the selection, for the composition banner. */
   regionCount: number
   riggingCount: number
+  /** Scene elements in the selection. */
+  elementCount?: number
   onApply: (changes: PlacementChange[], label: string, warnings?: string[]) => void
   onDismiss: () => void
 }
@@ -57,6 +59,7 @@ export function StageBulkPanel({
   projection,
   regionCount,
   riggingCount,
+  elementCount = 0,
   onApply,
   onDismiss,
 }: StageBulkPanelProps) {
@@ -110,7 +113,7 @@ export function StageBulkPanel({
   const unplace = () =>
     onApply(unplaceTargets(targets.map((t) => t.patch.id)), 'Unplace')
 
-  const nonPatches = regionCount + riggingCount
+  const nonPatches = regionCount + riggingCount + elementCount
 
   return (
     <aside className="w-72 shrink-0 border-l bg-background flex flex-col">

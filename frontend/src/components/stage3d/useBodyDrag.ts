@@ -4,7 +4,7 @@ import { Object3D } from 'three'
 import { useHandleDrag, type StartDragOptions } from './useHandleDrag'
 
 /** Pointer travel that promotes a press from a click into a drag. Shared with the
- *  2D editor's useBodyDrag2D so both views discriminate identically. */
+ *  section edit layer's useSectionPress so every camera tells a click from a drag the same way. */
 export const DRAG_PX_THRESHOLD = 4
 
 function isDescendantOf(node: Object3D | null, ancestor: Object3D): boolean {

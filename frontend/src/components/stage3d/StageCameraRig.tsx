@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
@@ -21,6 +21,9 @@ import {
   type OrbitPose,
   type Vec3,
 } from '../../lib/stageCameraPoses'
+import { fromThree } from '../../lib/stageCoords'
+import { STAGE_PROJECTIONS, project } from '../../lib/stageProjection'
+import type { SectionControls, SectionView } from './edit/sectionView'
 import {
   boundingSphere,
   clampFov,
@@ -47,6 +50,11 @@ export interface StageCameraControls {
 export interface StageCameraHandle {
   /** Bring these points (three.js space) into view, in whatever way the current camera moves. */
   frame(points: readonly Vec3[]): void
+  /**
+   * A section's pan and zoom, for the edit layer over the canvas, which holds the pointer while the
+   * view edits on a section (session 5). Absent on the orbit and the eye.
+   */
+  section?: SectionControls
 }
 
 /**
@@ -86,6 +94,12 @@ interface StageCameraRigProps {
   oneShot?: boolean
   controlsRef: React.RefObject<StageCameraControls | null>
   handleRef?: React.RefObject<StageCameraHandle | null>
+  /**
+   * Told where a section looks whenever it moves or the canvas resizes — its centre in the
+   * section's screen metres, its zoom and the canvas's size — so the edit layer over the canvas can
+   * draw and hit-test in metres (session 5). Sections only.
+   */
+  onSectionView?: (view: SectionView) => void
 }
 
 /**
@@ -397,6 +411,9 @@ function EyeRig({ defaultOrbit, persist, oneShot = false, controlsRef, handleRef
 
 /** A fit leaves this much of the canvas round the scene. */
 const ORTHO_FIT_FILL = 0.94
+/** A section's zoom range, in pixels per metre. */
+const ORTHO_MIN_ZOOM = 1
+const ORTHO_MAX_ZOOM = 4000
 
 function OrthoRig({
   view,
@@ -404,6 +421,7 @@ function OrthoRig({
   beyond = null,
   controlsRef,
   handleRef,
+  onSectionView,
 }: StageCameraRigProps & { view: OrthoCamera }) {
   const section = useMemo(() => orthoSection(view, bounds, beyond), [view, bounds, beyond])
   const [camera] = useState(() => {
@@ -422,8 +440,8 @@ function OrthoRig({
   // resizes, and to the rig as its lists arrive. After that it is theirs.
   const moved = useRef(false)
 
-  useLayoutEffect(() => {
-    if (controls == null || moved.current) return
+  const fit = useCallback(() => {
+    if (controls == null) return
     camera.position.set(...section.position)
     camera.far = section.far
     camera.zoom = fitZoom(section.width, section.height, size.width, size.height) * ORTHO_FIT_FILL
@@ -432,6 +450,10 @@ function OrthoRig({
     controls.update()
     invalidate()
   }, [camera, controls, section, size.width, size.height, invalidate])
+
+  useLayoutEffect(() => {
+    if (!moved.current) fit()
+  }, [fit])
 
   // How deep the section sees follows the scene even after the operator has moved it: a pan or a
   // frame slides the camera within its plane, never along the view axis, so the far plane measured
@@ -443,8 +465,43 @@ function OrthoRig({
     invalidate()
   }, [camera, section.far, invalidate])
 
+  // Where the section looks, for the edit layer: read after every frame drawn — the canvas draws
+  // whenever the camera moves or resizes — and handed on only when it changed.
+  const onSectionViewRef = useRef(onSectionView)
+  onSectionViewRef.current = onSectionView
+  const projection = STAGE_PROJECTIONS[view]
+  // The report is made from a drawn frame, and the canvas draws on demand: when a listener
+  // arrives — Edit turned on over a still stage — ask for the frame that tells it where it is.
+  const reporting = onSectionView != null
+  useLayoutEffect(() => {
+    if (reporting) invalidate()
+  }, [reporting, invalidate])
+  useFrame(() => {
+    const report = onSectionViewRef.current
+    if (report == null) return
+    const centre = project(fromThree(camera.position), projection)
+    report({ h: centre.h, v: centre.v, zoom: camera.zoom, width: size.width, height: size.height })
+  })
+
   const handle = useMemo<StageCameraHandle | null>(() => {
     if (controls == null) return null
+    // Along the section's screen axes in three.js space: right, and down (the projection's v).
+    const axes = () => {
+      camera.updateMatrixWorld()
+      const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0)
+      const down = new Vector3().setFromMatrixColumn(camera.matrixWorld, 1).negate()
+      return { right, down }
+    }
+    // Slides the camera and its target together, within the section plane — never along the view
+    // axis, so moving the section never changes what it cuts.
+    const slide = (dh: number, dv: number) => {
+      const { right, down } = axes()
+      const shift = right.multiplyScalar(dh).add(down.multiplyScalar(dv))
+      camera.position.add(shift)
+      controls.target.add(shift)
+      controls.update()
+      invalidate()
+    }
     return {
       frame(points) {
         const sphere = boundingSphere(points)
@@ -458,8 +515,33 @@ function OrthoRig({
         controls.update()
         invalidate()
       },
+      section: {
+        panBy(dxPx, dyPx) {
+          if (!(camera.zoom > 0)) return
+          moved.current = true
+          slide(-dxPx / camera.zoom, -dyPx / camera.zoom)
+        },
+        zoomAt(factor, xPx, yPx) {
+          if (!(camera.zoom > 0) || !(factor > 0)) return
+          moved.current = true
+          const before = camera.zoom
+          const after = Math.max(ORTHO_MIN_ZOOM, Math.min(ORTHO_MAX_ZOOM, before * factor))
+          if (after === before) return
+          // Keep the point under the pointer where it is: it sits (x − w/2) pixels from the centre,
+          // which is that many metres at the old zoom and fewer at the new one.
+          const ox = xPx - size.width / 2
+          const oy = yPx - size.height / 2
+          camera.zoom = after
+          camera.updateProjectionMatrix()
+          slide(ox / before - ox / after, oy / before - oy / after)
+        },
+        fit() {
+          moved.current = false
+          fit()
+        },
+      },
     }
-  }, [camera, controls, size, invalidate])
+  }, [camera, controls, size, invalidate, fit])
   useLend(handleRef, handle)
 
   return (
@@ -469,8 +551,8 @@ function OrthoRig({
       makeDefault
       enableRotate={false}
       screenSpacePanning
-      minZoom={1}
-      maxZoom={4000}
+      minZoom={ORTHO_MIN_ZOOM}
+      maxZoom={ORTHO_MAX_ZOOM}
       onStart={() => {
         moved.current = true
       }}

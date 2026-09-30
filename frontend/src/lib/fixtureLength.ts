@@ -17,7 +17,7 @@ import type { LightingPoint } from './stageProjection'
  * (a segment of a run laid in several sides), else the patch's, else the type's default; for any
  * other type, the type's own length. Null when the type is unknown or declares none.
  *
- * `placement` is for a caller holding the placement apart from its patch (the 2D plot). The 3D
+ * `placement` is for a caller holding the placement apart from its patch (`useProjectedPatches`). The 3D
  * view needs none: `patchAtPlacement` already lays the placement's length over the patch's.
  */
 export function drawnLengthM(
@@ -44,7 +44,7 @@ const SCRATCH_AXIS = new Vector3()
 /**
  * The unit vector of a fixture body's long axis (its local +X) in world lighting coords.
  *
- * Mirrors `FixtureModel` exactly, so the 2D plot and the 3D body agree: the body is drawn at its
+ * Mirrors `FixtureModel` exactly, so a projected span (`useProjectedPatches`) and the 3D body agree: the body is drawn at its
  * world position under a YXZ Euler of `(basePitchDeg, baseYawDeg, baseRollDeg)` alone — a rigging's
  * pose places the body but does not turn it. Pitch turns about the body's own X, so it never moves
  * the long axis: yaw swings it round the stage, and roll is the only thing that tilts it off level
@@ -65,8 +65,8 @@ export function longAxisLighting(
 }
 
 /**
- * The two ends of a body `lengthM` long, centred on `world` along its long axis — the span the 2D
- * plot draws a variable-length fixture as.
+ * The two ends of a body `lengthM` long, centred on `world` along its long axis — the span a
+ * section's edit layer presses a variable-length fixture along (`useProjectedPatches`).
  */
 export function bodyEndsLighting(
   world: LightingPoint,

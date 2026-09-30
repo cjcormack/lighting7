@@ -85,7 +85,7 @@ gotcha; append whenever something new is learned.
 - **`bg-muted` is near-white in the light theme.** A component whose only surface is muted
   (`Avatar`'s fallback) reads as floating text on a white card. Put those compositions on a
   `rounded-lg border p-3` surface, which is also where they sit in the app.
-- The emitted `.d.ts` drops `| null` from several props (`Stage2DHud.cursor`, `snapStepM`,
+- The emitted `.d.ts` drops `| null` from several props (`SectionHud.cursor`, `snapStepM`,
   `PromptBookToolbar.scriptFileName`, `BeamAngleField.value`, `GelPickerField.value`). The
   bundle is esbuild-compiled with no type check and the source does accept null, so passing it
   is correct; cast (`null as unknown as …`) rather than inventing a non-null value.
@@ -97,7 +97,7 @@ These are triaged and expected. A warn **not** in this list is new — look at i
 - `[GRID_OVERFLOW]` was resolved for all five components it named by the overrides in
   `cfg.overrides`: `AuthScreenLayout` and `FloatingSelectionToolbar` are `cardMode: single`
   (their content is fixed/portalled and escapes any grid cell); `ToggleGroup`, `BeamAngleField`
-  and `Stage2DHud` are `cardMode: column` (wider than a grid cell).
+  and `SectionHud` are `cardMode: column` (wider than a grid cell).
 - `PromptBookToolbar`'s live-cue chip is a dark green pill (`emerald-950/60` on `emerald-800`),
   tuned for the dark theme. On the light review sheet that is the component's real behaviour,
   not a render fault.
