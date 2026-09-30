@@ -60,9 +60,9 @@ Prefer a variant to restyling a component with classes.
   There is no `Card.Header`.
 - Icons: the library does not export an icon set. Components that need one render their own.
   In a `Button`, an inline `<svg>` child before the label is sized and gapped automatically.
-- Small desk-specific pieces exist and beat re-creating them: `BuskLabel` (region label),
-  `LookNameBadge`, `TimingBadge`, `InlineEditField` (click-to-edit text), `CollapsiblePanel`,
-  `TruncateStart` (keeps the end of a long name visible), `ShowLockControl`,
+- Small desk-specific pieces exist and beat re-creating them: `EditorLabel` (region and field
+  label), `LookNameBadge`, `TimingBadge`, `InlineEditField` (click-to-edit text),
+  `CollapsiblePanel`, `TruncateStart` (keeps the end of a long name visible), `ShowLockControl`,
   `OffPlayheadBanner`, `OutOfOrderBanner`.
 
 ### Where the truth lives

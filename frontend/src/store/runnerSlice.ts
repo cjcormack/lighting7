@@ -57,7 +57,7 @@ interface StackRunnerState {
   serverAutoAdvanceDelayMs: number | null
 }
 
-interface RunnerState {
+export interface RunnerState {
   stacks: Record<number, StackRunnerState>
 }
 
