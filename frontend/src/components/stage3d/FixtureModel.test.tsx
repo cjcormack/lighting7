@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
-import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Vector3 } from 'three'
-import { ColourSync, composeBeamHull, lensLocalMatrix, pixelsPerMetre, resolveCellColour } from './FixtureModel'
+import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Quaternion, Vector3 } from 'three'
+import { ColourSync, composeBeamHull, lensLocalMatrix, pixelsPerMetre, resolveCellColour, staticHeadQuaternion } from './FixtureModel'
 import { apexDistanceM } from './bodies/archetype'
 import { bodyShownFor, LOD_BILLBOARD_BELOW_PX, LOD_SIMPLE_BELOW_PX } from './bodies/StageBodies'
 import { fromThree } from '../../lib/stageCoords'
@@ -173,29 +173,51 @@ describe('the beam hull and the lenses', () => {
 })
 
 describe("a static lantern's yoke and head", () => {
-  it('split its base turn in two without moving the beam or the long axis', () => {
+  const turn = (yaw: number, pitch: number, roll: number) =>
+    new Matrix4()
+      .makeRotationFromEuler(new Euler(0, MathUtils.degToRad(yaw), 0))
+      .multiply(
+        new Matrix4().makeRotationFromQuaternion(
+          staticHeadQuaternion(MathUtils.degToRad(pitch), MathUtils.degToRad(roll), true),
+        ),
+      )
+  const beam = (m: Matrix4) => fromThree(new Vector3(0, -1, 0).transformDirection(m))
+
+  it('throws where the columns are documented: pitch 0 level towards the yaw, +pitch aiming down', () => {
+    // docs/fixtures-engineering.md: yaw 0 faces the audience (−y), +yaw turns towards audience
+    // right (+x); pitch 0 is horizontal, +pitch aims down. As the Commemoration Hall's data reads.
+    const near = (a: { x: number; y: number; z: number }, x: number, y: number, z: number) =>
+      expect(Math.hypot(a.x - x, a.y - y, a.z - z)).toBeCloseTo(0, 9)
+    near(beam(turn(0, 0, 0)), 0, -1, 0)
+    near(beam(turn(0, 90, 0)), 0, 0, -1)
+    near(beam(turn(90, 0, 0)), 1, 0, 0)
+    near(beam(turn(180, 30, 0)), 0, Math.cos(Math.PI / 6), -0.5)
+    // An ADV2 front (yaw −136, pitch 10) throws upstage at the stage, a little below level —
+    // before session 6 it was drawn almost straight down.
+    const adv2 = beam(turn(-136, 10, 0))
+    expect(adv2.y).toBeGreaterThan(0.6)
+    expect(adv2.z).toBeCloseTo(-Math.sin(MathUtils.degToRad(10)), 9)
+  })
+
+  it('keeps the long axis longAxisLighting reads, so roll still stands a strip on end', () => {
     for (const [yaw, pitch, roll] of [
       [-136, 10, 0],
       [175, 14, 0],
       [30, 57, 12],
-      [0, 90, 90],
+      [0, 0, 90],
     ]) {
-      const y = MathUtils.degToRad(yaw)
-      const p = MathUtils.degToRad(pitch)
-      const r = MathUtils.degToRad(roll)
-      // What the body was drawn as before session 6: one rigid YXZ turn.
-      const rigid = new Matrix4().makeRotationFromEuler(new Euler(p, y, r, 'YXZ'))
-      // What it is now: the yoke's yaw about the vertical, then the head's pitch and roll in it.
-      const split = new Matrix4()
-        .makeRotationFromEuler(new Euler(0, y, 0))
-        .multiply(new Matrix4().makeRotationFromEuler(new Euler(p, 0, r, 'XYZ')))
-      const beam = (m: Matrix4) => new Vector3(0, -1, 0).transformDirection(m)
-      expect(beam(split).distanceTo(beam(rigid))).toBeCloseTo(0, 9)
-      // `longAxisLighting` (lib/fixtureLength.ts) reads the head's X — unchanged too.
-      const long = fromThree(new Vector3(1, 0, 0).transformDirection(split))
+      const long = fromThree(new Vector3(1, 0, 0).transformDirection(turn(yaw, pitch, roll)))
       const axis = longAxisLighting(yaw, pitch, roll)
       expect(Math.hypot(long.x - axis.x, long.y - axis.y, long.z - axis.z)).toBeCloseTo(0, 9)
     }
+    // Roll turns a lantern about its own beam: the throw is the unrolled one.
+    const a = beam(turn(30, 20, 0))
+    const b = beam(turn(30, 20, 70))
+    expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeCloseTo(0, 9)
+  })
+
+  it("leaves a mover's head alone: its base orientation is its mount's", () => {
+    expect(staticHeadQuaternion(1, 1, false).equals(new Quaternion())).toBe(true)
   })
 })
 

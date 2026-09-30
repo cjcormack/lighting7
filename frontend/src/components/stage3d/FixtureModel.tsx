@@ -219,6 +219,25 @@ export function composeBeamHull(
   )
 }
 
+/** A quarter-turn about X: a static body's barrel from hanging down to lying level. */
+const STATIC_LEVEL = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2)
+
+/**
+ * A static lantern's head turn inside its yoke: `Rx(pitch) · Rz(roll)`, then the quarter-turn that
+ * lays the barrel level — so pitch 0 throws **horizontally** towards the yaw's facing and +pitch
+ * aims down, as `docs/fixtures-engineering.md` defines the columns and the MCP schema states them,
+ * and as the rigs authored through it are entered. With the yoke's `Ry(yaw)` the whole turn is the
+ * YXZ Euler of (pitch, yaw, roll) the body was always drawn with, then that quarter-turn, which is
+ * about the body's own X: the long axis — `longAxisLighting` — is untouched, and roll still stands a
+ * strip on end. Until session 6 the quarter-turn was missing and every static lantern was drawn 90°
+ * of pitch off: pitch 0 straight down, and +pitch tilting it upstage at yaw 0. A mover's head is the
+ * identity here: pan and tilt drive it, and its base orientation is its mount's.
+ */
+export function staticHeadQuaternion(pitchRad: number, rollRad: number, isStatic: boolean, out = new Quaternion()): Quaternion {
+  if (!isStatic) return out.identity()
+  return out.setFromEuler(new Euler(pitchRad, 0, rollRad, 'XYZ')).multiply(STATIC_LEVEL)
+}
+
 /** A lens face's matrix in the head's frame: the unit disc or 2 × 2 square, turned to face the beam. */
 export function lensLocalMatrix(cell: Cell, emitAxis: 1 | -1, out: Matrix4): Matrix4 {
   // The unit face lies in XY facing +Z; Rx(−e·90°) turns +Z onto e·Y and keeps X along the head's X.
@@ -254,8 +273,9 @@ interface FixtureModelProps {
  * parts (`StageBodies`); what the pointer presses is an invisible hit proxy on it. A mover's mount is
  * its base orientation (`basePitchDeg` 180 hangs it) and its yoke and head take pan and tilt. A
  * static lantern keeps the same rig: its yoke turns by its yaw about the vertical and its head by
- * its pitch (and roll) inside it, `Ry(yaw) · Rx(pitch) · Rz(roll)` — exactly the rigid turn it was
- * drawn with before, so the beam, `longAxisLighting` and `FixtureAim` are unchanged — and its yoke
+ * its pitch (and roll) inside it, `Ry(yaw) · Rx(pitch) · Rz(roll)` and a quarter-turn that lays the
+ * barrel level (`staticHeadQuaternion`: pitch 0 is horizontal, +pitch aims down, as documented) —
+ * so `longAxisLighting` is unchanged and `FixtureAim`, which aims movers, is untouched — and its yoke
  * hangs from its bar, or stands on a ledge (`bodies/mount.ts`).
  *
  * Every **cell** (`bodies/archetype.ts`) is its own lens and beam, leaving its aperture with the
@@ -377,10 +397,7 @@ export function FixtureModel({
     [isMover, pitchRad, yawRad, rollRad],
   )
   const yokeRotation = useMemo(() => new Euler(0, isMover ? 0 : yawRad, 0), [isMover, yawRad])
-  const headRotation = useMemo(
-    () => new Euler(isMover ? 0 : pitchRad, 0, isMover ? 0 : rollRad, 'XYZ'),
-    [isMover, pitchRad, rollRad],
-  )
+  const headQuaternion = useMemo(() => staticHeadQuaternion(pitchRad, rollRad, !isMover), [isMover, pitchRad, rollRad])
   const mountLift = geometry.standLiftM
 
   useEffect(() => {
@@ -497,7 +514,7 @@ export function FixtureModel({
     >
       <group ref={mountRef} rotation={mountRotation} position={[0, mountLift, 0]}>
         <group ref={yokeRef} rotation={yokeRotation}>
-          <group ref={headRef} position={[0, geometry.pivotY, 0]} rotation={headRotation}>
+          <group ref={headRef} position={[0, geometry.pivotY, 0]} quaternion={headQuaternion}>
             {hit.frame === 'head' && hitProxy}
           </group>
         </group>

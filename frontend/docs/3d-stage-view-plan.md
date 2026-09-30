@@ -121,6 +121,10 @@ Every rotation below is in R3F space (X = stage right, Y = up, Z = downstage).
 - **A fixture with no tilt axis is a rigid body emitting along −Y** (its lens
   face). That keeps a PAR at pitch 0 pointing at the floor rather than the
   ceiling, which is why the two rest poses differ.
+  *Superseded for static lanterns in stage-view plan session 6:* pitch 0 is
+  level and +pitch aims down, as `docs/fixtures-engineering.md` defines
+  `base_pitch_deg` — see `stage-vis-engineering.md` §"Fixture bodies". Movers
+  keep the mount convention above.
 - The rest axis is chosen from **the presence of a tilt descriptor, never from
   `kind`** — a Source 4 Revolution is a `PROFILE` that pans and tilts, and a
   Scantastic 4 is a `SCANNER` that does.

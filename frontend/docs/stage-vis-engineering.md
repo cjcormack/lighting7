@@ -973,10 +973,19 @@ only when its signature changes, as the emitters are — a drag, a pan or a tilt
   receiver never tinted any instance — the seat pick's hover tint included. It now tests both.
 
 **A static lantern keeps the mover's rig** (item 3). Its yoke turns by its yaw about the vertical and
-its head by its pitch, then roll, inside it — `Ry(yaw) · Rx(pitch) · Rz(roll)`, exactly the rigid
-YXZ turn the body had — so its beam, `longAxisLighting` (`lib/fixtureLength.ts`) and `FixtureAim` are
-unchanged, and the yoke hangs or stands plumb whatever the lantern is focused at.
-`FixtureModel.test.tsx` pins the split against the rigid turn and against `longAxisLighting`.
+its head by its pitch, then roll, inside it, then a fixed quarter-turn that lays the barrel level
+(`staticHeadQuaternion`) — so the yoke hangs or stands plumb whatever the lantern is focused at.
+
+**Pitch 0 is level, and +pitch aims down**, as `docs/fixtures-engineering.md` defines
+`base_pitch_deg` and the MCP schema states it (yaw 0 facing the audience, +yaw towards audience
+right). Until session 6 the view drew a static lantern 90° of pitch off: pitch 0 straight down, and
++pitch tilting it *upstage* at yaw 0 — while the rigs authored through the schema, the Commemoration
+Hall's among them, were entered level-is-zero (its ADV2 fronts at pitch 10–14, its house lights at
+90, its Liteobars at 60). The quarter-turn is about the body's own X, the long axis, so
+`longAxisLighting` (`lib/fixtureLength.ts`) is unchanged and roll still stands a strip on end; roll now
+turns a static lantern about its own beam. Movers are untouched — their mount is their base
+orientation, 0 standing and 180 hung, which `FixtureAim` solves from. `FixtureModel.test.tsx` pins the
+documented directions, the long axis and the roll.
 
 ### Mounts: hung or standing
 

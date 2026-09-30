@@ -15,7 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
-| [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open | Stage view S3, 2026-09-30 |
+| [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
+| [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S4`](#fu-manual-multi-screen-s4) | a record dragged off one screen's edge arrives on the next — the gesture is two windows by construction, so every step of it is the desk's; what one window proved is recorded in the entry | Multi-screen S4, 2026-09-17 |
@@ -109,7 +110,52 @@ Inspector.
 4. Record the numbers here and, if the default budget or the governor's 28 / 19 ms thresholds
    (`scene/hazeGovernor.ts`) should move, move them in the same commit.
 
+**Since session 6 every beam in the air is raymarched** (the cone shell an open beam used to be is
+gone), so the haze's share of the frame is now every lit beam's, not only a gobo beam's — step 3
+matters more than it did, and so does the governor's march size (12 steps, 8 above DPR 1;
+`washConfig.ts`'s `VOLUMETRIC_STEPS`). The one measurement so far is the desktop app's Chromium pane on
+the desk Mac with a GPU (not Safari), the Commemoration Hall at a full look with haze on, 58 of 58
+lights packed, a 1606 × 2236 px canvas: an orbit drag at a 17–21 ms median frame, the governor at
+tier 0 throughout. Safari and the iPad are still owed.
+
 30 minutes; all of it is the desk's.
+
+---
+
+## `FU-MANUAL-STAGE-HALL-DATA`
+
+**What it proves**: *the Commemoration Hall's stored rig and scene describe the room the desk is
+in*, so the Stage view, `render_view` and `aim_fixtures` all answer for the real hall. These are data
+fixes on the desk, not code — the stage-view plan's P5 says they are the operator's to make.
+
+**Why it is here**: session 6 of [`stage-view-plan.md`](stage-view-plan.md) drew what the data says,
+which made three things visible:
+
+- **FOH Balcony** is a `PIPE` at 2.8 m with the two Source Four Revolutions hung under it at
+  `basePitchDeg 180`, though they stand on the balcony front. `describe_rig`'s *Mounts:* line names
+  them.
+- **The Stage house** room (`set_scene`, `proscenium-hall`) is 3.6 m tall, but LX1–LX3 hang at
+  4.0 m — above its ceiling. The ceiling is a surface a beam stops at, so the LX bars' pools never
+  reach the stage, and since session 6 their haze is hidden behind it too (the beam hull is
+  depth-tested again).
+- Lantern types for the generic dimmers wait for session 7's library.
+- Static lanterns now honour the documented pitch (0 level, +pitch down), where the view drew 0
+  straight down. The Hall was entered level-is-zero; another show's statics left at 0 because they
+  looked right under the old drawing will now throw level.
+
+**Test**, on the desk (not a scratch copy):
+
+1. Make **FOH Balcony** a `LEDGE` at the front ledge's height (about 1.9 m above the deck, y ≈
+   −16.2 m), set both Revolutions to `basePitchDeg 0` with a height offset of 0 on it, and check
+   `describe_rig` no longer lists them under *Mounts:*.
+2. Raise the **Stage house** (or lower LX1–LX3) so the bars sit below its ceiling, then check in the
+   Stage view that an LX3 unit's beam reaches the deck and its pool lands there.
+3. Aim a Revolution at a point on the stage with *Aim at point* and check its beam goes through it.
+4. Before session 9: no Look, cue or template stores `output1` / `output2` on either Twin Shot.
+5. Open each other show's Stage view and check its static lanterns point where its plot says; set
+   `basePitchDeg` on any that were left at 0 to look hung.
+
+20 minutes.
 
 ---
 

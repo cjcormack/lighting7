@@ -265,7 +265,8 @@ class McpSceneToolsTest : RouteIntegrationTest() {
                     {"key":"lx2-2","name":"LX2 standing mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":60},
                     {"key":"profile","name":"Balcony profile","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":80},
                     {"key":"side","name":"LX2 side mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":100},
-                    {"key":"rolled","name":"Balcony rolled mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":120}
+                    {"key":"rolled","name":"Balcony rolled mover","fixtureTypeKey":"gear4music-orbit-70-13ch","universe":0,"startChannel":120},
+                    {"key":"override","name":"Balcony override mover","fixtureTypeKey":"generic-dimmer","universe":0,"startChannel":140}
                 ]}""",
             ).success,
         )
@@ -279,7 +280,8 @@ class McpSceneToolsTest : RouteIntegrationTest() {
                     {"key":"lx2-2","rigging":"LX2","x":1,"pitchDeg":0},
                     {"key":"profile","rigging":"FOH Balcony","x":0,"pitchDeg":180},
                     {"key":"side","rigging":"LX2","x":2,"pitchDeg":90},
-                    {"key":"rolled","rigging":"FOH Balcony","x":2,"pitchDeg":0,"rollDeg":180}
+                    {"key":"rolled","rigging":"FOH Balcony","x":2,"pitchDeg":0,"rollDeg":180},
+                    {"key":"override","rigging":"FOH Balcony","x":3,"pitchDeg":180,"kind":"MOVING_HEAD"}
                 ]}""",
             ).success,
         )
@@ -296,5 +298,7 @@ class McpSceneToolsTest : RouteIntegrationTest() {
         assertFalse("LX2 side mover" in briefing.substringAfter("Mounts:", ""), briefing)
         // Read through roll as the view reads it: rolled over, a head at pitch 0 hangs.
         assertTrue("Balcony rolled mover is on FOH Balcony, which it stands on" in briefing, briefing)
+        // A mover by the patch's kind override, as the view draws it, though its type is a dimmer.
+        assertTrue("Balcony override mover is on FOH Balcony, which it stands on" in briefing, briefing)
     }
 }

@@ -338,7 +338,7 @@ class RigBriefing(private val state: State) {
      */
     private fun mountMismatches(projectId: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>): String? {
         data class MountedUnit(val name: String, val rigging: DaoRigging?, val yaw: Double?, val pitch: Double?, val roll: Double?)
-        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey) }
+        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey, it.kindOverride) }
         if (heads.isEmpty()) return null
         val placements = DaoFixturePatchPlacement
             .find { DaoFixturePatchPlacements.fixturePatch inList heads.map { it.id } }
@@ -368,9 +368,15 @@ class RigBriefing(private val state: State) {
         return if (notes.isEmpty()) null else "Mounts: " + notes.joinToString("; ") + "."
     }
 
-    private fun isMovingHead(typeKey: String): Boolean {
+    /**
+     * Whether the view draws this patch as a mover: its kind — the patch's `kindOverride` first,
+     * then the type's, as the view's `resolveFixtureKind` reads it — is a moving head or a scanner,
+     * or the type has a tilt axis (`archetypeFor` in the frontend's `bodies/archetype.ts`).
+     */
+    private fun isMovingHead(typeKey: String, kindOverride: String?): Boolean {
         val info = FixtureTypeRegistry.typeInfoForKey(typeKey) ?: return false
-        return info.kind == FixtureKind.MOVING_HEAD || info.kind == FixtureKind.SCANNER ||
+        val kind = kindOverride?.let { k -> FixtureKind.entries.firstOrNull { it.name == k } } ?: info.kind
+        return kind == FixtureKind.MOVING_HEAD || kind == FixtureKind.SCANNER ||
             info.properties.any { it is SliderPropertyDescriptor && it.axis == "TILT" }
     }
 
