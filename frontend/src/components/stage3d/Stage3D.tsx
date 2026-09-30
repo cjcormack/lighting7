@@ -5,6 +5,7 @@ import { Edges, Text, TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useProjectQuery } from '../../store/projects'
 import { Bloom } from './Bloom'
+import { CaptureCanvas, type StageCapture } from './CaptureCanvas'
 import { StageRegionMeshes } from './StageRegionMeshes'
 import { RiggingMeshes } from './RiggingMeshes'
 import { FixtureModel } from './FixtureModel'
@@ -70,6 +71,8 @@ import { formatTriple } from '../../lib/utils'
 import { NO_RAYCAST } from './raycast'
 
 const EMPTY_RIGGINGS: RiggingDto[] = []
+/** Behind the scene: the on-screen canvas's CSS background, and a render's clear colour. */
+const STAGE_BACKGROUND = '#0b0e14'
 /** The snap state of a view that edits nothing. */
 const NO_SNAP: SnapGrid = {
   step: 0.25,
@@ -169,6 +172,12 @@ interface Stage3DProps {
   seatPicking?: SeatPicking | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
   framingRef?: React.RefObject<StageFraming | null>
+  /**
+   * Draw offscreen for `render_view` (stage-view plan session 4) instead of on screen: a detached
+   * canvas of this size, drawn on request (`CaptureCanvas`), and a camera that lands [landing]
+   * without recording anything for this window. Every other prop means what it does on screen.
+   */
+  capture?: StageCapture | null
 }
 
 export function Stage3D({
@@ -196,6 +205,7 @@ export function Stage3D({
   lightBudget = DEFAULT_LIGHT_BUDGET,
   seatPicking = null,
   framingRef,
+  capture = null,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
   const stageW = project?.stageWidthM ?? 10
@@ -489,6 +499,122 @@ export function Stage3D({
   })
   const allFixtureNodes = lanternNodes.length === 0 ? fixtureNodes : [...fixtureNodes, ...lanternNodes]
 
+  // The scene, drawn by the on-screen canvas or, for a render, by the capture canvas: one set of
+  // children for both, so a render is exactly what the view shows.
+  const scene = (
+    <>
+      <ContextLossWatcher
+        loseContextRef={loseContextRef}
+        onLost={() => {
+          setContextLost(true)
+          // A render has no Restore to offer: it ends, and says why.
+          capture?.onError('the graphics context was lost')
+        }}
+        onRestored={() => setContextLost(false)}
+      />
+      <StageLabelDriver store={labelStore} paused={contextLost} />
+      <HazeGovernorProbe onChange={setHazeQuality} />
+      <StageInvalidateProvider>
+      <StageLabelContext.Provider value={labelStore}>
+      <SurfaceLightingProvider>
+      <ambientLight intensity={0.5} />
+      {/* A modelled room is the floor the operator reads by; the grid floats at deck height over
+          the stalls. It stays while editing, where it is a measure. */}
+      {(!roomDrawn || editMode) && <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />}
+      <StageFloor width={stageW} depth={stageD} />
+      {!roomDrawn && <CatchFloor size={gridSize} />}
+      {!roomDrawn && <StageBackWall width={stageW} depth={stageD} height={stageH} />}
+      <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
+      <OriginMarkers depth={stageD} />
+      {placing && onPlacementClick && (
+        <PlacementClickCatcher targetZ={placementZ ?? 0} onClick={onPlacementClick} />
+      )}
+      {view.regions && (
+        <StageRegionMeshes
+          regions={safeRegions}
+          selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
+          editMode={interactable}
+          onClick={interactable ? handleRegionClick : undefined}
+          onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
+          snapActiveRef={snapActiveRef}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
+        />
+      )}
+      {view.riggings && (
+        <RiggingMeshes
+          riggings={safeRiggings}
+          selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
+          editMode={interactable}
+          onClick={interactable ? handleRiggingClick : undefined}
+          onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
+          snapActiveRef={snapActiveRef}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
+        />
+      )}
+      {view.fixtures && (view.beamCones ? (
+        <StageEmitters
+          layout={emitterLayout}
+          regionGeometry={regionGeometry}
+          colliders={colliders}
+          clip={beamClip}
+          lightBudget={lightBudget}
+          haze={layers.haze}
+          hazeQuality={hazeQuality}
+          statsRef={containerRef}
+        >
+          {allFixtureNodes}
+        </StageEmitters>
+      ) : allFixtureNodes)}
+      {canEdit && selectedRegion && onRegionPositionChange && (
+        <RegionEditHandles
+          region={selectedRegion}
+          snapActiveRef={snapActiveRef}
+          onChange={(next, settled) => onRegionPositionChange(selectedRegion, next, settled)}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
+        />
+      )}
+      {canEdit && selectedRigging && onRiggingPositionChange && (
+        <RiggingEndpointHandles
+          rig={selectedRigging}
+          snapActiveRef={snapActiveRef}
+          onChange={(next, settled) => onRiggingPositionChange(selectedRigging, next, settled)}
+          onDragStart={disableOrbit}
+          onDragEnd={enableOrbit}
+        />
+      )}
+      {builds.length > 0 && <StageSceneElements builds={builds} seatPicking={picking} />}
+      <StageCameraRig
+        camera={camera}
+        landing={landing}
+        defaultOrbit={defaultOrbit}
+        bounds={sceneBounds}
+        beyond={venueBounds}
+        persist={persistCamera && capture == null}
+        oneShot={capture != null}
+        controlsRef={orbitRef}
+        handleRef={cameraHandleRef}
+      />
+      <Controls
+        orbitRef={orbitRef}
+        patchTarget={editMode ? patchTarget : null}
+        selection={selection}
+        patches={patches ?? null}
+        riggings={safeRiggings}
+        snapActive={snapActive}
+        snapStepM={snap.step}
+        gizmoMode={gizmoMode}
+        onPatchPlacementChange={onPatchPlacementChange}
+      />
+      <Bloom />
+      </SurfaceLightingProvider>
+      </StageLabelContext.Provider>
+      </StageInvalidateProvider>
+    </>
+  )
+
   return (
     <div
       ref={containerRef}
@@ -501,120 +627,23 @@ export function Stage3D({
           beams stop looking soft. `frameloop="demand"`: the canvas renders while something moves —
           a channel the scene reads, the camera, a drag, a spinning gobo — and not at all when the
           stage is still. What asks for a frame is spelled out in stage-vis-engineering.md. */}
-      <Canvas
-        key={canvasKey}
-        flat
-        dpr={[1, 1.5]}
-        frameloop="demand"
-        gl={{ toneMapping: NoToneMapping, antialias: true }}
-        style={{ background: '#0b0e14' }}
-        onPointerMissed={handlePointerMissed}
-      >
-        <ContextLossWatcher
-          loseContextRef={loseContextRef}
-          onLost={() => setContextLost(true)}
-          onRestored={() => setContextLost(false)}
-        />
-        <StageLabelDriver store={labelStore} paused={contextLost} />
-        <HazeGovernorProbe onChange={setHazeQuality} />
-        <StageInvalidateProvider>
-        <StageLabelContext.Provider value={labelStore}>
-        <SurfaceLightingProvider>
-        <ambientLight intensity={0.5} />
-        {/* A modelled room is the floor the operator reads by; the grid floats at deck height over
-            the stalls. It stays while editing, where it is a measure. */}
-        {(!roomDrawn || editMode) && <gridHelper args={[gridSize, 20, '#4a5a6a', '#2a3540']} />}
-        <StageFloor width={stageW} depth={stageD} />
-        {!roomDrawn && <CatchFloor size={gridSize} />}
-        {!roomDrawn && <StageBackWall width={stageW} depth={stageD} height={stageH} />}
-        <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
-        <OriginMarkers depth={stageD} />
-        {placing && onPlacementClick && (
-          <PlacementClickCatcher targetZ={placementZ ?? 0} onClick={onPlacementClick} />
-        )}
-        {view.regions && (
-          <StageRegionMeshes
-            regions={safeRegions}
-            selectedUuid={selection?.kind === 'region' ? selection.uuid : null}
-            editMode={interactable}
-            onClick={interactable ? handleRegionClick : undefined}
-            onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
-            snapActiveRef={snapActiveRef}
-            onDragStart={disableOrbit}
-            onDragEnd={enableOrbit}
-          />
-        )}
-        {view.riggings && (
-          <RiggingMeshes
-            riggings={safeRiggings}
-            selectedUuid={selection?.kind === 'rigging' ? selection.uuid : null}
-            editMode={interactable}
-            onClick={interactable ? handleRiggingClick : undefined}
-            onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
-            snapActiveRef={snapActiveRef}
-            onDragStart={disableOrbit}
-            onDragEnd={enableOrbit}
-          />
-        )}
-        {view.fixtures && (view.beamCones ? (
-          <StageEmitters
-            layout={emitterLayout}
-            regionGeometry={regionGeometry}
-            colliders={colliders}
-            clip={beamClip}
-            lightBudget={lightBudget}
-            haze={layers.haze}
-            hazeQuality={hazeQuality}
-            statsRef={containerRef}
-          >
-            {allFixtureNodes}
-          </StageEmitters>
-        ) : allFixtureNodes)}
-        {canEdit && selectedRegion && onRegionPositionChange && (
-          <RegionEditHandles
-            region={selectedRegion}
-            snapActiveRef={snapActiveRef}
-            onChange={(next, settled) => onRegionPositionChange(selectedRegion, next, settled)}
-            onDragStart={disableOrbit}
-            onDragEnd={enableOrbit}
-          />
-        )}
-        {canEdit && selectedRigging && onRiggingPositionChange && (
-          <RiggingEndpointHandles
-            rig={selectedRigging}
-            snapActiveRef={snapActiveRef}
-            onChange={(next, settled) => onRiggingPositionChange(selectedRigging, next, settled)}
-            onDragStart={disableOrbit}
-            onDragEnd={enableOrbit}
-          />
-        )}
-        {builds.length > 0 && <StageSceneElements builds={builds} seatPicking={picking} />}
-        <StageCameraRig
-          camera={camera}
-          landing={landing}
-          defaultOrbit={defaultOrbit}
-          bounds={sceneBounds}
-          beyond={venueBounds}
-          persist={persistCamera}
-          controlsRef={orbitRef}
-          handleRef={cameraHandleRef}
-        />
-        <Controls
-          orbitRef={orbitRef}
-          patchTarget={editMode ? patchTarget : null}
-          selection={selection}
-          patches={patches ?? null}
-          riggings={safeRiggings}
-          snapActive={snapActive}
-          snapStepM={snap.step}
-          gizmoMode={gizmoMode}
-          onPatchPlacementChange={onPatchPlacementChange}
-        />
-        <Bloom />
-        </SurfaceLightingProvider>
-        </StageLabelContext.Provider>
-        </StageInvalidateProvider>
-      </Canvas>
+      {capture != null ? (
+        <CaptureCanvas capture={capture} background={STAGE_BACKGROUND}>
+          {scene}
+        </CaptureCanvas>
+      ) : (
+        <Canvas
+          key={canvasKey}
+          flat
+          dpr={[1, 1.5]}
+          frameloop="demand"
+          gl={{ toneMapping: NoToneMapping, antialias: true }}
+          style={{ background: STAGE_BACKGROUND }}
+          onPointerMissed={handlePointerMissed}
+        >
+          {scene}
+        </Canvas>
+      )}
       {/* The label layer: every label's <div>, owned and positioned by the store. */}
       <div
         ref={labelContainerRef}

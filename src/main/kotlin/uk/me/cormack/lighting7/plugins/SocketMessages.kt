@@ -52,6 +52,7 @@ sealed class InMessage
     ProjectOutMessage::class,
     SelectionOutMessage::class,
     SpeedMasterOutMessage::class,
+    StageRenderOutMessage::class,
     SurfaceOutMessage::class,
     WindowsOutMessage::class,
 )

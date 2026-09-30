@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.AnthropicToolDef
 import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
+import uk.me.cormack.lighting7.ai.ToolImage
 import uk.me.cormack.lighting7.ai.readOnlySetupToolNames
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
 import uk.me.cormack.lighting7.state.State
@@ -169,14 +170,25 @@ class McpProtocol(private val state: State) {
 
         val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments)
         else tools.executeTool(name, arguments)
-        return toolResult(outcome.result, isError = !outcome.success)
+        return toolResult(outcome.result, isError = !outcome.success, images = outcome.images)
     }
 
-    private fun toolResult(text: String, isError: Boolean) = buildJsonObject {
+    /**
+     * A `CallToolResult`: the text, then any images as `image` content (`{type, data, mimeType}`,
+     * base64 — the same shape in all three protocol versions this server speaks).
+     */
+    private fun toolResult(text: String, isError: Boolean, images: List<ToolImage> = emptyList()) = buildJsonObject {
         put("content", buildJsonArray {
             addJsonObject {
                 put("type", "text")
                 put("text", text)
+            }
+            images.forEach { image ->
+                addJsonObject {
+                    put("type", "image")
+                    put("data", image.base64)
+                    put("mimeType", image.mimeType)
+                }
             }
         })
         put("isError", isError)
@@ -214,7 +226,7 @@ class McpProtocol(private val state: State) {
             - Every tool acts on the current project. For a new show: create_project, then switch_project — which stops the live output, so confirm first unless the operator asked for it.
             - Patch: list_fixture_types to match each fixture to a typeKey (conventional lanterns are 'generic-dimmer'), then patch_fixtures with the whole list, using dryRun first. Report fixtures with no matching type rather than guessing. Put fixtures in groups by position and role; groups are what looks and cues address. delete_groups removes groups an old patch left behind.
             - Stage: set_stage for the stage size, regions and riggings (named as the plot names them), then place_fixtures to hang fixtures on them. get_patch shows the result. A long body (a lightstrip, a bar) stands on end with rollDeg 90. aim_fixtures points moving heads at a stage coordinate (a region's centre at head height, a mark on the plot) through the programmer, which the operator clears — so keep an aim with record_cue, or pass saveAsTemplate to save it as a position template.
-            - Venue: set_scene models the room, the proscenium, the seating and the set, so the Stage view shows the real hall. Start from template 'proscenium-hall' with the hall's numbers read off a plan or a photo, correct the named elements it makes, add set pieces, then get_scene to check. Save the views the operator will want — the desk's position, a seat — as viewpoints. A rigging the units stand on (a balcony front) is kind LEDGE.
+            - Venue: set_scene models the room, the proscenium, the seating and the set, so the Stage view shows the real hall. Start from template 'proscenium-hall' with the hall's numbers read off a plan or a photo, correct the named elements it makes, add set pieces, then get_scene to check. Save the views the operator will want — the desk's position, a seat — as viewpoints. render_view draws a viewpoint as a PNG (a desk window must be open), so you can compare the model with the operator's photo from the same place and correct it. A rigging the units stand on (a balcony front) is kind LEDGE.
             - Show: the operator imports the script PDF through the desk's Prompt Book view (get_prompt_book says where); then build_cue_stack creates the stack and cues in running order with numbers, notes and timings, anchoring each at the line it is called on, and mark_up_prompt_book adds notes and moves anchors. PDF pages count from 1 at the file's first page.
             - These tools validate a whole request and write nothing if any row is wrong; fix every listed problem and resend.
         """.trimIndent()

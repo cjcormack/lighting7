@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageViewpointDto } from '../../api/stageViewpointApi'
-import { resolveSavedViewpoint, savedViewNote, viewpointFromCamera } from './savedViewpoints'
+import { resolveSavedViewpoint, resolveViewpoint, savedViewNote, viewpointFromCamera } from './savedViewpoints'
 import { eyeTarget } from './stageCameras'
 
 const stalls: StageElementDto = {
@@ -73,5 +73,36 @@ describe('a saved viewpoint, landed (stage-view plan session 2)', () => {
     expect(request.eyeX).toBeUndefined()
     const ahead = eyeTarget(pose)
     expect(request.targetX).toBeCloseTo(ahead[0], 3)
+  })
+})
+
+describe('any viewpoint, resolved for a render (stage-view plan session 4)', () => {
+  const SEATING = '0a1b2c3d-0000-4000-8000-00000000000a'
+  const seated = { ...stalls, uuid: SEATING }
+  const desk = row({ kind: 'EYE', eyeX: 1.25, eyeY: -17, eyeZ: 2.6, targetX: 0, targetY: 2.6, targetZ: 0.8, fovDeg: 50 })
+  const wide = row({ uuid: '7c9e6679-7425-40de-944b-e07fc1f90ae7', kind: 'ORBIT', eyeX: 0, eyeY: -14, eyeZ: 4, targetX: 0, targetY: 0, targetZ: 1.5 })
+
+  it('draws a camera through itself, landing nowhere', () => {
+    expect(resolveViewpoint('plan', [], [])).toEqual({ camera: 'plan', landing: null })
+    expect(resolveViewpoint('orbit', [desk], [seated])).toEqual({ camera: 'orbit', landing: null })
+  })
+
+  it('draws a saved view through the rig its row lands, with the landing the Stage view takes', () => {
+    expect(resolveViewpoint(desk.uuid as never, [desk, wide], [])).toEqual({ camera: 'eye', landing: resolveSavedViewpoint(desk, []) })
+    expect(resolveViewpoint(wide.uuid as never, [desk, wide], [])?.camera).toBe('orbit')
+  })
+
+  it('sits an unsaved seat on the eye rig, at the seat the seating mesh draws', () => {
+    const drawn = resolveViewpoint(`seat:${SEATING}:F6`, [], [seated])!
+    expect(drawn.camera).toBe('eye')
+    const saved = resolveSavedViewpoint(row({ kind: 'SEAT', seatElementUuid: SEATING, seatId: 'F6' }), [seated])!
+    // The same eye a saved seat view with no target of its own lands.
+    expect(drawn.landing?.pose).toEqual(saved.pose)
+  })
+
+  it('cannot draw a view this project does not have, or a seat that is gone', () => {
+    expect(resolveViewpoint('7c9e6679-7425-40de-944b-e07fc1f90ae8', [desk, wide], [])).toBeNull()
+    expect(resolveViewpoint(`seat:${SEATING}:Z99`, [], [seated])).toBeNull()
+    expect(resolveViewpoint(`seat:${SEATING}:F6`, [], [])).toBeNull()
   })
 })

@@ -323,6 +323,53 @@ internal val getSceneTool = AnthropicToolDef(
     inputSchema = objectSchema {},
 )
 
+internal const val RENDER_DEFAULT_WIDTH = 1280
+internal const val RENDER_DEFAULT_HEIGHT = 720
+internal const val RENDER_MIN_SIDE = 160
+internal const val RENDER_MAX_SIDE = 1920
+/**
+ * 1920 × 1080: a long side of 1920, but not a 1920 square. The frame a window may upload is capped
+ * at 4 MB (`StageRenderService.MAX_RENDER_BYTES`), and a stage render — dark, mostly flat — is a few
+ * hundred KB at 1280 × 720; the pixel cap keeps even a hazy frame well inside the byte cap.
+ */
+internal const val RENDER_MAX_PIXELS = 1920 * 1080
+
+/** Declared before [renderViewTool], which reads it as it initialises. The Stage view's vis sources (`hooks/useVisSource.ts` in the frontend), in its order. */
+internal val RENDER_SOURCES = listOf("output", "outputProgrammer", "programmer", "nextGo")
+
+/**
+ * `render_view` (stage-view plan session 4, D4): what a desk window draws for a viewpoint, as a PNG.
+ * The viewpoint is `set_scene`'s vocabulary — a built-in camera, a saved view by name (or uuid), or
+ * a seat `{seating, seat}` — so a view saved there, or a seat read off `get_scene`, renders as named.
+ */
+internal val renderViewTool = AnthropicToolDef(
+    name = "render_view",
+    description = "See the Stage view: render a viewpoint of the current project's stage — the venue and set set_scene built, the rig, and the light the fixtures are putting out now — and answer it as a PNG image. " +
+        "Use it to check a model against the operator's photo or video frame and correct it with set_scene. " +
+        "A signed-in desk window draws it offscreen (any window on the desk's own network, whatever view it is on; nothing on its screen changes), so it needs one open: with none it answers RENDER_NO_WINDOW, and asking the operator to open the desk in a browser is the fix. " +
+        "It draws what a fresh Stage window shows on that viewpoint: every scene layer, haze on, and no labels. orbit and eye are the default views a fresh window opens on; plan, front and side are sections. " +
+        "Read-only: it changes no DMX, no programmer value and no window's view. Errors are named: RENDER_NO_WINDOW, RENDER_BUSY, RENDER_TIMEOUT, RENDER_WINDOW_CLOSED, RENDER_UNKNOWN_VIEWPOINT, RENDER_UNKNOWN_SEAT, RENDER_FAILED, RENDER_INVALID_REQUEST.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("viewpoint", buildJsonObject {
+                put("description", "Where to look from. A string: a built-in camera ('orbit', 'eye', 'plan', 'front', 'side'), or a saved viewpoint's name (get_scene lists them) or uuid. Or an object {seating, seat}: a seat, e.g. {\"seating\": \"Stalls\", \"seat\": \"F6\"} — seating may be left out when the scene has one.")
+                put("anyOf", buildJsonArray {
+                    add(buildJsonObject { put("type", "string") })
+                    add(objectSchema(required = listOf("seat")) {
+                        prop("seating", "string", "The seating element's name, as set_scene named it.")
+                        prop("seat", "string", "Row letter and seat number, e.g. 'F6'. Seat 1 is at the stage-right end of its row.")
+                    })
+                })
+            })
+            prop("width", "integer", "Pixels, ${RENDER_MIN_SIDE}–${RENDER_MAX_SIDE}, at most $RENDER_MAX_PIXELS pixels in all (1920 × 1080). Default ${RENDER_DEFAULT_WIDTH}; with only height given, 16:9 to it.")
+            prop("height", "integer", "Pixels, ${RENDER_MIN_SIDE}–${RENDER_MAX_SIDE}, at most $RENDER_MAX_PIXELS pixels in all. Default ${RENDER_DEFAULT_HEIGHT}; with only width given, 16:9 to it.")
+            enumProp("source", RENDER_SOURCES, "Which light to draw: 'output' (default) is what the desk is transmitting; 'outputProgrammer' lays the programmer over it (differs only in Blind); 'programmer' is the programmer alone; 'nextGo' the look the next GO would produce.")
+        })
+        put("required", buildJsonArray { add("viewpoint") })
+    },
+)
+
 private val placementSchema = objectSchema(required = listOf("key")) {
     prop("key", "string", "Patched fixture key, from get_patch or describe_rig.")
     placementProps()
@@ -424,6 +471,7 @@ internal val setupToolDefs: List<AnthropicToolDef> = listOf(
     setStageTool,
     setSceneTool,
     getSceneTool,
+    renderViewTool,
     placeFixturesTool,
     getPromptBookTool,
     buildCueStackTool,
@@ -431,4 +479,11 @@ internal val setupToolDefs: List<AnthropicToolDef> = listOf(
 )
 
 internal val readOnlySetupToolNames: Set<String> =
-    setOf(listProjectsTool.name, listFixtureTypesTool.name, getPatchTool.name, getPromptBookTool.name, getSceneTool.name)
+    setOf(
+        listProjectsTool.name,
+        listFixtureTypesTool.name,
+        getPatchTool.name,
+        getPromptBookTool.name,
+        getSceneTool.name,
+        renderViewTool.name,
+    )

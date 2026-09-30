@@ -697,6 +697,13 @@ class State(val config: ApplicationConfig) {
     val windowRegistry: WindowRegistry by lazy { WindowRegistry() }
 
     /**
+     * `render_view`'s jobs (stage-view plan session 4): a render asked of one signed-in desk window
+     * and answered once by its upload. Machine-scoped like [windowRegistry], whose rows it chooses
+     * from; a job carries its own project id. Never persisted; a job dies with its socket.
+     */
+    val stageRender: StageRenderService by lazy { StageRenderService(windowRegistry) }
+
+    /**
      * The desk's **hand** — one record held between a pick-up on one window and a place on another
      * (multi-screen plan §3.5). Project-scoped and transient like [deskSelection]: the record ids
      * it carries belong to one project's rows, so the `projectChangedFlow` collector below drops

@@ -10,7 +10,9 @@ import kotlinx.coroutines.flow.takeWhile
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import kotlinx.serialization.json.Json
+import io.ktor.server.plugins.origin
 import uk.me.cormack.lighting7.auth.resolveSessionUser
+import uk.me.cormack.lighting7.mcp.isRemote
 import uk.me.cormack.lighting7.state.BootPhase
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
@@ -74,7 +76,17 @@ fun Application.configureSockets(state: State) {
                 return@webSocket
             }
 
-            val scope = SocketScope(this, state, wsUser)
+            // Where the socket came from, for `render_view`: a render is only ever asked of a socket
+            // on this listener (never the public one — decided by port, `isRemote`), and a window on
+            // the desk machine itself is asked first.
+            val peer = runCatching { java.net.InetAddress.getByName(call.request.origin.remoteAddress) }.getOrNull()
+            val scope = SocketScope(
+                this,
+                state,
+                wsUser,
+                remote = call.isRemote,
+                loopbackPeer = peer?.isLoopbackAddress == true,
+            )
 
             // Live revocation (plan 3.5): the check above only runs at upgrade time, so
             // without this, "disable that operator" or a QR password reset would leave
@@ -148,6 +160,7 @@ fun Application.configureSockets(state: State) {
             setupProgrammerSubscriptions(scope)
             setupSpeedMasterSubscriptions(scope)
             setupHandSubscriptions(scope)
+            setupStageRenderSubscriptions(scope)
 
             try {
                 for (frame in incoming) {
@@ -183,6 +196,8 @@ fun Application.configureSockets(state: State) {
                 // makes a closed window disappear from the Screens sheet without a heartbeat.
                 // A no-op for a connection that never announced.
                 state.windowRegistry.remove(scope.id)
+                // And a render it was asked for ends now rather than at its timeout.
+                state.stageRender.detach(scope.id)
                 unregisterBroadcastListener()
             }
         }

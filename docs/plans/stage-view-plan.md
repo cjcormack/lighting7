@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 3 ([PR #30](https://github.com/cjcormack/lighting7/pull/30)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 4.** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -225,7 +225,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Gate.** `FU-AUTH-ATTRIBUTION` fires on this bump; §11 Q2 passed it (v18 has no attribution
   columns).
 
-### Session 3 — the room, lit (frontend)
+### ~~Session 3 — the room, lit (frontend)~~ — done, `fc47f67` ([PR #30](https://github.com/cjcormack/lighting7/pull/30))
 
 - **Element builders** in `stage3d/scene/`: room (inward-facing faces), proscenium, flat with
   openings, drape and tabs, platform with rail, seating (instanced, emitting the seat list),

@@ -68,6 +68,7 @@ fun Application.configureRouting(state: State) {
                     routeApiRestInstall(state)
                     routeApiRestInstallTunnel(state)
                     routeApiRestUpdate(state)
+                    routeApiRestStageRenders(state)
 
                     // Admin territory: user management and password resets (Session 3), the
                     // install-level cloud-sync batch endpoints, and the GitHub OAuth flows —

@@ -74,6 +74,7 @@ class SetupTools(
 ) {
     val toolDefs: List<AnthropicToolDef> = setupToolDefs
     private val scene = SceneSetupTools(state)
+    private val render = RenderViewTool(state)
 
     fun handles(name: String): Boolean = toolDefs.any { it.name == name }
 
@@ -89,6 +90,7 @@ class SetupTools(
             setStageTool.name -> setStage(input)
             setSceneTool.name -> scene.setScene(input)
             getSceneTool.name -> scene.getScene()
+            renderViewTool.name -> render.renderView(input)
             placeFixturesTool.name -> placeFixtures(input)
             getPromptBookTool.name -> getPromptBook()
             buildCueStackTool.name -> buildCueStack(input)

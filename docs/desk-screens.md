@@ -114,6 +114,24 @@ and what a `selection.state` `source` carries.
   same client-minted `windowId`. They are still two rows and still separately addressable: the id
   the desk uses is minted per socket, not by the client.
 
+## A window can be asked to render
+
+Claude's `render_view` tool (stage-view plan session 4, `mcp-engineering.md` §"`render_view`")
+needs a picture of a stage viewpoint, and the desk cannot draw WebGL itself — so it asks **one
+open window** to draw it offscreen and send the frame back. What the operator should know:
+
+- **Any signed-in desk window will do, on any view.** It need not be on the Stage view; a window on
+  Busk or the Programmer is asked just the same. A window on the desk machine itself is asked
+  before a tablet on the LAN, and among those the one that has been open longest. A phone or laptop
+  reaching the desk through Remote access is never asked.
+- **Nothing on its screen changes.** The picture is drawn on a canvas of its own that is never put
+  on the page, with that window's viewpoint, camera, layers and source untouched, no DMX written
+  and nothing toasted — mid-show, the operator sees nothing. It costs that window's GPU a moment,
+  one render at a time.
+- **With no window open, Claude is told so** (`RENDER_NO_WINDOW`) and should ask for one. A window
+  in a background tab still renders; a machine that is asleep does not, and the tool times out
+  naming the window it asked.
+
 ## Kiosk mode
 
 Not built, and nothing to build. For a screen nobody should be able to leave — a front-of-house
@@ -130,7 +148,8 @@ as a control in the Screens sheet.
 ## Related documentation
 
 - [WebSocket Protocol](websocket-engineering.md) §"Windows" — the `windows.*` family: the registry,
-  the announce, and the five commands one screen sends another
+  the announce, and the five commands one screen sends another; §"Stage render" — the one job the
+  desk sends a single window
 - [Composition Model](lighting-composition-model.md) — why the selection is one desk fact and not
   one per window
 - [Windows Updates](windows-updates.md) — the launcher these tray items live in

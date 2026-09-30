@@ -31,24 +31,39 @@ const NOTHING: NextGoTarget = { projectId: null, stackId: null, cueId: null, cue
  * no re-read on a standby-only or connect-snapshot frame that left the next cue where it was.
  */
 function useNextGoTarget(enabled: boolean): NextGoTarget {
-  const { data: project } = useCurrentProjectQuery(undefined, { skip: !enabled })
-  const projectId = project?.id ?? null
+  return useNextGoTargetState(enabled).target
+}
+
+/**
+ * [useNextGoTarget] and whether its three reads have settled — so a caller that must not draw
+ * until it knows (`render_view`'s offscreen render) can tell "no cue on deck" from "not read yet".
+ */
+function useNextGoTargetState(enabled: boolean): { target: NextGoTarget; settled: boolean } {
+  const project = useCurrentProjectQuery(undefined, { skip: !enabled })
+  const projectId = project.data?.id ?? null
   const skip = !enabled || projectId == null
 
-  const { data: programState } = useProjectProgramStateQuery(projectId ?? 0, { skip })
-  const { data: stacks } = useProjectCueStackListQuery(projectId ?? 0, { skip })
+  const programState = useProjectProgramStateQuery(projectId ?? 0, { skip })
+  const stacks = useProjectCueStackListQuery(projectId ?? 0, { skip })
 
-  const stackId = programState?.activeStackId ?? null
+  const stackId = programState.data?.activeStackId ?? null
+  const stackList = stacks.data
 
-  return useMemo(() => {
+  const target = useMemo(() => {
     if (skip || projectId == null || stackId == null) return NOTHING
-    const stack = stacks?.find((s) => s.id === stackId)
+    const stack = stackList?.find((s) => s.id === stackId)
     const cueId = stack?.nextCueId ?? null
     if (cueId == null) return { projectId, stackId, cueId: null, cueLabel: null }
     const cue = stack?.cues.find((c) => c.id === cueId)
     const cueLabel = cue ? (cue.cueNumber ? `${cue.cueNumber} · ${cue.name}` : cue.name) : null
     return { projectId, stackId, cueId, cueLabel }
-  }, [skip, projectId, stackId, stacks])
+  }, [skip, projectId, stackId, stackList])
+
+  const read = (q: { isSuccess: boolean; isError: boolean }) => q.isSuccess || q.isError
+  const settled =
+    !enabled ||
+    (read(project) && (projectId == null || (read(programState) && (stackId == null || read(stacks)))))
+  return { target, settled }
 }
 
 /**
@@ -102,9 +117,19 @@ export function useNextGoStatus(enabled: boolean): string | null {
  * answers 400 there, an ordinary state) and a failed request alike.
  */
 export function useNextGoSource(enabled: boolean): PushChannelSource | null {
-  const target = useNextGoTarget(enabled)
+  return useNextGoSourceState(enabled).source
+}
+
+/**
+ * [useNextGoSource], and whether what it holds is final: the cue on deck is known and its preview
+ * has answered (or there is none to ask for). The Stage view draws whatever the source holds as it
+ * arrives; `render_view`'s offscreen render waits for this, so its one frame is the preview and not
+ * the wire it falls back to while composing.
+ */
+export function useNextGoSourceState(enabled: boolean): { source: PushChannelSource | null; settled: boolean } {
+  const { target, settled: targetSettled } = useNextGoTargetState(enabled)
   const [source, setSource] = useState<PushChannelSource | null>(null)
-  const { data, isError } = usePreviewOfTarget(target)
+  const { data, isError, isSuccess, isFetching } = usePreviewOfTarget(target)
 
   useEffect(() => {
     if (!enabled) return
@@ -123,5 +148,6 @@ export function useNextGoSource(enabled: boolean): PushChannelSource | null {
     source?.setChannels(channels ?? [])
   }, [source, channels])
 
-  return source
+  const previewSettled = target.cueId == null || (!isFetching && (isSuccess || isError))
+  return { source, settled: !enabled || (source != null && targetSettled && previewSettled) }
 }

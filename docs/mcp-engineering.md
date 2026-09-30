@@ -232,7 +232,8 @@ desk's URL. Neither is exported, synced or cloned.
 `mcp/McpProtocol.kt` is JSON-RPC 2.0 with no transport, so tests call it directly. It speaks
 protocol versions 2025-06-18, 2025-03-26 and 2024-11-05, answers every POST with a JSON body (no
 SSE, no `Mcp-Session-Id`, no server-initiated messages), answers a notification with 202, refuses
-batches, and 405s `GET`/`DELETE /mcp`. The `Origin` header, when present, must be the public
+batches, and 405s `GET`/`DELETE /mcp`. A tool answers text content, and `render_view` an `image`
+beside it (`{type: "image", data, mimeType}`, base64 — the same shape in all three versions). The `Origin` header, when present, must be the public
 URL's origin, claude.ai, claude.com or loopback (DNS-rebinding protection).
 
 ### Tools
@@ -270,12 +271,12 @@ the specials on DSC": a model reading a plot knows where a region or a mark is i
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup
 readers below (`list_projects`, `list_fixture_types`, `get_patch`, `get_prompt_book`, `get_scene`)
-carry `readOnlyHint`.
+and `render_view` carry `readOnlyHint`.
 
 ### Show-setup tools
 
-`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds fourteen tools that **build** a show
-rather than run one, for four jobs: a project and patch from another console's patch export, the
+`ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`) adds fifteen tools that **build** a show
+rather than run one — and one, `render_view`, that looks at the result — for four jobs: a project and patch from another console's patch export, the
 Stage view (stage, regions, riggings, fixture placement) from plots or photos, the venue and set
 around it (the scene document) from photos or a video frame, and the show's cue stacks and
 prompt-book markup from a script and lighting notes.
@@ -290,6 +291,7 @@ prompt-book markup from a script and lighting notes.
 | `set_stage` | Stage dimensions plus regions and riggings **upserted by name** (sent fields only), and removals. A field it does not know (`width` for `widthM`) is refused rather than skipped, and the answer carries the stage box as stored. `get_patch` re-reads the project row rather than trusting `ProjectManager.currentProject`, whose columns are the values loaded at the last switch — reading those made every stage-box correction look unsaved. The write fires `projectDetailsChanged` so the Stage view redraws the box |
 | `set_scene` | The scene document (stage-view plan session 2, D2): **elements and viewpoints upserted by name**, with `removeElements` / `removeViewpoints` and a `dryRun`. An element row is `set_stage`'s shape — `name`, `kind`, `layer`, `x`/`y`/`z`, `yawDeg`, the three sizes, `finish {colour, pattern, emissive}`, `params` (replaced whole: what it may hold depends on the kind) and `hidden`; a platform's `params.region` names a region, stored as its uuid. A viewpoint row is `name`, `kind`, `eye`/`target` as `{x, y, z}`, `fovDeg`, and for a seat `seating` (omissible when the scene has one) and `seat` (`F6`). `template: "proscenium-hall"` with `templateParams` (hall, stage and opening sizes required; deck height, apron, rows, pitches, first-row distance and a balcony optional) expands server-side into named elements — `Hall`, `Stage house`, `Main stage`, `Proscenium`, `Stalls`, `Balcony` — before the explicit rows, and an explicit row of the same name lays its fields over the template's (`finish` one level down). A change that would leave a stored seat view without its seat is refused unless that view is changed or removed in the same call. Shares `validateStageElement` / `validateStageViewpoint` with the REST routes, so the two refuse the same things |
 | `get_scene` | The document back, in `set_scene`'s shape so a row can be corrected and resent: a platform's region by name, a seating's seat count and range, a seat view's `seating`, `seat` and the `seatedEye` it resolves to, and the built-in viewpoints. Read-only |
+| `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`. Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
 | `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
@@ -345,7 +347,79 @@ stage box, the regions, the riggings upstage first with their kind and trim, a c
 venue and set elements, and the saved viewpoints — a paragraph, not the document, because the
 briefing is also the in-app chat's prompt on every turn. Omitted for a project with none of it.
 
-Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`.
+### `render_view`: Claude seeing the model
+
+Stage-view plan session 4 (D4). `set_scene` lets a model build the hall from a photo; this lets it
+look at what it built and correct it. **The backend cannot draw WebGL**, so a signed-in desk window
+does: the desk resolves the viewpoint, asks one window to render it offscreen, and answers the PNG
+it uploads. A desk with no window open cannot answer — by design (plan §10), and said so by name.
+
+**The tool** (`ai/RenderViewTool.kt`) validates first and asks a window only when everything
+resolves: the size and source, then the viewpoint against the **current** project's rows — a
+camera word (any case), else a saved view by exact name, else by uuid (so a saved view named like a
+camera is reached by its uuid), or `{seating, seat}` with the seating omissible when the scene has
+one. What it sends the window is the Stage view's own vocabulary — a camera, a saved view's uuid,
+or `seat:<uuid>:<id>` — so the window resolves exactly what its picker would. A saved seat view is
+sent as its row, so the window lands the row's own target and lens; one whose seat has gone is
+refused, as the picker disables it. Every failure is a named `error` in the text content:
+
+| Code | When |
+|------|------|
+| `RENDER_INVALID_REQUEST` | An unknown field, a side outside 160–1920 or more than 1920 × 1080 pixels in all, one side alone whose 16:9 partner would be out of range, an unknown source, a malformed viewpoint, or an ambiguous seat (several seatings, none named) |
+| `RENDER_UNKNOWN_VIEWPOINT` | No camera, saved name or uuid matches; the message lists the cameras and the saved views |
+| `RENDER_UNKNOWN_SEAT` | No such seating, no such seat (the message gives the rows and seat range), or a saved seat view whose seat has gone |
+| `RENDER_NO_WINDOW` | No eligible window is open |
+| `RENDER_BUSY` | Another render held the desk for a whole timeout's worth of waiting |
+| `RENDER_TIMEOUT` | The window did not answer within 30 s; the message names it |
+| `RENDER_WINDOW_CLOSED` | The window's socket closed before it answered |
+| `RENDER_FAILED` | The window answered with a reason — its WebGL context was lost, a read failed, it gave up waiting for the scene, or its frame was refused as too large or not a PNG |
+
+**The request path** (`state/StageRenderService.kt`) is a **job, not a command**. The five
+`windows.*` commands are rebroadcast to every socket and acted on by the one they name; a render is
+addressed to **one** socket, carries a one-shot request id and a secret token, and is answered once.
+
+- **Which window.** Only a socket on the desk's own listener — never the public one (`isRemote`, by
+  port) — that is signed in and has announced itself, on a view that does not name another project
+  (`/projects/{id}/…`; a view that names none, `/install` say, is eligible). Of those, a window on
+  the desk machine itself (its socket's peer is loopback) comes first — the desk's GPU, not an
+  iPad's — then the registry's order, oldest announce first: on an ordinary night, the operator's
+  first screen. A remote socket and a bootstrap-open one are never even attached
+  (`setupStageRenderSubscriptions`), so they are never chosen and never sent a request.
+- **The request** goes out as `stageRender.request` (`docs/websocket-engineering.md`), down the
+  chosen socket's own queue — each attached socket has one, attached and detached on that
+  connection's own coroutine, so a request sent a moment after the window announces waits for it. The socket gains **no inbound message**, so `FU-AUTH-WS-PER-MESSAGE` is
+  not fired: nothing an operator's client could send over the socket changes.
+- **The answer is a REST upload**, `POST /api/rest/stage-renders/{requestId}` with the raw PNG and
+  `X-Render-Token`, or `…/failure` with `{reason}` (`routes/stageRenders.kt`). REST rather than a
+  socket frame because a PNG is hundreds of KB — base64 in JSON would be a third larger, through the
+  one sequential message loop the operator's writes use, on a socket with no per-message cap — and
+  because a bounded read of a raw body is the prompt book's pattern. It is accepted only while the
+  job is live, with its token (sent to that socket only) **and** from that socket's session; anything
+  else is 404 `RENDER_REQUEST_UNKNOWN` (answered, timed out, or never issued) or 403
+  `RENDER_REQUEST_NOT_YOURS`. The body is read bounded at 4 MB (`MAX_RENDER_BYTES`) and must carry
+  the PNG signature; either refusal (413 `RENDER_TOO_LARGE`, 400 `RENDER_NOT_PNG`) also ends the job
+  with that reason, since its window will not send another, and so does a `…/failure` body that
+  will not parse. **Never on the public listener**: a signed-in remote answer is 404 before
+  anything is looked up (an unsigned one is the auth gate's 401, before the route runs).
+- **One render at a time**, desk-wide: a render holds a WebGL context on someone's screen for a
+  moment. A call waits behind one in flight for no longer than the timeout, then answers
+  `RENDER_BUSY`, so every call ends within twice the timeout however many are queued. A socket that
+  closes mid-render ends its job at once (`RENDER_WINDOW_CLOSED`) rather than at the timeout.
+  Nothing is persisted and nothing is a table.
+- **Sizes.** Each side 160–1920 and at most 1920 × 1080 pixels in all, because the frame a window
+  may upload is capped at 4 MB: a stage render at 1280 × 720 is a few hundred KB, so the pixel cap
+  keeps even a hazy frame well inside the byte cap.
+
+**Residual, accepted:** the desk's own listener is a port, not a peer address, so a signed-in
+browser that reaches it from off the LAN (a port forward) is a window like any other. And a remote
+MCP client can make a desk window draw — read-only, one at a time,
+bounded by the timeout. The desk cannot see whether a window's tab is hidden; a hidden one still
+renders (the frontend draws without `requestAnimationFrame`), but a machine asleep will time out.
+
+The window's half — a lazily loaded render host in the app shell, the Stage view's own scene on a
+detached canvas — is `frontend/docs/stage-vis-engineering.md` §"Rendering for `render_view`".
+
+Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
 
 ## Tests
 

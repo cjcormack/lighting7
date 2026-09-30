@@ -251,6 +251,21 @@ exactly `lib/stageSeats.ts`'s. The View menu's Venue · Set · Seating · Haze a
 `useDefaultCamera`, and the bloom composer rebuilds after the swap's frame, so `Bloom` invalidates on
 each new composer or the view sits on the old camera's picture.
 
+**Any window can be asked to render a viewpoint for Claude** (`render_view`, stage-view plan
+session 4). `StageRenderHost` (`components/stageRender/`, mounted once in `Layout`) takes the desk's
+`stageRender.request` — sent to one socket, so it is always this window's — and mounts the lazily
+loaded `stage3d/render/StageRenderJob.tsx`, which draws **the Stage view's own `Stage3D`** with a
+`capture` prop: a detached canvas at the asked size (`CaptureCanvas.tsx` — `createRoot`, `dpr: 1`,
+`frameloop: 'never'`, driven by `advance`, so a hidden tab renders too), the viewpoint through
+`resolveViewpoint` (`savedViewpoints.ts`), the default layers, no labels, and the request's vis
+source through the same `StageChannelSourceProvider`, which now takes a `source` and reports
+`onSettled`. The rig's `oneShot` lands it and records nothing, so the window's viewpoint, camera
+poses, landed marker, layers and source never move, and nothing appears on screen. The PNG goes
+back over REST with the request's token; both answers are silent endpoints. The capture root
+bridges only `ChannelSourceContext` — a scene component that starts reading another context from
+outside the canvas must be bridged there too. See `docs/stage-vis-engineering.md` §"Rendering for
+`render_view`".
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group
@@ -4584,7 +4599,9 @@ path too (`UserMenu` reads the window count) and is **neither**: its only subscr
 `startWindowsBridge()`. The half of that family that turns a frame into an action — the announce
 and the three command handlers — lives in a hook (`components/screens/useWindowsBridge.ts`, mounted
 once in `Layout`), because it needs the router's location and `navigate`, which exist only inside
-`RouterProvider`.
+`RouterProvider`. `stageRender.request` is the same kind of thing and is **not** a bridge either:
+`StageRenderHost` subscribes in an effect because a request mounts a component (the render), not a
+cache entry, and it is mounted once in `Layout` for the same reason the windows hook is.
 
 Nothing is being migrated toward form 2. `import/no-cycle` is an ESLint **error** in this repo, so
 the precondition for the TDZ hazard — an import cycle through `api/lightingApi` — cannot reappear

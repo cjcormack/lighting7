@@ -1662,4 +1662,12 @@ data class ToolExecutionResult(
     val success: Boolean,
     val description: String,
     val result: String,
+    /**
+     * Images to answer beside [result] — MCP's image content (`render_view`'s PNG). Only the MCP
+     * surface sends them; the in-app chat has no tool that makes one.
+     */
+    val images: List<ToolImage> = emptyList(),
 )
+
+/** One image in a tool's answer: its bytes, base64, and their media type. */
+class ToolImage(val mimeType: String, val base64: String)
