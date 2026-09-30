@@ -1,4 +1,4 @@
-import { BuskLabel } from 'lighting-desk-ui'
+import { EditorLabel } from 'lighting-desk-ui'
 
 const Pad = ({ name, colour }: { name: string; colour?: string }) => (
   <div className="flex h-12 flex-col justify-between rounded-md border bg-card p-1.5 text-[11px] leading-tight">
@@ -10,7 +10,7 @@ const Pad = ({ name, colour }: { name: string; colour?: string }) => (
 export const Regions = () => (
   <div className="space-y-3">
     <div>
-      <BuskLabel className="mb-1">Targets</BuskLabel>
+      <EditorLabel className="mb-1">Targets</EditorLabel>
       <div className="grid grid-cols-4 gap-1.5">
         <Pad name="Front wash" />
         <Pad name="Spots" />
@@ -19,7 +19,7 @@ export const Regions = () => (
       </div>
     </div>
     <div>
-      <BuskLabel className="mb-1">Looks</BuskLabel>
+      <EditorLabel className="mb-1">Looks</EditorLabel>
       <div className="grid grid-cols-4 gap-1.5">
         <Pad name="Warm Wash" />
         <Pad name="Blue Night" />
@@ -32,7 +32,7 @@ export const Regions = () => (
 
 export const AbovePads = () => (
   <div>
-    <BuskLabel className="mb-1">Colour</BuskLabel>
+    <EditorLabel className="mb-1">Colour</EditorLabel>
     <div className="grid grid-cols-4 gap-1.5">
       <Pad name="Warm Amber" colour="#ff9d4a" />
       <Pad name="Congo Blue" colour="#2b1fd9" />
@@ -46,7 +46,7 @@ export const RailCardTitle = () => (
   <div className="w-56 rounded-md border bg-card p-2">
     <div className="flex items-center gap-2">
       <span className="size-2 rounded-full bg-primary" />
-      <BuskLabel className="flex-1">Master 2 · Colour</BuskLabel>
+      <EditorLabel className="flex-1">Master 2 · Colour</EditorLabel>
       <span className="rounded bg-muted px-1 text-[9px] uppercase text-muted-foreground">×1/2</span>
     </div>
     <p className="mt-1 text-2xl font-semibold tabular-nums">64</p>

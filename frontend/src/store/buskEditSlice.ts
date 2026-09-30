@@ -23,7 +23,7 @@ import { useSelector } from 'react-redux'
  * page after the operator navigated away — the same rule `CueSlotDndProvider` follows when its
  * panel hides.
  */
-interface BuskEditState {
+export interface BuskEditState {
   editing: boolean
   /** The page being edited, so a surface outside the busk view knows which one a drop belongs to. */
   pageId: number | null

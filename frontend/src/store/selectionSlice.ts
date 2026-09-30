@@ -36,7 +36,7 @@ import type { RowId } from '../components/fixtures-list/rowModel'
  */
 export type SelectionScope = 'fixtures' | 'groups' | 'programmer'
 
-interface ScopeState {
+export interface ScopeState {
   /** Selected ids, in the order they were added (not display order). */
   ids: RowId[]
   anchor: RowId | null

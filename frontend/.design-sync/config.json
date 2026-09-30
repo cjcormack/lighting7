@@ -15,7 +15,7 @@
     "RemoveBtn": "../src/components/looks/paneChrome.tsx",
     "LookValueChip": "../src/components/looks/lookValueChips.tsx",
     "LookPreviewSwatches": "../src/components/looks/lookValueChips.tsx",
-    "ThemeToggle": "../src/ThemeToggle.tsx"
+    "ThemeMenuItem": "../src/ThemeToggle.tsx"
   },
   "provider": {
     "component": "TooltipProvider"
@@ -40,6 +40,10 @@
     "DropdownMenu": {
       "cardMode": "single",
       "viewport": "640x520"
+    },
+    "ThemeMenuItem": {
+      "cardMode": "single",
+      "viewport": "640x480"
     },
     "ContextMenu": {
       "cardMode": "single",
