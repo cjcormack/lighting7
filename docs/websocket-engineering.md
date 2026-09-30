@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **118 message types**
-(47 inbound, 71 outbound) across fourteen domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **122 message types**
+(49 inbound, 73 outbound) across sixteen domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -221,11 +221,12 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
 | Speed masters | `SpeedMasterSocket.kt` | 4 | 4 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
+| Stage render | `StageRenderSocket.kt` | — | 1 | — | `setupStageRenderSubscriptions` |
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Four families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync and Machine. Channel is the odd one: its three messages are declared in
+Five families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Machine and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -507,7 +508,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (72)
+## Server → Client (73)
 
 ### Boot — `BootSocket.kt`
 
@@ -646,6 +647,36 @@ name on both sides.) `windows.state` is `StateFlow`-backed, so the subscription 
 it arrives before this window has announced anything; `id` is the socket-minted row id and `user` is
 the authenticated caller's display name, both stamped server-side for the reason `selection.state`'s
 `source` is (D7) — a window cannot claim to be another window, or another operator.
+
+### Stage render — `StageRenderSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `stageRender.request` | `requestId`, `token`, `projectId`, `viewpoint`, `width`, `height`, `source`, `timeoutMs` | **Unicast** — to the one window the desk chose |
+
+`render_view`'s job for one window (stage-view plan session 4; `docs/mcp-engineering.md`
+§"`render_view`"): draw `viewpoint` — already the Stage view's vocabulary, a camera, a saved view's
+uuid or `seat:<uuid>:<id>` — offscreen at `width` × `height` from `source`, and upload the PNG. It is
+the only frame in the protocol addressed to one socket: each attached socket has its own request
+queue in `StageRenderService`, and a job goes down the chosen socket's queue alone, so no other
+socket is ever sent it — unlike the five `windows.*` commands, which go to everyone and are acted on
+by the id they name. `token` is the secret that binds the answer to this socket.
+
+**The family is outbound-only.** The answer is a REST upload, `POST
+/api/rest/stage-renders/{requestId}` (or `…/failure`), accepted only with the id, the token and the
+socket's own session; a PNG is hundreds of KB and would be base64 through the one message loop the
+operator's writes share. So the socket gains no inbound message, and `FU-AUTH-WS-PER-MESSAGE` is not
+fired.
+
+**Only a signed-in socket on the desk's own listener subscribes.** `setupStageRenderSubscriptions`
+returns at once for a socket on the public listener (`SocketScope.remote`, decided by port — the
+desk's listener is a port, not a peer address) or one with no session (bootstrap-open), so neither
+is ever *attached* to the service and neither can be chosen. The socket is attached
+**synchronously**, on the connection's own coroutine in the show band past the warm-up gate (a job
+goes only to an announced window, and an announce is handled only past that gate), and detached in
+the same connection's `finally` — so the two can never land out of order — which closes its queue
+and ends a job it held at once (`RENDER_WINDOW_CLOSED`) rather than at the timeout. A request sent
+before the socket's collector is running waits in its queue. Nothing is persisted.
 
 ### Hand — `HandSocket.kt`
 
@@ -902,7 +933,8 @@ ids, where a window outlives a switch and its `view` still means something after
 1. Connection removed from `connections`.
 2. `scope.cancelAll()` cancels every subscription and pending snapshot job.
 3. Learn sessions this connection owns are cancelled.
-4. This connection's windows-registry row is removed, if it announced one.
+4. This connection's windows-registry row is removed, if it announced one, and it is detached from
+   `render_view`'s jobs — one it held ends now, not at its timeout.
 5. The fixtures listener is unregistered from whatever `Fixtures` instance is current — the project
    may have switched mid-connection, which is why `setupBroadcastSubscriptions` returns a closure
    rather than the caller holding the instance.
@@ -1009,6 +1041,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |
 | `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the five commands (machine-scoped band) |
+| `plugins/StageRenderSocket.kt` | `render_view`'s job to one window, `stageRender.request` (signed-in sockets on the desk's own listener only) |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |
 | `plugins/HTTP.kt` | OpenAPI / Swagger UI config — likewise not WebSocket |
 | `show/Fixtures.kt` | The `FixturesChangeListener` interface itself |

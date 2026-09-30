@@ -36,6 +36,7 @@ import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
 import {createRemoteAccessWsApi, RemoteAccessWsApi} from "./remoteAccessWsApi";
 import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
 import {createHandWsApi, HandWsApi} from "./handApi";
+import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
 interface LightingApi {
   universes: UniversesApi
@@ -72,6 +73,7 @@ interface LightingApi {
   buskPage: BuskPageWsApi
   windows: WindowsWsApi
   hand: HandWsApi
+  stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
   programmer: ProgrammerApi
@@ -136,6 +138,7 @@ function createLightingApi(): LightingApi {
   const buskPageWsApi = createBuskPageWsApi(connection)
   const windowsWsApi = createWindowsWsApi(connection)
   const handWsApi = createHandWsApi(connection)
+  const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
   const speedMastersWsApi = createSpeedMastersWsApi(connection)
@@ -175,6 +178,7 @@ function createLightingApi(): LightingApi {
     buskPage: buskPageWsApi,
     windows: windowsWsApi,
     hand: handWsApi,
+    stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,
     programmer: programmerApi,

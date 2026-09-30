@@ -53,6 +53,7 @@ vi.mock('./components/cloudSync/SyncReauthBanner', () => ({ SyncReauthBanner: ()
 vi.mock('./components/screens/ReturnToFullscreenBanner', () => ({ ReturnToFullscreenBanner: () => null }))
 vi.mock('./components/hand/HandChip', () => ({ HandChip: () => <div data-testid="hand-chip" /> }))
 vi.mock('./components/screens/ScreensSheet', () => ({ ScreensSheet: () => null }))
+vi.mock('./components/stageRender/StageRenderHost', () => ({ StageRenderHost: () => null }))
 vi.mock('./components/screens/useWindowsBridge', () => ({ useWindowsBridge: () => {} }))
 
 import Layout from './Layout'

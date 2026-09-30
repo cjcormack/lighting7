@@ -9,7 +9,7 @@ import {
 } from '../api/channelSource'
 import { descriptorsByTarget, type DescriptorsByTarget } from '../lib/programmerChannels'
 import { useFixtureLookup } from './useFixtureLookup'
-import { useNextGoSource } from './useNextGoPreview'
+import { useNextGoSourceState } from './useNextGoPreview'
 import { useVisSource, type VisSource } from './useVisSource'
 
 /**
@@ -51,7 +51,7 @@ const EMPTY_DESCRIPTORS: DescriptorsByTarget = new Map()
  * double-invokes render, and a source built during a discarded render would leak its programmer
  * subscription with nothing left holding a reference to dispose it.
  */
-function useProgrammerSource(enabled: boolean): DerivedChannelSource | null {
+function useProgrammerSource(enabled: boolean): { source: DerivedChannelSource | null; settled: boolean } {
   const { fixtures } = useFixtureLookup()
   const descriptors = useMemo(
     () => (fixtures ? descriptorsByTarget(fixtures) : EMPTY_DESCRIPTORS),
@@ -83,7 +83,13 @@ function useProgrammerSource(enabled: boolean): DerivedChannelSource | null {
     source?.refresh()
   }, [source, descriptors])
 
-  return source
+  return { source, settled: !enabled || (source != null && fixtures != null) }
+}
+
+/** A resolved source, and whether it holds what it will hold — see [StageChannelSourceProvider]'s `onSettled`. */
+interface ResolvedChannelSource {
+  source: ChannelSource
+  settled: boolean
 }
 
 /**
@@ -94,39 +100,57 @@ function useProgrammerSource(enabled: boolean): DerivedChannelSource | null {
  * being absent — a single early-out would pin `nextGo` to the wire, since it never builds a
  * programmer source at all.
  */
-function useResolvedChannelSource(visSource: VisSource): ChannelSource {
+function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
   const programmer = useProgrammerSource(
     visSource === 'outputProgrammer' || visSource === 'programmer',
   )
-  const nextGo = useNextGoSource(visSource === 'nextGo')
-  return useMemo(() => {
+  const nextGo = useNextGoSourceState(visSource === 'nextGo')
+  const source = useMemo(() => {
     switch (visSource) {
       case 'output':
         return outputChannelSource
       case 'outputProgrammer':
-        return programmer
-          ? createOverlayChannelSource(outputChannelSource, programmer)
+        return programmer.source
+          ? createOverlayChannelSource(outputChannelSource, programmer.source)
           : outputChannelSource
       case 'programmer':
-        return programmer ?? outputChannelSource
+        return programmer.source ?? outputChannelSource
       case 'nextGo':
         // Overlaid, not literal: the preview reports only the channels the cue asserts, so
         // everything it is silent about has to show the wire through.
-        return nextGo
-          ? createOverlayChannelSource(outputChannelSource, nextGo)
+        return nextGo.source
+          ? createOverlayChannelSource(outputChannelSource, nextGo.source)
           : outputChannelSource
     }
-  }, [visSource, programmer, nextGo])
+  }, [visSource, programmer.source, nextGo.source])
+  return { source, settled: programmer.settled && nextGo.settled }
 }
 
 /**
- * Point a stage canvas at whichever layer the operator selected.
+ * Point a stage canvas at whichever layer the operator selected — this window's vis source, or
+ * [source] when a caller names one (`render_view`'s offscreen render draws the source the desk
+ * asked for, and must neither read nor move this window's).
+ *
+ * [onSettled] is told whether the source holds what it will hold: a derived source falls back to
+ * the wire while it is built, which the live canvas shows for a frame and a one-frame render must
+ * wait out.
  *
  * Wrap **only the canvas**. The Stage route's docked `StageFixtureControlPanel` is a live editor
  * and has to keep reading real output, so this must not go around a subtree that contains it.
  */
-export function StageChannelSourceProvider({ children }: { children: ReactNode }) {
-  const visSource = useVisSource()
-  const source = useResolvedChannelSource(visSource)
+export function StageChannelSourceProvider({
+  source: named,
+  onSettled,
+  children,
+}: {
+  source?: VisSource
+  onSettled?: (settled: boolean) => void
+  children: ReactNode
+}) {
+  const windowSource = useVisSource()
+  const { source, settled } = useResolvedChannelSource(named ?? windowSource)
+  useEffect(() => {
+    onSettled?.(settled)
+  }, [onSettled, settled])
   return <ChannelSourceProvider source={source}>{children}</ChannelSourceProvider>
 }

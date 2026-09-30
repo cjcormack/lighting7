@@ -35,6 +35,7 @@ import { HandChip } from "./components/hand/HandChip"
 import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
+import { StageRenderHost } from "./components/stageRender/StageRenderHost"
 
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
@@ -351,6 +352,11 @@ export default function Layout() {
         {/* The Screens sheet, mounted once: opened from the user menu and from ⌘K through
             `screensSheetState`, neither of which is an ancestor of the other. */}
         <ScreensSheet controls={SCREENS_CONTROLS} />
+
+        {/* `render_view`'s renders (stage-view plan session 4): any window, on any route, can be
+            asked to draw a Stage viewpoint offscreen. Draws nothing of its own; the render itself
+            is a lazy chunk loaded on the first request, so three.js stays out of this shell. */}
+        <StageRenderHost />
 
         {/* Command Palette */}
         <CommandPalette

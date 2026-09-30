@@ -357,6 +357,22 @@ export const templatesWs: {
   pressed: null | ((event: { templateId: number; lastPressedAt: string }) => void)
 } = { changed: null, pressed: null }
 
+/**
+ * `render_view`'s requests to this window (`stageRender.request`): a test fires one at whatever
+ * subscribed. Spelled out rather than left to the fallback Proxy because the test has to *fire* it.
+ */
+export const stageRenderWs: {
+  callback: null | ((request: unknown) => void)
+  fire: (request: unknown) => void
+  reset: () => void
+} = {
+  callback: null,
+  fire: (request) => stageRenderWs.callback?.(request),
+  reset: () => {
+    stageRenderWs.callback = null
+  },
+}
+
 export function lightingApiMock() {
   const namespaces: Record<string, unknown> = {
       bootStatus: {
@@ -576,6 +592,16 @@ export function lightingApiMock() {
         },
         drop: (uuid?: string) => {
           handWs.dropped.push(uuid)
+        },
+      },
+      stageRender: {
+        subscribe: (fn: (request: unknown) => void) => {
+          stageRenderWs.callback = fn
+          return {
+            unsubscribe: () => {
+              if (stageRenderWs.callback === fn) stageRenderWs.callback = null
+            },
+          }
         },
       },
       // Spelled out for the `selection` reason: `store/windows.ts` seeds its entry from

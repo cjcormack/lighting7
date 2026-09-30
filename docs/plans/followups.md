@@ -1336,6 +1336,9 @@ subscription).
 Checked and not fired by `midi-surface-plan.md` session 1 (D12): `selection.set` / `.toggle` /
 `.clear` are operator gestures of the same tier as `surfaceBank.set`, and binding writes stayed on
 REST behind the gate they have today.
+Nor by `stage-view-plan.md` session 4 (`render_view`): its `stageRender.request` is outbound-only
+and unicast, and the window answers over REST (`POST /stage-renders/{id}`), so the socket gained no
+inbound message.
 
 **Trigger**: an admin-only operation gains a socket command, or `FU-AUTH-OPERATOR-LOCKDOWN` lands
 and a locked-down control is also reachable over WS — otherwise the two are the same change made

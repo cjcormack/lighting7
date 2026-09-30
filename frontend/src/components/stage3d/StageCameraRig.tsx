@@ -78,6 +78,12 @@ interface StageCameraRigProps {
    * the same scene and must not move the Stage view's.
    */
   persist: boolean
+  /**
+   * A render's camera (`render_view`, stage-view plan session 4): land [landing] as it mounts,
+   * whatever this window last landed on, and record nothing — no pose, no landed marker. Implies
+   * `persist` is false; the rig is mounted once per render.
+   */
+  oneShot?: boolean
   controlsRef: React.RefObject<StageCameraControls | null>
   handleRef?: React.RefObject<StageCameraHandle | null>
 }
@@ -105,15 +111,19 @@ export function StageCameraRig(props: StageCameraRigProps) {
 
 /**
  * The landing this rig should take now: one of its own camera's, on the Stage route's canvas (the
- * Positions plan never lands), and not the one the window has already landed on.
+ * Positions plan never lands), and not the one the window has already landed on — or, for a
+ * render's one-shot camera, the one it was given, always.
  */
 function usePendingLanding<C extends 'orbit' | 'eye'>(
   camera: C,
   landing: StageCameraLanding | null | undefined,
   persist: boolean,
+  oneShot: boolean,
 ): Extract<StageCameraLanding, { camera: C }> | null {
   const landed = useLandedViewpoint()
-  if (!persist || landing == null || landing.camera !== camera) return null
+  if (landing == null || landing.camera !== camera) return null
+  if (oneShot) return landing as Extract<StageCameraLanding, { camera: C }>
+  if (!persist) return null
   if (landed?.ref === landing.ref && landed.camera === landing.camera) return null
   return landing as Extract<StageCameraLanding, { camera: C }>
 }
@@ -195,8 +205,8 @@ function useLend<T>(ref: React.RefObject<T | null> | undefined, value: T | null)
 
 // — orbit ————————————————————————————————————————————————————————————————
 
-function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: StageCameraRigProps) {
-  const pending = usePendingLanding('orbit', landing, persist)
+function OrbitRig({ defaultOrbit, persist, oneShot = false, controlsRef, handleRef, landing }: StageCameraRigProps) {
+  const pending = usePendingLanding('orbit', landing, persist, oneShot)
   const [initial] = useState(() => pending?.pose ?? (persist ? readOrbitPose() : null) ?? defaultOrbit)
   const [target] = useState(() => [...initial.target] as [number, number, number])
   const [camera] = useState(() => {
@@ -253,8 +263,9 @@ function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: St
     controls.update()
     invalidate()
     onChange()
-    markViewpointLanded({ ref: pending.ref, camera: 'orbit' })
-  }, [pending, controls, camera, invalidate, onChange])
+    // The marker is the window's; a render's camera must not move it.
+    if (persist) markViewpointLanded({ ref: pending.ref, camera: 'orbit' })
+  }, [pending, controls, camera, invalidate, onChange, persist])
 
   return <OrbitControls ref={setControls} camera={camera} makeDefault target={target} onChange={onChange} />
 }
@@ -264,8 +275,8 @@ function OrbitRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: St
 /** Radians of head turn per pixel of drag at a 50° lens; a narrower lens turns slower. */
 const LOOK_RAD_PER_PX = 0.004
 
-function EyeRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: StageCameraRigProps) {
-  const pending = usePendingLanding('eye', landing, persist)
+function EyeRig({ defaultOrbit, persist, oneShot = false, controlsRef, handleRef, landing }: StageCameraRigProps) {
+  const pending = usePendingLanding('eye', landing, persist, oneShot)
   const [initial] = useState(
     () =>
       pending?.pose ??
@@ -281,7 +292,8 @@ function EyeRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: Stag
   useDefaultCamera(camera)
   const invalidate = useThree((s) => s.invalidate)
   const gl = useThree((s) => s.gl)
-  const connected = useThree((s) => s.events.connected) as HTMLElement | undefined
+  // `false`, not undefined, on a root with no event system (a render's capture canvas).
+  const connected = useThree((s) => s.events.connected) as HTMLElement | false | undefined
   const [controls] = useState<StageCameraControls>(() => ({ enabled: true }))
   useLend(controlsRef, controls)
 
@@ -311,15 +323,15 @@ function EyeRig({ defaultOrbit, persist, controlsRef, handleRef, landing }: Stag
     camera.position.set(...pending.pose.position)
     pose.current = { yaw: pending.pose.yaw, pitch: pending.pose.pitch, fov: pending.pose.fov }
     apply()
-    markViewpointLanded({ ref: pending.ref, camera: 'eye' })
-  }, [pending, camera, apply])
+    if (persist) markViewpointLanded({ ref: pending.ref, camera: 'eye' })
+  }, [pending, camera, apply, persist])
 
   // Drag turns the head, grabbing the scene: drag right and the view turns left, as a panorama
   // does. Scroll (and a trackpad pinch, which arrives as a ctrl-wheel) narrows or widens the lens —
   // a person does not walk forward by scrolling. Listening where drei's controls listen, and on the
   // window for the rest of a drag, so a drag that leaves the canvas still ends.
   useEffect(() => {
-    const el = connected ?? gl.domElement
+    const el = connected || gl.domElement
     const previousTouchAction = el.style.touchAction
     el.style.touchAction = 'none'
     let drag: { x: number; y: number } | null = null

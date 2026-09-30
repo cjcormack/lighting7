@@ -177,6 +177,12 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'parkChannel', // src/api/wsGesture.ts raises it
   'unparkChannel', // ...same
   'updateChannel', // ...same
+  // `render_view`'s answers (stage-view plan session 4). The render runs on an operator's screen
+  // mid-show for a model that asked over MCP, and a refused answer — the desk gave up waiting, or
+  // the window closed its request — is the model's to hear through the tool's own named error,
+  // never a toast on that screen. `StageRenderHost` logs it to the console instead.
+  'uploadStageRender', // src/components/stageRender/StageRenderHost.tsx
+  'failStageRender', // ...same
 ])
 
 /**

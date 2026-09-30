@@ -8,7 +8,8 @@ How the stage surfaces decide **what a fixture looks like**. Two independent sea
 
 And, since the stage-view plan's session 0, how the 3D view keeps within a browser's memory and
 survives losing its graphics context — §"The 3D renderer"; since session 1, its cameras, the
-window's viewpoint and the Positions panel — §"Cameras and viewpoints" at the end.
+window's viewpoint and the Positions panel — §"Cameras and viewpoints"; and since session 4, how a
+window draws a viewpoint offscreen for Claude — §"Rendering for `render_view`" at the end.
 
 ## The vis source
 
@@ -723,3 +724,87 @@ with no decluttering; no labelling scheme fixes a true-scale plan of three bars 
   opens the Stage view on Plan.
 - **Closed costs nothing.** The tab and the group filter live above `CollapsiblePanel`; every query,
   channel subscription and the canvas unmount with the body.
+
+## Rendering for `render_view`
+
+Session 4 of the stage-view plan gave Claude eyes (D4): the MCP tool `render_view` answers a PNG of
+a stage viewpoint, and since the desk cannot draw WebGL, **a desk window draws it**. The desk half —
+which window, the one-shot request, the bound upload, the named errors — is lighting7
+`docs/mcp-engineering.md` §"`render_view`"; this is the window's half.
+
+**Any window, on any route.** `StageRenderHost` (`components/stageRender/`) is mounted once in
+`Layout`, so a window on Busk or the Programmer is asked as readily as one on the Stage view. It
+subscribes to `stageRender.request` (`api/stageRenderApi.ts`) — a frame the desk sends to the one
+socket it chose, so a frame that arrives is this window's — and draws nothing of its own. While a
+request is in hand it mounts `stage3d/render/StageRenderJob.tsx`, **lazily**: the job imports
+`Stage3D` and with it three.js, which therefore still loads only when the Stage view, the Positions
+plan or a render first needs it, never with the app shell. The outcome goes back over REST
+(`store/stageRenders.ts`) with the request's token; both endpoints are silent in
+`errorToastMiddleware`, because a refused answer is the model's to hear and the operator at this
+window asked for nothing. One render at a time: a request arriving mid-render is answered *busy*.
+
+**It is the Stage view's own scene, not a copy.** The job mounts `Stage3D` itself, with a `capture`
+prop, and every other prop means what it does on screen:
+
+- **The camera** comes from `resolveViewpoint` (`savedViewpoints.ts`): a camera draws through
+  itself; a saved view and an unsaved seat land through `resolveSavedViewpoint` /
+  `resolveSeatViewpoint`, the maths the picker lands with. `orbit` and `eye` are the poses a fresh
+  window opens on (`defaultOrbitPose`, and the eye seeded from it), not any window's current pose.
+- **The scene** is `showScene` with the default layers (Venue, Set, Seating, Haze all on), the
+  default view flags **minus labels** — the label layer is DOM over the canvas, so a frame read off
+  the canvas never had them — and the machine's light budget, read, not written.
+- **The light** comes through the same `StageChannelSourceProvider` as the Stage view, now with a
+  `source` it can be handed (the request's, not this window's) and an `onSettled` that says when a
+  derived source holds what it will hold: the programmer source once it is built over the fixture
+  list, Next GO once the cue on deck is known and its preview has answered
+  (`useNextGoSourceState`). The Stage view draws the wire for the frame it takes to build one; a
+  one-frame render waits it out.
+
+**The capture canvas** (`CaptureCanvas.tsx`) is what `Stage3D` renders into instead of R3F's
+`<Canvas>`: an R3F root (`createRoot`) on a **detached** `<canvas>` — never put on the page, so the
+window's own canvas, layout and pointer are untouched — configured with its size, `dpr: 1` (the size
+asked for is the picture's), `frameloop: 'never'` and a preserved drawing buffer, and drawn with
+`advance` for that root alone. Two reasons it is not `<Canvas>`: `<Canvas>` sizes itself from a
+`ResizeObserver` and draws on `requestAnimationFrame`, and a background tab delivers neither — this
+one renders in a hidden tab, yielding between frames by `MessageChannel` rather than timers, which a
+hidden tab clamps. And an on-demand frameloop would keep drawing while a live show's channels move;
+this one draws exactly the frames it is told to. `flat`, no tone mapping and `antialias` are the
+view's; the clear colour is the view's CSS background, which a PNG has to have drawn. Two things
+`<Canvas>` does that a bare root does not, both found by rendering from a window that had never
+shown the Stage view: it registers the THREE catalogue (`extend(THREE)`) as it mounts, without which
+`<ambientLight>` throws in a window that has drawn no canvas yet, so the capture canvas calls it too;
+and it connects an event system, so on this root `events.connected` is `false` — anything reading
+it must fall back on falsy, not on `??` (the Eye rig did). A throw inside the root is caught there
+(`SceneBoundary`) and ends the render with its reason at once, since nothing above a detached
+canvas would hear it. **Contexts do not cross into an R3F root by themselves**: `<Canvas>` bridges every one, and the capture canvas
+bridges the one the scene reads from outside it — the vis source. A scene component that starts
+reading another outside context must be bridged there too, or a render silently draws its default.
+
+**Read-only in every sense.** No DMX and no programmer write — the view in view mode writes neither.
+None of this window's facts move: `StageCameraRig`'s `oneShot` lands the render's viewpoint
+**unconditionally** and records nothing — no pose in `sessionStorage`, no landed marker (it was
+`persist` that marked, and a render's rig is never persisted); the layers and the source are the
+render's own, not read from or written to this window's stores. The job's container sits far
+offscreen, `aria-hidden` and `inert`, holding only the scene's DOM overlays, all empty.
+
+**When it draws.** The job fetches afresh every read the scene draws from — the project, saved
+views, scene elements, patches, regions, riggings, fixtures and types — with `forceRefetch`, so a
+`set_scene` a moment before is in the picture and an entry that errored earlier cannot fail this
+render before its own fetch has run. Then it resolves the viewpoint once (a refetch mid-render moves
+the cache `Stage3D` draws from, never the camera, and never unmounts the canvas), mounts `Stage3D`,
+and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it, so
+the stage text's font counts — and for the source to settle. Then four frames a task apart (the
+emitters lay out and pack the light table; the bloom composer rebuilds after its camera swap and
+needs the next), and `toBlob`. It gives up three seconds before the desk would, naming what never
+arrived, so Claude hears *waiting for the scene to mount* rather than a bare timeout.
+
+**Disposal.** The host unmounts the job on its outcome, before the upload goes; R3F's `unmount`
+disposes the renderer and forces the context's loss — session 0's memory rule, and a second
+context on an iPad is the expensive case. A context lost mid-render (`ContextLossWatcher`) ends the
+render with that reason: a render has no *Restore* to offer.
+
+Tests: `api/stageRenderApi.test.ts` (the frame), `savedViewpoints.test.ts` (`resolveViewpoint`),
+`stageRender/StageRenderHost.test.tsx` (a request mounts one render, its outcome goes back bound to
+its id and token, busy, a throwing render, and nothing toasted) and
+`stage3d/render/StageRenderJob.test.tsx` (the props `Stage3D` is handed, drawing once the scene
+reports in, giving up with a reason, and this window's viewpoint and landed marker untouched).

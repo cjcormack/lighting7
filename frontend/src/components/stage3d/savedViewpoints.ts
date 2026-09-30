@@ -13,10 +13,14 @@ import {
   type LightingPoint3,
 } from '../../lib/stageSeats'
 import {
+  isSeatViewpointRef,
+  isStageCamera,
   parseSeatViewpointRef,
   type SavedViewCamera,
   type SavedViewpointRef,
   type SeatViewpointRef,
+  type StageCamera,
+  type StageViewpoint,
 } from '../../lib/stageViewpoint'
 import type { StageCameraLanding } from './StageCameraRig'
 import { EYE_DEFAULT_FOV_DEG, clampFov, eyeTarget, lookAngles } from './stageCameras'
@@ -126,6 +130,27 @@ export function resolveSavedViewpoint(
     camera: 'eye',
     pose: { position, ...lookAngles(position, toThreeVec(target)), fov: clampFov(row.fovDeg ?? EYE_DEFAULT_FOV_DEG) },
   }
+}
+
+/**
+ * Any viewpoint in the vocabulary as the camera it draws through and the landing it takes, or null
+ * when it cannot be drawn here: a saved view this project does not have, or a seat that is gone.
+ * `render_view`'s render (stage-view plan session 4), which has every row in hand before it draws —
+ * so unlike the Stage view it never falls back to a camera it last landed with.
+ */
+export function resolveViewpoint(
+  viewpoint: StageViewpoint,
+  rows: readonly StageViewpointDto[],
+  elements: readonly StageElementDto[],
+): { camera: StageCamera; landing: StageCameraLanding | null } | null {
+  if (isStageCamera(viewpoint)) return { camera: viewpoint, landing: null }
+  const landing = isSeatViewpointRef(viewpoint)
+    ? resolveSeatViewpoint(viewpoint, elements)
+    : (() => {
+        const row = rows.find((r) => r.uuid === viewpoint)
+        return row == null ? null : resolveSavedViewpoint(row, elements)
+      })()
+  return landing == null ? null : { camera: landing.camera, landing }
 }
 
 /** The picker's note for a row, after its name: `standing · 50°`, `seat F6`, `turntable`. */

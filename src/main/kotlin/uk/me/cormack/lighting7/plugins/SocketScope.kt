@@ -25,6 +25,13 @@ class SocketScope(
     val state: State,
     /** The authenticated caller, or null in bootstrap-open mode (zero users configured). */
     val user: AuthenticatedUser? = null,
+    /**
+     * The upgrade arrived on the public listener (`mcp/RemoteRequests.kt`'s `isRemote`, decided by
+     * port). A remote socket is never asked to render (`render_view`).
+     */
+    val remote: Boolean = false,
+    /** The socket's peer is this machine — a desk screen rather than a device on the LAN. */
+    val loopbackPeer: Boolean = false,
 ) {
     /** The caller's session-token hash — what a live-revocation stream (Session 3) matches on. */
     val sessionTokenHash: String? get() = user?.sessionTokenHash
