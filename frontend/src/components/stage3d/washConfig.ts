@@ -1,30 +1,17 @@
-// Stage-3D atmosphere & pixel-bar wash tuning. These are code-level knobs, not
-// UI settings — tweak the values here. Shared by the cone/pool emitters
-// (StageEmitters) and the PixelStrip glow so the floor wash and the mid-air
-// glow stay consistent (e.g. WASH_ANGLE_DEG shapes both).
+// Stage-3D atmosphere tuning. These are code-level knobs, not UI settings — tweak the values here.
+// Read by the beam volumes (`beamShaders.ts`, through `StageEmitters`) and the surface shader.
 
 /** Mid-air volume strength. 1 = normal beams; 0 = surfaces only (no haze in the
  *  air); >1 = denser, smokier room. Surface pools are unaffected. */
 export const HAZE_LEVEL = 1
 
 // — axial profile ——————————————————————————————————————————————————
-// Beam cones, gobo volumes and surface pools are deliberately UNIFORM along
-// the throw — no axial or distance fade (all three shaders in beamShaders.ts;
-// they end hard at BEAM_LENGTH by design). The one exception is the
-// PixelStrip bar glow (fixtureBodies/PixelStrip.tsx, GLOW_FADE_POWER): a
-// ~0.1 m lens bloom that keeps its lens-to-tip fade so it dies out instead of
-// ending in a visible disc. Don't "unify" in either direction without
-// deciding the look — and never re-add a fade to only one beam shader, or the
-// shell↔march brightness match VOL_GAIN is calibrated against breaks.
-
-/** Full cone angle (deg) shared by each pixel's floor/region wash pool and its
- *  mid-air glow cone. Wider = softer / more spread; narrower = tighter with more
- *  per-pixel colour separation. */
-export const WASH_ANGLE_DEG = 90
-
-/** Per-pixel wash pool opacity 0..1 (additive). Low so a bar's overlapping
- *  pixels blend as colour rather than blowing out to white. */
-export const WASH_OPACITY = 0.3
+// Beam volumes and surface pools are deliberately UNIFORM along the throw — no axial or distance
+// fade — so a stylised, consistent beam reads the same at every distance; the volumes end where the
+// beam lands, or at BEAM_LENGTH past the aperture. Only the spread thins the air (VOL_SPREAD): the
+// same light across a wider cross-section. Don't add a fade to the air alone, or the pools and the
+// beams above them disagree. (Session 6 retired the per-pixel wash and its glow, which were the one
+// exception, with the cone shell every open beam used to be.)
 
 // — focal model ————————————————————————————————————————————————————
 // Focus maps the fixture's focus channel to a focal *distance* along the
@@ -42,22 +29,24 @@ export const FOCUS_LOD_MAX = 6
 export const EDGE_SOFT_RANGE_M = 1.5
 
 // — volumetric beam ————————————————————————————————————————————————
-// A fixture with a gobo in the beam renders a raymarched volume instead of
-// the silhouette shell, so the pattern breaks the beam into sub-beams
-// through the haze.
+// Every beam in the air is a raymarched volume since stage-view plan session 6 (the silhouette
+// shell an open beam used to be could not show a soft edge, an iris or a segment's rectangle), and
+// a gobo breaks it into sub-beams through the haze.
 
 /** March samples per fragment at dpr ≤ 1.5; high-dpr displays drop a third
  *  (fill quadruples at dpr 2, so trade depth for area). Compile-time max 16. */
 export const VOLUMETRIC_STEPS = 12
 
-/** Overall gain on the marched beam (per-metre density scale), tuned so
- *  engaging a gobo reads as "a pattern appears in the beam", not a brightness
- *  jump against the shell: side-on through a ~1 m chord the shell's two
- *  silhouette faces sum to roughly 0.6× opacity, so the density must sit near
- *  that per metre after the radial/gobo terms eat into it. Brightness is
- *  uniform along the throw (no axial fade) in both the shell and the march,
- *  so the two stay matched without folding a fade into this gain. */
+/** How fast a marched chord reaches its beam's opacity, per metre: the alpha is
+ *  `opacity × (1 − exp(−gain × density × chord))`, so side-on through ~0.5 m of beam it sits at
+ *  the opacity the retired cone shell drew (stage-view plan session 6), and no chord, however long,
+ *  adds up past it. Brightness is uniform along the throw (no axial fade); the air thins only as the
+ *  beam spreads (`VOL_SPREAD`). */
 export const VOL_GAIN = 6.0
+
+/** How fast the marched air thins as a beam spreads, per metre of beam radius: density falls as
+ *  1 / (1 + k · r). Stage-view plan session 6, when every beam started marching. */
+export const VOL_SPREAD = 1.5
 
 /** Base mip level for in-air gobo samples; defocus LOD adds on top. 0 keeps
  *  the pattern crisp for the full throw — the stylised "consistent cone"

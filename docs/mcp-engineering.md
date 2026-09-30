@@ -346,6 +346,11 @@ level — so the hall floor sits at −`deckHeightM` and the hall runs from the 
 stage box, the regions, the riggings upstage first with their kind and trim, a count of the scene's
 venue and set elements, and the saved viewpoints — a paragraph, not the document, because the
 briefing is also the in-app chat's prompt on every turn. Omitted for a project with none of it.
+Since stage-view plan session 6 a rigging of a standing kind (`STANDING_RIGGING_KINDS`: `LEDGE`,
+`FLOOR_STAND`) says *units stand on it*, and a *Mounts:* line names each moving head whose
+base orientation disagrees with how its rigging carries it — 180 on a ledge is drawn and aimed hung
+under it, 0 on a bar stands on top of it, read through roll as the view reads it and silent for a
+head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 
 ### `render_view`: Claude seeing the model
 

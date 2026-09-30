@@ -1,0 +1,4 @@
+{
+  "comment": "The rigging kinds a fixture stands on rather than hangs from. Read by StandingRiggingKindsTest (the desk's STANDING_RIGGING_KINDS) and by the Stage view's bodies/mount.test.ts, so the two lists cannot drift (stage-view plan session 6).",
+  "standing": ["FLOOR_STAND", "LEDGE"]
+}

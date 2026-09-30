@@ -34,7 +34,9 @@ import {
   type SceneBuildCache,
 } from './scene/stageSurfaces'
 import { buildEmitterLayout } from './emitterLayout'
-import { emitterNeedsFor } from './emitterNeeds'
+import { bodySpecOf, emitterNeedsForSpec } from './emitterNeeds'
+import { StageBodies, buildBodyLayout } from './bodies/StageBodies'
+import { mountFor } from './bodies/mount'
 import { StageLabelContext, StageLabelDriver } from './StageLabel'
 import { StageLabelStore } from './stageLabels'
 import { StageInvalidateProvider } from './stageInvalidate'
@@ -476,19 +478,22 @@ export function Stage3D({
     }
   }, [framingRef])
 
-  // What each emitter slot needs — fixtures first, then lanterns, in the slot order below. A
-  // fresh layout every render is fine: StageEmitters rebuilds only when its signature changes.
-  const emitterLayout = useMemo(
+  // Each slot's body — fixtures first, then lanterns, in the slot order below — and what it needs
+  // from the emitters. Fresh layouts every render are fine: `StageBodies` and `StageEmitters` each
+  // rebuild only when their signature changes.
+  const bodySlots = useMemo(
     () =>
-      buildEmitterLayout(
-        [...visiblePatches, ...lanterns.map((l) => l.patch)].map((patch) => {
-          const fixture = fixtureByKey.get(patch.key)
-          const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
-          return emitterNeedsFor(patch, fixture, fixtureType)
-        }),
-      ),
-    [visiblePatches, lanterns, fixtureByKey, typeByKey],
+      [...visiblePatches, ...lanterns.map((l) => l.patch)].map((patch) => {
+        const fixture = fixtureByKey.get(patch.key)
+        const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
+        const spec = bodySpecOf(patch, fixture, fixtureType)
+        const rigging = patch.riggingUuid ? safeRiggings.find((r) => r.uuid === patch.riggingUuid) : undefined
+        return { spec, mount: mountFor(rigging), needs: emitterNeedsForSpec(spec, fixture) }
+      }),
+    [visiblePatches, lanterns, fixtureByKey, typeByKey, safeRiggings],
   )
+  const bodyLayout = useMemo(() => buildBodyLayout(bodySlots), [bodySlots])
+  const emitterLayout = useMemo(() => buildEmitterLayout(bodySlots.map((b) => b.needs)), [bodySlots])
 
   // The label layer: one store per Stage3D, one DOM layer over the canvas (see stageLabels.ts).
   const [labelStore] = useState(() => new StageLabelStore())
@@ -619,20 +624,24 @@ export function Stage3D({
           onDragEnd={enableOrbit}
         />
       )}
-      {view.fixtures && (view.beamCones ? (
-        <StageEmitters
-          layout={emitterLayout}
-          regionGeometry={regionGeometry}
-          colliders={colliders}
-          clip={beamClip}
-          lightBudget={lightBudget}
-          haze={layers.haze}
-          hazeQuality={hazeQuality}
-          statsRef={containerRef}
-        >
-          {allFixtureNodes}
-        </StageEmitters>
-      ) : allFixtureNodes)}
+      {view.fixtures && (
+        <StageBodies layout={bodyLayout}>
+          {view.beamCones ? (
+            <StageEmitters
+              layout={emitterLayout}
+              regionGeometry={regionGeometry}
+              colliders={colliders}
+              clip={beamClip}
+              lightBudget={lightBudget}
+              haze={layers.haze}
+              hazeQuality={hazeQuality}
+              statsRef={containerRef}
+            >
+              {allFixtureNodes}
+            </StageEmitters>
+          ) : allFixtureNodes}
+        </StageBodies>
+      )}
       {canEdit && selectedRegion && onRegionPositionChange && (
         <RegionEditHandles
           region={selectedRegion}

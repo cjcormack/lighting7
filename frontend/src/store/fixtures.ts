@@ -504,3 +504,7 @@ export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
 export function findIrisProperty(properties: PropertyDescriptor[] | undefined) {
   return findSlider(properties, 'iris')
 }
+
+export function findFrostProperty(properties: PropertyDescriptor[] | undefined) {
+  return findSlider(properties, 'frost')
+}

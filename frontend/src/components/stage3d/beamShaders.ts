@@ -1,5 +1,6 @@
-import { AdditiveBlending, BackSide, DoubleSide, ShaderMaterial, Vector2, Vector3 } from 'three'
+import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3 } from 'three'
 import type { DataArrayTexture } from 'three'
+import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
 import {
   EDGE_SOFT_RANGE_M,
@@ -9,16 +10,21 @@ import {
   VOLUMETRIC_STEPS,
   VOL_GAIN,
   VOL_LOD_BASE,
+  VOL_SPREAD,
 } from './washConfig'
 
 /** Compile-time march bound; `uVolSteps` varies below it at runtime. */
 export const MAX_VOL_STEPS = 16
 
 /**
- * GLSL programs for the shared beam emitters, extracted from `StageEmitters`
- * so the cone and volumetric materials assemble from the same chunks — in
- * particular the beam cross-section math, which must be identical everywhere
- * the gobo is sampled.
+ * GLSL for the shared beam emitters, extracted from `StageEmitters` so the beam cross-section math
+ * is one chunk wherever the gobo is sampled.
+ *
+ * Every beam in the air is **raymarched** (stage-view plan session 6). Until then an open beam was a
+ * hollow additive cone shell and only a gobo beam marched; a shell cannot show a beam's shape
+ * inside it — a soft edge, an iris, a segment's rectangle, session 7's shutter cut — so the shell
+ * is gone and the volume draws them all, through `beamMask`, the function the surfaces' pools are
+ * shaped by too. What that costs is the haze governor's to pay (`scene/hazeGovernor.ts`).
  *
  * The pool program that drew the floor, wall and region cookies is gone (stage-view plan
  * session 3): where a beam lands is the surface shader's (`scene/surfaceShader.ts`), which reads
@@ -84,124 +90,21 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
   }
 `
 
-// Hollow cone shell, additive, double-sided; alpha biased by abs(N·V) so
-// silhouette edges fade. Per-fragment ray-OBB shadow discards fragments
-// blocked by regions — the same regions that stop the light on the surfaces.
-// Per-fixture origin/color/opacity arrive via instance attributes.
-const CONE_VERTEX_SHADER = /* glsl */ `
-  attribute vec3 aBeamOrigin;
-  attribute vec3 aColor;
-  attribute float aOpacity;
-  attribute vec4 aBeamFx;
-
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying vec3 vBeamOrigin;
-  varying float vEdge;
-  varying float vFocusDist;
-
-  void main() {
-    vEdge = aBeamFx.x;
-    vFocusDist = aBeamFx.w;
-
-    vec4 worldPos4 = modelMatrix * instanceMatrix * vec4(position, 1.0);
-    vWorldPos = worldPos4.xyz;
-    vec4 viewPos4 = viewMatrix * worldPos4;
-    vViewPos = viewPos4.xyz;
-
-    // Normal transform that tolerates non-uniform scale on the instance
-    // matrix (cone scale is (R, L, R) where L >> R for narrow beams).
-    mat3 m = mat3(instanceMatrix);
-    vec3 transformedNormal = normal / vec3(
-      dot(m[0], m[0]),
-      dot(m[1], m[1]),
-      dot(m[2], m[2])
-    );
-    transformedNormal = m * transformedNormal;
-    vViewNormal = normalize(normalMatrix * transformedNormal);
-
-    vColor = aColor;
-    vOpacity = aOpacity;
-    vBeamOrigin = aBeamOrigin;
-
-    gl_Position = projectionMatrix * viewPos4;
-  }
-`
-
-const CONE_FRAGMENT_SHADER = /* glsl */ `
-  #define MAX_REGIONS ${MAX_BEAM_REGIONS}
-  uniform float uFloorY;
-  uniform float uWallZ;
-  uniform float uHaze;
-  uniform float uEdgeSoftRange;
-  ${REGION_UNIFORMS_GLSL}
-
-  varying vec3 vViewNormal;
-  varying vec3 vViewPos;
-  varying vec3 vWorldPos;
-  varying vec3 vColor;
-  varying float vOpacity;
-  varying vec3 vBeamOrigin;
-  varying float vEdge;
-  varying float vFocusDist;
-
-  ${RAY_OBB_T_GLSL}
-
-  void main() {
-    if (vWorldPos.y < uFloorY) discard;
-    // The upstage wall is a real surface now; the beam stops at it instead of
-    // punching through the back of the venue.
-    if (vWorldPos.z < uWallZ) discard;
-
-    vec3 toFrag = vWorldPos - vBeamOrigin;
-    float fragDist = length(toFrag);
-
-    if (uNumRegions > 0 && fragDist > 0.0001) {
-      vec3 rayDir = toFrag / fragDist;
-      for (int i = 0; i < MAX_REGIONS; i++) {
-        if (i >= uNumRegions) break;
-        float t = rayObbT(vBeamOrigin, rayDir, uRegionCenter[i], uRegionHalf[i], uRegionYawCs[i]);
-        if (t > 0.0 && t < fragDist - 0.01) discard;
-      }
-    }
-
-    // The view direction in view space: towards the eye under perspective, and the one constant
-    // axis under an orthographic section (whose eye is at infinity), so the rim fade does not skew
-    // across an ortho frame.
-    vec3 V = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-vViewPos);
-    float ndotv = abs(dot(normalize(vViewNormal), V));
-    // Same edge rule as the surfaces: with a focal distance the shell sharpens
-    // where the fragment sits near the focal plane, so a tightly-focused beam
-    // doesn't read as a hard floor spot inside a woolly column of air. The
-    // sentinel (< 0) keeps the raw channel hardness, so a fixture with no
-    // focus channel (or an older backend) renders unchanged.
-    float effEdge = vFocusDist < 0.0
-      ? vEdge
-      : 1.0 - smoothstep(0.0, uEdgeSoftRange, abs(fragDist - vFocusDist));
-    float radial = pow(ndotv, mix(0.7, 1.15, effEdge));
-    // uHaze scales the mid-air beam volume (atmosphere); 0.0 leaves only the
-    // light on the surfaces (a hazeless room). Brightness is deliberately uniform
-    // along the throw — a stylised consistent cone, not a physical falloff
-    // (see the axial-profile note in washConfig).
-    float a = vOpacity * radial * uHaze;
-    gl_FragColor = vec4(vColor, a);
-  }
-`
-
-// Raymarched beam volume, used instead of the shell when a gobo is in the
-// beam: the pattern must exist *inside* the cone (a dot gobo = separate
-// beamlets through haze), which a silhouette-faded surface cannot show.
+// Raymarched beam volume: a **frustum** that leaves its aperture (stage-view plan session 6). The
+// beam's origin is its apex, behind the aperture at the aperture's radius over tan(half-field), and
+// the march runs from the aperture (axial `near`) to where the beam lands. A round aperture throws a
+// cone frustum; a segment (aspect > 0) a rectangular one, whose chord is four half-spaces through
+// the apex.
 //
-// The closed cone geometry is only a conservative fragment generator — back
-// faces alone are rasterized (one fragment per covered pixel, camera-inside
-// safe) and the true bounds come from an analytic ray-cone intersection per
-// fragment. The chord is clamped by the axial range, the floor, the upstage
-// wall, and camera-ray region occlusion (depthTest is off; the depth buffer
-// can't clip a marched interior correctly), then sampled with a per-pixel
-// interleaved-gradient jitter so banding dissolves under bloom.
+// The closed hull geometry is only a conservative fragment generator — one face per covered pixel:
+// the front face, depth-tested, while the view ray starts outside the beam, so the scene in front of
+// a beam hides it; the back face while it starts inside, where the front faces are behind the eye
+// (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). The true
+// bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
+// clamped by the axial range, the floor, the upstage wall, and camera-ray region occlusion — the
+// depth test hides a beam behind something, but cannot cut one that passes through a box — then
+// sampled with a per-pixel interleaved-gradient jitter so banding dissolves under bloom. Each sample
+// is shaped by `beamMask`: the field edge, the iris and the softness.
 const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
@@ -211,6 +114,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute float aCosHalfAngle;
   attribute vec4 aBeamFx;
   attribute float aShadowMask;
+  attribute vec4 aBeamShape;
 
   varying vec3 vWorldPos;
   varying vec3 vBeamOrigin;
@@ -222,10 +126,12 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   varying vec4 vBeamFx;
   varying float vShadowMask;
   varying float vBeamLen;
+  varying vec4 vBeamShape;
 
   void main() {
-    // The drawn length is the instance's y scale: the beam ends where its axis meets a surface
-    // (the director's axial reach), or at BEAM_LENGTH in open air.
+    vBeamShape = aBeamShape;
+    // The drawn length is the instance's y scale, from the apex: the beam ends where its axis meets
+    // a surface (the director's axial reach), or BEAM_LENGTH past its aperture in open air.
     vBeamLen = length(instanceMatrix[1].xyz);
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
@@ -250,6 +156,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2DArray uGobo;
   uniform int uVolSteps;
   uniform float uVolGain;
+  uniform float uVolSpread;
   uniform float uVolLodBase;
   uniform float uLodK;
   uniform float uLodMax;
@@ -266,9 +173,12 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying vec4 vBeamFx;
   varying float vShadowMask;
   varying float vBeamLen;
+  varying vec4 vBeamShape;
 
   ${RAY_OBB_T_GLSL}
   ${CROSS_SECTION_GLSL}
+  ${BEAM_MASK_GLSL}
+  ${BEAM_HARDNESS_GLSL}
 
   // Clamp the chord [t0, t1] to the half-space value(t) = base + t*rate >= 0.
   void clampHalfSpace(float base, float rate, inout float t0, inout float t1) {
@@ -293,46 +203,78 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     vec3 O = vBeamOrigin;
     vec3 d = vBeamDir;
 
-    // Analytic infinite-double-cone intersection: f(t) = axial² − cos²·|rel|²
-    // is ≥ 0 inside. With A < 0 the inside is *between* the roots (ray crosses
-    // the side walls); with A > 0 it's *outside* them (ray runs steeper than
-    // the surface), and the two branches are the forward and mirror nappes —
-    // pick whichever has positive axial distance.
-    vec3 co = camPos - O;
+    float near = vBeamShape.x;
+    float iris = vBeamShape.y;
+    float aspect = vBeamShape.z;
     float cos2 = vCosHalfAngle * vCosHalfAngle;
     float vd = dot(rayDir, d);
+    vec3 co = camPos - O;
     float cod = dot(co, d);
-    float A = vd * vd - cos2;
-    float B = 2.0 * (vd * cod - cos2 * dot(rayDir, co));
-    float C = cod * cod - cos2 * dot(co, co);
-    // Rays parallel to the cone surface make A degenerate; nudging it keeps
-    // the quadratic solvable and the error is sub-texel at the silhouette.
-    if (abs(A) < 1e-7) A = A < 0.0 ? -1e-7 : 1e-7;
-    float disc = B * B - 4.0 * A * C;
-    // Degenerate default: empty chord (the final tExit <= tEnter test culls).
+    float sinHalf = sqrt(max(0.0, 1.0 - cos2));
+    float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
+    vec3 bx = normalize(vBeamRight - d * dot(vBeamRight, d));
+    vec3 by = cross(d, bx);
+
+    // Which face of the hull draws this pixel: its front face, depth-tested against the scene, when
+    // the view ray starts outside the beam — so the stalls, a pros wall or a flat in front of a beam
+    // hide it, as they hid the retired shell — and its back face when the ray starts inside it (the
+    // camera standing in a beam, or a section's plane cutting one), whose front faces are behind it.
+    float ty0 = tanHalf * aspect;
+    bool rayStartsInside = cod >= near && cod <= vBeamLen && (aspect > 0.0
+      ? abs(dot(co, bx)) <= cod * tanHalf && abs(dot(co, by)) <= cod * ty0
+      : cod * cod >= cos2 * dot(co, co));
+    if (gl_FrontFacing == rayStartsInside) discard;
+
     float tEnter = 0.0;
     float tExit = -1.0;
-    if (disc < 0.0) {
-      // No surface crossing: the whole ray is inside (looking down the barrel
-      // from within the cone) or wholly outside.
-      if (A > 0.0 && C > 0.0) { tEnter = -1e6; tExit = 1e6; }
+    if (aspect > 0.0) {
+      // A segment's rectangular frustum: inside the four planes through the apex whose normals are
+      // (±bx − d·tan) and (±by − d·tan·aspect) — each a half-space linear in t.
+      tEnter = 0.0;
+      tExit = 1e6;
+      vec3 n1 = bx - d * tanHalf;
+      vec3 n2 = -bx - d * tanHalf;
+      vec3 n3 = by - d * ty0;
+      vec3 n4 = -by - d * ty0;
+      clampHalfSpace(-dot(co, n1), -dot(rayDir, n1), tEnter, tExit);
+      clampHalfSpace(-dot(co, n2), -dot(rayDir, n2), tEnter, tExit);
+      clampHalfSpace(-dot(co, n3), -dot(rayDir, n3), tEnter, tExit);
+      clampHalfSpace(-dot(co, n4), -dot(rayDir, n4), tEnter, tExit);
     } else {
-      float sq = sqrt(disc);
-      float lo = (-B - sq) / (2.0 * A);
-      float hi = (-B + sq) / (2.0 * A);
-      if (lo > hi) { float tmp = lo; lo = hi; hi = tmp; }
-      if (A < 0.0) {
-        tEnter = lo; tExit = hi;
-      } else if (cod + hi * vd > 0.0) {
-        tEnter = hi; tExit = 1e6;
+      // Analytic infinite-double-cone intersection: f(t) = axial² − cos²·|rel|²
+      // is ≥ 0 inside. With A < 0 the inside is *between* the roots (ray crosses
+      // the side walls); with A > 0 it's *outside* them (ray runs steeper than
+      // the surface), and the two branches are the forward and mirror nappes —
+      // pick whichever has positive axial distance.
+      float A = vd * vd - cos2;
+      float B = 2.0 * (vd * cod - cos2 * dot(rayDir, co));
+      float C = cod * cod - cos2 * dot(co, co);
+      // Rays parallel to the cone surface make A degenerate; nudging it keeps
+      // the quadratic solvable and the error is sub-texel at the silhouette.
+      if (abs(A) < 1e-7) A = A < 0.0 ? -1e-7 : 1e-7;
+      float disc = B * B - 4.0 * A * C;
+      if (disc < 0.0) {
+        // No surface crossing: the whole ray is inside (looking down the barrel
+        // from within the cone) or wholly outside.
+        if (A > 0.0 && C > 0.0) { tEnter = -1e6; tExit = 1e6; }
       } else {
-        tEnter = -1e6; tExit = lo;
+        float sq = sqrt(disc);
+        float lo = (-B - sq) / (2.0 * A);
+        float hi = (-B + sq) / (2.0 * A);
+        if (lo > hi) { float tmp = lo; lo = hi; hi = tmp; }
+        if (A < 0.0) {
+          tEnter = lo; tExit = hi;
+        } else if (cod + hi * vd > 0.0) {
+          tEnter = hi; tExit = 1e6;
+        } else {
+          tEnter = -1e6; tExit = lo;
+        }
       }
     }
 
     tEnter = max(tEnter, 0.0);
-    // Axial range [0, vBeamLen]: axial(t) = cod + t*vd.
-    clampHalfSpace(cod, vd, tEnter, tExit);                       // axial >= 0
+    // Axial range [near, vBeamLen]: from the aperture to where the beam lands. axial(t) = cod + t*vd.
+    clampHalfSpace(cod - near, vd, tEnter, tExit);                // axial >= near
     clampHalfSpace(vBeamLen - cod, -vd, tEnter, tExit);           // axial <= L
     // Floor and upstage wall.
     clampHalfSpace(camPos.y - uFloorY, rayDir.y, tEnter, tExit);  // y >= floor
@@ -357,14 +299,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // grain (masked by bloom) instead of rings.
     float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
 
-    // The cross-section frame is constant per fragment — hoisted out of the
-    // march (WebKit's compiler is not trusted to do it). Same construction as
-    // beamCrossSection, so the in-air pattern and the surface pattern are the
-    // same image at every distance.
-    vec3 bx = normalize(vBeamRight - d * dot(vBeamRight, d));
-    vec3 by = cross(d, bx);
-    float sinHalf = sqrt(max(0.0, 1.0 - cos2));
-    float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
+    // The cross-section frame (bx, by, tanHalf, above) is constant per fragment — hoisted out of
+    // the march (WebKit's compiler is not trusted to do it). Same construction as the surface
+    // shader's, so the in-air shape and the pool are the same image at every distance.
     // The gobo rotation is per-fragment constant too — cos/sin hoisted with
     // the frame; goboUvCs keeps the rotate itself shared.
     float goboCs = cos(vBeamFx.z);
@@ -383,16 +320,14 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
 
       float cosAngle = dot(lightDir, d);
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
-      float rr = length(g);
-      float tEquiv = clamp(1.0 - rr, 0.0, 1.0);
-      float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - focusDist);
-      float effEdge = focusDist < 0.0
-        ? vBeamFx.x
-        : 1.0 - smoothstep(0.0, uEdgeSoftRange, defocus);
-      float radial = mix(pow(tEquiv, 0.7), smoothstep(0.0, 0.12, tEquiv), effEdge);
+      // Focus is a distance from the aperture, not from the apex behind it.
+      float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - near - focusDist);
+      float effEdge = beamHardness(vBeamFx.x, focusDist, defocus, uEdgeSoftRange);
+      vec2 mg = aspect > 0.0 ? vec2(g.x, g.y / aspect) : g;
+      float radial = beamMask(mg, aspect, iris, 1.0 - effEdge);
 
       float gobo = 1.0;
-      if (vBeamFx.y >= 0.5) {
+      if (vBeamFx.y >= 0.5 && aspect <= 0.0) {
         vec2 guv = goboUvCs(g, goboCs, goboSn);
         float lod = clamp(uVolLodBase + uLodK * defocus, 0.0, uLodMax);
         gobo = textureLod(uGobo, vec3(guv, vBeamFx.y), lod).r;
@@ -404,13 +339,20 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
         if (r >= uNumRegions) break;
         if ((lightMask & (1 << r)) == 0) continue;
         float tb = rayObbT(O, lightDir, uRegionCenter[r], uRegionHalf[r], uRegionYawCs[r]);
-        if (tb > 0.0 && tb < relLen - 0.01) { lit = 0.0; break; }
+        // From the apex; a box between it and the aperture is the lantern's own inside.
+        if (tb > near && tb < relLen - 0.01) { lit = 0.0; break; }
       }
 
-      sum += gobo * radial * lit;
+      // The air thins as the beam spreads: the same light over a wider cross-section. Without it
+      // a wide wash is as dense per metre as a spot, and looking down one is a white wall.
+      float spread = 1.0 / (1.0 + uVolSpread * max(0.0, relLen * cosAngle) * tanHalf);
+      sum += gobo * radial * lit * spread;
     }
 
-    float alpha = uHaze * vOpacity * uVolGain * sum * (tExit - tEnter) / float(uVolSteps);
+    // The beam's own opacity is the ceiling — what the retired shell drew it at — and the chord
+    // how near it gets: a thin edge is faint, a beam seen side-on is at its opacity within half a
+    // metre, and a long chord (the camera looking down the barrel) never adds up past it.
+    float alpha = uHaze * vOpacity * (1.0 - exp(-uVolGain * sum * (tExit - tEnter) / float(uVolSteps)));
     if (alpha <= 0.0005) discard;
     gl_FragColor = vec4(vColor, alpha);
   }
@@ -425,6 +367,7 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
       uGobo: { value: gobo },
       uVolSteps: { value: VOLUMETRIC_STEPS },
       uVolGain: { value: VOL_GAIN },
+      uVolSpread: { value: VOL_SPREAD },
       uVolLodBase: { value: VOL_LOD_BASE },
       uLodK: { value: FOCUS_LOD_K },
       uLodMax: { value: FOCUS_LOD_MAX },
@@ -436,8 +379,7 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
     transparent: true,
     blending: AdditiveBlending,
     depthWrite: false,
-    depthTest: false,
-    side: BackSide,
+    side: DoubleSide,
   })
 }
 
@@ -454,22 +396,4 @@ export function makeRegionUniforms() {
       value: Array.from({ length: MAX_BEAM_REGIONS }, () => new Vector2(1, 0)),
     },
   }
-}
-
-export function makeConeMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: {
-      uFloorY: { value: 0.0 },
-      uWallZ: { value: NO_WALL_Z },
-      uHaze: { value: HAZE_LEVEL },
-      uEdgeSoftRange: { value: EDGE_SOFT_RANGE_M },
-      ...makeRegionUniforms(),
-    },
-    vertexShader: CONE_VERTEX_SHADER,
-    fragmentShader: CONE_FRAGMENT_SHADER,
-    transparent: true,
-    blending: AdditiveBlending,
-    depthWrite: false,
-    side: DoubleSide,
-  })
 }

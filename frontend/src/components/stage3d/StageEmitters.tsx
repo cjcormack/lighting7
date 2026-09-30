@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
-  Color,
+  type Color,
   ConeGeometry,
   InstancedBufferAttribute,
   InstancedMesh,
@@ -14,28 +14,23 @@ import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { NO_RAYCAST } from './raycast'
 import { getGoboTexture } from './goboAtlas'
-import { makeConeMaterial, makeVolumeMaterial } from './beamShaders'
+import { makeVolumeMaterial } from './beamShaders'
 import { HAZE_LEVEL, VOLUMETRIC_STEPS } from './washConfig'
 import {
   MAX_BEAM_REGIONS,
   beamCapacity,
   beamInstanceIndex,
+  lightRowIndex,
+  lightsFor,
   lobesFor,
-  washPixelIndex,
-  washPixelsFor,
   type EmitterLayout,
 } from './emitterLayout'
-import { LightTable } from './scene/lightTable'
+import { LightTable, type LightRow } from './scene/lightTable'
 import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import type { HazeQuality } from './scene/hazeGovernor'
 
-export {
-  BEAM_LENGTH,
-  MAX_BEAM_REGIONS,
-  MAX_PRISM_LOBES,
-  MAX_WASH_PIXELS,
-} from './emitterLayout'
+export { BEAM_LENGTH, MAX_BEAM_REGIONS, MAX_PRISM_LOBES } from './emitterLayout'
 
 export interface RegionGeometry {
   uuid: string
@@ -44,7 +39,7 @@ export interface RegionGeometry {
   heightM: number
   yawRad: number
   // OBB centre, half a thickness below the deck — feeds the beam shaders' uRegion* uniforms, which
-  // run the ray-OBB shadow tests on the cones and the volumes.
+  // run the ray-OBB shadow tests on the volumes.
   obbCenter: Vector3
   obbHalfX: number
   obbHalfY: number
@@ -80,7 +75,7 @@ export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry
 
 /**
  * Where the beams stop in the air: the lowest floor and the furthest upstage wall the view draws, in
- * lighting metres. The cone shell and the volume clip to them, so a wide cone's flank does not poke
+ * lighting metres. The beam volumes clip to them, so a wide beam's flank does not poke
  * through the floor under a hung head. Without a modelled room they are the stage's own floor and
  * back wall, as before.
  */
@@ -89,28 +84,61 @@ export interface BeamClip {
   wallY: number
 }
 
+/**
+ * One beam in the air, as a director writes it (a scratch object, reused per frame): the hull's
+ * instance matrix — from the **apex**, its y scale the apex → aperture distance plus the drawn
+ * length — and what the march reads.
+ */
+export interface BeamWrite {
+  matrix: Matrix4
+  apex: Vector3
+  dir: Vector3
+  /** The head's world X axis: the gobo's and the beam mask's cross-section frame. */
+  right: Vector3
+  color: Color
+  opacity: number
+  /** Cos of the half-field (along `right`, for a segment). */
+  cosHalf: number
+  /** Edge hardness 0..1 — 1 minus the softness. */
+  edge: number
+  /** 0 = open. */
+  goboSlot: number
+  /** Radians. */
+  goboAngle: number
+  /** Metres from the aperture, or negative ("always sharp") with no focus channel. */
+  focusDist: number
+  /** Apex → aperture. */
+  near: number
+  /** Open fraction of the field. */
+  iris: number
+  /** 0 a round aperture; else a segment's depth over its width. */
+  aspect: number
+  /** Bitmask of the regions this beam can reach, from the CPU cone-vs-sphere cull. */
+  shadowMask: number
+}
+
 // Per-fixture emitter writes, called from FixtureModel's per-frame loop.
-// All writes target a (slot, lobe) allocated to the fixture by the controller:
-// lobe 0 is the primary beam, lobes 1+ exist for prism images and stay parked
-// otherwise. Each writer records which buffer *group* it touched; the
-// controller's own useFrame flips needsUpdate on the dirty groups once at the
-// end of the frame, so the caller never handles a buffer flag itself.
+// A beam write targets a (slot, lobe) and a light write a (slot, light), allocated to the fixture
+// by the layout: a single-cell body's lobe 0 is its beam and lobes 1+ its prism images, parked
+// otherwise; a multi-cell body has a lobe per cell and a light per run of cells. Each writer
+// records which buffer *group* it touched; the controller's own useFrame flips needsUpdate on the
+// dirty groups once at the end of the frame, so the caller never handles a buffer flag itself.
 //
-// Where a beam *lands* is no longer drawn here. The floor, wall and region cookie instances and the
-// per-pixel wash pools are gone (stage-view plan session 3): each lobe and each washing pixel is one
-// row of the light table, and every surface lights itself from the table (`scene/surfaceShader.ts`).
+// Every beam in the air is the raymarched volume since stage-view plan session 6 — the cone shell
+// that drew an open beam went. Where a beam *lands* is not drawn here: each light is one row of the
+// light table, and every surface lights itself from the table (`scene/surfaceShader.ts`).
 export interface EmittersHandle {
   /** Fixture slots the layout knows. A write for any other slot is dropped. */
   slotCount: number
   regionCount: number
   /**
-   * Beam lobes this slot was given — 0 (no beam), 1, or `MAX_PRISM_LOBES` for a prism fixture.
-   * A director draws no more lobes than this; a write past it is dropped rather than landing in
-   * the next slot's block.
+   * Beam lobes this slot was given — 0 (no beam), 1, `MAX_PRISM_LOBES` for a prism fixture, or
+   * one per cell. A director draws no more lobes than this; a write past it is dropped rather
+   * than landing in the next slot's block.
    */
   lobesFor(slot: number): number
-  /** Wash pixels this slot was given — 0 unless it is a pixel strip. Writes past it are dropped. */
-  washPixelsFor(slot: number): number
+  /** Light-table rows this slot was given. Writes past it are dropped. */
+  lightsFor(slot: number): number
 
   /**
    * Where a beam from [origin] along the unit [dir] first meets a surface of the view, within
@@ -118,83 +146,21 @@ export interface EmittersHandle {
    */
   reach(origin: Vector3, dir: Vector3, maxT: number, out: BeamHit): boolean
 
-  /**
-   * Place a (slot, lobe)'s mid-air beam. `volumetric` selects which mesh
-   * draws it — the cheap silhouette shell (open gobo) or the raymarched
-   * volume (gobo in the beam) — and parks the other, so switching is
-   * stateless for the caller. The matrix's y scale is the beam's drawn length,
-   * which the volume shader reads back as its march bound.
-   */
-  writeBeamMatrix(slot: number, lobe: number, matrix: Matrix4, volumetric: boolean): void
-  writeConeAttrs(
-    slot: number,
-    lobe: number,
-    origin: Vector3,
-    dir: Vector3,
-    color: Color,
-    opacity: number,
-    cosHalfAngle: number,
-  ): void
+  /** Place and shape a (slot, lobe)'s beam in the air. */
+  writeBeam(slot: number, lobe: number, beam: BeamWrite): void
 
-  /**
-   * Beam-shaping params for a (slot, lobe), applied to its cone and volume. `edge` 0..1 is focus
-   * hardness. `goboSlot` 0 = open. `goboAngle` is in radians. `focusDist` is the focal-plane
-   * distance in metres, or negative ("always sharp") when the fixture has no focus channel. `right`
-   * is the head's world X axis, giving the gobo a stable cross-section frame.
-   */
-  writeBeamFx(
-    slot: number,
-    lobe: number,
-    edge: number,
-    goboSlot: number,
-    goboAngle: number,
-    focusDist: number,
-    right: Vector3,
-  ): void
-
-  /**
-   * Bitmask of region indices this (slot, lobe)'s beam can reach, from the CPU cone-vs-sphere cull.
-   * The volume shader shadow-tests only masked regions.
-   */
-  writeShadowMask(slot: number, lobe: number, mask: number): void
-
-  /**
-   * A (slot, lobe)'s row of the light table: where it lands on the view's surfaces. [color] times
-   * [level] is what it paints; [hit] is the axial reach (null for a beam that reaches nothing).
-   */
-  writeLight(
-    slot: number,
-    lobe: number,
-    origin: Vector3,
-    dir: Vector3,
-    color: Color,
-    level: number,
-    cosHalfAngle: number,
-    edge: number,
-    focusDist: number,
-    hit: SurfaceHit | null,
-  ): void
-  /** A washing pixel's row of the light table — a soft cone with no edge and no focus. */
-  writeWashLight(
-    slot: number,
-    pixel: number,
-    origin: Vector3,
-    dir: Vector3,
-    color: Color,
-    level: number,
-    cosHalfAngle: number,
-    hit: SurfaceHit | null,
-  ): void
+  /** A (slot, light)'s row of the light table: where it lands on the view's surfaces. */
+  writeLight(slot: number, light: number, row: LightRow): void
+  /** Take one light off the table — dark this frame. */
+  clearLight(slot: number, light: number): void
 
   /** Park every lobe ≥ fromLobe of a slot — the "prism swung out" transition. */
   hideLobes(slot: number, fromLobe: number): void
-  // Zero-scale all of a slot's matrices and take its lights off the table.
+  /** Take every light ≥ fromLight of a slot off the table. */
+  hideLights(slot: number, fromLight: number): void
+  // Zero-scale all of a slot's beams and take its lights off the table.
   // Called when a fixture is functionally off.
   hideSlot(slot: number): void
-  /** Take one washing pixel off the table — dark this frame. */
-  clearWashLight(slot: number, pixel: number): void
-  /** Take all of a strip slot's washing pixels off the table. */
-  hideWashSlot(slot: number): void
 }
 
 /** Where a beam's axis landed, in three.js space: the point and the face's normal towards the light. */
@@ -218,9 +184,7 @@ export interface SurfaceHit {
 // bit — add a writer, give it a bit, and add its buffers to the table below. The light table is
 // not a group: it is one texture, packed and flagged by the flush whenever a light moved.
 const DIRTY_BEAM_MATRIX = 1 << 0
-const DIRTY_CONE_ATTRS = 1 << 1
-const DIRTY_BEAM_FX = 1 << 2
-const DIRTY_SHADOW_MASK = 1 << 3
+const DIRTY_BEAM_ATTRS = 1 << 1
 
 /** Anything with a `needsUpdate` flag — an InstancedBufferAttribute or a mesh's instanceMatrix. */
 interface Uploadable {
@@ -238,30 +202,20 @@ export interface DirtyGroup {
  */
 export function dirtyGroups(b: BuiltEmitters): DirtyGroup[] {
   return [
+    { bit: DIRTY_BEAM_MATRIX, buffers: [b.volumeMesh.instanceMatrix] },
     {
-      bit: DIRTY_BEAM_MATRIX,
-      buffers: [b.coneMesh.instanceMatrix, b.volumeMesh.instanceMatrix],
-    },
-    {
-      bit: DIRTY_CONE_ATTRS,
+      bit: DIRTY_BEAM_ATTRS,
       buffers: [
-        b.coneOrigin,
-        b.coneColor,
-        b.coneOpacity,
         b.volumeOrigin,
         b.volumeDir,
+        b.volumeRight,
         b.volumeColor,
         b.volumeOpacity,
         b.volumeCosHalfAngle,
+        b.volumeFx,
+        b.volumeMask,
+        b.volumeShape,
       ],
-    },
-    {
-      bit: DIRTY_BEAM_FX,
-      buffers: [b.coneFx, b.volumeFx, b.volumeRight],
-    },
-    {
-      bit: DIRTY_SHADOW_MASK,
-      buffers: [b.volumeMask],
     },
   ]
 }
@@ -325,10 +279,10 @@ interface StageEmittersProps {
  */
 export const EMITTER_FLUSH_PRIORITY = 0.5
 
-// Stage-level controller owning the InstancedMesh objects (the cone shells and the raymarched
-// volumes) and the light table the surfaces read. Allocates per-instance attribute buffers sized by
-// emitterLayout, then exposes an imperative write handle so each FixtureModel can populate its slot
-// without taking on the mesh state itself.
+// Stage-level controller owning the InstancedMesh of raymarched beam volumes and the light table the
+// surfaces read. Allocates per-instance attribute buffers sized by emitterLayout, then exposes an
+// imperative write handle so each FixtureModel can populate its slot without taking on the mesh
+// state itself.
 export function StageEmitters({
   layout,
   regionGeometry,
@@ -342,37 +296,32 @@ export function StageEmitters({
 }: StageEmittersProps) {
   const regionCount = Math.min(regionGeometry.length, MAX_BEAM_REGIONS)
 
-  const coneMaterial = useMemo(makeConeMaterial, [])
   // Module-level shared texture — deterministic, expensive to bake, so a
   // remount of the Stage view must not rebuild it (and must not dispose it).
   const goboTexture = getGoboTexture()
   const volumeMaterial = useMemo(() => makeVolumeMaterial(goboTexture), [goboTexture])
-  useEffect(() => () => coneMaterial.dispose(), [coneMaterial])
   useEffect(() => () => volumeMaterial.dispose(), [volumeMaterial])
 
   const invalidate = useThree((s) => s.invalidate)
 
   // March depth trades against fill: a high pixel ratio multiplies the shaded area (2.25× at the
   // canvas's 1.5 cap), so drop a third of the samples there — and the haze governor takes more off
-  // before the frame rate gives (`scene/hazeGovernor.ts`). With the volumes off, a gobo beam is
-  // drawn as its shell. Haze off shows no beam in the air at all; the surfaces still light — and the
-  // two meshes are not drawn, rather than drawn and marched to nothing: both shaders scale by
-  // `uHaze`, so at zero they cost their whole march for no pixel.
+  // before the frame rate gives (`scene/hazeGovernor.ts`). Haze off shows no beam in the air at
+  // all; the surfaces still light — and the mesh is not drawn, rather than drawn and marched to
+  // nothing: the shader scales by `uHaze`, so at zero it costs its whole march for no pixel.
   const gl = useThree((s) => s.gl)
   useEffect(() => {
     const dpr = gl.getPixelRatio()
     const base = dpr > 1 ? Math.max(6, VOLUMETRIC_STEPS - 4) : VOLUMETRIC_STEPS
     volumeMaterial.uniforms.uVolSteps.value = Math.max(2, Math.round(base * hazeQuality.stepScale))
-    const level = haze ? HAZE_LEVEL : 0
-    volumeMaterial.uniforms.uHaze.value = level
-    coneMaterial.uniforms.uHaze.value = level
+    volumeMaterial.uniforms.uHaze.value = haze ? HAZE_LEVEL : 0
     invalidate()
-  }, [gl, volumeMaterial, coneMaterial, haze, hazeQuality, invalidate])
+  }, [gl, volumeMaterial, haze, hazeQuality, invalidate])
 
-  // Shared region OBB uniforms — sync into both materials whenever the region layout changes. They
-  // drive the shadow tests, so a region drag is a uniform write and rebuilds no buffer. The floor
-  // and wall planes ride along: they clip the beams in the air.
-  const materials = useMemo(() => [coneMaterial, volumeMaterial], [coneMaterial, volumeMaterial])
+  // Shared region OBB uniforms — synced whenever the region layout changes. They drive the shadow
+  // tests, so a region drag is a uniform write and rebuilds no buffer. The floor and wall planes
+  // ride along: they clip the beams in the air.
+  const materials = useMemo(() => [volumeMaterial], [volumeMaterial])
   useEffect(() => {
     writeRegionUniforms(materials, regionGeometry, regionCount, clip.wallY)
     for (const mat of materials) mat.uniforms.uFloorY.value = clip.floorZ
@@ -386,26 +335,23 @@ export function StageEmitters({
   // with every render of the rig, and equal signatures address identically.
   const layoutKey = layout.signature
   const built = useMemo(
-    () => buildEmitters(layout, regionCount, coneMaterial, volumeMaterial),
+    () => buildEmitters(layout, regionCount, volumeMaterial),
     // `layout` is read only through its signature's content: two layouts with one signature
     // produce identical buffers, so rebuilding on a fresh-but-equal layout would throw away
     // every slot's written state for nothing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layoutKey, regionCount, coneMaterial, volumeMaterial],
+    [layoutKey, regionCount, volumeMaterial],
   )
 
-  // Haze off draws neither mesh (see the march-depth effect above): both shaders scale by `uHaze`.
+  // Haze off draws no beam mesh (see the march-depth effect above): the shader scales by `uHaze`.
   useEffect(() => {
-    built.coneMesh.visible = haze
     built.volumeMesh.visible = haze
     invalidate()
   }, [built, haze, invalidate])
 
   useEffect(
     () => () => {
-      built.coneMesh.dispose()
       built.volumeMesh.dispose()
-      built.coneMesh.geometry.dispose()
       built.volumeMesh.geometry.dispose()
     },
     [built],
@@ -457,7 +403,6 @@ export function StageEmitters({
 
   return (
     <>
-      <primitive object={built.coneMesh} raycast={NO_RAYCAST} />
       <primitive object={built.volumeMesh} raycast={NO_RAYCAST} />
       <EmittersContext.Provider value={handle}>{children}</EmittersContext.Provider>
     </>
@@ -472,13 +417,7 @@ export interface BuiltEmitters {
    *  per-frame write path — the one piece of state the handle owns rather than the meshes. */
   dirty: number
 
-  coneMesh: InstancedMesh
   volumeMesh: InstancedMesh
-
-  coneOrigin: InstancedBufferAttribute
-  coneFx: InstancedBufferAttribute
-  coneColor: InstancedBufferAttribute
-  coneOpacity: InstancedBufferAttribute
 
   volumeOrigin: InstancedBufferAttribute
   volumeDir: InstancedBufferAttribute
@@ -488,34 +427,25 @@ export interface BuiltEmitters {
   volumeCosHalfAngle: InstancedBufferAttribute
   volumeFx: InstancedBufferAttribute
   volumeMask: InstancedBufferAttribute
+  /** (apex → aperture, iris, aspect, unused) per beam. */
+  volumeShape: InstancedBufferAttribute
 
-  /** One row per beam lobe, then one per washing pixel — the layout's own order. */
+  /** One row per light, in the layout's slot order. */
   lights: LightTable
 }
 
 export function buildEmitters(
   layout: EmitterLayout,
   regionCount: number,
-  coneMaterial: ShaderMaterial,
   volumeMaterial: ShaderMaterial,
 ): BuiltEmitters {
   const beamCap = beamCapacity(layout)
   const lobeCount = layout.totalLobes
 
-  const coneGeo = new ConeGeometry(1, 1, 48, 1, true)
   // Closed + coarse: the volume hull is only a conservative fragment
   // generator (back faces), the analytic intersection in the shader is the
   // real boundary.
   const volumeGeo = new ConeGeometry(1, 1, 24, 1, false)
-
-  const coneOrigin = vec3InstAttr(beamCap)
-  const coneColor = vec3InstAttr(beamCap)
-  const coneOpacity = floatInstAttr(beamCap)
-  const coneFx = vec4InstAttr(beamCap)
-  coneGeo.setAttribute('aBeamOrigin', coneOrigin)
-  coneGeo.setAttribute('aColor', coneColor)
-  coneGeo.setAttribute('aOpacity', coneOpacity)
-  coneGeo.setAttribute('aBeamFx', coneFx)
 
   const volumeOrigin = vec3InstAttr(beamCap)
   const volumeDir = vec3InstAttr(beamCap)
@@ -525,6 +455,7 @@ export function buildEmitters(
   const volumeCosHalfAngle = floatInstAttr(beamCap)
   const volumeFx = vec4InstAttr(beamCap)
   const volumeMask = floatInstAttr(beamCap)
+  const volumeShape = vec4InstAttr(beamCap)
   volumeGeo.setAttribute('aBeamOrigin', volumeOrigin)
   volumeGeo.setAttribute('aBeamDir', volumeDir)
   volumeGeo.setAttribute('aBeamRight', volumeRight)
@@ -533,10 +464,7 @@ export function buildEmitters(
   volumeGeo.setAttribute('aCosHalfAngle', volumeCosHalfAngle)
   volumeGeo.setAttribute('aBeamFx', volumeFx)
   volumeGeo.setAttribute('aShadowMask', volumeMask)
-
-  const coneMesh = new InstancedMesh(coneGeo, coneMaterial, beamCap)
-  coneMesh.frustumCulled = false
-  coneMesh.count = lobeCount
+  volumeGeo.setAttribute('aBeamShape', volumeShape)
 
   const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
   volumeMesh.frustumCulled = false
@@ -544,11 +472,7 @@ export function buildEmitters(
 
   // Start every beam instance parked — the directors only write lobes they
   // use, and an unwritten instance would otherwise draw at identity scale.
-  for (let i = 0; i < beamCap; i++) {
-    coneMesh.setMatrixAt(i, ZERO_MATRIX)
-    volumeMesh.setMatrixAt(i, ZERO_MATRIX)
-  }
-  coneMesh.instanceMatrix.needsUpdate = true
+  for (let i = 0; i < beamCap; i++) volumeMesh.setMatrixAt(i, ZERO_MATRIX)
   volumeMesh.instanceMatrix.needsUpdate = true
 
   return {
@@ -556,12 +480,7 @@ export function buildEmitters(
     regionCount,
     // The build-time writes above flag their own buffers directly; the frame loop starts clean.
     dirty: 0,
-    coneMesh,
     volumeMesh,
-    coneOrigin,
-    coneFx,
-    coneColor,
-    coneOpacity,
     volumeOrigin,
     volumeDir,
     volumeRight,
@@ -570,7 +489,8 @@ export function buildEmitters(
     volumeCosHalfAngle,
     volumeFx,
     volumeMask,
-    lights: new LightTable(layout.totalLobes + layout.totalWashPixels),
+    volumeShape,
+    lights: new LightTable(layout.totalLights),
   }
 }
 
@@ -627,7 +547,7 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
   const layout = b.layout
   const lights = b.lights
 
-  // Index of a (slot, lobe) on the beam meshes, or -1 for one this slot was not given — which a
+  // Index of a (slot, lobe) on the beam mesh, or -1 for one this slot was not given — which a
   // writer then drops. Every writer goes through this, so a director that asks for more lobes
   // than its slot holds (a prism on a fixture whose layout predates it) parks nothing and
   // writes nothing, rather than drawing into the next fixture's block. The arithmetic itself is
@@ -635,126 +555,68 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
   function beamIndex(slot: number, lobe: number): number {
     return lobe >= 0 && lobe < lobesFor(layout, slot) ? beamInstanceIndex(layout, slot, lobe) : -1
   }
-  /** A washing pixel's row of the light table: after every lobe's. */
-  function washRow(slot: number, pixel: number): number {
-    return pixel >= 0 && pixel < washPixelsFor(layout, slot)
-      ? layout.totalLobes + washPixelIndex(layout, slot, pixel)
-      : -1
+  /** A (slot, light)'s row of the light table, or -1 for one this slot was not given. */
+  function lightRow(slot: number, light: number): number {
+    return light >= 0 && light < lightsFor(layout, slot) ? lightRowIndex(layout, slot, light) : -1
   }
 
-  // A named closure rather than a `this`-call so the handle survives
+  // Named closures rather than `this`-calls so the handle survives
   // destructuring (the tests stub methods individually).
   function hideLobes(slot: number, fromLobe: number): void {
     const count = lobesFor(layout, slot)
     if (fromLobe >= count) return
     b.dirty |= DIRTY_BEAM_MATRIX
     for (let lobe = Math.max(0, fromLobe); lobe < count; lobe++) {
-      const i = beamInstanceIndex(layout, slot, lobe)
-      b.coneMesh.setMatrixAt(i, ZERO_MATRIX)
-      b.volumeMesh.setMatrixAt(i, ZERO_MATRIX)
-      lights.clear(i)
+      b.volumeMesh.setMatrixAt(beamInstanceIndex(layout, slot, lobe), ZERO_MATRIX)
     }
   }
-
-  function writeRow(
-    row: number,
-    origin: Vector3,
-    dir: Vector3,
-    color: Color,
-    level: number,
-    cosHalfAngle: number,
-    edge: number,
-    focusDist: number,
-    hit: SurfaceHit | null,
-  ): void {
-    lights.set(
-      row,
-      origin.x,
-      origin.y,
-      origin.z,
-      dir.x,
-      dir.y,
-      dir.z,
-      cosHalfAngle,
-      color.r * level,
-      color.g * level,
-      color.b * level,
-      edge,
-      focusDist,
-      hit,
-    )
+  function hideLights(slot: number, fromLight: number): void {
+    const count = lightsFor(layout, slot)
+    for (let light = Math.max(0, fromLight); light < count; light++) {
+      lights.clear(lightRowIndex(layout, slot, light))
+    }
   }
 
   return {
     slotCount: layout.slotCount,
     regionCount: b.regionCount,
     lobesFor: (slot) => lobesFor(layout, slot),
-    washPixelsFor: (slot) => washPixelsFor(layout, slot),
+    lightsFor: (slot) => lightsFor(layout, slot),
 
     reach(origin, dir, maxT, out) {
       return beamReach(origin.x, origin.y, origin.z, dir.x, dir.y, dir.z, colliders(), maxT, out)
     },
 
-    writeBeamMatrix(slot, lobe, matrix, volumetric) {
+    writeBeam(slot, lobe, w) {
       const i = beamIndex(slot, lobe)
       if (i < 0) return
-      b.dirty |= DIRTY_BEAM_MATRIX
-      b.coneMesh.setMatrixAt(i, volumetric ? ZERO_MATRIX : matrix)
-      b.volumeMesh.setMatrixAt(i, volumetric ? matrix : ZERO_MATRIX)
-    },
-    writeConeAttrs(slot, lobe, origin, dir, color, opacity, cosHalfAngle) {
-      const i = beamIndex(slot, lobe)
-      if (i < 0) return
-      b.dirty |= DIRTY_CONE_ATTRS
-      b.coneOrigin.setXYZ(i, origin.x, origin.y, origin.z)
-      b.coneColor.setXYZ(i, color.r, color.g, color.b)
-      b.coneOpacity.setX(i, opacity)
-      b.volumeOrigin.setXYZ(i, origin.x, origin.y, origin.z)
-      b.volumeDir.setXYZ(i, dir.x, dir.y, dir.z)
-      b.volumeColor.setXYZ(i, color.r, color.g, color.b)
-      b.volumeOpacity.setX(i, opacity)
-      b.volumeCosHalfAngle.setX(i, cosHalfAngle)
+      b.dirty |= DIRTY_BEAM_MATRIX | DIRTY_BEAM_ATTRS
+      b.volumeMesh.setMatrixAt(i, w.matrix)
+      b.volumeOrigin.setXYZ(i, w.apex.x, w.apex.y, w.apex.z)
+      b.volumeDir.setXYZ(i, w.dir.x, w.dir.y, w.dir.z)
+      b.volumeRight.setXYZ(i, w.right.x, w.right.y, w.right.z)
+      b.volumeColor.setXYZ(i, w.color.r, w.color.g, w.color.b)
+      b.volumeOpacity.setX(i, w.opacity)
+      b.volumeCosHalfAngle.setX(i, w.cosHalf)
+      b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
+      b.volumeMask.setX(i, w.shadowMask)
+      b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, 0)
     },
 
-    writeBeamFx(slot, lobe, edge, goboSlot, goboAngle, focusDist, right) {
-      const i = beamIndex(slot, lobe)
+    writeLight(slot, light, row) {
+      const i = lightRow(slot, light)
       if (i < 0) return
-      b.dirty |= DIRTY_BEAM_FX
-      // The cone shell reads only .x (edge) and .w (focus) — it has no interior to project into, so
-      // the gobo payload matters on the volume, which shares this fx layout.
-      b.coneFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
-      b.volumeFx.setXYZW(i, edge, goboSlot, goboAngle, focusDist)
-      b.volumeRight.setXYZ(i, right.x, right.y, right.z)
+      lights.set(i, row)
     },
-
-    writeShadowMask(slot, lobe, mask) {
-      const i = beamIndex(slot, lobe)
-      if (i < 0) return
-      b.dirty |= DIRTY_SHADOW_MASK
-      b.volumeMask.setX(i, mask)
-    },
-
-    writeLight(slot, lobe, origin, dir, color, level, cosHalfAngle, edge, focusDist, hit) {
-      const i = beamIndex(slot, lobe)
-      if (i < 0) return
-      writeRow(i, origin, dir, color, level, cosHalfAngle, edge, focusDist, hit)
-    },
-    writeWashLight(slot, pixel, origin, dir, color, level, cosHalfAngle, hit) {
-      const row = washRow(slot, pixel)
-      if (row < 0) return
-      writeRow(row, origin, dir, color, level, cosHalfAngle, 0, -1, hit)
+    clearLight(slot, light) {
+      lights.clear(lightRow(slot, light))
     },
 
     hideLobes,
+    hideLights,
     hideSlot(slot) {
       hideLobes(slot, 0)
-    },
-    clearWashLight(slot, pixel) {
-      lights.clear(washRow(slot, pixel))
-    },
-    hideWashSlot(slot) {
-      const count = washPixelsFor(layout, slot)
-      for (let p = 0; p < count; p++) lights.clear(washRow(slot, p))
+      hideLights(slot, 0)
     },
   }
 }
