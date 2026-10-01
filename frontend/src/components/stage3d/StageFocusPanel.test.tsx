@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enablePatches, produceWithPatches } from 'immer'
 import type { FixturePatch } from '@/api/patchApi'
 import libraryJson from '../../../../src/main/resources/lanterns/library.json'
 import { indexLanterns, type Lantern } from '@/lib/lanterns'
@@ -115,6 +116,25 @@ describe('StageFocusPanel', () => {
     // otherwise be refused on every edit.
     expect(body).not.toHaveProperty('lanternType')
     expect(body).not.toHaveProperty('extraPlacements')
+  })
+
+  it('paints nothing over a cache that already holds the draft, cloned — no paint loop', () => {
+    // RTK lands a cache update by applying Immer patches, which clones the shutters array into the
+    // cache. A paint that assigned the draft's own array would then change the cache every time,
+    // and the effect that repaints on every new `patch` would loop until React gave up.
+    enablePatches()
+    const p = patch()
+    render(<StageFocusPanel projectId={1} patch={p} fixture={undefined} fixtureType={DIMMER_TYPE} lanterns={lanterns} />)
+    fireEvent.keyDown(screen.getByRole('slider', { name: 'Right shutters depth' }), { key: 'ArrowRight' })
+    const painted = cacheAfter([p])
+    const recipes = dispatch.mock.calls
+      .map(([action]) => action as { type: string; recipe?: Recipe })
+      .filter((a) => a.type === 'patch/update')
+    expect(recipes.length).toBeGreaterThan(0)
+    const [, patches] = produceWithPatches(structuredClone(painted), (draft) => {
+      recipes.at(-1)!.recipe!(draft as FixturePatch[])
+    })
+    expect(patches).toEqual([])
   })
 
   it('keeps an edit the desk has not confirmed when a read of the patch list lands first', async () => {
