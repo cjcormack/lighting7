@@ -19,7 +19,7 @@ Later the same day Chris added two more:
    or cue stack (§"Scenery you can place, and scenery that moves with the show").
 
 **Status: approved, 2026-09-29.** Chris confirmed all sixteen decisions (§"Decisions") as
-recommended. The implementation plan is [`../stage-view-plan.md`](../stage-view-plan.md). The
+recommended. The implementation plan is [`../completed/stage-view-plan.md`](../completed/stage-view-plan.md). The
 research, the findings on today's code and a working prototype are in this folder. Where this
 record and the prototype disagree, the record wins; the prototype is there to be looked at, not
 copied.

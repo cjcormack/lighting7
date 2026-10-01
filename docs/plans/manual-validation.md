@@ -75,7 +75,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 ## `FU-MANUAL-STAGE-LIGHT-BUDGET`
 
 **What it proves**: *the room, lit, runs at a frame rate on the desk's own hardware*. Session 3 of
-[`stage-view-plan.md`](stage-view-plan.md) put every surface on one receiver shader that loops over
+[`stage-view-plan.md`](completed/stage-view-plan.md) put every surface on one receiver shader that loops over
 the live lights (cost: pixels × lights, capped by the View menu's **Light budget**, default 64), and
 gave the raymarched haze a governor that gives up march steps when a continuous run averages over
 28 ms a frame (back up under 19 ms for 3 s). The plan's §10 fixed the rule and left the numbers to
@@ -128,7 +128,7 @@ tier 0 throughout. Safari and the iPad are still owed.
 in*, so the Stage view, `render_view` and `aim_fixtures` all answer for the real hall. These are data
 fixes on the desk, not code — the stage-view plan's P5 says they are the operator's to make.
 
-**Why it is here**: session 6 of [`stage-view-plan.md`](stage-view-plan.md) drew what the data says,
+**Why it is here**: session 6 of [`stage-view-plan.md`](completed/stage-view-plan.md) drew what the data says,
 which made three things visible:
 
 - **FOH Balcony** is a `PIPE` at 2.8 m with the two Source Four Revolutions hung under it at
