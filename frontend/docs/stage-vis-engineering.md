@@ -16,6 +16,8 @@ sections"; and since session 6, the fixture bodies, their cells and beams that l
 
 ## The vis source
 
+*Scenery follows the source too — §"Scenery that moves with the show (session 8)".*
+
 The desk transmits one merged DMX frame, and until this landed every stage surface drew exactly
 that. In **Blind** that is the wrong picture: the programmer is gated out of the merge, so the stage
 keeps showing the pre-blind look while the operator builds a cue they cannot see. The programmer
@@ -1134,10 +1136,57 @@ PAR's long axis turns with `lampRotationDeg`.
 of its gate (`GatePreview`), then only what the lantern can take — depth and angle per blade (or per
 barn door), the gate's turn, the iris, sharp ↔ soft, zoom within its range, a PAR's lamp — and a
 switch between the lanterns of a pair, which are focused separately. The tab writes each change
-into the patch list's cache at once, so the Stage redraws the cut as a blade moves, and saves one
-`PUT` after a 350 ms pause (a placement's through the whole `extraPlacements` list, which
+into the patch list's cache at once, so the Stage redraws the cut as a blade moves — **by value**
+(`paintDraft`): RTK lands a cache update by applying Immer patches, which *clones* the shutters
+array into the cache, so a paint that assigned the draft's own array would differ every time, and
+the effect that repaints on each new `patch` looped until React gave up (found on a desk: any blade
+key crashed the Stage view). It saves one `PUT` after a 350 ms pause (a placement's through the whole `extraPlacements` list, which
 `toPlacementInput` carries the focus in); a refused write re-reads the list. A DMX fixture's tab
 names the optics its channels drive instead. The patch list's **Lantern** column picks the lantern
 from the library, or reads out a DMX type's declared body, and its **Mount** column says *standing*
 for a unit on a ledge or a floor stand.
 
+
+## Scenery that moves with the show (session 8)
+
+**The desk resolves, the canvas draws.** Cues, stacks and Looks can move scene elements — a drawn
+drape's `open`, a flown piece's `trimM`, any element's `visible` — and the desk resolves what the
+stage shows (lighting7 `show/SceneryResolver.kt`, `docs/cue-stacks-engineering.md` §"Scenery") and
+streams it as `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`
+entry). Each entry is a move: the state an element is going to, the one it is leaving, and how long.
+This side never resolves precedence; it only draws a move.
+
+**The source picks the scenery too.** `StageChannelSourceProvider` provides `StageSceneryContext`
+beside the channel source: the live scenery for Output and the two programmer sources (the desk
+already counts the programmer's live Looks, blind excepted), and for **Next GO** the preview's
+`scenery` (the whole stage as it would resolve with the cue on deck, each element with `from` and the
+GO's duration), its moves started when the answer lands — so selecting Next GO draws Q2's tabs
+opening as the GO would open them. `Stage3D` reads the context itself, outside its canvas, so the
+capture root's bridge carries nothing new; a `render_view` draws every move landed.
+
+**Drawn by laying the state over the element.** `lib/scenery.ts`'s `sceneryElements` writes each
+element's interpolated state into its `params.states` before `sceneBuilds` — the builders already
+read `open`, `trimM` and `visible` from there (a drawn drape's halves, a flown piece's `elementBaseZ`,
+`hidden` building nothing) — so nothing in the builders changed, and **beam reach follows for free**:
+the colliders come from the builds, so closed tabs stop a beam and the surface shader lights nothing
+behind them. An element left at its base comes back as the same object, and one whose drawn state
+has not moved since the last call too (a `WeakMap` per element), so the build cache rebuilds only
+what is moving.
+
+**The clock ticks only while something moves.** `useSceneryClock` advances `performance.now()` on
+`requestAnimationFrame` and `invalidate()`s the canvas every frame **until the last move lands**,
+then stops (§"The frameloop renders on demand"): a tab drawing over four seconds asks for its
+frames, an idle stage asks for none. Moves are eased sine in-out, the desk's own curve
+(`SceneryService.ease` / `easeSceneryT`); a piece appearing shows at once, one disappearing goes at
+the end. A frame is anchored at receipt from its `elapsedMs`, never its wall-clock `startedAt`, so a
+skewed tablet does not replay a finished move.
+
+**Authoring** is one shared editor, `components/scenery/SceneryEditor.tsx` — element · state ·
+time · remove, the state a per-kind choice (`sceneryChoices`: Closed / Half open / Drawn, Trim · in /
+out, Shown / Hidden; a state no choice writes stays selectable as itself) — mounted as *Scenery* in
+Cue properties (with a time: blank moves with the cue's fade), *Set for this stack* in
+`CueStackForm` and *Scenery while live* in `LookDetailSheet`. Each gesture saves the owner's
+**whole list**, as the desk's `PUT …/scenery` takes it, and the rows are a draft the editor holds, so
+a refetch landing mid-save (or while a time is typed) never puts an older list back — the
+`StageFocusPanel` rule. The cue card (`CueDetailContent`) reads the cue's own changes and, hatched,
+what it shows by tracking (`CueDetails.trackedScenery`).

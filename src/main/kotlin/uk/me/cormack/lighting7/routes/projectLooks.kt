@@ -40,6 +40,12 @@ import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookEffects
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoLookRows
+import uk.me.cormack.lighting7.models.DaoLookScenery
+import uk.me.cormack.lighting7.models.DaoLookSceneryRow
+import uk.me.cormack.lighting7.models.SceneryChangeDto
+import uk.me.cormack.lighting7.models.deleteLookScenery
+import uk.me.cormack.lighting7.models.lookSceneryOf
+import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
@@ -236,6 +242,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 // a tile is an enrichment, not a use the guard above counts (busk-layout plan D3).
                 val pageIds = deleteBuskPadsReferencing(lookId = look.id.value)
                 val slots = DaoCueSlots.deleteWhere { DaoCueSlots.look eq look.id }
+                deleteLookScenery(look.id)
                 look.delete()
                 LookDeleteOutcome.Deleted(uuid, pageIds, slots > 0)
             }
@@ -322,6 +329,17 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                         sortOrder = effect.sortOrder
+                    }
+                }
+                // Its scenery within the project only: an element belongs to one project's scene.
+                if (target.id == project.id) {
+                    for (row in lookSceneryOf(source.id)) {
+                        DaoLookSceneryRow.new {
+                            look = copy
+                            element = row.element
+                            stateJson = row.stateJson
+                            sortOrder = row.sortOrder
+                        }
                     }
                 }
                 CopyLookOutcome.Copied(
@@ -481,6 +499,12 @@ internal data class LookToggleSource(
     val ownTargets: List<CueTargetDto>,
     /** The attribute families its rows and effects span, in declaration order — see [derivedFamilyGroups]. */
     val families: Set<PropertyMaskGroup>,
+    /**
+     * It carries scenery (stage-view plan session 8), which shows while the Look is live whatever it
+     * lights — so a Look with scenery and nothing patched to land on is pressed as a layer that names
+     * no targets, and a mask it has no rows in does not refuse it.
+     */
+    val hasScenery: Boolean = false,
 )
 
 /** Must be called inside a transaction. */
@@ -489,6 +513,7 @@ internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookTo
     hasDeferredEffect = effects.any { it.isDeferred },
     ownTargets = ownTargets(fixtures),
     families = derivedFamilyGroups(fixtures),
+    hasScenery = !DaoLookSceneryRow.find { DaoLookScenery.look eq id }.empty(),
 )
 
 /**
@@ -525,6 +550,9 @@ internal fun resolveLookToggleTargets(requested: List<CueTargetDto>, look: LookT
     look.hasDeferredEffect -> LookTargetResolution.Refused(
         "This Look has a deferred effect, so it needs a selection to press onto", CODE_LOOK_NEEDS_SELECTION,
     )
+    // Nothing of its own to light, but scenery to show: a layer with no targets, which asserts no
+    // value and toggles off as the same gesture (`ProgrammerLayerStack.toggle`'s twin).
+    look.ownTargets.isEmpty() && look.hasScenery -> LookTargetResolution.Targets(emptyList())
     look.ownTargets.isEmpty() -> LookTargetResolution.Refused(
         "None of this Look's own fixtures are patched, so there is nothing to press it onto", CODE_LOOK_NO_TARGETS,
     )
@@ -559,6 +587,8 @@ internal sealed interface LookMaskResolution {
  */
 internal fun resolveLookMask(mask: Set<PropertyMaskGroup>?, look: LookToggleSource): LookMaskResolution {
     if (mask == null) return LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
+    // A Look that lights nothing has nothing to mask; its scenery is not an attribute family.
+    if (look.families.isEmpty() && look.hasScenery) return LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
     val inside = look.families.filterTo(LinkedHashSet()) { it in mask }
     if (inside.isEmpty()) {
         return LookMaskResolution.Refused(
@@ -657,6 +687,8 @@ internal data class LookDetails(
     val layerCount: Int,
     val usedByCueIds: List<Int> = emptyList(),
     val usedByCueNames: List<String> = emptyList(),
+    /** What this Look shows while live (stage-view plan session 8); edited by `PUT looks/{id}/scenery`. */
+    val scenery: List<SceneryChangeDto> = emptyList(),
 )
 
 @Serializable
@@ -1032,6 +1064,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         layerCount = usage.layerCount,
         usedByCueIds = usage.cueIds,
         usedByCueNames = usage.cueNames,
+        scenery = lookSceneryOf(id).map { it.toDto() },
     )
 }
 

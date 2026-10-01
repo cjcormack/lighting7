@@ -9,7 +9,10 @@ import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
+import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
+import uk.me.cormack.lighting7.sync.dto.CueStackJson
+import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.StageElementJson
@@ -382,6 +385,92 @@ class ProjectRoundTripTest {
         assertEquals(stalls.uuid to "F5", seat.seatElementUuid to seat.seatId)
         assertEquals(null, seat.eyeX, "a seat view carries no eye of its own")
         assertEquals(1.25, views.getValue("Balcony desk").eyeX)
+    }
+
+    /**
+     * v20: scenery travels embedded in its owner — a cue, a stack, a Look — each change naming its
+     * element by uuid with its states as an object, and only a cue's carrying a transition.
+     */
+    @Test
+    fun `scenery exports embedded in its cue, stack and Look, the element by uuid`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val elements = Files.list(exportDirA.resolve("stageElements")).use { stream ->
+            stream.toList().map { canonicalDecode(StageElementJson.serializer(), Files.readString(it)) }
+        }.associate { it.name to it.uuid }
+        val cue = Files.list(exportDirA.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(listOf(elements["House tabs"], elements["Thrust deck"]), cue.scenery.map { it.elementUuid })
+        assertEquals(listOf(4000L, 1500L), cue.scenery.map { it.transitionMs })
+        assertEquals(0.0, cue.scenery[0].state["open"]!!.jsonPrimitive.double)
+        assertEquals(listOf(0, 1), cue.scenery.map { it.sortOrder })
+
+        val stack = Files.list(exportDirA.resolve("cueStacks")).use { stream ->
+            stream.toList().map { canonicalDecode(CueStackJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "show-1" }
+        assertEquals(listOf(elements["Stalls"], elements["House tabs"]), stack.scenery.map { it.elementUuid })
+        assertTrue(stack.scenery.all { it.transitionMs == null }, "a stack's set has no clock")
+
+        val look = Files.list(exportDirA.resolve("looks")).use { stream ->
+            stream.toList().map { canonicalDecode(LookJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "Warm Amber" }
+        assertEquals(0.75, look.scenery.single { it.elementUuid == elements["House tabs"] }.state["open"]!!.jsonPrimitive.double)
+
+        val text = Files.readString(exportDirA.resolve("cues/${cue.uuid}.json"))
+        assertTrue(text.contains("\"state\": {"), "states travel as an object, not a string: $text")
+    }
+
+    /**
+     * A scenery change naming an element the archive does not carry has lost its element, which
+     * its delete would have swept on the writing desk: the pull drops it and keeps the rest.
+     */
+    @Test
+    fun `a scenery change naming an element the archive lacks is dropped and its cue survives`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val tabs = Files.list(exportDirA.resolve("stageElements")).use { stream ->
+            stream.toList().first { Files.readString(it).contains("\"name\": \"House tabs\"") }
+        }
+        Files.delete(tabs)
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val cue = Files.list(exportDirB.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(1, cue.scenery.size, "the tabs' change went, the deck's stayed")
+        assertEquals(1500L, cue.scenery.single().transitionMs)
+    }
+
+    /**
+     * An owner says one thing about each element, and the tables hold it to that with a unique
+     * index. An archive that says it twice — a hand edit, a merge that kept both sides — keeps the
+     * first by order rather than failing the whole import.
+     */
+    @Test
+    fun `a scenery change naming its element a second time is dropped and the first kept`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val cueFile = Files.list(exportDirA.resolve("cues")).use { stream ->
+            stream.toList().first { canonicalDecode(CueJson.serializer(), Files.readString(it)).name == "open" }
+        }
+        val written = canonicalDecode(CueJson.serializer(), Files.readString(cueFile))
+        val first = written.scenery.first()
+        val again = first.copy(uuid = java.util.UUID.randomUUID().toString(), transitionMs = 9000, sortOrder = written.scenery.size)
+        Files.writeString(cueFile, canonicalEncode(CueJson.serializer(), written.copy(scenery = written.scenery + again)))
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val cue = Files.list(exportDirB.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(written.scenery.map { it.elementUuid to it.transitionMs }, cue.scenery.map { it.elementUuid to it.transitionMs })
     }
 
     /**

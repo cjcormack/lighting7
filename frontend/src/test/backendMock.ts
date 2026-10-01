@@ -594,6 +594,12 @@ export function lightingApiMock() {
           handWs.dropped.push(uuid)
         },
       },
+      // Spelled out for `windows`' reason: `store/scenery.ts` seeds its cache entry from
+      // `getState()`, and the fallback Proxy would hand it a subscription object, not a frame.
+      scenery: {
+        getState: () => ({ projectId: null, entries: {} }),
+        subscribe: noopSub,
+      },
       stageRender: {
         subscribe: (fn: (request: unknown) => void) => {
           stageRenderWs.callback = fn

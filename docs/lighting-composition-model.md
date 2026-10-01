@@ -23,6 +23,9 @@ Layer 5  Baseline / defaults         usually 0
 
 Intuition: parking (Layer 1) sits on top for safety. The programmer (Layer 2) is the operator's hands — whatever was touched manually wins, console-style. Effects (Layer 3) modulate over the playback state, except where the programmer holds a property. Playbacks (Layer 4) assert state. Defaults (Layer 5) fall through.
 
+**Scenery sits beside the layers, not in them** (stage-view plan session 8): a tab drawn, a
+flown piece trimmed or a piece shown is resolved separately, never as a channel — see §"Scenery" below.
+
 > **Historical note.** Before the programmer redesign the manual layer ("Direct Live
 > Writes") sat *below* playbacks at the old Layer 4, and Effects/Assignments were Layers
 > 2/3. Only the archived plans in [plans/completed/](plans/completed/) still use those
@@ -1008,6 +1011,30 @@ Two rules that fall out of that, both enforced rather than conventional:
 ## Layer 5 — Baseline / defaults
 
 Per-fixture baseline values: typically 0 (blackout) for intensity-like channels, 127 (centred) for pan/tilt where the fixture profile specifies. The "rest state" seen when no other layer contributes.
+
+## Scenery — beside the layers
+
+Cues, stacks and Looks can move **scenery** — the scene document's elements: tabs drawn
+(`open`), flown pieces trimmed (`trimM`), pieces shown or hidden (`visible`) — and none of it goes
+through the five layers above (stage-view plan session 8; the design record's §"Why scenery should
+not be a virtual fixture"):
+
+- **It is never a channel** (D12). Everything below the resolver is a DMX write; scenery is resolved
+  by `show/SceneryResolver.kt` and streamed as `scenery.state`, which only the Stage view reads. A
+  real DMX tab track is a fixture, patched as one.
+- **It tracks** where cues do not. A cue is a complete lighting state; a scene is where the last
+  change left it. A stack's scenery is every change from the top of its list down to the live cue,
+  over its *set*.
+- **Live Looks win**, programmer and busk layers above the Looks a live cue layers, and both above
+  every cue and set — the cook's "local rows last" turned round, because a Look pressed for "the
+  sofa is only there in this Look" has to be there whatever the cues said. Blind takes the
+  programmer's Looks off stage with its values.
+- **Record never captures it** (D13), and **a template never carries it** (D11): a template names no
+  targets of its own, so it has nothing to say about a particular sofa.
+- A Look that lights nothing and carries scenery is still pressable with no selection, as a layer
+  that names no targets: it asserts no value, and its pad's second press takes it off.
+
+The resolution order, the clocks and the routes are in `docs/cue-stacks-engineering.md` §"Scenery".
 
 ## Crossfade behaviour
 

@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 7 ([PR #35](https://github.com/cjcormack/lighting7/pull/35)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 8 ([PR #36](https://github.com/cjcormack/lighting7/pull/36)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -277,7 +277,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Docs.** `docs/fixtures-engineering.md` §"Aiming a head at a point" (standing mounts) and
   `stage-vis-engineering.md`.
 
-### Session 7 — the lantern library and focus data (backend + frontend)
+### ~~Session 7 — the lantern library and focus data (backend + frontend)~~ — done, `cce5195` ([PR #35](https://github.com/cjcormack/lighting7/pull/35))
 
 - **The library.** A resource of about 25 lanterns (§"The lantern library" in the record, seeded
   from datasheets), exposed as `GET /lanterns`. `@FixtureType` gains a `body` descriptor, which

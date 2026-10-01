@@ -1,4 +1,5 @@
 // Type definitions for cue stacks API
+import type { PreviewScenery, SceneryChange } from './sceneryApi'
 
 export type CueType = 'STANDARD' | 'MARKER'
 
@@ -56,6 +57,8 @@ export interface CueStack {
   nextCueId: number | null
   canEdit: boolean
   canDelete: boolean
+  /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. Omitted when empty. */
+  scenery?: SceneryChange[]
 }
 
 export interface CueStackInput {
@@ -200,4 +203,9 @@ export interface PreviewCueResponse {
   channels: PreviewChannel[]
   /** `fixtureKey.property` rows that couldn't be resolved to channels. Advisory. */
   skipped: string[]
+  /**
+   * The scenery the GO would land, whole (an element absent shows its base), each with the move from
+   * where it is now and how long the GO would take over it. Omitted when no change names anything.
+   */
+  scenery?: PreviewScenery[]
 }

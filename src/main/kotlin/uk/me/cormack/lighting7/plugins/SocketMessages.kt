@@ -50,6 +50,7 @@ sealed class InMessage
     ParkOutMessage::class,
     ProgrammerOutMessage::class,
     ProjectOutMessage::class,
+    SceneryOutMessage::class,
     SelectionOutMessage::class,
     SpeedMasterOutMessage::class,
     StageRenderOutMessage::class,

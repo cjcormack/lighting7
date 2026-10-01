@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
@@ -8,6 +9,7 @@ import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.buildCombinedCueLayerRows
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -51,6 +53,22 @@ data class PreviewCueResponse(
      * preview is thinner than the cue.
      */
     val skipped: List<String>,
+    /**
+     * The scenery the GO would land (stage-view plan session 8): every element a scenery change
+     * names, as it would resolve with this cue live — its stack's set and its cues tracked down to
+     * it, beside every other live stack and Look — and the move from where it is now, timed as the
+     * GO would time it. The Next GO vis source animates it on arrival. Unlike [channels] this is
+     * whole, not assertions only: an element absent here shows its base.
+     */
+    val scenery: List<PreviewSceneryDto> = emptyList(),
+)
+
+@Serializable
+data class PreviewSceneryDto(
+    val elementUuid: String,
+    val state: JsonObject,
+    val from: JsonObject,
+    val durationMs: Long,
 )
 
 /**
@@ -117,5 +135,8 @@ internal fun previewCueLook(state: State, stackId: Int, requestedCueId: Int?): P
         cueId = cueId,
         channels = channels.values.sortedWith(compareBy({ it.universe }, { it.channel })),
         skipped = skipped.sorted(),
+        scenery = state.sceneryService.preview(stackId, cueId).map {
+            PreviewSceneryDto(it.elementUuid.toString(), sceneryStateObject(it.state), sceneryStateObject(it.from), it.durationMs)
+        },
     )
 }

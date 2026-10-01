@@ -214,6 +214,8 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 4. Apply cue's effects (presets + ad-hoc) tagged with both `cueId` and `cueStackId`
 5. If crossfading: start new effects at `intensityMultiplier = 0.0`, launch crossfade coroutine
 6. If this cue has auto-advance configured: start delay timer
+7. Publish the run state, then the scenery (`SceneryService.onCueLive`) — §"Scenery" below.
+   `deactivateStack` likewise ends with `onStackStopped`
 
 A step "merge cue palette into stack palette" used to sit at 4, and the stack carried a positional
 colour list its cues inherited. That whole grammar is gone — an effect parameter names a colour
@@ -360,6 +362,65 @@ Three deliberate limits, all worth knowing before building UI on it:
   falls back to the live output the way the "Output + Programmer" vis source already overlays.
   Reporting 0 would black out every unaddressed fixture in the preview.
 - **No programmer, no park.** A preview of playback, not of the stage.
+
+**Scenery is the exception to all three** (stage-view plan session 8): the response's `scenery` is
+the whole stage's scenery as it would resolve with this cue live — its stack's set and its cues
+tracked down to it, beside every other live stack and every live Look, programmer included — each
+element with `from` (where it is drawn now) and the `durationMs` the GO would move it over. Unlike
+`channels` it is whole: an element absent shows its base. It comes from the same resolver the GO
+runs (`SceneryService.preview`), so a preview and the GO that follows cannot disagree.
+
+## Scenery
+
+A cue, a stack and a Look can each carry **scenery changes** — an element of the scene document and
+the states it takes (`visible`, a drawn drape's `open`, a flown piece's `trimM`) — in
+`cue_scenery`, `cue_stack_scenery` and `look_scenery` (`models/scenery.kt`; stage-view plan session 8,
+D11–D13). Scenery sits **beside** the composition model, not in it: nothing here is a DMX channel,
+Record never captures it, and a template never carries it. See `docs/lighting-composition-model.md`
+§"Scenery".
+
+**Scenery tracks; lighting does not.** A cue is a complete lighting state, but a tab closed at Q14
+stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state, highest last:
+
+1. the element's base (its own `params.states`);
+2. each live stack's **set**, then its **cues from the top of the list down to the live cue**
+   (STANDARD cues only), the last change winning — computed from the list, not from history, so
+   GO TO Q20 lands the set as if the list had been run. With two stacks live they fold in GO order,
+   so the most recently GO'd wins — not the lighting resolver's database-id order;
+3. the Looks the live cues **layer** (enabled, `amount > 0`, not timed), in layer order;
+4. the Looks **live in the programmer** — pressed, or on a busk pad — in layer order, unless the
+   programmer is blind.
+
+A state the element's kind no longer takes (a drape switched from DRAW) is ignored.
+
+**The hook.** `state/SceneryService.kt` holds the result as a `StateFlow`, `scenery.state` on the
+socket. It recomputes on `activateCueInStack` (`onCueLive`) and `deactivateStack`
+(`onStackStopped`), so every GO path reports — REST, MIDI, busk, auto-advance — and on the AI's
+`apply_cue`, which bypasses the manager (`applyCue` calls `onCueApplied`; the cue stands in for its
+stack's live cue until the stack goes or stops, and `stop_cue` lets it go). It also follows the
+programmer's layer stack (`layersFlow`), blind, and every cue, stack, Look and element list change,
+so an edit anywhere moves the stage.
+
+A hook only queues: the recompute runs on the service's one worker thread, never inside the
+caller's transaction (a stack delete calls `deactivateStack` inside its own, and the pool is one
+SQLite connection), and reads holding no lock. Two rules ride on that queue. **A non-GO recompute
+not yet started answers every later one**, so a fader riding a layer's amount queues one read, not
+one per move. And **a GO is judged against the stack as the worker finds it**: if a second GO lands
+before the first's recompute reads, that run starts the second cue's moves on the second cue's
+clocks, and the second's own run finds nothing left to move.
+
+**Clocks.** A change moves on its own `transition` (a cue's only; null follows the cue's fade) —
+**when it belongs to the cue just GO'd**. Everything else snaps: a stack stopping, a Look pressed, an
+edit, and GO TO landing a change an earlier cue made. A move's `from` is where the piece is drawn at
+that moment, so a retarget mid-move starts there.
+
+**REST.** Whole-list `PUT` on `cues/{id}/scenery`, `cue-stacks/{id}/scenery` and
+`looks/{id}/scenery` (`routes/projectScenery.kt`), body `{scenery: [{elementUuid, state,
+transitionMs?}]}`, every problem at once (a state its element's kind cannot take, an element named
+twice, a `transitionMs` off a cue, a MARKER or a separator). The owners' read DTOs carry the lists:
+`CueDetails.scenery` (plus `trackedScenery`, what the cue shows without moving it and where from),
+`CueStackDetails.scenery`, `LookDetails.scenery`. Deleting an element sweeps its changes; deleting a
+cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
 
 ## WebSocket
 

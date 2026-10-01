@@ -6,6 +6,9 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoAiConversations
+import uk.me.cormack.lighting7.models.DaoCueScenery
+import uk.me.cormack.lighting7.models.DaoCueStackScenery
+import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoStageElements
 import uk.me.cormack.lighting7.models.DaoStageViewpoints
 import uk.me.cormack.lighting7.models.DaoBuskBanks
@@ -143,6 +146,11 @@ class SyncCoverageTest {
         // venue's, not this Mac's (D6).
         DaoStageElements to Disposition.Portable("stageElements"),
         DaoStageViewpoints to Disposition.Portable("stageViewpoints"),
+        // v20: scenery (stage-view plan session 8), embedded in the cue, stack or Look that owns it
+        // as a Look's rows are — an owner says one thing about each element.
+        DaoCueScenery to Disposition.Portable("cues", "scenery"),
+        DaoCueStackScenery to Disposition.Portable("cueStacks", "scenery"),
+        DaoLookScenery to Disposition.Portable("looks", "scenery"),
         DaoFixturePatches to Disposition.Portable("fixturePatches"),
         // A paired dimmer's other lanterns, embedded in list order in their patch's document.
         DaoFixturePatchPlacements to Disposition.Portable("fixturePatches", "extraPlacements"),

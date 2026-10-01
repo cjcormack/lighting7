@@ -52,6 +52,7 @@ class AiTools(private val state: State) {
         includeIntoProgrammerTool,
         updateFromProgrammerTool,
         createTemplateTool,
+        setSceneryTool,
     )
 
     /**
@@ -93,6 +94,7 @@ class AiTools(private val state: State) {
                 "include_into_programmer" -> executeInclude(input)
                 "update_from_programmer" -> executeUpdate(input)
                 "create_template" -> executeCreateTemplate(input)
+                "set_scenery" -> executeSetScenery(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -115,11 +117,21 @@ class AiTools(private val state: State) {
     private fun executeCreateLook(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
         val notes = input["description"]?.jsonPrimitive?.contentOrNull
-        val effectsArray = input["effects"]?.jsonArray ?: return errorResult("Missing 'effects'")
+        val effectsArray = input["effects"]?.jsonArray ?: JsonArray(emptyList())
+        val sceneryArray = input["scenery"]?.jsonArray
+        if (effectsArray.isEmpty() && sceneryArray.isNullOrEmpty()) return errorResult("Give 'effects', 'scenery', or both")
 
         val effects = effectsArray.map { parseLookEffect(it.jsonObject) }
 
         val project = state.projectManager.currentProject
+        val scenery = sceneryArray?.let { items ->
+            val problems = mutableListOf<String>()
+            val writes = transaction(state.database) {
+                parseToolSceneryList(items, sceneryElementsOf(project), SceneryOwnerKind.LOOK, "scenery", problems)
+            }
+            if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
+            writes
+        }.orEmpty()
         val look = transaction(state.database) {
             val created = DaoLook.new {
                 this.name = name
@@ -151,6 +163,7 @@ class AiTools(private val state: State) {
                     sortOrder = index
                 }
             }
+            replaceLookScenery(created, scenery)
             created
         }
         state.show.fixtures.lookListChanged()
@@ -898,6 +911,14 @@ class AiTools(private val state: State) {
         val adHocEffects = adHocArray?.map { parseAdHocEffectFromJson(it.jsonObject) } ?: emptyList()
 
         val project = state.projectManager.currentProject
+        val scenery = input["scenery"]?.jsonArray?.let { items ->
+            val problems = mutableListOf<String>()
+            val writes = transaction(state.database) {
+                parseToolSceneryList(items, sceneryElementsOf(project), SceneryOwnerKind.CUE, "scenery", problems)
+            }
+            if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
+            writes
+        }.orEmpty()
         val cue = transaction(state.database) {
             // Every cue must belong to a stack; land AI-created cues in "Unsorted" (created on
             // demand) so the operator can move them afterwards. Without this the NOT NULL FK on
@@ -910,6 +931,7 @@ class AiTools(private val state: State) {
                 this.sortOrder = stack.cues.count().toInt()
             }
             createCueChildren(newCue, adHocEffects, layers = layers)
+            replaceCueScenery(newCue, scenery)
             newCue
         }
         state.show.fixtures.cueListChanged()
@@ -918,7 +940,7 @@ class AiTools(private val state: State) {
         val cueId = cue.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects)",
+            description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
@@ -997,10 +1019,66 @@ class AiTools(private val state: State) {
         )
     }
 
+    /**
+     * `set_scenery`: one owner's whole scenery list, checked against each element's kind before
+     * anything is written — the REST `PUT …/scenery` routes' rule, from the tool's shape.
+     */
+    private fun executeSetScenery(input: JsonObject): ToolExecutionResult {
+        val items = input["scenery"] as? JsonArray ?: return errorResult("Missing 'scenery' (send [] to clear)")
+        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull
+        val stackId = input["stackId"]?.jsonPrimitive?.intOrNull
+        val lookId = input["lookId"]?.jsonPrimitive?.intOrNull
+        if (listOfNotNull(cueId, stackId, lookId).size != 1) return errorResult("Give exactly one of cueId, stackId, lookId")
+        val project = state.projectManager.currentProject
+        val problems = mutableListOf<String>()
+        val written = transaction(state.database) {
+            val elements = sceneryElementsOf(project)
+            when {
+                cueId != null -> {
+                    val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
+                        ?: run { problems += "no cue $cueId in this project"; return@transaction null }
+                    if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never live, so it has no scenery"; return@transaction null }
+                    val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.CUE, "scenery", problems)
+                    if (problems.isNotEmpty()) null else { replaceCueScenery(cue, writes); "cue '${cue.name}'" to writes.size }
+                }
+                stackId != null -> {
+                    val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id && it.type == CueStackType.STACK.name }
+                        ?: run { problems += "no cue stack $stackId in this project"; return@transaction null }
+                    val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.STACK, "scenery", problems)
+                    if (problems.isNotEmpty()) null else { replaceStackScenery(stack, writes); "stack '${stack.name}'" to writes.size }
+                }
+                else -> {
+                    val look = DaoLook.findById(lookId!!)?.takeIf { it.project.id == project.id }
+                        ?: run { problems += "no Look $lookId in this project"; return@transaction null }
+                    val writes = parseToolSceneryList(items, elements, SceneryOwnerKind.LOOK, "scenery", problems)
+                    if (problems.isNotEmpty()) null else { replaceLookScenery(look, writes); "Look '${look.name}'" to writes.size }
+                }
+            }
+        }
+        if (written == null) return errorResult(problems.joinToString("; "))
+        when {
+            cueId != null -> state.show.fixtures.cueListChanged()
+            stackId != null -> state.show.fixtures.cueStackListChanged()
+            else -> state.show.fixtures.lookListChanged()
+        }
+        return ToolExecutionResult(
+            success = true,
+            description = "Set the scenery of ${written.first}: ${written.second} change(s)",
+            result = buildJsonObject {
+                cueId?.let { put("cueId", it) }
+                stackId?.let { put("stackId", it) }
+                lookId?.let { put("lookId", it) }
+                put("changes", written.second)
+            }.toString(),
+        )
+    }
+
     private fun executeStopCue(input: JsonObject): ToolExecutionResult {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
 
         val removedCount = state.show.fxEngine.removeEffectsForCue(cueId)
+        // An `apply_cue`'d cue's scenery lets go with it.
+        state.sceneryService.onCueStopped(cueId)
 
         return ToolExecutionResult(
             success = true,

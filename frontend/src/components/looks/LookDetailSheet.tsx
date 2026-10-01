@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
+import { Blinds, CopyPlus, Download, Loader2, XCircle } from 'lucide-react'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import {
   Sheet,
@@ -24,6 +24,11 @@ import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
 import type { LookSummary } from '@/api/looksApi'
 import { useLookDelete } from './useLookDelete'
+import { SceneryEditor } from '@/components/scenery/SceneryEditor'
+import { useSetLookSceneryMutation } from '@/store/scenery'
+import type { SceneryChange } from '@/api/sceneryApi'
+
+const EMPTY_SCENERY: SceneryChange[] = []
 
 export interface LookDetailSheetProps {
   open: boolean
@@ -73,6 +78,7 @@ export function LookDetailSheet({
     { skip: !open || lookId === 0 },
   )
   const [saveLook, { isLoading: isSaving, error: saveError }] = useSaveLookMutation()
+  const [setLookScenery] = useSetLookSceneryMutation()
   // The sheet's batch delete over one Look (library-sheets plan D13): the same question, in the same
   // dialog, as a Delete over a selection — and it reports its own refusals.
   const { run: runDelete, busy: isDeleting, dialog: deleteDialog } = useLookDelete({
@@ -252,6 +258,31 @@ export function LookDetailSheet({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Scenery while live (stage-view plan session 8). Saves itself — it is the Look's
+              contents, not the name and notes the footer's Save is for. */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Blinds className="size-3.5" />
+              Scenery while live
+            </Label>
+            {detail == null ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <SceneryEditor
+                projectId={projectId}
+                scenery={detail.scenery ?? EMPTY_SCENERY}
+                withTime={false}
+                addLabel="Add state"
+                idPrefix={`look-${look.id}-scenery`}
+                onSave={(items) => setLookScenery({ projectId, lookId: look.id, scenery: items }).unwrap()}
+              />
+            )}
+            <p className="text-[11px] text-muted-foreground">
+              Shows whenever this Look is live — layered in a live cue, or pressed on a busk pad —
+              above the stack&apos;s cues and its set.
+            </p>
           </div>
 
         </SheetBody>

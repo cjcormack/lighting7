@@ -1,3 +1,4 @@
+import type { SceneryChange, TrackedScenery } from './sceneryApi'
 import type { CueType } from './cueStacksApi'
 
 // Cue target (fixture or group)
@@ -213,6 +214,14 @@ export interface Cue {
   cueType: CueType
   canEdit: boolean
   canDelete: boolean
+  /**
+   * What this cue moves on GO (stage-view plan session 8), each change on its own clock. Edited
+   * through `PUT cues/{id}/scenery`, never through the cue's own PUT/PATCH. Optional: the desk
+   * omits an empty list.
+   */
+  scenery?: SceneryChange[]
+  /** The scenery this cue shows without moving it — tracked from earlier cues, or the stack's set. */
+  trackedScenery?: TrackedScenery[]
 }
 
 // Input for create/update

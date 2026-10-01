@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import type { SceneryChange } from '@/api/sceneryApi'
 import {
   ArrowRight,
   GripVertical,
@@ -57,6 +58,9 @@ import { CueStackForm } from '@/components/cues/CueStackForm'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
+
+/** An empty set, stable, so the form's set editor does not re-seed on every render. */
+const NO_SCENERY: SceneryChange[] = []
 
 // ── Sortable STACK entry row ────────────────────────────────────────────────
 
@@ -516,7 +520,11 @@ export function ShowOverview({
       <CueStackForm
         open={formOpen}
         onOpenChange={setFormOpen}
+        projectId={projectId}
         stack={editingStack}
+        // The set from the live list, not the snapshot the form opened on: the set saves itself, and
+        // re-seeding the form from a fresh `stack` would throw away a name being typed.
+        scenery={editingStack == null ? undefined : (stacks.find((s) => s.id === editingStack.id)?.scenery ?? NO_SCENERY)}
         onSave={handleSaveStack}
         isSaving={creating || saving}
       />

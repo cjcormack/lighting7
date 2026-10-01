@@ -74,10 +74,10 @@ export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanter
         const target = list.find((p) => p.id === id)
         if (!target) return
         for (const [unit, draft] of drafts.current) {
-          if (unit === 'fixture') Object.assign(target, draft)
+          if (unit === 'fixture') paintDraft(target, draft)
           else {
             const placement: PatchPlacement | undefined = target.extraPlacements?.find((p) => p.uuid === unit)
-            if (placement) Object.assign(placement, draft)
+            if (placement) paintDraft(placement, draft)
           }
         }
       }),
@@ -180,6 +180,22 @@ export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanter
       />
     </div>
   )
+}
+
+/**
+ * Lay [draft] over [target] key by key, writing only a key whose **value** differs. RTK applies a
+ * cache update as Immer patches, which clones the value into the cache — so the `shutters` array
+ * the cache holds after one paint is never the draft's own array. Assigned by reference, every
+ * paint would then be a change: a new patch list, a new `patch` prop, the paint effect again,
+ * until React gives up with "Maximum update depth exceeded" (found driving the Focus tab on a
+ * desk, stage-view session 8's checks). The draft's values are numbers, strings and one array of
+ * four small objects, so their JSON is the comparison.
+ */
+function paintDraft(target: object, draft: Draft) {
+  const t = target as Record<string, unknown>
+  for (const [k, v] of Object.entries(draft)) {
+    if (JSON.stringify(t[k] ?? null) !== JSON.stringify(v ?? null)) t[k] = v
+  }
 }
 
 /** What a DMX fixture's own channels drive, where a conventional has a spanner. */

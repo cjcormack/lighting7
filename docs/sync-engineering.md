@@ -56,8 +56,9 @@ formatVersion.json
 project.json
 installs.json                  # populated with the local install's identity (Phase 2)
 showEntries/{uuid}.json
-cueStacks/{uuid}.json
-cues/{uuid}.json               # carries cueStackUuid (nullable)
+cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
+cues/{uuid}.json               # carries cueStackUuid (nullable); v20+: `scenery` embedded, each
+                               # change an elementUuid, a state object and an optional transitionMs
 cuePropertyAssignments/{uuid}.json   # carries cueUuid
 cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
 cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
@@ -77,7 +78,7 @@ stageElements/{uuid}.json      # v18+: the scene document — venue and set elem
 stageViewpoints/{uuid}.json    # v18+: saved views and seats; a seat view names its seating by
                                # `seatElementUuid`
 fixtureGroups/{uuid}.json      # members embedded inline
-looks/{uuid}.json              # rows and effects embedded inline
+looks/{uuid}.json              # rows and effects embedded inline; v20+: `scenery` too
 templates/{uuid}.json          # rows embedded inline; one attribute family each (v6+)
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
                                # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
@@ -200,7 +201,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 19`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 20`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -242,6 +243,35 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 20 — scenery on cues, stacks and Looks
+
+**v20 adds one list in three places** (stage-view plan session 8, D11–D13): `CueJson`,
+`CueStackJson` and `LookJson` each carry `scenery`, a list of `SceneryChangeJson` — `uuid`,
+`elementUuid`, `state` and `sortOrder`, and on a cue `transitionMs`. The rows are the
+`cue_scenery`, `cue_stack_scenery` and `look_scenery` tables, embedded in their owner as a Look's
+rows are (an owner says one thing about each element, and the change is part of the owner's
+record), so `SyncCoverageTest` records them `Portable("cues", "scenery")`, `("cueStacks",
+"scenery")` and `("looks", "scenery")`, and `RichProjectFixture` seeds two on each owner with every
+optional field off its default. An empty list is omitted, so a show with no scenery exports
+byte-for-byte as at v19. Three things about the shape:
+
+- **The element is a uuid on the wire and a foreign key in the table.** The importer brings
+  elements in **first** now — they reference nothing that has to precede them (a platform's region
+  is a uuid inside its params) — so each owner's import resolves its changes' elements directly. A
+  change naming an element the archive lacks is dropped with a warning: its element's delete would
+  have swept it on the writing desk (`deleteSceneryForElements`), and the column cannot dangle. The
+  clone remapper re-points `elementUuid` like any other uuid string.
+- **`state` travels as a nested object** (`visible`, `open`, `trimM`), not as the JSON text the
+  column stores, and is stored as the archive holds it, unparsed; every reader tolerates one it
+  cannot read, and the resolver ignores a state the element's kind no longer takes.
+- **`transitionMs` is a cue's only** — its own clock for the move; absent moves with the cue's
+  fade. A stack's set and a Look's scenery have none.
+
+**It bumped `formatVersion`** by the sharp-edge rule: a v19 reader imports every cue, stack and Look
+without its scenery, and its next wipe-then-export push writes it away for every peer. `minReader`
+stays at 5: missing scenery is none. It went without `FU-AUTH-ATTRIBUTION`'s columns, as v18 and v19
+did (stage-view plan §11 Q2) — the plan's last bump, 21, is still there to fold it into.
 
 ### Version 19 — lanterns and focus
 

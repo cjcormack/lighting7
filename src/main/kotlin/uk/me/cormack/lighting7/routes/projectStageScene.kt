@@ -102,6 +102,8 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
                     ?: return@transaction ElementWrite.NotFound
                 val views = seatViewsOf(project, element.uuid)
                 if (views.isNotEmpty() && !resource.force) return@transaction ElementWrite.InUse(views)
+                // Its scenery changes go with it, as a group's busk-rig tiles go with the group.
+                deleteSceneryForElements(listOf(element.id))
                 element.delete()
                 ElementWrite.Deleted
             }

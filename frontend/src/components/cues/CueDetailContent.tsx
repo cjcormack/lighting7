@@ -1,6 +1,7 @@
 import { memo, useMemo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
+  Blinds,
   Theater,
   Layers,
   AudioWaveform,
@@ -22,6 +23,7 @@ import { MiniStage } from './MiniStage'
 import { collectCueTargets } from './targetUtils'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
+import { CueSceneryReadout } from '@/components/scenery/SceneryReadout'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import type { Cue } from '@/api/cuesApi'
 
@@ -99,6 +101,8 @@ export const CueDetailContent = memo(function CueDetailContent({
   )
   const adHocEffects = cue?.adHocEffects ?? []
   const triggers = cue?.triggers ?? []
+  const scenery = cue?.scenery ?? []
+  const trackedScenery = cue?.trackedScenery ?? []
 
   const fadeText = cue ? formatFadeText(cue.fadeDurationMs, cue.fadeCurve) : ''
 
@@ -203,6 +207,18 @@ export const CueDetailContent = memo(function CueDetailContent({
           ))
         )}
       </div>
+
+      {/* ── Scenery ──
+          What the cue moves on GO, on its own clocks, and — hatched — what it shows without moving
+          it: scenery tracks, so the set at this cue is every change from the top of the stack down
+          (stage-view plan session 8). Read-only; Cue properties edits it. Only drawn when there is
+          something to draw, so a rig with no scenery keeps its cards as they were. */}
+      {(scenery.length > 0 || trackedScenery.length > 0) && (
+        <div className="space-y-1.5">
+          <SectionHeader icon={Blinds} label="Scenery" count={scenery.length} />
+          <CueSceneryReadout projectId={projectId} scenery={scenery} tracked={trackedScenery} enabled={enabled} />
+        </div>
+      )}
 
       {/* ── Ad-hoc Effects ── */}
       <div className="space-y-1.5">

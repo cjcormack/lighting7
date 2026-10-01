@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPushChannelSource, type PushChannelSource } from '../api/channelSource'
+import type { LiveScenery } from '../api/sceneryApi'
+import { previewScenery } from '../lib/scenery'
 import { useCurrentProjectQuery } from '../store/projects'
 import {
   useProjectCueStackListQuery,
@@ -126,9 +128,19 @@ export function useNextGoSource(enabled: boolean): PushChannelSource | null {
  * arrives; `render_view`'s offscreen render waits for this, so its one frame is the preview and not
  * the wire it falls back to while composing.
  */
-export function useNextGoSourceState(enabled: boolean): { source: PushChannelSource | null; settled: boolean } {
+export function useNextGoSourceState(enabled: boolean): {
+  source: PushChannelSource | null
+  settled: boolean
+  /**
+   * The scenery the GO would land, its moves starting when the preview arrived — so selecting Next
+   * GO draws the tabs moving as the GO would move them (stage-view plan session 8). Null where the
+   * preview has nothing to say (no cue on deck, a refused request): the stage shows live scenery.
+   */
+  scenery: LiveScenery | null
+} {
   const { target, settled: targetSettled } = useNextGoTargetState(enabled)
   const [source, setSource] = useState<PushChannelSource | null>(null)
+  const [scenery, setScenery] = useState<LiveScenery | null>(null)
   const { data, isError, isSuccess, isFetching } = usePreviewOfTarget(target)
 
   useEffect(() => {
@@ -148,6 +160,17 @@ export function useNextGoSourceState(enabled: boolean): { source: PushChannelSou
     source?.setChannels(channels ?? [])
   }, [source, channels])
 
+  // Anchored here, in an effect, because the moves start when the answer lands — a `useMemo` would
+  // stamp the clock on whichever render happened to compute it. Keyed on the answer's `scenery`
+  // alone, not the whole answer: a refetch that recomposes the channels (a programmer move, a cue
+  // edit) is a new `data`, while RTK Query's structural sharing keeps an unchanged `scenery` the
+  // same array — so the tabs do not snap back and replay a move that has not changed.
+  const previewedScenery = target.cueId != null && !isError ? data?.scenery : undefined
+  useEffect(() => {
+    if (!enabled) return
+    setScenery(previewedScenery != null ? previewScenery(previewedScenery, target.projectId, performance.now()) : null)
+  }, [enabled, previewedScenery, target.projectId])
+
   const previewSettled = target.cueId == null || (!isFetching && (isSuccess || isError))
-  return { source, settled: !enabled || (source != null && targetSettled && previewSettled) }
+  return { source, settled: !enabled || (source != null && targetSettled && previewSettled), scenery: enabled ? scenery : null }
 }

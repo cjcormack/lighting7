@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useFieldAutosave } from '@/hooks/useFieldAutosave'
-import { ChevronDown, Plus, Zap } from 'lucide-react'
+import { Blinds, ChevronDown, Plus, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,7 +26,12 @@ import {
   usePatchProjectCueMutation,
 } from '@/store/cues'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
+import { SceneryEditor } from '@/components/scenery/SceneryEditor'
+import { useSetCueSceneryMutation } from '@/store/scenery'
 import type { Cue, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
+import type { SceneryChange } from '@/api/sceneryApi'
+
+const EMPTY_SCENERY: SceneryChange[] = []
 
 interface CuePropsPaneProps {
   cue: Cue
@@ -47,6 +52,7 @@ interface CuePropsPaneProps {
  */
 export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const [patchCue] = usePatchProjectCueMutation()
+  const [setCueScenery] = useSetCueSceneryMutation()
 
   const [name, setName] = useState(cue.name)
   const [cueNumber, setCueNumber] = useState(cue.cueNumber ?? '')
@@ -354,6 +360,30 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
           </div>
         )}
       </div>
+
+      {/* Scenery — between Transition and Script hooks, as the Cue board draws it. A MARKER is never
+          live, so it has none (the desk refuses one). */}
+      {cue.cueType !== 'MARKER' && (
+        <div className="border-t pt-3 space-y-2">
+          <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <Blinds className="size-3.5" />
+            Scenery
+          </Label>
+          <SceneryEditor
+            projectId={projectId}
+            scenery={cue.scenery ?? EMPTY_SCENERY}
+            withTime
+            addLabel="Add change"
+            idPrefix={`cue-${cue.id}-scenery`}
+            onSave={(scenery) => setCueScenery({ projectId, cueId: cue.id, scenery }).unwrap()}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Scenery tracks: this list is what <em>changes</em> here. What the set looks like at this
+            cue is every change from the top of the stack down. Each change moves on its own clock —
+            blank moves with the cue&apos;s fade.
+          </p>
+        </div>
+      )}
 
       {/* Script hooks */}
       <div className="border-t pt-3 space-y-2">

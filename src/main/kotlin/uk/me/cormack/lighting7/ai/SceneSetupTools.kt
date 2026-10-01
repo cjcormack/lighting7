@@ -190,7 +190,11 @@ internal class SceneSetupTools(private val state: State) {
                 view.store(fields)
             }
             for (name in removeViewpoints) storedViews[name]?.delete()
-            for (name in removeElements) stored[name]?.delete()
+            for (name in removeElements) {
+                val element = stored[name] ?: continue
+                deleteSceneryForElements(listOf(element.id))
+                element.delete()
+            }
             Triple(written.size, viewWrites.size, true)
         }
         if (problems.isNotEmpty()) return rejected(problems)

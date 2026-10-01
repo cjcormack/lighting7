@@ -472,6 +472,7 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
     prop("followSeconds", "number", "Auto-follow: the stack fires the next cue this many seconds after this one fires.")
     prop("marker", "boolean", "A section divider ('Act 1', 'Interval') rather than a cue: name is its label; GO skips it.")
     arrayProp("layers", cueLayerSchema, "Looks this cue applies, with their targets — the same shape as create_cue's layers.")
+    arrayProp("scenery", sceneryItemSchema(forCue = true), "Scene elements this cue moves on GO — the same shape as create_cue's scenery. $SCENERY_TRACKS_NOTE")
     put("at", buildJsonObject {
         put("type", "object")
         put("description", "Where the cue is called in the prompt book; anchors it there. Needs a prompt book (get_prompt_book).")
@@ -489,6 +490,7 @@ internal val buildCueStackTool = AnthropicToolDef(
         prop("stackName", "string", "Name for a new stack (e.g. 'Act 1', or the show's name). Required unless stackId is given.")
         prop("stackId", "integer", "Append to this existing stack instead of creating one.")
         prop("loop", "boolean", "New stack only: wrap to the first cue after the last. Default false.")
+        arrayProp("scenery", sceneryItemSchema(forCue = false), "The stack's set: the states its elements hold while it is live, under its cues ('the Act 2 set appears with Act 2'). Replaces the stack's set when given.")
         arrayProp("cues", showCueSchema, "In running order.")
     },
 )

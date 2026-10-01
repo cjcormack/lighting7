@@ -11,13 +11,21 @@ import {
   SheetTitle,
   SheetFooter,
 } from '@/components/ui/sheet'
-import { Loader2 } from 'lucide-react'
+import { Blinds, Loader2 } from 'lucide-react'
+import { SceneryEditor } from '@/components/scenery/SceneryEditor'
+import { useSetStackSceneryMutation } from '@/store/scenery'
 import type { CueStack, CueStackInput } from '@/api/cueStacksApi'
+import type { SceneryChange } from '@/api/sceneryApi'
+
+const EMPTY_SCENERY: SceneryChange[] = []
 
 interface CueStackFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  projectId: number
   stack: CueStack | null
+  /** The stack's set as the desk holds it now; edited in place and saved by itself. */
+  scenery?: SceneryChange[]
   onSave: (input: CueStackInput) => Promise<void>
   isSaving: boolean
 }
@@ -25,12 +33,15 @@ interface CueStackFormProps {
 export function CueStackForm({
   open,
   onOpenChange,
+  projectId,
   stack,
+  scenery,
   onSave,
   isSaving,
 }: CueStackFormProps) {
   const [name, setName] = useState('')
   const [loop, setLoop] = useState(false)
+  const [setStackScenery] = useSetStackSceneryMutation()
 
   useEffect(() => {
     if (open) {
@@ -111,6 +122,30 @@ export function CueStackForm({
               />
             </button>
           </div>
+
+          {/* Set for this stack (stage-view plan session 8). Saves itself, like Cue properties, rather
+              than waiting for Save — a new stack has no id to hang one on, so it appears once the
+              stack exists. */}
+          {stack != null && stack.type === 'STACK' && (
+            <div className="space-y-2 border-t pt-3">
+              <Label className="flex items-center gap-1.5">
+                <Blinds className="size-3.5" />
+                Set for this stack
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                While this stack is live these elements take these states, under anything its cues
+                change. Stopping the stack lets them go.
+              </p>
+              <SceneryEditor
+                projectId={projectId}
+                scenery={scenery ?? EMPTY_SCENERY}
+                withTime={false}
+                addLabel="Add state"
+                idPrefix={`stack-${stack.id}-set`}
+                onSave={(items) => setStackScenery({ projectId, stackId: stack.id, scenery: items }).unwrap()}
+              />
+            </div>
+          )}
 
           <p className="text-xs text-muted-foreground">
             Auto-advance and crossfade are configured per-cue in the cue editor.

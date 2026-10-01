@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -92,13 +93,18 @@ internal val createLookTool = AnthropicToolDef(
                 put("type", "array")
                 put("items", lookEffectSchema)
             })
+            put("scenery", buildJsonObject {
+                put("type", "array")
+                put("items", sceneryItemSchema(forCue = false))
+                put("description", "Scene elements this Look shows while it is live — layered in a live cue, or pressed on a busk pad — above every cue (the Night look flies the moon in).")
+            })
             put("applyToTargets", buildJsonObject {
                 put("type", "array")
                 put("description", "Optional: immediately apply to these targets")
                 put("items", targetSchema)
             })
         })
-        put("required", buildJsonArray { add("name"); add("effects") })
+        put("required", buildJsonArray { add("name") })
     }
 )
 
@@ -437,6 +443,11 @@ internal val createCueTool = AnthropicToolDef(
                 put("items", adHocEffectSchema)
                 put("description", "Ad-hoc effects not from a Look layer, stored as full effect definitions")
             })
+            put("scenery", buildJsonObject {
+                put("type", "array")
+                put("items", sceneryItemSchema(forCue = true))
+                put("description", "Scene elements this cue moves on GO — tabs, flown pieces, pieces shown or hidden. $SCENERY_TRACKS_NOTE")
+            })
         })
         put("required", buildJsonArray { add("name") })
     }
@@ -754,3 +765,62 @@ internal val createTemplateTool = AnthropicToolDef(
     }
 )
 
+
+/**
+ * One scenery change in a tool call (stage-view plan session 8): an element of the scene document by
+ * name, and the states it takes. [forCue] adds the cue's own clock. Shared by `create_cue`,
+ * `create_look`, `set_scenery` and the MCP `build_cue_stack`, so they cannot disagree.
+ */
+internal fun sceneryItemSchema(forCue: Boolean): JsonObject = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("element", buildJsonObject {
+            put("type", "string")
+            put("description", "The scene element's name, as set_scene / get_scene give it (or its uuid).")
+        })
+        put("visible", buildJsonObject {
+            put("type", "boolean")
+            put("description", "Any element: shown (true) or hidden (false).")
+        })
+        put("open", buildJsonObject {
+            put("type", "number")
+            put("description", "A drawn drape (a DRAPE with operation DRAW — house tabs) only: 0 closed … 1 drawn fully open.")
+        })
+        put("trimM", buildJsonObject {
+            put("type", "number")
+            put("description", "A flown piece (an OBJECT with flies, or a DRAPE with operation FLY) only: its height in metres. Its own Z is where it plays (in); its stored trimM is usually out.")
+        })
+        if (forCue) {
+            put("transitionSeconds", buildJsonObject {
+                put("type", "number")
+                put("description", "How long the move takes, on its own clock (tabs 4 s whatever the lighting fade). Omit to move with the cue's fade.")
+            })
+        }
+    })
+    put("required", buildJsonArray { add("element") })
+}
+
+/** The words every scenery list's description shares. */
+internal const val SCENERY_TRACKS_NOTE =
+    "Scenery tracks, unlike lighting: a change stays put until a later cue, the stack's set or a live Look moves it, so list only what changes."
+
+internal val setSceneryTool = AnthropicToolDef(
+    name = "set_scenery",
+    description = "Set the scenery of one cue, cue stack or Look — the scene elements it moves (tabs open or close, a flown piece flies, a piece appears). " +
+        "A cue's changes move on GO into it, each on its own clock; a stack's are its set, held while the stack is live, under its cues; a Look's show while it is live (layered in a live cue, or pressed), above every cue. " +
+        SCENERY_TRACKS_NOTE + " Replaces the whole list: send [] to clear it. Everything is checked against each element's kind before anything is written. Templates carry no scenery.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue whose scenery to set. Give exactly one of cueId, stackId, lookId.") })
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack whose set to set.") })
+            put("lookId", buildJsonObject { put("type", "integer"); put("description", "The Look whose scenery to set.") })
+            put("scenery", buildJsonObject {
+                put("type", "array")
+                put("items", sceneryItemSchema(forCue = true))
+                put("description", "The whole list. transitionSeconds is a cue's only.")
+            })
+        })
+        put("required", buildJsonArray { add("scenery") })
+    },
+)
