@@ -223,6 +223,8 @@ internal fun Route.routeApiRestProjects(state: State) {
                 // Every scenery change names one of the project's elements, so this sweeps all
                 // three tables before the cues, stacks and Looks that own them go.
                 deleteSceneryForElements(project.stageElements.map { it.id })
+                // Cue events name a cue and a patch, both going below: through the patches, so all go.
+                deleteCueEventsForPatches(project.fixturePatches.map { it.id })
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     cue.delete()
@@ -358,6 +360,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectStageRegions(state)
         routeApiRestProjectStageScene(state)
         routeApiRestProjectScenery(state)
+        routeApiRestProjectEffects(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)

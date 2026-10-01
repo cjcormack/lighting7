@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm]) — fader /
  *     encoder movements map to a Layer 2 property write (Phase 3) or a tempo write.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
- *     [SpeedMasterTap]) — button press invokes a service call.
+ *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
  *   - **Selection-relative** ([SelectionProperty], [SelectTarget], [ClearSelection],
@@ -101,6 +101,16 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("fireCue")
     data class FireCue(val cueId: Int, val cueUuid: String? = null) : BindingTarget()
+
+    /**
+     * Fire one tube of a one-shot fixture on button press (stage-view plan session 9, D16): the
+     * Twin Shot's `output1` (or its label, `A`). **Requires the desk's arm**, like every fire — an
+     * unarmed press does nothing and is announced (`effects.skipped`), and a blind programmer
+     * rehearses it. Fixture-keyed, as [FixtureProperty] is.
+     */
+    @Serializable
+    @SerialName("fireTrigger")
+    data class FireTrigger(val fixtureKey: String, val trigger: String) : BindingTarget()
 
     /**
      * Momentary "flash" write: on press, write [max] to the nested property via Layer 2;

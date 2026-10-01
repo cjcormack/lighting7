@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **123 message types**
-(49 inbound, 74 outbound) across seventeen domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **126 message types**
+(49 inbound, 77 outbound) across eighteen domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -100,7 +100,7 @@ to leave a WebSocket's fixtures listener bound to the outgoing project after the
 project switch.
 
 Pure event streams — `*ListChanged` invalidations, `cloudSync*`, `programmer.entryChanged`,
-`speedMasters.changed` — have no snapshot and push nothing on connect. That is not an exception to
+`speedMasters.changed`, `effects.fired`, `effects.skipped` — have no snapshot and push nothing on connect. That is not an exception to
 the rule; they simply are not state.
 
 ### Reply conventions
@@ -213,6 +213,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Busk page | `BuskSocket.kt` | 1 | 1 | `handleBusk` | `setupBuskSubscriptions` |
 | Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
 | Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
+| Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
 | FX | `FxSocket.kt` | 5 | 2 | `handleFx` | `setupFxSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
@@ -226,8 +227,8 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Six families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Machine, Scenery and Stage render. Channel is the odd one: its three messages are declared in
+Seven families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Effects, Machine, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -509,7 +510,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (74)
+## Server → Client (77)
 
 ### Boot — `BootSocket.kt`
 
@@ -723,6 +724,34 @@ piece appearing shows at once while one disappearing goes at the end.
 
 Registered in the **show band**: the scenery is the current project's, and the service is reset and
 re-attached to the new show on a switch.
+
+### Effects — `EffectsSocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `effects.armed` | `armed: Boolean`, `armedUntil?: String`, `remainingMs?: Long`, `rehearsal: Boolean`, `spent: [{fixture, trigger, spentAt}]`, `projectId?: Int` | Connect snapshot + broadcast |
+| `effects.fired` | `fixture`, `fixtureName`, `trigger`, `label`, `at: String`, `rehearsed: Boolean`, `source: "cue" \| "panel" \| "surface"`, `cueId?: Int` | Event, every socket |
+| `effects.skipped` | `reason: "UNARMED" \| "SPENT" \| "ARM_DROPPED" \| "UNKNOWN_TRIGGER"`, `message`, `tubes: [{fixture, trigger}]`, `source`, `cueId?`, `cueLabel?` | Event, every socket |
+
+The desk's one-shot effects (stage-view plan session 9; `state/EffectsService.kt`). **There is no
+inbound message**, and that is the design (P2): arming, firing and reloading are REST
+(`POST …/effects/arm`, `…/patches/{id}/fire`, `…/patches/{id}/reload`), so the socket gains no
+operation, `FU-AUTH-WS-PER-MESSAGE` stays unfired, and the public listener's refusal
+(`requireEffectsAccess`) has one door to guard.
+
+`effects.armed` is `StateFlow`-backed, so the subscription is the snapshot: the arm, whether the
+programmer is blind (every fire rehearsed, the cannons' arm channels held down), and every spent tube
+on this machine (`effect_tube_state`, read when a show starts). `remainingMs` is how long the arm had
+left **when this frame was sent** — computed at send time, as `scenery.state`'s `elapsedMs` is — and
+a client counts down from its own receive time; the frame is not re-sent per second. `effects.fired`
+announces one tube fired — or, `rehearsed`, drawn and not sent — to every window, which draws the
+burst; `effects.skipped` announces fires that did not happen (a cue's events on an unarmed desk, as
+one frame for the cue; a spent tube; an arm that dropped before an event's offset; a surface's
+press while disarmed). Both are events with nothing to replay: a window that connects after a fire
+has nothing to draw.
+
+Registered in the **show band** beside scenery: the cannons are the current project's, and a project
+switch re-attaches the service to the new show, which disarms.
 
 ### Busk page — `BuskSocket.kt`
 

@@ -1,6 +1,9 @@
 package uk.me.cormack.lighting7.sync
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -471,6 +474,90 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
         }.single { it.name == "open" }
         assertEquals(written.scenery.map { it.elementUuid to it.transitionMs }, cue.scenery.map { it.elementUuid to it.transitionMs })
+    }
+
+    /**
+     * v21: a cue's events travel embedded in the cue, the patch by uuid, and come back as they went;
+     * a spent tube is this machine's and travels nowhere.
+     */
+    @Test
+    fun `cue events export embedded in their cue and round-trip, and tube state stays home`() {
+        val projectId = seedRichProject(state)
+        transaction(state.database) {
+            val cannon = uk.me.cormack.lighting7.models.DaoFixturePatch.find {
+                uk.me.cormack.lighting7.models.DaoFixturePatches.key eq "cannon-1"
+            }.single()
+            uk.me.cormack.lighting7.models.DaoEffectTubeStates.insert {
+                it[patchUuid] = cannon.uuid
+                it[trigger] = "output1"
+                it[spentAt] = uk.me.cormack.lighting7.models.nowUtc()
+            }
+        }
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val cannonUuid = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "cannon-1" }.uuid
+        val cue = Files.list(exportDirA.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(listOf("output1" to 600L, "output2" to 750L), cue.events.map { it.trigger to it.offsetMs })
+        assertTrue(cue.events.all { it.patchUuid == cannonUuid })
+        assertEquals(listOf(0, 1), cue.events.map { it.sortOrder })
+        val everything = Files.walk(exportDirA).use { s -> s.filter { Files.isRegularFile(it) }.toList() }
+            .joinToString("\n") { Files.readString(it) }
+        assertTrue("spentAt" !in everything && "spent_at" !in everything, "tube state never travels")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(cue.events, back.events)
+    }
+
+    /**
+     * An event naming a patch the archive lacks, a trigger its type does not have, or a tube a second
+     * time is dropped with the cue kept; and a pre-v21 archive's row naming a trigger is stripped.
+     */
+    @Test
+    fun `an event that no longer makes sense is dropped, and a stored trigger row is stripped on import`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+
+        val cueFile = Files.list(exportDirA.resolve("cues")).use { stream ->
+            stream.toList().first { canonicalDecode(CueJson.serializer(), Files.readString(it)).name == "open" }
+        }
+        val written = canonicalDecode(CueJson.serializer(), Files.readString(cueFile))
+        val first = written.events.first()
+        val bogus = listOf(
+            first.copy(uuid = java.util.UUID.randomUUID().toString(), sortOrder = 5),
+            first.copy(uuid = java.util.UUID.randomUUID().toString(), trigger = "output9", sortOrder = 6),
+            first.copy(uuid = java.util.UUID.randomUUID().toString(), patchUuid = java.util.UUID.randomUUID().toString(), sortOrder = 7),
+        )
+        Files.writeString(cueFile, canonicalEncode(CueJson.serializer(), written.copy(events = written.events + bogus)))
+        // A pre-v21 cue row raising a tube, as the Twin Shot's sliders once allowed.
+        val rowDir = exportDirA.resolve("cuePropertyAssignments")
+        Files.createDirectories(rowDir)
+        val raised = CuePropertyAssignmentJson(
+            uuid = java.util.UUID.randomUUID().toString(), cueUuid = written.uuid,
+            targetType = "fixture", targetKey = "cannon-1", propertyName = "output1", value = "255",
+        )
+        Files.writeString(rowDir.resolve("${raised.uuid}.json"), canonicalEncode(CuePropertyAssignmentJson.serializer(), raised))
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("cues")).use { stream ->
+            stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "open" }
+        assertEquals(written.events.map { it.trigger }, back.events.map { it.trigger })
+        val rows = Files.list(exportDirB.resolve("cuePropertyAssignments")).use { stream ->
+            stream.toList().map { canonicalDecode(CuePropertyAssignmentJson.serializer(), Files.readString(it)) }
+        }
+        assertTrue(rows.none { it.propertyName == "output1" }, "the raised tube was stripped")
+        assertTrue(rows.isNotEmpty(), "the cue's other rows came through")
     }
 
     /**

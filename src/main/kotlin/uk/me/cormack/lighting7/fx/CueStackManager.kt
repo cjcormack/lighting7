@@ -106,6 +106,7 @@ class CueStackManager(
         cueId: Int,
         scope: CoroutineScope = GlobalScope,
         rejectMarkers: Boolean = false,
+        fireEvents: Boolean = true,
     ): ActivateResult {
         // Read cue data from DB
         val cueData = transaction(state.database) {
@@ -126,7 +127,7 @@ class CueStackManager(
             // The one builder. This used to be a hand-rolled second construction, and `layers`
             // — added later, to the other one — was inert on this path, the primary firing path,
             // for a whole session. See `buildCueApplyData`.
-            buildCueApplyData(cue)
+            buildCueGoData(cue)
         }
 
         // Cancel any in-progress crossfade for this stack — the driver drops the abandoned
@@ -348,6 +349,10 @@ class CueStackManager(
         // And the scenery: the stack's set and its cues down to this one, tracked from the top of
         // the list, with this cue's own changes moving on their clocks (stage-view plan session 8).
         state.sceneryService.onCueLive(stackId, cueData.cueId)
+        // And its events: fired on GO into this cue only, while armed, at their offsets — scheduled
+        // here and never waited on (stage-view plan session 9). Not on a GO BACK, which steps back
+        // into a cue rather than going to it.
+        if (fireEvents) state.effectsService.onCueGo(cueData.cueId, cueData.cueLabel, cueData.goEvents)
 
         return ActivateResult(
             stackId = stackId,
@@ -420,7 +425,7 @@ class CueStackManager(
             )
         }
 
-        return activateCueInStack(state, stackId, nextCueId, scope)
+        return activateCueInStack(state, stackId, nextCueId, scope, fireEvents = direction == AdvanceDirection.FORWARD)
     }
 
     /**
@@ -501,6 +506,8 @@ class CueStackManager(
         appState?.let { runState.publishRunState(it, stackId) }
         // The stack's set and its cues' scenery let go.
         appState?.sceneryService?.onStackStopped(stackId)
+        // And the desk's arm: a stack stopping is a stop (stage-view plan session 9, D16).
+        appState?.effectsService?.onStackStopped(stackId)
         return removed
     }
 

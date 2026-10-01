@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
 import uk.me.cormack.lighting7.auth.PasswordPolicyException
+import uk.me.cormack.lighting7.mcp.RemoteEffectsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.routes.ErrorResponse
 
 private val logger = LoggerFactory.getLogger("error-handling")
@@ -97,6 +99,18 @@ fun Application.configureErrorHandling() {
         exception<RemoteScriptsDisabledException> { call, cause ->
             logger.warn("Refused remote script request on {}", call.request.local.uri)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Scripts are turned off for remote access", "REMOTE_SCRIPTS_DISABLED"))
+        }
+        // A stored row, an effect or a programmer value naming a one-shot trigger (stage-view plan
+        // session 9, D15). Thrown from inside the row writers so a write's transaction rolls back
+        // whole; a caller mistake, so WARN and a 400 naming every refused row.
+        exception<TriggerNotStorableException> { call, cause ->
+            logger.warn("Refused a trigger row on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A one-shot trigger cannot be stored", TriggerNotStorableException.CODE))
+        }
+        // An arm, fire or reload through the tunnel while "allow arming and firing" is off.
+        exception<RemoteEffectsDisabledException> { call, cause ->
+            logger.warn("Refused remote effects request on {}", call.request.local.uri)
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Arming and firing are turned off for remote access", "REMOTE_EFFECTS_DISABLED"))
         }
         exception<PasswordPolicyException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Password rejected"))

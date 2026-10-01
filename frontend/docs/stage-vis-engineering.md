@@ -1190,3 +1190,47 @@ Cue properties (with a time: blank moves with the cue's fade), *Set for this sta
 a refetch landing mid-save (or while a time is typed) never puts an older list back — the
 `StageFocusPanel` rule. The cue card (`CueDetailContent`) reads the cue's own changes and, hatched,
 what it shows by tracking (`CueDetails.trackedScenery`).
+
+## Confetti (session 9)
+
+**Every fire throws confetti, real or rehearsed.** `stage3d/StageConfetti.tsx` subscribes to
+`effects.fired` (`api/effectsApi.ts`) and throws `FLAKES_PER_TUBE` (380) flakes from the fired tube's
+muzzle: the patch's world position through `worldPositionLighting`, the tube's axis from its base
+yaw and pitch (`muzzleDirection` — up for a standing cannon, down for a hung one, the Twin Shot's two
+tubes splayed ±12°, A left and B right). The frame is broadcast, so every window throws the same
+burst; a rehearsed fire (Blind, or a window whose vis source is the programmer — lighting7
+`docs/fixtures-engineering.md` §"@FixtureTrigger") sends nothing to the wire and is drawn exactly the
+same way. A fire for a fixture this canvas has not placed draws nothing.
+
+**The model is pure** (`confetti.ts`): a fixed pool of typed arrays — position, velocity, the floor it
+settles on, a state (idle · flying · settled) and a seed per flake — stepped by `stepConfetti` with
+drag, gravity capped at a flutter terminal of 0.85 m/s, and a sway, until a flake reaches its floor
+and **settles**: it never moves again until its slot is thrown anew. The floor is the deck inside
+the stage's footprint and the house floor (`houseFloorZ`, a modelled room's base) outside it. The
+pool is `MAX_FLAKES` = five tubes plus a margin (2000), and it is a **ring**: a sixth tube in the air
+reuses the oldest flakes rather than growing anything. `confetti.test.ts` pins the count, the
+settle, the terminal and the ring.
+
+**One instanced mesh, one draw call, unlit.** The pool is one `InstancedMesh` of a 3 × 2 cm plane,
+allocated once per canvas, with a `MeshBasicMaterial`: it reads no light, so it touches neither the
+surface shader's light table (§"Light lands through one surface shader") nor the haze program, and
+the four-lights-per-fixture cap is not involved. Its vertex attributes are the plane's three
+(position, normal, uv), the instance matrix's four and the instance colour — **eight**. Colours are
+written once per throw, matrices every frame a flake flies; a settled flake's matrix is written flat
+on the floor at a fixed turn and then left alone. The flakes are never raycast, so a click on the
+stage reaches what is under them.
+
+**It asks for frames only while a flake flies** (§"The frameloop renders on demand"). A fire
+invalidates once; each frame that steps a flying flake asks for the next; when the last one settles
+nothing asks again, and the settled flakes are a static draw like the rest of the stage. A hidden
+pane or tab gets no `requestAnimationFrame`, so its burst waits and resumes when shown — `dt` is
+clamped to 50 ms, so it does not jump.
+
+**Measured (2026-10-01).** In the browser (Chromium, a 1280 × 800 Stage view on a bare stage with
+one floor-standing Twin Shot), one rehearsed tube drew **305 frames over 5.1 s** and then **no draw
+calls at all** across the next two seconds; the confetti is one `drawElementsInstanced` of 2000
+instances per frame beside the rest of the scene's ~41 calls. The CPU side — `stepConfetti` plus the
+matrix write, measured in Node on the same code — is a mean of **0.04 ms** a frame for one tube,
+**0.07 ms** for two and **0.18 ms** for five (1900 flakes) once V8 has warmed up; a flight lasts
+~5.2 s (≈315 frames at 60 Hz) whatever the count. The buffers are 128 KB of matrices and 24 KB of
+colours, allocated once. Not measured: Safari on the operator's Mac, and an iPad.

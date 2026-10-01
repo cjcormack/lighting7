@@ -264,6 +264,55 @@ Marks a property as controllable. The `fixtureProperties` list on `Fixture` coll
 - REST API property enumeration
 - FX engine targeting
 
+### @FixtureTrigger — one-shot triggers
+
+```kotlin
+@FixtureTrigger("Tube A", label = "A", armName = "master", armDescription = "Master enable")
+val output1: DmxTrigger = DmxTrigger(universe, firstChannel, armChannelNo = firstChannel + 2)
+```
+
+A **one-shot trigger** (stage-view plan session 9, D15) is an output that spends something physical
+when it fires — a confetti tube — so it is **its own property kind, not a `@FixtureProperty`**. A
+`DmxTrigger` is a channel and its **arm** channel, nothing more: it is not a `Slider` and carries no
+transaction, so nothing that resolves a property by name — the programmer, a cue row, a Look row, a
+template, an effect target, Record, a surface fader — finds one, and nothing composes or crossfades
+it. The Equinox Twin Shot MKII is the one fixture with triggers: `output1` (A) and `output2` (B),
+armed by its shared `master`, which is no property either.
+
+- **The desk owns the channels.** `state/TriggerOutput.kt` (one per show, rebuilt on every register
+  change) holds every trigger channel at idle and every arm channel at the desk's arm, **above
+  composition and under park**, through the controllers' park source (`dmx/LayeredParkSource.kt`:
+  park on top, the trigger output under it, every `DbFixtureLoader.loadFixtures` handed
+  `Show.outputSource`). A raw `updateChannel` on one of them is dropped (logged) rather than parked
+  in the programmer's sideband; a **park at or above the fire threshold (51) is refused** on them —
+  a park beats the trigger output, so it would be a held fire — while a park below it is a lock-out
+  and allowed. A reload seeds them idle (`DbFixtureLoader` zeroes their buffer after the register
+  rebuild), so no value carried across a repatch can raise one.
+- **A fire is an event**, `state/EffectsService.kt`: a backend-timed pulse to `FIRE_LEVEL` for
+  `FixtureTriggers.PULSE` (300 ms) and back to idle. Three doors — a cue's **events** (§"Cue events"
+  in `cues-engineering.md`), the cannon's hold-to-fire panel (`POST …/patches/{id}/fire`) and a MIDI
+  `FireTrigger` — and **every one needs the desk's arm** (`POST …/effects/arm {on, seconds?}`):
+  desk-wide, 60 s by default, dropped on a disarm, a lapse, a project switch or any stack stop, and
+  runtime only. While armed and not blind every cannon's arm channel is high. **Blind rehearses**:
+  the fire is announced and drawn, nothing is sent, no arm is needed, no tube is spent — as is a fire
+  a window asks to rehearse (`rehearse: true`, a window whose vis source is the programmer).
+- **Loaded and spent** are the physical tubes, machine-local (`effect_tube_state`: patch uuid,
+  trigger, `spent_at`): a fire marks its tube spent, `POST …/patches/{id}/reload` loads it again, and
+  firing a spent tube warns (409 `TRIGGER_SPENT`) and sends nothing.
+- **Refused by name at every write boundary** (`fixture/TriggerGuard.kt`'s `TriggerIndex`): a Look
+  row or effect, a template row or effect, a cue row or ad-hoc effect, a programmer value, a live
+  effect (`FxTargetFactory`, every door an effect is spawned through) and a surface binding naming a
+  trigger or its arm — on a fixture, on a group with a cannon in it, or, for a row with no target
+  of its own, by any trigger's name — answer 400 `TRIGGER_NOT_STORABLE` naming every refused row.
+  Record and Update capture from the programmer, which can hold none, and a busk pad presses a record
+  that can hold none. The sync importer strips such a row from an older archive, and a one-off pass at
+  startup stripped the rows stored before this (`state/TriggerRowStrip.kt`, to be deleted once run).
+
+On the wire a trigger is a `TriggerPropertyDescriptor` (`type: "trigger"`, its channel, its arm
+channel and its label) at the end of a fixture's `properties` — so the cannon's panel can name its
+tubes, and a client drawing controls from the list skips it. The DMX sheet names the channels
+`Tube A (trigger)` and `Master enable (arm)`.
+
 ## Transaction Pattern
 
 Fixtures require a `ControllerTransaction` to read/write values. This ensures:

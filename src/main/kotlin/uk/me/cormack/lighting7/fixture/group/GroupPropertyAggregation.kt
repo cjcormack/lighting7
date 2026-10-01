@@ -39,6 +39,8 @@ fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescri
             is ColourPropertyDescriptor -> aggregateColourProperty(templateProp, dmxFixtures)
             is PositionPropertyDescriptor -> aggregatePositionProperty(templateProp, dmxFixtures)
             is SettingPropertyDescriptor -> aggregateSettingProperty(templateProp, dmxFixtures)
+            // A trigger fires per fixture, from its own panel: a group has no trigger control.
+            is TriggerPropertyDescriptor -> null
         }
         if (aggregated != null) result.add(aggregated)
     }

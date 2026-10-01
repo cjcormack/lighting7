@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
+
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
@@ -24,6 +26,12 @@ import uk.me.cormack.lighting7.state.State
  */
 class RigBriefing(private val state: State) {
 
+    /** `, one-shot triggers=output1 (A),output2 (B)` for a fixture with one-shot triggers — what a cue's events name. */
+    private fun triggerLabel(fixture: uk.me.cormack.lighting7.fixture.Fixture): String {
+        val triggers = FixtureTriggers.of(fixture)
+        return if (triggers.isEmpty()) "" else ", one-shot triggers=" + triggers.joinToString(",") { "${it.name} (${it.spec.label})" }
+    }
+
     /** Fixtures, groups, the effect library, what is running and parked, speed masters and the show's records. */
     fun describeRig(): String {
         val sb = StringBuilder()
@@ -46,6 +54,7 @@ class RigBriefing(private val state: State) {
                     "key=`${fixture.key}`, type=`${fixture.typeKey}`" +
                     (lanterns[fixture.key]?.let { ", $it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
+                    triggerLabel(fixture) +
                     ")")
         }
         sb.appendLine()
@@ -250,6 +259,13 @@ class RigBriefing(private val state: State) {
                 val propType = propValue?.javaClass?.simpleName ?: "Unknown"
                 sb.appendLine("  - `${prop.name}` ($propType, category=${prop.category})")
             }
+            val triggers = FixtureTriggers.of(sample)
+            if (triggers.isNotEmpty()) {
+                sb.appendLine(
+                    "One-shot triggers (not properties — a script cannot set them; they fire as cue events while the desk is armed): " +
+                        triggers.joinToString(", ") { "`${it.name}` (${it.spec.label})" },
+                )
+            }
             sb.appendLine()
         }
 
@@ -280,6 +296,7 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted means master 1 / unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with beat divisions. A master with `followNum`/`followDen` set follows another master (`followTargetUuid`, or Master 1 when absent) at that ratio: it ticks — and beats — in step with that master, its tempo is derived, set_bpm on it is refused, and the way to move it is to retune the master it follows.")
         sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then run it with go_cue_stack — one GO fires whatever is on deck, and starts the stack if it is stopped. Use advance_cue_stack for BACKWARD and activate_cue_stack to jump to a named cue. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Multiple stacks can be active simultaneously.")
         sb.appendLine("- **The programmer, and how work gets saved**: the programmer is the manual overlay on top of whatever is running — what busking writes, and what apply_look${if (scriptTool) " and run_lighting_script" else ""} write${if (scriptTool) "" else "s"} through. record_cue puts it into a cue (CREATE a new one, or MERGE / UPDATE_EXISTING / REMOVE against an existing one). The round trip in the other direction is include_into_programmer, which loads a cue or look back in as an edit buffer, then update_from_programmer, which writes back **only what changed** — that is what leaves the rest of the cue, template references included, alone. Call update_from_programmer with preview=true first if you are unsure what the programmer is sitting on top of.")
+        sb.appendLine("- **One-shot triggers and cue events**: a fixture listed with one-shot triggers (a confetti cannon) spends something physical when it fires, so its triggers are never a value — no look, template, cue row, effect or programmer value can name one, and the desk refuses it by name. A cue fires one through its **events** (create_cue / build_cue_stack's `events`, or set_cue_events): a tube and an offset after GO. Events fire on GO into their cue only — never tracked, never on GO TO a later cue, never previewed — and only while the operator has armed the desk; unarmed, they are skipped and announced. Arming and firing a tube outright are the operator's, at the desk, and no tool offers them — but the arm is the operator's consent to the show's events, so while the desk is armed a GO you make (go_cue_stack, apply_cue) fires its cue's events as a GO at the desk would.")
         sb.appendLine("- **Standby and GO**: what the next GO fires is the desk's, not the caller's — an armed standby if one is set, else the cue after the live one. set_standby arms (or, with no cueId, disarms) it without moving a light, so \"stand by cue 5\" and \"go\" stay two gestures; get_current_state's `cue_run` reports what each stack has on deck.")
 
         return sb.toString()

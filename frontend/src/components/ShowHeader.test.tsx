@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 
 vi.mock('./SaveStatusIndicator', () => ({ SaveStatusIndicator: () => null }))
+vi.mock('./effects/ArmedChip', () => ({ ArmedChip: () => null }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 const media = { desktop: true }

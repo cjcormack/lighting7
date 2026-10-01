@@ -1,5 +1,9 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.request.receive
@@ -1008,13 +1012,26 @@ internal fun contentsFamily(rows: List<TemplateRowDto>, effect: TemplateEffectDt
         ?: effect?.let { familyForEffectCategory(it.category) }
 
 /**
+ * A trigger's name is refused as a trigger (stage-view plan session 9), not with the slotted-property
+ * sentence below, which would send the operator to a recorded Look — and no Look can hold one either.
+ * Thrown as [TriggerNotStorableException] by [validateTemplateContents], so a template answers
+ * `TRIGGER_NOT_STORABLE` as a Look and a cue do.
+ */
+private fun triggerTemplateRefusal(propertyName: String): String? =
+    FixtureTriggers.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
+        "A template cannot hold '$it' — it is a one-shot trigger or its arm, which fires as an event " +
+            "(a cue's Events, the cannon's panel, a MIDI FireTrigger) while the desk is armed, and is never a stored value"
+    }
+
+/**
  * The template write boundary: a value template's rows *or* an effect template's one effect.
  *
  * Called with the **resulting** (post-write) contents, so create and update share the
  * implementation — the [uk.me.cormack.lighting7.models.validateSpeedMasterSettings] pattern.
  * [ownUuid] is the template being edited (null on create), needed for the self-reference rule.
  *
- * Returns the problem, or null when the contents are acceptable.
+ * Returns the problem, or null when the contents are acceptable — except a row naming a one-shot
+ * trigger, which throws [TriggerNotStorableException] so every route answers it with its code.
  */
 internal fun validateTemplateContents(
     rows: List<TemplateRowDto>,
@@ -1039,6 +1056,7 @@ internal fun validateTemplateContents(
             }
         }
         val property = TemplateProperty.ofOrNull(row.propertyName)
+            ?: triggerTemplateRefusal(row.propertyName)?.let { throw TriggerNotStorableException(it) }
             ?: return "A template cannot hold '${row.propertyName}' — " +
                 "slotted properties (gobo, colour wheel, macros) are per-model, so they live in a " +
                 "recorded look. Templates hold: " +
@@ -1207,6 +1225,14 @@ private val TEMPLATE_EFFECT_FAMILIES = setOf(
 
 /** Must be called inside a transaction. */
 private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>) {
+    // No row may name a one-shot trigger (stage-view plan session 9, D15); a generic row lands on the
+    // selection, so it is checked against every trigger name there is.
+    // The index is queries; build it only when some name could be refused at all.
+    if (rows.any { TriggerIndex.mayRefuse(it.propertyName) }) {
+        TriggerIndex.of(template.project).check(
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.propertyName, "rows[$i]") },
+        )
+    }
     for ((index, row) in rows.withIndex()) {
         DaoTemplateRow.new {
             this.template = template
@@ -1229,6 +1255,8 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
  * stored effect means.
  */
 private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDto) {
+    // A template's effect has no target of its own: it lands on the selection.
+    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
     DaoTemplateEffect.new {
         this.template = template
         effectType = effect.effectType

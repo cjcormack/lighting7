@@ -42,7 +42,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-PAD-SIZE`](#fu-busk-pad-size) | Trigger | Busk | a page needs more density than width and flow give |
 | [`FU-BUSK-EDIT-CONCURRENCY`](#fu-busk-edit-concurrency) | Trigger | Busk | two desks edit one busk page at once |
 | [`FU-HAND-PLACE-SHAPE`](#fu-hand-place-shape) | Trigger | Busk | a third caller of `appendBuskPad`, or `AddPadOutcome.Invalid` needs to mean something at a non-REST door |
-| [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Trigger | State | a fourth project-scoped transient state, or one that forgets its clear |
+| [`FU-STATE-PROJECT-SCOPED`](#fu-state-project-scoped) | Ready | State | fired 2026-10-01: the desk's arm is a fourth (stage-view session 9) |
 | [`FU-DTO-RECORD-SUMMARY`](#fu-dto-record-summary) | Trigger | State | a second `state/` class needs a record summary, or a library-only field reaches a frame that should not carry it |
 | [`FU-MIDI-SHOW-GUARD`](#fu-midi-show-guard) | Trigger | MIDI | a project switch kills a surface's input and it has to be replugged |
 | [`FU-SLOT-DROP-OVERLAY-HIDDEN`](#fu-slot-drop-overlay-hidden) | Trigger | Busk | a palette row dropped at a collapsed cue-slot overlay lands on nothing |
@@ -508,7 +508,12 @@ than the repetition.
 that session did not otherwise touch, to buy nothing for the three that exist today.
 
 **Trigger**: a fourth project-scoped transient state, or the first time one is added without its
-clear.
+clear. **Fired 2026-10-01** (stage-view plan session 9): the desk's **arm** drops on a project switch
+too. It is the scenery service's shape rather than a clear — `effectsService.attach(show)` in the same
+collector re-binds to the new show, which disarms and cancels what the old show scheduled — so it did
+not add a fifth bare clear line, but it is a fourth thing that collector must remember. Promoted to
+Ready rather than built in that session, which touched none of the three classes the interface would
+change; a `ProjectScopedState` should take the two `attach` services as well as the three clears.
 
 ### `FU-DTO-RECORD-SUMMARY`
 
@@ -1291,9 +1296,10 @@ time. That's a `formatVersion` question for `docs/sync-engineering.md` — see
 `formatVersion` bump is already planned, in which case fold the column in rather than paying for a
 second migration.
 
-**v18 passed without it** (stage-view plan §11 Q2, Chris, 2026-09-29): the scene document's bump
-carries no attribution columns. The design for machine-local users is still owed, and the plan has
-three more bumps (19–21) it can fold into; the gate stays open for each.
+**v18–v21 all passed without it** (stage-view plan §11 Q2, Chris, 2026-09-29; v21 on Chris's
+instruction for session 9): none of the stage-view plan's four bumps carries attribution columns. The
+design for machine-local users is still owed, and there is no further planned bump to fold it into;
+the gate now waits for its own trigger or the next bump someone plans.
 
 ### `FU-AUTH-AUDIT-LOG`
 

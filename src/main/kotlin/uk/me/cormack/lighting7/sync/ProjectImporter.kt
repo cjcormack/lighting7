@@ -56,6 +56,12 @@ import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.deleteSceneryForElements
+import uk.me.cormack.lighting7.models.deleteCueEventsForPatches
+import uk.me.cormack.lighting7.models.DaoCueEvent
+import uk.me.cormack.lighting7.models.stripTriggerRows
+import uk.me.cormack.lighting7.models.MAX_CUE_EVENT_OFFSET
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
+import uk.me.cormack.lighting7.sync.dto.CueEventJson
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.storedParamsText
@@ -161,7 +167,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 20
+internal const val SUPPORTED_FORMAT_VERSION = 21
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -297,6 +303,8 @@ class ProjectImporter(private val state: State) {
             deleteBuskRig(project)
             // Scenery before its owners and its elements: all three tables, through the elements.
             deleteSceneryForElements(project.stageElements.map { it.id })
+            // Cue events before their cues and patches, through the patches (v21).
+            deleteCueEventsForPatches(project.fixturePatches.map { it.id })
             project.cues.forEach { cue ->
                 deleteCueChildren(cue)
                 cue.delete()
@@ -408,7 +416,7 @@ class ProjectImporter(private val state: State) {
         // The rig after the groups and patches its tiles name (v12).
         importBuskRig(sourceDir, project, groupMap, patchMap)
         val cueStackMap = importCueStacks(sourceDir, project, elementMap)
-        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap)
+        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap)
         importCuePropertyAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, templateMap)
         importCueAdHocEffects(sourceDir, cueMap)
@@ -422,6 +430,10 @@ class ProjectImporter(private val state: State) {
         importBuskPages(sourceDir, project, templateMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
+        // Last, once the patches and groups exist to judge them by: an archive written before v21 may
+        // still hold a row naming a one-shot trigger, and none may come back (stage-view session 9).
+        val stripped = stripTriggerRows(project)
+        if (stripped > 0) logger.warn("Import: stripped {} row(s) naming a one-shot trigger", stripped)
     }
 
     private fun importScripts(dir: Path, project: DaoProject): Map<UUID, DaoScript> {
@@ -562,6 +574,39 @@ class ProjectImporter(private val state: State) {
                 continue
             }
             create(element, s)
+        }
+    }
+
+    /**
+     * v21: one cue's events, each patch resolved through [patchMap]. Dropped with a warning, rather
+     * than failing the pull, when the archive lacks the patch (its delete would have swept the event
+     * on the writing desk), when the patch's type has no such trigger, or when a tube is named twice
+     * (one row per tube, a unique index) — the record is kept as far as it still makes sense.
+     */
+    private fun importCueEvents(events: List<CueEventJson>, patchMap: Map<UUID, DaoFixturePatch>, cue: DaoCue, owner: String) {
+        val seen = HashSet<Pair<Int, String>>()
+        for (e in events.sortedBy { it.sortOrder }) {
+            val patch = runCatching { UUID.fromString(e.patchUuid) }.getOrNull()?.let { patchMap[it] }
+            if (patch == null) {
+                logger.warn("{}: event {} names no patch in the archive ({}); dropping it", owner, e.uuid, e.patchUuid)
+                continue
+            }
+            if (FixtureTriggers.specsForTypeKey(patch.fixtureTypeKey).none { it.name == e.trigger }) {
+                logger.warn("{}: event {} names '{}', which '{}' has no trigger of; dropping it", owner, e.uuid, e.trigger, patch.key)
+                continue
+            }
+            if (!seen.add(patch.id.value to e.trigger)) {
+                logger.warn("{}: event {} fires '{}' on '{}' a second time; dropping it", owner, e.uuid, e.trigger, patch.key)
+                continue
+            }
+            DaoCueEvent.new {
+                this.cue = cue
+                this.patch = patch
+                trigger = e.trigger
+                offset = java.time.Duration.ofMillis(e.offsetMs.coerceIn(0, MAX_CUE_EVENT_OFFSET.toMillis()))
+                sortOrder = e.sortOrder
+                this.uuid = UUID.fromString(e.uuid)
+            }
         }
     }
 
@@ -848,6 +893,7 @@ class ProjectImporter(private val state: State) {
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
         elementMap: Map<UUID, DaoStageElement>,
+        patchMap: Map<UUID, DaoFixturePatch>,
     ): Map<UUID, DaoCue> {
         // Every cue belongs to a stack now. Legacy archives may carry standalone cues (null
         // cueStackUuid); those land in a project "Unsorted" stack, created once on demand.
@@ -900,6 +946,7 @@ class ProjectImporter(private val state: State) {
                 this.uuid = UUID.fromString(s.uuid)
             }
         }
+        importCueEvents(c.events, patchMap, dao, "Cue ${c.uuid}")
         uuid to dao
         }
     }

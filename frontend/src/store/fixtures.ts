@@ -159,6 +159,7 @@ export type PropertyDescriptor =
   | ColourPropertyDescriptor
   | PositionPropertyDescriptor
   | SettingPropertyDescriptor
+  | TriggerPropertyDescriptor
 
 export type PropertyCategory =
   | 'dimmer'
@@ -264,6 +265,34 @@ export type SettingPropertyDescriptor = {
   channel: ChannelRef
   options: SettingOption[]
   compactDisplay?: CompactDisplayRole
+}
+
+/**
+ * A **one-shot trigger** (stage-view plan session 9, D15): a confetti cannon's tube. Not a control —
+ * nothing sets it, and every view that draws controls from a fixture's properties skips it. It is
+ * fired from the cannon's panel (`CannonPanel`), a cue's Events or a MIDI `FireTrigger`, only while
+ * the desk is armed; [armChannel] follows the desk's arm. Listed so the panel can name its tubes and
+ * the DMX sheet its channels.
+ */
+export type TriggerPropertyDescriptor = {
+  type: 'trigger'
+  /** The trigger's name (`output1`) — what a fire, a cue event and a binding name. */
+  name: string
+  /** `Tube A`. */
+  displayName: string
+  category: 'trigger'
+  /** `A`. */
+  label: string
+  channel: ChannelRef
+  armChannel: ChannelRef
+  /** The arm channel's name (`master`) — never a property. */
+  armName: string
+  compactDisplay?: undefined
+}
+
+/** A fixture's one-shot triggers, in the order the desk lists them; empty for every other fixture. */
+export function triggersOf(properties: readonly PropertyDescriptor[] | undefined): TriggerPropertyDescriptor[] {
+  return (properties ?? []).filter((p): p is TriggerPropertyDescriptor => p.type === 'trigger')
 }
 
 export type ElementDescriptor = {

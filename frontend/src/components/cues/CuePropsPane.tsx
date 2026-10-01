@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useFieldAutosave } from '@/hooks/useFieldAutosave'
-import { Blinds, ChevronDown, Plus, Zap } from 'lucide-react'
+import { Blinds, ChevronDown, Flame, Plus, Zap } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,10 +28,13 @@ import {
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { SceneryEditor } from '@/components/scenery/SceneryEditor'
 import { useSetCueSceneryMutation } from '@/store/scenery'
-import type { Cue, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
+import { useSetCueEventsMutation } from '@/store/effects'
+import { CueEventsEditor } from '@/components/effects/CueEventsEditor'
+import type { Cue, CueEvent, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
 import type { SceneryChange } from '@/api/sceneryApi'
 
 const EMPTY_SCENERY: SceneryChange[] = []
+const EMPTY_EVENTS: CueEvent[] = []
 
 interface CuePropsPaneProps {
   cue: Cue
@@ -53,6 +56,7 @@ interface CuePropsPaneProps {
 export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
   const [patchCue] = usePatchProjectCueMutation()
   const [setCueScenery] = useSetCueSceneryMutation()
+  const [setCueEvents] = useSetCueEventsMutation()
 
   const [name, setName] = useState(cue.name)
   const [cueNumber, setCueNumber] = useState(cue.cueNumber ?? '')
@@ -381,6 +385,27 @@ export function CuePropsPane({ cue, projectId }: CuePropsPaneProps) {
             Scenery tracks: this list is what <em>changes</em> here. What the set looks like at this
             cue is every change from the top of the stack down. Each change moves on its own clock —
             blank moves with the cue&apos;s fade.
+          </p>
+        </div>
+      )}
+
+      {/* Events — the cannons' door, between Scenery and Script hooks as the Cue board draws it
+          (stage-view plan session 9). A MARKER is never gone to, so it fires nothing. */}
+      {cue.cueType !== 'MARKER' && (
+        <div className="border-t pt-3 space-y-2">
+          <Label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            <Flame className="size-3.5" />
+            Events
+          </Label>
+          <CueEventsEditor
+            projectId={projectId}
+            events={cue.events ?? EMPTY_EVENTS}
+            idPrefix={`cue-${cue.id}-events`}
+            onSave={(events) => setCueEvents({ projectId, cueId: cue.id, events }).unwrap()}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Fires only while the desk is armed. Unarmed, the GO goes and the events are skipped and
+            announced — never queued.
           </p>
         </div>
       )}

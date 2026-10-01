@@ -6,7 +6,9 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.dmx.ChannelChange
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.LayeredParkSource
 import uk.me.cormack.lighting7.dmx.ParkManager
+import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.midi.GlobalScalerState
@@ -14,6 +16,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.TriggerOutput
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
 import java.security.MessageDigest
@@ -131,6 +134,20 @@ class Show(
             }
         },
     )
+    /**
+     * Every one-shot trigger and arm channel on the rig, held by the desk above composition (stage-view
+     * plan session 9) — see [TriggerOutput]. Rebuilt on every fixture-register change.
+     */
+    val triggerOutput = TriggerOutput(fixtures).also { fixtures.registerListener(it) }
+
+    /**
+     * What the controllers consult at transmit time in place of the bare [parkManager]: park on top,
+     * the trigger output under it. Every `DbFixtureLoader.loadFixtures` call passes this. A park at a
+     * firing level on a trigger or arm channel is passed over here whatever stored it
+     * ([TriggerOutput.admitsPark]); [start] also drops the stored ones.
+     */
+    val outputSource: ParkSource = LayeredParkSource(parkManager, triggerOutput, admitTop = triggerOutput::admitsPark)
+
     val fxEngine = FxEngine(
         fixtures = fixtures,
         speedMasters = SpeedMasterBank(),
@@ -188,12 +205,27 @@ class Show(
     var isStarted: Boolean = false
         private set
 
+    /**
+     * Drop every stored park the trigger output refuses — a firing level on a one-shot trigger or
+     * its arm (stage-view plan session 9). The output already passes them over
+     * ([TriggerOutput.admitsPark]); this keeps the park list honest about it. They can only be rows
+     * stored before the Twin Shot's channels were triggers, or brought in by a sync import or a clone.
+     */
+    internal fun dropRefusedParks() {
+        for (park in parkManager.getAllParked()) {
+            val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value) ?: continue
+            org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
+            parkManager.forget(park.universe, park.channel)
+        }
+    }
+
     fun start() {
         try {
             // Park state must be loaded before controllers are constructed: controllers read
             // it via [ParkSource] on their first transmit.
             parkManager.loadFromDatabase()
-            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = parkManager)
+            DbFixtureLoader.loadFixtures(project.id.value, fixtures, state.database, parkSource = outputSource)
+            dropRefusedParks()
         } catch (e: Exception) {
             e.printStackTrace()
         }

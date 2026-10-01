@@ -97,6 +97,13 @@ interface SurfaceActions {
     fun cueStackPause(stackId: Int, stackUuid: String? = null)
     fun fireCue(cueId: Int, cueUuid: String? = null)
 
+    /**
+     * Fire one tube of a one-shot fixture (stage-view plan session 9): through the effects service,
+     * which needs the desk's arm and announces a refused press. A default so a test double that does
+     * not care about cannons need not say so.
+     */
+    fun fireTrigger(fixtureKey: String, trigger: String) {}
+
     fun toggleBlackout(): Boolean
     fun toggleGrandMaster(): Boolean
 
@@ -329,6 +336,14 @@ class DefaultSurfaceActions(
             state.show.fixtures.cueStackListChanged()
         } catch (e: Exception) {
             logger.warn("Surface FIRE CUE failed for $cueId: ${e.message}")
+        }
+    }
+
+    override fun fireTrigger(fixtureKey: String, trigger: String) {
+        try {
+            state.effectsService.fireFromSurface(fixtureKey, trigger)
+        } catch (e: Exception) {
+            logger.warn("Surface FIRE TRIGGER failed for $fixtureKey/$trigger: ${e.message}")
         }
     }
 

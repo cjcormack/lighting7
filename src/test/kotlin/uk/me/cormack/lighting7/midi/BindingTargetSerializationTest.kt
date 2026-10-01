@@ -51,6 +51,15 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `FireTrigger round trips by fixture key and trigger`() {
+        val target: BindingTarget = BindingTarget.FireTrigger(fixtureKey = "cannon", trigger = "output1")
+        val encoded = BindingTargetJson.encodeToString(target)
+        assertEquals("""{"type":"fireTrigger","fixtureKey":"cannon","trigger":"output1"}""", encoded)
+        assertEquals(target, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        assertEquals(ControlKind.BUTTON, targetControlKind(target))
+    }
+
+    @Test
     fun `Flash wraps a FixtureProperty target`() {
         val flash: BindingTarget = BindingTarget.Flash(
             target = BindingTarget.FixtureProperty("hex-1", "dimmer"),

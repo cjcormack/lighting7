@@ -570,7 +570,7 @@ class SetupTools(
             groupsByName.keys.filter { it !in groupsBefore }
         }
 
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
         state.show.fixtures.patchListChanged()
 
         val result = buildJsonObject {
@@ -630,7 +630,7 @@ class SetupTools(
             tiles to members
         }
         if (sweptTiles > 0) state.show.fixtures.buskRigChanged()
-        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+        DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
         state.show.fixtures.patchListChanged()
         return success(
             "Deleted ${wanted.size} group(s)",
@@ -1170,6 +1170,7 @@ class SetupTools(
         val layers: List<CueLayerDto>,
         val place: PromptBookRectDto?,
         val scenery: List<SceneryWrite>,
+        val events: List<CueEventWrite>,
     )
 
     private fun buildCueStack(input: JsonObject): ToolExecutionResult {
@@ -1189,11 +1190,13 @@ class SetupTools(
             val pageCount: Int?,
             val lookIds: Set<Int>,
             val elements: Map<UUID, SceneryElementInfo>,
+            val patches: Map<Int, CueEventPatchInfo>,
         )
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
             val lookIds = DaoLook.find { DaoLooks.project eq project.id }.map { it.id.value }.toSet()
             val elements = sceneryElementsOf(project)
+            val patches = cueEventPatchesOf(project)
             if (stackId != null) {
                 val stack = DaoCueStack.findById(stackId)
                 val error = when {
@@ -1202,13 +1205,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.cues?.filter { it.cueType == CueType.STANDARD.name }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, lookIds, elements)
+                Context(error, numbers, pageCount, lookIds, elements, patches)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds, elements)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds, elements, patches)
             }
         }
         context.stackError?.let { problems += it }
@@ -1258,6 +1261,10 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot carry scenery: it is never live"
                 parseToolSceneryList(it, context.elements, SceneryOwnerKind.CUE, "scenery", rowProblems)
             }.orEmpty()
+            val events = (row["events"] as? JsonArray)?.let {
+                if (marker) rowProblems += "a marker cannot carry events: it is never gone to"
+                parseToolCueEventList(it, context.patches, "events", rowProblems)
+            }.orEmpty()
             val place = row["at"]?.let { at ->
                 if (context.pageCount == null) {
                     rowProblems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
@@ -1267,7 +1274,7 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place, scenery)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place, scenery, events)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1297,6 +1304,7 @@ class SetupTools(
                 }
                 createCueChildren(cue, emptyList(), layers = spec.layers)
                 replaceCueScenery(cue, spec.scenery)
+                replaceCueEvents(cue, spec.events)
                 cue to spec
             }
             stackSet?.let { replaceStackScenery(stack, it) }

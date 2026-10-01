@@ -162,6 +162,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 stack.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     deleteCueScenery(cue.id)
+                    deleteCueEvents(cue.id)
                     removedAnchors += deletePromptBookAnchorsForCue(cue)
                     pageIds += deleteCueReferences(cue)
                     // Same reason the single-cue delete does this: a deleted cue can't be

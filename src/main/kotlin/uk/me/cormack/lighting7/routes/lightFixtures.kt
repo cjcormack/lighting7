@@ -354,6 +354,29 @@ data class SettingPropertyDescriptor(
     override val compactDisplay: String? = null
 ) : PropertyDescriptor
 
+/**
+ * A **one-shot trigger** (stage-view plan session 9, D15) — a cannon's tube. Not a control: nothing
+ * sets it. It is fired as an event (`POST …/patches/{id}/fire`, a cue event, a MIDI `FireTrigger`),
+ * only while the desk is armed, and its [armChannel] follows the desk's arm. Listed so a client can
+ * draw the cannon's panel and the DMX sheet can name the channels; a client that draws controls from
+ * the property list must skip it.
+ */
+@Serializable
+@kotlinx.serialization.SerialName("trigger")
+data class TriggerPropertyDescriptor(
+    override val name: String,
+    override val displayName: String,
+    /** The short name an event row and a button use ("A"). */
+    val label: String,
+    val channel: ChannelRef,
+    val armChannel: ChannelRef,
+    /** The arm channel's name — never a property, refused by name wherever a row names it. */
+    val armName: String,
+) : PropertyDescriptor {
+    override val category: String = "trigger"
+    override val compactDisplay: String? = null
+}
+
 @Serializable
 data class SettingOption(
     val name: String,

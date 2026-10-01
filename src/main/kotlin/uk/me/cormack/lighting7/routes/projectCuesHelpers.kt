@@ -1,6 +1,8 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.serialization.Serializable
@@ -406,6 +408,7 @@ internal fun DaoCue.toCueDetails(
         canDelete = isCurrentProject,
         scenery = cueSceneryOf(this.id).map { it.toDto() },
         trackedScenery = trackedSceneryAt(this),
+        events = cueEventsOf(this.id).map { it.toDto() },
     )
 }
 
@@ -520,6 +523,15 @@ internal fun createCueChildren(
     layers: List<CueLayerDto> = emptyList(),
 ) {
     validateCueChildren(adHocEffects, layers)?.let { throw IllegalArgumentException(it) }
+    // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
+    // problem at once, before anything is written, so the caller's transaction rolls back whole.
+    // The index is queries; build it only when some name could be refused at all.
+    if (propertyAssignments.any { TriggerIndex.mayRefuse(it.propertyName) } || adHocEffects.any { TriggerIndex.mayRefuse(it.propertyName) }) {
+        TriggerIndex.of(cue.project).check(
+            propertyAssignments.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]") } +
+                adHocEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") },
+        )
+    }
     for (layer in layers) {
         // A layer naming a record that no longer exists is dropped rather than failing the write —
         // the rule a preset application used for a deleted preset, kept when that table went. The
@@ -787,6 +799,9 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     // hook a stack GO fires is fired here too: the cue stands in for its stack's live cue, its set
     // and its tracked changes included (stage-view plan session 8).
     cueData.cueStackId?.let { state.sceneryService.onCueApplied(it, cueData.cueId, replaceAll) }
+    // And its events, through the same hook a stack GO fires (stage-view plan session 9): the caller
+    // built the cue with `buildCueGoData`, so a GO through `apply_cue` fires what a GO fires.
+    state.effectsService.onCueGo(cueData.cueId, cueData.cueLabel, cueData.goEvents)
 
     return ApplyCueResponse(effectCount = spawning.size, cueName = cueData.cueName)
 }

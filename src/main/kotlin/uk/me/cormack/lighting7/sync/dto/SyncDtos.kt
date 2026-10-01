@@ -28,6 +28,15 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v21: cue events (stage-view plan session 9). `CueJson` gains an `events` list
+    // ([CueEventJson]): a patch by uuid, the trigger's name on its fixture type, an `offsetMs` and a
+    // sort order. Empty is omitted, so a show with no cannon cues exports byte-for-byte as at v20.
+    // The writer's number moves by the sharp-edge rule: a v20 reader imports every cue without its
+    // events and its next wipe-then-export push writes them away for every peer. `minReader` stays
+    // at **5** — missing events are none. Spent tubes (`effect_tube_state`) are machine-local and
+    // never travel. Went without `FU-AUTH-ATTRIBUTION`'s columns, as v18–v20 did (plan §11 Q2).
+    // See `docs/sync-engineering.md` §"Version 21 — cue events".
+    //
     // v20: scenery on cues, stacks and Looks (stage-view plan session 8). `CueJson`, `CueStackJson`
     // and `LookJson` each gain a `scenery` list ([SceneryChangeJson]): an element by uuid, its
     // states as a nested object, and on a cue a `transitionMs`. Empty is omitted, so a show with no
@@ -169,7 +178,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 20,
+    val formatVersion: Int = 21,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -711,6 +720,23 @@ data class CueJson(
     val stomp: Boolean = false,
     /** v20: what the cue moves on GO, each change on its own clock. */
     val scenery: List<SceneryChangeJson> = emptyList(),
+    /** v21: the tubes the cue fires on GO into it, each at its offset, while the desk is armed. */
+    val events: List<CueEventJson> = emptyList(),
+)
+
+/**
+ * v21: one cue event — a one-shot trigger on a patch, fired [offsetMs] after GO into its cue. The
+ * patch by uuid, so `ExportUuidRemapper` re-points it on a clone; [trigger] is the trigger's name on
+ * the patch's fixture type (`output1`). An event at GO omits [offsetMs], as a zero sort order is
+ * omitted.
+ */
+@Serializable
+data class CueEventJson(
+    val uuid: String,
+    val patchUuid: String,
+    val trigger: String,
+    val offsetMs: Long = 0,
+    val sortOrder: Int = 0,
 )
 
 @Serializable

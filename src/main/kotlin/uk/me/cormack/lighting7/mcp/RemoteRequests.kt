@@ -50,6 +50,24 @@ fun ApplicationCall.requireScriptAccess(state: State) {
     if (!scriptsAllowed(state)) throw RemoteScriptsDisabledException()
 }
 
+/** Thrown by [requireEffectsAccess]; `plugins/ErrorHandling.kt` answers it 403 `REMOTE_EFFECTS_DISABLED`. */
+class RemoteEffectsDisabledException :
+    RuntimeException("Arming and firing are turned off for remote access. An admin can allow them in Install settings → Remote access.")
+
+/** Whether this caller may arm the desk, fire a one-shot trigger or reload one: always on the LAN, per the setting remotely. */
+fun ApplicationCall.effectsAllowed(state: State): Boolean =
+    !isRemote || state.remoteAccess.allowRemoteEffects
+
+/**
+ * Refuse an arm, a fire or a reload that came through the tunnel while Remote access's "allow arming
+ * and firing" is off (stage-view plan session 9, P2, D16) — the [requireScriptAccess] twin. A cannon
+ * spends something physical in a room a remote caller cannot see, so it is off unless an admin turns
+ * it on; on the desk's own listener both roles may arm and fire.
+ */
+fun ApplicationCall.requireEffectsAccess(state: State) {
+    if (!effectsAllowed(state)) throw RemoteEffectsDisabledException()
+}
+
 private val errorJson = Json { explicitNulls = false }
 
 /**

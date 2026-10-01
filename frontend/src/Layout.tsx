@@ -32,6 +32,8 @@ import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
 import { ReturnToFullscreenBanner } from "./components/screens/ReturnToFullscreenBanner"
 import { HandChip } from "./components/hand/HandChip"
+import { ArmedChip } from "./components/effects/ArmedChip"
+import { EffectsAnnouncer } from "./components/effects/EffectsAnnouncer"
 import { ScreensSheet, type WindowViewControls } from "./components/screens/ScreensSheet"
 import { VIEW_OPTION_VIEWPOINT } from "./lib/stageViewpoint"
 import { useWindowsBridge } from "./components/screens/useWindowsBridge"
@@ -254,6 +256,8 @@ export default function Layout() {
               </h1>
               <div className="flex-1 @[620px]:hidden" />
               <div className="flex shrink-0 items-center gap-1 overflow-x-auto sm:gap-2">
+                {/* The desk's arm, first: red, counting down, a tap disarms (stage-view session 9). */}
+                <ArmedChip />
                 <ConnectionStatus />
                 <ProgrammerIndicator />
                 {panels.map((panel) => (
@@ -321,6 +325,8 @@ export default function Layout() {
                   boundary's sibling and inside `DeskDndProvider`; `position: fixed` takes it out
                   of the scroller regardless, so it does not move with the page. */}
               <HandChip />
+              {/* A fire that did not happen is said on every window (stage-view plan session 9). */}
+              <EffectsAnnouncer />
             </main>
           </DeskDndProvider>
 

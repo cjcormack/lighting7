@@ -42,6 +42,13 @@ abstract class DmxFixture(
             }
         }
 
+        // One-shot triggers and their arm (stage-view plan session 9): not properties, so named here
+        // by hand, and marked so the DMX sheet says what a raised value on them would do.
+        for (trigger in FixtureTriggers.of(this)) {
+            channelDescriptions[trigger.channelNo] = "${trigger.spec.description} (trigger)"
+            channelDescriptions[trigger.armChannelNo] = "${trigger.spec.armDescription} (arm)"
+        }
+
         // Add element properties for multi-element fixtures
         if (this is MultiElementFixture<*>) {
             for (element in elements) {
@@ -151,6 +158,22 @@ abstract class DmxFixture(
             }
         }
 
+        // One-shot triggers, last: a client that draws controls from this list draws none for them
+        // (a trigger is fired from the cannon's panel, never set), and one that predates the kind
+        // skips a type it does not know.
+        for (trigger in FixtureTriggers.of(this)) {
+            descriptors.add(
+                TriggerPropertyDescriptor(
+                    name = trigger.name,
+                    displayName = trigger.spec.description,
+                    label = trigger.spec.label,
+                    channel = ChannelRef(trigger.universe, trigger.channelNo),
+                    armChannel = ChannelRef(trigger.universe, trigger.armChannelNo),
+                    armName = trigger.spec.armName,
+                )
+            )
+        }
+
         return descriptors
     }
 
@@ -242,6 +265,8 @@ abstract class DmxFixture(
                         MemberSettingChannel(fixtureKey = elementDescriptors[idx].key, channel = p.channel)
                     }
                 )
+                // A head never carries a trigger (they are fixture-level), and a trigger has no "all heads" control.
+                is TriggerPropertyDescriptor -> null
             }
         }
     }

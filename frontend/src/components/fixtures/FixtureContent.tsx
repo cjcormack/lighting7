@@ -11,6 +11,7 @@ import {
   SliderPropertyDescriptor,
   findColourSource,
   findDimmerProperty,
+  triggersOf,
   useFixtureTypeListQuery,
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
@@ -24,6 +25,7 @@ import { PropertyVisualizer, VirtualDimmerSlider } from './PropertyVisualizers'
 import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupPropertyVisualizers'
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { FxSection } from '../fx/FxSection'
+import { CannonPanel } from '../effects/CannonPanel'
 import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
 import { GelSwatch, useDimmerBrightness } from './GelSwatch'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
@@ -99,8 +101,10 @@ function PropertiesView({
     [fixture.elementGroupProperties],
   )
 
+  // A one-shot fixture's tubes are not controls: they get the cannon's panel (stage-view session 9).
+  const triggers = useMemo(() => triggersOf(fixture.properties), [fixture.properties])
   const hasFixtureProperties =
-    fixture.properties && fixture.properties.length > 0
+    fixture.properties && fixture.properties.length > triggers.length
   const hasElementGroupProperties =
     fixture.elementGroupProperties && fixture.elementGroupProperties.length > 0
   const hasAnyProperties = hasFixtureProperties || hasElementGroupProperties
@@ -130,6 +134,9 @@ function PropertiesView({
     <div className="space-y-4">
       {/* Surface bindings — small chip row for any controls mapped to this fixture */}
       <FixtureBoundControlsRow fixtureKey={fixture.key} />
+
+      {/* A confetti cannon's panel: loaded and spent, arm, hold to fire, reload. */}
+      {triggers.length > 0 && <CannonPanel fixtureKey={fixture.key} triggers={triggers} canFire={isEditing} />}
 
       {/* Properties - fixture-level and element-group interleaved by category */}
       {(hasAnyProperties || hasVirtualDimmer) && (
@@ -253,7 +260,7 @@ function PropertiesView({
         </>
       )}
 
-      {!hasAnyProperties && !hasElements && (
+      {!hasAnyProperties && !hasElements && triggers.length === 0 && (
         <p className="text-sm text-muted-foreground">No properties available</p>
       )}
     </div>

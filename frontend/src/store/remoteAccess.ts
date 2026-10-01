@@ -22,6 +22,8 @@ export interface TunnelSettings {
   enabled: boolean
   domain?: string | null
   allowScripts: boolean
+  /** A remote caller may arm the desk and fire or reload a one-shot trigger (stage-view session 9). Absent from an older desk. */
+  allowEffects?: boolean
   hasAuthtoken: boolean
   /** The desk's public base URL — the OAuth issuer — as it stands now. */
   publicUrl: string
@@ -41,6 +43,7 @@ export interface UpdateTunnelRequest {
   domain?: string
   authtoken?: string
   allowScripts?: boolean
+  allowEffects?: boolean
 }
 
 export const remoteAccessApi = restApi.injectEndpoints({

@@ -193,6 +193,9 @@ object FixtureTypeRegistry {
         return typeKeyToClass[typeKey]?.simpleName
     }
 
+    /** The concrete class registered for [typeKey], or null for an unknown key. */
+    fun classForTypeKey(typeKey: String): KClass<out Fixture>? = typeKeyToClass[typeKey]
+
     /** Dummy universe used for introspection — no real DMX connection needed. */
     private val dummyUniverse = Universe(0, 0)
 

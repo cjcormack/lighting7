@@ -7,6 +7,8 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoAiConversations
 import uk.me.cormack.lighting7.models.DaoCueScenery
+import uk.me.cormack.lighting7.models.DaoCueEvents
+import uk.me.cormack.lighting7.models.DaoEffectTubeStates
 import uk.me.cormack.lighting7.models.DaoCueStackScenery
 import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoStageElements
@@ -151,6 +153,8 @@ class SyncCoverageTest {
         DaoCueScenery to Disposition.Portable("cues", "scenery"),
         DaoCueStackScenery to Disposition.Portable("cueStacks", "scenery"),
         DaoLookScenery to Disposition.Portable("looks", "scenery"),
+        // v21: a cue's events (stage-view plan session 9), embedded in the cue as its scenery is.
+        DaoCueEvents to Disposition.Portable("cues", "events"),
         DaoFixturePatches to Disposition.Portable("fixturePatches"),
         // A paired dimmer's other lanterns, embedded in list order in their patch's document.
         DaoFixturePatchPlacements to Disposition.Portable("fixturePatches", "extraPlacements"),
@@ -195,6 +199,7 @@ class SyncCoverageTest {
         DaoMcpOAuthGrants to Disposition.MachineLocal("MCP OAuth grants: per-desk credentials, like sessions"),
         DaoRemoteAccessSettingsTable to Disposition.MachineLocal("this desk's ngrok tunnel: its public domain and whether it is on"),
         DaoPasswordResetTokens to Disposition.MachineLocal("short-lived local password reset tokens"),
+        DaoEffectTubeStates to Disposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
         DaoAiConversations to Disposition.Excluded("AI chat scratch history, not show content"),

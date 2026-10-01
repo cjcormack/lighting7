@@ -129,6 +129,9 @@ function channelsFor(
             { key: channelMapKey(descriptor.tiltChannel), value: parsed.tilt },
           ]
         : []
+    // The programmer never holds a one-shot trigger: the desk refuses one by name.
+    case 'trigger':
+      return []
   }
 }
 

@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -320,6 +323,10 @@ private fun applyGroupEffect(
     val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
     val distribution = EffectSpecCoercion.Strict.distribution(request.distribution)
     val elementMode = EffectSpecCoercion.Strict.elementMode(request.elementMode)
+
+    // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
+    TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
+        ?.let { throw TriggerNotStorableException(it) }
 
     // Validate property support (direct or via elements)
     if (!groupSupportsProperty(group, request.propertyName)) {

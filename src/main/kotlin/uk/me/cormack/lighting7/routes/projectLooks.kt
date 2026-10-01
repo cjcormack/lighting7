@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.application.*
@@ -887,6 +889,15 @@ private fun createLookChildren(
     rows: List<LookRowDto>,
     effects: List<LookEffectDto>,
 ) {
+    // No row and no effect may name a one-shot trigger (stage-view plan session 9, D15). Thrown, so
+    // the write's transaction rolls back whole and the route answers 400 with every problem at once.
+    // The index is queries; build it only when some name could be refused at all.
+    if (rows.any { TriggerIndex.mayRefuse(it.propertyName) } || effects.any { TriggerIndex.mayRefuse(it.propertyName) }) {
+        TriggerIndex.of(look.project).check(
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]") } +
+                effects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "effects[$i]") },
+        )
+    }
     for (row in rows) {
         DaoLookRow.new {
             this.look = look

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.coroutines.GlobalScope
@@ -53,6 +54,7 @@ class AiTools(private val state: State) {
         updateFromProgrammerTool,
         createTemplateTool,
         setSceneryTool,
+        setCueEventsTool,
     )
 
     /**
@@ -95,6 +97,7 @@ class AiTools(private val state: State) {
                 "update_from_programmer" -> executeUpdate(input)
                 "create_template" -> executeCreateTemplate(input)
                 "set_scenery" -> executeSetScenery(input)
+                "set_cue_events" -> executeSetCueEvents(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -122,6 +125,9 @@ class AiTools(private val state: State) {
         if (effectsArray.isEmpty() && sceneryArray.isNullOrEmpty()) return errorResult("Give 'effects', 'scenery', or both")
 
         val effects = effectsArray.map { parseLookEffect(it.jsonObject) }
+        // A deferred effect lands on whatever applies the Look, so it may name no one-shot trigger
+        // at all (stage-view plan session 9) — the REST write boundary's rule, every problem at once.
+        TriggerIndex.EMPTY.check(effects.mapIndexed { i, e -> TriggerIndex.RowRef(DEFERRED_TARGET_TYPE, "", e.propertyName, "effects[$i]") })
 
         val project = state.projectManager.currentProject
         val scenery = sceneryArray?.let { items ->
@@ -833,6 +839,7 @@ class AiTools(private val state: State) {
             )
         }
 
+        state.show.triggerOutput.parkRefusal(universe, channel, value.toUByte())?.let { return errorResult(it) }
         val parkManager = state.show.parkManager
         val previous = parkManager.getParkedValue(universe, channel)?.toInt()
         parkManager.park(universe, channel, value.toUByte())
@@ -919,6 +926,14 @@ class AiTools(private val state: State) {
             if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
             writes
         }.orEmpty()
+        val events = input["events"]?.jsonArray?.let { items ->
+            val problems = mutableListOf<String>()
+            val writes = transaction(state.database) {
+                parseToolCueEventList(items, cueEventPatchesOf(project), "events", problems)
+            }
+            if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
+            writes
+        }.orEmpty()
         val cue = transaction(state.database) {
             // Every cue must belong to a stack; land AI-created cues in "Unsorted" (created on
             // demand) so the operator can move them afterwards. Without this the NOT NULL FK on
@@ -932,6 +947,7 @@ class AiTools(private val state: State) {
             }
             createCueChildren(newCue, adHocEffects, layers = layers)
             replaceCueScenery(newCue, scenery)
+            replaceCueEvents(newCue, events)
             newCue
         }
         state.show.fixtures.cueListChanged()
@@ -940,7 +956,7 @@ class AiTools(private val state: State) {
         val cueId = cue.id.value
         return ToolExecutionResult(
             success = true,
-            description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes)",
+            description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events)",
             result = buildJsonObject {
                 put("cueId", cueId)
                 put("name", name)
@@ -989,8 +1005,9 @@ class AiTools(private val state: State) {
             val cue = DaoCue.findById(cueId) ?: return@transaction null
             // The one builder — this was a third hand-rolled construction, and it silently
             // dropped the cue's own property assignments and its triggers, plus every timing and
-            // speed-master field on an ad-hoc effect. See `buildCueApplyData`.
-            buildCueApplyData(cue)
+            // speed-master field on an ad-hoc effect. See `buildCueApplyData`. The GO form, so the
+            // cue's events fire through `applyCue`'s hook exactly as a stack GO fires them.
+            buildCueGoData(cue)
         } ?: return errorResult("Cue not found: $cueId")
 
         val result = applyCue(state, cueData, replaceAll)
@@ -1069,6 +1086,34 @@ class AiTools(private val state: State) {
                 stackId?.let { put("stackId", it) }
                 lookId?.let { put("lookId", it) }
                 put("changes", written.second)
+            }.toString(),
+        )
+    }
+
+    /**
+     * `set_cue_events`: one cue's whole event list, every event checked before anything is written —
+     * the REST `PUT cues/{id}/events` rule, from the tool's shape. Authoring only: arming and firing
+     * are refused to MCP by default, and no tool offers them.
+     */
+    private fun executeSetCueEvents(input: JsonObject): ToolExecutionResult {
+        val cueId = input["cueId"]?.jsonPrimitive?.intOrNull ?: return errorResult("Missing 'cueId'")
+        val items = input["events"] as? JsonArray ?: return errorResult("Missing 'events' (send [] to clear)")
+        val project = state.projectManager.currentProject
+        val problems = mutableListOf<String>()
+        val written = transaction(state.database) {
+            val cue = DaoCue.findById(cueId)?.takeIf { it.project.id == project.id }
+                ?: run { problems += "no cue $cueId in this project"; return@transaction null }
+            if (cue.cueType == CueType.MARKER.name) { problems += "cue $cueId is a MARKER, never gone to, so it fires nothing"; return@transaction null }
+            val writes = parseToolCueEventList(items, cueEventPatchesOf(project), "events", problems)
+            if (problems.isNotEmpty()) null else { replaceCueEvents(cue, writes); cue.name to writes.size }
+        } ?: return errorResult(problems.joinToString("; "))
+        state.show.fixtures.cueListChanged()
+        return ToolExecutionResult(
+            success = true,
+            description = "Set the events of cue '${written.first}': ${written.second} event(s)",
+            result = buildJsonObject {
+                put("cueId", cueId)
+                put("events", written.second)
             }.toString(),
         )
     }

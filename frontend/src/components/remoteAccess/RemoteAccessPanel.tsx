@@ -238,6 +238,29 @@ function RemoteAccessForm({ settings }: { settings: TunnelSettings }) {
         </label>
       </section>
 
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">Cannons</h3>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.allowEffects === true}
+            disabled={saving}
+            onChange={(e) => void run({ allowEffects: e.target.checked })}
+          />
+          <span>
+            Allow arming and firing over remote access
+            <span className="block text-xs text-muted-foreground">
+              A confetti cannon spends something physical in a room a remote caller cannot see. Off,
+              anyone signed in from outside can author a cue&apos;s events but cannot arm the desk, fire
+              a tube or reload one; at the desk itself every signed-in role can. The arm is the
+              operator&apos;s consent: while the desk is armed, a GO from anywhere — a remote session
+              or Claude included — fires its cue&apos;s events.
+            </span>
+          </span>
+        </label>
+      </section>
+
       {saveError != null && (
         <Alert variant="destructive">
           <TriangleAlert className="h-4 w-4" />

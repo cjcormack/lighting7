@@ -222,6 +222,34 @@ export interface Cue {
   scenery?: SceneryChange[]
   /** The scenery this cue shows without moving it — tracked from earlier cues, or the stack's set. */
   trackedScenery?: TrackedScenery[]
+  /**
+   * The tubes this cue fires on GO into it, each at its offset, while the desk is armed (stage-view
+   * plan session 9). Edited through `PUT cues/{id}/events`, never the cue's own PUT/PATCH. Never
+   * tracked: a later cue carries none of an earlier one's. Optional: the desk omits an empty list.
+   */
+  events?: CueEvent[]
+}
+
+/** One cue event: a one-shot trigger on a patch, fired [offsetMs] after GO into its cue. */
+export interface CueEvent {
+  uuid: string
+  patchId: number
+  patchUuid: string
+  fixtureKey: string
+  fixtureName: string
+  /** The trigger's name on its fixture type (`output1`). */
+  trigger: string
+  /** Its short name (`A`). */
+  triggerLabel: string
+  offsetMs: number
+  sortOrder: number
+}
+
+/** One event of a whole-list write: `PUT cues/{id}/events`. `trigger` takes a name or a label. */
+export interface CueEventWriteItem {
+  patchId: number
+  trigger: string
+  offsetMs: number
 }
 
 // Input for create/update

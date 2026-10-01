@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.DaoCueSceneryRow
+import uk.me.cormack.lighting7.models.DaoCueEvent
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoStageElement
@@ -304,6 +305,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         lengthM = 12.25
         sortOrder = 0
     }
+    // A confetti cannon (v21): its tubes are what a cue's events name.
+    val cannon = DaoFixturePatch.new {
+        this.project = project
+        universeConfig = u0
+        fixtureTypeKey = "equinox-twin-shot-mkii"
+        key = "cannon-1"; displayName = "ADV1 Twin Shot"; startChannel = 400; sortOrder = 8
+    }
     // A pair of conventionals on one dimmer (v19): a zoom profile focused off the pros, and its
     // partner a PAR can with its lamp turned — every focus field off its default on one or the other,
     // so a copier that lost any of them would show in the round-trip and clone tests.
@@ -569,6 +577,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoLookSceneryRow.new {
         look = boundLook; element = houseTabs; stateJson = encodeSceneryState(ElementStates(open = 0.75))
         sortOrder = 1
+    }
+    // v21: two events on a cue, both off the default offset, the second off the default sort order.
+    DaoCueEvent.new {
+        cue = cue1; patch = cannon; trigger = "output1"; offset = Duration.ofMillis(600L)
+    }
+    DaoCueEvent.new {
+        cue = cue1; patch = cannon; trigger = "output2"; offset = Duration.ofMillis(750L); sortOrder = 1
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"

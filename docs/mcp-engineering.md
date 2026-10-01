@@ -121,7 +121,7 @@ tab then reads *Online · https://<domain>* and shows `https://<domain>/mcp` wit
 ## Remote hardening
 
 `mcp/RemoteRequests.kt` and the call sites that read `isRemote`. On by default, not configurable
-except for scripts:
+except for scripts and the cannons:
 
 - **A desk with no accounts is closed remotely.** Bootstrap-open is a LAN convenience; from
   outside, `/api…` answers 403 `REMOTE_NEEDS_ACCOUNT`, so nobody on the internet can create the
@@ -146,6 +146,17 @@ except for scripts:
   the whole `/script-editor` service, and the AI chat's `run_lighting_script` (the chat is given
   the MCP tool list and a prompt without the script API instead). MCP never has the script tool,
   whatever this says.
+- **Arming and firing are refused remotely unless an admin allows them** (Remote access → *Allow
+  arming and firing over remote access*; stage-view plan session 9, P2, D16). A confetti cannon spends
+  something physical in a room a remote caller cannot see. Refused (`REMOTE_EFFECTS_DISABLED`,
+  `requireEffectsAccess`, the `requireScriptAccess` twin): `POST …/effects/arm`, `…/patches/{id}/fire`
+  and `…/patches/{id}/reload`. They are REST precisely so this is the only door to refuse — the
+  socket only *reports* the arm and fires (`effects.*`), and MCP offers no tool that arms or fires,
+  so it is refused by construction whatever the setting. Authoring a cue's **events** stays open
+  remotely: it is data, and an event fires only on a GO while someone at the desk has armed it.
+  **The local arm is the consent, by decision** (session 9 review): a GO from a remote session or an
+  MCP tool (`go_cue_stack`, `apply_cue`) into a cue with events fires them while the desk is armed,
+  as a GO at the desk would. What a remote caller cannot do is arm, fire a tube outright or reload.
 
 **Residual risks, known and accepted:** a remote *admin* can still bring scripts in by importing a
 project or pulling a cloud-sync repo, which the gate does not cover — an admin account is trusted
@@ -299,7 +310,7 @@ prompt-book markup from a script and lighting notes.
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`. Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
-| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
 
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
@@ -314,6 +325,18 @@ with the cue's fade). Each is checked against the element's kind exactly as the 
 `open` only on a drawn drape, `trimM` only on a flown piece, an element named twice refused, every
 problem at once and nothing written. The schema text says scenery **tracks** — list only what
 changes — and that a Look's scenery shows while it is live, above every cue; templates carry none.
+
+**Events** (stage-view plan session 9). `create_cue` and `build_cue_stack` (per cue) carry an
+`events` list, and `set_cue_events` replaces one cue's whole list (`cueId`, `events`; `[]` clears),
+so "both cannons at the curtain call, 0.6 and 0.9 s after GO" is one call. One item is `{fixture,
+trigger, offsetSeconds?}`: a fixture with one-shot triggers by key or name (`describe_rig` lists them,
+`one-shot triggers=output1 (A),output2 (B)`), the tube by name or label, and the offset from GO
+(0–600 s, default 0). Checked as the REST `PUT …/events` checks it (`parseToolCueEventList` beside
+`parseCueEventList`, `models/cueEvents.kt`): a fixture with no trigger, an unknown tube, a tube named
+twice refused, every problem at once and nothing written. The schema text says what an event is —
+fired on GO into the cue only, never tracked or previewed, and only while the operator has armed the
+desk — and that arming and firing are the operator's: **no tool arms or fires**, and a row naming a
+trigger as a property is refused by name (`TRIGGER_NOT_STORABLE`) by every tool that writes rows.
 
 Four decisions shape them:
 

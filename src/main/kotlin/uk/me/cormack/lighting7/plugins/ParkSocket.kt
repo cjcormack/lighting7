@@ -4,6 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.state.State
 
+private val parkLogger = org.slf4j.LoggerFactory.getLogger("ParkSocket")
+
 // ─── Inbound ────────────────────────────────────────────────────────────
 
 @Serializable
@@ -53,6 +55,13 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
     when (message) {
         is ParkStateInMessage -> scope.send(buildParkStateMessage(scope.state))
         is ParkChannelInMessage -> {
+            // A park at a firing level on a one-shot trigger or its arm would be a held fire (stage-view
+            // plan session 9). No reply channel on this frame: refused with a log, and the park list
+            // the client already holds stays as it was.
+            scope.state.show.triggerOutput.parkRefusal(message.universe, message.channel, message.value)?.let {
+                parkLogger.warn("parkChannel refused: {}", it)
+                return
+            }
             // Nothing to nudge: controllers consult the ParkSource at transmit time, so the
             // park lands on the next frame of the affected universe.
             parkManager.park(message.universe, message.channel, message.value)

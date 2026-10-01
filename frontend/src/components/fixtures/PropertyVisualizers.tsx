@@ -491,6 +491,9 @@ export function PropertyVisualizer({ property, fixtureKey, isEditing = false, di
           dimmerProp={dimmerProp}
         />
       )
+    // A one-shot trigger is not a control: it fires from the cannon's panel (`CannonPanel`).
+    case 'trigger':
+      return null
   }
 }
 

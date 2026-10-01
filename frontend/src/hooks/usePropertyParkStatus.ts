@@ -19,6 +19,9 @@ function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] {
       return [property.panChannel, property.tiltChannel]
     case "setting":
       return [property.channel]
+    // A one-shot trigger and its arm can be parked — below the fire level, as a lock-out.
+    case "trigger":
+      return [property.channel, property.armChannel]
   }
 }
 
