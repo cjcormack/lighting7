@@ -23,6 +23,9 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
+import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
+import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
+import uk.me.cormack.lighting7.fixture.lantern.focus
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
@@ -118,6 +121,25 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid kindOverride"))
                 return@withProject
             }
+            val requestedFocus = request.focus()
+            val focusRangeProblems = requestedFocus.rangeProblems()
+            if (focusRangeProblems.isNotEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(focusRangeProblems.joinToString("; ")))
+                return@withProject
+            }
+            // The kind is derived from a lantern named, and the focus checked against the type.
+            val focusWrite = resolvePatchFocus(
+                typeKey = typeInfo.typeKey,
+                stored = LanternFocus(),
+                storedKindOverride = null,
+                sent = LanternFocus.KEYS.toSet(),
+                parsed = requestedFocus,
+                kindOverrideSent = true,
+                kindOverride = normalisedKindOverride,
+            ).getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid focus"))
+                return@withProject
+            }
 
             val result = transaction(state.database) {
                 val rigging = request.riggingUuid?.let { resolveRiggingForProject(project, it) }
@@ -187,11 +209,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.baseRollDeg = request.baseRollDeg
                     this.beamAngleDeg = request.beamAngleDeg
                     this.gelCode = normalisedGelCode
-                    this.kindOverride = normalisedKindOverride
+                    this.kindOverride = focusWrite.kindOverride
                     this.lengthM = request.lengthM
                     this.stageHidden = request.stageHidden
                     this.infrastructure = request.infrastructure
                 }
+                if (!focusWrite.focus.isEmpty) patch.focus = focusWrite.focus
 
                 // Assign to group if specified
                 request.groupName?.takeIf { it.isNotBlank() }?.let { groupName ->
@@ -271,6 +294,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
             } else null
 
+            val parsedFocus = LanternFocus.parse(body).getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid focus"))
+                return@withProject
+            }
+
             var sweptCellTiles = 0
             var infrastructureFlipped = false
             // Set when the refusal is the request's fault rather than a conflict with stored state.
@@ -292,6 +320,22 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         refusedAsBadRequest = true
                         return@transaction Pair<FixturePatchDto?, String?>(null, it)
                     }
+                }
+
+                // The lantern, its focus and the kind it derives, as this write leaves them — and every
+                // placement's focus against them. The request's fault when refused, so a 400; before
+                // the first write below for the rigging's reason.
+                val focusWrite = resolvePatchFocus(
+                    patch.fixtureTypeKey, patch.focus, patch.kindOverride, body, parsedFocus, normalisedKindOverride,
+                ).getOrElse {
+                    refusedAsBadRequest = true
+                    return@transaction Pair<FixturePatchDto?, String?>(null, it.message)
+                }
+                placementInputs?.let { inputs ->
+                    placementFocusRefusal(patch.fixtureTypeKey, focusWrite.kindOverride, focusWrite.focus.lanternType, inputs)
+                }?.let {
+                    refusedAsBadRequest = true
+                    return@transaction Pair<FixturePatchDto?, String?>(null, it)
                 }
 
                 // Another head's number: a conflict with stored state, so a 409. Before the first
@@ -348,8 +392,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 if ("gelCode" in body) {
                     patch.gelCode = normaliseGelCode(body["gelCode"].nullableString())
                 }
-                if ("kindOverride" in body) {
-                    patch.kindOverride = normalisedKindOverride
+                if ("kindOverride" in body || body.keys.any { it in LanternFocus.KEYS }) {
+                    patch.kindOverride = focusWrite.kindOverride
+                    patch.focus = focusWrite.focus
+                    if (placementInputs == null) {
+                        clearStaleInheritedZooms(patch.fixtureTypeKey, focusWrite.kindOverride, focusWrite.focus.lanternType, extraPlacementsOf(patch))
+                    }
                 }
                 // Non-nullable column: an explicit JSON null is read as "show it".
                 if ("stageHidden" in body) {
@@ -461,6 +509,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val prepared = mutableListOf<Pair<Int, JsonObject>>()
             val failures = mutableListOf<BulkPlacementFailure>()
             val placementInputsById = mutableMapOf<Int, List<PlacementInput>>()
+            // Every entry's focus fields, range-checked; the entry's keys say which it carries.
+            val focusById = mutableMapOf<Int, LanternFocus>()
             // Only the entries that carry the key — a null value is an explicit clear.
             val headNumbersById = mutableMapOf<Int, Int?>()
             for (entry in request.updates) {
@@ -513,6 +563,17 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                     headNumbersById[patchId] = parsed.getOrThrow()
                 }
+                val focusParsed = LanternFocus.parse(entry)
+                val focusError = focusParsed.exceptionOrNull()?.message
+                if (focusError != null) {
+                    if (request.atomic) {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse("patch $patchId: $focusError"))
+                        return@withProject
+                    }
+                    failures.add(BulkPlacementFailure(patchId, focusError))
+                    continue
+                }
+                focusById[patchId] = focusParsed.getOrThrow()
                 if ("extraPlacements" in entry) {
                     val parsed = parseExtraPlacements(entry["extraPlacements"])
                     val placementError = parsed.exceptionOrNull()?.message
@@ -560,7 +621,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 //
                 // Validating first means an atomic abort returns with a clean entity
                 // cache, so the commit that follows writes nothing.
-                val kindOverrides = mutableMapOf<Int, String?>()
+                val focusWrites = mutableMapOf<Int, PatchFocusWrite>()
                 val placementRiggingsById = mutableMapOf<Int, Map<String, DaoRigging>>()
                 val fatal = mutableListOf<BulkPlacementFailure>()
                 for ((patchId, entry) in prepared) {
@@ -585,14 +646,28 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                             continue
                         }
                     }
-                    if ("kindOverride" in entry) {
+                    val normalisedKind = if ("kindOverride" in entry) {
                         try {
-                            kindOverrides[patchId] = normaliseKindOverride(entry["kindOverride"].nullableString())
+                            normaliseKindOverride(entry["kindOverride"].nullableString())
                         } catch (e: IllegalArgumentException) {
                             fatal.add(BulkPlacementFailure(patchId, e.message ?: "Invalid kindOverride"))
                             continue
                         }
+                    } else null
+                    val focusWrite = resolvePatchFocus(
+                        target.fixtureTypeKey, target.focus, target.kindOverride, entry,
+                        focusById[patchId] ?: LanternFocus(), normalisedKind,
+                    ).getOrElse {
+                        fatal.add(BulkPlacementFailure(patchId, it.message ?: "Invalid focus"))
+                        continue
                     }
+                    placementInputsById[patchId]?.let { inputs ->
+                        placementFocusRefusal(target.fixtureTypeKey, focusWrite.kindOverride, focusWrite.focus.lanternType, inputs)
+                    }?.let {
+                        fatal.add(BulkPlacementFailure(patchId, it))
+                        continue
+                    }
+                    focusWrites[patchId] = focusWrite
                     placementInputsById[patchId]?.let { inputs ->
                         val resolved = placementRiggingsFrom(riggingByUuid, inputs)
                         val placementError = resolved.exceptionOrNull()?.message
@@ -638,8 +713,16 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("lengthM" in entry) patch.lengthM = entry["lengthM"].nullableDouble()
                     if (patchId in headNumbersById) patch.headNumber = headNumbersById[patchId]
                     if ("gelCode" in entry) patch.gelCode = normaliseGelCode(entry["gelCode"].nullableString())
-                    // Already normalised (and validated) in the pass above.
-                    if ("kindOverride" in entry) patch.kindOverride = kindOverrides[patchId]
+                    // Already resolved (and validated) in the pass above: the kind a lantern derives, too.
+                    if ("kindOverride" in entry || entry.keys.any { it in LanternFocus.KEYS }) {
+                        focusWrites[patchId]?.let { w ->
+                            patch.kindOverride = w.kindOverride
+                            patch.focus = w.focus
+                            if (patchId !in placementInputsById) {
+                                clearStaleInheritedZooms(patch.fixtureTypeKey, w.kindOverride, w.focus.lanternType, extraPlacementsOf(patch))
+                            }
+                        }
+                    }
                     if ("stageHidden" in entry) {
                         patch.stageHidden = entry["stageHidden"].nullableBoolean() ?: false
                     }
@@ -834,6 +917,24 @@ data class FixturePatchDto(
     /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
     val infrastructure: Boolean = false,
     /**
+     * The lantern, by its id in `GET /lanterns`, for a type that takes one (`acceptsLantern`); null
+     * is the library's default for the kind. With one named, [kindOverride] is the lantern's kind.
+     * This and the six after it are the unit's **focus data** — see `docs/fixtures-engineering.md`
+     * §"Lanterns and focus".
+     */
+    val lanternType: String? = null,
+    /** The field it is zoomed to, within the lantern's range; null is the lantern's default. */
+    val zoomDeg: Double? = null,
+    /** A PAR's lamp turn, which turns its oval; null is 0. */
+    val lampRotationDeg: Double? = null,
+    /** Four blades — top, bottom, left, right — or null for all out. */
+    val shutters: List<ShutterBlade>? = null,
+    val gateRotationDeg: Double? = null,
+    /** Open fraction, 1 open; null is open. */
+    val iris: Double? = null,
+    /** Sharp 0 to soft 1; null is the lantern's own edge. */
+    val focusSoftness: Double? = null,
+    /**
      * The other places this fixture hangs — a paired dimmer's second lantern, SL beside SR.
      * One fixture to control, several to draw. In order; empty for almost every patch.
      */
@@ -873,7 +974,19 @@ data class CreatePatchRequest(
     val stageHidden: Boolean = false,
     /** Infrastructure, not a lighting fixture: hidden everywhere but the Patches and Channels views. */
     val infrastructure: Boolean = false,
-)
+    /** Only for a type that takes a lantern (`acceptsLantern`); see [FixturePatchDto.lanternType]. */
+    val lanternType: String? = null,
+    val zoomDeg: Double? = null,
+    val lampRotationDeg: Double? = null,
+    val shutters: List<ShutterBlade>? = null,
+    val gateRotationDeg: Double? = null,
+    val iris: Double? = null,
+    val focusSoftness: Double? = null,
+) {
+    fun focus() = LanternFocus(
+        lanternType?.trim()?.takeIf { it.isNotEmpty() }, zoomDeg, lampRotationDeg, shutters, gateRotationDeg, iris, focusSoftness,
+    )
+}
 
 /**
  * PUT body keys that are pure patch metadata — present on `fixture_patches`
@@ -902,6 +1015,14 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "stageHidden",
     // A paired fixture's other placements — its own table, which the loader never reads.
     "extraPlacements",
+    // The lantern and its focus (stage-view plan session 7) — drawn, never built from.
+    "lanternType",
+    "zoomDeg",
+    "lampRotationDeg",
+    "shutters",
+    "gateRotationDeg",
+    "iris",
+    "focusSoftness",
 )
 
 /**
@@ -922,6 +1043,7 @@ private fun DaoFixturePatch.toDto(
     val typeInfo = FixtureTypeRegistry.typeInfoForKey(fixtureTypeKey)
     val groupRefs = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq this@toDto.id }
         .map { FixturePatchGroupRef(id = it.group.id.value, name = it.group.name) }
+    val f = focus
     return FixturePatchDto(
         id = id.value,
         key = key,
@@ -950,6 +1072,13 @@ private fun DaoFixturePatch.toDto(
         lengthM = lengthM,
         stageHidden = stageHidden,
         infrastructure = infrastructure,
+        lanternType = f.lanternType,
+        zoomDeg = f.zoomDeg,
+        lampRotationDeg = f.lampRotationDeg,
+        shutters = f.shutters,
+        gateRotationDeg = f.gateRotationDeg,
+        iris = f.iris,
+        focusSoftness = f.focusSoftness,
         extraPlacements = placements.map { it.toDto() },
     )
 }

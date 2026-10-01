@@ -1,11 +1,24 @@
 import type { FixturePatch } from '../../../api/patchApi'
 import {
+  effectiveLantern,
+  EMPTY_LANTERNS,
+  focusFeatures,
+  LANTERN_FAMILY_KIND,
+  lanternFieldDeg,
+  softnessForFocus,
+  type Lantern,
+  type LanternFocus,
+  type LanternIndex,
+  type ShutterBlade,
+} from '../../../lib/lanterns'
+import {
   findColourSource,
   findDimmerProperty,
   findTiltProperty,
   resolveFixtureKind,
   type ElementDescriptor,
   type Fixture,
+  type FixtureBodyInfo,
   type FixtureKind,
   type FixtureTypeInfo,
 } from '../../../store/fixtures'
@@ -21,20 +34,25 @@ export { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE }
  * and so `emitterNeedsFor` (which sizes the shared emitters) and `FixtureModel` (which draws) read
  * one statement of it.
  *
- * **Where the archetype comes from today.** Session 7 gives a generic dimmer a lantern from the
- * library and `@FixtureType` a `body` descriptor; until then the desk knows a fixture's kind (the
- * patch's `kindOverride` over the type's `kind`), its type key and model, whether it tilts, its
- * elements and its dimensions, and that is all this reads:
+ * **Where the archetype comes from** (stage-view plan session 7), first match wins:
  *
- * - a tilt axis, or kind `MOVING_HEAD` / `SCANNER`, is a **mover** — a Source Four Revolution is a
- *   `PROFILE` that tilts, so it is a mover with a profile head. The head is a spot, a wash or a
- *   profile by the type key and model's words, else by the type's beam edge; a mover with several
- *   coloured elements is a bar of heads;
- * - a Twin Shot is the **cannon**;
- * - otherwise by kind: `PROFILE` a profile barrel (a box profile where the type's name says
- *   Cantata or Prelude — none does today), `FRESNEL` a fresnel, `PAR` a can, `WASH` a flood,
- *   `STRIP` a batten (a **tape** where the type takes a per-install length), `BLINDER` a blinder,
- *   `LASER` and `EFFECT` an effect box, `GENERIC` a house downlight.
+ * 1. **The lantern.** A type that takes one (`acceptsLantern` — a generic dimmer) is drawn as the
+ *    lantern it names from the library (`GET /lanterns`), else the library's default for its kind
+ *    (a PROFILE a Source Four 19°, a FRESNEL a Cantata F, a PAR a Par 64 CP62, a GENERIC a house
+ *    downlight). Its size, lens, field, zoom, oval and accessories are the lantern's, and its focus
+ *    — zoom, the focus knob, blades, gate, iris, a PAR's lamp turn — is the patch's (or the
+ *    placement's) own.
+ * 2. **The type's declared body** (`@FixtureType.body`): its archetype, and a mover's head.
+ * 3. **The words**, as before the library existed: a tilt axis, or kind `MOVING_HEAD` / `SCANNER`,
+ *    is a **mover** — a Source Four Revolution is a `PROFILE` that tilts — whose head is a spot, a
+ *    wash or a profile by the type key and model's words, else by the type's beam edge, and a mover
+ *    with several coloured elements is a bar of heads; a Twin Shot is the **cannon**; otherwise by
+ *    kind: `PROFILE` a profile barrel (a box profile where the type's name says Cantata or Prelude),
+ *    `FRESNEL` a fresnel, `PAR` a can, `WASH` a flood, `STRIP` a batten (a **tape** where the type
+ *    takes a per-install length), `BLINDER` a blinder, `LASER` and `EFFECT` an effect box,
+ *    `GENERIC` a house downlight.
+ *
+ * A declared mover's head it does not name still comes from the words.
  */
 
 export type Archetype =
@@ -98,11 +116,27 @@ export interface BodySpec {
   /** Edge softness from the family: profiles and spots hard (low), everything else soft. */
   softness: number
   accessories: {
-    /** Shutter handles on the gate — drawn, and the frame session 7's blades will cut in. */
+    /** Shutter handles on the gate — drawn, and the frame the blades cut in. */
     shutters: boolean
     barnDoors: boolean
     colourFrame: boolean
   }
+  /** The lantern it is drawn as, for a type hung with one; null otherwise. */
+  lantern: Lantern | null
+  /**
+   * An oval beam's narrow axis over its wide one, as the tangents of their half-angles — a PAR
+   * lamp's (`Lantern.oval`); null for a round beam. The field angle is the wide axis's.
+   */
+  ovalRatio: number | null
+  /**
+   * How far the beam's frame is turned about its axis, degrees: the gate's turn where the lantern
+   * has blades, plus the lamp's where it has an oval. The blades and the oval turn with it.
+   */
+  frameTurnDeg: number
+  /** The four blades where the lantern has shutters or barn doors and one is in; null otherwise. */
+  blades: ShutterBlade[] | null
+  /** The iris's open fraction where the lantern has one, else 1. A DMX iris closes it further. */
+  iris: number
   /**
    * Everything the geometry is built from, spelled out: two specs with one key share every
    * instanced part (`StageBodies`), and a body rebuilds only when it changes.
@@ -174,7 +208,7 @@ const BOX_PROFILE_WORDS = /cantata|prelude|harmony/i
 const SPOT_WORDS = /spot|beam|mac-250|mac 250|profile/i
 const WASH_WORDS = /wash/i
 
-/** The facts the body is chosen from — every one of them something the desk sends today. */
+/** The facts the body is chosen from — every one of them something the desk sends. */
 export interface BodyInput {
   kind: FixtureKind
   typeKey: string
@@ -189,6 +223,12 @@ export interface BodyInput {
   lengthM: number | null
   widthM: number | null
   heightM: number | null
+  /** The lantern it is hung with (named, else its kind's default), for a type that takes one. */
+  lantern?: Lantern | null
+  /** The type's declared body; null or absent leaves it to the kind. */
+  body?: FixtureBodyInfo | null
+  /** The lantern's focus — the patch's own, or a placement's. */
+  focus?: LanternFocus | null
 }
 
 /** Whether an element has a colour or a level of its own, so it is drawn as a cell. */
@@ -207,15 +247,22 @@ export function colourElementsOf(fixture: Fixture | undefined): number[] {
   return out
 }
 
-/** Read a fixture as the facts a body is chosen from. */
+/**
+ * Read a fixture as the facts a body is chosen from. The kind is the lantern's where it is hung
+ * with one — derived, as the desk derives `kindOverride` from it — else the patch's override over
+ * the type's (`RigBriefing.isMovingHead` reads it in the same order).
+ */
 export function bodyInputFor(
-  patch: Pick<FixturePatch, 'kindOverride'>,
+  patch: Pick<FixturePatch, 'kindOverride'> & LanternFocus,
   fixture: Fixture | undefined,
   fixtureType: FixtureTypeInfo | undefined,
   lengthM: number | null,
+  lanterns: LanternIndex = EMPTY_LANTERNS,
 ): BodyInput {
+  const ownKind = resolveFixtureKind(patch.kindOverride, fixtureType?.kind)
+  const lantern = fixtureType?.acceptsLantern === true ? effectiveLantern(lanterns, patch.lanternType, ownKind) : null
   return {
-    kind: resolveFixtureKind(patch.kindOverride, fixtureType?.kind),
+    kind: lantern ? LANTERN_FAMILY_KIND[lantern.family] : ownKind,
     typeKey: fixtureType?.typeKey ?? fixture?.typeKey ?? '',
     typeName: [fixtureType?.manufacturer, fixtureType?.model].filter(Boolean).join(' '),
     hasTilt: findTiltProperty(fixture?.properties) != null,
@@ -226,21 +273,40 @@ export function bodyInputFor(
     lengthM,
     widthM: fixtureType?.widthM ?? null,
     heightM: fixtureType?.heightM ?? null,
+    lantern,
+    body: fixtureType?.body ?? null,
+    focus: patch,
   }
 }
 
-/** The archetype and, for a mover, its head. */
+const ARCHETYPES: ReadonlySet<string> = new Set<Archetype>([
+  'profile', 'boxProfile', 'fresnel', 'par', 'flood', 'downlight', 'mover', 'batten', 'blinder', 'effect', 'cannon', 'tape',
+])
+const MOVER_HEADS: ReadonlySet<string> = new Set<MoverHead>(['spot', 'wash', 'profile', 'bar'])
+
+/** A mover's head from the words — the fallback when nothing declares one. */
+function guessHead(input: BodyInput, words: string): MoverHead {
+  if (input.colourElements.length >= 2) return 'bar'
+  if (input.kind === 'PROFILE') return 'profile'
+  if (WASH_WORDS.test(words)) return 'wash'
+  if (SPOT_WORDS.test(words)) return 'spot'
+  return input.beamEdge === 'HARD' ? 'spot' : 'wash'
+}
+
+/** The archetype and, for a mover, its head: the lantern's, else the type's body, else the words. */
 export function archetypeFor(input: BodyInput): { archetype: Archetype; head: MoverHead | null } {
   const words = `${input.typeKey} ${input.typeName}`
+  if (input.lantern) return { archetype: input.lantern.archetype, head: null }
+  const declared = input.body?.archetype
+  if (declared && ARCHETYPES.has(declared)) {
+    const archetype = declared as Archetype
+    if (archetype !== 'mover') return { archetype, head: null }
+    const head = input.body?.head
+    return { archetype, head: head && MOVER_HEADS.has(head) ? (head as MoverHead) : guessHead(input, words) }
+  }
   if (/twin-shot|twin shot/i.test(words)) return { archetype: 'cannon', head: null }
   if (input.hasTilt || input.kind === 'MOVING_HEAD' || input.kind === 'SCANNER') {
-    let head: MoverHead
-    if (input.colourElements.length >= 2) head = 'bar'
-    else if (input.kind === 'PROFILE') head = 'profile'
-    else if (WASH_WORDS.test(words)) head = 'wash'
-    else if (SPOT_WORDS.test(words)) head = 'spot'
-    else head = input.beamEdge === 'HARD' ? 'spot' : 'wash'
-    return { archetype: 'mover', head }
+    return { archetype: 'mover', head: guessHead(input, words) }
   }
   switch (input.kind) {
     case 'PROFILE':
@@ -315,12 +381,17 @@ function disc(y: number, r: number): Cell {
  */
 export function bodySpecFor(input: BodyInput): BodySpec {
   const { archetype, head } = archetypeFor(input)
+  const lantern = input.lantern ?? null
   const [dl, dw, dh] = DEFAULT_DIMS[archetype]
-  let L = dim(input.lengthM, dl)
-  let W = dim(input.widthM, dw)
-  let H = dim(input.heightM, dh)
+  let L = dim(lantern?.lengthM ?? input.lengthM, dl)
+  let W = dim(lantern?.widthM ?? input.widthM, dw)
+  let H = dim(lantern?.heightM ?? input.heightM, dh)
   // A lantern's barrel is its length; its diameter the larger of its other two.
   const D = Math.max(W, H)
+  // The lens the lantern (or the type's body) declares, where one does: its radius, else null.
+  const declaredLens = lantern?.lensDiameterM ?? input.body?.lensDiameterM ?? null
+  const lensR = (fallback: number) =>
+    declaredLens != null && Number.isFinite(declaredLens) && declaredLens > 0 ? Math.min(declaredLens / 2, D * 0.49) : fallback
   let cells: Cell[] = []
   let emitAxis: 1 | -1 = -1
   let yoke = true
@@ -328,22 +399,22 @@ export function bodySpecFor(input: BodyInput): BodySpec {
 
   switch (archetype) {
     case 'profile':
-      cells = [disc(-L / 2, D * 0.33)]
+      cells = [disc(-L / 2, lensR(D * 0.33))]
       accessories.shutters = true
       accessories.colourFrame = true
       break
     case 'boxProfile':
-      cells = [disc(-L / 2, D * 0.3)]
+      cells = [disc(-L / 2, lensR(D * 0.3))]
       accessories.shutters = true
       accessories.colourFrame = true
       break
     case 'fresnel':
-      cells = [disc(-L / 2, D * 0.34)]
+      cells = [disc(-L / 2, lensR(D * 0.34))]
       accessories.barnDoors = true
       accessories.colourFrame = true
       break
     case 'par':
-      cells = [disc(-L / 2, D * 0.42)]
+      cells = [disc(-L / 2, lensR(D * 0.42))]
       accessories.colourFrame = true
       break
     case 'flood':
@@ -361,7 +432,7 @@ export function bodySpecFor(input: BodyInput): BodySpec {
       accessories.colourFrame = true
       break
     case 'downlight':
-      cells = [disc(-L / 2, D * 0.4)]
+      cells = [disc(-L / 2, lensR(D * 0.4))]
       yoke = false
       break
     case 'mover': {
@@ -371,12 +442,12 @@ export function bodySpecFor(input: BodyInput): BodySpec {
       const headLen = H * (head === 'wash' ? 0.34 : head === 'bar' ? 0.2 : 0.52)
       const front = headLen / 2
       if (head === 'bar') {
-        // A bar of heads: a row across the yoke, all tilting together until session 7's
-        // independent heads (FU-STAGE-INDEPENDENT-HEADS).
+        // A bar of heads: a row across the yoke, all tilting together until
+        // FU-STAGE-INDEPENDENT-HEADS gives each head a tilt of its own.
         cells = cellRow(input.colourElements, W * 0.9, front, 'disc', 0, headLen * 0.4)
       } else {
         const r = headDia * (head === 'wash' ? 0.42 : head === 'profile' ? 0.33 : 0.28)
-        cells = [disc(front, r)]
+        cells = [disc(front, declaredLens != null && declaredLens > 0 ? Math.min(declaredLens / 2, headDia * 0.49) : r)]
       }
       break
     }
@@ -410,7 +481,32 @@ export function bodySpecFor(input: BodyInput): BodySpec {
       ? true
       : archetype === 'tape' || archetype === 'cannon'
         ? false
-        : input.acceptsBeamAngle
+        : input.acceptsBeamAngle || lantern != null
+
+  // A lantern's parts are its own: a PC is a fresnel body without the barn doors, a Par 16 has no
+  // colour frame, a profile's iris and shutters are what it can take.
+  const focus = input.focus ?? null
+  const features = focusFeatures(lantern)
+  if (lantern) {
+    const a = lantern.accessories ?? {}
+    accessories.shutters = a.shutters === true
+    accessories.barnDoors = a.barnDoors === true
+    accessories.colourFrame = a.colourFrame === true
+  }
+  const blades =
+    features.blades && focus?.shutters?.length === 4 && focus.shutters.some((b) => (b?.depth ?? 0) > 0)
+      ? focus.shutters.map((b) => ({ depth: b?.depth ?? 0, angleDeg: b?.angleDeg ?? 0 }))
+      : null
+  const oval = lantern?.oval ?? null
+  const ovalRatio =
+    oval && oval.wideDeg > 0 && oval.narrowDeg > 0
+      ? Math.tan((Math.min(oval.narrowDeg, oval.wideDeg) * Math.PI) / 360) / Math.tan((oval.wideDeg * Math.PI) / 360)
+      : null
+  const frameTurnDeg =
+    (features.blades ? finite(focus?.gateRotationDeg) : 0) + (ovalRatio != null ? finite(focus?.lampRotationDeg) : 0)
+  const iris = features.iris && focus?.iris != null && Number.isFinite(focus.iris) ? Math.min(1, Math.max(0, focus.iris)) : 1
+  const softness =
+    softnessForFocus(lantern, focus?.focusSoftness) ?? (lantern?.family === 'PC' ? PC_SOFTNESS : SOFTNESS[family])
 
   const spec: Omit<BodySpec, 'key'> = {
     archetype,
@@ -422,11 +518,23 @@ export function bodySpecFor(input: BodyInput): BodySpec {
     heightM: H,
     cells,
     emits,
-    fieldDeg: FIELD_DEG[family],
-    softness: SOFTNESS[family],
+    fieldDeg: lantern ? lanternFieldDeg(lantern, focus?.zoomDeg) : FIELD_DEG[family],
+    softness,
     accessories,
+    lantern,
+    ovalRatio,
+    frameTurnDeg,
+    blades,
+    iris,
   }
   return { ...spec, key: specKey(spec) }
+}
+
+/** A PC's edge: between a profile's and a fresnel's (the prototype's `SOFT.PC`). */
+const PC_SOFTNESS = 0.55
+
+function finite(v: number | null | undefined): number {
+  return v != null && Number.isFinite(v) ? v : 0
 }
 
 function specKey(spec: Omit<BodySpec, 'key'>): string {

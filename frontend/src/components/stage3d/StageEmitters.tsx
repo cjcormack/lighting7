@@ -111,8 +111,11 @@ export interface BeamWrite {
   near: number
   /** Open fraction of the field. */
   iris: number
-  /** 0 a round aperture; else a segment's depth over its width. */
+  /** 0 a round aperture; > 0 a segment's depth over its width; < 0 an oval's narrow over wide. */
   aspect: number
+  /** The four blades, `beamMask.ts`'s `packBlades` — (top, bottom) and (left, right); 0, 0 for none. */
+  bladesA: number
+  bladesB: number
   /** Bitmask of the regions this beam can reach, from the CPU cone-vs-sphere cull. */
   shadowMask: number
 }
@@ -210,11 +213,9 @@ export function dirtyGroups(b: BuiltEmitters): DirtyGroup[] {
         b.volumeDir,
         b.volumeRight,
         b.volumeColor,
-        b.volumeOpacity,
-        b.volumeCosHalfAngle,
         b.volumeFx,
-        b.volumeMask,
         b.volumeShape,
+        b.volumeGate,
       ],
     },
   ]
@@ -422,13 +423,14 @@ export interface BuiltEmitters {
   volumeOrigin: InstancedBufferAttribute
   volumeDir: InstancedBufferAttribute
   volumeRight: InstancedBufferAttribute
+  /** (r, g, b, opacity) per beam. */
   volumeColor: InstancedBufferAttribute
-  volumeOpacity: InstancedBufferAttribute
-  volumeCosHalfAngle: InstancedBufferAttribute
   volumeFx: InstancedBufferAttribute
-  volumeMask: InstancedBufferAttribute
   /** (apex → aperture, iris, aspect, unused) per beam. */
   volumeShape: InstancedBufferAttribute
+  /** (cos of the half-field, shadow mask, the two packed blade words — `beamMask.ts`'s
+   *  `packBlades`) per beam. */
+  volumeGate: InstancedBufferAttribute
 
   /** One row per light, in the layout's slot order. */
   lights: LightTable
@@ -450,21 +452,20 @@ export function buildEmitters(
   const volumeOrigin = vec3InstAttr(beamCap)
   const volumeDir = vec3InstAttr(beamCap)
   const volumeRight = vec3InstAttr(beamCap)
-  const volumeColor = vec3InstAttr(beamCap)
-  const volumeOpacity = floatInstAttr(beamCap)
-  const volumeCosHalfAngle = floatInstAttr(beamCap)
+  const volumeColor = vec4InstAttr(beamCap)
   const volumeFx = vec4InstAttr(beamCap)
-  const volumeMask = floatInstAttr(beamCap)
   const volumeShape = vec4InstAttr(beamCap)
+  const volumeGate = vec4InstAttr(beamCap)
+  // Seven attributes here plus three's position, normal and uv and the instance matrix's four make
+  // fourteen of WebGL's guaranteed sixteen — `beamShaders.ts` says why they are packed: a program
+  // with a seventeenth does not link (ANGLE: "Too many attributes"), and every beam goes dark.
   volumeGeo.setAttribute('aBeamOrigin', volumeOrigin)
   volumeGeo.setAttribute('aBeamDir', volumeDir)
   volumeGeo.setAttribute('aBeamRight', volumeRight)
   volumeGeo.setAttribute('aColor', volumeColor)
-  volumeGeo.setAttribute('aOpacity', volumeOpacity)
-  volumeGeo.setAttribute('aCosHalfAngle', volumeCosHalfAngle)
   volumeGeo.setAttribute('aBeamFx', volumeFx)
-  volumeGeo.setAttribute('aShadowMask', volumeMask)
   volumeGeo.setAttribute('aBeamShape', volumeShape)
+  volumeGeo.setAttribute('aBeamGate', volumeGate)
 
   const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
   volumeMesh.frustumCulled = false
@@ -485,11 +486,9 @@ export function buildEmitters(
     volumeDir,
     volumeRight,
     volumeColor,
-    volumeOpacity,
-    volumeCosHalfAngle,
     volumeFx,
-    volumeMask,
     volumeShape,
+    volumeGate,
     lights: new LightTable(layout.totalLights),
   }
 }
@@ -498,13 +497,6 @@ function vec3InstAttr(count: number): InstancedBufferAttribute {
   return new InstancedBufferAttribute(new Float32Array(count * 3), 3)
 }
 
-function floatInstAttr(count: number): InstancedBufferAttribute {
-  return new InstancedBufferAttribute(new Float32Array(count), 1)
-}
-
-// Beam-shaping params packed as one vec4 (edge, goboSlot, goboAngle, focusDist) rather than four
-// scalars: the volume program is near the 16-attribute floor guaranteed by WebGL2, and one
-// attribute means one needsUpdate flip.
 function vec4InstAttr(count: number): InstancedBufferAttribute {
   return new InstancedBufferAttribute(new Float32Array(count * 4), 4)
 }
@@ -595,12 +587,10 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeOrigin.setXYZ(i, w.apex.x, w.apex.y, w.apex.z)
       b.volumeDir.setXYZ(i, w.dir.x, w.dir.y, w.dir.z)
       b.volumeRight.setXYZ(i, w.right.x, w.right.y, w.right.z)
-      b.volumeColor.setXYZ(i, w.color.r, w.color.g, w.color.b)
-      b.volumeOpacity.setX(i, w.opacity)
-      b.volumeCosHalfAngle.setX(i, w.cosHalf)
+      b.volumeColor.setXYZW(i, w.color.r, w.color.g, w.color.b, w.opacity)
       b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
-      b.volumeMask.setX(i, w.shadowMask)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, 0)
+      b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
     },
 
     writeLight(slot, light, row) {

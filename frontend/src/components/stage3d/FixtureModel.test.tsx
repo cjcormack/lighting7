@@ -4,6 +4,7 @@ import { render } from '@testing-library/react'
 import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { ColourSync, composeBeamHull, lensLocalMatrix, pixelsPerMetre, resolveCellColour, staticHeadQuaternion } from './FixtureModel'
 import { apexDistanceM } from './bodies/archetype'
+import { beamMask, packBlades } from './beamMask'
 import { bodyShownFor, LOD_BILLBOARD_BELOW_PX, LOD_SIMPLE_BELOW_PX } from './bodies/StageBodies'
 import { fromThree } from '../../lib/stageCoords'
 import { longAxisLighting } from '../../lib/fixtureLength'
@@ -281,5 +282,139 @@ describe('the size a body is drawn at', () => {
     const ortho = new OrthographicCamera(-5, 5, 5, -5, 0.1, 100)
     ortho.zoom = 2
     expect(pixelsPerMetre(ortho, 800, 999)).toBeCloseTo(160, 9)
+  })
+})
+
+/**
+ * The beam's cross-section frame, as the surface shader builds it (`scene/surfaceShader.ts`): `u`
+ * the head's right axis turned by the frame's turn, `v = axis × u`, normalised so the field edge is
+ * at 1 — and an oval's (or a segment's) `v` divided by `|aspect|`. The GLSL is the authority; this is
+ * its arithmetic, so the tests below read the rig the way the pool does.
+ */
+function beamUv(
+  point: Vector3,
+  apex: Vector3,
+  dir: Vector3,
+  right: Vector3,
+  fieldDeg: number,
+  aspect = 0,
+): [number, number] {
+  const v = point.clone().sub(apex)
+  const axial = v.dot(dir)
+  const bx = right.clone().addScaledVector(dir, -right.dot(dir)).normalize()
+  const by = new Vector3().crossVectors(dir, bx)
+  const tanHalf = Math.tan((fieldDeg * Math.PI) / 360)
+  const uv: [number, number] = [v.dot(bx) / (axial * tanHalf), v.dot(by) / (axial * tanHalf)]
+  if (aspect !== 0) uv[1] /= Math.abs(aspect)
+  return uv
+}
+
+describe("a lantern's focus, through the frame the pool and the haze share", () => {
+  const head = (yaw: number, pitch: number, roll: number) =>
+    new Matrix4()
+      .makeRotationFromEuler(new Euler(0, MathUtils.degToRad(yaw), 0))
+      .multiply(
+        new Matrix4().makeRotationFromQuaternion(
+          staticHeadQuaternion(MathUtils.degToRad(pitch), MathUtils.degToRad(roll), true),
+        ),
+      )
+  const axes = (m: Matrix4) => ({
+    dir: new Vector3(0, -1, 0).transformDirection(m),
+    right: new Vector3(1, 0, 0).transformDirection(m),
+  })
+
+  it("puts the top of the beam up for a level lantern, whichever way it faces, and turns it with roll", () => {
+    for (const yaw of [0, 90, 180, -136]) {
+      const { dir, right } = axes(head(yaw, 0, 0))
+      const by = new Vector3().crossVectors(dir, right.clone().addScaledVector(dir, -right.dot(dir)).normalize())
+      // three's +Y is up: the top blade (+v) cuts the top of the light.
+      expect(by.y).toBeCloseTo(1, 9)
+      // And +u is the left of someone behind the lantern looking along the beam.
+      const viewersRight = new Vector3().crossVectors(dir, new Vector3(0, 1, 0))
+      expect(right.dot(viewersRight)).toBeCloseTo(-1, 9)
+    }
+    // Rolled 90°, the frame — and every blade in it — has turned about the beam with the lantern.
+    const { dir, right } = axes(head(0, 0, 90))
+    const by = new Vector3().crossVectors(dir, right)
+    expect(Math.abs(by.y)).toBeLessThan(1e-9)
+  })
+
+  it('cuts a straight edge on the floor with a shuttered profile', () => {
+    // A 19° profile 6 m up and 4 m back, aimed down at the floor, its top blade a third in.
+    const { dir, right } = axes(head(180, 50, 0))
+    const apex = new Vector3(0, 6, 4)
+    const [a, b] = packBlades([
+      { depth: 21 / 63, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+    ])
+    const lit = (x: number, z: number) => {
+      const [u, v] = beamUv(new Vector3(x, 0, z), apex, dir, right, 19)
+      return beamMask(u, v, 0, 1, 0.04, a, b)
+    }
+    // For several lines across the pool, find where the light ends along the floor's depth: with the
+    // blade in, that edge is where the pool stops before its field circle would.
+    const edgeAt = (x: number) => {
+      let lo = -6
+      let hi = 4
+      // March from the lit middle towards the far edge, then bisect the transition.
+      const centre = apex.clone().addScaledVector(dir, 6 / -dir.y)
+      let z = centre.z
+      while (lit(x, z) > 0.5 && z > lo) z -= 0.02
+      lo = z
+      hi = z + 0.02
+      for (let i = 0; i < 40; i++) {
+        const mid = (lo + hi) / 2
+        if (lit(x, mid) > 0.5) hi = mid
+        else lo = mid
+      }
+      return (lo + hi) / 2
+    }
+    const xs = [-0.4, -0.2, 0, 0.2, 0.4]
+    const edges = xs.map(edgeAt)
+    // Collinear: a straight edge, not the field's arc.
+    const slope = (edges[4] - edges[0]) / (xs[4] - xs[0])
+    for (let i = 0; i < xs.length; i++) {
+      expect(edges[i]).toBeCloseTo(edges[0] + slope * (xs[i] - xs[0]), 3)
+    }
+    // Without the blade the same march finds the field's circle, which is not straight.
+    const [a0, b0] = packBlades(null)
+    const openEdge = (x: number) => {
+      const centre = apex.clone().addScaledVector(dir, 6 / -dir.y)
+      let z = centre.z
+      const on = (zz: number) => {
+        const [u, v] = beamUv(new Vector3(x, 0, zz), apex, dir, right, 19)
+        return beamMask(u, v, 0, 1, 0.04, a0, b0)
+      }
+      while (on(z) > 0.5 && z > -20) z -= 0.02
+      return z
+    }
+    const open = xs.map(openEdge)
+    expect(Math.abs(open[0] - open[2])).toBeGreaterThan(0.02)
+    // The blade took light away: its edge is inside the open field.
+    expect(edges[2]).toBeGreaterThan(open[2])
+  })
+
+  it("turns an oval PAR's pool with its lamp", () => {
+    // A CP62, 44 × 21, straight down from 5 m: the pool is wide along the frame's u.
+    const { dir, right } = axes(head(0, 90, 0))
+    const apex = new Vector3(0, 5, 0)
+    const ratio = Math.tan((21 * Math.PI) / 360) / Math.tan((44 * Math.PI) / 360)
+    const reach = 5 * Math.tan((44 * Math.PI) / 360) * 0.85
+    const along = (r: Vector3, p: Vector3) => {
+      const [u, v] = beamUv(p, apex, dir, r, 44, -ratio)
+      return beamMask(u, v, -ratio, 1, 0.3)
+    }
+    const wide = new Vector3(reach, 0, 0)
+    const across = new Vector3(0, 0, reach)
+    // Unturned, the pool reaches the point along x and not the one along z.
+    expect(along(right, wide)).toBeGreaterThan(0.2)
+    expect(along(right, across)).toBe(0)
+    // With the lamp turned 90°, the director turns the frame's right axis about the beam — and the
+    // oval turns with it.
+    const turned = right.clone().applyAxisAngle(dir, Math.PI / 2)
+    expect(along(turned, wide)).toBe(0)
+    expect(along(turned, across)).toBeGreaterThan(0.2)
   })
 })

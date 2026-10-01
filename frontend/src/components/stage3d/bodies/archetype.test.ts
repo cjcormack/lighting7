@@ -6,6 +6,14 @@ import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../../stor
 import { chan, colourProp, element, sliderProp } from '../../../test/fixtureFactories'
 import { bodySpecOf } from '../emitterNeeds'
 import { apexDistanceM, archetypeFor, bodyInputFor, lightRuns, MAX_CELLS, SOFTNESS, type BodyInput } from './archetype'
+import { indexLanterns, type Lantern } from '../../../lib/lanterns'
+// The desk's own library resource, read straight from the backend's tree — so the lanterns this
+// test hangs are the ones the desk ships, and a datasheet fix there is a fix here.
+import library from '../../../../../src/main/resources/lanterns/library.json'
+
+const LANTERNS = indexLanterns(library as Lantern[])
+const DIMMER = type({ typeKey: 'generic-dimmer', kind: 'GENERIC', acceptsBeamAngle: true, acceptsLantern: true })
+const dimmer = fixture({ typeKey: 'generic-dimmer' })
 
 function type(over: Partial<FixtureTypeInfo>): FixtureTypeInfo {
   return {
@@ -254,5 +262,125 @@ describe('light runs', () => {
       const covered = runs.flatMap(([a, b]) => Array.from({ length: b - a }, (_, i) => a + i))
       expect(covered).toEqual(Array.from({ length: n }, (_, i) => i))
     }
+  })
+})
+
+describe('the lantern library decides a conventional', () => {
+  const spec = (patch: Record<string, unknown>) =>
+    bodySpecOf({ kindOverride: null, lengthM: null, ...patch }, dimmer, DIMMER, LANTERNS)
+
+  it("draws the kind's default where the dimmer names no lantern", () => {
+    expect(spec({ kindOverride: 'PROFILE' }).lantern?.id).toBe('s4-19')
+    expect(spec({ kindOverride: 'FRESNEL' }).lantern?.id).toBe('cantata-f')
+    expect(spec({ kindOverride: 'PAR' }).lantern?.id).toBe('par64-cp62')
+    expect(spec({}).lantern?.id).toBe('downlight')
+  })
+
+  it('draws the lantern it names, over its kind', () => {
+    const s = spec({ kindOverride: 'PROFILE', lanternType: 'rama-175' })
+    expect(s.archetype).toBe('fresnel')
+    expect(s.accessories.barnDoors).toBe(true)
+    expect(bodyInputFor({ kindOverride: 'PROFILE', lanternType: 'rama-175' }, dimmer, DIMMER, null, LANTERNS).kind).toBe(
+      'FRESNEL',
+    )
+    // A PC is the fresnel body without the barn doors, and a harder edge.
+    const pc = spec({ lanternType: 'prelude-pc' })
+    expect(pc.archetype).toBe('fresnel')
+    expect(pc.accessories.barnDoors).toBe(false)
+    expect(pc.softness).toBeLessThan(spec({ lanternType: 'rama-175' }).softness)
+  })
+
+  it("passes a Source Four 19°'s cone through the lens at the lens's width", () => {
+    const s = spec({ lanternType: 's4-19' })
+    expect(s.fieldDeg).toBe(19)
+    const lens = s.cells[0]
+    expect(lens.halfWidthM).toBeCloseTo(0.085, 9)
+    // The apex behind it is the lamp, about half a metre back, and the cone there is the lens.
+    const near = apexDistanceM(lens.halfWidthM, s.fieldDeg)
+    expect(near).toBeGreaterThan(0.45)
+    expect(near).toBeLessThan(0.55)
+    expect(near * Math.tan((s.fieldDeg * Math.PI) / 360)).toBeCloseTo(0.085, 9)
+  })
+
+  it('zooms within the range, and keeps its own field without one', () => {
+    expect(spec({ lanternType: 's4-zoom-25-50' }).fieldDeg).toBe(35)
+    expect(spec({ lanternType: 's4-zoom-25-50', zoomDeg: 42 }).fieldDeg).toBe(42)
+    // A stored zoom past the range is drawn at the range's end, never beyond.
+    expect(spec({ lanternType: 's4-zoom-25-50', zoomDeg: 70 }).fieldDeg).toBe(50)
+    expect(spec({ lanternType: 's4-19', zoomDeg: 30 }).fieldDeg).toBe(19)
+  })
+
+  it("takes an oval from a PAR lamp, and turns the frame by the lamp's turn", () => {
+    const par = spec({ lanternType: 'par64-cp62', lampRotationDeg: 30 })
+    expect(par.fieldDeg).toBe(44)
+    expect(par.ovalRatio).toBeCloseTo(Math.tan((21 * Math.PI) / 360) / Math.tan((44 * Math.PI) / 360), 9)
+    expect(par.frameTurnDeg).toBe(30)
+    // A profile has no oval, so a stale lamp turn left from a PAR turns nothing.
+    expect(spec({ lanternType: 's4-19', lampRotationDeg: 30 }).frameTurnDeg).toBe(0)
+  })
+
+  it("carries a profile's blades, gate and iris, and drops what the lantern cannot take", () => {
+    const blades = [
+      { depth: 0.3, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0.1, angleDeg: -10 },
+      { depth: 0, angleDeg: 0 },
+    ]
+    const profile = spec({ lanternType: 's4-19', shutters: blades, gateRotationDeg: 12, iris: 0.6, focusSoftness: 1 })
+    expect(profile.blades).toEqual(blades)
+    expect(profile.frameTurnDeg).toBe(12)
+    expect(profile.iris).toBe(0.6)
+    // The focus knob softens a profile, within a profile's range.
+    expect(profile.softness).toBeGreaterThan(spec({ lanternType: 's4-19', focusSoftness: 0 }).softness)
+    // A PAR has neither blades nor an iris: the same focus data draws nothing on it.
+    const par = spec({ lanternType: 'par64-cp62', shutters: blades, gateRotationDeg: 12, iris: 0.6 })
+    expect(par.blades).toBeNull()
+    expect(par.frameTurnDeg).toBe(0)
+    expect(par.iris).toBe(1)
+    // Blades all out are no blades at all.
+    expect(spec({ lanternType: 's4-19', shutters: blades.map(() => ({ depth: 0, angleDeg: 5 })) }).blades).toBeNull()
+  })
+
+  it('is only for a type that takes a lantern — a DMX fixture keeps its own body', () => {
+    const hex = type({ typeKey: 'hex', kind: 'PAR', acceptsBeamAngle: true })
+    const s = bodySpecOf({ kindOverride: null, lengthM: null, lanternType: 's4-19' }, fixture({ typeKey: 'hex' }), hex, LANTERNS)
+    expect(s.lantern).toBeNull()
+    expect(s.archetype).toBe('par')
+  })
+
+  it("sizes the body by the lantern's own dimensions", () => {
+    const s = spec({ lanternType: 's4-19' })
+    expect(s.lengthM).toBe(0.64)
+    expect(s.widthM).toBe(0.26)
+  })
+})
+
+describe("a type's declared body decides before its words", () => {
+  it('takes the archetype and the head the type declares', () => {
+    expect(archetypeFor(input({ kind: 'MOVING_HEAD', body: { archetype: 'mover', head: 'wash' } }))).toEqual({
+      archetype: 'mover',
+      head: 'wash',
+    })
+    // The words would say spot; the declaration says wash, and wins.
+    expect(
+      archetypeFor(input({ kind: 'MOVING_HEAD', typeKey: 'x-spot', body: { archetype: 'mover', head: 'wash' } })).head,
+    ).toBe('wash')
+    expect(archetypeFor(input({ kind: 'EFFECT', body: { archetype: 'cannon' } })).archetype).toBe('cannon')
+  })
+
+  it("falls back to the words for a head it leaves out, and ignores an archetype it does not know", () => {
+    expect(archetypeFor(input({ kind: 'MOVING_HEAD', typeKey: 'mac-250', body: { archetype: 'mover' } })).head).toBe(
+      'spot',
+    )
+    expect(archetypeFor(input({ kind: 'PAR', body: { archetype: 'hologram' } })).archetype).toBe('par')
+  })
+
+  it('draws a declared lens diameter', () => {
+    const s = bodySpecOf(
+      { kindOverride: null, lengthM: null },
+      fixture({ properties: [TILT] }),
+      type({ kind: 'MOVING_HEAD', acceptsBeamAngle: true, body: { archetype: 'mover', head: 'spot', lensDiameterM: 0.1 } }),
+    )
+    expect(s.cells[0].halfWidthM).toBeCloseTo(0.05, 9)
   })
 })

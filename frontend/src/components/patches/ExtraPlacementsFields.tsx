@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Crosshair, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +12,10 @@ import { mirroredPlacement, type PlacementGeometry } from '@/lib/extraPlacements
 import { PatchPlacementFields } from './PatchPlacementFields'
 import { FixtureLengthField } from './FixtureLengthField'
 import { cn } from '@/lib/utils'
+import { effectiveLantern, focusFields, focusSummary, zoomFor, type Lantern, type LanternIndex } from '@/lib/lanterns'
+import type { FixtureKind } from '@/store/fixtures'
+import { LanternPicker } from '@/components/lanterns/LanternPicker'
+import { FocusCard } from '@/components/lanterns/FocusCard'
 
 interface Props {
   projectId: number
@@ -25,6 +29,12 @@ interface Props {
    * `fixtureM` is the length one without its own takes (the fixture's, else the type default).
    */
   segmentLength?: { fixtureM: number | null }
+  /**
+   * Set for a type hung with a lantern (a generic dimmer): each entry is then a lantern of its own
+   * (stage-view plan D9) — a type from the library, or the fixture's where it names none — and is
+   * focused on its own (D14).
+   */
+  lantern?: { lanterns: LanternIndex; kind: FixtureKind; fixtureLantern: Lantern | null }
 }
 
 /**
@@ -36,7 +46,9 @@ interface Props {
  * for the plot. Every stage view draws each one, lit from the fixture's channels. They are moved
  * here rather than by dragging on the plot, where a drag moves the fixture's own placement.
  */
-export function ExtraPlacementsFields({ projectId, primary, value, onChange, segmentLength }: Props) {
+export function ExtraPlacementsFields({ projectId, primary, value, onChange, segmentLength, lantern }: Props) {
+  // Which entry's focus card is open, by its React key; one at a time keeps the form short.
+  const [focusing, setFocusing] = useState<string | null>(null)
   const segments = segmentLength != null
   const atCap = value.length >= MAX_EXTRA_PLACEMENTS
   const replace = (index: number, next: PatchPlacementInput) =>
@@ -124,6 +136,56 @@ export function ExtraPlacementsFields({ projectId, primary, value, onChange, seg
                 value={placement}
                 onChange={(geometry) => replace(index, { ...placement, ...geometry })}
               />
+              {lantern && (() => {
+                const drawn = effectiveLantern(lantern.lanterns, placement.lanternType, lantern.kind) ?? null
+                const own = placement.lanternType ? drawn : lantern.fixtureLantern
+                const open = focusing === keys[index]
+                return (
+                  <div className="space-y-2">
+                    <LanternPicker
+                      id={`${idPrefix}-lantern`}
+                      value={placement.lanternType}
+                      onChange={(lanternType) => {
+                        const next = lanternType
+                          ? effectiveLantern(lantern.lanterns, lanternType, lantern.kind)
+                          : lantern.fixtureLantern
+                        replace(index, { ...placement, lanternType, zoomDeg: zoomFor(next, placement.zoomDeg) })
+                      }}
+                      lanterns={lantern.lanterns}
+                      inherited={lantern.fixtureLantern}
+                      inheritWord="Same as the fixture"
+                    />
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        Focus · {focusSummary(own, placement)}
+                      </p>
+                      <Button
+                        type="button"
+                        variant={open ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-7"
+                        aria-expanded={open}
+                        aria-label={`Focus ${placement.label?.trim() || `lantern ${index + 2}`}`}
+                        onClick={() => setFocusing(open ? null : keys[index])}
+                      >
+                        <Crosshair className="size-3.5" />
+                        Focus
+                      </Button>
+                    </div>
+                    {open && (
+                      <div className="rounded-md border border-border p-3">
+                        <FocusCard
+                          units={[{ key: keys[index], label: placement.label?.trim() || `Lantern ${index + 2}`, lantern: own, focus: placement }]}
+                          active={0}
+                          onActiveChange={() => {}}
+                          onChange={(_, next) => replace(index, { ...placement, ...focusFields(next) })}
+                          note="Focused on its own: the fixture's other lanterns keep theirs."
+                        />
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {segmentLength && (
                 <FixtureLengthField
                   id={`${idPrefix}-length`}

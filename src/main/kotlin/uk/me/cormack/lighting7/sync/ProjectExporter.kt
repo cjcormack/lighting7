@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -321,6 +322,13 @@ class ProjectExporter(private val state: State) {
                     lengthM = p.lengthM,
                     stageHidden = p.stageHidden,
                     infrastructure = p.infrastructure,
+                    lanternType = p.lanternType,
+                    zoomDeg = p.zoomDeg,
+                    lampRotationDeg = p.lampRotationDeg,
+                    shutters = LanternFocus.shuttersFromText(p.shutters),
+                    gateRotationDeg = p.gateRotationDeg,
+                    iris = p.iris,
+                    focusSoftness = p.focusSoftness,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(
                             uuid = pl.uuid.toString(),
@@ -333,6 +341,13 @@ class ProjectExporter(private val state: State) {
                             basePitchDeg = pl.basePitchDeg,
                             baseRollDeg = pl.baseRollDeg,
                             lengthM = pl.lengthM,
+                            lanternType = pl.lanternType,
+                            zoomDeg = pl.zoomDeg,
+                            lampRotationDeg = pl.lampRotationDeg,
+                            shutters = LanternFocus.shuttersFromText(pl.shutters),
+                            gateRotationDeg = pl.gateRotationDeg,
+                            iris = pl.iris,
+                            focusSoftness = pl.focusSoftness,
                         )
                     },
                 )

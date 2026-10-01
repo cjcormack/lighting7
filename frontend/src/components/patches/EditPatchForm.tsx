@@ -7,7 +7,10 @@ import { headNumberFieldError, parseHeadNumberDraft } from '@/lib/headNumber'
 import { SheetHeader, SheetBody, SheetFooter } from '@/components/ui/sheet'
 import { Trash2, X } from 'lucide-react'
 import { useUpdatePatchMutation, useDeletePatchMutation, usePatchGroupListQuery } from '@/store/patches'
-import { useFixtureTypeListQuery } from '@/store/fixtures'
+import { resolveFixtureKind, useFixtureTypeListQuery } from '@/store/fixtures'
+import { useLanternIndex } from '@/hooks/useLanternIndex'
+import { effectiveLantern, focusFields, FOCUS_KEYS, LANTERN_FAMILY_KIND, type LanternFocus } from '@/lib/lanterns'
+import { LanternBox } from './LanternBox'
 import { KindOverrideField } from './KindOverrideField'
 import { GroupComboInput } from './GroupComboInput'
 import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacementFields'
@@ -17,7 +20,7 @@ import { GelPickerField } from './GelPickerField'
 import { FixtureLengthField, fixtureLengthValid } from './FixtureLengthField'
 import { acceptsLength as typeAcceptsLength } from '@/lib/fixtureLength'
 import type { FixturePatch, PatchPlacementInput } from '@/api/patchApi'
-import { placementListsEqual, toPlacementInput } from '@/lib/extraPlacements'
+import { focusEqual, placementListsEqual, toPlacementInput } from '@/lib/extraPlacements'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 
 export interface EditPatchFormHandle {
@@ -65,6 +68,9 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [beamAngleDeg, setBeamAngleDeg] = useState<number | null>(patch.beamAngleDeg)
   const [gelCode, setGelCode] = useState<string | null>(patch.gelCode)
   const [kindOverride, setKindOverride] = useState<string | null>(patch.kindOverride)
+  // The lantern and its focus (stage-view plan session 7), for a type hung with one.
+  const [focus, setFocus] = useState<Required<LanternFocus>>(() => focusFields(patch))
+  const focusChanged = !focusEqual(focus, patch)
   const [lengthM, setLengthM] = useState<number | null>(patch.lengthM ?? null)
   const [stageHidden, setStageHidden] = useState(patch.stageHidden)
   const [infrastructure, setInfrastructure] = useState(patch.infrastructure ?? false)
@@ -79,6 +85,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const [deletePatch, { isLoading: isDeleting }] = useDeletePatchMutation()
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const lanterns = useLanternIndex()
 
   useImperativeHandle(ref, () => ({
     // Merged, not replaced: the Stage view's drag sends position, yaw and pitch, and a roll it does
@@ -101,10 +108,17 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   // placements, takes a length of its own. Every other type's length is the model's.
   const acceptsLength = typeAcceptsLength(fixtureType)
   const typeLengthM = fixtureType?.lengthM ?? null
-  // Only expose the override picker for fixture types whose declared kind is
-  // GENERIC — those are the ones (generic dimmers, UV) that ship without a
-  // shape hint. Other types already render distinctly per kind.
+  // A conventional dimmer is hung with a lantern, and the lantern is its shape: the Lantern box
+  // replaces *Beam & Gel* and *3D shape* for it, and the desk derives its kind from the lantern.
+  const acceptsLantern = fixtureType?.acceptsLantern === true
+  // Only expose the override picker for types whose declared kind is GENERIC — a UV fixture ships
+  // without a shape hint, and a dimmer feeds whatever is plugged into it. Every other type already
+  // renders distinctly per kind. A dimmer with a lantern named takes the lantern's kind, which the
+  // desk derives, so the picker shows it locked; with none named (a hazer on a dimmer, a practical)
+  // the kind is the operator's to choose.
   const allowsKindOverride = (fixtureType?.kind ?? 'GENERIC') === 'GENERIC'
+  const namedLantern = acceptsLantern && focus.lanternType ? (lanterns.byId.get(focus.lanternType) ?? null) : null
+  const ownKind = namedLantern ? LANTERN_FAMILY_KIND[namedLantern.family] : resolveFixtureKind(kindOverride, fixtureType?.kind)
   const beamGelTitle =
     acceptsBeamAngle && acceptsGel ? 'Beam & Gel' : acceptsBeamAngle ? 'Beam' : 'Gel'
 
@@ -137,6 +151,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     lengthM !== (patch.lengthM ?? null) ||
     stageHidden !== patch.stageHidden ||
     infrastructure !== (patch.infrastructure ?? false) ||
+    focusChanged ||
     extraPlacementsChanged
 
   const handleSave = async () => {
@@ -154,10 +169,18 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     if ((placement.baseRollDeg ?? null) !== (patch.baseRollDeg ?? null)) body.baseRollDeg = placement.baseRollDeg ?? null
     if (beamAngleDeg !== patch.beamAngleDeg) body.beamAngleDeg = beamAngleDeg
     if (gelCode !== patch.gelCode) body.gelCode = gelCode
-    if (kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
+    // Beside a named lantern the desk derives the kind, and refuses another, so none is sent.
+    if (!namedLantern && kindOverride !== patch.kindOverride) body.kindOverride = kindOverride
     if (lengthM !== (patch.lengthM ?? null)) body.lengthM = lengthM
     if (stageHidden !== patch.stageHidden) body.stageHidden = stageHidden
     if (infrastructure !== (patch.infrastructure ?? false)) body.infrastructure = infrastructure
+    if (focusChanged) {
+      // Only the fields that moved: an absent key is unchanged on the desk.
+      const stored = focusFields(patch)
+      for (const k of FOCUS_KEYS) {
+        if (!focusEqual({ [k]: focus[k] }, { [k]: stored[k] })) body[k] = focus[k]
+      }
+    }
     if (extraPlacementsChanged) body.extraPlacements = extraPlacements
     // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
     // operator loses their edits with no indication the form still holds unsaved changes.
@@ -290,15 +313,40 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
           </div>
         )}
 
+        {acceptsLantern && (
+          <LanternBox
+            idPrefix="edit"
+            lanterns={lanterns}
+            kind={ownKind}
+            focus={focus}
+            onFocusChange={(next) => {
+              // Clearing the lantern clears the kind it derived, as the desk does on the write.
+              if (focus.lanternType && !next.lanternType && patch.lanternType) setKindOverride(null)
+              setFocus(focusFields(next))
+            }}
+            gelCode={gelCode}
+            onGelChange={setGelCode}
+            beamAngleDeg={beamAngleDeg}
+            onBeamAngleChange={setBeamAngleDeg}
+            placements={extraPlacements}
+            onPlacementsChange={setExtraPlacements}
+          />
+        )}
+
         <ExtraPlacementsFields
           projectId={projectId}
           primary={placement}
           value={extraPlacements}
           onChange={setExtraPlacements}
           segmentLength={acceptsLength ? { fixtureM: lengthM ?? typeLengthM } : undefined}
+          lantern={
+            acceptsLantern
+              ? { lanterns, kind: ownKind, fixtureLantern: effectiveLantern(lanterns, focus.lanternType, ownKind) }
+              : undefined
+          }
         />
 
-        {(acceptsBeamAngle || acceptsGel) && (
+        {!acceptsLantern && (acceptsBeamAngle || acceptsGel) && (
           <div className="space-y-2.5 rounded-md border border-border p-3">
             <p className="text-xs font-medium text-muted-foreground">{beamGelTitle}</p>
             {acceptsBeamAngle && (
@@ -321,8 +369,9 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
         {allowsKindOverride && (
           <KindOverrideField
             id="edit-kind-override"
-            value={kindOverride}
+            value={namedLantern ? ownKind : kindOverride}
             onChange={setKindOverride}
+            lockedBy={namedLantern?.name ?? null}
           />
         )}
 

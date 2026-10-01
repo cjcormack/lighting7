@@ -28,4 +28,13 @@ annotation class FixtureType(
      *  [kind] default in [FixtureTypeRegistry]. */
     val beamShape: BeamShape = BeamShape.INHERIT,
     val beamEdge: BeamEdge = BeamEdge.INHERIT,
+    /** The body the Stage view draws — archetype, a mover's head, lens diameter ([FixtureBody]).
+     *  Absent, the view defaults it from the [kind]. */
+    val body: FixtureBody = FixtureBody(),
+    /** A patch of this type names a **lantern** from the library (`fixture/lantern/`) and carries
+     *  its focus — shutters, gate, iris, focus, zoom — per placement. Only a conventional dimmer
+     *  does: a DMX type carries its own [body], and a fixture whose optics are on channels drives
+     *  them from its looks (D14). Every other type refuses the fields at the write boundary. See
+     *  `docs/fixtures-engineering.md` §"Lanterns and focus". */
+    val acceptsLantern: Boolean = false,
 )

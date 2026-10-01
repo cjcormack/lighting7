@@ -1,7 +1,15 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
+import type { LanternFocus } from "../lib/lanterns";
 
-export interface FixturePatch {
+/**
+ * A patch carries its lantern and focus (`LanternFocus`, stage-view plan session 7) for a type
+ * that takes one (`FixtureTypeInfo.acceptsLantern` — a generic dimmer): which lantern from
+ * `GET /lanterns` it is, and how it was focused — zoom, a PAR's lamp turn, four blades, gate
+ * rotation, iris and the focus knob. With a lantern named the desk derives `kindOverride` from it.
+ * Every field optional: an older desk omits them.
+ */
+export interface FixturePatch extends LanternFocus {
   id: number;
   key: string;
   displayName: string;
@@ -67,9 +75,11 @@ export interface FixturePatch {
 /**
  * One of a patch's extra placements. Same geometry and rigging-relative rule as the patch's own
  * `stageX`… fields; it carries none of the fixture's own facts (type, beam angle, gel, kind), which
- * a paired lantern shares with the primary one.
+ * a paired lantern shares with the primary one — except its **lantern and focus** (D9, D14): a pair
+ * on one dimmer is two lanterns, focused separately. A null `lanternType` takes the patch's; the six
+ * focus fields are this lantern's own and never inherited.
  */
-export interface PatchPlacement {
+export interface PatchPlacement extends LanternFocus {
   uuid: string;
   /** Short name for this lantern on the plot, e.g. "SR". */
   label: string | null;
@@ -155,9 +165,17 @@ export interface CreatePatchRequest {
   lengthM?: number | null;
   stageHidden?: boolean;
   infrastructure?: boolean;
+  /** Only for a type that takes a lantern (`acceptsLantern`). */
+  lanternType?: string | null;
+  zoomDeg?: number | null;
+  lampRotationDeg?: number | null;
+  shutters?: LanternFocus['shutters'];
+  gateRotationDeg?: number | null;
+  iris?: number | null;
+  focusSoftness?: number | null;
 }
 
-export interface UpdatePatchRequest {
+export interface UpdatePatchRequest extends LanternFocus {
   displayName?: string;
   /** Null unnumbers the head; a number another head holds is a 409. */
   headNumber?: number | null;

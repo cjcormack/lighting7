@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -123,6 +124,13 @@ import uk.me.cormack.lighting7.models.asDuration
 // would import every rolled body flat and write the roll away on its next push; MIN stays at 5
 // because both fields default to null.
 //
+// v19 added the lantern and its focus to `FixturePatchJson` and `PatchPlacementJson` —
+// `lanternType`, `zoomDeg`, `lampRotationDeg`, `shutters`, `gateRotationDeg`, `iris`,
+// `focusSoftness` (stage-view plan session 7). SUPPORTED moved for v14's reason — a v18 reader would
+// import every lantern unfocused as its kind's default and write the focus away on its next push;
+// MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
+// consulted, so an id a newer desk's library holds survives a round trip through this one.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -148,7 +156,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 18
+internal const val SUPPORTED_FORMAT_VERSION = 19
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -692,6 +700,13 @@ class ProjectImporter(private val state: State) {
             lengthM = p.lengthM
             stageHidden = p.stageHidden
             infrastructure = p.infrastructure
+            lanternType = p.lanternType
+            zoomDeg = p.zoomDeg
+            lampRotationDeg = p.lampRotationDeg
+            shutters = LanternFocus.shuttersToText(p.shutters)
+            gateRotationDeg = p.gateRotationDeg
+            iris = p.iris
+            focusSoftness = p.focusSoftness
             this.uuid = uuid
         }
         p.extraPlacements.forEachIndexed { index, pl ->
@@ -711,6 +726,13 @@ class ProjectImporter(private val state: State) {
                 basePitchDeg = pl.basePitchDeg
                 baseRollDeg = pl.baseRollDeg
                 lengthM = pl.lengthM
+                lanternType = pl.lanternType
+                zoomDeg = pl.zoomDeg
+                lampRotationDeg = pl.lampRotationDeg
+                shutters = LanternFocus.shuttersToText(pl.shutters)
+                gateRotationDeg = pl.gateRotationDeg
+                iris = pl.iris
+                focusSoftness = pl.focusSoftness
                 sortOrder = index
                 this.uuid = UUID.fromString(pl.uuid)
             }

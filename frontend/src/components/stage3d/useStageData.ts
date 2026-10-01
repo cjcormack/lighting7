@@ -8,6 +8,8 @@ import type { RiggingDto } from '../../api/riggingApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
 import { buildHarness, isHarnessActive } from './profileHarness'
+import { useLanternIndex } from '../../hooks/useLanternIndex'
+import type { LanternIndex } from '../../lib/lanterns'
 
 interface StageData {
   patches: FixturePatch[] | undefined
@@ -15,6 +17,8 @@ interface StageData {
   riggings: RiggingDto[] | undefined
   fixtureByKey: Map<string, Fixture>
   typeByKey: Map<string, FixtureTypeInfo>
+  /** The lantern library, which a generic dimmer's body is chosen from. */
+  lanterns: LanternIndex
 }
 
 // Single source of truth for Stage 3D's input data. When the profiling
@@ -32,6 +36,7 @@ export function useStageData(
   const { data: regions } = useStageRegionListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
   const { fixtureByKey, typeByKey } = useFixtureLookup()
+  const lanterns = useLanternIndex()
 
   const harness = useMemo(() => {
     if (!isHarnessActive()) return null
@@ -40,7 +45,7 @@ export function useStageData(
 
   return useMemo(() => {
     if (!harness) {
-      return { patches, regions, riggings, fixtureByKey, typeByKey }
+      return { patches, regions, riggings, fixtureByKey, typeByKey, lanterns }
     }
     const mergedFixtureByKey = new Map(fixtureByKey)
     for (const p of harness.patches) mergedFixtureByKey.set(p.key, harness.syntheticFixture)
@@ -52,6 +57,7 @@ export function useStageData(
       riggings: harness.riggings,
       fixtureByKey: mergedFixtureByKey,
       typeByKey: mergedTypeByKey,
+      lanterns,
     }
-  }, [harness, patches, regions, riggings, fixtureByKey, typeByKey])
+  }, [harness, patches, regions, riggings, fixtureByKey, typeByKey, lanterns])
 }

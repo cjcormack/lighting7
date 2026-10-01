@@ -89,6 +89,9 @@ export default function StageRenderJob({
       ['the riggings', dispatch(riggingsApi.endpoints.riggingList.initiate(projectId, FRESH))],
       ['the fixtures', dispatch(fixturesApi.endpoints.fixtureList.initiate(undefined, FRESH))],
       ['the fixture types', dispatch(fixturesApi.endpoints.fixtureTypeList.initiate(undefined, FRESH))],
+      // A generic dimmer is drawn as its lantern (session 7): without the library in, every one
+      // would be its kind's default, with no cut and no oval.
+      ['the lantern library', dispatch(fixturesApi.endpoints.lanternList.initiate(undefined, FRESH))],
     ] as const
     let cancelled = false
     void Promise.all(pending.map(([, p]) => p)).then((results) => {

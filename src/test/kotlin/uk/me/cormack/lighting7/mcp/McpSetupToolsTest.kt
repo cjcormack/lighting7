@@ -481,6 +481,101 @@ class McpSetupToolsTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `patch_fixtures and place_fixtures hang a lantern, focus it per lantern and describe_rig names it`() {
+        val types = call("list_fixture_types", """{"query":"dimmer"}""").json()["fixtureTypes"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(types.single { it["typeKey"]!!.jsonPrimitive.content == "generic-dimmer" }["acceptsLantern"]!!.jsonPrimitive.boolean)
+
+        assertTrue(patchTwoDimmers(""","lanternType":"cantata-f","zoomDeg":20""").success)
+        val placed = call(
+            "place_fixtures",
+            """{"placements":[{"key":"foh-1","lanternType":"s4-19","iris":0.5,
+                "shutters":[{"depth":0.3},{"depth":0},{"depth":0.1,"angleDeg":-8},{}],
+                "alsoAt":[{"label":"SR","x":2,"lanternType":"par64-cp62","lampRotationDeg":90},{"label":"SL","x":-2,"focusSoftness":0.4}]}]}""",
+        )
+        assertTrue(placed.success, placed.result)
+        transaction(state.database) {
+            val foh1 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single()
+            assertEquals("s4-19", foh1.lanternType)
+            assertEquals("PROFILE", foh1.kindOverride, "the kind follows the lantern")
+            val foh2 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-2" }.single()
+            assertEquals("FRESNEL", foh2.kindOverride)
+            assertEquals(20.0, foh2.zoomDeg)
+        }
+        val listed = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.map { it.jsonObject }.associateBy { it["key"]!!.jsonPrimitive.content }
+        val foh1 = listed.getValue("foh-1")
+        assertEquals("Source Four 19°", foh1["lantern"]!!.jsonPrimitive.content)
+        assertEquals(0.3, foh1["shutters"]!!.jsonArray[0].jsonObject["depth"]!!.jsonPrimitive.content.toDouble())
+        assertEquals(-8.0, foh1["shutters"]!!.jsonArray[2].jsonObject["angleDeg"]!!.jsonPrimitive.content.toDouble())
+        assertEquals("par64-cp62", foh1["alsoAt"]!!.jsonArray[0].jsonObject["lanternType"]!!.jsonPrimitive.content)
+
+        val briefing = RigBriefing(state).describeRig()
+        assertTrue("lanterns=[Source Four 19°; SR: Par 64 · CP62 MFL; SL: Source Four 19°]" in briefing, briefing)
+        assertTrue("lantern=Strand Cantata F" in briefing, briefing)
+
+        // Refused as a whole: a zoom a fixed lantern cannot take, a kind that contradicts its lantern.
+        val refused = call(
+            "place_fixtures",
+            """{"placements":[{"key":"foh-1","zoomDeg":25},{"key":"foh-2","kind":"PAR"},{"key":"foh-2","iris":2}]}""",
+        )
+        assertFalse(refused.success)
+        val problems = refused.problems()
+        assertTrue(problems.any { "fixed" in it }, refused.result)
+        assertTrue(problems.any { "derived from the lantern" in it }, refused.result)
+        assertTrue(problems.any { "iris" in it }, refused.result)
+    }
+
+    @Test
+    fun `a lantern change keeps the placements valid, a geometry row leaves the focus alone, and a new type drops the lantern`() {
+        assertTrue(patchTwoDimmers(""","lanternType":"par64-cp62","lampRotationDeg":30""").success)
+        assertTrue(
+            call(
+                "place_fixtures",
+                """{"placements":[{"key":"foh-1","lanternType":"s4-zoom-15-30","zoomDeg":20,
+                    "alsoAt":[{"label":"SR","x":2,"zoomDeg":25,"lampRotationDeg":10}]}]}""",
+            ).success,
+        )
+
+        // A fixed 19° on the fixture, no alsoAt: the SR lantern inherits it, so its zoom goes and the
+        // rest of its focus stays.
+        val fixed = call("place_fixtures", """{"placements":[{"key":"foh-1","lanternType":"s4-19"}]}""")
+        assertTrue(fixed.success, fixed.result)
+        transaction(state.database) {
+            val foh1 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-1" }.single()
+            val sr = extraPlacementsOf(foh1).single()
+            assertNull(sr.zoomDeg, "an inherited zoom the new lantern cannot take is cleared")
+            assertEquals(10.0, sr.lampRotationDeg)
+        }
+
+        // A row that moves the fixture and names no focus key writes neither kind nor focus.
+        transaction(state.database) {
+            DaoFixturePatch.find { DaoFixturePatches.key eq "foh-2" }.single().iris = 0.4
+        }
+        assertTrue(call("place_fixtures", """{"placements":[{"key":"foh-2","x":1.5}]}""").success)
+        transaction(state.database) {
+            val foh2 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-2" }.single()
+            assertEquals(0.4, foh2.iris, "a geometry-only row leaves the focus as it stands")
+            assertEquals("PAR", foh2.kindOverride)
+            assertEquals(30.0, foh2.lampRotationDeg)
+        }
+
+        // Re-patched as a type with a body of its own, foh-2 keeps no lantern, no focus and no
+        // derived kind.
+        val retyped = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"foh-2","name":"FOH 2","fixtureTypeKey":"hex","universe":0,"startChannel":2}]}""",
+        )
+        assertTrue(retyped.success, retyped.result)
+        transaction(state.database) {
+            val foh2 = DaoFixturePatch.find { DaoFixturePatches.key eq "foh-2" }.single()
+            assertEquals("hex", foh2.fixtureTypeKey)
+            assertNull(foh2.lanternType)
+            assertNull(foh2.lampRotationDeg)
+            assertNull(foh2.iris)
+            assertNull(foh2.kindOverride, "the kind the lantern derived goes with it")
+        }
+    }
+
+    @Test
     fun `a malformed number is refused rather than read as a clear`() {
         assertTrue(call("set_stage", """{"regions":[{"name":"Main","centerX":1.5}],"riggings":[{"name":"LX1","z":6}]}""").success)
         val result = call(

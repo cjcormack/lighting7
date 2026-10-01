@@ -93,6 +93,8 @@ import type { BeamHit } from './scene/beamReach'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
 import { bodySpecOf } from './emitterNeeds'
+import { packBlades } from './beamMask'
+import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
 import { apexDistanceM, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec, type Cell } from './bodies/archetype'
 import { bodyFrames } from './bodies/bodyGeometry'
 import { hangerLengthM, mountFor, type Mount } from './bodies/mount'
@@ -253,6 +255,9 @@ interface FixtureModelProps {
   patch: FixturePatch
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
+  /** The lantern library a generic dimmer's body is chosen from — `Stage3D`'s, passed rather than
+   *  read, since a capture canvas bridges only the channel source into its tree. */
+  lanterns?: LanternIndex
   riggings: RiggingDto[]
   regionGeometry: ReadonlyArray<RegionGeometry>
   slot: number
@@ -285,6 +290,7 @@ export function FixtureModel({
   patch,
   fixture,
   fixtureType,
+  lanterns = EMPTY_LANTERNS,
   riggings,
   regionGeometry,
   slot,
@@ -300,8 +306,37 @@ export function FixtureModel({
   const bodies = useBodies()
 
   const spec = useMemo(
-    () => bodySpecOf({ kindOverride: patch.kindOverride, lengthM: patch.lengthM }, fixture, fixtureType),
-    [patch.kindOverride, patch.lengthM, fixture, fixtureType],
+    () =>
+      bodySpecOf(
+        {
+          kindOverride: patch.kindOverride,
+          lengthM: patch.lengthM,
+          lanternType: patch.lanternType,
+          zoomDeg: patch.zoomDeg,
+          lampRotationDeg: patch.lampRotationDeg,
+          shutters: patch.shutters,
+          gateRotationDeg: patch.gateRotationDeg,
+          iris: patch.iris,
+          focusSoftness: patch.focusSoftness,
+        },
+        fixture,
+        fixtureType,
+        lanterns,
+      ),
+    [
+      patch.kindOverride,
+      patch.lengthM,
+      patch.lanternType,
+      patch.zoomDeg,
+      patch.lampRotationDeg,
+      patch.shutters,
+      patch.gateRotationDeg,
+      patch.iris,
+      patch.focusSoftness,
+      fixture,
+      fixtureType,
+      lanterns,
+    ],
   )
   const rigging = useMemo(
     () => (patch.riggingUuid ? riggings.find((r) => r.uuid === patch.riggingUuid) ?? null : null),
@@ -375,7 +410,8 @@ export function FixtureModel({
   }, [rigging, patch.stageX, patch.stageY, patch.riggingUuid, riggings])
 
   // Fallback beam angle. A ZOOM channel overrides this per frame inside the director. The patch's
-  // own angle first, then the family's (`bodies/archetype.ts`).
+  // own angle first, then the body's — a lantern's field at its zoom, else the family's
+  // (`bodies/archetype.ts`).
   const baseBeamDeg = patch.beamAngleDeg ?? spec.fieldDeg
   const showCone = spec.emits && cellCount > 0 && !!emitters
 
@@ -728,6 +764,8 @@ const SCRATCH_BEAM: BeamWrite = {
   near: 0,
   iris: 1,
   aspect: 0,
+  bladesA: 0,
+  bladesB: 0,
   shadowMask: 0,
 }
 const SCRATCH_LIGHT: LightRow = makeLightRow()
@@ -833,6 +871,11 @@ function useBeamDirector({
     () => (spec.cells.length > 1 ? lightRuns(spec.cells.length, MAX_LIGHTS_PER_FIXTURE) : []),
     [spec],
   )
+  // The lantern's blades, packed once per spec (`beamMask.ts`): the director writes the two floats
+  // into the beam and its light each frame, and the GPU unpacks them.
+  const blades = useMemo(() => packBlades(spec.cells.length === 1 ? spec.blades : null), [spec])
+  // The frame's turn about the beam — the gate's, and a PAR lamp's — in radians.
+  const frameTurnRad = MathUtils.degToRad(spec.cells.length === 1 ? spec.frameTurnDeg : 0)
 
   // The canvas renders on demand. Everything this director reads per frame is
   // a channel, so a change on any of them asks for a frame — on the active
@@ -999,7 +1042,9 @@ function useBeamDirector({
     const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
     const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
     const edge = 1 - softness
-    const iris = resolveIris(irisProp, readChannel(channelSource, beamKeys.iris))
+    // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
+    // tighter of the two wins.
+    const iris = Math.min(spec.iris, resolveIris(irisProp, readChannel(channelSource, beamKeys.iris)))
 
     // A fixture can carry two gobo wheels in series (Robe: static + rotating);
     // the renderer projects one pattern, so draw whichever wheel currently
@@ -1041,6 +1086,9 @@ function useBeamDirector({
     // The head's world X axis gives the beam its cross-section frame — the gobo's, the mask's, a
     // segment's width — and the prism lobes their splay basis.
     SCRATCH_RIGHT.set(1, 0, 0).transformDirection(head.matrixWorld)
+    // A lantern's gate — and a PAR's lamp — turns the frame about the beam, so its blades and its
+    // oval turn with it, in the air and on every surface alike (`beamMask.ts`).
+    if (frameTurnRad !== 0) SCRATCH_RIGHT.applyAxisAngle(dir, frameTurnRad)
 
     // A prism shows N displaced copies of the whole beam — gobo, focus, volume
     // and all — so each engaged facet takes one lobe of the slot's block and
@@ -1078,6 +1126,8 @@ function useBeamDirector({
     beam.edge = edge
     beam.focusDist = focusDist
     beam.iris = iris
+    beam.bladesA = multi ? 0 : blades[0]
+    beam.bladesB = multi ? 0 : blades[1]
     beam.goboSlot = goboSlot
     beam.goboAngle = goboAngleRef.current
 
@@ -1113,7 +1163,14 @@ function useBeamDirector({
       // The beam leaves the cell's aperture, at the aperture's own size; its apex sits the
       // aperture's radius over tan(half-field) behind it (`bodies/archetype.ts`).
       apertureWorld(cell, head, SCRATCH_APERTURE)
-      const aspect = cell.shape === 'segment' ? cell.halfDepthM / Math.max(1e-4, cell.halfWidthM) : 0
+      // A segment's depth over its width; an oval PAR's narrow axis over its wide one, negative
+      // (`beamMask.ts`); 0 for a round lens.
+      const aspect =
+        cell.shape === 'segment'
+          ? cell.halfDepthM / Math.max(1e-4, cell.halfWidthM)
+          : !multi && spec.ovalRatio != null
+            ? -spec.ovalRatio
+            : 0
       const near = apexDistanceM(cell.halfWidthM, beamDeg)
       SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(lobeDir, -near)
 
@@ -1131,7 +1188,9 @@ function useBeamDirector({
         SCRATCH_BY,
         length,
         far * (aspect > 0 ? RECT_HULL : HULL_SLACK),
-        far * (aspect > 0 ? RECT_HULL * aspect : HULL_SLACK),
+        // An oval's hull is the oval's, turned with the lamp: the march still bounds it by the round
+        // cone of its wide field, and the mask cuts it to the oval.
+        far * (aspect > 0 ? RECT_HULL * aspect : aspect < 0 ? HULL_SLACK * -aspect : HULL_SLACK),
         beam.matrix,
       )
       beam.dir.copy(lobeDir)
@@ -1151,7 +1210,7 @@ function useBeamDirector({
       if (!multi) {
         // A single cell: each lobe lands as its own light.
         const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, blades[0], blades[1])
         emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
       }
     }
@@ -1190,7 +1249,7 @@ function useBeamDirector({
         const near = apexDistanceM(halfWidth, beamDeg)
         SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(dir, -near)
         const landed = landBeam(emitters, SCRATCH_APERTURE, dir)
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }
     } else if (lobes < litLobesRef.current) {
@@ -1219,6 +1278,8 @@ function writeLightRow(
   iris: number,
   aspect: number,
   hit: SurfaceHit | null,
+  bladesA: number,
+  bladesB: number,
 ): void {
   row.ax = apex.x
   row.ay = apex.y
@@ -1240,6 +1301,8 @@ function writeLightRow(
   row.near = near
   row.iris = iris
   row.aspect = aspect
+  row.bladesA = bladesA
+  row.bladesB = bladesB
 }
 
 // — colour sync (event-driven via live channel subscriptions) —————————

@@ -125,3 +125,37 @@ describe('normalisedLabel', () => {
     expect(normalisedLabel(null)).toBeNull()
   })
 })
+
+describe("a lantern's focus on a placement", () => {
+  const focus = {
+    lanternType: 'cantata-f',
+    zoomDeg: 20,
+    shutters: [
+      { depth: 0.2, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0.1, angleDeg: 5 },
+    ],
+    iris: 0.5,
+  }
+
+  it('is carried whole, so a list sent back does not clear it', () => {
+    const input = toPlacementInput({ ...stored, ...focus })
+    expect(input.lanternType).toBe('cantata-f')
+    expect(input.zoomDeg).toBe(20)
+    expect(input.shutters?.[3].angleDeg).toBe(5)
+    expect(input.iris).toBe(0.5)
+    // An unfocused placement sends every focus field as null: the whole entry replaces the stored one.
+    expect(toPlacementInput(stored)).toMatchObject({ lanternType: null, shutters: null, focusSoftness: null })
+  })
+
+  it('is an edit when any field of it moves', () => {
+    const a = toPlacementInput({ ...stored, ...focus })
+    expect(placementListsEqual([a], [{ ...a }])).toBe(true)
+    expect(placementListsEqual([a], [{ ...a, lanternType: 's4-19' }])).toBe(false)
+    expect(placementListsEqual([a], [{ ...a, shutters: a.shutters!.map((b, i) => (i === 0 ? { ...b, depth: 0.3 } : b)) }])).toBe(
+      false,
+    )
+    expect(placementListsEqual([a], [{ ...a, focusSoftness: undefined }])).toBe(true)
+  })
+})

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { packBlades } from '../beamMask'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
-import { LIGHT_TEXELS, LightTable, makeLightRow } from './lightTable'
+import { EDGE_IRIS_STEPS, LIGHT_TEXELS, LightTable, makeLightRow, packEdgeIris, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
 import { DEFAULT_SCENE_LAYERS, elementInLayers } from './sceneView'
@@ -94,10 +95,31 @@ describe('the light table', () => {
     expect(Array.from(table.staged.subarray(12, 16))).toEqual([0, 1, 0, 0.5])
   })
 
-  it("carries the beam's frame and aperture for the surfaces' mask: right axis, tan, near, iris, aspect", () => {
+  it("carries the beam's frame and aperture for the surfaces' mask: right axis, tan, near, blades, aspect", () => {
     const table = new LightTable(1)
-    table.set(0, { ...makeLightRow(), r: 1, rx: 0, ry: 0, rz: 1, tanHalf: 0.17, near: 0.5, iris: 0.4, aspect: 0.25 })
-    expect(Array.from(table.staged.subarray(16, 24))).toEqual([0, 0, 1, Math.fround(0.17), 0.5, Math.fround(0.4), 0.25, 0])
+    const [bladesA, bladesB] = packBlades([
+      { depth: 0.25, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0.5, angleDeg: -12 },
+      { depth: 1, angleDeg: 30 },
+    ])
+    table.set(0, { ...makeLightRow(), r: 1, rx: 0, ry: 0, rz: 1, tanHalf: 0.17, near: 0.5, iris: 0.4, aspect: -0.25, bladesA, bladesB })
+    // Texel 4 is the frame; texel 5 the aperture — near, the (top, bottom) blades, aspect (an oval
+    // is negative), the (left, right) blades — every packed blade word held exactly by a float32.
+    expect(Array.from(table.staged.subarray(16, 24))).toEqual([0, 0, 1, Math.fround(0.17), 0.5, bladesA, -0.25, bladesB])
+  })
+
+  it('packs the edge and the iris into texel 2, and the shader unpacks them exactly', () => {
+    const table = new LightTable(1)
+    table.set(0, { ...makeLightRow(), r: 1, edge: 0.8, iris: 0.4 })
+    const packed = table.staged[11]
+    expect(packed).toBe(packEdgeIris(0.8, 0.4))
+    expect(Math.fround(packed)).toBe(packed)
+    // The GLSL's arithmetic, in doubles: a power-of-two division is exact in a float32 too.
+    const iq = Math.floor(packed / 1024)
+    expect((packed - iq * 1024) / EDGE_IRIS_STEPS).toBeCloseTo(0.8, 3)
+    expect(iq / EDGE_IRIS_STEPS).toBeCloseTo(0.4, 3)
+    expect(UNPACK_EDGE_IRIS_GLSL).toContain(`${EDGE_IRIS_STEPS}.0`)
   })
 
   it('treats a dark light as off', () => {

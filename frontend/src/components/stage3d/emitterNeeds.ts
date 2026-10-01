@@ -1,5 +1,6 @@
 import type { FixturePatch } from '../../api/patchApi'
 import { drawnLengthM } from '../../lib/fixtureLength'
+import { EMPTY_LANTERNS, type LanternFocus, type LanternIndex } from '../../lib/lanterns'
 import { findPrismProperty, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
 import { bodyInputFor, bodySpecFor, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec } from './bodies/archetype'
 import { MAX_PRISM_LOBES, type SlotNeeds } from './emitterLayout'
@@ -7,18 +8,21 @@ import { MAX_PRISM_LOBES, type SlotNeeds } from './emitterLayout'
 /**
  * The body a patch is drawn as — its archetype, size and cells (`bodies/archetype.ts`). The one
  * statement of it, read by `Stage3D` to size the emitters and the body instances and by
- * `FixtureModel` to draw, so the two cannot disagree about how many cells a fixture has.
+ * `FixtureModel` to draw, so the two cannot disagree about how many cells a fixture has. Both pass
+ * the same lantern library (`useLanternIndex`) and the patch — or a placement laid over it
+ * (`patchAtPlacement`) — whose lantern and focus choose the body.
  */
 export function bodySpecOf(
-  patch: Pick<FixturePatch, 'kindOverride' | 'lengthM'>,
+  patch: Pick<FixturePatch, 'kindOverride' | 'lengthM'> & LanternFocus,
   fixture: Fixture | undefined,
   fixtureType: FixtureTypeInfo | undefined,
+  lanterns: LanternIndex = EMPTY_LANTERNS,
 ): BodySpec {
   const lengthM = drawnLengthM(
     fixtureType ? { acceptsLength: fixtureType.acceptsLength, lengthM: fixtureType.lengthM } : undefined,
     { lengthM: patch.lengthM ?? null },
   )
-  return bodySpecFor(bodyInputFor(patch, fixture, fixtureType, lengthM))
+  return bodySpecFor(bodyInputFor(patch, fixture, fixtureType, lengthM, lanterns))
 }
 
 /**

@@ -13,7 +13,9 @@ import {
 import { Columns3, Layers, Plus, Pencil, Check, Search } from "lucide-react"
 import { usePatchListQuery, useUniverseConfigListQuery, useUpdateUniverseConfigMutation, usePatchGroupListQuery } from "../store/patches"
 import { useRiggingListQuery } from "../store/riggings"
-import { useFixtureTypeListQuery } from "../store/fixtures"
+import { resolveFixtureKind, useFixtureTypeListQuery, type FixtureTypeInfo } from "../store/fixtures"
+import { useLanternIndex } from "../hooks/useLanternIndex"
+import { EMPTY_LANTERNS, effectiveLantern, lanternListLabel, type LanternIndex } from "../lib/lanterns"
 import { usePersistentState } from "../hooks/usePersistentState"
 import { AddFixtureSheet } from "@/components/patches/AddFixtureSheet"
 import { EditPatchSheet } from "@/components/patches/EditPatchSheet"
@@ -105,6 +107,7 @@ const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
   ch: true,
   key: true,
   mount: true,
+  lantern: true,
   angle: true,
   gel: true,
   groups: true,
@@ -153,14 +156,15 @@ function PatchListContent({
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: riggings } = useRiggingListQuery(projectId)
   const { data: fixtureTypes } = useFixtureTypeListQuery()
+  const lanterns = useLanternIndex()
 
   const universes = useMemo(
     () => [...new Set((patches ?? []).map((p) => p.universe))].sort((a, b) => a - b),
     [patches],
   )
   const rows = useMemo(
-    () => buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter),
-    [patches, riggings, fixtureTypes, universeFilter, filter],
+    () => buildPatchRows(patches, riggings, fixtureTypes, universeFilter, filter, lanterns),
+    [patches, riggings, fixtureTypes, universeFilter, filter, lanterns],
   )
   const visibleColumns = useMemo(
     () => PATCH_COLUMN_ORDER.filter((key) => columnVisibility[key]),
@@ -308,6 +312,7 @@ function PatchListContent({
           rows={rows}
           allPatches={patches ?? []}
           riggings={riggings ?? []}
+          lanterns={lanterns}
           visibleColumns={visibleColumns}
           onEditPatch={onEditPatch}
           onEditGroup={onEditGroup}
@@ -507,15 +512,20 @@ function UniverseChip({ config, projectId, fill }: { config: UniverseConfig; pro
 
 function buildPatchRows(
   patches: FixturePatch[] | undefined,
-  riggings: { uuid: string; name: string }[] | undefined,
-  fixtureTypes: { typeKey: string; acceptsBeamAngle?: boolean; acceptsGel?: boolean }[] | undefined,
+  riggings: { uuid: string; name: string; kind?: string | null }[] | undefined,
+  fixtureTypes: FixtureTypeInfo[] | undefined,
   universeFilter: 'all' | number,
   filter: string,
+  lanterns: LanternIndex = EMPTY_LANTERNS,
 ): PatchSheetRow[] {
   if (!patches) return []
 
   const riggingNames = new Map<string, string>()
-  for (const r of riggings ?? []) riggingNames.set(r.uuid, r.name)
+  const riggingKinds = new Map<string, string | null>()
+  for (const r of riggings ?? []) {
+    riggingNames.set(r.uuid, r.name)
+    riggingKinds.set(r.uuid, r.kind ?? null)
+  }
   const typeByKey = new Map((fixtureTypes ?? []).map((t) => [t.typeKey, t]))
   const needle = filter.trim().toLowerCase()
 
@@ -530,12 +540,27 @@ function buildPatchRows(
     })
     .map((p) => {
       const type = typeByKey.get(p.fixtureTypeKey)
+      const acceptsLantern = type?.acceptsLantern === true
+      // The fixture's lanterns — its own, then each placement's (its own, else the fixture's) — as
+      // the Stage view draws them.
+      const kind = resolveFixtureKind(p.kindOverride, type?.kind)
+      const drawn = acceptsLantern
+        ? [p.lanternType ?? null, ...(p.extraPlacements ?? []).map((pl) => pl.lanternType ?? p.lanternType ?? null)]
+            .map((id) => effectiveLantern(lanterns, id, kind)?.name)
+            .filter((name): name is string => name != null)
+        : []
+      const named = p.lanternType != null || (p.extraPlacements ?? []).some((pl) => pl.lanternType != null)
       return {
         id: patchRowId(p.id),
         patch: p,
         riggingName: p.riggingUuid ? riggingNames.get(p.riggingUuid) ?? null : null,
+        riggingKind: p.riggingUuid ? riggingKinds.get(p.riggingUuid) ?? null : null,
         acceptsBeamAngle: type?.acceptsBeamAngle ?? false,
         acceptsGel: type?.acceptsGel ?? false,
+        acceptsLantern,
+        lanternLabel: acceptsLantern ? lanternListLabel(drawn) || null : null,
+        lanternIsDefault: acceptsLantern && !named,
+        bodyLabel: type?.body ? [type.body.archetype, type.body.head].filter(Boolean).join(' · ') : null,
       }
     })
 

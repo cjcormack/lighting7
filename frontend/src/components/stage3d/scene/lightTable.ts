@@ -19,13 +19,20 @@
  * |---|---|---|
  * | 0 | the apex | focal distance from the aperture (m; < 0 is always sharp) |
  * | 1 | axis (unit) | cos of the bounding half-angle — the field, or a segment's corner |
- * | 2 | colour × level | edge hardness 0..1 |
+ * | 2 | colour × level | edge hardness and iris, packed ([packEdgeIris]) |
  * | 3 | the reach plane's normal, towards the light | the plane's offset `n · p` |
  * | 4 | the head's right axis, the beam frame's `u` | tan of the half-field along `u` |
- * | 5 | apex → aperture distance, iris open fraction, aspect (0 a disc, else a segment's depth over its width) | — |
+ * | 5 | apex → aperture distance, the (top, bottom) blades, aspect (0 a disc, > 0 a segment's depth over its width, < 0 an oval's narrow over wide) | the (left, right) blades |
  *
- * Texels 4 and 5 are what the surface shader's `beamMask` reads, as the haze's does, so a soft edge
- * and an iris shape the pool exactly as they shape the air.
+ * Texels 4 and 5 are what the surface shader's `beamMask` reads, as the haze's does, so a soft edge,
+ * an iris and a shutter shape the pool exactly as they shape the air.
+ *
+ * **Still six texels** (stage-view plan session 7). The four blades ride texel 5 packed two to a
+ * float (`beamMask.ts`'s `packBlades`), which texel 5's free slot and the iris's old one hold, and
+ * the iris moved in beside the edge hardness in texel 2, both quantised to 1/1023. The gate
+ * rotation and a PAR's lamp rotation turn the right axis in texel 4 before it is written, and an
+ * oval is a negative aspect. A seventh texel would have cost every surface fragment a fetch per
+ * light, which the plan says to measure first — and the packing costs nothing measurable.
  *
  * Texel 3 is the axial reach ([`beamReach.ts`](./beamReach.ts)): a fragment behind the plane of the
  * first surface on the axis is not lit. A light that reaches nothing carries a zero normal and a
@@ -74,13 +81,34 @@ export interface LightRow {
   near: number
   iris: number
   aspect: number
+  /** The blades, [packBlades]' two floats; 0, 0 for none. */
+  bladesA: number
+  bladesB: number
 }
+
+/** Quantisation of the edge and iris in texel 2's alpha: 1023 steps each, the iris above. */
+export const EDGE_IRIS_STEPS = 1023
+const EDGE_IRIS_BASE = 1024
+
+/** Edge hardness and iris, both 0..1, as texel 2's one float — exact in a float32 (20 bits). */
+export function packEdgeIris(edge: number, iris: number): number {
+  const q = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * EDGE_IRIS_STEPS)
+  return q(edge) + EDGE_IRIS_BASE * q(iris)
+}
+
+/** The GLSL that unpacks [packEdgeIris]: `vec2(edge, iris)`. Division by a power of two is exact. */
+export const UNPACK_EDGE_IRIS_GLSL = /* glsl */ `
+  vec2 unpackEdgeIris(float packed) {
+    float iq = floor(packed / ${EDGE_IRIS_BASE}.0);
+    return vec2(packed - iq * ${EDGE_IRIS_BASE}.0, iq) / ${EDGE_IRIS_STEPS}.0;
+  }
+`
 
 /** A fresh row, for a caller's scratch. */
 export function makeLightRow(): LightRow {
   return {
     ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1,
-    hit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0,
+    hit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0, bladesA: 0, bladesB: 0,
   }
 }
 
@@ -117,7 +145,7 @@ export class LightTable {
     s[o + 8] = row.r
     s[o + 9] = row.g
     s[o + 10] = row.b
-    s[o + 11] = row.edge
+    s[o + 11] = packEdgeIris(row.edge, row.iris)
     const hit = row.hit
     if (hit == null) {
       s[o + 12] = 0
@@ -135,9 +163,9 @@ export class LightTable {
     s[o + 18] = row.rz
     s[o + 19] = row.tanHalf
     s[o + 20] = row.near
-    s[o + 21] = row.iris
+    s[o + 21] = row.bladesA
     s[o + 22] = row.aspect
-    s[o + 23] = 0
+    s[o + 23] = row.bladesB
     const w = Math.max(row.r, row.g, row.b)
     this.weight[i] = w > DARK ? w : 0
     this.dirty = true

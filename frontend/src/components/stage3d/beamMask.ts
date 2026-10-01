@@ -1,8 +1,8 @@
 /**
  * A beam's **cross-section** — the one function the pool on every surface and the haze in the air
- * both shape a beam by (stage-view plan session 6; the design record's item 10, "a frame, shared by
- * pool and haze"). So a soft edge, an iris and, from session 7, a shutter cut the pool and the beam
- * along the same line.
+ * both shape a beam by (stage-view plan sessions 6–7; the design record's item 10, "a frame, shared
+ * by pool and haze"). So a soft edge, an iris and a shutter cut the pool and the beam along the same
+ * line.
  *
  * `uv` is where a point sits in the beam's frame — the head's own right axis and the one at right
  * angles to it round the beam's axis — normalised so the **field edge is at 1**: a disc's radius,
@@ -10,12 +10,27 @@
  * The frame is the head's, so the cut turns with the lantern.
  *
  * - `aspect` 0 is a round aperture (a lens); above 0 a segment's depth over its width, whose
- *   cross-section is a rectangle;
+ *   cross-section is a rectangle; **below 0 an oval** — a PAR lamp's — whose narrow axis over its
+ *   wide one is `−aspect` (the caller divides `v` by `|aspect|` either way, so the field edge is
+ *   at 1 on both axes, and the oval's wide axis is `u`);
  * - `iris` is the open fraction of the field, 1 fully open;
  * - `soft` is the edge, 0 a profile's hard gate edge to 1 a flood's feathered one, and a soft beam
  *   is a little brighter at its middle, as a wash is.
  *
- * Session 7 adds the four blades and the gate rotation as arguments in this frame.
+ * - `blades` is the four shutters (or barn doors), **packed** two to a float ([packBlades]) so a light
+ *   carries them in the light table's six texels without a seventh. Each blade is a straight edge in
+ *   this frame: its depth moves it in from the field edge and its angle turns it about its own
+ *   middle.
+ *
+ * The **gate rotation** and a PAR's **lamp rotation** are not arguments: they turn the frame itself.
+ * The director turns the head's right axis about the beam before it writes `u`, so every blade (and
+ * an oval's wide axis) turns with it, in the surfaces and in the air alike.
+ *
+ * Which way the frame faces: `u` is the head's right axis and `v = axis × u`, which for a level
+ * lantern is **up** and makes `u` the **left** of someone behind the lantern looking along its beam.
+ * The blades are named for the edge of the light they cut as that person sees it (the design record:
+ * "nobody thinks 'top shutter to cut the bottom of the beam'"), so top pushes in from `+v`, left from
+ * `+u`. `FixtureModel.test.tsx` pins that orientation against the head rig.
  *
  * The GLSL and the TypeScript twin are written side by side from the same constants, and
  * `beamMask.test.ts` pins the twin; the twin exists for that test and for nothing else.
@@ -28,20 +43,106 @@ export const MASK_EDGE_SOFT = 0.55
 export const MASK_SOFT_CENTRE = 0.35
 /** An iris's edge is this fraction of the field edge's roll-off. */
 const IRIS_EDGE = 0.6
+/** A blade's edge is in the gate, as the iris is, so it rolls off as the iris's does. */
+const BLADE_EDGE = 0.6
+
+/**
+ * A blade's code, 12 bits: its depth in [BLADE_DEPTH_STEPS] steps above its angle's six bits
+ * (whole degrees, offset by [BLADE_ANGLE_OFFSET]). Two codes make a float of 24 bits — every integer
+ * a float32 holds exactly — and every division the decode makes is by a power of two, so the GPU
+ * unpacks exactly what the director packed. Depth 0 is a blade that is out, whatever its angle.
+ */
+export const BLADE_DEPTH_STEPS = 63
+export const BLADE_ANGLE_OFFSET = 32
+export const MAX_BLADE_ANGLE_DEG = 30
+const CODE = 64
+const PAIR = 4096
+
+/** The four blades' normals in the beam's frame: top, bottom, left, right — the wire's order. */
+export const BLADE_NORMALS: ReadonlyArray<readonly [number, number]> = [
+  [0, 1],
+  [0, -1],
+  [1, 0],
+  [-1, 0],
+]
 
 const f = (v: number) => v.toFixed(4)
 
 export const BEAM_MASK_GLSL = /* glsl */ `
-  float beamMask(vec2 uv, float aspect, float iris, float soft) {
+  // One blade: cuts past a straight edge whose middle sits 1 − 2·depth along the blade's normal n,
+  // turned by its angle about that middle. A code of depth 0 is a blade that is out.
+  float bladeCut(vec2 uv, float code, vec2 n, float w) {
+    float dq = floor(code / ${CODE}.0);
+    if (dq < 0.5) return 1.0;
+    float a = radians(code - dq * ${CODE}.0 - ${BLADE_ANGLE_OFFSET}.0);
+    vec2 p0 = n * (1.0 - 2.0 * dq / ${BLADE_DEPTH_STEPS}.0);
+    float c = cos(a);
+    float s = sin(a);
+    vec2 nr = vec2(c * n.x - s * n.y, s * n.x + c * n.y);
+    return 1.0 - smoothstep(-w, 0.005, dot(uv - p0, nr));
+  }
+
+  // The four blades, packed two to a float: (top, bottom) and (left, right).
+  float beamBlades(vec2 uv, vec2 packed, float w) {
+    if (packed.x < 0.5 && packed.y < 0.5) return 1.0;
+    float top = floor(packed.x / ${PAIR}.0);
+    float left = floor(packed.y / ${PAIR}.0);
+    return bladeCut(uv, top, vec2(0.0, 1.0), w)
+      * bladeCut(uv, packed.x - top * ${PAIR}.0, vec2(0.0, -1.0), w)
+      * bladeCut(uv, left, vec2(1.0, 0.0), w)
+      * bladeCut(uv, packed.y - left * ${PAIR}.0, vec2(-1.0, 0.0), w);
+  }
+
+  float beamMask(vec2 uv, float aspect, float iris, float soft, vec2 blades) {
     float s = clamp(soft, 0.0, 1.0);
     float r = aspect > 0.0 ? max(abs(uv.x), abs(uv.y)) : length(uv);
     float w = mix(${f(MASK_EDGE_HARD)}, ${f(MASK_EDGE_SOFT)}, s);
     float m = 1.0 - smoothstep(1.0 - w, 1.0, r);
     if (iris < 0.999) m *= 1.0 - smoothstep(iris - w * ${f(IRIS_EDGE)}, iris + 0.005, r);
+    m *= beamBlades(uv, blades, w * ${f(BLADE_EDGE)});
     m *= 1.0 - ${f(MASK_SOFT_CENTRE)} * s * min(r * r, 1.0);
     return max(m, 0.0);
   }
 `
+
+/** One blade's code ([BLADE_DEPTH_STEPS] depth steps × whole degrees), 0 for a blade that is out. */
+export function packBlade(depth: number, angleDeg: number): number {
+  const d = Math.round(Math.min(1, Math.max(0, Number.isFinite(depth) ? depth : 0)) * BLADE_DEPTH_STEPS)
+  if (d === 0) return 0
+  const a = Math.round(Math.min(MAX_BLADE_ANGLE_DEG, Math.max(-MAX_BLADE_ANGLE_DEG, Number.isFinite(angleDeg) ? angleDeg : 0)))
+  return d * CODE + a + BLADE_ANGLE_OFFSET
+}
+
+/**
+ * The four blades as two floats — (top, bottom) and (left, right) — for the light table's texel 5
+ * and the haze's `aBeamGate.zw`. `[0, 0]` for none, which the mask skips outright.
+ */
+export function packBlades(
+  blades: ReadonlyArray<{ depth: number; angleDeg: number }> | null | undefined,
+  out: [number, number] = [0, 0],
+): [number, number] {
+  if (!blades || blades.length !== 4) {
+    out[0] = 0
+    out[1] = 0
+    return out
+  }
+  out[0] = packBlade(blades[0].depth, blades[0].angleDeg) * PAIR + packBlade(blades[1].depth, blades[1].angleDeg)
+  out[1] = packBlade(blades[2].depth, blades[2].angleDeg) * PAIR + packBlade(blades[3].depth, blades[3].angleDeg)
+  return out
+}
+
+/**
+ * A blade's edge in the beam's frame — where its middle sits and which way it faces (the side it
+ * cuts). The Focus card draws its preview from this, so the picture and the pool agree.
+ */
+export function bladeLine(index: number, depth: number, angleDeg: number): { px: number; py: number; nx: number; ny: number } {
+  const [bx, by] = BLADE_NORMALS[index]
+  const d = Math.min(1, Math.max(0, depth))
+  const a = (Math.min(MAX_BLADE_ANGLE_DEG, Math.max(-MAX_BLADE_ANGLE_DEG, angleDeg)) * Math.PI) / 180
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  return { px: bx * (1 - 2 * d), py: by * (1 - 2 * d), nx: c * bx - s * by, ny: s * bx + c * by }
+}
 
 /**
  * A beam's edge **hardness** at a point `defocus` metres from its focal plane: the family's own
@@ -67,13 +168,46 @@ function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-/** The TypeScript twin of [BEAM_MASK_GLSL], for its test. */
-export function beamMask(u: number, v: number, aspect: number, iris: number, soft: number): number {
+function bladeCut(u: number, v: number, code: number, nx: number, ny: number, w: number): number {
+  const dq = Math.floor(code / CODE)
+  if (dq < 0.5) return 1
+  const a = ((code - dq * CODE - BLADE_ANGLE_OFFSET) * Math.PI) / 180
+  const k = 1 - (2 * dq) / BLADE_DEPTH_STEPS
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  const rx = c * nx - s * ny
+  const ry = s * nx + c * ny
+  return 1 - smoothstep(-w, 0.005, (u - nx * k) * rx + (v - ny * k) * ry)
+}
+
+function beamBlades(u: number, v: number, a: number, b: number, w: number): number {
+  if (a < 0.5 && b < 0.5) return 1
+  const top = Math.floor(a / PAIR)
+  const left = Math.floor(b / PAIR)
+  return (
+    bladeCut(u, v, top, 0, 1, w) *
+    bladeCut(u, v, a - top * PAIR, 0, -1, w) *
+    bladeCut(u, v, left, 1, 0, w) *
+    bladeCut(u, v, b - left * PAIR, -1, 0, w)
+  )
+}
+
+/** The TypeScript twin of [BEAM_MASK_GLSL], for its test. [bladesA]/[bladesB] are [packBlades]'. */
+export function beamMask(
+  u: number,
+  v: number,
+  aspect: number,
+  iris: number,
+  soft: number,
+  bladesA = 0,
+  bladesB = 0,
+): number {
   const s = Math.max(0, Math.min(1, soft))
   const r = aspect > 0 ? Math.max(Math.abs(u), Math.abs(v)) : Math.hypot(u, v)
   const w = MASK_EDGE_HARD + (MASK_EDGE_SOFT - MASK_EDGE_HARD) * s
   let m = 1 - smoothstep(1 - w, 1, r)
   if (iris < 0.999) m *= 1 - smoothstep(iris - w * IRIS_EDGE, iris + 0.005, r)
+  m *= beamBlades(u, v, bladesA, bladesB, w * BLADE_EDGE)
   m *= 1 - MASK_SOFT_CENTRE * s * Math.min(r * r, 1)
   return Math.max(m, 0)
 }

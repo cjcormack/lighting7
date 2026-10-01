@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 6 ([PR #34](https://github.com/cjcormack/lighting7/pull/34)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 7 ([PR #35](https://github.com/cjcormack/lighting7/pull/35)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -260,7 +260,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   else uses it.
 - **Docs.** `frontend/CLAUDE.md`, `stage-vis-engineering.md`.
 
-### Session 6 — fixture bodies (frontend, one backend constant)
+### ~~Session 6 — fixture bodies (frontend, one backend constant)~~ — done, `13f14c5` ([PR #34](https://github.com/cjcormack/lighting7/pull/34))
 
 - **Archetypes.** Parametric bodies (profile, box profile, fresnel/PC, PAR, flood, downlight, mover
   heads, batten, blinder, effect, cannon) replace `fixtureBodies/*`. They are instanced per

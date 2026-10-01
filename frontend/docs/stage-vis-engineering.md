@@ -912,15 +912,27 @@ started every beam at its **aperture**, and shaped pool and haze with one **beam
 is the record's §"Fixture bodies and the lantern library", items 1–3, 8, 9, 11 and 12; the
 prototype proved the maths and is not the code.
 
-### The archetype, from what the desk knows today
+### The archetype: the lantern, the type's body, then the words
 
 `bodies/archetype.ts` is pure and node-tested: a patch, its fixture and its type in, a `BodySpec`
 out — the archetype, its size, its **cells**, whether it emits, its field angle and its edge
 softness. `emitterNeeds.ts`'s `bodySpecOf` is the one call, read by `Stage3D` (to size the emitters
 and the body instances) and by `FixtureModel` (to draw), so the two cannot disagree about a cell.
 
-Until session 7 gives a generic dimmer a lantern and `@FixtureType` a `body` descriptor, the
-archetype comes from what the desk already sends:
+**The archetype is chosen in three steps, first answer wins** (session 7 moved the first two in
+front of what used to be the whole rule):
+
+1. **The lantern** — for a type that takes one (`acceptsLantern`, the generic dimmer), the lantern
+   the patch names, else its kind's default, from the library (`GET /lanterns`, read through
+   `useLanternIndex` and handed to `bodySpecOf` as an index). The lantern gives the archetype, its
+   dimensions, its lens, its field (zoomed where the focus sets one) and its oval, and the patch
+   takes its family's **kind** (`LANTERN_FAMILY_KIND`: a PC is a `FRESNEL`, a flood and a cyc a
+   `WASH`, a downlight `GENERIC`) — the desk derives `kindOverride` from it at the write boundary,
+   and reads the lantern first in `RigBriefing.isMovingHead`, so the two sides agree. A lantern is
+   never a mover. See `docs/fixtures-engineering.md` §"Lanterns and focus".
+2. **The type's declared `body`** (`FixtureTypeInfo.body`, from `@FixtureType(body = …)`): an
+   archetype, a mover's head and a lens diameter. A type that declares none answers `null`.
+3. **The words, as they were** — the fallback for every type that says nothing:
 
 - **A mover** is anything with a tilt axis, or of kind `MOVING_HEAD` / `SCANNER` — so a Source Four
   Revolution, a `PROFILE` that tilts, is a mover with a profile head. The head is a spot, a wash or a
@@ -929,13 +941,15 @@ archetype comes from what the desk already sends:
   Quad — its heads tilt together until `FU-STAGE-INDEPENDENT-HEADS`).
 - **A Twin Shot** is the cannon.
 - **Otherwise the kind** — the patch's `kindOverride` over the type's: `PROFILE` a profile barrel (a
-  box profile where the type names a Cantata, Prelude or Harmony; none does today), `FRESNEL` a
-  fresnel (a PC is the same archetype without the barn doors, and nothing tells the two apart yet),
+  box profile where the type names a Cantata, Prelude or Harmony — the library's are box profiles by
+  their own archetype), `FRESNEL` a fresnel (a PC is the same archetype without the barn doors,
+  which only a PC lantern from the library tells apart),
   `PAR` a can, `WASH` a flood, `STRIP` a batten — a strip of **tape** where the type takes a
   per-install length (`acceptsLength`) — `BLINDER` a blinder, `LASER` and `EFFECT` an effect box,
   `GENERIC` a house downlight (the prototype's default for a generic dimmer).
 
-The field angle is the patch's `beamAngleDeg`, then a zoom channel, then the **family's**
+The field angle is the patch's `beamAngleDeg`, then a zoom channel, then the **lantern's** (at the
+focus's zoom where it has one), then the **family's**
 (`FIELD_DEG`: a profile 26°, a fresnel 45°, a PAR 32°, a spot 16°, a wash 25°, a batten 30°, a
 blinder 60°…) — it was 30° for everything. Which bodies emit: a batten and a blinder always (their
 types have no beam angle to set, so `acceptsBeamAngle` could not say), tape and the cannon never,
@@ -1051,7 +1065,8 @@ group`).
 
 `beamMask.ts` is the cross-section both the surfaces and the haze shape a beam by — the field circle
 or a segment's rectangle, the iris, the softness — in the head's frame, with the field edge at 1;
-session 7's blades are arguments in the same frame. The GLSL and a TypeScript twin are written from
+the shutter blades are arguments in the same frame (§"The lantern's focus: the cut, the gate and
+the oval"). The GLSL and a TypeScript twin are written from
 one set of constants and the twin is pinned by `beamMask.test.ts`.
 
 **Every beam in the air is raymarched** now, round or rectangular: the hollow cone shell an open beam
@@ -1077,3 +1092,52 @@ on (every dimmer up but the house lights, 58 of 58 lights packed, a 1606 × 2236
 DPR cap): an orbit drag ran at a median of 17–21 ms a frame and the governor held tier 0. So the
 sizes stay as they were — 12 steps, a 64-light default budget — until the Safari and iPad passes.
 `data-lights` and `data-haze-tier` on the container are what to read.
+
+### The lantern's focus: the cut, the gate and the oval
+
+Session 7 gave a conventional its focus (`docs/fixtures-engineering.md` §"Lanterns and focus"), and
+`BodySpec` carries what the beam needs of it: `blades` (null while every blade is out, or the lantern
+has neither shutters nor barn doors), `frameTurnDeg` (the gate's turn where it has blades, plus a
+PAR lamp's where it has an oval), `iris` (where it has one; a DMX iris closes it further, the
+smaller winning) and `ovalRatio` (narrow over wide, as tangents of the half-angles). The focus knob
+sets the edge softness within the family's range (`softnessForFocus` in `lib/lanterns.ts`: a
+profile 0.04–0.9, a PC 0.3–0.85, a fresnel 0.6–1), so a fresnel at its sharpest is still softer
+than a profile at its softest. Focus applies to a single-cell body only; a lantern is always one.
+
+**The blades are arguments to `beamMask`**, in the same head frame the field circle is drawn in —
+`u` along the head's right axis, `v` = beam × `u`, up for a level lantern — so the pool and the haze
+cut by one rule. A blade is a straight line `depth` in from the field's edge (0.5 reaches the centre)
+turned by its angle about the middle of its edge; everything past it is dark, softened by the same
+edge as the field. **They are packed, not given a texel**: each blade is 12 bits — 63 depth steps
+× 64 angle steps (±30° by the degree, `packBlade`) — two to a float, so the four fit texel 5's `.y`
+and `.w` (`packBlades`), and the iris moved into texel 2's alpha beside the edge hardness
+(`packEdgeIris`, both to 1/1023). The haze takes them as one more instanced attribute
+(`aBeamBlades`, flat varying). The GLSL and the TypeScript twin changed together and
+`beamMask.test.ts` pins them — a quarter-in top blade cuts a straight edge, an angled one a sloped
+one, a gate turn turns the lot.
+
+**A gate or lamp turn rotates the frame, not the mask**: the director turns the head's right axis
+about the beam by `frameTurnDeg` before it writes the light row and the hull, so the mask never
+learns an angle it would have to spend a texel on. That is also why a lantern's own roll turns its
+cut — the right axis is the head's.
+
+**An oval is a negative aspect.** A disc is aspect 0 and a segment a positive depth-over-width; an
+oval PAR writes −`ovalRatio`, and `v` is divided by its magnitude before the mask (in the surface
+shader and the haze alike), so the unit circle becomes the lamp's ellipse — its wide axis along the
+turned right axis. The hull is widened along the wide axis only. `FixtureModel.test.tsx` pins the
+three §9 checks in unit form: a Source Four 19°'s apex puts the cone at the lens's width at the lens
+(`archetype.test.ts`), a quarter-in top shutter draws a straight edge on the floor, and an oval
+PAR's long axis turns with `lampRotationDeg`.
+
+**The Focus tab** (`StageFocusPanel`, a tab of `StageFixtureControlPanel`) and the patch editor's
+**Lantern** box both mount `components/lanterns/FocusCard.tsx`: the lantern and a live cross-section
+of its gate (`GatePreview`), then only what the lantern can take — depth and angle per blade (or per
+barn door), the gate's turn, the iris, sharp ↔ soft, zoom within its range, a PAR's lamp — and a
+switch between the lanterns of a pair, which are focused separately. The tab writes each change
+into the patch list's cache at once, so the Stage redraws the cut as a blade moves, and saves one
+`PUT` after a 350 ms pause (a placement's through the whole `extraPlacements` list, which
+`toPlacementInput` carries the focus in); a refused write re-reads the list. A DMX fixture's tab
+names the optics its channels drive instead. The patch list's **Lantern** column picks the lantern
+from the library, or reads out a DMX type's declared body, and its **Mount** column says *standing*
+for a unit on a ledge or a floor stand.
+

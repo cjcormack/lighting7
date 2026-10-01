@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
+import uk.me.cormack.lighting7.fixture.FixtureBody
+import uk.me.cormack.lighting7.fixture.BodyArchetype
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
@@ -23,7 +25,7 @@ import uk.me.cormack.lighting7.fixture.property.Slider
  * physical confetti cartridge. Scripts should treat the channels as momentary
  * triggers (raise high → wait → release).
  */
-@FixtureType("equinox-twin-shot-mkii", manufacturer = "Equinox", model = "Twin Shot MKII", kind = FixtureKind.EFFECT)
+@FixtureType("equinox-twin-shot-mkii", manufacturer = "Equinox", model = "Twin Shot MKII", kind = FixtureKind.EFFECT, body = FixtureBody(BodyArchetype.CANNON))
 class EquinoxTwinShotMkIIFixture(
     universe: Universe,
     key: String,

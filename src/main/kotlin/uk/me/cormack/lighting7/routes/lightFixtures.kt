@@ -211,6 +211,8 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 acceptsLength = info.acceptsLength,
                 beamShape = info.beamShape.name,
                 beamEdge = info.beamEdge.name,
+                body = info.body,
+                acceptsLantern = info.acceptsLantern,
             )
         })
     }
@@ -402,4 +404,8 @@ data class FixtureTypeDetails(
     val acceptsLength: Boolean = false,
     val beamShape: String = "NONE",
     val beamEdge: String = "SOFT",
+    /** The body the type declares (`@FixtureType.body`); null when the view defaults it from [kind]. */
+    val body: FixtureBodyInfo? = null,
+    /** A patch of this type names a lantern from `GET /lanterns` and carries its focus. */
+    val acceptsLantern: Boolean = false,
 )

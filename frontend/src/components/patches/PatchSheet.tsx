@@ -41,6 +41,8 @@ import { AddressCell, type CellAddress } from '@/components/sheet/cells/AddressC
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
 import { GelCell } from './GelCell'
+import { mountFor } from '@/components/stage3d/bodies/mount'
+import { EMPTY_LANTERNS, lanternFieldLabel, type LanternIndex } from '@/lib/lanterns'
 import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { FixturePatch } from '@/api/patchApi'
@@ -53,6 +55,7 @@ export type PatchColumnKey =
   | 'ch'
   | 'key'
   | 'mount'
+  | 'lantern'
   | 'angle'
   | 'gel'
   | 'groups'
@@ -67,6 +70,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
   ch: 'Ch',
   key: 'Key',
   mount: 'Mount',
+  lantern: 'Lantern',
   angle: 'Angle',
   gel: 'Gel',
   groups: 'Groups',
@@ -82,6 +86,7 @@ export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
   'ch',
   'key',
   'mount',
+  'lantern',
   'angle',
   'gel',
   'groups',
@@ -93,8 +98,18 @@ export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
 export interface PatchSheetRow extends SheetRow {
   patch: FixturePatch
   riggingName: string | null
+  /** The rigging's kind — which says whether the unit hangs from it or stands on it. */
+  riggingKind?: string | null
   acceptsBeamAngle: boolean
   acceptsGel: boolean
+  /** Hung with a lantern from the library (a generic dimmer): the Lantern column edits it. */
+  acceptsLantern?: boolean
+  /** The lanterns it is drawn as, in a phrase (`lanternListLabel`); null for a type with none. */
+  lanternLabel?: string | null
+  /** Whether that phrase is the kind's default rather than a lantern the patch names. */
+  lanternIsDefault?: boolean
+  /** A DMX type's declared body, for the Lantern column's read-out — *mover · spot*. */
+  bodyLabel?: string | null
 }
 
 export function patchRowId(patchId: number): string {
@@ -126,6 +141,8 @@ function headOf(patch: FixturePatch): AddressedHead {
 }
 
 const NO_MOUNT = ''
+/** The Lantern column's "names none" option: a dimmer drawn as its kind's default. */
+const DEFAULT_LANTERN = '__default__'
 const STAGE_OPTIONS: SheetOption[] = [
   { value: 'shown', label: 'Shown' },
   { value: 'hidden', label: 'Hidden' },
@@ -159,6 +176,11 @@ const ROLE_OPTIONS: SheetOption[] = [
  *  - **Clear is refused on Address** (an address cannot be empty), on Key (it cannot be blank), on
  *    Stage (a head is shown or hidden) and on Role (lighting or infrastructure), and offered on
  *    Mount, Angle and Gel, which each have a null. The Fixture column is the row head, not a cell.
+ *  - **Mount names how the unit is carried** — a rigging a unit stands on (a ledge, a floor stand)
+ *    says *standing* beside its name — and **Lantern** is the library's lantern a conventional is
+ *    hung with (stage-view plan session 7): a pick lands on every selected dimmer, the desk derives
+ *    each one's kind from it and drops a zoom the new lantern cannot take; a DMX type reads out the
+ *    body it declares, and Clear returns a dimmer to its kind's default.
  *  - **Every column is its own kind**, so a commit never crosses into a neighbour: Key, Mount,
  *    Angle, Gel and Stage all take a string, and without the kind a rigging picked over a
  *    Mount→Gel marquee would have landed as a gel code (`PatchSheet.test.tsx`).
@@ -168,6 +190,7 @@ export function PatchSheet({
   rows,
   allPatches,
   riggings,
+  lanterns = EMPTY_LANTERNS,
   visibleColumns,
   onEditPatch,
   onEditGroup,
@@ -179,6 +202,8 @@ export function PatchSheet({
   /** Every patch on the project, filtered or not — the overlap check needs the whole rig. */
   allPatches: readonly FixturePatch[]
   riggings: readonly { uuid: string; name: string }[]
+  /** The lantern library — the Lantern column's options. */
+  lanterns?: LanternIndex
   visibleColumns: readonly PatchColumnKey[]
   onEditPatch: (patchId: number) => void
   onEditGroup: (groupId: number, name: string) => void
@@ -319,6 +344,13 @@ export function PatchSheet({
   const mountOptions = useMemo<SheetOption[]>(
     () => [{ value: NO_MOUNT, label: 'Free' }, ...riggings.map((r) => ({ value: r.uuid, label: r.name }))],
     [riggings],
+  )
+  const lanternOptions = useMemo<SheetOption[]>(
+    () => [
+      { value: DEFAULT_LANTERN, label: 'Default for the kind' },
+      ...lanterns.all.map((l) => ({ value: l.id, label: `${l.name} · ${lanternFieldLabel(l)}` })),
+    ],
+    [lanterns],
   )
 
   const columns = useMemo<SheetColumn<PatchSheetRow, PatchColumnKey>[]>(() => {
@@ -518,13 +550,28 @@ export function PatchSheet({
             options={mountOptions}
             face={
               row.riggingName ? (
-                <span className="mx-1.5 truncate text-xs">{row.riggingName}</span>
+                <span className="mx-1.5 truncate text-xs">
+                  {row.riggingName}
+                  {mountFor({ kind: row.riggingKind ?? null }) === 'stand' && (
+                    <span className="text-muted-foreground"> · standing</span>
+                  )}
+                </span>
               ) : (
                 <span className="mx-1.5 truncate text-xs text-muted-foreground/60">Free</span>
               )
             }
           />
         ),
+        cellTitle: (row) =>
+          row.riggingName
+            ? [
+                row.riggingName,
+                row.riggingKind?.toLowerCase().replace('_', ' '),
+                mountFor({ kind: row.riggingKind ?? null }) === 'stand' ? 'standing' : 'hung',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : undefined,
         write: (batch, value) => {
           if (typeof value !== 'string') return false
           const uuid = value === NO_MOUNT ? null : value
@@ -533,6 +580,44 @@ export function PatchSheet({
         },
         clear: (batch) => {
           for (const row of batch) if (row.patch.riggingUuid != null) void put(row.patch.id, { riggingUuid: null })
+        },
+      },
+      {
+        key: 'lantern',
+        label: 'Lantern',
+        kind: 'lantern',
+        width: 'minmax(140px, 1fr)',
+        value: (row) => (row.acceptsLantern ? (row.patch.lanternType ?? DEFAULT_LANTERN) : undefined),
+        cell: (row, props) => (
+          <OptionCell
+            {...(props as React.ComponentProps<typeof OptionCell>)}
+            options={lanternOptions}
+            face={
+              <span className={cn('mx-1.5 truncate text-xs', row.lanternIsDefault && 'text-muted-foreground')}>
+                {row.lanternLabel || '—'}
+              </span>
+            }
+          />
+        ),
+        // A DMX type's body, which it declares: it is not the operator's to pick.
+        display: (row) =>
+          row.bodyLabel ? <span className="mx-1.5 truncate text-xs text-muted-foreground">{row.bodyLabel}</span> : null,
+        cellTitle: (row) =>
+          row.acceptsLantern
+            ? `${row.lanternLabel ?? ''}${row.lanternIsDefault ? ' — the default for its kind' : ''}`
+            : row.bodyLabel
+              ? `Its type's body: ${row.bodyLabel}`
+              : undefined,
+        write: (batch, value) => {
+          if (typeof value !== 'string') return false
+          const id = value === DEFAULT_LANTERN ? null : value
+          for (const row of batch) {
+            if (id !== (row.patch.lanternType ?? null)) void put(row.patch.id, { lanternType: id })
+          }
+          return true
+        },
+        clear: (batch) => {
+          for (const row of batch) if (row.patch.lanternType != null) void put(row.patch.id, { lanternType: null })
         },
       },
       {
@@ -670,6 +755,7 @@ export function PatchSheet({
     keyLanding,
     landing,
     mountOptions,
+    lanternOptions,
     onEditGroup,
     overlaps,
     put,

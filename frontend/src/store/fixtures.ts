@@ -3,6 +3,7 @@ import { useWithoutInfrastructure } from "@/lib/infrastructure"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
 import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
+import type { Lantern } from "../lib/lanterns"
 
 // `GroupList` rides along because `GET /groups` reads the same runtime register the
 // `fixturesChanged` frame announces: groups only ever change inside `Fixtures.register {}`
@@ -31,13 +32,19 @@ export const fixturesApi = restApi.injectEndpoints({
         },
         providesTags: ['Fixture'],
       }),
+      // The lantern library (stage-view plan session 7): the desk's, not a show's, and fixed for
+      // the life of the desk process — so it is read once and kept.
+      lanternList: build.query<Array<Lantern>, void>({
+        query: () => 'lanterns',
+        keepUnusedDataFor: 3600,
+      }),
     }
   },
   overrideExisting: false,
 })
 
 export const {
-  useFixtureListQuery, useFixtureTypeListQuery,
+  useFixtureListQuery, useFixtureTypeListQuery, useLanternListQuery,
 } = fixturesApi
 
 export const FIXTURE_KINDS = [
@@ -125,6 +132,19 @@ export type FixtureTypeInfo = {
   acceptsLength?: boolean
   beamShape?: BeamShape
   beamEdge?: BeamEdge
+  /** The body the type declares (`@FixtureType.body`, stage-view plan session 7): an archetype, a
+   *  mover's head, a lens diameter. Null or absent leaves it to the kind, as it always was. */
+  body?: FixtureBodyInfo | null
+  /** A patch of this type names a lantern from `GET /lanterns` and carries its focus — a generic
+   *  dimmer. Optional so an older desk reads as "no". */
+  acceptsLantern?: boolean
+}
+
+/** A declared body on the wire (backend `FixtureBodyInfo`). */
+export interface FixtureBodyInfo {
+  archetype: string
+  head?: string | null
+  lensDiameterM?: number | null
 }
 
 // Channel reference for property descriptors

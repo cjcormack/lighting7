@@ -22,7 +22,7 @@ export const MAX_VOL_STEPS = 16
  *
  * Every beam in the air is **raymarched** (stage-view plan session 6). Until then an open beam was a
  * hollow additive cone shell and only a gobo beam marched; a shell cannot show a beam's shape
- * inside it — a soft edge, an iris, a segment's rectangle, session 7's shutter cut — so the shell
+ * inside it — a soft edge, an iris, a segment's rectangle, a shutter cut, an oval — so the shell
  * is gone and the volume draws them all, through `beamMask`, the function the surfaces' pools are
  * shaped by too. What that costs is the haze governor's to pay (`scene/hazeGovernor.ts`).
  *
@@ -109,12 +109,15 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
   attribute vec3 aBeamRight;
-  attribute vec3 aColor;
-  attribute float aOpacity;
-  attribute float aCosHalfAngle;
+  // Packed to stay inside WebGL's guaranteed sixteen vertex attributes: three's prefix declares
+  // position, normal and uv, the instance matrix takes four, and these seven take the rest —
+  // fourteen. The colour carries the opacity in .a; the gate carries the half-angle, the shadow
+  // mask and the two packed blade words (stage-view plan session 7). A program past sixteen does
+  // not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
+  attribute vec4 aColor;
   attribute vec4 aBeamFx;
-  attribute float aShadowMask;
   attribute vec4 aBeamShape;
+  attribute vec4 aBeamGate;
 
   varying vec3 vWorldPos;
   varying vec3 vBeamOrigin;
@@ -127,9 +130,13 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   varying float vShadowMask;
   varying float vBeamLen;
   varying vec4 vBeamShape;
+  // Flat: the blades are packed integers (beamMask.ts's packBlades), which interpolation — even of
+  // three equal corners — could nudge off by an ulp and unpack as the wrong blade.
+  flat varying vec2 vBeamBlades;
 
   void main() {
     vBeamShape = aBeamShape;
+    vBeamBlades = aBeamGate.zw;
     // The drawn length is the instance's y scale, from the apex: the beam ends where its axis meets
     // a surface (the director's axial reach), or BEAM_LENGTH past its aperture in open air.
     vBeamLen = length(instanceMatrix[1].xyz);
@@ -138,11 +145,11 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
     vBeamOrigin = aBeamOrigin;
     vBeamDir = aBeamDir;
     vBeamRight = aBeamRight;
-    vColor = aColor;
-    vOpacity = aOpacity;
-    vCosHalfAngle = aCosHalfAngle;
+    vColor = aColor.rgb;
+    vOpacity = aColor.a;
+    vCosHalfAngle = aBeamGate.x;
     vBeamFx = aBeamFx;
-    vShadowMask = aShadowMask;
+    vShadowMask = aBeamGate.y;
     gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `
@@ -174,6 +181,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying float vShadowMask;
   varying float vBeamLen;
   varying vec4 vBeamShape;
+  flat varying vec2 vBeamBlades;
 
   ${RAY_OBB_T_GLSL}
   ${CROSS_SECTION_GLSL}
@@ -323,8 +331,10 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       // Focus is a distance from the aperture, not from the apex behind it.
       float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - near - focusDist);
       float effEdge = beamHardness(vBeamFx.x, focusDist, defocus, uEdgeSoftRange);
-      vec2 mg = aspect > 0.0 ? vec2(g.x, g.y / aspect) : g;
-      float radial = beamMask(mg, aspect, iris, 1.0 - effEdge);
+      // A segment's rectangle or an oval's narrow axis: the field edge at 1 on v too. An oval is
+      // marched through the round cone of its wide field, and the mask cuts it to the oval.
+      vec2 mg = aspect != 0.0 ? vec2(g.x, g.y / abs(aspect)) : g;
+      float radial = beamMask(mg, aspect, iris, 1.0 - effEdge, vBeamBlades);
 
       float gobo = 1.0;
       if (vBeamFx.y >= 0.5 && aspect <= 0.0) {

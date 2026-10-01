@@ -7,6 +7,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
+import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
+import uk.me.cormack.lighting7.fixture.lantern.effectiveKind
 import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
@@ -33,12 +35,16 @@ class RigBriefing(private val state: State) {
         // (the loader never reads them). An operator migrated from another console calls fixtures
         // by these — "head 12 at full" — so the model has to see them beside the keys it acts on.
         val headNumbers = patchHeadNumbers()
+        // Each conventional's lantern (stage-view plan session 7), read from the patch as the head
+        // numbers are: which unit a dimmer drives is what "the fresnel on 12" means to an operator.
+        val lanterns = patchLanterns()
         for (fixture in lighting) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
             // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
             // closing paren went missing for every fixture that *is* in a group.
             sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
                     "key=`${fixture.key}`, type=`${fixture.typeKey}`" +
+                    (lanterns[fixture.key]?.let { ", $it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     ")")
         }
@@ -338,7 +344,7 @@ class RigBriefing(private val state: State) {
      */
     private fun mountMismatches(projectId: org.jetbrains.exposed.v1.core.dao.id.EntityID<Int>): String? {
         data class MountedUnit(val name: String, val rigging: DaoRigging?, val yaw: Double?, val pitch: Double?, val roll: Double?)
-        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey, it.kindOverride) }
+        val heads = DaoFixturePatch.find { DaoFixturePatches.project eq projectId }.filter { isMovingHead(it.fixtureTypeKey, it.kindOverride, it.lanternType) }
         if (heads.isEmpty()) return null
         val placements = DaoFixturePatchPlacement
             .find { DaoFixturePatchPlacements.fixturePatch inList heads.map { it.id } }
@@ -369,15 +375,46 @@ class RigBriefing(private val state: State) {
     }
 
     /**
-     * Whether the view draws this patch as a mover: its kind — the patch's `kindOverride` first,
-     * then the type's, as the view's `resolveFixtureKind` reads it — is a moving head or a scanner,
-     * or the type has a tilt axis (`archetypeFor` in the frontend's `bodies/archetype.ts`).
+     * Whether the view draws this patch as a mover: its kind — its lantern's, then the patch's
+     * `kindOverride`, then the type's, as the view's `bodyInputFor` reads it ([effectiveKind]) — is
+     * a moving head or a scanner, or the type has a tilt axis (`archetypeFor` in the frontend's
+     * `bodies/archetype.ts`). A lantern is never a mover's, so naming one takes a patch out.
      */
-    private fun isMovingHead(typeKey: String, kindOverride: String?): Boolean {
+    private fun isMovingHead(typeKey: String, kindOverride: String?, lanternType: String?): Boolean {
         val info = FixtureTypeRegistry.typeInfoForKey(typeKey) ?: return false
-        val kind = kindOverride?.let { k -> FixtureKind.entries.firstOrNull { it.name == k } } ?: info.kind
+        val kind = effectiveKind(typeKey, kindOverride, lanternType) ?: info.kind
         return kind == FixtureKind.MOVING_HEAD || kind == FixtureKind.SCANNER ||
             info.properties.any { it is SliderPropertyDescriptor && it.axis == "TILT" }
+    }
+
+    /**
+     * Each lantern-hung patch's lantern, in a phrase, by fixture key: `lantern=…` for one unit and
+     * `lanterns=[…]` for a pair, each placement by its label. A unit that names none is drawn as its
+     * kind's default, and says so. Patches of a type that takes no lantern are absent.
+     */
+    private fun patchLanterns(): Map<String, String> {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                .filter { FixtureTypeRegistry.typeInfoForKey(it.fixtureTypeKey)?.acceptsLantern == true }
+            if (patches.isEmpty()) return@transaction emptyMap()
+            val placements = extraPlacementsByPatch(patches.map { it.id })
+            patches.associate { p ->
+                val kind = effectiveKind(p.fixtureTypeKey, p.kindOverride, p.lanternType) ?: FixtureKind.GENERIC
+                fun name(own: String?, inherited: String?): String {
+                    val named = LanternLibrary.byId(own ?: inherited)
+                    return named?.name ?: LanternLibrary.defaultFor(kind)?.let { "${it.name} (default)" } ?: "none"
+                }
+                val others = placements[p.id.value].orEmpty()
+                p.key to if (others.isEmpty()) {
+                    "lantern=${name(p.lanternType, null)}"
+                } else {
+                    "lanterns=[" + (listOf(name(p.lanternType, null)) + others.map { pl ->
+                        (pl.label?.takeIf { it.isNotBlank() }?.let { "$it: " } ?: "") + name(pl.lanternType, p.lanternType)
+                    }).joinToString("; ") + "]"
+                }
+            }
+        }
     }
 
     private fun m1(v: Double?): String =

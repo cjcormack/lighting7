@@ -90,3 +90,44 @@ describe("patchAtPlacement — a variable-length run's sides", () => {
     expect(patchAtPlacement({ ...strip, lengthM: null }, sr).lengthM).toBeNull()
   })
 })
+
+describe("a placement's lantern and focus", () => {
+  const blades = [
+    { depth: 0.2, angleDeg: 0 },
+    { depth: 0, angleDeg: 0 },
+    { depth: 0, angleDeg: 0 },
+    { depth: 0.4, angleDeg: 8 },
+  ]
+  const focused = {
+    ...base,
+    lanternType: 's4-26',
+    zoomDeg: null,
+    shutters: blades,
+    gateRotationDeg: 10,
+    iris: 0.5,
+    focusSoftness: 0.2,
+  } satisfies FixturePatch
+
+  it("takes the patch's lantern where it names none, and never the patch's focus", () => {
+    const drawn = patchAtPlacement(focused, sr)
+    expect(drawn.lanternType).toBe('s4-26')
+    expect(drawn.shutters).toBeNull()
+    expect(drawn.gateRotationDeg).toBeNull()
+    expect(drawn.iris).toBeNull()
+    expect(drawn.focusSoftness).toBeNull()
+  })
+
+  it('is its own lantern, focused separately, where it names one', () => {
+    const drawn = patchAtPlacement(focused, {
+      ...sr,
+      lanternType: 'cantata-f',
+      zoomDeg: 20,
+      shutters: [blades[3], blades[2], blades[1], blades[0]],
+      focusSoftness: 0.9,
+    })
+    expect(drawn.lanternType).toBe('cantata-f')
+    expect(drawn.zoomDeg).toBe(20)
+    expect(drawn.shutters?.[0].depth).toBe(0.4)
+    expect(drawn.focusSoftness).toBe(0.9)
+  })
+})

@@ -108,6 +108,9 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SURFACE-SELECTION-FOLLOW-SET`](#fu-surface-selection-follow-set) | Trigger | MIDI | a desk button should take a named window off the desk selection, or put it back |
 | [`FU-SCRIPT-USED-BY`](#fu-script-used-by) | Trigger | FE | an operator needs to know which cues hook a script before editing or deleting it |
 | [`FU-STAGE-HAZE-FOLLOWS-HAZER`](#fu-stage-haze-follows-hazer) | Trigger | Stage | a rig can say which fixture is its hazer |
+| [`FU-LANTERN-LIBRARY-HALL`](#fu-lantern-library-hall) | Trigger | Stage | Chris answers which lanterns the Commemoration Hall owns (stage-view plan §11 Q4) |
+| [`FU-STAGE-FOCUS-ON-POOL`](#fu-stage-focus-on-pool) | Trigger | Stage | an operator focuses a rig from the Stage view rather than the card |
+| [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2098,6 +2101,48 @@ channel), or a role on a patch. **Then**: the volume shader's haze level reads t
 on the window's vis source (so Blind and Next GO preview it), with the constant as the fallback for
 a rig that names none; the View menu's toggle stays as the window's override. The haze governor
 (`scene/hazeGovernor.ts`) is unaffected — it scales march steps, not the level.
+
+### `FU-LANTERN-LIBRARY-HALL`
+
+**The lantern library is seeded from datasheets as remembered, and the hall's own list is unknown**
+· Trigger · stage-view plan session 7, 2026-09-30
+
+Session 7 shipped `src/main/resources/lanterns/library.json` — 26 lanterns, with the plan's defaults
+(Source Four 19° for a `PROFILE`, Cantata F for a `FRESNEL`, Par 64 CP62 for a `PAR`) — because
+§11 Q4, *which lanterns does the Commemoration Hall own?*, is still open. Each entry's beam, field,
+zoom, oval, lens and dimensions were written from memory of the maker's datasheet, which the entry's
+`source` names; none was checked against the sheet.
+
+**Trigger**: Chris answers Q4. **Then**: add or correct the hall's lanterns, set `defaultFor` to
+what the hall hangs most of each kind, and check every entry's numbers against its datasheet in the
+same pass (`LanternLibraryTest` refuses a library that would draw wrong, not one that is merely
+inaccurate). Patches that name a lantern keep it; the default move changes only units that name
+none.
+
+### `FU-STAGE-FOCUS-ON-POOL`
+
+**Blades are dragged on the focus card, not on the pool** · Trigger · stage-view plan §8, recorded in
+session 7, 2026-09-30
+
+The Focus tab draws a cross-section of the gate beside the Stage (`GatePreview`) and its sliders move
+the blades, with the Stage redrawing the cut live. The record's item 10 also imagined grabbing a
+blade's edge on the pool itself. **Trigger**: an operator focuses a rig from the Stage view and
+reaches for the pool. **Then**: a handle per blade on the landed pool, solved back into the head
+frame — the inverse of `beamMask`'s blade line through the surface's plane.
+
+### `FU-STAGE-SURFACE-LOOP-COST`
+
+**Three unmeasured costs in the surface-light loop, and session 7 added a fourth** · Trigger ·
+stage-view plan sessions 6–7, 2026-09-30
+
+Session 6's review left three notes it could not measure in a container: dark cells still raycast
+in the multi-cell loop, fixture housings run the full surface-light loop (every light, every
+fragment), and `LightTable.set` marks the texture dirty on every write. Session 7 adds a little to the
+second: every light's edge and iris are unpacked from one float (`unpackEdgeIris`), and a light with
+a blade in evaluates four half-plane cuts (skipped when every blade is out). **Trigger**: the Safari
+and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
+cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
+compare before dirtying — before cutting steps from the march.
 
 ## Completed
 

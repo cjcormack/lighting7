@@ -2,6 +2,9 @@ import { Loader2, X } from 'lucide-react'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { FixtureDetailView } from '@/components/fixtures/FixtureDetailView'
 import { StageAimControls, isAimable } from './StageAimControls'
+import { StageFocusPanel } from './StageFocusPanel'
+import { useVisiblePatchListQuery } from '@/store/patches'
+import { useLanternIndex } from '@/hooks/useLanternIndex'
 
 interface StageFixtureControlPanelProps {
   /** Selected patch key — equals the fixture key (see useFixtureLookup). */
@@ -18,11 +21,17 @@ interface StageFixtureControlPanelProps {
  * on the stage in view mode. Reuses the same live-control view as the
  * `FixtureDetailModal` (colour, dimmer, position, channels…) — always editable,
  * no edit button — but docked inline rather than overlaying the page. A moving head also gets
- * "Aim at point" underneath, pinned to the panel's foot.
+ * "Aim at point" underneath, pinned to the panel's foot, and every fixture a **Focus** view
+ * (`StageFocusPanel`): a conventional's lanterns focused on the stage, or what a DMX fixture's own
+ * channels drive.
  */
 export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose }: StageFixtureControlPanelProps) {
-  const { fixtureByKey } = useFixtureLookup()
+  const { fixtureByKey, typeByKey } = useFixtureLookup()
   const fixture = fixtureByKey.get(patchKey)
+  const { data: patches } = useVisiblePatchListQuery(projectId)
+  const patch = patches?.find((p) => p.key === patchKey)
+  const lanterns = useLanternIndex()
+  const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
 
   return (
     <aside className="relative flex w-full flex-col border-l bg-background shadow-lg sm:w-[380px]">
@@ -37,7 +46,23 @@ export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose 
       {fixture ? (
         <>
           <div className="flex min-h-0 flex-1 flex-col">
-            <FixtureDetailView key={patchKey} fixture={fixture} isEditing />
+            <FixtureDetailView
+              key={patchKey}
+              fixture={fixture}
+              isEditing
+              focus={
+                patch ? (
+                  <StageFocusPanel
+                    key={patch.id}
+                    projectId={projectId}
+                    patch={patch}
+                    fixture={fixture}
+                    fixtureType={fixtureType}
+                    lanterns={lanterns}
+                  />
+                ) : undefined
+              }
+            />
           </div>
           {canAim && isAimable(fixture) && (
             <div className="border-t p-4">

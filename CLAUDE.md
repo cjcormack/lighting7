@@ -575,6 +575,10 @@ Never add a table-by-table clone path; that's what rotted last time.
 2. Add `@FixtureType` annotation with name
 3. Implement required traits (Dimmer, Colour, etc.)
 4. Use `@FixtureProperty` to annotate controllable properties
+5. Declare its 3D `body` on `@FixtureType` (archetype, a mover's head, lens) where the kind and
+   the words would guess wrong; a type whose body is the lantern it is hung with sets
+   `acceptsLantern` instead (the generic dimmer — the lantern library and each unit's focus are
+   `docs/fixtures-engineering.md` §"Lanterns and focus")
 
 ### Multi-Mode Fixtures
 Some fixtures support multiple DMX channel modes (set via DIP switches). Use the sealed class pattern:

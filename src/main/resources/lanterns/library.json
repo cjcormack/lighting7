@@ -1,0 +1,610 @@
+[
+  {
+    "id": "s4-19",
+    "name": "Source Four 19°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 13,
+    "fieldDeg": 19,
+    "lensDiameterM": 0.17,
+    "frameSizeM": 0.159,
+    "lengthM": 0.64,
+    "widthM": 0.26,
+    "heightM": 0.26,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "defaultFor": [
+      "PROFILE"
+    ],
+    "source": "ETC Source Four datasheet (HPL 575 W)"
+  },
+  {
+    "id": "s4-26",
+    "name": "Source Four 26°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 17,
+    "fieldDeg": 26,
+    "lensDiameterM": 0.17,
+    "frameSizeM": 0.159,
+    "lengthM": 0.57,
+    "widthM": 0.26,
+    "heightM": 0.26,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "ETC Source Four datasheet (HPL 575 W)"
+  },
+  {
+    "id": "s4-36",
+    "name": "Source Four 36°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 25,
+    "fieldDeg": 36,
+    "lensDiameterM": 0.17,
+    "frameSizeM": 0.159,
+    "lengthM": 0.54,
+    "widthM": 0.26,
+    "heightM": 0.26,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "ETC Source Four datasheet (HPL 575 W)"
+  },
+  {
+    "id": "s4-50",
+    "name": "Source Four 50°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 33,
+    "fieldDeg": 50,
+    "lensDiameterM": 0.17,
+    "frameSizeM": 0.159,
+    "lengthM": 0.52,
+    "widthM": 0.26,
+    "heightM": 0.26,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "ETC Source Four datasheet (HPL 575 W)"
+  },
+  {
+    "id": "s4-zoom-15-30",
+    "name": "Source Four Zoom 15–30°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 15,
+    "fieldDeg": 22,
+    "zoom": {
+      "minDeg": 15,
+      "maxDeg": 30
+    },
+    "lensDiameterM": 0.18,
+    "frameSizeM": 0.19,
+    "lengthM": 0.8,
+    "widthM": 0.28,
+    "heightM": 0.28,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "ETC Source Four Zoom datasheet"
+  },
+  {
+    "id": "s4-zoom-25-50",
+    "name": "Source Four Zoom 25–50°",
+    "maker": "ETC",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 575,
+    "beamDeg": 24,
+    "fieldDeg": 35,
+    "zoom": {
+      "minDeg": 25,
+      "maxDeg": 50
+    },
+    "lensDiameterM": 0.18,
+    "frameSizeM": 0.159,
+    "lengthM": 0.7,
+    "widthM": 0.28,
+    "heightM": 0.28,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "ETC Source Four Zoom datasheet"
+  },
+  {
+    "id": "sil-30",
+    "name": "CCT Silhouette 30",
+    "maker": "CCT",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 1000,
+    "beamDeg": 20,
+    "fieldDeg": 30,
+    "zoom": {
+      "minDeg": 22,
+      "maxDeg": 40
+    },
+    "lensDiameterM": 0.2,
+    "frameSizeM": 0.185,
+    "lengthM": 0.72,
+    "widthM": 0.3,
+    "heightM": 0.3,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "CCT Silhouette datasheet (Theatrecrafts archive)"
+  },
+  {
+    "id": "patt-23",
+    "name": "Strand Patt 23",
+    "maker": "Strand",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 500,
+    "beamDeg": 17,
+    "fieldDeg": 30,
+    "lensDiameterM": 0.1,
+    "frameSizeM": 0.1,
+    "lengthM": 0.3,
+    "widthM": 0.15,
+    "heightM": 0.15,
+    "accessories": {
+      "shutters": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Patt 23 datasheet (Theatrecrafts archive)"
+  },
+  {
+    "id": "cantata-11-26",
+    "name": "Strand Cantata 11/26",
+    "maker": "Strand",
+    "family": "PROFILE",
+    "archetype": "boxProfile",
+    "watts": 1200,
+    "beamDeg": 12,
+    "fieldDeg": 18,
+    "zoom": {
+      "minDeg": 11,
+      "maxDeg": 26
+    },
+    "lensDiameterM": 0.15,
+    "frameSizeM": 0.185,
+    "lengthM": 0.64,
+    "widthM": 0.33,
+    "heightM": 0.33,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Cantata datasheet"
+  },
+  {
+    "id": "prelude-16-30",
+    "name": "Strand Prelude 16/30",
+    "maker": "Strand",
+    "family": "PROFILE",
+    "archetype": "boxProfile",
+    "watts": 650,
+    "beamDeg": 16,
+    "fieldDeg": 23,
+    "zoom": {
+      "minDeg": 16,
+      "maxDeg": 30
+    },
+    "lensDiameterM": 0.115,
+    "frameSizeM": 0.15,
+    "lengthM": 0.5,
+    "widthM": 0.25,
+    "heightM": 0.25,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Prelude datasheet"
+  },
+  {
+    "id": "sl-23-50",
+    "name": "Strand SL 23/50",
+    "maker": "Strand",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 600,
+    "beamDeg": 24,
+    "fieldDeg": 36,
+    "zoom": {
+      "minDeg": 23,
+      "maxDeg": 50
+    },
+    "lensDiameterM": 0.17,
+    "frameSizeM": 0.159,
+    "lengthM": 0.7,
+    "widthM": 0.28,
+    "heightM": 0.28,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "Strand SL datasheet"
+  },
+  {
+    "id": "acclaim-axial-18-34",
+    "name": "Selecon Acclaim Axial 18–34°",
+    "maker": "Selecon",
+    "family": "PROFILE",
+    "archetype": "profile",
+    "watts": 650,
+    "beamDeg": 18,
+    "fieldDeg": 26,
+    "zoom": {
+      "minDeg": 18,
+      "maxDeg": 34
+    },
+    "lensDiameterM": 0.12,
+    "frameSizeM": 0.15,
+    "lengthM": 0.55,
+    "widthM": 0.22,
+    "heightM": 0.22,
+    "accessories": {
+      "shutters": true,
+      "iris": true,
+      "colourFrame": true
+    },
+    "source": "Selecon Acclaim Axial datasheet"
+  },
+  {
+    "id": "cantata-f",
+    "name": "Strand Cantata F",
+    "maker": "Strand",
+    "family": "FRESNEL",
+    "archetype": "fresnel",
+    "watts": 1200,
+    "beamDeg": 30,
+    "fieldDeg": 45,
+    "zoom": {
+      "minDeg": 9,
+      "maxDeg": 51
+    },
+    "lensDiameterM": 0.2,
+    "frameSizeM": 0.185,
+    "lengthM": 0.42,
+    "widthM": 0.3,
+    "heightM": 0.3,
+    "accessories": {
+      "barnDoors": true,
+      "colourFrame": true
+    },
+    "defaultFor": [
+      "FRESNEL"
+    ],
+    "discontinued": true,
+    "source": "Strand Cantata F datasheet"
+  },
+  {
+    "id": "rama-175",
+    "name": "Selecon Rama 175",
+    "maker": "Selecon",
+    "family": "FRESNEL",
+    "archetype": "fresnel",
+    "watts": 1200,
+    "beamDeg": 30,
+    "fieldDeg": 45,
+    "zoom": {
+      "minDeg": 7,
+      "maxDeg": 56
+    },
+    "lensDiameterM": 0.175,
+    "frameSizeM": 0.185,
+    "lengthM": 0.38,
+    "widthM": 0.3,
+    "heightM": 0.3,
+    "accessories": {
+      "barnDoors": true,
+      "colourFrame": true
+    },
+    "source": "Selecon Rama datasheet"
+  },
+  {
+    "id": "patt-743",
+    "name": "Strand Patt 743",
+    "maker": "Strand",
+    "family": "FRESNEL",
+    "archetype": "fresnel",
+    "watts": 1000,
+    "beamDeg": 30,
+    "fieldDeg": 48,
+    "zoom": {
+      "minDeg": 15,
+      "maxDeg": 65
+    },
+    "lensDiameterM": 0.2,
+    "frameSizeM": 0.185,
+    "lengthM": 0.34,
+    "widthM": 0.3,
+    "heightM": 0.3,
+    "accessories": {
+      "barnDoors": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Patt 743 datasheet (Theatrecrafts archive)"
+  },
+  {
+    "id": "quartet-f",
+    "name": "Strand Quartet F",
+    "maker": "Strand",
+    "family": "FRESNEL",
+    "archetype": "fresnel",
+    "watts": 650,
+    "beamDeg": 26,
+    "fieldDeg": 40,
+    "zoom": {
+      "minDeg": 8,
+      "maxDeg": 60
+    },
+    "lensDiameterM": 0.12,
+    "frameSizeM": 0.15,
+    "lengthM": 0.3,
+    "widthM": 0.22,
+    "heightM": 0.22,
+    "accessories": {
+      "barnDoors": true,
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Quartet datasheet"
+  },
+  {
+    "id": "prelude-pc",
+    "name": "Strand Prelude PC",
+    "maker": "Strand",
+    "family": "PC",
+    "archetype": "fresnel",
+    "watts": 650,
+    "beamDeg": 20,
+    "fieldDeg": 34,
+    "zoom": {
+      "minDeg": 8,
+      "maxDeg": 60
+    },
+    "lensDiameterM": 0.14,
+    "frameSizeM": 0.15,
+    "lengthM": 0.3,
+    "widthM": 0.22,
+    "heightM": 0.22,
+    "accessories": {
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Prelude datasheet"
+  },
+  {
+    "id": "cantata-pc",
+    "name": "Strand Cantata PC",
+    "maker": "Strand",
+    "family": "PC",
+    "archetype": "fresnel",
+    "watts": 1200,
+    "beamDeg": 22,
+    "fieldDeg": 35,
+    "zoom": {
+      "minDeg": 5,
+      "maxDeg": 60
+    },
+    "lensDiameterM": 0.2,
+    "frameSizeM": 0.185,
+    "lengthM": 0.42,
+    "widthM": 0.3,
+    "heightM": 0.3,
+    "accessories": {
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Cantata datasheet"
+  },
+  {
+    "id": "par64-cp60",
+    "name": "Par 64 · CP60 VNSP",
+    "maker": "Generic",
+    "family": "PAR",
+    "archetype": "par",
+    "watts": 1000,
+    "beamDeg": 12,
+    "fieldDeg": 24,
+    "oval": {
+      "wideDeg": 24,
+      "narrowDeg": 10
+    },
+    "lensDiameterM": 0.19,
+    "frameSizeM": 0.254,
+    "lengthM": 0.36,
+    "widthM": 0.23,
+    "heightM": 0.23,
+    "accessories": {
+      "colourFrame": true
+    },
+    "source": "Altman Par 64 datasheet (CP60 beam 12×6°, field 24×10°)"
+  },
+  {
+    "id": "par64-cp61",
+    "name": "Par 64 · CP61 NSP",
+    "maker": "Generic",
+    "family": "PAR",
+    "archetype": "par",
+    "watts": 1000,
+    "beamDeg": 14,
+    "fieldDeg": 26,
+    "oval": {
+      "wideDeg": 26,
+      "narrowDeg": 14
+    },
+    "lensDiameterM": 0.19,
+    "frameSizeM": 0.254,
+    "lengthM": 0.36,
+    "widthM": 0.23,
+    "heightM": 0.23,
+    "accessories": {
+      "colourFrame": true
+    },
+    "source": "Altman Par 64 datasheet (CP61 beam 14×7°, field 26×14°)"
+  },
+  {
+    "id": "par64-cp62",
+    "name": "Par 64 · CP62 MFL",
+    "maker": "Generic",
+    "family": "PAR",
+    "archetype": "par",
+    "watts": 1000,
+    "beamDeg": 28,
+    "fieldDeg": 44,
+    "oval": {
+      "wideDeg": 44,
+      "narrowDeg": 21
+    },
+    "lensDiameterM": 0.19,
+    "frameSizeM": 0.254,
+    "lengthM": 0.36,
+    "widthM": 0.23,
+    "heightM": 0.23,
+    "accessories": {
+      "colourFrame": true
+    },
+    "defaultFor": [
+      "PAR"
+    ],
+    "source": "Altman Par 64 datasheet (CP62 beam 28×12°, field 44×21°)"
+  },
+  {
+    "id": "par64-wfl",
+    "name": "Par 64 · WFL",
+    "maker": "Generic",
+    "family": "PAR",
+    "archetype": "par",
+    "watts": 1000,
+    "beamDeg": 48,
+    "fieldDeg": 71,
+    "oval": {
+      "wideDeg": 71,
+      "narrowDeg": 45
+    },
+    "lensDiameterM": 0.19,
+    "frameSizeM": 0.254,
+    "lengthM": 0.36,
+    "widthM": 0.23,
+    "heightM": 0.23,
+    "accessories": {
+      "colourFrame": true
+    },
+    "source": "Altman Par 64 datasheet (WFL beam 48×24°, field 71×45°)"
+  },
+  {
+    "id": "par16",
+    "name": "Par 16 birdie",
+    "maker": "Generic",
+    "family": "PAR",
+    "archetype": "par",
+    "watts": 50,
+    "beamDeg": 10,
+    "fieldDeg": 18,
+    "lensDiameterM": 0.056,
+    "lengthM": 0.12,
+    "widthM": 0.07,
+    "heightM": 0.07,
+    "accessories": {},
+    "source": "Generic Par 16 (MR16 50 W, 10° lamp)"
+  },
+  {
+    "id": "coda-500",
+    "name": "Strand Coda 500 flood",
+    "maker": "Strand",
+    "family": "FLOOD",
+    "archetype": "flood",
+    "watts": 500,
+    "beamDeg": 70,
+    "fieldDeg": 100,
+    "lensDiameterM": 0.2,
+    "frameSizeM": 0.2,
+    "lengthM": 0.2,
+    "widthM": 0.26,
+    "heightM": 0.24,
+    "accessories": {
+      "colourFrame": true
+    },
+    "defaultFor": [
+      "WASH"
+    ],
+    "discontinued": true,
+    "source": "Strand Coda datasheet"
+  },
+  {
+    "id": "iris-1",
+    "name": "Strand Iris 1 cyc",
+    "maker": "Strand",
+    "family": "CYC",
+    "archetype": "flood",
+    "watts": 1250,
+    "beamDeg": 80,
+    "fieldDeg": 110,
+    "lensDiameterM": 0.28,
+    "frameSizeM": 0.3,
+    "lengthM": 0.24,
+    "widthM": 0.36,
+    "heightM": 0.34,
+    "accessories": {
+      "colourFrame": true
+    },
+    "discontinued": true,
+    "source": "Strand Iris datasheet"
+  },
+  {
+    "id": "downlight",
+    "name": "House downlight",
+    "maker": "Generic",
+    "family": "DOWNLIGHT",
+    "archetype": "downlight",
+    "beamDeg": 80,
+    "fieldDeg": 110,
+    "lensDiameterM": 0.16,
+    "lengthM": 0.16,
+    "widthM": 0.2,
+    "heightM": 0.2,
+    "accessories": {},
+    "defaultFor": [
+      "GENERIC"
+    ],
+    "source": "Generic house downlight"
+  }
+]

@@ -27,6 +27,8 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
     // GENERIC kind defaults to NONE; this conventional fixture does throw a
     // beam, so opt in explicitly to keep the shape-gate and acceptsBeamAngle aligned.
     beamShape = BeamShape.ROUND,
+    // A conventional: it is hung with a lantern from the library, focused per placement.
+    acceptsLantern = true,
 )
 class GenericDimmerFixture(
     universe: Universe,

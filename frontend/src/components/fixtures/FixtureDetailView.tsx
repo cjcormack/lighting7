@@ -2,7 +2,7 @@ import { useState, type ElementType, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Settings2, SlidersHorizontal } from 'lucide-react'
+import { Crosshair, Settings2, SlidersHorizontal } from 'lucide-react'
 import { SheetBody, SheetHeader } from '@/components/ui/sheet'
 import { FixtureContent, FixtureViewMode } from './FixtureContent'
 import { FixtureParkButton } from './FixtureParkButton'
@@ -16,6 +16,11 @@ interface FixtureDetailViewProps {
   /** Element used to render the fixture name — pass `SheetTitle` inside a Sheet
    *  (for Dialog a11y), or leave as a plain heading when docked inline. */
   titleComponent?: ElementType<{ className?: string; children?: ReactNode }>
+  /**
+   * A **Focus** view beside Properties and Channels — the Stage view's Focus tab (stage-view plan
+   * session 7). Absent everywhere else: the fixture sheet has no lantern to focus.
+   */
+  focus?: ReactNode
 }
 
 /**
@@ -28,9 +33,10 @@ export function FixtureDetailView({
   fixture,
   isEditing: externalIsEditing,
   titleComponent: TitleComponent = 'div',
+  focus,
 }: FixtureDetailViewProps) {
   const [internalIsEditing, setInternalIsEditing] = useState(false)
-  const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
+  const [viewMode, setViewMode] = useState<FixtureViewMode | 'focus'>('properties')
 
   // Use the forced edit state if provided, otherwise the internal toggle.
   const isEditing = externalIsEditing ?? internalIsEditing
@@ -40,22 +46,24 @@ export function FixtureDetailView({
   return (
     <>
       <SheetHeader>
-        <div className="flex items-center justify-between pr-8">
-          <div>
-            <TitleComponent className="font-semibold text-foreground">
+        <div className="flex items-center justify-between gap-2 pr-8">
+          {/* Truncates rather than wraps: with the Focus toggle beside Locate and Park, a long
+              name in the Stage view's 380px panel broke over two lines, the model over four. */}
+          <div className="min-w-0">
+            <TitleComponent className="truncate font-semibold text-foreground" title={fixture?.name}>
               {fixture?.name ?? 'Fixture'}
             </TitleComponent>
             {fixture && (fixture.manufacturer || fixture.model) && (
-              <p className="text-sm text-muted-foreground">
+              <p className="truncate text-sm text-muted-foreground">
                 {[fixture.manufacturer, fixture.model].filter(Boolean).join(' ')}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <ToggleGroup
               type="single"
               value={viewMode}
-              onValueChange={(value) => value && setViewMode(value as FixtureViewMode)}
+              onValueChange={(value) => value && setViewMode(value as FixtureViewMode | 'focus')}
               size="sm"
             >
               <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
@@ -64,6 +72,11 @@ export function FixtureDetailView({
               <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">
                 <SlidersHorizontal className="h-4 w-4" />
               </ToggleGroupItem>
+              {focus != null && (
+                <ToggleGroupItem value="focus" aria-label="Show focus" title="Focus">
+                  <Crosshair className="h-4 w-4" />
+                </ToggleGroupItem>
+              )}
             </ToggleGroup>
             {fixture && (
               <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
@@ -100,9 +113,15 @@ export function FixtureDetailView({
       </SheetHeader>
 
       <SheetBody>
-        {fixture && (
-          <FixtureContent fixture={fixture} isEditing={isEditing} viewMode={viewMode} />
-        )}
+        {viewMode === 'focus' && focus != null
+          ? focus
+          : fixture && (
+              <FixtureContent
+                fixture={fixture}
+                isEditing={isEditing}
+                viewMode={viewMode === 'focus' ? 'properties' : viewMode}
+              />
+            )}
       </SheetBody>
     </>
   )
