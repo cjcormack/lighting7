@@ -299,8 +299,21 @@ prompt-book markup from a script and lighting notes.
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`. Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too |
 | `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
-| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, and `at` — its place in the prompt book |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look layers, `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
 | `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
+
+**Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
+`create_cue`, `create_look` and `build_cue_stack` (per cue, and the stack's set) — and `set_scenery`
+replaces one cue's, stack's or Look's whole list (`cueId` | `stackId` | `lookId`; `[]` clears), so
+"close the tabs on the blackout at the end of Act 1" is one call. Those three are the chat's tools
+too, so MCP gets them through `AiTools.mcpTools`; `build_cue_stack` is MCP-only like the rest of this
+table. One item is `{element, visible?, open?, trimM?, transitionSeconds?}`: the element by its
+`set_scene` **name** (or uuid), the states beside it, and on a cue its own clock (omitted, it moves
+with the cue's fade). Each is checked against the element's kind exactly as the REST `PUT
+…/scenery` routes check it (`parseToolSceneryList` beside `parseSceneryList`, `models/scenery.kt`):
+`open` only on a drawn drape, `trimM` only on a flown piece, an element named twice refused, every
+problem at once and nothing written. The schema text says scenery **tracks** — list only what
+changes — and that a Look's scenery shows while it is live, above every cue; templates carry none.
 
 Four decisions shape them:
 

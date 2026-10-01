@@ -36,6 +36,7 @@ import {createUpdateWsApi, UpdateWsApi} from "./updateWsApi";
 import {createRemoteAccessWsApi, RemoteAccessWsApi} from "./remoteAccessWsApi";
 import {createWindowsWsApi, WindowsWsApi} from "./windowsApi";
 import {createHandWsApi, HandWsApi} from "./handApi";
+import {createSceneryWsApi, SceneryWsApi} from "./sceneryApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
 interface LightingApi {
@@ -73,6 +74,7 @@ interface LightingApi {
   buskPage: BuskPageWsApi
   windows: WindowsWsApi
   hand: HandWsApi
+  scenery: SceneryWsApi
   stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
   bootStatus: BootStatusWsApi
@@ -138,6 +140,7 @@ function createLightingApi(): LightingApi {
   const buskPageWsApi = createBuskPageWsApi(connection)
   const windowsWsApi = createWindowsWsApi(connection)
   const handWsApi = createHandWsApi(connection)
+  const sceneryWsApi = createSceneryWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
   const programmerApi = createProgrammerApi(connection)
@@ -178,6 +181,7 @@ function createLightingApi(): LightingApi {
     buskPage: buskPageWsApi,
     windows: windowsWsApi,
     hand: handWsApi,
+    scenery: sceneryWsApi,
     stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,
     bootStatus: bootStatusWsApi,

@@ -298,6 +298,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (cue.project.id != project.id) return@transaction null
                 val stack = cue.cueStack
                 deleteCueChildren(cue)
+                // Its scenery dies with it, but not with an edit, which `deleteCueChildren` also serves.
+                deleteCueScenery(cue.id)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)
                 val pageIds = deleteCueReferences(cue)
                 cue.delete()
@@ -450,6 +452,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
             }
 
+            // Its scenery too — but only within the project: an element belongs to one project's
+            // scene, so a copy into another has nothing to name.
+            if (targetProject.id == sourceProject.id) copyCueScenery(sourceCue, newCue)
+
             // The copy carries no cue number, so it picks one up from where it landed.
             renumberAutoCues(targetStack)
 
@@ -531,6 +537,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             } else {
                 state.cueTriggerManager.deactivateTriggersForCue(resource.cueId)
                 val removedCount = state.show.fxEngine.removeEffectsForCue(resource.cueId)
+                state.sceneryService.onCueStopped(resource.cueId)
                 call.respond(StopCueResponse(removedCount = removedCount, cueId = resource.cueId))
             }
         }
@@ -615,6 +622,13 @@ data class CueDetails(
     val stomp: Boolean = false,
     val canEdit: Boolean,
     val canDelete: Boolean,
+    /** What this cue moves on GO (stage-view plan session 8); edited by `PUT cues/{id}/scenery`. */
+    val scenery: List<SceneryChangeDto> = emptyList(),
+    /**
+     * The scenery this cue does not move itself but shows anyway — tracked from an earlier cue of
+     * its stack, or held by the stack's set. Read-only; the cue card draws it hatched.
+     */
+    val trackedScenery: List<TrackedSceneryDto> = emptyList(),
 )
 
 

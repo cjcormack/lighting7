@@ -636,6 +636,8 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         }
         is ProgrammerSetBlindInMessage -> {
             state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
+            // Blind takes the programmer off stage, its Looks' scenery with it.
+            state.sceneryService.onBlindChanged()
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)

@@ -302,6 +302,17 @@ frame rather than the mask; an oval is a negative aspect) — the GLSL and its t
 The Stage view's **Focus** tab and the patch editor's **Lantern** box mount one `FocusCard`, and a
 pair's lanterns are focused separately. See the stage-vis doc's §"Fixture bodies".
 
+**Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
+— a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
+streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage
+canvas lays each element's interpolated state over its `params.states` before building
+(`lib/scenery.ts`'s `sceneryElements`), so the builders draw tabs and trims unchanged and **beam
+reach reads closed tabs** for free; `useSceneryClock` invalidates every frame only while a move is in
+flight. The vis source picks the scenery too (`StageSceneryContext` from `StageChannelSourceProvider`:
+Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in Cue
+properties, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
+holding its draft over a refetch. See the stage-vis doc's §"Scenery that moves with the show".
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group
@@ -4284,7 +4295,7 @@ recovery. Frontend shape:
   can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties; a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The show-editing lock
 

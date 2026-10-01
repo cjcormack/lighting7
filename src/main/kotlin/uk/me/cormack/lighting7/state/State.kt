@@ -739,6 +739,13 @@ class State(val config: ApplicationConfig) {
     }.getOrDefault(true)
 
     /**
+     * The live scenery (stage-view plan session 8): what each element a scenery change names shows,
+     * and the move it is making — `scenery.state`. Project-scoped, re-attached to the new show on a
+     * switch (which forgets the old show's live cues); see [SceneryService].
+     */
+    val sceneryService: SceneryService by lazy { SceneryService(this) }
+
+    /**
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
      * ways of making one gesture, so there is one answer. State-scoped and transient like
      * [deskSelection]: cleared on project switch, reconciled when the layout changes, never
@@ -925,6 +932,7 @@ class State(val config: ApplicationConfig) {
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
+        sceneryService.attach(show, GlobalScope)
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
@@ -946,6 +954,8 @@ class State(val config: ApplicationConfig) {
                 handState.drop()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
+                // A live cue belongs to the show being left; the new one starts with its base.
+                sceneryService.attach(projectManager.show, GlobalScope)
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
                 // cached binding health against the new show.
                 controlSurfaceBindingService.invalidateHealth(projectManager.currentProject.id.value)
@@ -978,6 +988,7 @@ class State(val config: ApplicationConfig) {
         // the retention `FU-TEST-COREMIDI-INIT-DEADLOCK` was written about, and `RouteIntegrationTest`
         // tears a State down between every test.
         runCatching { handState.close() }
+        runCatching { sceneryService.close() }
 
         // Before the MIDI stack goes down: the listener's callback reaches back into
         // `midiRegistry`, and it is the one teardown step whose absence silently retains the

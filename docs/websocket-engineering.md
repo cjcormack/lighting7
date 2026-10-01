@@ -1,7 +1,7 @@
 # WebSocket Protocol Engineering Documentation
 
-The desk's real-time channel: one endpoint, one polymorphic message envelope, **122 message types**
-(49 inbound, 73 outbound) across sixteen domain families. This document is the inventory and the
+The desk's real-time channel: one endpoint, one polymorphic message envelope, **123 message types**
+(49 inbound, 74 outbound) across seventeen domain families. This document is the inventory and the
 rules that govern it.
 
 The inventory below is generated from the `@SerialName` declarations, which are the wire contract.
@@ -219,14 +219,15 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
 | Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
+| Scenery | `ScenerySocket.kt` | — | 1 | — | `setupScenerySubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
 | Speed masters | `SpeedMasterSocket.kt` | 4 | 4 | `handleSpeedMasters` | `setupSpeedMasterSubscriptions` |
 | Stage render | `StageRenderSocket.kt` | — | 1 | — | `setupStageRenderSubscriptions` |
 | Surfaces | `SurfaceSocket.kt` | 11 | 14 | `handleSurface` | `setupSurfaceSubscriptions` |
 | Windows | `WindowsSocket.kt` | 4 | 4 | `handleWindows` | `setupWindowsSubscriptions` |
 
-Five families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
-Broadcast, Cloud sync, Machine and Stage render. Channel is the odd one: its three messages are declared in
+Six families are outbound-only and therefore have no dispatch arm in `Sockets.kt`: Boot,
+Broadcast, Cloud sync, Machine, Scenery and Stage render. Channel is the odd one: its three messages are declared in
 `ChannelSocket.kt` and answered there on request, but every *unsolicited* one is fired from
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
@@ -508,7 +509,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (73)
+## Server → Client (74)
 
 ### Boot — `BootSocket.kt`
 
@@ -697,6 +698,31 @@ write, the way a windows row's `id` and `user` are: a caller that could set its 
 the desk's hand all night, and one that could set its own `holdId` could make a guarded drop match a
 hold that was not its own. `holdId` is monotonic per pick-up, so two holds are never equal — which is
 what keeps `MutableStateFlow`'s `equals` conflation from swallowing a repeated pick-up.
+
+### Scenery — `ScenerySocket.kt`
+
+| Message | Fields | Cadence |
+|---|---|---|
+| `scenery.state` | `projectId?: Int`, `elements: [{elementUuid, state, from, startedAt, elapsedMs, durationMs}]` | Connect snapshot + broadcast |
+
+The live scenery (stage-view plan session 8): every scene element a scenery change names, as the
+desk resolves it now (`state/SceneryService.kt`, `show/SceneryResolver.kt`) — what it is going to
+(`state`), what it is leaving (`from`, as drawn when the move started, so a retarget mid-move starts
+where the piece is), and the move between. Each state object holds only the states the element's
+kind takes: `visible`, a drawn drape's `open`, a flown piece's `trimM`. An element absent from the
+list shows its base. `StateFlow`-backed, so the subscription *is* the snapshot; there is no inbound
+message — scenery moves only with the records that own it (a GO, a stack stopping, a Look pressed,
+blind, an edit).
+
+`startedAt` is an ISO instant, but a client animates from **`elapsedMs`** — how far into the move the
+desk was when *this* frame was sent, computed at send time so the connect snapshot is as fresh as a
+broadcast — anchored to its own receive time, exactly as `cueRunStateChanged`'s `fadeElapsedMs` is,
+so a tablet with a skewed clock does not replay a finished move. `elapsedMs >= durationMs` is landed.
+Moves are drawn sine in-out on both sides (`SceneryService.displayedAt`, `lib/scenery.ts`), and a
+piece appearing shows at once while one disappearing goes at the end.
+
+Registered in the **show band**: the scenery is the current project's, and the service is reset and
+re-attached to the new show on a switch.
 
 ### Busk page — `BuskSocket.kt`
 
@@ -1040,6 +1066,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/SpeedMasterSocket.kt` | Per-master tempo: state, BPM writes, tap, beat stream |
 | `plugins/SurfaceSocket.kt` | MIDI learn, banks, scaler, devices, pickup, the control-state stream |
 | `plugins/BuskSocket.kt` | The showing busk page: snapshot + broadcast, and `busk.setPage` |
+| `plugins/ScenerySocket.kt` | `scenery.state`, the live scenery: snapshot + broadcast, built at send time |
 | `plugins/WindowsSocket.kt` | The windows registry: announce, the list, and the five commands (machine-scoped band) |
 | `plugins/StageRenderSocket.kt` | `render_view`'s job to one window, `stageRender.request` (signed-in sockets on the desk's own listener only) |
 | `plugins/ErrorHandling.kt` | REST `StatusPages` net — not on the WS path, listed only because it shares the package |

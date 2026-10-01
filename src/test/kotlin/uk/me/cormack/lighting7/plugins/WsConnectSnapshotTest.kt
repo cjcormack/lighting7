@@ -56,6 +56,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         HandStateOutMessage::class,
         // Remote access, machine band, admin sockets only — and a zero-user desk's socket is one.
         TunnelStateOutMessage::class,
+        // Scenery, in the show band: on a desk where nothing has gone yet its frame names no
+        // element, and that empty frame is still what a Stage view starts from.
+        SceneryStateOutMessage::class,
     )
 
     @Test

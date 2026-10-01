@@ -24,6 +24,8 @@ val ALL_TABLES: List<Table> = listOf(
     DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
     DaoStageElements, DaoStageViewpoints,
+    // After the cues, stacks, Looks and elements they reference (stage-view plan session 8).
+    DaoCueScenery, DaoCueStackScenery, DaoLookScenery,
     DaoFixturePatches, DaoFixturePatchPlacements, DaoFixtureGroups, DaoFixtureGroupMembers,
     // After the groups and patches their tiles reference.
     DaoBuskRigRows, DaoBuskRigTiles,

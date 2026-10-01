@@ -10,6 +10,9 @@ import {
 import { descriptorsByTarget, type DescriptorsByTarget } from '../lib/programmerChannels'
 import { useFixtureLookup } from './useFixtureLookup'
 import { useNextGoSourceState } from './useNextGoPreview'
+import { StageSceneryContext } from './stageScenery'
+import { useLiveScenery } from '../store/scenery'
+import type { LiveScenery } from '../api/sceneryApi'
 import { useVisSource, type VisSource } from './useVisSource'
 
 /**
@@ -90,6 +93,8 @@ function useProgrammerSource(enabled: boolean): { source: DerivedChannelSource |
 interface ResolvedChannelSource {
   source: ChannelSource
   settled: boolean
+  /** The scenery that goes with it: the desk's live scenery, or the Next GO preview's. */
+  scenery: LiveScenery
 }
 
 /**
@@ -105,6 +110,10 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
     visSource === 'outputProgrammer' || visSource === 'programmer',
   )
   const nextGo = useNextGoSourceState(visSource === 'nextGo')
+  // Every source but Next GO draws the stage's own scenery: the programmer sources preview values,
+  // and the desk already counts the programmer's live Looks in what it resolves (blind excepted).
+  const live = useLiveScenery()
+  const scenery = visSource === 'nextGo' ? (nextGo.scenery ?? live) : live
   const source = useMemo(() => {
     switch (visSource) {
       case 'output':
@@ -123,7 +132,7 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
           : outputChannelSource
     }
   }, [visSource, programmer.source, nextGo.source])
-  return { source, settled: programmer.settled && nextGo.settled }
+  return { source, settled: programmer.settled && nextGo.settled, scenery }
 }
 
 /**
@@ -148,9 +157,13 @@ export function StageChannelSourceProvider({
   children: ReactNode
 }) {
   const windowSource = useVisSource()
-  const { source, settled } = useResolvedChannelSource(named ?? windowSource)
+  const { source, settled, scenery } = useResolvedChannelSource(named ?? windowSource)
   useEffect(() => {
     onSettled?.(settled)
   }, [onSettled, settled])
-  return <ChannelSourceProvider source={source}>{children}</ChannelSourceProvider>
+  return (
+    <ChannelSourceProvider source={source}>
+      <StageSceneryContext.Provider value={scenery}>{children}</StageSceneryContext.Provider>
+    </ChannelSourceProvider>
+  )
 }

@@ -404,6 +404,8 @@ internal fun DaoCue.toCueDetails(
         stomp = this.stomp,
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
+        scenery = cueSceneryOf(this.id).map { it.toDto() },
+        trackedScenery = trackedSceneryAt(this),
     )
 }
 
@@ -780,6 +782,11 @@ internal fun applyCue(state: State, cueData: CueApplyData, replaceAll: Boolean =
     }
 
     engine.addEffects(spawning)
+
+    // The AI's `apply_cue` lands here and not in `CueStackManager.activateCueInStack`, so the scenery
+    // hook a stack GO fires is fired here too: the cue stands in for its stack's live cue, its set
+    // and its tracked changes included (stage-view plan session 8).
+    cueData.cueStackId?.let { state.sceneryService.onCueApplied(it, cueData.cueId, replaceAll) }
 
     return ApplyCueResponse(effectCount = spawning.size, cueName = cueData.cueName)
 }

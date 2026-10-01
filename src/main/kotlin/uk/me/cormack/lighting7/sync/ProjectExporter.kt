@@ -6,7 +6,13 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.DaoInstall
+import uk.me.cormack.lighting7.models.DaoCueSceneryRow
+import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
+import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.cueSceneryOf
+import uk.me.cormack.lighting7.models.lookSceneryOf
+import uk.me.cormack.lighting7.models.stackSceneryOf
 import uk.me.cormack.lighting7.models.extraPlacementsOf
 import uk.me.cormack.lighting7.models.storedParamsObject
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
@@ -16,6 +22,7 @@ import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
+import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
@@ -163,6 +170,7 @@ class ProjectExporter(private val state: State) {
                     sortOrder = s.sortOrder,
                     type = s.type,
                     label = s.label,
+                    scenery = stackSceneryOf(s.id).map { it.toJson() },
                 )
             }
 
@@ -181,6 +189,7 @@ class ProjectExporter(private val state: State) {
                     notes = c.notes,
                     cueType = c.cueType,
                     stomp = c.stomp,
+                    scenery = cueSceneryOf(c.id).map { it.toJson() },
                 )
             }
 
@@ -443,6 +452,7 @@ class ProjectExporter(private val state: State) {
                     notes = l.notes,
                     rows = rows,
                     effects = effects,
+                    scenery = lookSceneryOf(l.id).map { it.toJson() },
                 )
             }
 
@@ -810,3 +820,26 @@ class ProjectExporter(private val state: State) {
         return count
     }
 }
+
+// v20: scenery travels embedded in its owner, its element by uuid and its states as an object.
+private fun DaoCueSceneryRow.toJson() = SceneryChangeJson(
+    uuid = uuid.toString(),
+    elementUuid = element.uuid.toString(),
+    state = storedParamsObject(stateJson),
+    transitionMs = transition?.toMillis(),
+    sortOrder = sortOrder,
+)
+
+private fun DaoCueStackSceneryRow.toJson() = SceneryChangeJson(
+    uuid = uuid.toString(),
+    elementUuid = element.uuid.toString(),
+    state = storedParamsObject(stateJson),
+    sortOrder = sortOrder,
+)
+
+private fun DaoLookSceneryRow.toJson() = SceneryChangeJson(
+    uuid = uuid.toString(),
+    elementUuid = element.uuid.toString(),
+    state = storedParamsObject(stateJson),
+    sortOrder = sortOrder,
+)

@@ -28,6 +28,15 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v20: scenery on cues, stacks and Looks (stage-view plan session 8). `CueJson`, `CueStackJson`
+    // and `LookJson` each gain a `scenery` list ([SceneryChangeJson]): an element by uuid, its
+    // states as a nested object, and on a cue a `transitionMs`. Empty is omitted, so a show with no
+    // scenery exports byte-for-byte as at v19. The writer's number moves by the sharp-edge rule: a
+    // v19 reader imports every cue, stack and Look without its scenery and its next wipe-then-export
+    // push writes it away for every peer. `minReader` stays at **5** — missing scenery is none.
+    // Went without `FU-AUTH-ATTRIBUTION`'s columns, as v18 and v19 did (plan §11 Q2).
+    // See `docs/sync-engineering.md` §"Version 20 — scenery on cues, stacks and Looks".
+    //
     // v19: the lantern and its focus (stage-view plan session 7). `FixturePatchJson` and
     // `PatchPlacementJson` each gain `lanternType`, `zoomDeg`, `lampRotationDeg`, `shutters` (four
     // `{depth, angleDeg}`, nested, not a string), `gateRotationDeg`, `iris` and `focusSoftness`,
@@ -160,7 +169,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 19,
+    val formatVersion: Int = 20,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -265,6 +274,8 @@ data class LookJson(
     val notes: String? = null,
     val rows: List<LookRowJson> = emptyList(),
     val effects: List<LookEffectJson> = emptyList(),
+    /** v20: what the Look shows while it is live. */
+    val scenery: List<SceneryChangeJson> = emptyList(),
 )
 
 /**
@@ -579,6 +590,25 @@ data class CueStackJson(
     /** "STACK" (default) or "SEPARATOR". */
     val type: String = "STACK",
     val label: String? = null,
+    /** v20: the stack's *set* — the states its elements hold while it is live. */
+    val scenery: List<SceneryChangeJson> = emptyList(),
+)
+
+/**
+ * One scenery change (stage-view plan session 8), embedded in the cue, stack or Look that owns it,
+ * as a Look's rows are: an owner says one thing about each element, and the change is part of the
+ * owner's own record. [elementUuid] names a `stageElements/` record — a uuid like every other
+ * cross-record reference here, so [uk.me.cormack.lighting7.sync.ExportUuidRemapper] re-points it on
+ * clone. [state] is the states as a nested object (`visible`, `open`, `trimM`), stored as the
+ * archive holds it. [transitionMs] is a cue's own clock only.
+ */
+@Serializable
+data class SceneryChangeJson(
+    val uuid: String,
+    val elementUuid: String,
+    val state: JsonObject = JsonObject(emptyMap()),
+    val transitionMs: Long? = null,
+    val sortOrder: Int = 0,
 )
 
 @Serializable
@@ -679,6 +709,8 @@ data class CueJson(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
+    /** v20: what the cue moves on GO, each change on its own clock. */
+    val scenery: List<SceneryChangeJson> = emptyList(),
 )
 
 @Serializable

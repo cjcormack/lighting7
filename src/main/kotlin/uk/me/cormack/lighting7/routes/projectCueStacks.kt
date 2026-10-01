@@ -161,6 +161,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 val pageIds = mutableSetOf<Int>()
                 stack.cues.forEach { cue ->
                     deleteCueChildren(cue)
+                    deleteCueScenery(cue.id)
                     removedAnchors += deletePromptBookAnchorsForCue(cue)
                     pageIds += deleteCueReferences(cue)
                     // Same reason the single-cue delete does this: a deleted cue can't be
@@ -170,6 +171,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                     cue.delete()
                 }
 
+                deleteStackScenery(stack.id)
                 stack.delete()
                 removedAnchors to pageIds
             }
@@ -549,6 +551,8 @@ data class CueStackDetails(
     val nextCueId: Int?,
     val canEdit: Boolean,
     val canDelete: Boolean,
+    /** The stack's *set* (stage-view plan session 8): held while it is live, under its cues. */
+    val scenery: List<SceneryChangeDto> = emptyList(),
 )
 
 @Serializable
@@ -693,5 +697,6 @@ private fun DaoCueStack.toCueStackDetails(
         nextCueId = manager.runState.effectiveNextCueId(id.value, standardCueIds, loop),
         canEdit = isCurrentProject,
         canDelete = isCurrentProject,
+        scenery = stackSceneryOf(id).map { it.toDto() },
     )
 }

@@ -52,6 +52,10 @@ import uk.me.cormack.lighting7.models.layerSourceShape
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoStageElement
+import uk.me.cormack.lighting7.models.DaoCueSceneryRow
+import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
+import uk.me.cormack.lighting7.models.DaoLookSceneryRow
+import uk.me.cormack.lighting7.models.deleteSceneryForElements
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.storedParamsText
@@ -88,6 +92,7 @@ import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.ScriptMetaJson
 import uk.me.cormack.lighting7.sync.dto.ShowEntryJson
+import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.StageElementJson
 import uk.me.cormack.lighting7.sync.dto.StageRegionJson
 import uk.me.cormack.lighting7.sync.dto.StageViewpointJson
@@ -156,7 +161,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 19
+internal const val SUPPORTED_FORMAT_VERSION = 20
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -290,6 +295,8 @@ class ProjectImporter(private val state: State) {
             // The rig too, and **before** the group and patch deletes below: a tile is a plain FK
             // onto a group or a patch with no cascade (`DaoBuskRigTiles`), so it would block them.
             deleteBuskRig(project)
+            // Scenery before its owners and its elements: all three tables, through the elements.
+            deleteSceneryForElements(project.stageElements.map { it.id })
             project.cues.forEach { cue ->
                 deleteCueChildren(cue)
                 cue.delete()
@@ -383,23 +390,25 @@ class ProjectImporter(private val state: State) {
      * dereference them through the maps returned by each step.
      */
     private fun populateProject(sourceDir: Path, project: DaoProject) {
+        // Elements first (v20): a Look's, a stack's and a cue's scenery name one, and an element
+        // names nothing that needs importing before it (a platform's region is a uuid in its params).
+        val elementMap = importStageElements(sourceDir, project)
         val scriptMap = importScripts(sourceDir, project)
         importFxDefinitions(sourceDir, project)
-        val lookMap = importLooks(sourceDir, project)
+        val lookMap = importLooks(sourceDir, project, elementMap)
         val templateMap = importTemplates(sourceDir, project)
         importSpeedMasters(sourceDir, project)
         val universeMap = importUniverseConfigs(sourceDir, project)
         val riggingMap = importRiggings(sourceDir, project)
         importStageRegions(sourceDir, project)
-        // Elements before the viewpoints whose seats name them (v18).
-        importStageElements(sourceDir, project)
+        // The viewpoints after the elements their seats name (v18), imported above.
         importStageViewpoints(sourceDir, project)
         val patchMap = importFixturePatches(sourceDir, project, universeMap, riggingMap)
         val groupMap = importFixtureGroups(sourceDir, project, patchMap)
         // The rig after the groups and patches its tiles name (v12).
         importBuskRig(sourceDir, project, groupMap, patchMap)
-        val cueStackMap = importCueStacks(sourceDir, project)
-        val cueMap = importCues(sourceDir, project, cueStackMap)
+        val cueStackMap = importCueStacks(sourceDir, project, elementMap)
+        val cueMap = importCues(sourceDir, project, cueStackMap, elementMap)
         importCuePropertyAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, templateMap)
         importCueAdHocEffects(sourceDir, cueMap)
@@ -466,7 +475,7 @@ class ProjectImporter(private val state: State) {
      * its Look through a real FK — unlike a named palette, which was only ever named by a `ref:{uuid}`
      * string inside an opaque `value` column and so needed no map.
      */
-    private fun importLooks(dir: Path, project: DaoProject): Map<UUID, DaoLook> =
+    private fun importLooks(dir: Path, project: DaoProject, elementMap: Map<UUID, DaoStageElement>): Map<UUID, DaoLook> =
         readDir(dir.resolve("looks")) { json ->
             val l = canonicalDecode(LookJson.serializer(), json)
             val uuid = UUID.fromString(l.uuid)
@@ -515,8 +524,46 @@ class ProjectImporter(private val state: State) {
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
+            importScenery(l.scenery, elementMap, "Look ${l.uuid}") { element, s ->
+                DaoLookSceneryRow.new {
+                    look = dao
+                    this.element = element
+                    stateJson = storedParamsText(s.state)
+                    sortOrder = s.sortOrder
+                    this.uuid = UUID.fromString(s.uuid)
+                }
+            }
             uuid to dao
         }
+
+    /**
+     * v20: one owner's scenery list, each change's element resolved through [elementMap]. A change
+     * naming an element the archive lacks is dropped with a warning — the column is a real FK, and
+     * the element's delete would have swept it on the writing desk — and its state is stored as the
+     * archive holds it, as every record here is; every reader tolerates one it cannot read.
+     */
+    private fun importScenery(
+        scenery: List<SceneryChangeJson>,
+        elementMap: Map<UUID, DaoStageElement>,
+        owner: String,
+        create: (DaoStageElement, SceneryChangeJson) -> Unit,
+    ) {
+        // An owner says one thing about each element (a unique index), and an archive that says two —
+        // a hand edit, a merge that kept both sides — keeps the first rather than failing the import.
+        val seen = HashSet<UUID>()
+        for (s in scenery.sortedBy { it.sortOrder }) {
+            val element = runCatching { UUID.fromString(s.elementUuid) }.getOrNull()?.let { elementMap[it] }
+            if (element == null) {
+                logger.warn("{}: scenery change {} names no stage element in the archive ({}); dropping it", owner, s.uuid, s.elementUuid)
+                continue
+            }
+            if (!seen.add(element.uuid)) {
+                logger.warn("{}: scenery change {} names {} a second time; dropping it", owner, s.uuid, s.elementUuid)
+                continue
+            }
+            create(element, s)
+        }
+    }
 
     /**
      * Speed masters. Returns nothing: look-effect and cue-effect rows reference a master by
@@ -609,11 +656,11 @@ class ProjectImporter(private val state: State) {
      * record, it does not re-author one (the same posture as a head number, `docs/sync-engineering.md`
      * §"Version 16"). Readers of the params tolerate a document they cannot read.
      */
-    private fun importStageElements(dir: Path, project: DaoProject) {
+    private fun importStageElements(dir: Path, project: DaoProject): Map<UUID, DaoStageElement> =
         readDir(dir.resolve("stageElements")) { json ->
             val e = canonicalDecode(StageElementJson.serializer(), json)
             val uuid = UUID.fromString(e.uuid)
-            DaoStageElement.new {
+            val dao = DaoStageElement.new {
                 this.project = project
                 name = e.name
                 kind = e.kind
@@ -633,9 +680,8 @@ class ProjectImporter(private val state: State) {
                 sortOrder = e.sortOrder
                 this.uuid = uuid
             }
-            uuid to Unit
+            uuid to dao
         }
-    }
 
     /** v18. A seat view's element reference is kept verbatim; one the archive lacks dangles. */
     private fun importStageViewpoints(dir: Path, project: DaoProject) {
@@ -768,7 +814,11 @@ class ProjectImporter(private val state: State) {
         uuid to dao
     }
 
-    private fun importCueStacks(dir: Path, project: DaoProject): Map<UUID, DaoCueStack> =
+    private fun importCueStacks(
+        dir: Path,
+        project: DaoProject,
+        elementMap: Map<UUID, DaoStageElement>,
+    ): Map<UUID, DaoCueStack> =
         readDir(dir.resolve("cueStacks")) { json ->
             val s = canonicalDecode(CueStackJson.serializer(), json)
             val uuid = UUID.fromString(s.uuid)
@@ -781,6 +831,15 @@ class ProjectImporter(private val state: State) {
                 label = s.label
                 this.uuid = uuid
             }
+            importScenery(s.scenery, elementMap, "Cue stack ${s.uuid}") { element, change ->
+                DaoCueStackSceneryRow.new {
+                    stack = dao
+                    this.element = element
+                    stateJson = storedParamsText(change.state)
+                    sortOrder = change.sortOrder
+                    this.uuid = UUID.fromString(change.uuid)
+                }
+            }
             uuid to dao
         }
 
@@ -788,6 +847,7 @@ class ProjectImporter(private val state: State) {
         dir: Path,
         project: DaoProject,
         cueStackMap: Map<UUID, DaoCueStack>,
+        elementMap: Map<UUID, DaoStageElement>,
     ): Map<UUID, DaoCue> {
         // Every cue belongs to a stack now. Legacy archives may carry standalone cues (null
         // cueStackUuid); those land in a project "Unsorted" stack, created once on demand.
@@ -829,6 +889,16 @@ class ProjectImporter(private val state: State) {
             cueType = c.cueType
             stomp = c.stomp
             this.uuid = uuid
+        }
+        importScenery(c.scenery, elementMap, "Cue ${c.uuid}") { element, s ->
+            DaoCueSceneryRow.new {
+                cue = dao
+                this.element = element
+                stateJson = storedParamsText(s.state)
+                transition = s.transitionMs.asDuration()
+                sortOrder = s.sortOrder
+                this.uuid = UUID.fromString(s.uuid)
+            }
         }
         uuid to dao
         }

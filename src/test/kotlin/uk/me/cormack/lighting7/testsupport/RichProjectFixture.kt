@@ -7,7 +7,11 @@ import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
+import uk.me.cormack.lighting7.models.DaoCueSceneryRow
+import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
+import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoStageElement
+import uk.me.cormack.lighting7.models.encodeSceneryState
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.DrapeOperation
 import uk.me.cormack.lighting7.models.DrapeParams
@@ -172,7 +176,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         hidden = true
         sortOrder = 2
     }
-    DaoStageElement.new {
+    val thrustDeck = DaoStageElement.new {
         this.project = project
         name = "Thrust deck"
         kind = StageElementKind.PLATFORM.name
@@ -185,7 +189,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         )
         sortOrder = 1
     }
-    DaoStageElement.new {
+    val houseTabs = DaoStageElement.new {
         this.project = project
         name = "House tabs"
         kind = StageElementKind.DRAPE.name
@@ -540,6 +544,31 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         autoAdvance = true
         autoAdvanceDelay = Duration.ofMillis(2500L)
         fadeCurve = "SINE_IN_OUT"
+    }
+    // v20: scenery on a cue, a stack and a Look (stage-view plan session 8). Two rows each, so
+    // the second carries a non-default sort order; the cue's carry a transition, which only a cue
+    // may. The states go through the real encoder, as a write would.
+    DaoCueSceneryRow.new {
+        cue = cue1; element = houseTabs; stateJson = encodeSceneryState(ElementStates(open = 0.0))
+        transition = Duration.ofMillis(4000L)
+    }
+    DaoCueSceneryRow.new {
+        cue = cue1; element = thrustDeck; stateJson = encodeSceneryState(ElementStates(visible = false))
+        transition = Duration.ofMillis(1500L); sortOrder = 1
+    }
+    DaoCueStackSceneryRow.new {
+        stack = stack1; element = stalls; stateJson = encodeSceneryState(ElementStates(visible = false))
+    }
+    DaoCueStackSceneryRow.new {
+        stack = stack1; element = houseTabs; stateJson = encodeSceneryState(ElementStates(open = 0.25, visible = true))
+        sortOrder = 1
+    }
+    DaoLookSceneryRow.new {
+        look = boundLook; element = thrustDeck; stateJson = encodeSceneryState(ElementStates(visible = true))
+    }
+    DaoLookSceneryRow.new {
+        look = boundLook; element = houseTabs; stateJson = encodeSceneryState(ElementStates(open = 0.75))
+        sortOrder = 1
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"

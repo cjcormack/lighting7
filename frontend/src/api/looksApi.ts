@@ -1,3 +1,4 @@
+import type { SceneryChange } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
 
@@ -143,6 +144,8 @@ export interface LookDetails {
   layerCount: number
   usedByCueIds: number[]
   usedByCueNames: string[]
+  /** What this Look shows while it is live (stage-view plan session 8). Omitted when empty. */
+  scenery?: SceneryChange[]
 }
 
 /**

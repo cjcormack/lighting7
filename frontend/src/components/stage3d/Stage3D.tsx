@@ -49,6 +49,9 @@ import {
 import { defaultOrbitPose, sceneBoundsLighting } from './stageCameras'
 import { isOrthoCamera, type StageCamera } from '../../lib/stageViewpoint'
 import { useStageElementListQuery } from '../../store/stageElements'
+import { useStageScenery } from '../../hooks/stageScenery'
+import { sceneryElements, type SceneryOverlayCache } from '../../lib/scenery'
+import { useSceneryClock } from './scene/useSceneryClock'
 import type { LightingPoint } from '../../lib/stageProjection'
 // drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
 // reach. This is the Liberation Sans that react-pdf's pinned pdf.js ships; importing it as an
@@ -248,7 +251,21 @@ export function Stage3D({
     stageH,
   )
 
-  const { data: sceneElements } = useStageElementListQuery(projectId, { skip: !showScene })
+  const { data: storedElements } = useStageElementListQuery(projectId, { skip: !showScene })
+  // The scenery the cues, stacks and Looks have moved (stage-view plan session 8), laid over the
+  // elements before they are built — so the builders draw the tabs where they are, and the beam
+  // reach below stops at closed ones. The vis source chose it (live, or the Next GO preview); a
+  // one-frame render draws every move landed and ticks no clock.
+  const scenery = useStageScenery()
+  const sceneryNow = useSceneryClock(scenery, showScene && capture == null)
+  const [sceneryCache] = useState<SceneryOverlayCache>(() => new WeakMap())
+  const sceneElements = useMemo(
+    () =>
+      storedElements == null
+        ? undefined
+        : sceneryElements(storedElements, scenery, sceneryNow, sceneryCache, capture != null),
+    [storedElements, scenery, sceneryNow, sceneryCache, capture],
+  )
 
   const gridSize = Math.max(stageW, stageD) * 1.6
   // Stable identity: StageEmitters rebuilds its instance buffers when this

@@ -220,6 +220,9 @@ internal fun Route.routeApiRestProjects(state: State) {
                 project.buskPages.forEach { deleteBuskPage(it) }
                 // And the rig, for the same reason: a tile is a plain FK onto a group or a patch.
                 deleteBuskRig(project)
+                // Every scenery change names one of the project's elements, so this sweeps all
+                // three tables before the cues, stacks and Looks that own them go.
+                deleteSceneryForElements(project.stageElements.map { it.id })
                 project.cues.forEach { cue ->
                     deleteCueChildren(cue)
                     cue.delete()
@@ -354,6 +357,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectRiggings(state)
         routeApiRestProjectStageRegions(state)
         routeApiRestProjectStageScene(state)
+        routeApiRestProjectScenery(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)

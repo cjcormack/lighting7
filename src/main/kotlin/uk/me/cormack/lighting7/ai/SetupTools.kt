@@ -56,6 +56,7 @@ import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.worldPosition
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.UUID
 
 /**
  * The MCP server's show-setup tools ([setupToolDefs]): build a project, its patch, its stage and
@@ -1168,6 +1169,7 @@ class SetupTools(
         val marker: Boolean,
         val layers: List<CueLayerDto>,
         val place: PromptBookRectDto?,
+        val scenery: List<SceneryWrite>,
     )
 
     private fun buildCueStack(input: JsonObject): ToolExecutionResult {
@@ -1181,10 +1183,17 @@ class SetupTools(
         if (stackId == null && stackName.isNullOrEmpty()) problems += "give stackName for a new stack, or stackId to append to one"
         if (stackName != null && stackName.length > 255) problems += "stackName must be at most 255 characters"
 
-        data class Context(val stackError: String?, val takenNumbers: Set<String>, val pageCount: Int?, val lookIds: Set<Int>)
+        data class Context(
+            val stackError: String?,
+            val takenNumbers: Set<String>,
+            val pageCount: Int?,
+            val lookIds: Set<Int>,
+            val elements: Map<UUID, SceneryElementInfo>,
+        )
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
             val lookIds = DaoLook.find { DaoLooks.project eq project.id }.map { it.id.value }.toSet()
+            val elements = sceneryElementsOf(project)
             if (stackId != null) {
                 val stack = DaoCueStack.findById(stackId)
                 val error = when {
@@ -1193,16 +1202,19 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.cues?.filter { it.cueType == CueType.STANDARD.name }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, lookIds)
+                Context(error, numbers, pageCount, lookIds, elements)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, lookIds, elements)
             }
         }
         context.stackError?.let { problems += it }
+        val stackSet = (input["scenery"] as? JsonArray)?.let {
+            parseToolSceneryList(it, context.elements, SceneryOwnerKind.STACK, "scenery", problems)
+        }
 
         val seenNumbers = mutableMapOf<String, Int>()
         val cues = cueRows.mapIndexedNotNull { index, element ->
@@ -1242,6 +1254,10 @@ class SetupTools(
                 emptyList()
             }
             if (marker && layers.isNotEmpty()) rowProblems += "a marker cannot carry layers"
+            val scenery = (row["scenery"] as? JsonArray)?.let {
+                if (marker) rowProblems += "a marker cannot carry scenery: it is never live"
+                parseToolSceneryList(it, context.elements, SceneryOwnerKind.CUE, "scenery", rowProblems)
+            }.orEmpty()
             val place = row["at"]?.let { at ->
                 if (context.pageCount == null) {
                     rowProblems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
@@ -1251,7 +1267,7 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, place, scenery)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1280,8 +1296,10 @@ class SetupTools(
                     autoAdvanceDelay = spec.follow
                 }
                 createCueChildren(cue, emptyList(), layers = spec.layers)
+                replaceCueScenery(cue, spec.scenery)
                 cue to spec
             }
+            stackSet?.let { replaceStackScenery(stack, it) }
             // Unnumbered cues take their labels from their numbered neighbours.
             renumberAutoCues(stack)
 

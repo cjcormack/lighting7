@@ -345,6 +345,9 @@ class CueStackManager(
         // Every activation path lands here — REST, the MIDI surface, a cue-edit live apply and
         // the auto-advance timer — so this is the one place that has to tell the other sessions.
         runState.publishRunState(state, stackId, transition = true)
+        // And the scenery: the stack's set and its cues down to this one, tracked from the top of
+        // the list, with this cue's own changes moving on their clocks (stage-view plan session 8).
+        state.sceneryService.onCueLive(stackId, cueData.cueId)
 
         return ActivateResult(
             stackId = stackId,
@@ -496,6 +499,8 @@ class CueStackManager(
         // teardown so the frame describes the stack as it now is.
         runState.consumeStandby(stackId)
         appState?.let { runState.publishRunState(it, stackId) }
+        // The stack's set and its cues' scenery let go.
+        appState?.sceneryService?.onStackStopped(stackId)
         return removed
     }
 
