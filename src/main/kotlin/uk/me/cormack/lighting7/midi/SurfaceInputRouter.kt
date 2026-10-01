@@ -278,6 +278,8 @@ class SurfaceInputRouter(
             is BindingTarget.CueStackBack -> actions.cueStackBack(target.stackId, target.stackUuid)
             is BindingTarget.CueStackPause -> actions.cueStackPause(target.stackId, target.stackUuid)
             is BindingTarget.FireCue -> actions.fireCue(target.cueId, target.cueUuid)
+            // Needs the arm, like every fire; an unarmed press is refused and announced there.
+            is BindingTarget.FireTrigger -> actions.fireTrigger(target.fixtureKey, target.trigger)
             is BindingTarget.SelectTarget -> actions.selectTarget(target.target, target.mode)
             is BindingTarget.ClearSelection -> actions.clearSelection()
             is BindingTarget.LocateSelection -> actions.locateSelection()

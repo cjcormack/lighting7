@@ -1,6 +1,6 @@
 # The stage view — a modelled venue, viewpoints, lanterns, scenery and one-shot effects
 
-> **Document status: IN PROGRESS — session 8 ([PR #36](https://github.com/cjcormack/lighting7/pull/36)).** Approved 2026-09-29. The design is checked in beside this plan at
+> **Document status: IN PROGRESS — session 9 ([PR #37](https://github.com/cjcormack/lighting7/pull/37)).** Approved 2026-09-29. The design is checked in beside this plan at
 > [`stage-view-design/`](stage-view-design/INDEX.md). It contains:
 > - the design record;
 > - a working three.js prototype of project 15;
@@ -294,7 +294,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **MCP.** `place_fixtures` and `patch_fixtures` gain the fields.
 - **Docs.** `docs/fixtures-engineering.md`, `docs/sync-engineering.md` (v19).
 
-### Session 8 — scenery on cues, stacks and Looks (backend + frontend)
+### ~~Session 8 — scenery on cues, stacks and Looks (backend + frontend)~~ — done, `ce776fb` ([PR #36](https://github.com/cjcormack/lighting7/pull/36))
 
 - **Tables and routes** (§3.1, §3.3), on `formatVersion` 20.
 - **The resolver.** `SceneryResolver` tracks each element through, in precedence order:

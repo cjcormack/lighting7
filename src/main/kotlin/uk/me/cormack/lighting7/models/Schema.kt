@@ -27,6 +27,8 @@ val ALL_TABLES: List<Table> = listOf(
     // After the cues, stacks, Looks and elements they reference (stage-view plan session 8).
     DaoCueScenery, DaoCueStackScenery, DaoLookScenery,
     DaoFixturePatches, DaoFixturePatchPlacements, DaoFixtureGroups, DaoFixtureGroupMembers,
+    // After the cues and patches they reference (stage-view plan session 9).
+    DaoCueEvents,
     // After the groups and patches their tiles reference.
     DaoBuskRigRows, DaoBuskRigTiles,
     DaoParkedChannels, DaoFxDefinitions,
@@ -42,4 +44,6 @@ val ALL_TABLES: List<Table> = listOf(
     // After DaoUsers, which a grant references.
     DaoMcpOAuthClients, DaoMcpOAuthGrants,
     DaoRemoteAccessSettingsTable,
+    // Machine-local one-shot tube state (stage-view plan session 9); keyed by patch uuid, no FK.
+    DaoEffectTubeStates,
 )

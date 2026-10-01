@@ -201,7 +201,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 20`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 21`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -243,6 +243,39 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 21 — cue events
+
+**v21 adds one list in one place** (stage-view plan session 9, D15, D16): `CueJson` carries `events`,
+a list of `CueEventJson` — `uuid`, `patchUuid`, `trigger` (the trigger's name on its fixture type,
+`output1`), `offsetMs` and `sortOrder`. The rows are the `cue_events` table, embedded in their cue
+as its scenery is, so `SyncCoverageTest` records it `Portable("cues", "events")`, and
+`RichProjectFixture` patches a Twin Shot (`cannon-1`) and gives a cue two events, both off the
+default offset and the second off the default sort order. An empty list is omitted, so a show with no
+cannon cues exports byte-for-byte as at v20; an event at GO omits its `offsetMs` as a zero sort order
+is omitted. Three things about the shape:
+
+- **The patch is a uuid on the wire and a foreign key in the table.** Patches already import before
+  cues, so each cue's events resolve their patch directly; the clone remapper re-points `patchUuid`
+  like any other uuid string. An event is **dropped with a warning**, the cue kept, when the archive
+  lacks its patch (the patch's delete would have swept it on the writing desk), when the patch's type
+  has no such trigger, or when it names a tube the cue already fires (one row per tube, a unique
+  index). Its offset is clamped into 0–10 minutes.
+- **The record is the event, never its firing.** Whether a tube is **spent** is the physical cannon
+  in this hall, not the show — `effect_tube_state` is machine-local (§"Machine-local data") — and the
+  desk's **arm** is runtime only. Neither travels, and a restart disarms.
+- **An import strips any row naming a trigger.** Until v21 the Twin Shot's `output1`, `output2` and
+  `master` were plain sliders, so a v20 archive may hold a Look, template or cue row (or an effect)
+  raising one; every import ends with `stripTriggerRows` over the imported project, the same pass the
+  one-off startup strip ran, and logs how many went. A trigger can no longer be stored at all
+  (`TRIGGER_NOT_STORABLE`), so the pass has nothing to find in a v21 archive.
+
+**It bumped `formatVersion`** by the sharp-edge rule: a v20 reader imports every cue without its
+events, and its next wipe-then-export push writes them away for every peer. `minReader` stays at 5:
+missing events are none. **It went without `FU-AUTH-ATTRIBUTION`'s columns, as v18–v20 did** (stage-view
+plan §11 Q2, passed again on Chris's instruction for this session): attribution still needs its own
+design for machine-local users, and this was the plan's last bump to fold it into, so the gate now
+waits for its own trigger rather than a planned bump.
 
 ### Version 20 — scenery on cues, stacks and Looks
 
@@ -727,6 +760,16 @@ UI on the importing machine.
 This is the precedent for any future per-install field. The decision tree
 in `CLAUDE.md` §"Database changes and cloud sync" guides which side of the
 portable/machine-local line a new field falls on.
+
+**`effect_tube_state` is machine-local in its own table** (stage-view plan session 9, §3.2) — the
+"wholly machine-local" branch of that tree, like `sync_configs`, rather than an override: a row is a
+spent one-shot tube (`patch_uuid`, `trigger`, `spent_at` as a `utcInstant`), and loaded is the absence
+of a row. Whether a confetti tube on this rig has been fired is a fact about the physical cannon in
+this hall, not about the show, so it never travels, is never cloned (`SyncCoverageTest` records it
+`MachineLocal`) and is never wiped by an import. It is keyed by the patch's **uuid** with no foreign
+key, so a row survives a re-import of its project (an import keeps uuids) and simply stops mattering
+for a patch that is gone. `state/EffectsService.kt` reads it into memory when a show starts and writes
+it off the firing path, on its own worker thread, so a fire never waits on SQLite.
 
 ## Install identity
 

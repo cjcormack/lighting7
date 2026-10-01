@@ -6,10 +6,8 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureKind
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureTrigger
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fixture.property.Slider
 
 /**
  * Equinox Twin Shot MKII (EQLED406) — twin electric confetti / streamer launcher.
@@ -19,11 +17,14 @@ import uk.me.cormack.lighting7.fixture.property.Slider
  * - Ch 2: Output 2 (0–50 idle, 51–255 fire).
  * - Ch 3: Master (0–50 idle, 51–255 enabled). Outputs 1/2 only fire while master is high.
  *
- * **Safety**: this fixture intentionally does not implement any FX-targetable trait
- * (no `WithDimmer` / `WithStrobe` / `WithColour`). Random tempo-driven effects must
- * not be allowed to drive the trigger channels, since each fire pulse expends a
- * physical confetti cartridge. Scripts should treat the channels as momentary
- * triggers (raise high → wait → release).
+ * **Safety**: each fire spends a physical cartridge, so the two outputs are
+ * [one-shot triggers][FixtureTrigger] and the master is their arm (stage-view plan session 9,
+ * D15, D16) — none of the three is a `@FixtureProperty`. No Look, template, cue row, effect,
+ * programmer value or Record can hold one, nothing composes or crossfades them, and the desk owns
+ * all three channels: the outputs sit idle except for one ~300 ms pulse per fire, and the master
+ * follows the desk's arm. A fire is a cue event, the cannon's hold-to-fire button or a MIDI
+ * `FireTrigger`, and only while the desk is armed. The class still implements no FX-targetable
+ * trait, so a tempo effect cannot reach it either.
  */
 @FixtureType("equinox-twin-shot-mkii", manufacturer = "Equinox", model = "Twin Shot MKII", kind = FixtureKind.EFFECT, body = FixtureBody(BodyArchetype.CANNON))
 class EquinoxTwinShotMkIIFixture(
@@ -48,12 +49,15 @@ class EquinoxTwinShotMkIIFixture(
     override fun withTransaction(transaction: ControllerTransaction): EquinoxTwinShotMkIIFixture =
         EquinoxTwinShotMkIIFixture(this, transaction)
 
-    @FixtureProperty("Output 1 fire trigger (≥51 to fire)", category = PropertyCategory.OTHER)
-    val output1: Slider = DmxSlider(transaction, universe, firstChannel)
+    @FixtureTrigger("Tube A", label = "A", armName = ARM, armDescription = ARM_DESCRIPTION)
+    val output1: DmxTrigger = DmxTrigger(universe, firstChannel, firstChannel + 2)
 
-    @FixtureProperty("Output 2 fire trigger (≥51 to fire)", category = PropertyCategory.OTHER)
-    val output2: Slider = DmxSlider(transaction, universe, firstChannel + 1)
+    @FixtureTrigger("Tube B", label = "B", armName = ARM, armDescription = ARM_DESCRIPTION)
+    val output2: DmxTrigger = DmxTrigger(universe, firstChannel + 1, firstChannel + 2)
 
-    @FixtureProperty("Master enable (≥51 enables outputs 1/2)", category = PropertyCategory.OTHER)
-    val master: Slider = DmxSlider(transaction, universe, firstChannel + 2)
+    private companion object {
+        /** Channel 3: the master enable both tubes share, and the name a stored row once used for it. */
+        const val ARM = "master"
+        const val ARM_DESCRIPTION = "Master enable"
+    }
 }

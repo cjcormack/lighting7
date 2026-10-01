@@ -136,6 +136,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'cueStackBack':
     case 'cueStackPause':
     case 'fireCue':
+    case 'fireTrigger':
     case 'selectTarget':
     case 'clearSelection':
     case 'locateSelection':

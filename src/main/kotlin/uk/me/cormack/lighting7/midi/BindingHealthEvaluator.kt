@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.models.AssignmentHealth
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -119,6 +120,9 @@ object BindingHealthEvaluator {
         is BindingTarget.CueStackBack -> checkStack(target.stackId, target.stackUuid, context)
         is BindingTarget.CueStackPause -> checkStack(target.stackId, target.stackUuid, context)
         is BindingTarget.FireCue -> checkCue(target.cueId, target.cueUuid, context)
+        // The fixture and its trigger. Whether the desk is armed is a fact about this second, not
+        // about the binding — an unarmed press is announced, never a dead binding.
+        is BindingTarget.FireTrigger -> checkTrigger(target.fixtureKey, target.trigger, context)
         is BindingTarget.SelectionProperty ->
             if (target.propertyName in context.selectionProperties) AssignmentHealth.Ok
             else AssignmentHealth.UnknownProperty(target.propertyName)
@@ -188,6 +192,14 @@ object BindingHealthEvaluator {
         is BindingTarget.SpeedMasterTap -> checkSpeedMaster(target.masterUuid, context)
         BindingTarget.Blackout -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
+    }
+
+    /** A [BindingTarget.FireTrigger]'s fixture must be patched and carry that trigger (by name or label). */
+    private fun checkTrigger(fixtureKey: String, trigger: String, context: Context): AssignmentHealth {
+        val fixture = runCatching { context.fixtures.untypedFixture(fixtureKey) }.getOrNull()
+            ?: return AssignmentHealth.MissingFixture(fixtureKey)
+        val known = FixtureTriggers.of(fixture).any { it.name.equals(trigger, ignoreCase = true) || it.spec.label.equals(trigger, ignoreCase = true) }
+        return if (known) AssignmentHealth.Ok else AssignmentHealth.MissingProperty(fixtureKey, trigger)
     }
 
     /**

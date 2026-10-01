@@ -2,6 +2,7 @@ import { memo, useMemo, type ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import {
   Blinds,
+  Flame,
   Theater,
   Layers,
   AudioWaveform,
@@ -24,6 +25,7 @@ import { collectCueTargets } from './targetUtils'
 import { TriggerSummary } from './TriggerSummary'
 import { TimingBadge } from './TimingBadge'
 import { CueSceneryReadout } from '@/components/scenery/SceneryReadout'
+import { CueEventsReadout } from '@/components/effects/CueEventsEditor'
 import { fromCueAdHocEffect } from '@/components/fx/effectSummaryTypes'
 import type { Cue } from '@/api/cuesApi'
 
@@ -103,6 +105,7 @@ export const CueDetailContent = memo(function CueDetailContent({
   const triggers = cue?.triggers ?? []
   const scenery = cue?.scenery ?? []
   const trackedScenery = cue?.trackedScenery ?? []
+  const events = cue?.events ?? []
 
   const fadeText = cue ? formatFadeText(cue.fadeDurationMs, cue.fadeCurve) : ''
 
@@ -217,6 +220,16 @@ export const CueDetailContent = memo(function CueDetailContent({
         <div className="space-y-1.5">
           <SectionHeader icon={Blinds} label="Scenery" count={scenery.length} />
           <CueSceneryReadout projectId={projectId} scenery={scenery} tracked={trackedScenery} enabled={enabled} />
+        </div>
+      )}
+
+      {/* ── Events ──
+          The cannons this cue fires on GO into it (stage-view plan session 9). Read-only; Cue
+          properties edits them. Only drawn when there are some. */}
+      {events.length > 0 && (
+        <div className="space-y-1.5">
+          <SectionHeader icon={Flame} label="Events" count={events.length} />
+          <CueEventsReadout events={events} />
         </div>
       )}
 

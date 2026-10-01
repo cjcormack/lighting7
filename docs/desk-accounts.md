@@ -41,6 +41,22 @@ mid-show. Project **export and import** are the exception — they take a caller
 absolute filesystem path and read or write it verbatim, which is the one authenticated surface
 reaching outside the app's own data directory, so both are `adminOnly {}`.
 
+**Arming and firing are not admin territory either, and not operator-only** (stage-view plan
+session 9, D16). The design record's D16 said arming was "operator-only"; the plan overrides it, and
+the plan wins: **both roles may arm the desk, fire a tube and reload one on the desk's own
+listener** — `POST /projects/{id}/effects/arm`, `…/patches/{id}/fire`, `…/patches/{id}/reload` sit
+in no `adminOnly {}` subtree and call no `requireAdmin()`. The reasoning is the scripts paragraph's:
+whoever is standing at the desk running the show is who fires the confetti, and an arm that only an
+admin could give would make the operator fetch one mid-show. What gates the cannons is not a role
+but **where the caller is**: on the public listener all three are refused (403
+`REMOTE_EFFECTS_DISABLED`, `requireEffectsAccess`) unless an admin has turned on *Allow arming and
+firing over remote access* in Install settings → Remote access — off by default, because a cannon
+spends something physical in a room a remote caller cannot see. They are REST rather than socket
+commands for the next paragraph's reason: the socket gains no operation. **The arm itself is the
+consent to a cue's events, wherever the GO comes from** (a decision made in session 9's review): a
+GO from a remote session or Claude into a cue with events fires them while the desk is armed, as a
+GO at the desk would; what a remote caller cannot do is arm, fire a tube outright or reload one.
+
 WebSocket messages are **not** role-scoped in v1: any authenticated user can send any
 socket message. Deliberate, not an oversight — see `FU-AUTH-WS-PER-MESSAGE` in
 `docs/plans/followups.md`. The socket shares the `/api` routing node with the HTTP API, so the

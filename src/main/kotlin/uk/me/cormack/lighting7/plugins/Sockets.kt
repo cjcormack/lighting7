@@ -161,6 +161,7 @@ fun Application.configureSockets(state: State) {
             setupSpeedMasterSubscriptions(scope)
             setupHandSubscriptions(scope)
             setupScenerySubscriptions(scope)
+            setupEffectsSubscriptions(scope)
             setupStageRenderSubscriptions(scope)
 
             try {

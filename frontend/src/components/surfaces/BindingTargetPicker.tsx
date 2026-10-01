@@ -92,6 +92,7 @@ const BUTTON_KINDS: TargetKind[] = [
   "cueStackBack",
   "cueStackPause",
   "fireCue",
+  "fireTrigger",
   "blackout",
   "grandMasterToggle",
   "setBank",
@@ -120,6 +121,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   cueStackBack: "Cue stack — Back",
   cueStackPause: "Cue stack — Pause",
   fireCue: "Fire cue",
+  fireTrigger: "Fire trigger (needs the arm)",
   flash: "Flash",
   selectTarget: "Selection — select",
   clearSelection: "Selection — clear",
@@ -590,6 +592,28 @@ function TargetBody({
       </div>
     )
   }
+  if (kind === "fireTrigger" && value.type === "fireTrigger") {
+    return (
+      <div className="space-y-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Fixture</Label>
+          <Select value={value.fixtureKey || undefined} onValueChange={(fixtureKey) => onChange({ ...value, fixtureKey })}>
+            <SelectTrigger><SelectValue placeholder="Select a cannon…" /></SelectTrigger>
+            <SelectContent>
+              {fixtureOptions.map((f) => (
+                <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Tube (trigger name or label)</Label>
+          <Input value={value.trigger} onChange={(e) => onChange({ ...value, trigger: e.target.value })} />
+        </div>
+        <p className="text-[11px] text-muted-foreground">Fires only while the desk is armed; unarmed, the press is announced and does nothing.</p>
+      </div>
+    )
+  }
   if (kind === "flash" && value.type === "flash") {
     return (
       <div className="space-y-2">
@@ -925,6 +949,10 @@ function defaultForKind(
       return { type: "cueStackPause", stackId: stacks[0]?.id ?? 0 }
     case "fireCue":
       return { type: "fireCue", cueId: 0 }
+    // No fixture yet, the record variants' rule: the first fixture would bind a fire button to a
+    // cannon the operator never picked. Health reads it dead until one is chosen.
+    case "fireTrigger":
+      return { type: "fireTrigger", fixtureKey: "", trigger: "output1" }
     case "flash":
       return {
         type: "flash",

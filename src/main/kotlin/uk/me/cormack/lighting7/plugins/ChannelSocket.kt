@@ -24,6 +24,8 @@ import java.awt.Color
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicReference
 
+private val logger = org.slf4j.LoggerFactory.getLogger("ChannelSocket")
+
 // ─── Inbound ────────────────────────────────────────────────────────────
 
 @Serializable
@@ -145,6 +147,17 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
     val level = message.level
     val fade = message.fadeTime
 
+    // A one-shot trigger or its arm (stage-view plan session 9): the desk owns these channels, so a
+    // raw write is dropped rather than parked in the sideband, where it would sit under the trigger
+    // output doing nothing until a Clear. No reply channel on this frame, so the refusal is a log.
+    show.triggerOutput.ownerOf(universe, channel)?.let { owner ->
+        logger.warn(
+            "updateChannel: refused {}/{} — '{}' on '{}' is a one-shot trigger{}; it fires as an event, never as a level",
+            universe, channel, owner.trigger.name, owner.fixtureName, if (owner.arm) "'s arm" else "",
+        )
+        return
+    }
+
     val key = engine.cascade.resolveChannelCoveringKey(universe, channel)
     if (key == null) {
         // No backing property — raw sideband write; nothing sits below it in the cascade.
@@ -262,18 +275,19 @@ private fun currentExtendedColour(
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 /**
- * The whole DMX output buffer, parked values overlaid so clients see what the fixture is
- * actually emitting rather than the underlying buffered value.
+ * The whole DMX output buffer, parked values — and the trigger output's held channels under them —
+ * overlaid so clients see what the fixture is actually emitting rather than the underlying buffered
+ * value.
  */
 internal fun buildChannelStateMessage(state: State): ChannelStateOutMessage {
-    val parkManager = state.show.parkManager
+    val overrides = state.show.outputSource
     val currentValues = state.show.fixtures.controllers.flatMap { controller ->
         val universe = controller.universe.universe
         controller.currentValues.map { (channelNo, value) ->
             ChannelState(
                 universe,
                 channelNo,
-                parkManager.getParkedValue(universe, channelNo) ?: value,
+                overrides.getParkedValue(universe, channelNo) ?: value,
             )
         }
     }

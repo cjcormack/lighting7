@@ -313,6 +313,28 @@ Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor
 properties, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
 holding its draft over a refetch. See the stage-vis doc's §"Scenery that moves with the show".
 
+**One-shot effects — the cannons** (session 9; lighting7 `docs/fixtures-engineering.md`
+§"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
+**triggers**, never values: a `TriggerPropertyDescriptor` (`type: 'trigger'`, `triggersOf` in
+`store/fixtures.ts`) at the end of a fixture's properties, which every control-drawing switch skips
+(`PropertyVisualizer`, `categoriseProperties`, the programmer's channel map). `api/effectsApi.ts` reads
+the three outbound frames — `effects.armed` (form 3 in `store/effects.ts`, its countdown anchored to
+this browser's clock from the frame's `remainingMs`), `effects.fired`, `effects.skipped` — and the
+REST verbs (arm, fire, reload, a cue's whole-list events) are `store/effects.ts`'s; there is no inbound
+frame (lighting7 P2). Four surfaces: the red **`ArmedChip`** on the app header and, while immersive, on
+the `ShowHeader` row (`components/effects/`; a tap disarms, nothing is drawn disarmed);
+**`EffectsAnnouncer`**, mounted once in `Layout`, toasting every skip on every window; the
+**`CannonPanel`**, which `FixtureContent` draws in place of controls for a fixture with triggers —
+loaded/spent per tube, arm/disarm, **hold-to-fire** (`HoldToFireButton`, 700 ms, a brush fires
+nothing), a confirmed reload, and a fire **rehearsed** while the programmer is blind or this window's
+vis source is the programmer (`rehearse: true`: drawn on every window, nothing sent); and
+**`CueEventsEditor`** in Cue properties (with `CueEventsReadout` on the cue card), the session-8
+scenery editor's shape — a whole-list save per gesture, its draft held over a refetch. The Stage view
+throws **confetti** on every fire (`stage3d/StageConfetti.tsx` over the pure `confetti.ts`): one
+instanced mesh pooled per canvas, unlit, invalidating each frame only while a flake flies — see
+`docs/stage-vis-engineering.md` §"Confetti". The MIDI `fireTrigger` target is mirrored in
+`lib/surfaceDrop.ts` and the binding picker; the remote-access tab carries *Allow arming and firing*.
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group

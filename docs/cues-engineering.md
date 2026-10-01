@@ -16,6 +16,10 @@ A **Cue** is a named, project-scoped entity that captures a complete lighting lo
   it. Later layers override earlier ones for the same fixture and property, whatever the attribute;
   the cue's own local values win over every layer.
 - **Ad-hoc effects** — manually applied effects belonging to no Look, stored as full inline effect definitions.
+- **Scenery** — scene elements the cue moves on GO, each on its own clock (stage-view plan session 8;
+  `cue-stacks-engineering.md` §"Scenery").
+- **Events** — one-shot triggers (a confetti cannon's tubes) the cue fires a set time after GO into it,
+  while the desk is armed (stage-view plan session 9; §"Cue events" below).
 
 A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
 effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
@@ -39,17 +43,30 @@ Key behaviours:
 cues
 ├── id (auto-increment PK)
 ├── name (varchar 255)
-└── project_id (FK → projects)
+├── project_id (FK → projects)
+├── cue_stack_id (FK → cue_stacks — NOT NULL: every cue belongs to a stack)
+├── sort_order, cue_number, cue_number_auto, cue_type (STANDARD | MARKER)
+├── fade_duration, fade_curve, auto_advance, auto_advance_delay (Durations; nanoseconds on disk)
+├── notes, stomp
+└── uuid
 
 cue_layers
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
-├── look_id (FK → looks)
+├── look_id (FK → looks, nullable)        ┐ exactly one of the two: a layer applies a Look
+├── template_id (FK → templates, nullable) ┘ or a template
+├── sort_order (int, default 0)
+├── enabled (bool, default true)
 ├── targets (JSON: List<CueTargetDto>)
+├── property_mask (varchar, nullable — I/P/C/B mask, e.g. "INTENSITY,COLOUR")
+├── blend_mode (varchar, default OVERRIDE)
+├── amount (double, default 1.0)
+├── stomp (bool, default false — per-layer stomp, see lighting-composition-model.md §Stomp)
+├── speed_master_uuid, rate_speed_master_uuid (nullable — override the layer's effects' masters)
 ├── delay (Duration, nullable — delayed application; nanoseconds on disk)
 ├── interval (Duration, nullable — recurring application)
 ├── random_window (Duration, nullable — randomisation for recurring)
-└── sort_order (int, default 0)
+└── uuid
 
 cue_ad_hoc_effects
 ├── id (auto-increment PK)
@@ -75,12 +92,23 @@ cue_ad_hoc_effects
 cue_triggers (script hooks only)
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
-├── trigger_type (enum: ACTIVATION, DEACTIVATION, DELAYED, RECURRING)
-├── delay (Duration, nullable — for DELAYED; nanoseconds on disk)
-├── interval (Duration, nullable — for RECURRING)
+├── trigger_type (enum: ACTIVATION, DEACTIVATION — a delayed or recurring hook is an
+│                 ACTIVATION with timing; a write naming DELAYED or RECURRING is normalised)
+├── delay (Duration, nullable — fire this long after activation; nanoseconds on disk)
+├── interval (Duration, nullable — re-fire at this interval)
 ├── random_window (Duration, nullable — randomisation window)
 ├── script_id (FK → scripts — required)
 └── sort_order (int, default 0)
+
+cue_events (stage-view plan session 9 — see §"Cue events")
+├── id (auto-increment PK)
+├── cue_id (FK → cues)
+├── patch_id (FK → fixture_patches)
+├── trigger (varchar 64 — the trigger's name on its fixture type, e.g. output1)
+├── offset (Duration — how long after GO it fires; nanoseconds on disk)
+├── sort_order (int, default 0)
+├── uuid
+└── unique(cue_id, patch_id, trigger) — a tube fires once per cue
 ```
 
 Cue names are free-form and **not** unique. The old `unique(project_id, name)` index predated
@@ -179,34 +207,22 @@ When a Look is referenced by any cue layer (via FK), it cannot be deleted. The d
 
 ## Cue Stack Membership
 
-Cues can optionally belong to a **cue stack** for sequential playback. See `cue-stacks-engineering.md` for full details.
+**Every cue belongs to a cue stack** — `cues.cue_stack_id` is `NOT NULL` (`models/cues.kt`), and
+there are no standalone cues any more. See `cue-stacks-engineering.md` for the stack itself.
 
-### Database Fields
-
-The `cues` table has two additional columns:
-- `cue_stack_id` (nullable FK → `cue_stacks`) — which stack the cue belongs to, or null for standalone
+- `cue_stack_id` (FK → `cue_stacks`) — the stack the cue belongs to
 - `sort_order` (int, default 0) — position within the stack's ordered sequence
 
-### API Changes
+`CueDetails` carries `cueStackId` and `cueStackName`; `NewCue` requires `cueStackId` (a create without
+one is a 400) and takes an optional `sortOrder` (appended to the end if omitted). An archive from
+before stacks were mandatory imports its stack-less cues into an "Unsorted" stack.
 
-`CueDetails` includes:
-- `cueStackId: Int?` — null for standalone cues
-- `cueStackName: String?` — resolved from the stack entity
-- `sortOrder: Int` — position within stack (0 for standalone)
+Two ways put a cue on stage, and both go through the stack:
 
-`NewCue` accepts optional:
-- `cueStackId: Int?` — assign cue to a stack on creation
-- `sortOrder: Int?` — position within stack (appended to end if omitted)
-
-### Standalone vs Stacked Cues
-
-| Behaviour | Standalone Cue | Stacked Cue |
-|-----------|---------------|-------------|
-| Apply/Stop | Via `apply_cue`/`stop_cue` | Via stack activate/advance/deactivate |
-| Multiple concurrent | Yes (independent) | Yes (via multiple active stacks) |
-| FxInstance tagging | `cueId` set, `cueStackId` null | Both `cueId` and `cueStackId` set |
-| Crossfade | None (snap-cut on re-apply) | Intensity envelope (if cue has fadeDurationMs) |
-| Auto-advance | N/A | Per-cue (autoAdvance + autoAdvanceDelayMs) |
+| Path | What it does |
+|------|--------------|
+| A stack GO, GO TO, BACK, a busk pad, `POST /cues/{id}/apply` | `CueStackManager.activateCueInStack` — the cue becomes its stack's live cue, with the crossfade and auto-advance it carries |
+| The AI's `apply_cue` | `applyCue` — the cue's effects and Layer 4 rows alongside other running cues; it stands in for its stack's live cue for scenery and fires its events through the same hook a GO does |
 
 ## FxInstance Integration
 
@@ -246,13 +262,50 @@ Manual effects and effects owned by the stomping cue itself are never stomped. S
 
 ## Active Cue Tracking
 
-Active cues are derived from `FxInstance.cueId` — there is no separate "active cue" registry. The `cueId` field is included in:
-- `EffectDto` (`fx/EffectDto.kt`) — the one effect report, carried by the FxEngine state flow,
-  the `fxState` WebSocket broadcast and the REST active-effect responses alike
-- `GroupEffectDto` (REST group responses)
-- `get_current_state` AI tool output
+A cue is live when its stack has it as `activeCueId` — the stack's own run state, kept by
+`CueStackManager` and streamed as `cueRunStateChanged`. The frontend's `useActiveCueIds()`
+(`store/cues.ts`) reads exactly that, from the cue-stack list: it used to derive "active" from
+`FxInstance.cueId` over the `fxState` stream, which could never see a cue made only of values (no
+effect carries its id). `FxInstance.cueId` is still carried — by `EffectDto`, `GroupEffectDto` and
+`get_current_state` — because it is what the apply and stop paths use to find a cue's own effects.
 
-The frontend derives active cue IDs from the real-time FxState WebSocket stream using the `useActiveCueIds()` hook (no additional WebSocket message needed).
+## Cue events
+
+**A cue event fires one one-shot trigger — a confetti cannon's tube — a set time after GO into its
+cue** (stage-view plan session 9, D15, D16). Events are the cannons' door into a show, and they are
+deliberately unlike everything else a cue carries:
+
+- **They fire on GO into this cue only.** Every path that makes the cue its stack's live cue fires
+  them — GO, GO TO the cue itself, a busk pad, `POST /cues/{id}/apply`, the auto-advance timer — and
+  the AI's `apply_cue` fires them through the same hook (`EffectsService.onCueGo`, from
+  `activateCueInStack` and `applyCue`). **They never track**: GO TO a *later* cue fires nothing of
+  an earlier one's, and a **GO BACK** into the cue fires nothing either (`fireEvents = false` on the
+  BACKWARD arm), since stepping back is a correction, not a go. **They are never previewed**: only
+  the GO builder (`buildCueGoData`) carries them, so a Next GO preview, a republish or a cook cannot.
+- **They need the arm.** Judged at GO: unarmed, the GO goes and every event of the cue is skipped
+  — logged, and announced on every window as one `effects.skipped` frame — and **never queued**, so
+  arming a moment later does not bring them back. An event scheduled under an arm that has dropped
+  by its offset — a disarm, a lapse, a stack stop, a project switch, even if armed again since — is
+  skipped too; extending a held arm (arming again while armed) is not a drop. In Blind every event is **rehearsed** instead: the
+  burst is drawn, nothing is sent, no arm is needed and no tube is spent.
+- **They are not channel values.** Nothing composes, crossfades, records or stomps them. A fire is a
+  backend-timed pulse, ~300 ms high then idle, written above composition through the show's
+  `TriggerOutput` (`docs/fixtures-engineering.md` §"One-shot triggers").
+- **A spent tube sends nothing.** An event reaching one is skipped and announced (`SPENT`).
+
+The write is whole-list: `PUT /api/rest/projects/{id}/cues/{cueId}/events`
+`{events: [{patchId, trigger, offsetMs}]}`, answered with the list as stored (`CueEventDto`:
+`uuid, patchId, patchUuid, fixtureKey, fixtureName, trigger, triggerLabel, offsetMs, sortOrder`).
+Every problem comes back at once: a patch with no trigger, a trigger its type does not have (by name,
+`output1`, or label, `A`), a tube named twice, an offset outside 0–600 000 ms; a MARKER has none. The
+cue's own DTO carries them as `CueDetails.events`. A re-save keeps each tube's row and uuid, so an
+unchanged list exports byte-for-byte as before. Deleting a cue or a patch sweeps its events; a
+same-project cue copy carries them. They travel in sync embedded in `CueJson.events` on
+`formatVersion` 21 (`docs/sync-engineering.md` §"Version 21 — cue events").
+
+The chat and MCP tools author them too — `create_cue` and `build_cue_stack` take `events`
+(`[{fixture, trigger, offsetSeconds?}]`, the fixture by key or name) and `set_cue_events` replaces
+one cue's list. No tool arms or fires (`docs/mcp-engineering.md`).
 
 ## WebSocket Notifications
 

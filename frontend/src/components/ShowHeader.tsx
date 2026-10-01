@@ -21,6 +21,7 @@ import { Breadcrumbs } from './Breadcrumbs'
 import { useOpenMobileDrawer } from './mobileDrawerContext'
 import { ImmersiveToggle } from './ImmersiveToggle'
 import { SaveStatusIndicator } from './SaveStatusIndicator'
+import { ArmedChip } from './effects/ArmedChip'
 import { ViewSwitcher, type ShowView } from './ViewSwitcher'
 
 const PAGE_LABEL: Record<ShowView, string> = {
@@ -178,6 +179,9 @@ export function ShowHeader({
       <div className="flex items-center gap-2 shrink-0">
         {/* Offline, and only offline, and only while immersive (D10): with the app header drawn its
             connection pill says this already. First in the group for the save pill's reason. */}
+        {/* ARMED, while immersive: the app header that carries it is not drawn, and the arm is the
+            one state no screen may hide (stage-view plan session 9, D16). */}
+        {immersive && <ArmedChip className="h-6" />}
         {immersive && !connected && (
           <Badge variant="destructive" className="h-5 shrink-0 px-2 text-[10px] uppercase tracking-wide" title="The desk's socket is down">
             Offline

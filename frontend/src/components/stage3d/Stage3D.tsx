@@ -22,6 +22,7 @@ import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
 import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
+import { StageConfetti } from './StageConfetti'
 import { DEFAULT_SCENE_LAYERS, type SceneLayers } from './scene/sceneView'
 import { DEFAULT_LIGHT_BUDGET } from './scene/lightTable'
 import { HAZE_TIERS, HazeGovernor, type HazeQuality } from './scene/hazeGovernor'
@@ -268,6 +269,11 @@ export function Stage3D({
   )
 
   const gridSize = Math.max(stageW, stageD) * 1.6
+  // Where confetti thrown off the stage's footprint settles: a modelled room's floor, else the deck.
+  const houseFloorZ = useMemo(() => {
+    const rooms = (showScene ? storedElements ?? [] : []).filter((e) => e.kind === 'ROOM' && !e.hidden)
+    return rooms.length > 0 ? Math.min(...rooms.map((e) => e.positionZ ?? 0)) : 0
+  }, [showScene, storedElements])
   // Stable identity: StageEmitters rebuilds its instance buffers when this
   // changes, so it must not be a fresh object every render.
   const stageDims = useMemo(
@@ -680,6 +686,18 @@ export function Stage3D({
         />
       )}
       {builds.length > 0 && <StageSceneElements builds={builds} seatPicking={picking} />}
+      {/* Confetti on every fire, real or rehearsed (stage-view plan session 9). Not in a one-frame
+          render: a capture draws the stage, not a burst in flight. */}
+      {capture == null && (
+        <StageConfetti
+          patches={visiblePatches}
+          fixtureByKey={fixtureByKey}
+          riggings={safeRiggings}
+          stageWidth={stageW}
+          stageDepth={stageD}
+          houseFloorZ={houseFloorZ}
+        />
+      )}
       <StageCameraRig
         camera={camera}
         landing={landing}

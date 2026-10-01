@@ -59,6 +59,9 @@ class WsConnectSnapshotTest : RouteIntegrationTest() {
         // Scenery, in the show band: on a desk where nothing has gone yet its frame names no
         // element, and that empty frame is still what a Stage view starts from.
         SceneryStateOutMessage::class,
+        // The arm, in the show band: on a fresh desk it is disarmed with nothing spent, and that is
+        // still the frame every window's ARMED chip and cannon panel start from (stage-view session 9).
+        EffectsArmedOutMessage::class,
     )
 
     @Test

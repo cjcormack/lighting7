@@ -63,6 +63,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │         ├─ LocateSelection → LocateManager.toggle, per selected target   │
   │         ├─ CueStackGo / Back / Pause / FireCue → CueStackManager         │
   │         │    (uuid first; a bare int only for a pre-v11 row)             │
+  │         ├─ FireTrigger → EffectsService.fireFromSurface (needs the arm)  │
   │         ├─ Flash → L4 write on press, clear on release                   │
   │         ├─ Blackout / GrandMasterToggle → GlobalScalerState              │
   │         └─ SetBank → ActiveBankState.setBank                             │
@@ -137,7 +138,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
+| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
 | `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `BindingTarget.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Fills `cueUuid` / `stackUuid` on create and update. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `SelectionWrites.kt` | The pure fan-out behind `SelectionProperty`: one programmer write per selected head, a group's members tagged with `sourceGroup`, heads without the property skipped, an empty selection → no writes. |
 | `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
@@ -353,6 +354,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `CueStackBack(stackId)` | Button | `CueStackManager.advanceStack(BACKWARD)` |
 | `CueStackPause(stackId)` | Button | `CueStackManager.pauseAutoAdvance(stackId)` |
 | `FireCue(cueId)` | Button | `CueStackManager.fireCue(cueId)` |
+| `FireTrigger(fixtureKey, trigger)` | Button | Fire one tube of a one-shot fixture — the Twin Shot's `output1`, or its label `A` — through `EffectsService.fireFromSurface` (stage-view plan session 9). **Needs the desk's arm**, like every fire: an unarmed press sends nothing and is announced on every window (`effects.skipped`, source `surface`), as is a spent tube; a blind programmer rehearses it. Fixture-keyed, as `FixtureProperty` is. Health: `missingFixture` with no such patch, `missingProperty` when the fixture has no such trigger — the arm is a fact about this second, never a dead binding. No LED |
 | `Flash(target, max)` | Button (momentary) | Press: programmer write (owner `flash`) at `minOf(max, sliderMax)`. Release: clear the `flash` slot — the property cascades to the surviving owner / cue layer / baseline in one publish |
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` |
@@ -406,7 +408,7 @@ item for when duplicate names ever matter.
 
 ### Bind-time refusals
 
-Five rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
+Six rules live on `ControlSurfaceBindingService` rather than in the REST routes, because the
 service is the one door every write comes through — MIDI Learn's commit reaches `create` directly,
 with no route validation of its own:
 
@@ -416,6 +418,7 @@ with no route validation of its own:
 | `refuseWrongSlot` | a `Strip` off a strip slot, or anything else on one | `BINDING_STRIP_NEEDS_STRIP` / `BINDING_CONTROL_NOT_STRIP` |
 | `refuseWrongKind` | a target the control's half of the dispatch can never reach | `BINDING_WRONG_CONTROL_KIND` |
 | `refuseUnpressableLook` | an `ApplyLook` on a Look with a deferred effect | `BINDING_LOOK_NEEDS_SELECTION` |
+| `refuseTriggerProperty` | a `FixtureProperty`, `GroupProperty`, `SelectionProperty`, `EncoderBankSet` or the `Flash` around one naming a **one-shot trigger or its arm** (stage-view plan session 9): a trigger fires as an event, and a surface's door to one is `FireTrigger`, which needs the arm. Judged by `TriggerIndex` against the register; a target-less selection or encoder-bank name by every trigger's name | `TRIGGER_NOT_STORABLE` |
 | `refuseAxisOnNonColour` | a `colourAxis` on a property that is not a colour — a fixture or group by the head's own type (the dispatch lookup, so it can never disagree with a move), a selection or encoder bank by the rig's colour vocabulary (`Context.colourProperties`); a `Flash` for the property it wraps. A missing fixture or an unknown property name is health's, not this rule's | `BINDING_AXIS_NEEDS_COLOUR` |
 
 The hand's three are the only place bindings there are — there is deliberately **no
@@ -607,6 +610,7 @@ can show. It is the one place in this class where the compiler is not the safety
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
 | Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI; uuid resolved to the project's row first |
 | Fire cue | `CueStackManager.fireCue` | *(Layer 4)* | |
+| Fire trigger | `EffectsService.fireFromSurface` | **above composition, under park** (`TriggerOutput`) | A ~300 ms pulse on the tube's channel, only while the desk is armed; never a value, so no layer holds it |
 | Fader → SelectionProperty | `ProgrammerWriter.writeProperties` (owner `surface`) | **Layer 2 (programmer)** | One write per selected head, a group's members tagged with `sourceGroup` — the same slot a fixed fader uses, so releasing a flash reveals it the same way |
 | Select / Clear button | `State.deskSelection` | *(no layer — the desk's selection)* | What the next selection-relative move acts on |
 | Locate button | `LocateManager.toggle` (owner `locate`) | **Layer 2 (programmer)** | Per selected target, the `POST /locate/toggle` path |

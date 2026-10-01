@@ -746,6 +746,13 @@ class State(val config: ApplicationConfig) {
     val sceneryService: SceneryService by lazy { SceneryService(this) }
 
     /**
+     * The desk's one-shot effects (stage-view plan session 9): the arm, every fire, the spent tubes
+     * and the cue events a GO schedules — `effects.armed`, `effects.fired`, `effects.skipped`.
+     * Re-attached to the new show on a switch, which disarms; see [EffectsService].
+     */
+    val effectsService: EffectsService by lazy { EffectsService(this) }
+
+    /**
      * Which busk page the desk is showing — a surface's *next page* button and a tab click are two
      * ways of making one gesture, so there is one answer. State-scoped and transient like
      * [deskSelection]: cleared on project switch, reconciled when the layout changes, never
@@ -933,6 +940,7 @@ class State(val config: ApplicationConfig) {
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
         sceneryService.attach(show, GlobalScope)
+        effectsService.attach(show)
         // Re-attach the feedback publisher to the new show's fixture listener on project
         // switch so motor / LED drive follows the composition model of the active project.
         projectChangedJob = GlobalScope.launch {
@@ -956,6 +964,9 @@ class State(val config: ApplicationConfig) {
                 attachBindingHealthListener()
                 // A live cue belongs to the show being left; the new one starts with its base.
                 sceneryService.attach(projectManager.show, GlobalScope)
+                // The arm drops on a project switch: the new show's cannons start disarmed, its tubes
+                // are read afresh, and nothing the old show scheduled fires (stage-view plan session 9).
+                effectsService.attach(projectManager.show)
                 // Patch / cue / stack row identities flip on project switch; re-evaluate
                 // cached binding health against the new show.
                 controlSurfaceBindingService.invalidateHealth(projectManager.currentProject.id.value)
@@ -989,6 +1000,7 @@ class State(val config: ApplicationConfig) {
         // tears a State down between every test.
         runCatching { handState.close() }
         runCatching { sceneryService.close() }
+        runCatching { effectsService.close() }
 
         // Before the MIDI stack goes down: the listener's callback reaches back into
         // `midiRegistry`, and it is the one teardown step whose absence silently retains the
@@ -1224,6 +1236,9 @@ class State(val config: ApplicationConfig) {
             """.trimIndent())
 
             ensureInstallRow()
+            // One-off (stage-view plan session 9): stored rows naming a one-shot trigger go. Delete
+            // this line and `TriggerRowStrip.kt` once it has run on the one install.
+            stripStoredTriggerRows()
         }
 
         return database

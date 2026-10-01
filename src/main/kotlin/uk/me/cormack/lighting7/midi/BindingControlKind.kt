@@ -52,6 +52,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     is BindingTarget.CueStackBack,
     is BindingTarget.CueStackPause,
     is BindingTarget.FireCue,
+    is BindingTarget.FireTrigger,
     is BindingTarget.SelectTarget,
     BindingTarget.ClearSelection,
     BindingTarget.LocateSelection,

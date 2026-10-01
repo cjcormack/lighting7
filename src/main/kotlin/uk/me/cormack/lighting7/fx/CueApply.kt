@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.state.EffectsService
+
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.dao.Entity
@@ -52,6 +54,13 @@ internal data class CueApplyData(
     val stomp: Boolean = false,
     val cueStackId: Int? = null,
     val sortOrder: Int = 0,
+    /**
+     * The cue's events (stage-view plan session 9), for the GO paths only — [buildCueGoData] fills
+     * them, every other builder leaves them empty, so a republish or a preview can never fire one.
+     */
+    val goEvents: List<EffectsService.CueEventFire> = emptyList(),
+    /** How a skipped event announces the cue: `Q5`, or its name when unnumbered. */
+    val cueLabel: String = cueName,
 )
 
 /**
@@ -90,6 +99,17 @@ private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayO
  */
 internal fun buildCueApplyData(cue: DaoCue): CueApplyData =
     cue.load(*CUE_APPLY_RELATIONS).toCueApplyData()
+
+/**
+ * [buildCueApplyData] plus the cue's events — what a **GO** into the cue builds, and nothing else:
+ * `CueStackManager.activateCueInStack` and the AI's `apply_cue`. Events fire on GO into their cue
+ * only (stage-view plan session 9), so the republish, preview and cook builders never carry them.
+ * Must be called inside a transaction.
+ */
+internal fun buildCueGoData(cue: DaoCue): CueApplyData = buildCueApplyData(cue).copy(
+    goEvents = cueEventsOf(cue.id).map { EffectsService.CueEventFire(it.patch.key, it.trigger, it.offset.toMillis()) },
+    cueLabel = cue.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name,
+)
 
 /**
  * The batched form: one query per relation for the whole set, rather than one transaction and a

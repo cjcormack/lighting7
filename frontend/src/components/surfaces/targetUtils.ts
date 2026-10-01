@@ -85,6 +85,8 @@ export function describeTarget(target: BindingTarget): string {
       return `Pause · stack ${target.stackId}`
     case "fireCue":
       return `Fire cue #${target.cueId}`
+    case "fireTrigger":
+      return `Fire ${target.fixtureKey} · ${target.trigger}`
     case "flash":
       return `Flash ${describeTarget(target.target)}`
     case "blackout":

@@ -22,12 +22,22 @@ Script hooks are lifecycle callbacks that run FX_APPLICATION scripts at cue even
 
 | Type | When it fires | Configuration |
 |------|--------------|---------------|
-| `ACTIVATION` | Immediately when the cue is activated | — |
+| `ACTIVATION` | When the cue is activated — immediately, or after `delayMs`, or repeatedly every `intervalMs` | `delayMs`, `intervalMs`, `randomWindowMs` (all optional) |
 | `DEACTIVATION` | When the cue is deactivated (cleanup) | — |
-| `DELAYED` | After a delay from activation | `delayMs` |
-| `RECURRING` | Repeatedly at an interval | `intervalMs`, `randomWindowMs` (optional) |
+
+There are **two** types (`TriggerType` in `models/cueTriggers.kt`). A delayed or recurring hook is
+an `ACTIVATION` hook with timing: `CueTriggerManager` launches a timed coroutine when either timing
+field is positive and runs the script at once otherwise. `DELAYED` and `RECURRING` were types of
+their own once; a write still naming either is normalised to `ACTIVATION` with its timing
+(`createCueChildren`), so an older client keeps working, but neither is ever stored or answered.
 
 Script hooks are stored in the `cue_triggers` table and always reference a script. The DEACTIVATION type only applies to script hooks (effects are inherently removed on deactivation).
+
+**A script hook is not a cue event.** A cue's **events** (stage-view plan session 9,
+`cues-engineering.md` §"Cue events") fire a one-shot trigger — a confetti cannon's tube — at an
+offset after GO, only while the desk is armed and only on GO into the cue; a hook runs a script on
+every activation whatever the desk's arm. Reach for an event to fire a cannon: a script cannot set
+a trigger (it is not a property), and the arm exists so that nothing but a deliberate event can.
 
 ## Data Model
 
@@ -60,9 +70,9 @@ Same timing columns added to `cue_ad_hoc_effects`:
 cue_triggers
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
-├── trigger_type (enum: ACTIVATION, DEACTIVATION, DELAYED, RECURRING)
-├── delay (nullable Duration — for DELAYED; nanoseconds on disk)
-├── interval (nullable Duration — for RECURRING)
+├── trigger_type (enum: ACTIVATION, DEACTIVATION)
+├── delay (nullable Duration — an ACTIVATION hook fires this long after activation; nanoseconds on disk)
+├── interval (nullable Duration — an ACTIVATION hook re-fires at this interval)
 ├── random_window (nullable Duration — randomisation range)
 ├── script_id (FK → scripts — required, always a script)
 └── sort_order (Int)
@@ -89,10 +99,10 @@ After the cue's immediate effects have been applied:
 
 1. **Timed effects** (`activateTimedEffectsForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing. Timed preset fires also contribute their property assignments to the cue layer (Layer 4) at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
 2. **Script hooks** (`activateTriggersForCue`): For each script trigger, execute by type:
-   - **ACTIVATION**: Run script immediately
-   - **DEACTIVATION**: Stored for later
-   - **DELAYED**: Launch `delay(delayMs) → runScript()` coroutine
-   - **RECURRING**: Launch `while(isActive) { delay(randomised) → runScript() }` coroutine
+   - **ACTIVATION** with no timing: run the script immediately
+   - **ACTIVATION** with `delayMs`: launch `delay(delayMs) → runScript()`
+   - **ACTIVATION** with `intervalMs`: launch `while(isActive) { delay(randomised) → runScript() }`
+   - **DEACTIVATION**: stored for later
 
 ### Deactivation Flow
 

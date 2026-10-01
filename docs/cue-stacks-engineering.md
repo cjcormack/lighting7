@@ -12,8 +12,8 @@ A **Cue Stack** is a named, project-scoped entity that groups cues into an order
 - **Multiple active stacks** — several stacks can be active simultaneously
 
 Key behaviours:
-- A cue can belong to at most one stack (`cue_stack_id` FK, nullable)
-- Cues not in a stack are "standalone" and behave as before
+- Every cue belongs to exactly one stack (`cue_stack_id` FK, `NOT NULL` — there are no standalone
+  cues; an archive from before that imports its stack-less cues into an "Unsorted" stack)
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through cues in sort order
 - Deactivating removes all effects tagged with the stack's ID
@@ -108,7 +108,8 @@ is next mutated.
 
 ### Key Design Decisions
 
-- **Nullable FK** on `cues.cue_stack_id` preserves backward compatibility — standalone cues have `null`
+- **`cues.cue_stack_id` is `NOT NULL`** — every cue is in a stack, and moving a cue is `add-cue` to
+  another; deleting a stack deletes its cues (with their children, scenery and events)
 - **Sort order** as integer allows easy reordering without renumbering (gaps are fine)
 - **Per-cue fade settings** allow different transition timing for each cue in a stack; `fade_duration = null` means snap-cut
 - **`cue_number` is a display label only** — `sort_order` remains the authoritative playback order
@@ -216,6 +217,8 @@ On `cueStackManager.runState` (`CueRunStateTracker`):
 6. If this cue has auto-advance configured: start delay timer
 7. Publish the run state, then the scenery (`SceneryService.onCueLive`) — §"Scenery" below.
    `deactivateStack` likewise ends with `onStackStopped`
+8. Then the cue's **events** (`EffectsService.onCueGo`) — §"Events" below — unless this is the
+   BACKWARD arm of `advanceStack`. `deactivateStack` drops the desk's arm (`onStackStopped`)
 
 A step "merge cue palette into stack palette" used to sit at 4, and the stack carried a positional
 colour list its cues inherited. That whole grammar is gone — an effect parameter names a colour
@@ -289,10 +292,9 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | POST | `/` | Create stack |
 | GET | `/{stackId}` | Get stack details |
 | PUT | `/{stackId}` | Update stack settings |
-| DELETE | `/{stackId}` | Delete stack (query param `?keepCues=true` default) |
+| DELETE | `/{stackId}` | Delete stack and its cues |
 | POST | `/{stackId}/reorder` | Reorder cues: body `{ cueIds: [3, 1, 5] }` |
-| POST | `/{stackId}/add-cue` | Add cue to stack: body `{ cueId, sortOrder?, insertByNumber? }` |
-| POST | `/{stackId}/remove-cue` | Remove cue from stack (becomes standalone): body `{ cueId }` |
+| POST | `/{stackId}/add-cue` | Add or move a cue to this stack: body `{ cueId, sortOrder?, insertByNumber? }` |
 | POST | `/{stackId}/activate` | Activate stack (first STANDARD cue), optional `{ cueId }` |
 | POST | `/{stackId}/deactivate` | Deactivate stack |
 | POST | `/{stackId}/advance` | Advance STANDARD cues only: body `{ direction: "FORWARD"\|"BACKWARD" }` |
@@ -421,6 +423,26 @@ twice, a `transitionMs` off a cue, a MARKER or a separator). The owners' read DT
 `CueDetails.scenery` (plus `trackedScenery`, what the cue shows without moving it and where from),
 `CueStackDetails.scenery`, `LookDetails.scenery`. Deleting an element sweeps its changes; deleting a
 cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
+
+## Events
+
+A cue's **events** fire one-shot triggers — a confetti cannon's tubes — at their offsets after GO
+into the cue, only while the desk is armed (stage-view plan session 9; `cues-engineering.md`
+§"Cue events" is the contract). Two facts are the stack manager's:
+
+- **The hook, beside scenery's.** `activateCueInStack` builds the cue with `buildCueGoData` (the one
+  builder that carries events, so no republish or preview can fire one) inside its own read, and
+  ends with `state.effectsService.onCueGo(cueId, label, events)` — after the run state and the
+  scenery, so every GO path fires them: REST, MIDI, a busk pad, auto-advance. The AI's `apply_cue`
+  reaches the same hook from `applyCue`. `advanceStack` passes `fireEvents = false` for BACKWARD:
+  stepping back into a cue fires nothing. **The hook only schedules** — it judges the arm and blind
+  at that instant and launches one coroutine per event on the effects service's scope; nothing
+  blocks the GO and nothing runs inside a caller's transaction (the pool is one SQLite connection).
+  A fire touches memory and the trigger output, and the spent tube is written by the service's own
+  worker thread, scenery's arrangement.
+- **A stack stop drops the arm.** `deactivateStack` calls `effectsService.onStackStopped`, which
+  disarms the desk — any stack stopping is a stop, and the pending events of an armed GO find the
+  arm gone when their offset comes and are announced as skipped.
 
 ## WebSocket
 

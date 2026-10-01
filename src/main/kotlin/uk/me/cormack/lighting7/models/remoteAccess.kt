@@ -23,6 +23,12 @@ object DaoRemoteAccessSettingsTable : IntIdTable("remote_access_settings") {
     val domain = varchar("domain", 253).nullable()
     /** Whether a remote request may compile, run or save scripts. Off by default. */
     val allowScripts = bool("allow_scripts").default(false)
+    /**
+     * Whether a remote request may arm the desk, fire a one-shot trigger or reload one (stage-view
+     * plan session 9, D16). Off by default: a confetti cannon spends something physical, in a room
+     * the remote caller cannot see.
+     */
+    val allowEffects = bool("allow_effects").default(false)
     val updatedAt = utcInstant("updated_at")
 }
 
@@ -32,5 +38,6 @@ class DaoRemoteAccessSettings(id: EntityID<Int>) : IntEntity(id) {
     var enabled by DaoRemoteAccessSettingsTable.enabled
     var domain by DaoRemoteAccessSettingsTable.domain
     var allowScripts by DaoRemoteAccessSettingsTable.allowScripts
+    var allowEffects by DaoRemoteAccessSettingsTable.allowEffects
     var updatedAt by DaoRemoteAccessSettingsTable.updatedAt
 }

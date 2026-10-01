@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.plugins
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -638,6 +640,8 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
             // Blind takes the programmer off stage, its Looks' scenery with it.
             state.sceneryService.onBlindChanged()
+            // Blind rehearses every fire and holds the cannons' arm channels down (session 9).
+            state.effectsService.onBlindChanged()
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)
@@ -690,6 +694,14 @@ private inline fun withTarget(
 object ProgrammerHandler {
     private val logger = LoggerFactory.getLogger(ProgrammerHandler::class.java)
 
+    /**
+     * The programmer never holds a one-shot trigger (stage-view plan session 9, D15). It could not
+     * anyway — a trigger is not a property, so the write would resolve no channels — but this names
+     * the reason rather than reporting "resolves to no DMX channels".
+     */
+    private fun triggerRefusal(state: State, target: TargetRef, propertyName: String): String? =
+        TriggerIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, propertyName, "programmer")
+
     /** Parse [value] against the property's category, then delegate to [setTyped]. */
     fun set(
         state: State,
@@ -699,6 +711,7 @@ object ProgrammerHandler {
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
+        triggerRefusal(state, target, propertyName)?.let { return ProgrammerErrorOutMessage(it) }
         val typed = parseValue(state, target, propertyName, value)
             ?: return ProgrammerErrorOutMessage(
                 "Value '$value' doesn't parse for ${target.discriminator} '${target.key}' property '$propertyName'"
@@ -715,6 +728,7 @@ object ProgrammerHandler {
         fadeMs: Long,
         sourceGroup: String? = null,
     ): OutMessage {
+        triggerRefusal(state, target, propertyName)?.let { return ProgrammerErrorOutMessage(it) }
         val engine = state.show.fxEngine
         val landed = when (target) {
             is TargetRef.Fixture -> {

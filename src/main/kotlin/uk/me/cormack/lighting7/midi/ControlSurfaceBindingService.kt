@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.midi
 
+import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -264,6 +267,7 @@ class ControlSurfaceBindingService(
         val healthContext = resolveHealthContext(projectId)
         refuseUnpressableLook(healthContext, target)
         refuseAxisOnNonColour(healthContext, target)
+        refuseTriggerProperty(healthContext, target)
         val resolved = synchronized(lockFor(projectId)) {
             val existing = cache[projectId]?.byControl
                 ?.get(ControlKey(deviceTypeKey, controlId))
@@ -317,6 +321,7 @@ class ControlSurfaceBindingService(
         target?.let {
             refuseUnpressableLook(healthContext, it)
             refuseAxisOnNonColour(healthContext, it)
+            refuseTriggerProperty(healthContext, it)
         }
         val resolved = synchronized(lockFor(projectId)) {
             val pc = cache[projectId] ?: return null
@@ -415,6 +420,7 @@ class ControlSurfaceBindingService(
         creates.forEach {
             refuseUnpressableLook(healthContext, it.target)
             refuseAxisOnNonColour(healthContext, it.target)
+            refuseTriggerProperty(healthContext, it.target)
         }
         val created = synchronized(lockFor(projectId)) {
             val pc = cache.getOrPut(projectId) { ProjectCache() }
@@ -544,6 +550,31 @@ class ControlSurfaceBindingService(
             cache[projectId] = pc
             loaded.add(projectId)
         }
+    }
+
+    /**
+     * A fader, encoder or flash may not drive a one-shot trigger or its arm (stage-view plan session
+     * 9, D15): a trigger fires as an event, and a surface's door to one is [BindingTarget.FireTrigger],
+     * which needs the desk's arm. Without a register to judge by (no show), a name no trigger reserves
+     * passes and one that does is left to health, as an unknown property would be.
+     */
+    private fun refuseTriggerProperty(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
+        val (type, key, property) = when (target) {
+            is BindingTarget.FixtureProperty -> Triple("fixture", target.fixtureKey, target.propertyName)
+            is BindingTarget.GroupProperty -> Triple("group", target.groupName, target.propertyName)
+            is BindingTarget.Flash -> return refuseTriggerProperty(context, target.target)
+            is BindingTarget.SelectionProperty -> Triple(null, null, target.propertyName)
+            is BindingTarget.EncoderBankSet -> Triple(null, null, target.propertyName)
+            else -> return
+        }
+        val refusal = if (context != null) {
+            TriggerIndex.refusalLive(context.fixtures, type, key, property, "binding")
+        } else if (type == null) {
+            TriggerIndex.EMPTY.refusal(null, null, property, "binding")
+        } else {
+            null
+        }
+        refusal?.let { throw BindingRefused(it, TriggerNotStorableException.CODE) }
     }
 
     /**

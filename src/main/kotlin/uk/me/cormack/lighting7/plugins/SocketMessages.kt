@@ -44,6 +44,7 @@ sealed class InMessage
     BuskOutMessage::class,
     ChannelOutMessage::class,
     CloudSyncOutMessage::class,
+    EffectsOutMessage::class,
     FxOutMessage::class,
     HandOutMessage::class,
     MachineOutMessage::class,

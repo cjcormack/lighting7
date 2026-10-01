@@ -232,7 +232,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             }
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
             }
             state.show.fixtures.patchListChanged()
 
@@ -453,7 +453,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             val touchedRebuildKey = body.keys.any { it !in PUT_KEYS_WITHOUT_REBUILD }
             if (touchedRebuildKey && state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
             } else if (state.isCurrentProject(project)) {
                 // Metadata-only edits skip the rebuild, so refresh the cache directly.
                 state.show.fixtures.setPatchMetadata(
@@ -804,19 +804,23 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 DaoFixtureGroupMember.find { DaoFixtureGroupMembers.fixturePatch eq patch.id }
                     .forEach { it.delete() }
                 deletePlacementsOf(patch)
+                // A cue event fires one of this patch's tubes: it goes with the patch, as a busk tile
+                // does — swept, never a guard. A cue changes; it is told by `cueListChanged` below.
+                val sweptEvents = deleteCueEventsForPatches(listOf(patch.id))
 
                 patch.delete()
-                sweptTiles
+                sweptTiles to sweptEvents
             }
 
             if (deleted == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Patch not found"))
                 return@withProject
             }
-            if (deleted > 0) state.show.fixtures.buskRigChanged()
+            if (deleted.first > 0) state.show.fixtures.buskRigChanged()
+            if (deleted.second > 0) state.show.fixtures.cueListChanged()
 
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.parkManager)
+                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource)
             }
             state.show.fixtures.patchListChanged()
 

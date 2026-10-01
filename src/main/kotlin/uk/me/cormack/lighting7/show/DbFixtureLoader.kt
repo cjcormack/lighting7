@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.models.*
@@ -153,6 +154,18 @@ object DbFixtureLoader {
                     }
                 }
             }
+        }
+
+        // A reload seeds every one-shot trigger and its arm idle (stage-view plan session 9). The
+        // snapshot above carried the old buffer across, and a trigger channel is never something a
+        // carried value may hold: the trigger output owns it from here (`state/TriggerOutput.kt`),
+        // and the buffer under it is zeroed so nothing raised survives even where no output is wired.
+        for (fixture in fixtures.fixtures) {
+            val dmx = fixture as? DmxFixture ?: continue
+            val triggers = FixtureTriggers.of(dmx)
+            if (triggers.isEmpty()) continue
+            val idle = triggers.flatMap { listOf(it.channelNo, it.armChannelNo) }.associateWith { FixtureTriggers.IDLE_LEVEL }
+            fixtures.controllerOrNull(dmx.universe)?.restoreState(idle)
         }
     }
 

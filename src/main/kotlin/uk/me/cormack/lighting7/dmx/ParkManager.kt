@@ -135,6 +135,23 @@ class ParkManager(
     }
 
     /**
+     * Drop a park outright — no hand-off to the layers below, unlike [unpark]. For a park that may
+     * not stand at all (a firing level on a one-shot trigger's channel, `Show.dropRefusedParks`),
+     * where handing its value down would only carry it somewhere else.
+     */
+    fun forget(universe: Int, channel: Int) {
+        parkedChannels[universe]?.remove(channel) ?: return
+        transaction(database) {
+            DaoParkedChannel.find {
+                (DaoParkedChannels.project eq projectId) and
+                    (DaoParkedChannels.universe eq universe) and
+                    (DaoParkedChannels.channel eq channel)
+            }.firstOrNull()?.delete()
+        }
+        emitState()
+    }
+
+    /**
      * Unpark all channels, leaving every output where it was. Same hand-off ordering as
      * [unpark].
      */

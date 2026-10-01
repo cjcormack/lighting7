@@ -75,6 +75,17 @@ export interface FireCueTarget {
   cueUuid?: string | null
 }
 
+/**
+ * Fire one tube of a one-shot fixture (a confetti cannon) on press — stage-view plan session 9.
+ * Needs the desk's arm, like every fire: an unarmed press does nothing and the desk announces it
+ * (`effects.skipped`). `trigger` is the trigger's name (`output1`) or its label (`A`).
+ */
+export interface FireTriggerTarget {
+  type: "fireTrigger"
+  fixtureKey: string
+  trigger: string
+}
+
 /** Flash wraps either a FixtureProperty or GroupProperty continuous target. */
 export interface FlashTarget {
   type: "flash"
@@ -337,6 +348,7 @@ export type BindingTarget =
   | CueStackBackTarget
   | CueStackPauseTarget
   | FireCueTarget
+  | FireTriggerTarget
   | FlashTarget
   | BlackoutTarget
   | GrandMasterToggleTarget

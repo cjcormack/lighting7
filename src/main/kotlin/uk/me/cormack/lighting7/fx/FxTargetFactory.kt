@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.fixture.FixtureTriggers
+import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
@@ -69,6 +72,17 @@ object FxTargetFactory {
         fixture: GroupableFixture?,
     ): FxTarget {
         val lower = propertyName.lowercase()
+
+        // No effect may drive a one-shot trigger or its arm (stage-view plan session 9, D15). Neither
+        // is a property, so the reflective branch below would find nothing anyway; this says why, on
+        // every door an effect is spawned through — the REST routes, a cue's effects, the AI.
+        if (fixture != null) {
+            FixtureTriggers.reservedNamesOf(fixture::class).firstOrNull { it.equals(propertyName, ignoreCase = true) }?.let {
+                throw TriggerNotStorableException(
+                    "'$it' on '${fixture.targetKey}' is a one-shot trigger or its arm: no effect can drive it — it fires as an event while the desk is armed",
+                )
+            }
+        }
 
         // A11: both axes of a POSITION effect's output, addressed by one of its axes.
         // Canonicalise to the synthetic "position" property every other path already

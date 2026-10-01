@@ -426,6 +426,17 @@ internal val cueLayerSchema = buildJsonObject {
     put("required", buildJsonArray { add("lookId"); add("targets") })
 }
 
+/** One cue event in the tools' shape: a fixture by key, its trigger, an offset from GO. */
+internal val cueEventItemSchema = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("fixture", buildJsonObject { put("type", "string"); put("description", "A patched fixture with one-shot triggers (a confetti cannon), by key or name. describe_rig lists them.") })
+        put("trigger", buildJsonObject { put("type", "string"); put("description", "The tube: its trigger name ('output1') or label ('A').") })
+        put("offsetSeconds", buildJsonObject { put("type", "number"); put("description", "How long after GO it fires, 0–600 s. Default 0.") })
+    })
+    put("required", buildJsonArray { add("fixture"); add("trigger") })
+}
+
 internal val createCueTool = AnthropicToolDef(
     name = "create_cue",
     description = "Create a named cue as an ordered stack of look layers plus its own local values and ad-hoc effects. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
@@ -447,6 +458,11 @@ internal val createCueTool = AnthropicToolDef(
                 put("type", "array")
                 put("items", sceneryItemSchema(forCue = true))
                 put("description", "Scene elements this cue moves on GO — tabs, flown pieces, pieces shown or hidden. $SCENERY_TRACKS_NOTE")
+            })
+            put("events", buildJsonObject {
+                put("type", "array")
+                put("items", cueEventItemSchema)
+                put("description", CUE_EVENTS_NOTE)
             })
         })
         put("required", buildJsonArray { add("name") })
@@ -803,6 +819,27 @@ internal fun sceneryItemSchema(forCue: Boolean): JsonObject = buildJsonObject {
 /** The words every scenery list's description shares. */
 internal const val SCENERY_TRACKS_NOTE =
     "Scenery tracks, unlike lighting: a change stays put until a later cue, the stack's set or a live Look moves it, so list only what changes."
+
+/** The words every event list's description shares. */
+internal const val CUE_EVENTS_NOTE =
+    "Cue events: one-shot triggers (a confetti cannon's tubes) fired a set time after GO into this cue. They fire on GO into this cue only — never tracked, never on GO TO a later cue, never previewed — and only while the desk is armed: unarmed, the GO goes and the events are skipped and announced, never queued. Each tube fires once per cue. Arming and firing are the operator's, at the desk; you only author the events."
+
+internal val setCueEventsTool = AnthropicToolDef(
+    name = "set_cue_events",
+    description = "Set one cue's events — the one-shot triggers (confetti cannon tubes) it fires after GO. $CUE_EVENTS_NOTE Replaces the whole list: send [] to clear it. Every event is checked before anything is written.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue whose events to set.") })
+            put("events", buildJsonObject {
+                put("type", "array")
+                put("items", cueEventItemSchema)
+                put("description", "The whole list.")
+            })
+        })
+        put("required", buildJsonArray { add("cueId"); add("events") })
+    },
+)
 
 internal val setSceneryTool = AnthropicToolDef(
     name = "set_scenery",

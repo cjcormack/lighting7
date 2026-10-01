@@ -298,8 +298,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (cue.project.id != project.id) return@transaction null
                 val stack = cue.cueStack
                 deleteCueChildren(cue)
-                // Its scenery dies with it, but not with an edit, which `deleteCueChildren` also serves.
+                // Its scenery and its events die with it, but not with an edit, which
+                // `deleteCueChildren` also serves.
                 deleteCueScenery(cue.id)
+                deleteCueEvents(cue.id)
                 val removedAnchors = deletePromptBookAnchorsForCue(cue)
                 val pageIds = deleteCueReferences(cue)
                 cue.delete()
@@ -454,7 +456,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
             // Its scenery too — but only within the project: an element belongs to one project's
             // scene, so a copy into another has nothing to name.
-            if (targetProject.id == sourceProject.id) copyCueScenery(sourceCue, newCue)
+            if (targetProject.id == sourceProject.id) {
+                copyCueScenery(sourceCue, newCue)
+                // A patch is a project's own, so events copy only within one.
+                copyCueEvents(sourceCue, newCue)
+            }
 
             // The copy carries no cue number, so it picks one up from where it landed.
             renumberAutoCues(targetStack)
@@ -629,6 +635,11 @@ data class CueDetails(
      * its stack, or held by the stack's set. Read-only; the cue card draws it hatched.
      */
     val trackedScenery: List<TrackedSceneryDto> = emptyList(),
+    /**
+     * The tubes this cue fires on GO into it, each at its offset, while the desk is armed (stage-view
+     * plan session 9); edited by `PUT cues/{id}/events`. Never tracked: a later cue shows none of them.
+     */
+    val events: List<CueEventDto> = emptyList(),
 )
 
 
