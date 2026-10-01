@@ -299,7 +299,7 @@ paired lanterns holds for a side: lit from the patch, selects the patch, never d
 
 ## The 3D renderer
 
-Session 0 of `../docs/plans/stage-view-plan.md` fixed the Stage view's renderer before anything is
+Session 0 of `../docs/plans/completed/stage-view-plan.md` fixed the Stage view's renderer before anything is
 added to it. The findings are in the design record (`stage-view-design/INDEX.md` §"What is wrong
 today"); what follows is what the code does now and why, since each piece is easy to undo by
 "tidying".

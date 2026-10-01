@@ -111,6 +111,11 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LANTERN-LIBRARY-HALL`](#fu-lantern-library-hall) | Trigger | Stage | Chris answers which lanterns the Commemoration Hall owns (stage-view plan §11 Q4) |
 | [`FU-STAGE-FOCUS-ON-POOL`](#fu-stage-focus-on-pool) | Trigger | Stage | an operator focuses a rig from the Stage view rather than the card |
 | [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
+| [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a gobo or a shadow land, not just the beam |
+| [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
+| [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
+| [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
+| [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2149,6 +2154,58 @@ a blade in evaluates four half-plane cuts (skipped when every blade is out). **T
 and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
 cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
+
+### `FU-STAGE-QUALITY-TIER`
+
+**No shadows, and gobos are drawn in the beam but never on a surface** · Trigger · stage-view plan
+§8, 2026-10-01
+
+The surface shader lands every light as a pool through one loop over the light table, and beam reach
+stops at the first surface on the axis — crude occlusion, no shadow maps. The design record's
+§"Lighting the room" sketched a quality tier: shadow maps for up to four selected heads, and gobos
+projected by sampling the existing gobo atlas in light space. **Trigger**: an operator needs to see a
+gobo or a shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light
+table — a shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a
+starting point.
+
+### `FU-STAGE-GLB-IMPORT`
+
+**Every element and body is parametric; there is no mesh** · Trigger · stage-view plan §8 (D7, D10),
+2026-10-01
+
+Scene elements are seven parametric kinds and fixture bodies are archetypes. The design keeps two
+slots open: a `mesh` element kind, and the GDTF-shaped `body` on a fixture type, which a GLB could
+fill. **Trigger**: a venue or a fixture the parametric kinds cannot draw. **Then**: blob storage for
+the GLB (the prompt-book PDF store is the precedent) and a sync story for it — a portable table can't
+carry a binary in canonical JSON. Author meshes ourselves: GDTF-Share's cannot be redistributed.
+
+### `FU-STAGE-VENUE-SHARED`
+
+**The venue lives inside each project** · Trigger · stage-view plan §8 (D3), 2026-10-01
+
+`VENUE` and `SET` are layers of one project's scene document, so a second show in the same hall
+copies the room. **Trigger**: a second show plays the Commemoration Hall. **Then**: a Venue entity
+projects reference, with its own sync identity; decide whether a project may override a venue
+element, and what a clone of a project that references one carries.
+
+### `FU-STAGE-INDEPENDENT-HEADS`
+
+**A multi-head mover's heads tilt together** · Trigger · stage-view plan §8, 2026-10-01
+
+Session 6 gave every coloured cell its own lens, beam and light, but one tilt node per fixture: the
+Slender Beam Bar Quad's four heads are drawn at one angle whatever their elements' tilt channels say
+(`frontend/docs/stage-vis-engineering.md` §"Fixture bodies"). **Trigger**: a show runs the heads apart and the
+Stage view misleads. **Then**: a tilt node per head, driven by its element's tilt, under the
+fixture's pan.
+
+### `FU-LANTERNS-CUSTOM`
+
+**The lantern library is the desk's only** · Trigger · stage-view plan §8 (D8), 2026-10-01
+
+The library ships as a resource (`lanterns/library.json`), so a fix reaches every show at once, but a
+show cannot add a lantern of its own. **Trigger**: a show hangs a lantern the library lacks.
+**Then**: per-project lanterns in a portable table, resolved before the shipped library by key, with
+the same `LanternLibraryTest` checks at the write boundary.
 
 ## Completed
 
