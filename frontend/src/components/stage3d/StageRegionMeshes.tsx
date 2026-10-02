@@ -127,7 +127,7 @@ function RegionMesh({
     : colorWithHueShift(BASE_EDGE_HSL, shift)
   // A region is a surface a beam lands on (D5; stage-view plan session 3): lit by the light table like
   // the venue's, so it is solid now rather than the see-through box it was while cookies lit it.
-  const material = useSurfaceMaterial({ colour: fillColor, pattern: 'PLAIN', emissive: false })
+  const material = useSurfaceMaterial({ colour: fillColor, pattern: 'PLAIN', emissive: false }, { behind: true })
 
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     const mesh = e.eventObject
