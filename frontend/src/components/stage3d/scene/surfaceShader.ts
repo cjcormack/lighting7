@@ -11,6 +11,7 @@ import {
 } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { EDGE_SOFT_RANGE_M } from '../washConfig'
+import { LANDING_GLSL } from './landing'
 import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
@@ -23,8 +24,9 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * and one wall).
  *
  * Per light and fragment: inside the cone from the beam's **apex** (behind its aperture — stage-view
- * plan session 6), facing the light, and not behind the plane of the first surface on the beam's axis
- * (the axial reach, which stands in for occlusion) — then the beam's cross-section, `beamMask`
+ * plan session 6), facing the light, and not behind where the beam lands (`landing.ts`: the plane of
+ * the first surface on its axis, and of the second face a beam split across an edge lands on, which
+ * stand in for occlusion) — then the beam's cross-section, `beamMask`
  * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
  * iris, and an edge softened by the family and by how far the surface sits from the focal plane,
  * which is measured from the aperture. **No falloff with distance**, for `washConfig.ts`'s reason: the
@@ -36,7 +38,7 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * pool still reads as the beam's colour on the near-black finishes a hall is painted in.
  */
 
-/** How far behind the reach plane a fragment may sit and still be lit: the hit surface's own skin. */
+/** How far behind a landing plane a fragment may sit and still be lit: the hit surface's own skin. */
 const REACH_EPS_M = 0.03
 
 /** The shared uniforms of one canvas's surfaces: the light table, how many rows are live, the room's fill. */
@@ -120,6 +122,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${BEAM_MASK_GLSL}
   ${BEAM_HARDNESS_GLSL}
   ${UNPACK_EDGE_IRIS_GLSL}
+  ${LANDING_GLSL}
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -171,8 +174,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if (c < axis.w) continue;
       float facing = dot(n, -L);
       if (facing <= 0.0) continue;
-      vec4 reach = texelFetch(uLights, ivec2(3, i), 0);
-      if (dot(reach.xyz, vWorldPos) - reach.w < -REACH_EPS) continue;
+      if (behindLanding(texelFetch(uLights, ivec2(3, i), 0), vWorldPos, REACH_EPS)) continue;
       vec4 aperture = texelFetch(uLights, ivec2(5, i), 0);
       float axial = dist * c;
       // Behind the aperture is inside the lantern: nothing there is lit by it.

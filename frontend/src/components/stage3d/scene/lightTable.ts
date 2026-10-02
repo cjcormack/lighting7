@@ -20,7 +20,7 @@
  * | 0 | the apex | focal distance from the aperture (m; < 0 is always sharp) |
  * | 1 | axis (unit) | cos of the bounding half-angle — the field, or a segment's corner |
  * | 2 | colour × level | edge hardness and iris, packed ([packEdgeIris]) |
- * | 3 | the reach plane's normal, towards the light | the plane's offset `n · p` |
+ * | 3 | where the beam lands, two planes packed (`landing.ts`'s `packLanding`) | |
  * | 4 | the head's right axis, the beam frame's `u` | tan of the half-field along `u` |
  * | 5 | apex → aperture distance, the (top, bottom) blades, aspect (0 a disc, > 0 a segment's depth over its width, < 0 an oval's narrow over wide) | the (left, right) blades |
  *
@@ -34,12 +34,15 @@
  * oval is a negative aspect. A seventh texel would have cost every surface fragment a fetch per
  * light, which the plan says to measure first — and the packing costs nothing measurable.
  *
- * Texel 3 is the axial reach ([`beamReach.ts`](./beamReach.ts)): a fragment behind the plane of the
- * first surface on the axis is not lit. A light that reaches nothing carries a zero normal and a
- * negative offset, which lights everything in its cone.
+ * Texel 3 is where the beam lands ([`landing.ts`](./landing.ts)): the face its axis hit
+ * ([`beamReach.ts`](./beamReach.ts)) and, for a beam split across an edge, the face the rest of it
+ * lands on. A fragment behind both is not lit. A light that reaches nothing lights everything in its
+ * cone.
  *
  * Pure and three.js-free, so the packing is pinned by a node test.
  */
+
+import { packLanding, type LandingFace } from './landing'
 
 export const LIGHT_TEXELS = 6
 const FLOATS = LIGHT_TEXELS * 4
@@ -71,7 +74,9 @@ export interface LightRow {
   b: number
   edge: number
   focusDist: number
-  hit: { nx: number; ny: number; nz: number; px: number; py: number; pz: number } | null
+  hit: LandingFace | null
+  /** The second face a beam split across an edge lands on; null for one face, or none. */
+  edgeHit: LandingFace | null
   /** The head's right axis — the beam frame's `u`. */
   rx: number
   ry: number
@@ -108,7 +113,7 @@ export const UNPACK_EDGE_IRIS_GLSL = /* glsl */ `
 export function makeLightRow(): LightRow {
   return {
     ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1,
-    hit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0, bladesA: 0, bladesB: 0,
+    hit: null, edgeHit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0, bladesA: 0, bladesB: 0,
   }
 }
 
@@ -146,18 +151,7 @@ export class LightTable {
     s[o + 9] = row.g
     s[o + 10] = row.b
     s[o + 11] = packEdgeIris(row.edge, row.iris)
-    const hit = row.hit
-    if (hit == null) {
-      s[o + 12] = 0
-      s[o + 13] = 0
-      s[o + 14] = 0
-      s[o + 15] = -1
-    } else {
-      s[o + 12] = hit.nx
-      s[o + 13] = hit.ny
-      s[o + 14] = hit.nz
-      s[o + 15] = hit.nx * hit.px + hit.ny * hit.py + hit.nz * hit.pz
-    }
+    packLanding(row.hit, row.edgeHit, s, o + 12)
     s[o + 16] = row.rx
     s[o + 17] = row.ry
     s[o + 18] = row.rz

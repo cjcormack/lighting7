@@ -27,6 +27,7 @@ import {
 import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
 import { makeLightRow, type LightRow } from './scene/lightTable'
+import { LAND_NONE, LAND_UP } from './scene/landing'
 import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
 
 // Two slots with a prism each, so every writer below has room to write.
@@ -121,6 +122,7 @@ function beamWrite(): BeamWrite {
     bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
     land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0 },
+    edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1 },
   }
 }
 
@@ -159,12 +161,18 @@ describe('emitter dirty groups', () => {
     expect(mutated.sort()).toEqual(allBuffers(b).map((x) => x.name).sort())
   })
 
-  it("packs the landing surface's plane, and lets an open-air beam through everywhere", () => {
+  it('packs both landing planes, the first alone where there is no edge, and nothing in open air', () => {
     const b = build()
     const h = makeHandle(b)
     h.writeBeam(0, 0, beamWrite())
-    h.writeBeam(0, 1, { ...beamWrite(), land: null })
-    expect(Array.from(b.volumeLand.array.slice(0, 8))).toEqual([0, 1, 0, -0.25, 0, 0, 0, 1])
+    h.writeBeam(0, 1, { ...beamWrite(), edgeLand: null })
+    h.writeBeam(0, 2, { ...beamWrite(), land: null, edgeLand: null })
+    const packed = Array.from(b.volumeLand.array.slice(0, 12))
+    expect(packed.slice(0, 2)).toEqual([LAND_UP, 0.25])
+    expect(packed[2]).toBeCloseTo(Math.PI / 2, 6)
+    expect(packed[3]).toBe(-2.5)
+    expect(packed.slice(4, 8)).toEqual([LAND_UP, 0.25, LAND_NONE, 1])
+    expect(packed.slice(8, 12)).toEqual([LAND_NONE, -1, LAND_NONE, -1])
   })
 
   it('flags the matrices hideLobes parks', () => {
@@ -284,7 +292,7 @@ describe('the light table rows', () => {
     const b = build(layout)
     makeHandle(b).writeLight(0, 0, lightRow(1, { px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0 }))
     const row = b.lights.staged.subarray(0, 24)
-    expect(Array.from(row.subarray(12, 16))).toEqual([0, 1, 0, 0])
+    expect(Array.from(row.subarray(12, 16))).toEqual([LAND_UP, 0, LAND_NONE, 1])
   })
 
   it('answers the axial reach from the colliders it is handed', () => {
