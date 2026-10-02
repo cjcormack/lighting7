@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Edges, useCursor } from '@react-three/drei'
 import { type ThreeEvent } from '@react-three/fiber'
-import { Color, MathUtils, Plane, Vector3, type Object3D } from 'three'
+import { Color, MathUtils, Plane, SRGBColorSpace, Vector3, type Object3D } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { RegionPositionUpdate } from './Stage3D'
 import { toThree, fromThree } from '../../lib/stageCoords'
@@ -84,7 +84,8 @@ function hueShiftForUuid(uuid: string): number {
 }
 
 function colorWithHueShift(base: { h: number; s: number; l: number }, shift: number): string {
-  TMP_COLOR.setHSL((base.h + shift + 1) % 1, base.s, base.l)
+  // The HSL constants are sRGB, not three's linear working space.
+  TMP_COLOR.setHSL((base.h + shift + 1) % 1, base.s, base.l, SRGBColorSpace)
   return `#${TMP_COLOR.getHexString()}`
 }
 
