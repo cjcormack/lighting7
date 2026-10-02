@@ -17,6 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
+| [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade and which way everything turns — the guesses the fixture-optics plan builds on | Fixture optics plan, 2026-10-02 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -159,6 +160,41 @@ which made three things visible:
    `basePitchDeg` on any that were left at 0 to look hung.
 
 20 minutes.
+
+---
+
+## `FU-MANUAL-S4REV-OPTICS`
+
+**What it proves**: *the Source Four Revolution's definition describes the units in the hall*, so a
+cue's frames, zoom, wheel and scroller draw on the Stage view as they land on the rig.
+
+**Why it is here**: [`fixture-optics-plan.md`](fixture-optics-plan.md) builds on ETC's manual
+(7160M1200 Rev E) and the ChamSys capture. Neither states the values below, so each is an estimate
+marked `// Estimate:` at its source (the plan's D15). The plan can be built before this runs; its
+answers correct the annotations afterwards.
+
+**Test**, on one FOH Balcony Revolution, from the desk with the unit's frames and wheel at Locate:
+
+1. **Hardware.** Read the label: part 7160A1002 (pre-May 2007) or 7160A1017? Look in the front bay:
+   blank, iris, static wheel or rotating wheel — and what is loaded in each slot? Read the scroller
+   string's frames.
+2. **Zoom.** DMX 0 and 255: which is wide? (ChamSys says 0.)
+3. **Iris.** DMX 0 and 255: which is open? (ChamSys says 0.) Skip if the front bay has no iris.
+4. **Frames.** For each of frames 1–4, take position to 255: which side of the beam does it cut
+   (from the lens's point of view, with the head at pan/tilt home)? Does it reach the centre or
+   cross it? Then take its rotation to 0 and to 255: which way does the edge turn, by about how
+   much, and is 128 square?
+5. **Media frame.** Sweep ch 6: at what value do the wings go in, and is there a band where they
+   come out again?
+6. **Wheel.** If a rotating wheel is fitted: in index mode, does the 16-bit range turn the image
+   once (360°)? In rotate mode, which way is ">>" (14–26), seen from the lens?
+7. **Pan and tilt.** From home, which way does increasing pan turn, and increasing tilt?
+
+Where an answer disagrees with the annotation, correct the annotation and its comment, and drop the
+`Estimate:` marker. Step 1 answers the plan's §11 questions. Run the Revolution's half of
+`FU-MANUAL-FOCUS-DIRECTION` in the same visit.
+
+30 minutes.
 
 ---
 

@@ -1,0 +1,1201 @@
+<title>Fixture Optics Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: a sticky contents rail beside one long reading column; prose at ~72ch, tables and drawings to the column's full width. */
+  :root {
+    --bg: oklch(0.985 0.004 75);
+    --surface: oklch(0.955 0.008 75);
+    --fg: oklch(0.22 0.012 60);
+    --muted: oklch(0.47 0.015 60);
+    --rule: oklch(0.87 0.012 70);
+    --accent: oklch(0.62 0.15 62);
+    --accent-ink: oklch(0.48 0.13 55);
+    --cool: oklch(0.55 0.11 245);
+    --bad: oklch(0.55 0.17 28);
+    --good: oklch(0.55 0.12 150);
+    --est: oklch(0.58 0.12 85);
+    --zone: oklch(0.62 0.15 62 / 0.14);
+    --cool-zone: oklch(0.55 0.11 245 / 0.12);
+    /* The desk's own palette, for the UI sketches: always dark, as the desk is. */
+    --desk-bg: oklch(0.141 0.005 285.8);
+    --desk-card: oklch(0.21 0.006 285.9);
+    --desk-bd: oklch(0.32 0.006 286);
+    --desk-fg: oklch(0.985 0 0);
+    --desk-mfg: oklch(0.705 0.015 286);
+    --desk-pri: oklch(0.623 0.214 259.8);
+    --desk-red: oklch(0.704 0.191 22.2);
+    --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+      --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+      --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+      --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+      --cool-zone: oklch(0.72 0.11 245 / 0.14); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+    --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+    --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+    --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+    --cool-zone: oklch(0.72 0.11 245 / 0.14); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+  nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; max-height: calc(100vh - 48px); overflow-y: auto; }
+  nav.toc a { color: var(--muted); text-decoration: none; padding: 3px 0 3px 10px; border-left: 2px solid var(--rule); }
+  nav.toc a:hover { color: var(--fg); border-left-color: var(--accent); }
+  nav.toc .grp { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 4px; }
+  nav.toc .grp:first-child { margin-top: 0; }
+  main { display: flex; flex-direction: column; gap: 72px; min-width: 0; }
+  @media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); } nav.toc { display: none; } }
+
+  .prose { max-width: 72ch; }
+  h1, h2, h3, h4 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 1.75rem; font-weight: 600; }
+  h3 { font-size: 1.2rem; font-weight: 600; }
+  h4 { font-size: 1rem; font-weight: 600; }
+  p { margin: 0; }
+  a { color: var(--accent-ink); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 24px; }
+  .sub { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+  .stack { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 66ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.85rem; }
+  ul.plain { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 6px; }
+  ul.plain li::marker { color: var(--accent); }
+  b { font-weight: 600; }
+
+  header { display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 16px; }
+  .fact { display: flex; flex-direction: column; gap: 2px; }
+  .fact .v { font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact .k { font-size: 0.8rem; color: var(--muted); }
+  .pill { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; letter-spacing: 0.04em; white-space: nowrap; }
+  .pill.ok { color: var(--accent-ink); }
+  .pill.est { color: var(--est); }
+  .s { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; padding: 0 6px; border-radius: 4px; background: var(--zone); color: var(--accent-ink); white-space: nowrap; }
+
+  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; max-width: 72ch; }
+  .callout.cool { border-left-color: var(--cool); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-items: start; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start; }
+  @media (max-width: 760px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  figcaption { font-size: 0.85rem; color: var(--muted); max-width: 72ch; }
+  svg.fig { width: 100%; height: auto; display: block; }
+  svg.fig text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+  svg.fig .lab { fill: var(--fg); font-size: 12px; }
+  svg.fig .t-acc { fill: var(--accent-ink); }
+  svg.fig .t-cool { fill: var(--cool); }
+  svg.fig .t-bad { fill: var(--bad); }
+
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.87rem; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--rule); padding: 8px 12px 6px 0; white-space: nowrap; vertical-align: bottom; }
+  td { border-bottom: 1px solid var(--rule); padding: 8px 12px 8px 0; vertical-align: top; }
+  td.k { white-space: nowrap; font-family: var(--font-mono); font-size: 0.8rem; }
+  td.n { white-space: nowrap; }
+  .was { color: var(--bad); }
+  .now { color: var(--good); }
+
+  /* Channel map */
+  .chmap { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+  .ch { border: 1px solid var(--rule); border-radius: 6px; padding: 6px 7px; display: flex; flex-direction: column; gap: 3px; min-width: 0; background: var(--bg); }
+  .ch .no { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); }
+  .ch .nm { font-size: 0.78rem; font-weight: 500; line-height: 1.25; overflow-wrap: anywhere; }
+  .ch .st { display: flex; flex-direction: column; gap: 2px; font-family: var(--font-mono); font-size: 0.64rem; line-height: 1.3; }
+  .ch .st span { padding: 0 4px; border-radius: 3px; }
+  .st .r { background: oklch(0.55 0.12 150 / 0.16); color: var(--good); }
+  .st .u { background: oklch(0.55 0.17 28 / 0.14); color: var(--bad); }
+  .st .i { background: oklch(0.58 0.12 85 / 0.18); color: var(--est); }
+  .st .h { background: var(--surface); color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8rem; color: var(--muted); }
+  .legend .st { display: inline-flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 0.7rem; }
+
+  .gels { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+  .gel { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .gel i { display: block; aspect-ratio: 1 / 1.1; max-width: 100%; border-radius: 4px; border: 1px solid var(--rule); }
+  .gel span { font-family: var(--font-mono); font-size: 0.68rem; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+  .gel span b { color: var(--fg); font-weight: 500; }
+  @media (max-width: 620px) { .gels { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+  /* Pipeline */
+  .pipe { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .stage { padding: 12px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; }
+  .stage:last-child { border-right: 0; }
+  .stage .where { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .stage h4 { font-size: 0.92rem; }
+  .stage code { font-size: 0.72rem; overflow-wrap: anywhere; }
+  .stage ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 0.76rem; }
+  .stage ul li { display: flex; gap: 6px; align-items: baseline; }
+  @media (max-width: 1100px) { .pipe { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stage:nth-child(3) { border-right: 0; } .stage:nth-child(-n+3) { border-bottom: 1px solid var(--rule); } }
+  @media (max-width: 620px) { .pipe { grid-template-columns: minmax(0, 1fr); } .stage { border-right: 0; border-bottom: 1px solid var(--rule); } .stage:last-child { border-bottom: 0; } }
+
+  pre { margin: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.55; }
+  pre .c { color: var(--muted); }
+  pre .k { color: var(--accent-ink); }
+
+  /* Decisions */
+  .dlist { display: flex; flex-direction: column; }
+  .d { display: grid; grid-template-columns: 3rem minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 0.9rem; }
+  .d .id { font-family: var(--font-mono); color: var(--accent-ink); font-size: 0.85rem; }
+  .d .why { color: var(--muted); }
+  @media (max-width: 760px) { .d { grid-template-columns: 3rem minmax(0, 1fr); } .d .why { grid-column: 2; } }
+
+  /* Sessions */
+  .sess { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: 18px; padding: 28px 0; border-top: 1px solid var(--rule); scroll-margin-top: 24px; }
+  .sess .n { font-family: var(--font-display); font-size: 2.6rem; font-weight: 700; color: var(--accent-ink); line-height: 0.9; font-variant-numeric: tabular-nums; }
+  .sess .body { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .sess .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+  .sess .tag { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+  .sess .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; }
+  .sess .cols > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .sess .cols h4 { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .sess ul { margin: 0; padding-left: 1rem; display: flex; flex-direction: column; gap: 4px; font-size: 0.88rem; }
+  .sess .done { border-left: 3px solid var(--good); padding-left: 12px; font-size: 0.9rem; }
+  .sess .risk { border-left: 3px solid var(--est); padding-left: 12px; font-size: 0.9rem; }
+  @media (max-width: 760px) { .sess { grid-template-columns: minmax(0, 1fr); gap: 8px; } .sess .cols { grid-template-columns: minmax(0, 1fr); } }
+
+  /* UI sketches */
+  .sketches { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 24px; align-items: start; }
+  .desk { background: var(--desk-bg); color: var(--desk-fg); border: 1px solid var(--desk-bd); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; font-size: 12px; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .desk .ttl { font-size: 13px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .desk .ttl span { color: var(--desk-mfg); font-weight: 400; }
+  .desk .lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--desk-mfg); }
+  .desk .card { background: var(--desk-card); border: 1px solid var(--desk-bd); border-radius: 8px; padding: 9px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .desk .row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .desk .row .k { width: 52px; color: var(--desk-mfg); flex: 0 0 auto; }
+  .desk .track { flex: 1; height: 4px; border-radius: 2px; background: var(--desk-bd); position: relative; min-width: 40px; }
+  .desk .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--desk-pri); }
+  .desk .track b { position: absolute; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--desk-fg); }
+  .desk .v { font-family: var(--font-mono); font-size: 11px; color: var(--desk-mfg); white-space: nowrap; }
+  .desk .btn { border: 1px solid var(--desk-bd); background: var(--desk-card); color: var(--desk-fg); border-radius: 6px; padding: 4px 10px; font-size: 12px; white-space: nowrap; }
+  .desk .btn.pri { background: var(--desk-pri); border-color: var(--desk-pri); }
+  .desk .btn.red { background: var(--desk-red); border-color: var(--desk-red); color: oklch(0.15 0 0); }
+  .desk .sw { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--desk-bd); flex: 0 0 auto; }
+  .desk .menu { display: flex; flex-direction: column; border: 1px solid var(--desk-bd); border-radius: 8px; background: var(--desk-card); overflow: hidden; }
+  .desk .menu div { padding: 6px 10px; display: flex; justify-content: space-between; gap: 10px; }
+  .desk .menu div + div { border-top: 1px solid var(--desk-bd); }
+  .desk .menu .on { background: oklch(0.623 0.214 259.8 / 0.22); }
+  .desk .menu small { color: var(--desk-mfg); font-family: var(--font-mono); font-size: 10px; }
+  .desk .note { color: var(--desk-mfg); font-size: 11px; line-height: 1.45; }
+  .desk .chip { font-family: var(--font-mono); font-size: 10px; border: 1px solid var(--desk-bd); border-radius: 4px; padding: 0 5px; color: var(--desk-mfg); white-space: nowrap; }
+
+  footer { border-top: 1px solid var(--rule); padding-top: 18px; font-size: 0.82rem; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <span class="grp">Problem</span>
+    <a href="#brief">The brief</a>
+    <a href="#rig">The rig</a>
+    <a href="#zoom">Zoom</a>
+    <a href="#focus">Focus</a>
+    <a href="#channels">The 31 channels</a>
+    <span class="grp">Evidence</span>
+    <a href="#manual">ETC's manual</a>
+    <a href="#library">The library</a>
+    <span class="grp">Design</span>
+    <a href="#pipeline">The data path</a>
+    <a href="#vocabulary">New vocabulary</a>
+    <a href="#blades">Blades</a>
+    <a href="#media">Fitted media</a>
+    <a href="#commands">Commands</a>
+    <a href="#strobe">Strobe</a>
+    <a href="#travel">Travel</a>
+    <a href="#ux">On screen</a>
+    <a href="#decisions">Decisions</a>
+    <span class="grp">Delivery</span>
+    <a href="#order">Order</a>
+    <a href="#s0">Sessions 0–8</a>
+    <a href="#estimates">Estimates</a>
+    <a href="#wire">The wire</a>
+    <a href="#risks">Risks and limits</a>
+  </nav>
+
+  <main>
+    <header>
+      <span class="eyebrow">Lighting7 · plan · approved 2026-10-02</span>
+      <h1>Fixture optics: every beam channel the Stage view can see</h1>
+      <p class="lede">The two Source Four Revolutions on the Commemoration Hall's balcony zoom, frame and scroll on the rig but not on screen, and focus can't visibly land on the back wall. This plan fixes them, and the same gaps across the rest of the fixture library, in nine sessions.</p>
+      <div class="facts">
+        <div class="fact"><span class="v">9</span><span class="k">sessions, one PR each</span></div>
+        <div class="fact"><span class="v">15</span><span class="k">design decisions, plus 4 for the plan</span></div>
+        <div class="fact"><span class="v">22</span><span class="k">the one sync <code>formatVersion</code> bump</span></div>
+        <div class="fact"><span class="v">16</span><span class="k">estimates, each checked on the rig</span></div>
+        <div class="fact"><span class="v">0</span><span class="k">stored rows to migrate</span></div>
+      </div>
+      <p class="small muted">Engineering plan: <code>docs/plans/fixture-optics-plan.md</code>. Evidence: <code>docs/plans/fixture-optics-design/INDEX.md</code>. Where this page and the plan disagree, the plan wins.</p>
+    </header>
+
+    <!-- ============ PROBLEM ============ -->
+    <section id="brief">
+      <span class="eyebrow">The brief, 2026-10-02</span>
+      <h2>Three complaints about one fixture</h2>
+      <div class="grid3">
+        <div class="callout"><h4>"The zoom doesn't do anything"</h4><p class="small muted">The iris does work, which rules out a wiring fault. The zoom channel reaches the Stage view and has no effect there.</p></div>
+        <div class="callout"><h4>"I can't focus it on the back wall"</h4><p class="small muted">The focus range was lengthened once already, to 40 m. The operator still can't find a setting that lands sharp on the wall.</p></div>
+        <div class="callout"><h4>"Frames, scroller and wheels have no effect"</h4><p class="small muted">Four framing blades, a 14-frame gel scroller, two beam wheels and a media frame. Nothing moves on screen.</p></div>
+      </div>
+      <p class="prose">Chris asked for the problem to be widened into a survey of every fixture type, expecting new features to be needed. Three surveys ran in parallel: ETC's 48-page manual, every type definition in the library, and every channel the Stage view decodes.</p>
+    </section>
+
+    <section id="rig">
+      <span class="eyebrow">Project 15, as stored on the desk</span>
+      <h2>A 24-metre throw onto an 8.6-metre wall</h2>
+      <figure>
+        <svg class="fig" viewBox="0 0 660 250" role="img" aria-label="Plan view of the Commemoration Hall. The two Revolutions on the balcony at the back throw about 24 metres to the back wall of the stage. At their narrowest zoom the pool is 6.5 metres across; at their widest it is 14.8 metres, wider than the 8.6 metre wall.">
+          <defs><clipPath id="hall"><rect x="40" y="30" width="580" height="172"/></clipPath></defs>
+          <rect x="40" y="30" width="423" height="172" fill="var(--surface)" stroke="var(--rule)"/>
+          <rect x="463" y="30" width="157" height="172" fill="var(--zone)" stroke="var(--rule)"/>
+          <rect x="40" y="30" width="41" height="172" fill="none" stroke="var(--muted)" stroke-dasharray="3 3"/>
+          <line x1="474.7" y1="30" x2="474.7" y2="202" stroke="var(--muted)" stroke-width="2"/>
+          <line x1="619" y1="30" x2="619" y2="202" stroke="var(--fg)" stroke-width="3"/>
+          <g stroke="var(--muted)" stroke-width="1.5">
+            <line x1="359.7" y1="56" x2="359.7" y2="176"/><line x1="429.9" y1="56" x2="429.9" y2="176"/>
+            <line x1="523" y1="56" x2="523" y2="176"/><line x1="562.1" y1="56" x2="562.1" y2="176"/><line x1="589.7" y1="56" x2="589.7" y2="176"/>
+          </g>
+          <g clip-path="url(#hall)">
+            <polygon points="65.3,176 619,-32 619,264" fill="var(--cool-zone)"/>
+            <polygon points="65.3,176 619,52 619,180" fill="var(--zone)" stroke="var(--accent)" stroke-width="1"/>
+          </g>
+          <line x1="65.3" y1="36" x2="619" y2="116" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 3"/>
+          <circle cx="65.3" cy="36" r="5" fill="var(--accent)"/><circle cx="65.3" cy="176" r="5" fill="var(--accent)"/>
+          <text class="lab" x="74" y="24">S4 Rev SR</text>
+          <text class="lab" x="74" y="196">S4 Rev SL</text>
+          <text x="44" y="216">Balcony</text>
+          <text x="200" y="216">Auditorium</text>
+          <text x="347" y="24">ADV2</text><text x="420" y="24">ADV1</text>
+          <text x="476" y="216">Stage</text>
+          <text x="512" y="24">LX1</text><text x="552" y="24">LX2</text><text x="582" y="24">LX3</text>
+          <text class="lab" x="626" y="120">Back wall</text>
+          <text class="t-acc" x="300" y="80">≈ 24.4 m</text>
+          <text class="t-cool" x="510" y="244">wide zoom overfills the wall</text>
+        </svg>
+        <figcaption>Plan view, to scale. Stage-right Revolution at (−4.0, −17.3, 2.8) m; the back wall at y = 6.77 m. The amber cone is the narrow end of the zoom (15.3° field, a 6.5 m pool); the blue one is the wide end (34.3°, 14.8 m). The Stage view draws both at the family's fixed 19°, an 8.0 m pool.</figcaption>
+      </figure>
+    </section>
+
+    <section id="zoom">
+      <span class="eyebrow">Diagnosis 1</span>
+      <h2>The zoom channel has nothing to convert</h2>
+      <div class="grid2">
+        <div class="stack prose">
+          <p>The Stage view resolves a beam angle from the first of these that has one:</p>
+          <ol class="small" style="margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:4px">
+            <li>the zoom channel, through its declared <code>degMin</code> / <code>degMax</code>;</li>
+            <li>the patch's <code>beamAngleDeg</code>, a static override;</li>
+            <li>the lantern's field at its focused zoom (generic dimmers only);</li>
+            <li>the family's default field: <code>mover:profile</code> is 19°.</li>
+          </ol>
+          <p>The Revolution's zoom declares no angles, so step 1 returns nothing and the beam falls through to step 4. The code's own comment names the Revolution as a known case (<code>FixtureModel.tsx:1165</code>). The Robe ColorSpot is the other.</p>
+          <p>The fix is one annotation, <code>degMin = 35, degMax = 15</code>, plus a test that fails any ZOOM slider without angles, so the next type can't repeat it.</p>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Spread</th><th>Beam ½ peak</th><th>Field 1/10</th><th>Pool at 24 m</th></tr></thead>
+            <tbody>
+              <tr><td class="n">Narrow (15°)</td><td>10.5°</td><td>15.3°</td><td>6.5 m</td></tr>
+              <tr><td class="n">Median (25°)</td><td>17.2°</td><td>25.3°</td><td>10.8 m</td></tr>
+              <tr><td class="n">Wide (35°)</td><td>23.7°</td><td>34.3°</td><td>14.8 m</td></tr>
+              <tr><td class="n was">Drawn today</td><td>—</td><td class="was">19° fixed</td><td class="was">8.0 m</td></tr>
+            </tbody>
+          </table>
+          <p class="small muted" style="margin-top:8px">Photometrics: manual p47 [43]. Pool = 2 · d · tan(field / 2).</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="focus">
+      <span class="eyebrow">Diagnosis 2</span>
+      <h2>The focus curve reaches the wall; the renderer hides it</h2>
+      <div class="grid2">
+        <figure>
+          <svg class="fig" viewBox="0 0 640 290" role="img" aria-label="Focal distance against focus DMX: under 5 metres until DMX 160, 24 metres at DMX 246. From DMX 141 to 255 the Stage view draws the same edge on a far wall.">
+            <rect x="365.6" y="20" width="250.4" height="230" fill="var(--zone)"/>
+            <g stroke="var(--rule)" stroke-width="1">
+              <line x1="56" y1="250" x2="616" y2="250"/><line x1="56" y1="192.5" x2="616" y2="192.5" stroke-dasharray="2 4"/><line x1="56" y1="135" x2="616" y2="135" stroke-dasharray="2 4"/><line x1="56" y1="77.5" x2="616" y2="77.5" stroke-dasharray="2 4"/><line x1="56" y1="20" x2="616" y2="20" stroke-dasharray="2 4"/><line x1="56" y1="20" x2="56" y2="250"/>
+            </g>
+            <g text-anchor="end"><text x="48" y="254">0 m</text><text x="48" y="196.5">10</text><text x="48" y="139">20</text><text x="48" y="81.5">30</text><text x="48" y="24">40</text></g>
+            <g text-anchor="middle"><text x="56" y="268">0</text><text x="196.5" y="268">64</text><text x="337.1" y="268">128</text><text x="477.6" y="268">192</text><text x="616" y="268">255</text><text x="336" y="285">Focus channel (DMX)</text></g>
+            <line x1="56" y1="112.3" x2="616" y2="112.3" stroke="var(--cool)" stroke-dasharray="5 3"/>
+            <text class="lab t-cool" x="64" y="106">Back wall, 24 m</text>
+            <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" points="56.0,238.5 62.6,238.4 69.2,238.2 75.8,238.1 82.4,238.0 88.9,237.8 95.5,237.7 102.1,237.5 108.7,237.4 115.3,237.2 121.9,237.1 128.5,236.9 135.1,236.7 141.6,236.5 148.2,236.4 154.8,236.2 161.4,236.0 168.0,235.8 174.6,235.6 181.2,235.4 187.8,235.2 194.4,235.0 200.9,234.8 207.5,234.5 214.1,234.3 220.7,234.0 227.3,233.8 233.9,233.5 240.5,233.3 247.1,233.0 253.6,232.7 260.2,232.4 266.8,232.1 273.4,231.8 280.0,231.5 286.6,231.1 293.2,230.8 299.8,230.4 306.4,230.0 312.9,229.6 319.5,229.2 326.1,228.8 332.7,228.3 339.3,227.9 345.9,227.4 352.5,226.9 359.1,226.3 365.6,225.8 372.2,225.2 378.8,224.6 385.4,223.9 392.0,223.3 398.6,222.5 405.2,221.8 411.8,221.0 418.4,220.2 424.9,219.3 431.5,218.3 438.1,217.3 444.7,216.2 451.3,215.1 457.9,213.9 464.5,212.5 471.1,211.1 477.6,209.6 484.2,208.0 490.8,206.2 497.4,204.2 504.0,202.1 510.6,199.7 517.2,197.2 523.8,194.3 530.4,191.1 536.9,187.5 543.5,183.5 550.1,178.9 556.7,173.6 563.3,167.5 569.9,160.3 576.5,151.8 583.1,141.4 589.6,128.6 596.2,112.3 602.8,91.1 609.4,62.0 616.0,20.0"/>
+            <circle cx="596.2" cy="112.3" r="4.5" fill="var(--cool)"/>
+            <text class="lab" x="588" y="132" text-anchor="end">DMX 246</text>
+            <circle cx="337.1" cy="228" r="4.5" fill="var(--fg)"/>
+            <text class="lab" x="337.1" y="212" text-anchor="middle">Locate: 3.8 m</text>
+            <text class="lab" x="374" y="38">Same edge on a far wall</text>
+            <text x="374" y="53">DMX 141–255, today</text>
+          </svg>
+          <figcaption><b>A. Where focus lands.</b> The declared 2–40 m range interpolates in 1/distance, as a focus lens moves, so 10–40 m is the top 16% of the fader. Locate parks it at mid-DMX, which is 3.8 m.</figcaption>
+        </figure>
+        <figure>
+          <svg class="fig" viewBox="0 0 640 290" role="img" aria-label="Edge hardness on the 24 metre wall against focal distance. Today the edge is flat at 0.88 from about 4.5 metres to 40 metres. The proposal peaks sharply at 24 metres.">
+            <g stroke="var(--rule)" stroke-width="1">
+              <line x1="70" y1="230" x2="610" y2="230"/><line x1="70" y1="180" x2="610" y2="180" stroke-dasharray="2 4"/><line x1="70" y1="130" x2="610" y2="130" stroke-dasharray="2 4"/><line x1="70" y1="80" x2="610" y2="80" stroke-dasharray="2 4"/><line x1="70" y1="30" x2="610" y2="30" stroke-dasharray="2 4"/><line x1="70" y1="30" x2="70" y2="230"/>
+            </g>
+            <g text-anchor="end"><text x="62" y="234">soft 0</text><text x="62" y="134">0.5</text><text x="62" y="34">hard 1</text></g>
+            <g text-anchor="middle"><text x="70" y="248">2 m</text><text x="194.9" y="248">4</text><text x="319.9" y="248">8</text><text x="444.8" y="248">16</text><text x="517.9" y="248">24</text><text x="610" y="248">40</text><text x="340" y="268">Focal distance (log scale)</text></g>
+            <line x1="517.9" y1="30" x2="517.9" y2="230" stroke="var(--cool)" stroke-dasharray="5 3"/>
+            <text class="lab t-cool" x="524" y="222">wall</text>
+            <polyline fill="none" stroke="var(--bad)" stroke-width="2.5" stroke-linejoin="round" points="70.0,154.7 74.5,150.1 79.0,145.6 83.5,141.1 88.0,136.8 92.5,132.5 97.0,128.4 101.5,124.3 106.0,120.4 110.5,116.6 115.0,112.8 119.5,109.2 124.0,105.7 128.5,102.4 133.0,99.1 137.5,95.9 142.0,92.9 146.5,89.9 151.0,87.1 155.5,84.4 160.0,81.8 164.5,79.3 169.0,76.8 173.5,74.5 178.0,72.3 182.5,70.1 187.0,68.1 191.5,66.1 196.0,64.3 200.5,62.5 205.0,60.7 209.5,59.1 214.0,57.5 218.5,56.0 223.0,54.6 227.5,54.0 610.0,54.0"/>
+            <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" points="70.0,200.0 461.5,200.0 466.0,193.7 470.5,175.4 475.0,155.7 479.5,135.5 484.0,115.6 488.5,96.6 493.0,79.2 497.5,63.9 502.0,51.1 506.5,41.1 511.0,34.1 515.5,34.0 524.5,34.0 529.0,39.3 533.5,47.2 538.0,56.9 542.5,67.8 547.0,79.7 551.5,92.1 556.0,104.9 560.5,117.7 565.0,130.5 569.5,142.8 574.0,154.8 578.5,166.1 583.0,176.7 587.5,186.5 592.0,195.4 596.5,200.0 610.0,200.0"/>
+            <text class="lab t-bad" x="240" y="46">Today: 0.88 everywhere past 4.5 m</text>
+            <text class="lab t-acc" x="250" y="214">Proposed (illustrative gain)</text>
+          </svg>
+          <figcaption><b>B. What the wall shows.</b> Today the blur scales with a lens radius the Revolution never declares (0.059 m, from the kind's default body), so every focal distance past ~4.5 m draws the same 88%-hard edge. The proposal keys blur to the relative distance from the focal plane, with a per-type gain; the curve uses a gain of 1.2 for illustration.</figcaption>
+        </figure>
+      </div>
+      <div class="callout cool prose">
+        <p><b>The proposed sharp window is DMX 243–249.</b> At 21 m the wall reads 0.77 hard, at 27 m 0.85, at 24 m fully sharp. Six DMX steps is realistic and hard to find by hand, which is why session 1 pairs the recalibration with <i>Focus here</i>: the desk solves the DMX value for the point the beam lands on. Gobos landing on the wall (session 4) give the eye something to focus on.</p>
+      </div>
+    </section>
+
+    <section id="channels">
+      <span class="eyebrow">Diagnosis 3</span>
+      <h2>The 31 channels, before and after</h2>
+      <p class="prose">The Stage view finds every beam channel by its category. It never reads <code>SETTING</code> or <code>OTHER</code>, and nine of the Revolution's beam controls are one or the other. Each cell shows what the view does with the channel today, then after the plan.</p>
+      <div class="legend">
+        <span class="st"><span class="r" style="padding:0 4px;border-radius:3px">drawn</span></span>
+        <span class="st"><span class="i" style="padding:0 4px;border-radius:3px">read, no effect</span></span>
+        <span class="st"><span class="u" style="padding:0 4px;border-radius:3px">unread</span></span>
+        <span class="st"><span class="h" style="padding:0 4px;border-radius:3px">hidden / not visual</span></span>
+      </div>
+      <div class="chmap">
+        <div class="ch"><span class="no">1</span><span class="nm">Intensity</span><span class="st"><span class="r">drawn</span><span class="r">drawn</span></span></div>
+        <div class="ch"><span class="no">2–3</span><span class="nm">Pan 16-bit</span><span class="st"><span class="r">drawn</span><span class="r">+ travel <span class="s">S8</span></span></span></div>
+        <div class="ch"><span class="no">4–5</span><span class="nm">Tilt 16-bit</span><span class="st"><span class="r">drawn</span><span class="r">+ travel <span class="s">S8</span></span></span></div>
+        <div class="ch"><span class="no">6</span><span class="nm">Media frame</span><span class="st"><span class="u">unread</span><span class="r">in/out <span class="s">S0 S3</span></span></span></div>
+        <div class="ch"><span class="no">7</span><span class="nm">Focus</span><span class="st"><span class="i">read, flat</span><span class="r">focal plane <span class="s">S1</span></span></span></div>
+        <div class="ch"><span class="no">8</span><span class="nm">Zoom</span><span class="st"><span class="i">read, inert</span><span class="r">35→15° <span class="s">S0</span></span></span></div>
+        <div class="ch"><span class="no">9</span><span class="nm">Focus timing</span><span class="st"><span class="u">unread</span><span class="r">eases P/T <span class="s">S8</span></span></span></div>
+        <div class="ch"><span class="no">10</span><span class="nm">Colour timing</span><span class="st"><span class="u">unread</span><span class="r">eases scroll <span class="s">S8</span></span></span></div>
+        <div class="ch"><span class="no">11</span><span class="nm">Beam timing</span><span class="st"><span class="u">unread</span><span class="r">eases beam <span class="s">S8</span></span></span></div>
+        <div class="ch"><span class="no">12</span><span class="nm">Reset</span><span class="st"><span class="h">hidden</span><span class="h">command <span class="s">S7</span></span></span></div>
+        <div class="ch"><span class="no">13</span><span class="nm">Gel scroller</span><span class="st"><span class="u">unread</span><span class="r">colour <span class="s">S0 S3</span></span></span></div>
+        <div class="ch"><span class="no">14</span><span class="nm">Fan speed</span><span class="st"><span class="h">hidden</span><span class="h">exposed <span class="s">S0</span></span></span></div>
+        <div class="ch"><span class="no">15</span><span class="nm">Iris</span><span class="st"><span class="r">drawn</span><span class="r">drawn</span></span></div>
+        <div class="ch"><span class="no">16</span><span class="nm">Front wheel pos</span><span class="st"><span class="u">unread</span><span class="r">gobo <span class="s">S0 S3</span></span></span></div>
+        <div class="ch"><span class="no">17</span><span class="nm">Front wheel mode</span><span class="st"><span class="u">unread</span><span class="r">index / spin <span class="s">S0</span></span></span></div>
+        <div class="ch"><span class="no">18–19</span><span class="nm">Front wheel rot 16-bit</span><span class="st"><span class="u">unread</span><span class="r">angle / RPM <span class="s">S0</span></span></span></div>
+        <div class="ch"><span class="no">20–23</span><span class="nm">"Rear wheel"</span><span class="st"><span class="u">unread</span><span class="h">removed: reserved <span class="s">S0</span></span></span></div>
+        <div class="ch"><span class="no">24–25</span><span class="nm">Frame 1</span><span class="st"><span class="u">unread</span><span class="r">blade <span class="s">S2</span></span></span></div>
+        <div class="ch"><span class="no">26–27</span><span class="nm">Frame 2</span><span class="st"><span class="u">unread</span><span class="r">blade <span class="s">S2</span></span></span></div>
+        <div class="ch"><span class="no">28–29</span><span class="nm">Frame 3</span><span class="st"><span class="u">unread</span><span class="r">blade <span class="s">S2</span></span></span></div>
+        <div class="ch"><span class="no">30–31</span><span class="nm">Frame 4</span><span class="st"><span class="u">unread</span><span class="r">blade <span class="s">S2</span></span></span></div>
+      </div>
+      <p class="small muted">No Look, template or cue row on the desk stores any of the Revolution's beam properties (checked 2026-10-02), so channels can be removed or recategorised without a migration.</p>
+    </section>
+
+    <!-- ============ EVIDENCE ============ -->
+    <section id="manual">
+      <span class="eyebrow">ETC manual 7160M1200 Rev E</span>
+      <h2>What the manual settles, and what it corrects</h2>
+      <p class="prose">The definition was built from a ChamSys head-editor capture with only three channels' bands recorded. ETC's manual fills in most of the rest, and contradicts the capture in four places.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Ch</th><th>The definition today</th><th>The manual</th><th>Page</th></tr></thead>
+          <tbody>
+            <tr><td class="k">1</td><td class="was">"Mechanical douser"</td><td>An integral PWM electronic dimmer on the lamp</td><td class="n">p4 [ii]</td></tr>
+            <tr><td class="k">6</td><td>Media frame, <code>OTHER</code> slider</td><td>The internal media frame: two semicircular gel wings swung in and out by the front lens. In or out only.</td><td class="n">p31–33</td></tr>
+            <tr><td class="k">8</td><td>Zoom, no angles</td><td>15°–35° (nominal). The direction is not stated; ChamSys says 0 is wide.</td><td class="n">p4, p47</td></tr>
+            <tr><td class="k">9–11</td><td>Fade times, <code>SPEED</code></td><td>One second per DMX step, to 255 s. Record in zero-fade cues. Focus timing at 100% is a "console response" mode.</td><td class="n">p16 [12]</td></tr>
+            <tr><td class="k">12</td><td>Reset, bands not captured</td><td>Whole fixture 185–190 · scroller and lenses 147–152 · pan/tilt 126–129 · front module 97–102 · rear module 72–77. Hold 3 s, then snap to 0.</td><td class="n">p15 [11]</td></tr>
+            <tr><td class="k">13</td><td>Gel scroller, frames without colours</td><td>Up to 20 frames; ships with ETC's 12-colour string (below). No speed or mix channel.</td><td class="n">p15, p29</td></tr>
+            <tr><td class="k">14</td><td class="was">"Reserved"</td><td>Fan speed: 0 full, 255 off. Thermal sensors override.</td><td class="n">p16 [12]</td></tr>
+            <tr><td class="k">16</td><td>Front wheel position, slider</td><td>0–13 open · 14–26 slot 1 · 27–39 slot 2 · 40–50 slot 3 · 51–255 = slot 3</td><td class="n">p22–24</td></tr>
+            <tr><td class="k">17</td><td>Front wheel function, slider</td><td>0–13 index · 14–26 rotate &gt;&gt; · 27–39 rotate &lt;&lt; · 40–255 reserved</td><td class="n">p23–24</td></tr>
+            <tr><td class="k">18–19</td><td>Front wheel rotation, two sliders</td><td>16-bit: an index position, or 0–30 RPM in rotate mode</td><td class="n">p23–24</td></tr>
+            <tr><td class="k">20–23</td><td class="was">"Rear beam wheel"</td><td><b>Reserved in Base + Framing.</b> The shutter module fits the rear bay only.</td><td class="n">p14, p17</td></tr>
+            <tr><td class="k">24–31</td><td>Frames 1–4, sliders</td><td>Four multi-plane blades, each rotating ±45° (90° total). No side, depth or sign stated.</td><td class="n">p17–18</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid2">
+        <div class="stack">
+          <h3>Module bays</h3>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Module</th><th>Front bay</th><th>Rear bay</th></tr></thead>
+              <tbody>
+                <tr><td class="n">Shutter (4 blades)</td><td class="was">no</td><td class="now">only here</td></tr>
+                <tr><td class="n">Iris (18 leaves, to 2.5°)</td><td>yes</td><td>yes</td></tr>
+                <tr><td class="n">Static wheel (3 slots + open)</td><td>yes</td><td>yes</td></tr>
+                <tr><td class="n">Rotating wheel (3 slots + open)</td><td>recommended</td><td>belt wear</td></tr>
+                <tr><td class="n">Blank (one metal gobo)</td><td>yes</td><td>yes</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small muted">So a framing unit has an iris <i>or</i> a wheel in front, never both. Nobody knows which TCH's units hold, so the plan keeps both live until the rig check (P3). The wheels ship empty: their slots hold the user's M-size gobos or dichroic filters.</p>
+        </div>
+        <div class="stack">
+          <h3>The stock scroller string</h3>
+          <div class="gels" role="list">
+            <div class="gel" role="listitem"><i style="background:#fffaf0"></i><span><b>0</b> open</span></div>
+            <div class="gel" role="listitem"><i style="background:#fbcc9a"></i><span><b>1</b> R02</span></div>
+            <div class="gel" role="listitem"><i style="background:#f6d3d6"></i><span><b>2</b> R05</span></div>
+            <div class="gel" role="listitem"><i style="background:#f7c587"></i><span><b>3</b> R09</span></div>
+            <div class="gel" role="listitem"><i style="background:#dac7ea"></i><span><b>4</b> R54</span></div>
+            <div class="gel" role="listitem"><i style="background:#a87bc9"></i><span><b>5</b> R357</span></div>
+            <div class="gel" role="listitem"><i style="background:#ef9fb9"></i><span><b>6</b> R36</span></div>
+            <div class="gel" role="listitem"><i style="background:#e85b2b"></i><span><b>7</b> R25</span></div>
+            <div class="gel" role="listitem"><i style="background:#dbe7f2"></i><span><b>8</b> L203</span></div>
+            <div class="gel" role="listitem"><i style="background:#9bbede"></i><span><b>9</b> L201</span></div>
+            <div class="gel" role="listitem"><i style="background:#65a8db"></i><span><b>10</b> R68</span></div>
+            <div class="gel" role="listitem"><i style="background:#b6e09a"></i><span><b>11</b> R88</span></div>
+            <div class="gel" role="listitem"><i style="background:#2aa5a6"></i><span><b>12</b> L-HT115</span></div>
+            <div class="gel" role="listitem"><i style="background:#fffaf0"></i><span><b>13</b> open</span></div>
+          </div>
+          <p class="small muted">Bastard Amber, Rose Tint, Pale Amber Gold, Special Lavender, Royal Lavender, Medium Pink, Orange Red, ¼ CTB, Full CTB, Sky Blue, Light Green, Peacock Blue. ChamSys's 14 bands match ETC's exactly. The desk's gel library has four of the twelve; session 3 adds the other eight. Swatches are approximate.</p>
+        </div>
+      </div>
+      <p class="small muted">The manual covers units built before May 2007 (part 7160A1002). Later units have manual 7160M1210, and nothing says which TCH owns.</p>
+    </section>
+
+    <section id="library">
+      <span class="eyebrow">Every type in <code>fixture/dmx/</code></span>
+      <h2>The same gaps across the library, and where each lands</h2>
+      <p class="prose">Each cell is the work a session does for that fixture. A blank cell means the session doesn't touch it. Session 1's focus recalibration and session 4's gobos-on-surfaces reach every head with a focus channel or a gobo wheel.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Fixture</th><th>S0</th><th>S1</th><th>S2</th><th>S3</th><th>S4</th><th>S5</th><th>S6</th><th>S7</th><th>S8</th></tr></thead>
+          <tbody>
+            <tr><td class="n">ETC Source Four Revolution</td><td>zoom, scroller, wheel, corrections</td><td>focus</td><td>frames</td><td>fitted media</td><td>gobos land</td><td></td><td></td><td>reset</td><td>timing channels</td></tr>
+            <tr><td class="n">Robe ColorSpot 575</td><td></td><td>focus</td><td></td><td></td><td>2nd gobo + colour wheel</td><td>stepped zoom, iris/frost bands, scroll bands, pan/tilt</td><td>closed 0–31</td><td>lamp, resets</td><td>speeds</td></tr>
+            <tr><td class="n">Martin MAC 250</td><td></td><td>focus</td><td></td><td></td><td>gobos land</td><td>scroll bands</td><td>closed 0–19</td><td>lamp, reset</td><td>speeds</td></tr>
+            <tr><td class="n">Varytec Easymove XL 60</td><td></td><td></td><td></td><td></td><td>gobos land</td><td><b>colour previews</b></td><td>strobe bands</td><td>reset</td><td>speeds</td></tr>
+            <tr><td class="n">Equinox Fusion 100 Spot</td><td></td><td>focus</td><td></td><td></td><td>gobos land</td><td>10° lens, rainbow bands</td><td>blackout 0–9</td><td>reset</td><td>speeds</td></tr>
+            <tr><td class="n">IMG Stageline Wash-42</td><td></td><td></td><td></td><td></td><td></td><td>10° lens</td><td>strobe bands</td><td></td><td>speeds</td></tr>
+            <tr><td class="n">Gear4music Orbit-70</td><td></td><td></td><td></td><td></td><td></td><td></td><td>off 0–7</td><td>reset</td><td>speeds</td></tr>
+            <tr><td class="n">Shehds LED19 RGBW</td><td></td><td></td><td></td><td></td><td></td><td></td><td>strobe bands</td><td>reset</td><td>speeds</td></tr>
+            <tr><td class="n">Slender Beam Bar Quad</td><td></td><td></td><td></td><td></td><td></td><td></td><td>strobe bands</td><td>reset</td><td></td></tr>
+            <tr><td class="n">Equinox Scantastic 4</td><td></td><td></td><td></td><td></td><td></td><td>11° lens</td><td>shutter</td><td></td><td></td></tr>
+            <tr><td class="n">Whex</td><td></td><td></td><td></td><td></td><td></td><td>strobe overflow, program level</td><td>strobe bands</td><td></td><td></td></tr>
+            <tr><td class="n">LED Lightbar 12 Pixel</td><td></td><td></td><td></td><td></td><td></td><td>8-digit preview</td><td>strobe bands</td><td></td><td></td></tr>
+            <tr><td class="n">UV</td><td></td><td></td><td></td><td></td><td></td><td>dimmer found</td><td></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="grid2">
+        <div class="stack">
+          <h4>Across the library, today</h4>
+          <ul class="plain small">
+            <li>No strobe channel is drawn. A closed band is dark on the rig and lit on screen.</li>
+            <li>No timing or speed channel is modelled: the view snaps to every value.</li>
+            <li>No type declares a lens diameter, and none can declare a fixed field angle.</li>
+            <li>A colour option without a preview draws the beam black, including every scroll and random band.</li>
+            <li>Five types expose a reset as an ordinary option a Look, cue, template or effect can hold.</li>
+            <li>The beam vocabulary is undocumented: categories, <code>gobo</code>, <code>prismFacets</code> and <code>colourPreview</code> live only in KDoc.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <h4>Left as they are</h4>
+          <ul class="plain small">
+            <li>The laser: no laser rendering exists, and none is planned.</li>
+            <li>Hazer and fog output: <code>FU-STAGE-HAZE-FOLLOWS-HAZER</code>.</li>
+            <li>LED and movement programs: drawing a guessed program is worse than drawing none.</li>
+            <li>The Slender Quad's heads tilting together: <code>FU-STAGE-INDEPENDENT-HEADS</code>.</li>
+            <li>Philips Hue: there are no Hue fixture types to survey.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DESIGN ============ -->
+    <section id="pipeline">
+      <span class="eyebrow">Design</span>
+      <h2>The data path, and what each session adds to it</h2>
+      <p class="prose">Every optic travels the same route: an annotation on the Kotlin fixture class, reflected into a descriptor, serialised to the client, found by category, decoded by the director every frame, and drawn by two shaders. Most of the plan is new vocabulary flowing down this path; nothing about it changes shape.</p>
+      <div class="pipe">
+        <div class="stage"><span class="where">Kotlin</span><h4>Annotations</h4><code>@FixtureType</code> <code>@FixtureProperty</code> option interfaces
+          <ul><li><span class="s">S0</span> <code>fineOf</code>, rotation mode</li><li><span class="s">S1</span> <code>depthOfField</code></li><li><span class="s">S2</span> <code>blade</code>, <code>depthMax</code></li><li><span class="s">S5</span> <code>fieldDeg</code>, <code>zoomDeg</code>, <code>activeMax</code></li><li><span class="s">S6</span> strobe kind, Hz</li><li><span class="s">S7</span> <code>@FixtureCommand</code></li><li><span class="s">S8</span> <code>travel</code>, <code>timing</code></li></ul></div>
+        <div class="stage"><span class="where">Kotlin</span><h4>Reflection</h4><code>generatePropertyDescriptors()</code>
+          <ul><li><span class="s">S3</span> options resolved per placement: fitted gel or gobo, else stock</li><li><span class="s">S7</span> commands listed beside triggers</li></ul></div>
+        <div class="stage"><span class="where">Wire</span><h4>Descriptors</h4><code>SliderPropertyDescriptor</code> <code>SettingOption</code> <code>FixtureTypeDetails</code>
+          <ul><li>Every new field, optional; absent means today's behaviour</li></ul></div>
+        <div class="stage"><span class="where">fixtures.ts</span><h4>Finders</h4><code>findZoomProperty</code> and kin
+          <ul><li><span class="s">S2</span> <code>findShutterProperties</code></li><li><span class="s">S4</span> two colour sources</li><li><span class="s">S5</span> zoom from a setting</li><li><span class="s">S6</span> strobe</li></ul></div>
+        <div class="stage"><span class="where">Per frame</span><h4>Director</h4><code>useBeamDirector</code>, <code>beamOptics.ts</code>
+          <ul><li><span class="s">S0</span> 16-bit pairs, wheel modes</li><li><span class="s">S2</span> blades packed each frame</li><li><span class="s">S5</span> no-colour bands animate</li><li><span class="s">S6</span> strobe factor</li><li><span class="s">S8</span> eased display values</li></ul></div>
+        <div class="stage"><span class="where">GPU</span><h4>Shaders</h4><code>beamShaders.ts</code> <code>surfaceShader.ts</code>
+          <ul><li><span class="s">S1</span> relative blur, cap lifted</li><li><span class="s">S2</span> ±45° blades</li><li><span class="s">S4</span> gobos on surfaces, 2nd layer in <code>aBeamShape.w</code></li></ul></div>
+      </div>
+      <p class="small muted">The beam volume already uses 15 of WebGL's 16 guaranteed attributes, so nothing here adds one. Session 4's second gobo layer takes the one free component, <code>aBeamShape.w</code>, which is written as 0 today.</p>
+    </section>
+
+    <section id="vocabulary" class="sub">
+      <h3>New vocabulary, by session</h3>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>S</th><th>Where</th><th>Addition</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="k">0</td><td class="k">@FixtureProperty</td><td class="k">fineOf</td><td>Names the coarse property this one refines. Generalises <code>PAN_FINE</code>/<code>TILT_FINE</code> to any 16-bit pair.</td></tr>
+            <tr><td class="k">0</td><td class="k">category</td><td class="k">GOBO_ROTATION_MODE</td><td>A wheel's function channel; its bands name <code>INDEX</code>, <code>ROTATE_FWD</code>, <code>ROTATE_REV</code>.</td></tr>
+            <tr><td class="k">0</td><td class="k">@FixtureProperty</td><td class="k">rpmMax, indexDegMax</td><td>A rotation slider's top speed in rotate mode, and its sweep in index mode.</td></tr>
+            <tr><td class="k">1</td><td class="k">@FixtureType</td><td class="k">depthOfField</td><td>The type's blur gain; the family's when absent.</td></tr>
+            <tr><td class="k">2</td><td class="k">category</td><td class="k">SHUTTER, SHUTTER_ROTATION</td><td>A blade's insertion and its angle.</td></tr>
+            <tr><td class="k">2</td><td class="k">@FixtureProperty</td><td class="k">blade, depthMax</td><td>Which edge it cuts (<code>TOP</code>, <code>BOTTOM</code>, <code>LEFT</code>, <code>RIGHT</code>) and how far, as a fraction of the field's diameter, at DMX max. Rotation reuses <code>degMin</code>/<code>degMax</code>.</td></tr>
+            <tr><td class="k">3</td><td class="k">@FixtureProperty</td><td class="k">media</td><td><code>GEL</code>, <code>GOBO</code> or <code>GOBO_OR_GEL</code>: this setting's options can be loaded per unit.</td></tr>
+            <tr><td class="k">5</td><td class="k">@FixtureType</td><td class="k">fieldDeg</td><td>A fixed lens's field angle.</td></tr>
+            <tr><td class="k">5</td><td class="k">option</td><td class="k">zoomDeg</td><td>A stepped zoom's angle per band.</td></tr>
+            <tr><td class="k">5</td><td class="k">@FixtureProperty</td><td class="k">activeMin, activeMax</td><td>The proportional part of a slider whose top is effects. Past it, the view holds the end value.</td></tr>
+            <tr><td class="k">6</td><td class="k">option</td><td class="k">strobeKind, hzMin, hzMax</td><td><code>CLOSED</code>, <code>OPEN</code>, <code>STROBE</code>, <code>RANDOM</code> or <code>PULSE</code>, and a strobe band's rate.</td></tr>
+            <tr><td class="k">7</td><td class="k">annotation</td><td class="k">@FixtureCommand</td><td>Label, description, hold time, confirm text, on a <code>DmxCommand</code>. Not a property.</td></tr>
+            <tr><td class="k">8</td><td class="k">@FixtureType</td><td class="k">travel</td><td>Pan and tilt degrees per second; beam and colour transit times.</td></tr>
+            <tr><td class="k">8</td><td class="k">@FixtureProperty</td><td class="k">timing</td><td>A fixture timing channel: which families it stretches (<code>POSITION</code>, <code>BEAM</code>, <code>COLOUR</code>, <code>ALL</code>) and how many seconds a step is.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">Two tests enforce the vocabulary, beside <code>FocusRangeTest</code>: every ZOOM declares its angles (session 0), and every COLOUR option declares a preview or is marked as a no-colour band (session 5).</p>
+    </section>
+
+    <section id="blades" class="sub">
+      <h3>Blades: one shader path for lanterns and DMX heads</h3>
+      <div class="grid2">
+        <figure>
+          <svg class="fig" viewBox="0 0 300 270" role="img" aria-label="The field seen from the lens, with the top blade turned, the left blade in a quarter of the way, and the bottom blade just in. The right blade is out.">
+            <defs><clipPath id="field"><circle cx="150" cy="130" r="100"/></clipPath></defs>
+            <circle cx="150" cy="130" r="100" fill="var(--zone)"/>
+            <g clip-path="url(#field)" fill="var(--fg)" opacity="0.85">
+              <polygon points="20,20 290,20 290,80 20,45"/>
+              <polygon points="20,20 100,20 100,250 20,250"/>
+              <polygon points="20,215 290,215 290,250 20,250"/>
+            </g>
+            <circle cx="150" cy="130" r="100" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+            <line x1="150" y1="30" x2="150" y2="230" stroke="var(--rule)" stroke-dasharray="2 3"/>
+            <line x1="50" y1="130" x2="250" y2="130" stroke="var(--rule)" stroke-dasharray="2 3"/>
+            <text x="150" y="14" text-anchor="middle">TOP · frame 1 · turned 7°</text>
+            <text x="150" y="264" text-anchor="middle">BOTTOM · frame 2 · just in</text>
+            <text x="6" y="126">LEFT</text><text x="6" y="140">frame 3</text><text x="6" y="154">depth 0.25</text>
+            <text x="294" y="126" text-anchor="end">RIGHT</text><text x="294" y="140" text-anchor="end">frame 4</text><text x="294" y="154" text-anchor="end">out</text>
+          </svg>
+          <figcaption>Seen from the lens. Depth is a fraction of the field's diameter, so 0.5 reaches the centre. The frame-to-side mapping is an estimate (D15).</figcaption>
+        </figure>
+        <div class="stack">
+          <p class="prose">Lantern shutters already cut the beam in both shaders. They are packed once per body spec and written into the light table every frame. Session 2 reads the eight DMX channels instead, every frame, into the same scratch packing. A unit has either lantern blades or DMX blades, never both.</p>
+          <figure>
+            <svg class="fig" viewBox="0 0 560 150" role="img" aria-label="Bit layout of one float: four six-bit fields, blade A depth, blade A angle, blade B depth, blade B angle, 24 bits in all.">
+              <g font-family="var(--font-mono)">
+                <rect x="10" y="30" width="135" height="34" fill="var(--zone)" stroke="var(--rule)"/><rect x="145" y="30" width="135" height="34" fill="var(--cool-zone)" stroke="var(--rule)"/><rect x="280" y="30" width="135" height="34" fill="var(--zone)" stroke="var(--rule)"/><rect x="415" y="30" width="135" height="34" fill="var(--cool-zone)" stroke="var(--rule)"/>
+              </g>
+              <text class="lab" x="77" y="52" text-anchor="middle">A depth · 6</text><text class="lab" x="212" y="52" text-anchor="middle">A angle · 6</text><text class="lab" x="347" y="52" text-anchor="middle">B depth · 6</text><text class="lab" x="482" y="52" text-anchor="middle">B angle · 6</text>
+              <text x="10" y="20">one float · 24-bit mantissa · two blades</text>
+              <text x="145" y="88">today: 1° steps, ±30°</text>
+              <text class="t-acc" x="145" y="104">plan: 1.5° steps, ±45° (61 values)</text>
+              <text x="10" y="130">Seven angle bits would need 26 bits and break the float. Coarser steps keep two blades per float.</text>
+            </svg>
+          </figure>
+          <ul class="plain small">
+            <li><b>Locate</b> takes blades out and rotation to square.</li>
+            <li><b>Channels</b> join the director's <code>beamChannels</code>, so a blade move asks for a frame.</li>
+            <li><b>The packing test</b> changes with the step.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="media" class="sub">
+      <h3>Fitted media: what a unit has loaded</h3>
+      <div class="grid2">
+        <div class="stack">
+          <p class="prose">A type declares which settings are loadable and what is in them from the factory. A placement overrides any option by name. Two units in one rig can carry different strings, so this lives beside each placement's lantern focus, not on the type, and travels with the show in sync.</p>
+          <ol class="small" style="margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:4px">
+            <li>The placement's fitted content for that option;</li>
+            <li>else the type's stock content;</li>
+            <li>else, for a band with no single colour, the wheel's own previews animated (D8).</li>
+          </ol>
+          <p class="small muted">The gel library moves from <code>frontend/src/data/gels.ts</code> to a backend resource served at <code>GET /api/rest/gels</code>, because the template resolver's wheel snap and <code>describe_rig</code> both need a fitted gel's colour. Fitted gobos are picked from the desk's 16 patterns; custom artwork is a follow-up.</p>
+        </div>
+        <pre><span class="c">// fixture_patches.media (and each placement's), formatVersion 22</span>
+{
+  <span class="k">"slots"</span>: {
+    <span class="k">"gelScroller"</span>: {
+      <span class="k">"FRAME_7"</span>: { <span class="k">"gel"</span>: "L106" },
+      <span class="k">"FRAME_8"</span>: { <span class="k">"gel"</span>: "L181" }
+    },
+    <span class="k">"fbWheelPos"</span>: {
+      <span class="k">"SLOT_1"</span>: { <span class="k">"gobo"</span>: "breakup" },
+      <span class="k">"SLOT_2"</span>: { <span class="k">"gel"</span>: "R80" }
+    },
+    <span class="k">"mediaFrame"</span>: {
+      <span class="k">"IN"</span>: { <span class="k">"gel"</span>: "L201" }
+    }
+  }
+}
+<span class="c">// Validated against the type's loadable settings at the
+// write boundary, every problem reported at once.</span></pre>
+      </div>
+    </section>
+
+    <section id="commands" class="sub">
+      <h3>Fixture commands: resets out of reach of a Look</h3>
+      <div class="grid2">
+        <div class="stack">
+          <p class="prose">Five types offer a reset as an ordinary setting option today, selectable from a Look, cue, template, the programmer or an effect. The MAC 250's and Robe's resets are script methods. Session 7 makes them all <b>commands</b>, a kind modelled on one-shot triggers: outside composition, refused by name everywhere a property can be stored.</p>
+          <ul class="plain small">
+            <li><b>Refused at:</b> Look and template rows, cue assignments, the programmer, effects, Record, busk pads, surface bindings and MCP property tools (<code>COMMAND_NOT_STORABLE</code>). Raw channel writes are dropped, as a trigger's are.</li>
+            <li><b>Run from:</b> the fixture panel's <i>Commands</i> menu, behind a confirm naming the unit and the command.</li>
+            <li><b>Remote:</b> the public listener and MCP are refused unless an admin allows them, like effects.</li>
+            <li><b>Busy:</b> a second command to a unit mid-hold is 409 <code>COMMAND_BUSY</code>.</li>
+            <li><b>Stored rows</b> naming a removed RESET option are stripped once at startup, logged.</li>
+          </ul>
+        </div>
+        <figure>
+          <svg class="fig" viewBox="0 0 400 190" role="img" aria-label="Channel 12 over time: at rest it follows composition at 0; the command holds it at 150 for three seconds, then snaps back to 0.">
+            <line x1="40" y1="150" x2="380" y2="150" stroke="var(--rule)"/><line x1="40" y1="20" x2="40" y2="150" stroke="var(--rule)"/>
+            <rect x="110" y="20" width="180" height="130" fill="var(--zone)"/>
+            <polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="40,148 110,148 110,72 290,72 290,148 380,148"/>
+            <text x="34" y="154" text-anchor="end">0</text><text x="34" y="76" text-anchor="end">150</text><text x="34" y="24" text-anchor="end">255</text>
+            <text x="110" y="168" text-anchor="middle">confirm</text><text x="290" y="168" text-anchor="middle">+3.0 s</text>
+            <text class="lab" x="200" y="62" text-anchor="middle">desk owns ch 12</text>
+            <text x="200" y="186" text-anchor="middle">Reset scroller and lenses: 147–152, held 3 s, then snap to 0</text>
+          </svg>
+          <figcaption>The desk holds the band for the command's declared time, then hands the channel back. The REST call answers when the hold ends.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="strobe" class="sub">
+      <h3>Strobe and closed shutters</h3>
+      <div class="grid2">
+        <div class="stack">
+          <p class="prose">Every strobe band declares what it does. The view draws <code>CLOSED</code> dark and <code>OPEN</code> lit. <code>STROBE</code> flashes at its band's rate. <code>RANDOM</code> and <code>PULSE</code> run on the same clock, from elapsed time passed into the director, so the test harness stays reproducible.</p>
+          <p class="prose">The Stage view runs on screens other people watch. WCAG 2.3.1 allows no more than three flashes a second, so a faster strobe draws as a reduced-contrast shimmer. The DMX is untouched.</p>
+          <p class="small muted">The Hz annotation is the data half of <code>FU-TMPL-STROBE-HZ</code>. A Hertz intent in the template grammar stays there.</p>
+        </div>
+        <figure>
+          <svg class="fig" viewBox="0 0 400 170" role="img" aria-label="One second of a 20 hertz strobe: the rig flashes twenty times; the Stage view draws a steady shimmer between 55 and 85 percent.">
+            <text x="10" y="18">the rig · 20 Hz</text>
+            <g fill="var(--fg)"><rect x="40" y="26" width="8" height="40"/><rect x="57" y="26" width="8" height="40"/><rect x="74" y="26" width="8" height="40"/><rect x="91" y="26" width="8" height="40"/><rect x="108" y="26" width="8" height="40"/><rect x="125" y="26" width="8" height="40"/><rect x="142" y="26" width="8" height="40"/><rect x="159" y="26" width="8" height="40"/><rect x="176" y="26" width="8" height="40"/><rect x="193" y="26" width="8" height="40"/><rect x="210" y="26" width="8" height="40"/><rect x="227" y="26" width="8" height="40"/><rect x="244" y="26" width="8" height="40"/><rect x="261" y="26" width="8" height="40"/><rect x="278" y="26" width="8" height="40"/><rect x="295" y="26" width="8" height="40"/><rect x="312" y="26" width="8" height="40"/><rect x="329" y="26" width="8" height="40"/><rect x="346" y="26" width="8" height="40"/><rect x="363" y="26" width="8" height="40"/></g>
+            <text x="10" y="96">the Stage view · shimmer</text>
+            <rect x="40" y="104" width="340" height="40" fill="var(--accent)" opacity="0.7"/>
+            <polyline fill="none" stroke="var(--fg)" stroke-width="1" points="40,112 60,118 80,110 100,121 120,113 140,119 160,111 180,120 200,112 220,118 240,110 260,121 280,113 300,119 320,111 340,120 360,112 380,117"/>
+            <text x="40" y="162">0 s</text><text x="380" y="162" text-anchor="end">1 s</text>
+          </svg>
+          <figcaption>A strobe at or under 3 Hz is drawn as it is. Above it, the beam holds a reduced-contrast flicker.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="travel" class="sub">
+      <h3>Travel time: drawn, never sent</h3>
+      <div class="grid2">
+        <div class="stack">
+          <p class="prose">The Stage view snaps to every DMX value today. A real head takes time: its motors have a top speed, and the Revolution's own timing channels stretch a move to one second per DMX step. Session 8 keeps a displayed value per family in the director and moves it toward the DMX value at the allowed rate.</p>
+          <p class="prose">It only changes what is drawn. The desk never second-guesses what a fixture does with its own timing.</p>
+          <p class="small muted">Few manuals publish motor speeds, so most base speeds are estimates. The Revolution's timing scale is in the manual.</p>
+        </div>
+        <figure>
+          <svg class="fig" viewBox="0 0 400 130" role="img" aria-label="With colour timing at 5, the scroller moves from frame 1 to frame 9 over five seconds, showing every frame in between.">
+            <defs><linearGradient id="scroll" x1="0" x2="1">
+              <stop offset="0" stop-color="#fbcc9a"/><stop offset="0.125" stop-color="#f6d3d6"/><stop offset="0.25" stop-color="#f7c587"/><stop offset="0.375" stop-color="#dac7ea"/><stop offset="0.5" stop-color="#a87bc9"/><stop offset="0.625" stop-color="#ef9fb9"/><stop offset="0.75" stop-color="#e85b2b"/><stop offset="0.875" stop-color="#dbe7f2"/><stop offset="1" stop-color="#9bbede"/>
+            </linearGradient></defs>
+            <rect x="20" y="30" width="360" height="40" rx="4" fill="url(#scroll)" stroke="var(--rule)"/>
+            <text x="20" y="20">frame 1 · R02</text><text x="380" y="20" text-anchor="end">frame 9 · L201</text>
+            <text x="20" y="90">0 s</text><text x="200" y="90" text-anchor="middle">colour timing = 5 → 5 s</text><text x="380" y="90" text-anchor="end">5 s</text>
+            <text x="20" y="118">today the view jumps straight from amber to blue</text>
+          </svg>
+          <figcaption>The scroller passes through the frames between two gels, as the string does on the rig.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="ux">
+      <span class="eyebrow">On screen</span>
+      <h2>Three places the operator meets this</h2>
+      <p class="prose">Sketches in the desk's own style, for layout and copy. The patch sheet, the Stage view's Focus tab and the fixture panel already exist; each gains a box.</p>
+      <div class="sketches">
+        <figure>
+          <div class="desk" aria-label="Sketch: the Focus tab">
+            <div class="ttl">Focus <span>FOH Balcony S4 Rev SR</span></div>
+            <div class="card">
+              <span class="lbl">From its channels</span>
+              <div class="row"><span class="k">Zoom</span><div class="track"><i style="width:60%"></i><b style="left:60%"></b></div><span class="v">23°</span></div>
+              <div class="row"><span class="k">Focus</span><div class="track"><i style="width:96%"></i><b style="left:96%"></b></div><span class="v">23.9 m</span></div>
+              <div class="row"><span class="k">Iris</span><div class="track"><i style="width:0%"></i><b style="left:0%"></b></div><span class="v">open</span></div>
+              <div class="row" style="justify-content:space-between"><span class="note">Beam lands on <b style="color:var(--desk-fg)">Back wall</b>, 24.4 m</span><span class="btn pri">Focus here</span></div>
+            </div>
+            <div class="card">
+              <span class="lbl">Loaded</span>
+              <div class="row"><span class="k">Scroller</span><span class="sw" style="background:#fbcc9a"></span><span class="sw" style="background:#f6d3d6"></span><span class="sw" style="background:#f7c587"></span><span class="sw" style="background:#dac7ea"></span><span class="note">+ 8</span><span class="chip">stock</span></div>
+              <div class="row"><span class="k">Wheel</span><span class="chip">open</span><span class="chip">breakup</span><span class="chip">R80</span><span class="chip">—</span></div>
+            </div>
+          </div>
+          <figcaption><b>Focus tab.</b> <i>Focus here</i> solves the DMX for the landed point and writes it to the programmer. The zoom now reads in degrees.</figcaption>
+        </figure>
+        <figure>
+          <div class="desk" aria-label="Sketch: the patch sheet's Media box">
+            <div class="ttl">Media <span>Source Four Revolution</span></div>
+            <div class="card">
+              <span class="lbl">Gel scroller · 14 frames</span>
+              <div class="row"><span class="chip">7</span><span class="sw" style="background:#d12028"></span><span>L106 Primary Red</span><span class="note" style="margin-left:auto">was R25</span></div>
+              <div class="row"><span class="chip">8</span><span class="sw" style="background:#161a8e"></span><span>L181 Congo Blue</span><span class="note" style="margin-left:auto">was L203</span></div>
+              <div class="row"><span class="chip">9</span><span class="sw" style="background:#9bbede"></span><span>L201 Full CT Blue</span><span class="note" style="margin-left:auto">stock</span></div>
+              <div class="row" style="justify-content:space-between"><span class="note">11 frames at stock</span><span class="btn">Reset to stock</span></div>
+            </div>
+            <div class="card">
+              <span class="lbl">Front wheel · 3 slots</span>
+              <div class="row"><span class="chip">1</span><span>Gobo · Breakup</span></div>
+              <div class="row"><span class="chip">2</span><span class="sw" style="background:#3a7ec8"></span><span>Gel · R80</span></div>
+              <div class="row"><span class="chip">3</span><span class="note">Empty</span></div>
+            </div>
+          </div>
+          <figcaption><b>Patch sheet, Media box.</b> Beside the Lantern box, for a type with loadable settings. Per unit; a paired placement has its own.</figcaption>
+        </figure>
+        <figure>
+          <div class="desk" aria-label="Sketch: the Commands menu and its confirm">
+            <div class="ttl">Commands <span>FOH Balcony S4 Rev SR</span></div>
+            <div class="menu">
+              <div>Reset whole fixture <small>185 · 3 s</small></div>
+              <div class="on">Reset scroller and lenses <small>150 · 3 s</small></div>
+              <div>Reset pan and tilt <small>128 · 3 s</small></div>
+              <div>Reset front module <small>100 · 3 s</small></div>
+              <div>Reset rear module <small>75 · 3 s</small></div>
+            </div>
+            <div class="card">
+              <b>Reset the scroller and lenses?</b>
+              <span class="note">The desk holds channel 12 for 3 seconds. The unit re-homes its scroller, zoom and focus, and the beam will move while it does.</span>
+              <div class="row" style="justify-content:flex-end"><span class="btn">Cancel</span><span class="btn red">Reset</span></div>
+            </div>
+          </div>
+          <figcaption><b>Fixture panel, Commands.</b> Each command names its band and hold. Nothing here can be recorded.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="decisions">
+      <span class="eyebrow">Confirmed by Chris, 2026-10-02</span>
+      <h2>Decisions and their reasons</h2>
+      <div class="dlist">
+        <div class="d"><span class="id">D1</span><span>Optics are fixture-type facts on the annotations. What is loaded into a unit is placement data. Neither lives in a Look.</span><span class="why">The manual settles the bands; the venue settles what is in the slots.</span></div>
+        <div class="d"><span class="id">D2</span><span>A ZOOM must declare its angles; a stepped zoom declares one per band. A test enforces both.</span><span class="why">A zoom without angles is silently inert, which is how the Revolution's went unnoticed.</span></div>
+        <div class="d"><span class="id">D3</span><span>A fixed-lens head declares <code>fieldDeg</code> on its type.</span><span class="why">The Fusion, IMG Wash and Scantastic all document theirs, and today only a per-patch override can say so.</span></div>
+        <div class="d"><span class="id">D4</span><span><code>SHUTTER</code> and <code>SHUTTER_ROTATION</code> categories, each naming its blade, depth and range.</span><span class="why">Frame numbers say nothing about sides; the renderer needs sides.</span></div>
+        <div class="d"><span class="id">D5</span><span>One shader path for lantern and DMX blades, widened to ±45° in 1.5° steps.</span><span class="why">Two blades per float is the packing's budget; finer than 1.5° is finer than anyone focuses a frame.</span></div>
+        <div class="d"><span class="id">D6</span><span>Fitted media per placement, defaulted from the type.</span><span class="why">Two units can carry different strings. Follows the stage-view plan's D14 for focus data.</span></div>
+        <div class="d"><span class="id">D7</span><span>The gel library moves to a backend resource.</span><span class="why">The wheel snap and <code>describe_rig</code> are backend, and both need a fitted gel's colour.</span></div>
+        <div class="d"><span class="id">D8</span><span>No-colour bands animate; every other COLOUR option must declare a preview.</span><span class="why">Black is the one answer certain to be wrong. Chris chose animation over open white.</span></div>
+        <div class="d"><span class="id">D9</span><span>Relative blur with a per-type gain; full hardness at the focal plane.</span><span class="why">The desk will never know apertures well; a tuned constant is honest about that and shows a focal plane.</span></div>
+        <div class="d"><span class="id">D10</span><span>Gobos land on surfaces. Shadows stay a follow-up.</span><span class="why">The gobo is what anyone focuses by. Chris chose the full treatment; the budget check guards it.</span></div>
+        <div class="d"><span class="id">D11</span><span><i>Focus here</i> solves the DMX for a point and writes the programmer, as aim does.</span><span class="why">The sharp window at 24 m is six DMX steps. A solve finds it; a hand rarely does.</span></div>
+        <div class="d"><span class="id">D12</span><span>Strobe bands declare their kind and rate; the view flashes within the three-flash rule.</span><span class="why">The Stage view is on screens other people watch.</span></div>
+        <div class="d"><span class="id">D13</span><span>Resets and lamp control become fixture commands, refused wherever a property is stored.</span><span class="why">A reset in a Look is a show-stopper one click away on five types. Triggers already prove the pattern.</span></div>
+        <div class="d"><span class="id">D14</span><span>Travel time is drawn, never output.</span><span class="why">The fixture owns its timing; the view only shows it.</span></div>
+        <div class="d"><span class="id">D15</span><span>Every unstated value is marked <code>// Estimate:</code> and checked on the rig.</span><span class="why">Chris chose to build on estimates and correct afterwards.</span></div>
+        <div class="d"><span class="id">P1</span><span>Nine sessions, one PR each.</span><span class="why">The repo's git workflow: a branch and a PR per change.</span></div>
+        <div class="d"><span class="id">P2</span><span>One <code>formatVersion</code> bump, 22, for fitted media.</span><span class="why">An older reader would drop it and push the loss back. Everything else is type data.</span></div>
+        <div class="d"><span class="id">P3</span><span>The front bay stays both: iris and wheel live.</span><span class="why">Nobody knows which TCH's units hold.</span></div>
+        <div class="d"><span class="id">P4</span><span>Project 15's fitted media is Chris's to set on the desk.</span><span class="why">It is show data, not a migration.</span></div>
+      </div>
+    </section>
+
+    <!-- ============ DELIVERY ============ -->
+    <section id="order">
+      <span class="eyebrow">Delivery</span>
+      <h2>Order and dependencies</h2>
+      <figure>
+        <svg class="fig" viewBox="0 0 660 230" role="img" aria-label="Session 0 comes first. Sessions 1, 2 and 3 follow it. Session 4 follows session 3 for the Revolution's gobos only. Sessions 5 to 8 can run in any order after session 0.">
+          <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--muted)"/></marker></defs>
+          <g stroke="var(--muted)" stroke-width="1.5" fill="none" marker-end="url(#ar)">
+            <path d="M110,115 C150,115 150,40 190,40"/><path d="M110,115 L190,115"/><path d="M110,115 C150,115 150,190 190,190"/>
+            <path d="M300,190 L370,190" stroke-dasharray="4 3"/>
+            <path d="M110,115 C140,115 140,215 400,215 C440,215 440,190 476,190" stroke-dasharray="1 4"/>
+          </g>
+          <g font-family="var(--font-body)">
+            <rect x="10" y="90" width="100" height="50" rx="6" fill="var(--zone)" stroke="var(--accent)"/>
+            <rect x="190" y="15" width="110" height="50" rx="6" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="190" y="90" width="110" height="50" rx="6" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="190" y="165" width="110" height="50" rx="6" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="370" y="165" width="100" height="50" rx="6" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="476" y="15" width="174" height="200" rx="6" fill="none" stroke="var(--rule)" stroke-dasharray="4 3"/>
+            <rect x="490" y="30" width="146" height="34" rx="5" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="490" y="76" width="146" height="34" rx="5" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="490" y="122" width="146" height="34" rx="5" fill="var(--surface)" stroke="var(--rule)"/>
+            <rect x="490" y="168" width="146" height="34" rx="5" fill="var(--surface)" stroke="var(--rule)"/>
+          </g>
+          <text class="lab" x="60" y="112" text-anchor="middle">S0</text><text x="60" y="128" text-anchor="middle">Revolution</text>
+          <text class="lab" x="245" y="37" text-anchor="middle">S1</text><text x="245" y="53" text-anchor="middle">focus</text>
+          <text class="lab" x="245" y="112" text-anchor="middle">S2</text><text x="245" y="128" text-anchor="middle">shutters</text>
+          <text class="lab" x="245" y="187" text-anchor="middle">S3</text><text x="245" y="203" text-anchor="middle">fitted media</text>
+          <text class="lab" x="420" y="187" text-anchor="middle">S4</text><text x="420" y="203" text-anchor="middle">gobos land</text>
+          <text x="335" y="182" text-anchor="middle">Rev only</text>
+          <text class="lab" x="563" y="51" text-anchor="middle">S5 library pass</text>
+          <text class="lab" x="563" y="97" text-anchor="middle">S6 strobe</text>
+          <text class="lab" x="563" y="143" text-anchor="middle">S7 commands</text>
+          <text class="lab" x="563" y="189" text-anchor="middle">S8 travel</text>
+          <text x="563" y="10" text-anchor="middle">any order, after S0</text>
+        </svg>
+        <figcaption>Session 4 needs session 3 only for the Revolution's fitted gobos; the MAC 250's and Robe's gobos can land without it. Sessions 5–8 are independent of each other, but each touches a definition session 0 rewrites, so they follow it.</figcaption>
+      </figure>
+      <p class="small muted">Every session ends with <code>./gradlew test</code> and <code>npm run check</code> green, its docs written, and a one-line done-marker in the plan with its merge SHA.</p>
+    </section>
+
+    <div>
+      <article class="sess" id="s0">
+        <span class="n">0</span>
+        <div class="body">
+          <div class="head"><h3>The Revolution, corrected</h3><span class="tag">backend · one frontend decoder</span></div>
+          <p class="prose">Make the definition say what the manual says, so the fixture's existing renderer support switches on.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li>Zoom: <code>degMin = 35, degMax = 15</code>.</li>
+              <li>Body: lens diameter and the manual's dimensions.</li>
+              <li>Gel scroller → <code>COLOUR</code>, its frames carrying the stock string's previews.</li>
+              <li>Front wheel → <code>GOBO</code> setting with the manual's bands; function → <code>GOBO_ROTATION_MODE</code>; 16-bit rotation with <code>fineOf</code>, <code>rpmMax = 30</code>, <code>indexDegMax = 360</code>.</li>
+              <li>Rear wheel's four properties removed.</li>
+              <li>Media frame → two-band setting, out and in.</li>
+              <li>Fan speed exposed on ch 14.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>Source4RevolutionFixture.kt</code></li>
+              <li><code>FixtureProperty.kt</code>, <code>DmxFixture.kt</code>, <code>routes/lightFixtures.kt</code></li>
+              <li><code>store/fixtures.ts</code>, <code>beamOptics.ts</code></li>
+              <li><code>Manuals/personalities/ETC_Source4Rev_BaseFrame.md</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>New: every ZOOM declares its angles (D2).</li>
+              <li>Decoder: 16-bit pairs and wheel modes.</li>
+              <li>Personality tests updated for the removed properties.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> the zoom sweeps the pool between 35° and 15°, frame 9 draws Full CTB, and the rear wheel is gone from the fixture card.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s1">
+        <span class="n">1</span>
+        <div class="body">
+          <div class="head"><h3>Focus that reads</h3><span class="tag">frontend · one backend route</span></div>
+          <p class="prose">Make the focal plane visible, and let the desk find it.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li><code>focusBlur</code> takes the relative error from the focal plane times the type's <code>depthOfField</code>; family constants tuned in the harness.</li>
+              <li>The 0.88 hardness cap lifts at the focal plane.</li>
+              <li>Locate parks a declared-range focus at the range's middle distance, not mid-DMX.</li>
+              <li><code>POST programmer/focus</code>: the inverse of the declared range, solved in Kotlin.</li>
+              <li><i>Focus here</i> on the Focus tab; <code>aim_fixtures</code> gains <code>focus: true</code>.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>beamMask.ts</code>, <code>beamShaders.ts</code>, <code>scene/surfaceShader.ts</code></li>
+              <li><code>bodies/archetype.ts</code>, <code>profileHarness.ts</code></li>
+              <li><code>LocateValueResolver.kt</code>; a new <code>routes/programmerFocus.kt</code> beside <code>programmerAim.kt</code></li>
+              <li><code>StageFocusPanel.tsx</code>, <code>ai/AiTools.kt</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>A shared vector pins the Kotlin solve against <code>resolveDeclaredFocusDistance</code>.</li>
+              <li>Harness: a 24 m wall is soft at ±3 m and sharp at the wall.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b>, from <i>Balcony · desk</i>, a Revolution on the back wall goes soft 3 m either side and <i>Focus here</i> lands it sharp. The MCP route does the same, checked with <code>render_view</code>.</p>
+          <p class="risk">The gain is judged by eye. If the sharp window proves too narrow to drive by hand, widen it before narrowing it.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s2">
+        <span class="n">2</span>
+        <div class="body">
+          <div class="head"><h3>DMX framing shutters</h3><span class="tag">backend + frontend</span></div>
+          <p class="prose">Let DMX channels drive the blades the renderer already draws for lanterns.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li><code>SHUTTER</code>, <code>SHUTTER_ROTATION</code>, <code>blade</code>, <code>depthMax</code>.</li>
+              <li>The Revolution's frames: 1 → top, 2 → bottom, 3 → left, 4 → right; depth 0.5; ±45°. All estimates.</li>
+              <li>The director packs blades every frame for a DMX head; lanterns keep the memo.</li>
+              <li>Packing: 1.5° steps to ±45°.</li>
+              <li>Locate: blades out, rotation square.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>FixtureProperty.kt</code>, the descriptor, <code>store/fixtures.ts</code></li>
+              <li><code>FixtureModel.tsx</code> (the blade memo and <code>beamChannels</code>)</li>
+              <li><code>beamMask.ts</code> (<code>packBlade</code> and GLSL <code>bladeCut</code>)</li>
+              <li><code>docs/fixtures-engineering.md</code> §"Framing shutters"</li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>Pack and unpack at ±45°.</li>
+              <li>Decoder: channel to depth and angle, both directions of <code>inverted</code>.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> each blade cuts the side it is named for, turns about its own edge, and at full reaches the centre.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s3">
+        <span class="n">3</span>
+        <div class="body">
+          <div class="head"><h3>Fitted media</h3><span class="tag">backend + frontend · formatVersion 22</span></div>
+          <p class="prose">Say what each unit has loaded, and draw it.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li>The gel library becomes <code>resources/gels.json</code>, served at <code>GET /api/rest/gels</code>, with the eight missing gels.</li>
+              <li><code>media</code> on the Revolution's scroller, front wheel and media frame.</li>
+              <li><code>media</code> column on patches and placements; descriptors resolve options per placement.</li>
+              <li>The wheel snap uses fitted colours.</li>
+              <li>The Media box, the Focus tab's list, MCP's <code>media</code>.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>models/fixturePatches.kt</code>, <code>fixturePatchPlacements.kt</code></li>
+              <li><code>sync/dto/SyncDtos.kt</code>, <code>ProjectExporter</code>, <code>ProjectImporter</code></li>
+              <li><code>TemplateResolver.kt</code>, <code>ai/SetupTools.kt</code>, <code>RigBriefing.kt</code></li>
+              <li><code>LanternBox.tsx</code>, <code>EditPatchForm.tsx</code>, <code>GelPicker.tsx</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li><code>RichProjectFixture</code> gains non-default media; the round-trip and clone tests carry it.</li>
+              <li>Write-boundary validation: unknown setting, unknown option, wrong kind, all reported at once.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> one unit draws a custom string while the other keeps stock, and both survive sync and a clone.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s4">
+        <span class="n">4</span>
+        <div class="body">
+          <div class="head"><h3>Gobos on surfaces, stacked wheels</h3><span class="tag">frontend</span></div>
+          <p class="prose">Put the gobo where an operator looks for it, and draw two wheels at once.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li>The surface shader samples the gobo atlas in light space, blurred by session 1's term.</li>
+              <li>A second gobo layer and angle in <code>aBeamShape.w</code>, multiplied over the first.</li>
+              <li>The Robe's second colour wheel multiplied subtractively over the first.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>scene/surfaceShader.ts</code>, <code>scene/lightTable.ts</code></li>
+              <li><code>beamShaders.ts</code>, <code>StageEmitters.tsx</code>, <code>goboAtlas.ts</code></li>
+              <li><code>FixtureModel.tsx</code> (<code>ColourSync</code>), <code>store/fixtures.ts</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>Harness frames for one and two layers.</li>
+              <li>Colour dispatch parity with two wheels.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> a MAC 250 gobo lands on the back wall and blurs as focus moves, and the light-budget pass holds in Safari and on an iPad.</p>
+          <p class="risk">The cost is unmeasured. If the budget runs short, surface gobos are limited to the selected heads and the rest keep today's pool. Recorded against <code>FU-MANUAL-STAGE-LIGHT-BUDGET</code>.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s5">
+        <span class="n">5</span>
+        <div class="body">
+          <div class="head"><h3>The library optics pass</h3><span class="tag">backend + frontend</span></div>
+          <p class="prose">Close the gaps the survey found in every other type.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li><code>fieldDeg</code>: Fusion 10°, IMG Wash 10°, Scantastic 11°.</li>
+              <li>The Robe's zoom as a setting with <code>zoomDeg</code> per band: 15°, 18°, 22°, and again with focus correction.</li>
+              <li><code>activeMax = 179</code> on the Robe's iris and frost.</li>
+              <li>Varytec colour previews; no-colour bands animate.</li>
+              <li>Robe pan/tilt to 530°/280°; Whex strobe overflow and duplicate level; UV's channel found as its dimmer; LED Lightbar's preview.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>FixtureType.kt</code>, <code>FixtureTypeRegistry.kt</code>, <code>bodies/archetype.ts</code></li>
+              <li>Each fixture file named</li>
+              <li><code>beamOptics.ts</code>, <code>FixtureModel.tsx</code>, <code>store/fixtures.ts</code></li>
+              <li><code>docs/fixtures-engineering.md</code> §"Beam vocabulary", its signature and fixture table; <code>stage-vis-engineering.md</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>New: every COLOUR option has a preview or is a no-colour band (D8).</li>
+              <li>Decoder: setting-backed zoom, <code>activeMax</code>.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> a Varytec beam is never black and the Robe zooms in three steps.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s6">
+        <span class="n">6</span>
+        <div class="body">
+          <div class="head"><h3>Strobe and closed shutters</h3><span class="tag">backend + frontend</span></div>
+          <p class="prose">Draw a shutter that is shut, and a strobe that strobes, safely.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li>Strobe kind and Hz on every STROBE property, from its manual where it has one.</li>
+              <li>The director's strobe factor: closed dark, strobe at rate, random and pulse on the same clock.</li>
+              <li>Above 3 Hz, a reduced-contrast shimmer.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>BandedStrobeChannel.kt</code>, <code>DmxFixtureSetting.kt</code>, each strobe fixture</li>
+              <li><code>FixtureModel.tsx</code>, <code>beamOptics.ts</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>Band decoding per fixture.</li>
+              <li>The flash limit, from elapsed time.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> a MAC 250 at strobe 0 is dark on screen as on the rig, and a 20 Hz strobe draws a shimmer.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s7">
+        <span class="n">7</span>
+        <div class="body">
+          <div class="head"><h3>Fixture commands</h3><span class="tag">backend + frontend</span></div>
+          <p class="prose">Take every reset and lamp control out of reach of composition.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li><code>@FixtureCommand</code> and <code>DmxCommand</code>, guarded beside triggers.</li>
+              <li>MAC 250 and Robe lamp and reset methods; the Revolution's five resets; the RESET options on the Varytec, Shehds, Fusion, Orbit and Slender.</li>
+              <li><code>POST patches/{pid}/commands/{command}</code>; the <i>Commands</i> menu; MCP refused by default.</li>
+              <li>A one-off startup strip of stored RESET options, logged.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>fixture/TriggerGuard.kt</code> and a new <code>FixtureCommand.kt</code></li>
+              <li>The seven fixture files</li>
+              <li><code>mcp/RemoteRequests.kt</code>, <code>state/InstallBootstrap.kt</code></li>
+              <li><code>docs/fixtures-engineering.md</code> §"@FixtureCommand"</li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>Every write boundary refuses a command by name.</li>
+              <li>The hold: band held, then released; busy refused.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> no Look, template, cue or programmer path can hold a reset, <i>Reset scroller</i> holds 147–152 for 3 s and drops, and the public listener refuses it.</p>
+        </div>
+      </article>
+
+      <article class="sess" id="s8">
+        <span class="n">8</span>
+        <div class="body">
+          <div class="head"><h3>Travel time</h3><span class="tag">backend + frontend</span></div>
+          <p class="prose">Draw a head moving as fast as it can, not instantly.</p>
+          <div class="cols">
+            <div><h4>Changes</h4><ul>
+              <li><code>travel</code> base speeds on the movers.</li>
+              <li><code>timing</code> on the Revolution's three channels: one second per step; 0 is the fixture's own fastest.</li>
+              <li>The director eases a displayed value per family toward the DMX value.</li>
+            </ul></div>
+            <div><h4>Files</h4><ul>
+              <li><code>FixtureType.kt</code>, <code>FixtureProperty.kt</code>, the mover fixtures</li>
+              <li><code>FixtureModel.tsx</code>, <code>profileHarness.ts</code></li>
+            </ul>
+            <h4>Tests</h4><ul>
+              <li>Easing from elapsed time passed in; reproducible in the harness.</li>
+            </ul></div>
+          </div>
+          <p class="done"><b>Done when</b> a Revolution with colour timing at 5 scrolls from frame 1 to 9 over 5 s, through the frames between.</p>
+        </div>
+      </article>
+    </div>
+
+    <section id="estimates">
+      <span class="eyebrow">D15</span>
+      <h2>Estimates register</h2>
+      <p class="prose">Every value below is declared with an <code>// Estimate:</code> comment at its source. The rig check (<code>FU-MANUAL-S4REV-OPTICS</code>, step numbers below) replaces each with a measurement.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Value</th><th>Estimate</th><th>Basis</th><th>Check</th></tr></thead>
+          <tbody>
+            <tr><td class="n">Zoom direction</td><td>DMX 0 wide</td><td>ChamSys ranges</td><td class="n">step 2</td></tr>
+            <tr><td class="n">Iris direction</td><td>DMX 0 open</td><td>ChamSys ranges</td><td class="n">step 3</td></tr>
+            <tr><td class="n">Focus range and direction</td><td>2–40 m, DMX 0 near</td><td>Default; manual silent</td><td class="n">FOCUS-DIRECTION</td></tr>
+            <tr><td class="n">Lens diameter</td><td>from the head's size</td><td>Manual gives the body, not the lens</td><td class="n">—</td></tr>
+            <tr><td class="n">Media frame bands</td><td>out below 128, in above</td><td>None</td><td class="n">step 5</td></tr>
+            <tr><td class="n">Frame → side</td><td>1 top, 2 bottom, 3 left, 4 right</td><td>None</td><td class="n">step 4</td></tr>
+            <tr><td class="n">Blade depth at 255</td><td>0.5 (to the centre)</td><td>None</td><td class="n">step 4</td></tr>
+            <tr><td class="n">Rotation sign and square</td><td>±45°, 128 square</td><td>Manual ±45°; ChamSys locates at 128</td><td class="n">step 4</td></tr>
+            <tr><td class="n">Wheel index range</td><td>360° over 16 bits</td><td>None</td><td class="n">step 6</td></tr>
+            <tr><td class="n">"Rotate &gt;&gt;" direction</td><td>forward</td><td>None</td><td class="n">step 6</td></tr>
+            <tr><td class="n">Rotate speed curve</td><td>linear to 30 RPM</td><td>Manual gives the top only</td><td class="n">step 6</td></tr>
+            <tr><td class="n">Scroller string</td><td>ETC stock 12</td><td>Manual's shipped string</td><td class="n">step 1</td></tr>
+            <tr><td class="n">Front-bay module</td><td>iris and wheel both live</td><td>Unknown (P3)</td><td class="n">step 1</td></tr>
+            <tr><td class="n">Pan and tilt direction</td><td>as annotated today</td><td>Manual silent</td><td class="n">step 7</td></tr>
+            <tr><td class="n">Depth-of-field gains</td><td>tuned per family</td><td>Judged in the harness</td><td class="n">session 1's check</td></tr>
+            <tr><td class="n">Travel base speeds</td><td>per type</td><td>Few manuals publish them</td><td class="n">session 8's check</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="wire">
+      <span class="eyebrow">The wire</span>
+      <h2>REST, WebSocket and MCP changes</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>S</th><th>Surface</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td class="k">1</td><td class="k">REST</td><td><code>POST /projects/{id}/programmer/focus</code> <code>{targets, point, fadeMs?, write?}</code> → <code>{written: [{target, value, distanceM}], skipped: [{target, reason}]}</code>. Skips a head with no focus channel, no declared range, no placement, or a point outside its range, by name.</td></tr>
+            <tr><td class="k">1</td><td class="k">MCP</td><td><code>aim_fixtures</code> gains <code>focus: true</code>: focus on the aim point.</td></tr>
+            <tr><td class="k">3</td><td class="k">REST</td><td><code>GET /api/rest/gels</code>: the gel library.</td></tr>
+            <tr><td class="k">3</td><td class="k">REST, MCP</td><td>Patch and placement bodies, <code>patch_fixtures</code> and <code>place_fixtures</code> gain <code>media</code>; <code>describe_rig</code> lists it.</td></tr>
+            <tr><td class="k">3</td><td class="k">Sync</td><td><code>formatVersion</code> 22, with its <code>docs/sync-engineering.md</code> entry.</td></tr>
+            <tr><td class="k">7</td><td class="k">REST</td><td><code>POST /projects/{id}/patches/{pid}/commands/{command}</code>; 409 <code>COMMAND_BUSY</code>; 403 <code>REMOTE_COMMANDS_DISABLED</code> on the public listener unless allowed.</td></tr>
+            <tr><td class="k">7</td><td class="k">MCP</td><td><code>run_fixture_command</code>, refused unless an admin allows it; <code>describe_rig</code> lists commands.</td></tr>
+            <tr><td class="k">all</td><td class="k">Descriptors</td><td>Every new annotation field, optional on the wire. Absent means today's behaviour.</td></tr>
+            <tr><td class="k">—</td><td class="k">WebSocket</td><td>None. A command's hold is a REST call that answers when it ends.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="risks">
+      <span class="eyebrow">Risks and limits</span>
+      <h2>What could go wrong, and what is left out</h2>
+      <div class="grid2">
+        <div class="stack">
+          <h4>Scope honesty</h4>
+          <ul class="plain small">
+            <li><b>Most Revolution numbers are estimates.</b> Sixteen values rest on ChamSys, defaults or judgement.</li>
+            <li><b>The manual may be the wrong one.</b> It covers pre-May-2007 units.</li>
+            <li><b>One of the iris and the wheel is dead</b> on the real unit, until the front bay is known.</li>
+            <li><b>Depth of field is tuned by eye.</b></li>
+            <li><b>Gobos on surfaces have an unmeasured cost</b>; the fallback narrows them to the selection.</li>
+            <li><b>Travel speeds are mostly guesses.</b></li>
+          </ul>
+          <h4>Migration</h4>
+          <ul class="plain small">
+            <li>No DB migration: <code>media</code> is additive.</li>
+            <li>Session 7's strip of stored RESET options runs once at startup, logged.</li>
+            <li>Project 15's fitted media is Chris's to set.</li>
+          </ul>
+        </div>
+        <div class="stack">
+          <h4>Out of scope</h4>
+          <ul class="plain small">
+            <li>The Revolution's 14, 15 and 23-channel modes.</li>
+            <li>Custom gobo artwork.</li>
+            <li>Shadow maps (<code>FU-STAGE-QUALITY-TIER</code>'s other half).</li>
+            <li>Dragging blades on the pool (<code>FU-STAGE-FOCUS-ON-POOL</code>).</li>
+            <li>Lasers; haze that follows the hazer.</li>
+            <li>LED and movement programs as canned animations.</li>
+            <li>A Hertz intent in templates.</li>
+          </ul>
+          <h4>Follow-ups to record as sessions land</h4>
+          <ul class="plain small">
+            <li><code>FU-S4REV-PERSONALITIES</code> (session 0)</li>
+            <li><code>FU-GOBO-CUSTOM-IMAGES</code> (session 3)</li>
+            <li><code>FU-STAGE-PROGRAM-MACROS</code> (session 5)</li>
+          </ul>
+          <h4>Open questions, for the rig</h4>
+          <ul class="plain small">
+            <li>Which module is in each unit's front bay, and what is loaded in it?</li>
+            <li>Is the scroller string ETC's stock 12?</li>
+            <li>Are the units pre- or post-May-2007?</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>Sources: ETC Source Four Revolution user manual 7160M1200 Rev E; the ChamSys head capture of 2026-04-26; the TCH 2026 patch export; project 15 as stored on the desk; the code at <code>07e473f0</code>.</span>
+      <span>Swatches and the illustrative focus curve are approximations. The engineering plan is the authority.</span>
+    </footer>
+  </main>
+</div>
