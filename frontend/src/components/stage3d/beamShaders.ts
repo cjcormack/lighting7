@@ -2,6 +2,7 @@ import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3, Vector4
 import type { DataArrayTexture } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
+import { LANDING_GLSL } from './scene/landing'
 import {
   FOCUS_LOD_MAX,
   FOCUS_SOFT_BLUR,
@@ -103,7 +104,7 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 // a beam hides it; the back face while it starts inside, where the front faces are behind the eye
 // (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). The true
 // bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
-// clamped by the axial range, the plane of the surface the beam landed on, the floor, the upstage
+// clamped by the axial range, where the beam landed (`scene/landing.ts`), the floor, the upstage
 // and side walls, the window's haze plane and camera-ray region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
 // through a box — then sampled with a per-pixel interleaved-gradient jitter so banding dissolves
 // under bloom. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
@@ -120,7 +121,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec4 aBeamFx;
   attribute vec4 aBeamShape;
   attribute vec4 aBeamGate;
-  // The plane of the surface the beam landed on, (normal towards the light, w): nothing past it.
+  // Where the beam landed: two planes packed (scene/landing.ts), nothing behind both.
   attribute vec4 aBeamLand;
 
   varying vec3 vWorldPos;
@@ -135,18 +136,22 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   varying float vBeamLen;
   varying vec4 vBeamShape;
   varying vec4 vBeamLand;
+  varying vec4 vBeamLandEdge;
   // Flat: the blades are packed integers (beamMask.ts's packBlades), which interpolation — even of
   // three equal corners — could nudge off by an ulp and unpack as the wrong blade.
   flat varying vec2 vBeamBlades;
+
+  ${LANDING_GLSL}
 
   void main() {
     vBeamShape = aBeamShape;
     vBeamBlades = aBeamGate.zw;
     // The drawn length is the instance's y scale, from the apex: far enough for the whole cone to
-    // cross the plane it landed on (the director's coneLandingDepth), or BEAM_LENGTH past its
+    // cross the planes it landed on (the director's coneLandingDepth), or BEAM_LENGTH past its
     // aperture in open air.
     vBeamLen = length(instanceMatrix[1].xyz);
-    vBeamLand = aBeamLand;
+    vBeamLand = landPlane(aBeamLand.x, aBeamLand.y);
+    vBeamLandEdge = landPlane(aBeamLand.z, aBeamLand.w);
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
     vBeamOrigin = aBeamOrigin;
@@ -193,6 +198,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying float vBeamLen;
   varying vec4 vBeamShape;
   varying vec4 vBeamLand;
+  varying vec4 vBeamLandEdge;
   flat varying vec2 vBeamBlades;
 
   ${RAY_OBB_T_GLSL}
@@ -208,6 +214,13 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     }
     float tc = -base / rate;
     if (rate > 0.0) { t0 = max(t0, tc); } else { t1 = min(t1, tc); }
+  }
+
+  // The span of t where base + t*rate < 0 — behind a plane — as (from, to); empty when from >= to.
+  vec2 behindSpan(float base, float rate) {
+    if (abs(rate) < 1e-6) return base < 0.0 ? vec2(-1e9, 1e9) : vec2(1.0, -1.0);
+    float tc = -base / rate;
+    return rate > 0.0 ? vec2(-1e9, tc) : vec2(tc, 1e9);
   }
 
   void main() {
@@ -296,14 +309,22 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // Axial range [near, vBeamLen]: from the aperture to where the beam lands. axial(t) = cod + t*vd.
     clampHalfSpace(cod - near, vd, tEnter, tExit);                // axial >= near
     clampHalfSpace(vBeamLen - cod, -vd, tEnter, tExit);           // axial <= L
-    // Nothing past the plane of the surface the beam landed on, however obliquely it lands.
-    clampHalfSpace(dot(camPos, vBeamLand.xyz) + vBeamLand.w, dot(rayDir, vBeamLand.xyz), tEnter, tExit);
     // Floor, upstage wall, and how far this window's haze reaches (hazeClipFor).
     clampHalfSpace(camPos.y - uFloorY, rayDir.y, tEnter, tExit);  // y >= floor
     clampHalfSpace(camPos.z - uWallZ, rayDir.z, tEnter, tExit);   // z >= wall
     clampHalfSpace(camPos.x - uSideX.x, rayDir.x, tEnter, tExit); // x >= the SR side wall
     clampHalfSpace(uSideX.y - camPos.x, -rayDir.x, tEnter, tExit); // x <= the SL side wall
     clampHalfSpace(dot(camPos, uHazeClip.xyz) + uHazeClip.w, dot(rayDir, uHazeClip.xyz), tEnter, tExit);
+    // Nothing behind both landing planes, however obliquely the beam lands. Behind one is a half-line
+    // of the ray and behind both their overlap: at an end of the chord it trims it, and inside it
+    // (an edge seen side-on) the march skips it.
+    vec2 landGap = behindSpan(dot(camPos, vBeamLand.xyz) - vBeamLand.w, dot(rayDir, vBeamLand.xyz));
+    vec2 edgeGap = behindSpan(dot(camPos, vBeamLandEdge.xyz) - vBeamLandEdge.w, dot(rayDir, vBeamLandEdge.xyz));
+    landGap = vec2(max(landGap.x, edgeGap.x), min(landGap.y, edgeGap.y));
+    if (landGap.x < landGap.y) {
+      if (landGap.x <= tEnter) { tEnter = max(tEnter, landGap.y); landGap = vec2(1.0, -1.0); }
+      else if (landGap.y >= tExit) { tExit = min(tExit, landGap.x); landGap = vec2(1.0, -1.0); }
+    }
 
     // Cheap rejection first: a chord the clamps have already emptied must not
     // pay for the occlusion loop below.
@@ -338,6 +359,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     for (int i = 0; i < MAX_VOL_STEPS; i++) {
       if (i >= uVolSteps) break;
       float t = mix(tEnter, tExit, (float(i) + jitter) / float(uVolSteps));
+      if (t > landGap.x && t < landGap.y) continue;
       vec3 p = camPos + rayDir * t;
       vec3 rel = p - O;
       float relLen = max(length(rel), 1e-4);
