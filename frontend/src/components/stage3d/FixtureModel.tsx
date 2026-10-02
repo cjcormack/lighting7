@@ -173,13 +173,14 @@ const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz:
 
 /**
  * Where a beam from [origin] along [dir] lands: the surface hit (in the scratch object) and the
- * length to draw its cone — to the surface, or [BEAM_LENGTH], whichever is nearer. The light itself
- * reaches the surface however far it is ([MAX_THROW_M]); only the drawn cone keeps the desk's
- * stylised length, so a front-of-house wash lands on the stage without a 16 m cone of haze filling
- * the hall between. Cast from the **aperture**, not the apex behind it.
+ * length to draw its cone — to the surface, however far it is within [MAX_THROW_M], so a follow spot
+ * on a balcony reaches the stage; or the desk's stylised [BEAM_LENGTH] in open air. How much of the
+ * cone shows in the air is the window's Haze setting: Stage clips it at the proscenium
+ * (`hazeClipFor`), Everywhere and the Positions plan draw it whole. Cast from the **aperture**, not
+ * the apex behind it.
  */
-function landBeam(
-  emitters: EmittersHandle,
+export function landBeam(
+  emitters: Pick<EmittersHandle, 'reach'>,
   origin: Vector3,
   dir: Vector3,
 ): { hit: SurfaceHit | null; length: number } {
@@ -191,7 +192,15 @@ function landBeam(
   SCRATCH_SURFACE_HIT.nx = SCRATCH_BEAM_HIT.nx
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
-  return { hit: SCRATCH_SURFACE_HIT, length: Math.min(t, BEAM_LENGTH) }
+  return { hit: SCRATCH_SURFACE_HIT, length: t }
+}
+
+/**
+ * The throw a focus channel racks over, from [landBeam]'s length: [BEAM_LENGTH], or the beam's own
+ * throw where it lands further away, so full focus is sharp on what a long throw lands on.
+ */
+export function focusRangeM(landedLength: number): number {
+  return Math.max(BEAM_LENGTH, landedLength)
 }
 
 /**
@@ -1035,11 +1044,11 @@ function useBeamDirector({
     }
     const tanHalf = Math.tan(MathUtils.degToRad(beamDeg) / 2)
 
-    // Focus maps to a focal-plane distance from the aperture; the shaders soften the edge by how
-    // far a surface or a sample sits from it. Without a focus channel the edge is the family's
-    // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
+    // Focus maps to a focal-plane distance from the aperture, per lobe over its own throw
+    // ([focusRangeM]); the shaders soften the edge by how far a surface or a sample sits from it.
+    // Without a focus channel the edge is the family's softness (`bodies/archetype.ts`), moved
+    // towards soft by a frost channel.
     const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
-    const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
     const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
     const edge = 1 - softness
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
@@ -1124,7 +1133,6 @@ function useBeamDirector({
     const beam = SCRATCH_BEAM
     beam.cosHalf = geom.cosHalfBeam
     beam.edge = edge
-    beam.focusDist = focusDist
     beam.iris = iris
     beam.bladesA = multi ? 0 : blades[0]
     beam.bladesB = multi ? 0 : blades[1]
@@ -1178,6 +1186,8 @@ function useBeamDirector({
       // to it, and the light table carries it as the plane the surfaces stop lighting behind.
       const landed = landBeam(emitters, SCRATCH_APERTURE, lobeDir)
       const length = near + landed.length
+      const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
+      beam.focusDist = focusDist
       SCRATCH_BX.copy(SCRATCH_RIGHT).addScaledVector(lobeDir, -SCRATCH_RIGHT.dot(lobeDir)).normalize()
       SCRATCH_BY.crossVectors(lobeDir, SCRATCH_BX)
       const far = length * tanHalf
@@ -1249,6 +1259,7 @@ function useBeamDirector({
         const near = apexDistanceM(halfWidth, beamDeg)
         SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(dir, -near)
         const landed = landBeam(emitters, SCRATCH_APERTURE, dir)
+        const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
         writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }

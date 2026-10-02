@@ -2,7 +2,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Quaternion, Vector3 } from 'three'
-import { ColourSync, composeBeamHull, lensLocalMatrix, pixelsPerMetre, resolveCellColour, staticHeadQuaternion } from './FixtureModel'
+import {
+  ColourSync,
+  composeBeamHull,
+  focusRangeM,
+  landBeam,
+  lensLocalMatrix,
+  pixelsPerMetre,
+  resolveCellColour,
+  staticHeadQuaternion,
+} from './FixtureModel'
+import { BEAM_LENGTH } from './emitterLayout'
+import { resolveFocusDistance } from './beamOptics'
+import { beamReach, boxCollider, type BeamHit } from './scene/beamReach'
 import { apexDistanceM } from './bodies/archetype'
 import { beamMask, packBlades } from './beamMask'
 import { bodyShownFor, LOD_BILLBOARD_BELOW_PX, LOD_SIMPLE_BELOW_PX } from './bodies/StageBodies'
@@ -170,6 +182,36 @@ describe('the beam hull and the lenses', () => {
     expect(origin.y).toBeLessThan(-0.3)
     const up = lensLocalMatrix({ ...cell, y: 0.3 }, 1, new Matrix4())
     expect(new Vector3(0, 0, 1).transformDirection(up).y).toBeCloseTo(1, 9)
+  })
+})
+
+describe('where a beam is drawn to', () => {
+  // A stage deck's top at y 0, 7 m deep from the downstage edge (z 0) upstage (−z).
+  const deck = [boxCollider(0, -0.5, -3.5, 5, 0.5, 3.5)]
+  const emitters = {
+    reach: (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, deck, maxT, out),
+  }
+
+  it('reaches the stage from a balcony 17 m out, however far past BEAM_LENGTH that is', () => {
+    const balcony = new Vector3(0, 2.8, 17.3)
+    const dir = new Vector3(0, 0, -2).sub(balcony).normalize()
+    const landed = landBeam(emitters, balcony, dir)
+    expect(landed.hit).not.toBeNull()
+    expect(landed.length).toBeGreaterThan(BEAM_LENGTH)
+    expect(landed.length).toBeCloseTo(new Vector3(0, 0, -2).distanceTo(balcony), 6)
+  })
+
+  it('keeps the stylised length in open air', () => {
+    const landed = landBeam(emitters, new Vector3(0, 3, 0), new Vector3(0, 1, 0))
+    expect(landed).toEqual({ hit: null, length: BEAM_LENGTH })
+  })
+
+  it('racks focus over a long throw, so full focus is sharp where the follow spot lands', () => {
+    const balcony = new Vector3(0, 2.8, 17.3)
+    const landed = landBeam(emitters, balcony, new Vector3(0, 0, -2).sub(balcony).normalize())
+    expect(resolveFocusDistance(1, focusRangeM(landed.length))).toBeCloseTo(landed.length, 6)
+    // A throw inside BEAM_LENGTH racks over BEAM_LENGTH, as it always has.
+    expect(focusRangeM(4)).toBe(BEAM_LENGTH)
   })
 })
 
