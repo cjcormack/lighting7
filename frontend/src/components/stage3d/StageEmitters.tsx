@@ -9,6 +9,7 @@ import {
   Matrix4,
   ShaderMaterial,
   Vector3,
+  type Vector4,
 } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
@@ -82,6 +83,16 @@ export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry
 export interface BeamClip {
   floorZ: number
   wallY: number
+}
+
+/**
+ * Where the air shows a beam, as a vertical half-plane in lighting metres: haze where
+ * `nx·X + ny·Y ≥ d`, `(nx, ny)` a unit normal pointing upstage. Null draws haze everywhere.
+ */
+export interface HazePlane {
+  nx: number
+  ny: number
+  d: number
 }
 
 /**
@@ -261,8 +272,10 @@ interface StageEmittersProps {
   clip: BeamClip
   /** How much of the light table the surfaces take (`scene/sceneView.ts`). */
   lightBudget: number
-  /** Whether the air shows the beams — the View menu's Haze. */
+  /** Whether the air shows the beams — the View menu's Haze, unless it is Off. */
   haze: boolean
+  /** How far the air shows them (`hazeClipFor`); null everywhere. */
+  hazeClip: HazePlane | null
   /** The haze governor's tier: how much the volumes may march (`scene/hazeGovernor.ts`). */
   hazeQuality: HazeQuality
   /**
@@ -291,6 +304,7 @@ export function StageEmitters({
   clip,
   lightBudget,
   haze,
+  hazeClip,
   hazeQuality,
   statsRef,
   children,
@@ -329,6 +343,11 @@ export function StageEmitters({
     // A uniform write is not a prop change, so the `demand` frameloop has to be asked.
     invalidate()
   }, [materials, regionGeometry, regionCount, clip.wallY, clip.floorZ, invalidate])
+
+  useEffect(() => {
+    writeHazeClip(materials, hazeClip)
+    invalidate()
+  }, [materials, hazeClip, invalidate])
 
   // Pre-allocate buffers + InstancedMesh objects sized by the layout. Rebuilds
   // when the rig's needs change — a patch edit. A region moved is a uniform write (above).
@@ -532,6 +551,18 @@ export function writeRegionUniforms(
     }
     u.uNumRegions.value = regionCount
     u.uWallZ.value = -wallY
+  }
+}
+
+/**
+ * Write how far the haze reaches into the beam materials: [plane] in lighting metres, as three's
+ * `dot(p, n) + w ≥ 0` — lighting (X, Y) is three (x, −z). Null clips nothing.
+ */
+export function writeHazeClip(materials: ReadonlyArray<ShaderMaterial>, plane: HazePlane | null): void {
+  for (const mat of materials) {
+    const v = mat.uniforms.uHazeClip.value as Vector4
+    if (plane == null) v.set(0, 0, 0, 1)
+    else v.set(plane.nx, 0, -plane.ny, -plane.d)
   }
 }
 

@@ -25,7 +25,7 @@ import {
   isStageLabelMode,
   type StageLabelMode,
 } from './stageLabels'
-import type { SceneLayer, SceneLayers } from './scene/sceneView'
+import { isHazeExtent, type HazeExtent, type SceneLayer, type SceneLayers } from './scene/sceneView'
 import { LIGHT_BUDGETS } from './scene/lightTable'
 
 /** The scene's per-window layers, in the order `Stage.dc.html`'s View menu lists them under Show. */
@@ -33,7 +33,13 @@ const SCENE_LAYER_ITEMS: ReadonlyArray<{ layer: SceneLayer; label: string; hint:
   { layer: 'venue', label: 'Venue', hint: 'The room: walls, proscenium, the house' },
   { layer: 'set', label: 'Set', hint: "This show's scenery" },
   { layer: 'seating', label: 'Seating', hint: 'The seats, whichever layer they are in' },
-  { layer: 'haze', label: 'Haze', hint: 'Beams in the air; off leaves only the light that lands' },
+]
+
+/** How far the air shows the beams. */
+const HAZE_ITEMS: ReadonlyArray<{ extent: HazeExtent; label: string; hint: string }> = [
+  { extent: 'off', label: 'Off', hint: 'Only the light that lands' },
+  { extent: 'stage', label: 'Stage', hint: 'Upstage of the proscenium, or the stage edge' },
+  { extent: 'everywhere', label: 'Everywhere', hint: 'The house too' },
 ]
 
 interface StageViewMenuProps {
@@ -54,11 +60,12 @@ interface StageViewMenuProps {
    */
   sourceStatus?: Partial<Record<VisSource, string | null>>
   /**
-   * The scene's layers — Venue, Set, Seating, Haze (stage-view plan session 3) — per window. Absent
-   * where they mean nothing.
+   * The scene's layers — Venue, Set, Seating, and how far the Haze reaches (stage-view plan
+   * session 3) — per window. Absent where they mean nothing.
    */
   layers?: SceneLayers
   setLayer?: (layer: SceneLayer, on: boolean) => void
+  setHaze?: (extent: HazeExtent) => void
   /** How many lights the surfaces take, per browser; absent where there are no lit surfaces. */
   lightBudget?: number
   setLightBudget?: (budget: number) => void
@@ -74,6 +81,7 @@ export function StageViewMenu({
   sourceStatus,
   layers,
   setLayer,
+  setHaze,
   lightBudget,
   setLightBudget,
 }: StageViewMenuProps) {
@@ -147,6 +155,27 @@ export function StageViewMenu({
               {label}
             </DropdownMenuCheckboxItem>
           ))}
+        {layers != null && setHaze != null && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Haze</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={layers.haze}
+              onValueChange={(v) => {
+                if (isHazeExtent(v)) setHaze(v)
+              }}
+            >
+              {HAZE_ITEMS.map(({ extent, label, hint }) => (
+                <DropdownMenuRadioItem key={extent} value={extent} className="items-start">
+                  <span className="flex flex-col gap-0.5">
+                    <span>{label}</span>
+                    <span className="text-xs text-muted-foreground">{hint}</span>
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel>Labels</DropdownMenuLabel>
         <DropdownMenuRadioGroup

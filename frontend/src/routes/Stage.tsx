@@ -72,6 +72,7 @@ import {
   viewpointFromCamera,
 } from '../components/stage3d/savedViewpoints'
 import {
+  setHazeExtent,
   setLightBudget,
   setSceneLayer,
   useLightBudget,
@@ -1224,6 +1225,7 @@ export function Stage() {
             sourceStatus={{ nextGo: nextGoStatus }}
             layers={sceneLayers}
             setLayer={setSceneLayer}
+            setHaze={setHazeExtent}
             lightBudget={lightBudget}
             setLightBudget={setLightBudget}
           />

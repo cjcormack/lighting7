@@ -448,8 +448,18 @@ what it measured (`endRun`), so the recovery clock never counts through idle tim
 never steps on the last one's average; the tier itself is kept. A gap over a second is a pause, not
 a frame — deliberately far above any frame worth governing, because a software renderer at ~700 ms
 a frame is exactly the case the rule is for. The light budget is the viewer's and never touched by
-it. The View menu's **Haze** switches the air off for the window — the cone and volume meshes are
-then not drawn at all, rather than marched to nothing; the container carries `data-haze-tier`.
+it. The container carries `data-haze-tier`.
+
+The View menu's **Haze** is how far the air shows the beams, per window: **Off**, **Stage** (the
+default) or **Everywhere**. Off does not draw the volume mesh at all, rather than marching it to
+nothing. Stage keeps the haze upstage of the most downstage shown proscenium, along its own turn, or
+of the stage's downstage edge where none is modelled (`hazeClipFor` in `scene/stageSurfaces.ts`): a
+front-of-house beam is otherwise a cone through the whole house, and the house is where the
+audience-side camera looks through to see the stage. The plane is read from the stored elements, so
+hiding Venue does not move it, and reaches the shader as one more chord clamp (`uHazeClip`) beside
+the floor and the wall, so every march step lands in the haze that is drawn. A canvas that draws no
+scene (the Positions plan) is never clipped. A window that stored the old on/off reads `false` as
+Off and anything else as Stage.
 
 The haze *level* is still `washConfig.ts`'s constant. The plan wanted it to follow the hazer's DMX,
 but nothing in a rig says which fixture is the hazer (the Commemoration Hall's is a generic dimmer),
@@ -732,7 +742,8 @@ prop, and every other prop means what it does on screen:
   itself; a saved view and an unsaved seat land through `resolveSavedViewpoint` /
   `resolveSeatViewpoint`, the maths the picker lands with. `orbit` and `eye` are the poses a fresh
   window opens on (`defaultOrbitPose`, and the eye seeded from it), not any window's current pose.
-- **The scene** is `showScene` with the default layers (Venue, Set, Seating, Haze all on), the
+- **The scene** is `showScene` with the default layers (Venue, Set and Seating on, Haze on the
+  Stage), the
   default view flags **minus labels** — the label layer is DOM over the canvas, so a frame read off
   the canvas never had them — and the machine's light budget, read, not written.
 - **The light** comes through the same `StageChannelSourceProvider` as the Stage view, now with a

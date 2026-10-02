@@ -5,8 +5,8 @@ import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamRe
 import { buildElement } from './builders'
 import { EDGE_IRIS_STEPS, LIGHT_TEXELS, LightTable, makeLightRow, packEdgeIris, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
-import { beamClipFor, drawsRoom, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
-import { DEFAULT_SCENE_LAYERS, elementInLayers } from './sceneView'
+import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
+import { DEFAULT_SCENE_LAYERS, elementInLayers, parseSceneLayers } from './sceneView'
 
 function element(fields: Partial<StageElementDto>): StageElementDto {
   return {
@@ -220,5 +220,53 @@ describe('what the view draws and casts at', () => {
     expect(bounds.min.z).toBeLessThanOrEqual(-0.95)
     expect(bounds.min.y).toBeLessThanOrEqual(-18.4)
     expect(bounds.max.z).toBeGreaterThanOrEqual(4.6)
+  })
+})
+
+describe('how far the haze reaches', () => {
+  const pros = (fields: Partial<StageElementDto>) => element({ kind: 'PROSCENIUM', ...fields })
+
+  it('reaches the house only when asked to', () => {
+    expect(hazeClipFor('everywhere', [pros({ positionY: 0.3 })])).toBeNull()
+    expect(hazeClipFor('off', [])).toBeNull()
+  })
+
+  it("stops at the stage's downstage edge without a proscenium", () => {
+    expect(hazeClipFor('stage', [element({ kind: 'ROOM', positionY: -9 })])).toEqual({ nx: 0, ny: 1, d: 0 })
+  })
+
+  it('stops at the most downstage proscenium that is shown', () => {
+    const clip = hazeClipFor('stage', [
+      pros({ uuid: 'inner', positionY: 2 }),
+      pros({ uuid: 'gone', positionY: -1, hidden: true }),
+      pros({ uuid: 'outer', positionY: 0.3 }),
+    ])!
+    expect(clip.nx).toBeCloseTo(0, 12)
+    expect(clip.ny).toBe(1)
+    expect(clip.d).toBeCloseTo(0.3, 12)
+  })
+
+  it("follows a turned proscenium's line, and points upstage whichever way round it stands", () => {
+    const clip = hazeClipFor('stage', [pros({ positionX: 1, positionY: 2, yawDeg: 30 })])!
+    const yaw = Math.PI / 6
+    expect(clip.nx).toBeCloseTo(-Math.sin(yaw), 12)
+    expect(clip.ny).toBeCloseTo(Math.cos(yaw), 12)
+    // The wall's own origin is on the line.
+    expect(clip.nx * 1 + clip.ny * 2 - clip.d).toBeCloseTo(0, 12)
+    const flipped = hazeClipFor('stage', [pros({ positionX: 1, positionY: 2, yawDeg: 210 })])!
+    expect(flipped.nx).toBeCloseTo(clip.nx, 12)
+    expect(flipped.ny).toBeCloseTo(clip.ny, 12)
+    expect(flipped.d).toBeCloseTo(clip.d, 12)
+  })
+})
+
+describe('the stored scene layers', () => {
+  it('keeps a haze extent, reads an old off as Off, and falls back to Stage', () => {
+    expect(parseSceneLayers({ haze: 'everywhere' }).haze).toBe('everywhere')
+    expect(parseSceneLayers({ haze: false }).haze).toBe('off')
+    expect(parseSceneLayers({ haze: true }).haze).toBe('stage')
+    expect(parseSceneLayers({ haze: 'fog' }).haze).toBe('stage')
+    expect(parseSceneLayers(null)).toEqual(DEFAULT_SCENE_LAYERS)
+    expect(parseSceneLayers({ venue: false, haze: 'off' })).toEqual({ ...DEFAULT_SCENE_LAYERS, venue: false, haze: 'off' })
   })
 })

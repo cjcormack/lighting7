@@ -18,6 +18,7 @@ import {
   dirtyGroups,
   flushDirty,
   makeHandle,
+  writeHazeClip,
   writeRegionUniforms,
   type BeamWrite,
   type BuiltEmitters,
@@ -305,6 +306,21 @@ describe('region uniforms', () => {
     expect(mat.uniforms.uNumRegions.value).toBe(1)
     // The wall the beams clip to, in three's −z: 8 m upstage.
     expect(mat.uniforms.uWallZ.value).toBe(-8)
+  })
+
+  it('clip the haze to a plane given in lighting metres, and nowhere without one', () => {
+    const mat = makeVolumeMaterial(getGoboTexture())
+    const clip = mat.uniforms.uHazeClip.value as { x: number; y: number; z: number; w: number }
+    // The default is no plane: 0·p + 1 ≥ 0 everywhere.
+    expect([clip.x, clip.y, clip.z, clip.w]).toEqual([0, 0, 0, 1])
+    // Upstage of lighting Y = 0.3: three's z = −Y, so the haze is where −z − 0.3 ≥ 0.
+    writeHazeClip([mat], { nx: 0, ny: 1, d: 0.3 })
+    expect([clip.x, clip.y, clip.z, clip.w]).toEqual([0, 0, -1, -0.3])
+    const at = (x: number, y: number, z: number) => clip.x * x + clip.y * y + clip.z * z + clip.w
+    expect(at(0, 2, -1)).toBeGreaterThan(0) // 1 m upstage, in the haze
+    expect(at(0, 2, 3)).toBeLessThan(0) // 3 m into the house, clear
+    writeHazeClip([mat], null)
+    expect([clip.x, clip.y, clip.z, clip.w]).toEqual([0, 0, 0, 1])
   })
 
   it('centre a region half its thickness below its deck', () => {

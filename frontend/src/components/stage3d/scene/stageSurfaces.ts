@@ -1,9 +1,9 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import type { LightingBounds } from '../stageCameras'
-import type { BeamClip, RegionGeometry, StageDims } from '../StageEmitters'
+import type { BeamClip, HazePlane, RegionGeometry, StageDims } from '../StageEmitters'
 import { boxCollider, elementColliders, type Collider } from './beamReach'
 import { buildElement } from './builders'
-import { elementInLayers, type SceneLayers } from './sceneView'
+import { elementInLayers, type HazeExtent, type SceneLayers } from './sceneView'
 import type { BuildContext, ElementBuild } from './sceneParts'
 import type { SceneBuild } from './StageSceneElements'
 
@@ -111,6 +111,35 @@ export function beamClipFor(stage: StageDims, builds: readonly SceneBuild[]): Be
     wallY = Math.max(wallY, element.positionY + reach)
   }
   return { floorZ, wallY }
+}
+
+/**
+ * Where a window's haze stops. *Stage* is upstage of the proscenium — the most downstage one, by its
+ * own turn — or of the stage's downstage edge where none is modelled. Read from the stored elements,
+ * not the drawn ones, so hiding the Venue layer does not move the haze. Null for *everywhere* and
+ * *off* (whose beams are not drawn at all).
+ */
+export function hazeClipFor(
+  extent: HazeExtent,
+  elements: readonly Pick<StageElementDto, 'kind' | 'hidden' | 'positionX' | 'positionY' | 'yawDeg'>[],
+): HazePlane | null {
+  if (extent !== 'stage') return null
+  let pros: (typeof elements)[number] | null = null
+  for (const e of elements) {
+    if (e.kind !== 'PROSCENIUM' || e.hidden) continue
+    if (pros == null || e.positionY < pros.positionY) pros = e
+  }
+  if (pros == null) return { nx: 0, ny: 1, d: 0 }
+  // The wall's own +Y, turned by +yaw (anticlockwise from above, as `elementColliders` turns it),
+  // and kept pointing upstage whichever way round the wall was placed.
+  const yaw = (pros.yawDeg * Math.PI) / 180
+  let nx = -Math.sin(yaw)
+  let ny = Math.cos(yaw)
+  if (ny < 0) {
+    nx = -nx
+    ny = -ny
+  }
+  return { nx, ny, d: nx * pros.positionX + ny * pros.positionY }
 }
 
 /** The drawn venue and set as one lighting-space box, for how deep a section sees; null when none. */

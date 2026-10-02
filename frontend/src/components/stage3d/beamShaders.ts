@@ -1,4 +1,4 @@
-import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3 } from 'three'
+import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three'
 import type { DataArrayTexture } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
@@ -101,10 +101,10 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 // a beam hides it; the back face while it starts inside, where the front faces are behind the eye
 // (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). The true
 // bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
-// clamped by the axial range, the floor, the upstage wall, and camera-ray region occlusion — the
-// depth test hides a beam behind something, but cannot cut one that passes through a box — then
-// sampled with a per-pixel interleaved-gradient jitter so banding dissolves under bloom. Each sample
-// is shaped by `beamMask`: the field edge, the iris and the softness.
+// clamped by the axial range, the floor, the upstage wall, the window's haze plane and camera-ray
+// region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
+// through a box — then sampled with a per-pixel interleaved-gradient jitter so banding dissolves
+// under bloom. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
 const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
@@ -159,6 +159,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_VOL_STEPS ${MAX_VOL_STEPS}
   uniform float uFloorY;
   uniform float uWallZ;
+  // Where the air shows the beam: dot(p, xyz) + w >= 0. (0, 0, 0, 1) everywhere.
+  uniform vec4 uHazeClip;
   uniform float uHaze;
   uniform sampler2DArray uGobo;
   uniform int uVolSteps;
@@ -284,9 +286,10 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // Axial range [near, vBeamLen]: from the aperture to where the beam lands. axial(t) = cod + t*vd.
     clampHalfSpace(cod - near, vd, tEnter, tExit);                // axial >= near
     clampHalfSpace(vBeamLen - cod, -vd, tEnter, tExit);           // axial <= L
-    // Floor and upstage wall.
+    // Floor, upstage wall, and how far this window's haze reaches (hazeClipFor).
     clampHalfSpace(camPos.y - uFloorY, rayDir.y, tEnter, tExit);  // y >= floor
     clampHalfSpace(camPos.z - uWallZ, rayDir.z, tEnter, tExit);   // z >= wall
+    clampHalfSpace(dot(camPos, uHazeClip.xyz) + uHazeClip.w, dot(rayDir, uHazeClip.xyz), tEnter, tExit);
 
     // Cheap rejection first: a chord the clamps have already emptied must not
     // pay for the occlusion loop below.
@@ -373,6 +376,7 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
     uniforms: {
       uFloorY: { value: 0.0 },
       uWallZ: { value: NO_WALL_Z },
+      uHazeClip: { value: new Vector4(0, 0, 0, 1) },
       uHaze: { value: HAZE_LEVEL },
       uGobo: { value: gobo },
       uVolSteps: { value: VOLUMETRIC_STEPS },
