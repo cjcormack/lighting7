@@ -16,7 +16,7 @@ the HTML version for human readers is [`fixture-optics.html`](fixture-optics.htm
 | File | What it is |
 | --- | --- |
 | `INDEX.md` | This record. |
-| `fixture-optics.html` | The plan and the survey as one page, for engineers. Where it and the plan disagree, the plan wins. There is a live copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk>, private to Chris; the file here is the authority. |
+| `fixture-optics.html` | The plan and the survey as one page, for engineers. Where it and the plan disagree, the plan wins. There is a live copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk>; the file here is the authority. |
 
 ## Sources
 

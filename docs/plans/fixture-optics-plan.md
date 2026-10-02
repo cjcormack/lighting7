@@ -4,8 +4,7 @@
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
-> copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk> (private to Chris; the checked-in file is the
-> authority).
+> copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk> (the checked-in file is the authority).
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins.
 
@@ -159,7 +158,8 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 ### Session 0 — the Revolution, corrected (backend)
 
 - **Zoom:** `degMin = 35.0, degMax = 15.0` (DMX 0 wide, per ChamSys; the manual's nominal range).
-- **Body:** `lensDiameterM` and dimensions from the manual (head 317 mm wide, 344 mm deep).
+- **Body:** dimensions from the manual (head 317 mm wide, 344 mm deep) and an estimated
+  `lensDiameterM` from them; the manual gives no lens size.
 - **Gel scroller:** category `COLOUR`, `GelFrame` options carrying the stock string's previews and
   names — frame 0 and 13 open, then R02, R05, R09, R54, R357, R36, R25, L203, L201, R68, R88,
   L-HT115.
