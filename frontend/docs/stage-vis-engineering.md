@@ -409,13 +409,16 @@ without a room — the back wall and the catch floor:
   2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m) and writes the first
   hit's plane into the light's fourth texel. The surface shader lights nothing behind that plane
   (`REACH_EPS` 3 cm), so a pool on the floor lands whole however oblique the beam, while the floor
-  under a deck the beam landed on stays dark. The **cone** is drawn to the hit however far it is, so
-  a follow spot on the Commemoration Hall's balcony reaches the stage 20 m away; only a beam that
-  meets nothing keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the
-  air is the window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the
-  proscenium, Everywhere and the Positions plan draw it whole. A focus channel racks over the same
-  throw (`focusRangeM`): 15 % of it to all of it, never less than `BEAM_LENGTH`, so a long throw at
-  full focus is sharp where it lands.
+  under a deck the beam landed on stays dark. The **cone** is cut at the same plane, however far
+  away it is, so a follow spot on the Commemoration Hall's balcony reaches the stage 20 m away; the
+  hull runs on past the axial hit to where the cone's far rim meets the plane (`coneLandingDepth`,
+  capped at `MAX_THROW_M`), so a grazing beam is in the air over the whole of its pool rather than
+  ending square to its axis. The plane reaches the march as one more chord clamp (`aBeamLand`); only
+  a beam that meets nothing keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long
+  throw shows in the air is the window's Haze setting (§"Haze degrades before frame rate"): Stage
+  clips it at the proscenium, Everywhere and the Positions plan draw it whole. A focus channel racks
+  over the axial throw (`focusRangeM`): 15 % of it to all of it, never less than `BEAM_LENGTH`, so a
+  long throw at full focus is sharp where it lands.
 - **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
   disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
   a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the
@@ -434,9 +437,10 @@ was `(cos −yaw, sin −yaw)` once, which turned every shadow box the wrong way
 
 **A modelled room replaces the stage's own shell** (`scene/stageSurfaces.ts`). While a `ROOM` is
 drawn the stage box's back wall, the catch floor and the grid (outside edit mode, where it is a
-measure) give way to it, and the beams in the air clip to the lowest room floor and the furthest
-upstage wall (`beamClipFor`). The stage floor stays; a room's faces sit 4 mm outside its box
-(`ROOM_FACE_INSET_M`) so a region's top at the room's floor does not z-fight it.
+measure) give way to it, and the beams in the air clip to the lowest room floor, the furthest
+upstage wall and the outermost side walls (`beamClipFor`). The stage floor stays; a room's faces
+sit 4 mm outside its box (`ROOM_FACE_INSET_M`) so a region's top at the room's floor does not
+z-fight it.
 
 ### Haze degrades before frame rate
 

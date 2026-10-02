@@ -120,6 +120,7 @@ function beamWrite(): BeamWrite {
     bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
     bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
+    land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0 },
   }
 }
 
@@ -156,6 +157,14 @@ describe('emitter dirty groups', () => {
     const b = build()
     const { mutated } = writeAndFlush(b, (h) => h.writeBeam(0, 0, beamWrite()))
     expect(mutated.sort()).toEqual(allBuffers(b).map((x) => x.name).sort())
+  })
+
+  it("packs the landing surface's plane, and lets an open-air beam through everywhere", () => {
+    const b = build()
+    const h = makeHandle(b)
+    h.writeBeam(0, 0, beamWrite())
+    h.writeBeam(0, 1, { ...beamWrite(), land: null })
+    expect(Array.from(b.volumeLand.array.slice(0, 8))).toEqual([0, 1, 0, -0.25, 0, 0, 0, 1])
   })
 
   it('flags the matrices hideLobes parks', () => {

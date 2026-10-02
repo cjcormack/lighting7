@@ -3,6 +3,7 @@ import type { LightingBounds } from '../stageCameras'
 import type { BeamClip, HazePlane, RegionGeometry, StageDims } from '../StageEmitters'
 import { boxCollider, elementColliders, type Collider } from './beamReach'
 import { buildElement } from './builders'
+import { NO_SIDE_X } from '../beamShaders'
 import { elementInLayers, type HazeExtent, type SceneLayers } from './sceneView'
 import type { BuildContext, ElementBuild } from './sceneParts'
 import type { SceneBuild } from './StageSceneElements'
@@ -93,24 +94,30 @@ export function sceneColliders({
 }
 
 /**
- * The floor and back wall the beams clip to in the air: the stage's own, or — while a room is
- * drawn — the lowest room floor and the furthest upstage room wall, so a hung head's beam reaches
- * the hall floor in front of a raised stage rather than stopping at deck height.
+ * The floor and walls the beams clip to in the air: the stage's own floor and back wall, or — while
+ * a room is drawn — the lowest room floor, the furthest upstage room wall and the outermost side
+ * walls, so a hung head's beam reaches the hall floor in front of a raised stage rather than
+ * stopping at deck height, and a long throw stays inside the building.
  */
 export function beamClipFor(stage: StageDims, builds: readonly SceneBuild[]): BeamClip {
   let floorZ = 0
   let wallY = stage.depth
+  let minX = Infinity
+  let maxX = -Infinity
   for (const { element, build } of builds) {
     if (element.kind !== 'ROOM' || build.parts.length === 0) continue
     floorZ = Math.min(floorZ, element.positionZ)
     const yaw = (element.yawDeg * Math.PI) / 180
     const hw = element.widthM / 2
     const hd = element.depthM / 2
-    // The room's furthest corner upstage, whatever its turn.
+    // The room's furthest corners upstage and to each side, whatever its turn.
     const reach = Math.abs(Math.sin(yaw)) * hw + Math.abs(Math.cos(yaw)) * hd
     wallY = Math.max(wallY, element.positionY + reach)
+    const side = Math.abs(Math.cos(yaw)) * hw + Math.abs(Math.sin(yaw)) * hd
+    minX = Math.min(minX, element.positionX - side)
+    maxX = Math.max(maxX, element.positionX + side)
   }
-  return { floorZ, wallY }
+  return minX <= maxX ? { floorZ, wallY, minX, maxX } : { floorZ, wallY, minX: -NO_SIDE_X, maxX: NO_SIDE_X }
 }
 
 /**

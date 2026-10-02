@@ -5,6 +5,7 @@ import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera
 import {
   ColourSync,
   composeBeamHull,
+  coneLandingDepth,
   focusRangeM,
   landBeam,
   lensLocalMatrix,
@@ -204,6 +205,32 @@ describe('where a beam is drawn to', () => {
   it('keeps the stylised length in open air', () => {
     const landed = landBeam(emitters, new Vector3(0, 3, 0), new Vector3(0, 1, 0))
     expect(landed).toEqual({ hit: null, length: BEAM_LENGTH })
+  })
+
+  it("draws a grazing landing on until the cone's far rim meets the floor", () => {
+    const balcony = new Vector3(0, 2.8, 17.3)
+    const dir = new Vector3(0, 0, -2).sub(balcony).normalize()
+    const hit = landBeam(emitters, balcony, dir).hit!
+    const tanHalf = Math.tan((10 * Math.PI) / 360)
+    const depth = coneLandingDepth(balcony, dir, tanHalf, hit, 100)
+    // Further than the axis's own hit: the rim leaning away from the floor lands well upstage of it.
+    expect(depth).toBeGreaterThan(new Vector3(0, 0, -2).distanceTo(balcony) + 1)
+    const n = new Vector3(hit.nx, hit.ny, hit.nz)
+    const away = n.clone().addScaledVector(dir, -n.dot(dir)).normalize()
+    const rim = balcony.clone().addScaledVector(dir.clone().addScaledVector(away, tanHalf), depth)
+    expect(rim.y).toBeCloseTo(0, 6)
+  })
+
+  it('stops at the axial hit for a beam square to the surface, and caps a rim that never lands', () => {
+    const above = new Vector3(0, 4, -3)
+    const down = new Vector3(0, -1, 0)
+    const hit = landBeam(emitters, above, down).hit!
+    expect(coneLandingDepth(above, down, Math.tan(0.3), hit, 100)).toBeCloseTo(4, 6)
+    // 5° down onto the deck, with a 30° half-field: the upper rim climbs away and never comes down.
+    const low = new Vector3(0, 0.5, 3)
+    const shallow = new Vector3(0, -Math.sin(0.087), -Math.cos(0.087))
+    const graze = landBeam(emitters, low, shallow).hit!
+    expect(coneLandingDepth(low, shallow, Math.tan(Math.PI / 6), graze, 40)).toBe(40)
   })
 
   it('racks focus over a long throw, so full focus is sharp where the follow spot lands', () => {

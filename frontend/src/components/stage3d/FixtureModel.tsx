@@ -173,11 +173,11 @@ const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz:
 
 /**
  * Where a beam from [origin] along [dir] lands: the surface hit (in the scratch object) and the
- * length to draw its cone — to the surface, however far it is within [MAX_THROW_M], so a follow spot
- * on a balcony reaches the stage; or the desk's stylised [BEAM_LENGTH] in open air. How much of the
- * cone shows in the air is the window's Haze setting: Stage clips it at the proscenium
- * (`hazeClipFor`), Everywhere and the Positions plan draw it whole. Cast from the **aperture**, not
- * the apex behind it.
+ * axial throw to it, however far within [MAX_THROW_M], so a follow spot on a balcony reaches the
+ * stage; or the desk's stylised [BEAM_LENGTH] in open air. The cone is drawn past the hit to
+ * [coneLandingDepth] and cut at the hit's plane. How much of it shows in the air is the window's
+ * Haze setting: Stage clips it at the proscenium (`hazeClipFor`), Everywhere and the Positions plan
+ * draw it whole. Cast from the **aperture**, not the apex behind it.
  */
 export function landBeam(
   emitters: Pick<EmittersHandle, 'reach'>,
@@ -193,6 +193,21 @@ export function landBeam(
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
   return { hit: SCRATCH_SURFACE_HIT, length: t }
+}
+
+/**
+ * How far along [dir] from [apex] a cone of half-angle tangent [tanHalf] reaches before all of it
+ * has crossed the plane of [hit] (its normal towards the light): the far rim of a grazing landing,
+ * well past the axis's own hit. [cap] where the far rim never meets the plane.
+ */
+export function coneLandingDepth(apex: Vector3, dir: Vector3, tanHalf: number, hit: SurfaceHit, cap: number): number {
+  const height = (apex.x - hit.px) * hit.nx + (apex.y - hit.py) * hit.ny + (apex.z - hit.pz) * hit.nz
+  const nd = dir.x * hit.nx + dir.y * hit.ny + dir.z * hit.nz
+  if (height <= 0 || nd >= 0) return cap
+  // The steepest-away rim leans from the axis towards the plane's own direction across the beam.
+  const across = Math.sqrt(Math.max(0, 1 - nd * nd))
+  const closing = -nd - tanHalf * across
+  return closing > 1e-6 ? Math.min(cap, height / closing) : cap
 }
 
 /**
@@ -776,6 +791,7 @@ const SCRATCH_BEAM: BeamWrite = {
   bladesA: 0,
   bladesB: 0,
   shadowMask: 0,
+  land: null,
 }
 const SCRATCH_LIGHT: LightRow = makeLightRow()
 
@@ -1183,11 +1199,17 @@ function useBeamDirector({
       SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(lobeDir, -near)
 
       // Where the lobe lands: the first surface on its axis, from the aperture. The volume is drawn
-      // to it, and the light table carries it as the plane the surfaces stop lighting behind.
+      // until all of it has crossed that surface's plane and is cut there, and the light table
+      // carries the same plane as the one the surfaces stop lighting behind.
       const landed = landBeam(emitters, SCRATCH_APERTURE, lobeDir)
-      const length = near + landed.length
+      // A segment's frustum reaches past the field circle at its corners.
+      const tanEdge = aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf
+      const length = landed.hit
+        ? coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, landed.hit, near + MAX_THROW_M)
+        : near + landed.length
       const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
       beam.focusDist = focusDist
+      beam.land = landed.hit
       SCRATCH_BX.copy(SCRATCH_RIGHT).addScaledVector(lobeDir, -SCRATCH_RIGHT.dot(lobeDir)).normalize()
       SCRATCH_BY.crossVectors(lobeDir, SCRATCH_BX)
       const far = length * tanHalf
