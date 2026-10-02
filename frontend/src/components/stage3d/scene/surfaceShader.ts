@@ -218,6 +218,11 @@ export interface SurfaceMaterialOptions {
   opacity?: number
   /** The light alone, added: a catch surface ([SURFACE_FRAGMENT_SHADER]'s `CATCH`). */
   catchOnly?: boolean
+  /**
+   * Loses every depth tie: a region under a platform that models the same deck. Without it two
+   * coincident surfaces are won by whichever material three draws last, which is creation order.
+   */
+  behind?: boolean
 }
 
 /**
@@ -248,5 +253,10 @@ export function makeSurfaceMaterial(
     depthWrite: options.catchOnly !== true,
   })
   if (options.catchOnly) material.blending = AdditiveBlending
+  if (options.behind) {
+    material.polygonOffset = true
+    material.polygonOffsetFactor = 1
+    material.polygonOffsetUnits = 1
+  }
   return material
 }
