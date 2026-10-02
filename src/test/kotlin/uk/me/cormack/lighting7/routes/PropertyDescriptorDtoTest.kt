@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import io.ktor.serialization.kotlinx.json.DefaultJson
 import kotlinx.serialization.json.Json
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.GoboPattern
@@ -107,6 +108,33 @@ class PropertyDescriptorDtoTest {
         )
         assertNull(legacy.gobo)
         assertNull(legacy.prismFacets)
+    }
+
+    @Test
+    fun `a focus slider carries its declared range onto the wire`() {
+        val fixture = MartinMac250Fixture.Mode4Ch(universe, "mac-1", "Mac 1", 1)
+        val focus = fixture.generatePropertyDescriptors()
+            .filterIsInstance<SliderPropertyDescriptor>()
+            .single { it.category == "focus" }
+        assertEquals(2.0, focus.focusNearM)
+        assertEquals(40.0, focus.focusFarM)
+        assertEquals(true, focus.inverted)
+
+        // The routes' own Json (Ktor's `json()`), and the shape `store/fixtures.ts` reads.
+        val encoded = DefaultJson.encodeToString(PropertyDescriptor.serializer(), focus)
+        assertTrue("\"type\":\"slider\"" in encoded, encoded)
+        assertTrue("\"focusNearM\":2.0" in encoded, encoded)
+        assertTrue("\"focusFarM\":40.0" in encoded, encoded)
+        assertTrue("\"inverted\":true" in encoded, encoded)
+        assertEquals(focus, DefaultJson.decodeFromString(PropertyDescriptor.serializer(), encoded))
+
+        // A payload from before the range existed still decodes, with no range.
+        val legacy = DefaultJson.decodeFromString(
+            PropertyDescriptor.serializer(),
+            """{"type":"slider","name":"focus","displayName":"Focus","category":"focus","channel":{"universe":0,"channelNo":6}}""",
+        ) as SliderPropertyDescriptor
+        assertNull(legacy.focusNearM)
+        assertNull(legacy.focusFarM)
     }
 
     @Test

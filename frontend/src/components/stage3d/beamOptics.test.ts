@@ -10,6 +10,7 @@ import {
   evalMovementMacro,
   makeBeamGeom,
   prismSpinFromSlider,
+  resolveDeclaredFocusDistance,
   resolveFocusDistance,
   resolveFocusParam,
   resolveGoboSlot,
@@ -339,6 +340,59 @@ describe('resolveFocusDistance', () => {
     }
     expect(resolveFocusDistance(-0.5, LEN)).toBe(resolveFocusDistance(0, LEN))
     expect(resolveFocusDistance(1.5, LEN)).toBe(resolveFocusDistance(1, LEN))
+  })
+})
+
+describe('resolveDeclaredFocusDistance', () => {
+  const declared = (over: Partial<SliderPropertyDescriptor> = {}) =>
+    slider({ focusNearM: 2, focusFarM: 40, ...over })
+
+  it('runs near → far across DMX min → max', () => {
+    expect(resolveDeclaredFocusDistance(declared(), 0)).toBeCloseTo(2, 9)
+    expect(resolveDeclaredFocusDistance(declared(), 1)).toBeCloseTo(40, 9)
+  })
+
+  it('is linear in 1 / distance, as a lens is', () => {
+    // Half the travel is half way between 1/2 and 1/40, not half way between 2 and 40.
+    expect(resolveDeclaredFocusDistance(declared(), 0.5)).toBeCloseTo(1 / ((1 / 2 + 1 / 40) / 2), 9)
+    expect(resolveDeclaredFocusDistance(declared(), 0.5)).toBeLessThan(4)
+    let prevInv = Infinity
+    let prevStep = -Infinity
+    for (let i = 0; i <= 10; i++) {
+      const inv = 1 / resolveDeclaredFocusDistance(declared(), i / 10)!
+      if (i > 0) {
+        const step = prevInv - inv
+        if (i > 1) expect(step).toBeCloseTo(prevStep, 9)
+        prevStep = step
+      }
+      prevInv = inv
+    }
+  })
+
+  it('runs far → near when inverted (a MAC 250: DMX 0 is infinity)', () => {
+    const mac = declared({ inverted: true })
+    expect(resolveDeclaredFocusDistance(mac, 0)).toBeCloseTo(40, 9)
+    expect(resolveDeclaredFocusDistance(mac, 1)).toBeCloseTo(2, 9)
+    expect(resolveDeclaredFocusDistance(mac, 0.3)).toBeCloseTo(resolveDeclaredFocusDistance(declared(), 0.7)!, 9)
+  })
+
+  it('clamps out-of-range params', () => {
+    expect(resolveDeclaredFocusDistance(declared(), -1)).toBe(resolveDeclaredFocusDistance(declared(), 0))
+    expect(resolveDeclaredFocusDistance(declared(), 2)).toBe(resolveDeclaredFocusDistance(declared(), 1))
+  })
+
+  it('is null where nothing is declared, so the focus racks over the throw', () => {
+    expect(resolveDeclaredFocusDistance(slider(), 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(slider({ focusNearM: 2 }), 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(slider({ focusFarM: 40 }), 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(undefined, 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(declared(), null)).toBeNull()
+  })
+
+  it('is null for a range no lens has', () => {
+    expect(resolveDeclaredFocusDistance(declared({ focusNearM: 0 }), 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(declared({ focusNearM: 40, focusFarM: 2 }), 0.5)).toBeNull()
+    expect(resolveDeclaredFocusDistance(declared({ focusFarM: 2 }), 0.5)).toBeNull()
   })
 })
 

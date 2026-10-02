@@ -1,3 +1,6 @@
+import { MASK_EDGE_SOFT } from './beamMask'
+import { GOBO_TILE_PX } from './goboAtlas'
+
 // Stage-3D atmosphere tuning. These are code-level knobs, not UI settings — tweak the values here.
 // Read by the beam volumes (`beamShaders.ts`, through `StageEmitters`) and the surface shader.
 
@@ -15,18 +18,21 @@ export const HAZE_LEVEL = 1
 
 // — focal model ————————————————————————————————————————————————————
 // Focus maps the fixture's focus channel to a focal *distance* along the
-// throw; pattern blur and rim softness both grow with how far the receiving
-// surface sits from that plane (see resolveFocusDistance in beamOptics).
+// throw; pattern blur and rim softness both grow with the blur circle a
+// receiving surface sees, which is linear in |1/d − 1/focus| (focusBlur in
+// beamMask; the distance is resolveFocusDistance's in beamOptics).
 
-/** Mip LOD added per metre of defocus — higher = blurrier faster. */
-export const FOCUS_LOD_K = 1.2
+/** A gobo tile's texels across the field's radius. A blur circle `b` field
+ *  radii wide spans `b ×` this many texels and each mip level averages twice
+ *  as many, so the in-air gobo samples at LOD log2(1 + b × this). */
+export const GOBO_BLUR_TEXELS = GOBO_TILE_PX / 2
 
 /** LOD ceiling for defocus blur (128px atlas has 8 mip levels; 6 is mush). */
 export const FOCUS_LOD_MAX = 6
 
-/** Defocus distance (m) over which the pool rim fades from crisp to the
- *  original soft falloff. */
-export const EDGE_SOFT_RANGE_M = 1.5
+/** The blur circle, in field radii, at which the edge is fully soft: a fully
+ *  soft beam's own roll-off, so the edge rolls off over the width of the blur. */
+export const FOCUS_SOFT_BLUR = MASK_EDGE_SOFT
 
 // — volumetric beam ————————————————————————————————————————————————
 // Every beam in the air is a raymarched volume since stage-view plan session 6 (the silhouette

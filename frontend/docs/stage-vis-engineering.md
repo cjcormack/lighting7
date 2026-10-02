@@ -416,9 +416,7 @@ without a room — the back wall and the catch floor:
   over the whole of its pool rather than ending square to its axis. Only a beam that meets nothing
   keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
   window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
-  Everywhere and the Positions plan draw it whole. A focus channel racks over the axial throw
-  (`focusRangeM`): 15 % of it to all of it, never less than `BEAM_LENGTH`, so a long throw at full
-  focus is sharp where it lands.
+  Everywhere and the Positions plan draw it whole.
 - **A beam split across an edge lands on both faces** (`scene/landing.ts`, `edgeLanding` in
   `FixtureModel.tsx`). One plane cannot stand for a convex edge: a follow spot aimed at the front of
   the stage has its axis on the riser, and cutting at the riser's plane took the half that clears
@@ -435,6 +433,28 @@ without a room — the back wall and the catch floor:
   down or level and one float codes it (`landNormalCode`). In the march, behind both is an interval
   of the view ray: at an end of the chord it trims the chord, and inside it (an edge seen side-on)
   the samples in it are skipped.
+- **A focus channel focuses at a distance.** Where the type declares a focus range
+  (`@FixtureProperty(focusNearM =, focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureProperty"),
+  the channel sets one focal distance from the aperture wherever the head points, so a spot focused
+  on a downstage mark goes soft on an upstage one, and a cue's focus means the same distance on every
+  mark (`resolveDeclaredFocusDistance`). DMX runs **linearly in 1 / distance** between the ends: a
+  focus motor moves the lens linearly, and the lens's travel from infinity is very nearly
+  proportional to 1 / distance. So a 2 m-to-infinity spot is under 4 m at half travel, and a long
+  throw is focused in the last few percent of the channel, as on the rig. A type that declares no
+  range racks over the axial throw instead (`focusRangeM`): 15 % of it to all of it, quadratic, never
+  less than `BEAM_LENGTH`, so full focus is sharp wherever it lands.
+- **Defocus is a blur circle, not a distance** (`focusBlur` in `beamMask.ts`, shared by the surfaces
+  and the haze): the lens images the gate at the focal distance, so at `d` from the aperture the
+  light bound for one image point is `2a·|1 − d/focus|` wide against a field radius of
+  `a·(near + d)/near` (a the lens radius, near the apex distance). That is linear in
+  |1/d − 1/focus|, as a real lens's blur is: two metres past focus blurs about seventeen times as
+  much at a 4 m throw as at a 20 m one, and a wide aperture holds less depth of focus than a small
+  one. A field edge therefore stays fairly crisp over the focus a cue is likely to be off by, and the
+  gobo, whose detail is a fraction of the field, is what goes soft — as on a real spot. The edge is
+  fully soft at a blur of `MASK_EDGE_SOFT` field radii (`FOCUS_SOFT_BLUR`), where it rolls off over
+  the blur's own width; the in-air gobo samples at mip `log2(1 + blur × GOBO_BLUR_TEXELS)`. It
+  replaced a defocus in metres (soft 1.5 m either side of the plane), which with a fixed focus made
+  a balcony throw sharp within a DMX step or two.
 - **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
   disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
   a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the
@@ -1094,7 +1114,8 @@ group`).
   the aperture; its reach is cast from the aperture.
 - **Edge softness is data**: the family's (`SOFTNESS` — profiles and spots hard, everything else
   soft), moved towards soft by a **frost** channel (`resolveSoftness`); a focus channel still
-  sharpens the edge at its focal distance. `FixtureTypeInfo.beamEdge` still only picks a mover's
+  sharpens the edge at its focal distance, and softens it by the blur circle away from it
+  (§"Light lands through one surface shader"). `FixtureTypeInfo.beamEdge` still only picks a mover's
   head.
 - **A DMX iris is drawn** (`resolveIris`: the channel runs open → closed, down to 12 % of the field).
 

@@ -42,7 +42,8 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     // max()-ing two contributors is meaningless — the same reasoning as PAN/TILT. Splitting
     // them out of SETTING/OTHER is what lets the 3D stage view recognise them; it already
     // keys off category this way for pan/tilt. A ZOOM slider reuses the existing
-    // degMin/degMax annotation fields, where they mean "full beam angle at DMX min / max".
+    // degMin/degMax annotation fields, where they mean "full beam angle at DMX min / max";
+    // a FOCUS slider declares its range with focusNearM/focusFarM.
     GOBO(CompositionRule.LTP),
     GOBO_ROTATION(CompositionRule.LTP),
     PRISM(CompositionRule.LTP),
@@ -113,6 +114,12 @@ enum class CompactDisplayRole {
  * @param degMax Slider max in degrees (mapped to the slider's DMX max). Defaults [Double.NaN].
  * @param inverted Reverse the direction of the slider→degrees mapping. Used for fixtures
  *                  whose tilt is mechanically inverted from the DMX-up = stage-up convention.
+ *                  On a FOCUS slider it reverses the focus range instead: DMX min is far focus.
+ * @param focusNearM On a FOCUS slider, the nearest focal distance in metres from the aperture,
+ *                   at DMX min (DMX max when [inverted]). [Double.NaN] means "unset", as for
+ *                   [degMin]; a slider declares both ends or neither.
+ * @param focusFarM On a FOCUS slider, the farthest focal distance in metres from the aperture,
+ *                  at DMX max (DMX min when [inverted]). Defaults [Double.NaN].
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -126,6 +133,8 @@ annotation class FixtureProperty(
     val degMin: Double = Double.NaN,
     val degMax: Double = Double.NaN,
     val inverted: Boolean = false,
+    val focusNearM: Double = Double.NaN,
+    val focusFarM: Double = Double.NaN,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

@@ -10,7 +10,7 @@ import {
   ShaderMaterial,
 } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
-import { EDGE_SOFT_RANGE_M } from '../washConfig'
+import { FOCUS_SOFT_BLUR } from '../washConfig'
 import { LANDING_GLSL } from './landing'
 import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
@@ -48,7 +48,7 @@ export interface SurfaceUniforms {
   uAmbient: { value: number }
   uLightGain: { value: number }
   uSheen: { value: number }
-  uEdgeSoftRange: { value: number }
+  uFocusSoftBlur: { value: number }
 }
 
 /** A canvas's light texture: [MAX_LIGHT_BUDGET] rows of [LIGHT_TEXELS] RGBA float texels. */
@@ -70,7 +70,7 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
     uAmbient: { value: 0.16 },
     uLightGain: { value: 1.6 },
     uSheen: { value: 0.18 },
-    uEdgeSoftRange: { value: EDGE_SOFT_RANGE_M },
+    uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
   }
 }
 
@@ -105,7 +105,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform float uAmbient;
   uniform float uLightGain;
   uniform float uSheen;
-  uniform float uEdgeSoftRange;
+  uniform float uFocusSoftBlur;
   uniform vec3 uAlbedo;
   uniform int uPattern;
   uniform float uOpacity;
@@ -190,7 +190,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if (aperture.z != 0.0) uv.y /= abs(aperture.z);
       vec2 edgeIris = unpackEdgeIris(colour.w);
       // Focus is a distance from the aperture — the lens — not from the apex behind it.
-      float hard = beamHardness(edgeIris.x, apex.w, abs(dist - aperture.x - apex.w), uEdgeSoftRange);
+      float hard = beamHardness(edgeIris.x, apex.w, focusBlur(dist - aperture.x, apex.w, aperture.x), uFocusSoftBlur);
       float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - hard, aperture.yw);
       if (m <= 0.0) continue;
       acc += colour.rgb * m * (0.3 + 0.7 * facing);

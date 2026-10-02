@@ -316,22 +316,45 @@ export function resolveSoftness(
  *  zero defocus everywhere, which is byte-identical to the pre-focal look. */
 export const FOCUS_ALWAYS_SHARP = -1
 
-// Focal-plane curve endpoints as fractions of the beam length. Real fixtures
-// rack from a couple of metres to the full throw, with most of the *useful*
-// travel at distance — the quadratic gives finer control where the pool
+// The fallback for a focus channel whose type declares no range: the curve's endpoints as
+// fractions of the beam's own throw. Real fixtures rack from a couple of metres to the full throw,
+// with most of the *useful* travel at distance — the quadratic gives finer control where the pool
 // actually lives.
 export const FOCUS_NEAR_FRAC = 0.15
 
 /**
- * Focal-plane distance (metres along the throw) for a focus channel value, or
- * [FOCUS_ALWAYS_SHARP] when the fixture has no focus channel. The pool and
- * volume shaders blur the gobo and soften the rim by how far a surface or
- * sample sits from this plane.
+ * Focal-plane distance (metres along the throw) for a focus channel value over the beam's own
+ * throw, or [FOCUS_ALWAYS_SHARP] when the fixture has no focus channel. The fallback for a type
+ * that declares no focus range ([resolveDeclaredFocusDistance]). The pool and volume shaders blur
+ * the gobo and soften the rim by how far a surface or sample sits from this plane.
  */
 export function resolveFocusDistance(focusParam: number | null, beamLength: number): number {
   if (focusParam == null) return FOCUS_ALWAYS_SHARP
   const p = Math.max(0, Math.min(1, focusParam))
   return beamLength * (FOCUS_NEAR_FRAC + (1 - FOCUS_NEAR_FRAC) * p * p)
+}
+
+/**
+ * The fixed focal distance (metres from the aperture) a focus slider's declared range puts
+ * [focusParam] at, wherever the head points; null where the slider declares no usable range, and
+ * the focus racks over the throw instead ([resolveFocusDistance]).
+ *
+ * Linear in the reciprocal of the distance: a focus motor drives the lens linearly, and the lens's
+ * travel from its infinity position is very nearly proportional to 1 / distance — so a DMX chart
+ * reads "proportional" while the distance runs fastest at the far end. A MAC 250's 2 m → infinity
+ * is under 4 m at half travel.
+ */
+export function resolveDeclaredFocusDistance(
+  prop: SliderPropertyDescriptor | undefined,
+  focusParam: number | null,
+): number | null {
+  if (!prop || focusParam == null) return null
+  const near = prop.focusNearM
+  const far = prop.focusFarM
+  if (near == null || far == null || !(near > 0) || !(far > near)) return null
+  const p = Math.max(0, Math.min(1, focusParam))
+  const t = prop.inverted ? 1 - p : p
+  return 1 / (1 / near + t * (1 / far - 1 / near))
 }
 
 /** Macro program index; 0 = no macro running. */

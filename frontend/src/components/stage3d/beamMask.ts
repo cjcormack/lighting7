@@ -145,22 +145,42 @@ export function bladeLine(index: number, depth: number, angleDeg: number): { px:
 }
 
 /**
- * A beam's edge **hardness** at a point `defocus` metres from its focal plane: the family's own
- * hardness (1 − softness, frost already folded in), capped by how far the point sits from the focal
- * plane where the fixture has a focus channel (`focusDist` ≥ 0) — so a frosted beam stays soft even at
- * its focus, and an unfrosted one sharpens only there. Shared by the surface shader and the haze.
+ * How far out of focus a beam is `d` metres from its aperture: the **blur circle** there, in field
+ * radii, for a lens focused `focusDist` metres out whose apex sits `near` behind it; 0 without a
+ * focus channel (`focusDist` < 0). The lens (radius a) images the gate at `focusDist`, so the light
+ * bound for one image point is 2a·|1 − d/focus| wide at `d`, where the field's radius is
+ * a·(near + d)/near. That is linear in |1/d − 1/focus|, as a real lens's blur is: a long throw keeps
+ * its depth of focus, and a wide lens (a long `near`) has less of it.
+ *
+ * A beam's edge **hardness** is then the family's own (1 − softness, frost already folded in), capped
+ * by that blur where the fixture has a focus channel (`focusDist` ≥ 0) — so a frosted beam stays soft
+ * even at its focus, and an unfrosted one sharpens only there. Shared by the surface shader and the
+ * haze.
  */
 export const BEAM_HARDNESS_GLSL = /* glsl */ `
-  float beamHardness(float baseHard, float focusDist, float defocus, float softRange) {
+  float focusBlur(float d, float focusDist, float near) {
+    if (focusDist < 0.0) return 0.0;
+    float f = max(focusDist, 1e-3);
+    return 2.0 * near * abs(f - d) / (f * max(near + max(d, 0.0), 1e-4));
+  }
+
+  float beamHardness(float baseHard, float focusDist, float blur, float softBlur) {
     if (focusDist < 0.0) return baseHard;
-    return min(baseHard, 1.0 - smoothstep(0.0, softRange, defocus));
+    return min(baseHard, 1.0 - smoothstep(0.0, softBlur, blur));
   }
 `
 
-/** The TypeScript twin of [BEAM_HARDNESS_GLSL], for its test. */
-export function beamHardness(baseHard: number, focusDist: number, defocus: number, softRange: number): number {
+/** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `focusBlur`, for its test. */
+export function focusBlur(d: number, focusDist: number, near: number): number {
+  if (focusDist < 0) return 0
+  const f = Math.max(focusDist, 1e-3)
+  return (2 * near * Math.abs(f - d)) / (f * Math.max(near + Math.max(d, 0), 1e-4))
+}
+
+/** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `beamHardness`, for its test. */
+export function beamHardness(baseHard: number, focusDist: number, blur: number, softBlur: number): number {
   if (focusDist < 0) return baseHard
-  return Math.min(baseHard, 1 - smoothstep(0, softRange, defocus))
+  return Math.min(baseHard, 1 - smoothstep(0, softBlur, blur))
 }
 
 function smoothstep(e0: number, e1: number, x: number): number {

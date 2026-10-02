@@ -230,7 +230,15 @@ sealed class MartinMac250Fixture(
         )
         val goboRotation: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+        // "MAC 250 / MAC 250+ user manual" (Martin): "approximately 2 meters (6.5 feet) to
+        // infinity", DMX 0–255 = "Infinity → 2 meters". Infinity is the Stage view's 40 m longest throw.
+        @FixtureProperty(
+            "Focus",
+            category = PropertyCategory.FOCUS,
+            focusNearM = 2.0,
+            focusFarM = 40.0,
+            inverted = true,
+        )
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
         @FixtureProperty("Prism", category = PropertyCategory.PRISM)

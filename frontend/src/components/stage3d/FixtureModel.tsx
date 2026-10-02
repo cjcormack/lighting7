@@ -65,6 +65,7 @@ import {
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  resolveDeclaredFocusDistance,
   resolveFocusDistance,
   resolveFocusParam,
   resolveGoboSlot,
@@ -321,8 +322,9 @@ export function edgeLanding(
 }
 
 /**
- * The throw a focus channel racks over, from [landBeam]'s length: [BEAM_LENGTH], or the beam's own
- * throw where it lands further away, so full focus is sharp on what a long throw lands on.
+ * The throw a focus channel racks over where its type declares no focus range, from [landBeam]'s
+ * length: [BEAM_LENGTH], or the beam's own throw where it lands further away, so full focus is sharp
+ * on what a long throw lands on.
  */
 export function focusRangeM(landedLength: number): number {
   return Math.max(BEAM_LENGTH, landedLength)
@@ -1171,11 +1173,12 @@ function useBeamDirector({
     }
     const tanHalf = Math.tan(MathUtils.degToRad(beamDeg) / 2)
 
-    // Focus maps to a focal-plane distance from the aperture, per lobe over its own throw
-    // ([focusRangeM]); the shaders soften the edge by how far a surface or a sample sits from it.
-    // Without a focus channel the edge is the family's softness (`bodies/archetype.ts`), moved
-    // towards soft by a frost channel.
+    // Focus maps to a focal-plane distance from the aperture: a fixed one over the type's declared
+    // range, else per lobe over its own throw ([focusRangeM]). The shaders soften the edge by how
+    // far a surface or a sample sits from it. Without a focus channel the edge is the family's
+    // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
     const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
+    const declaredFocusDist = resolveDeclaredFocusDistance(focusProp, focusParam)
     const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
     const edge = 1 - softness
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
@@ -1326,7 +1329,7 @@ function useBeamDirector({
             edgeHit ? coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, edgeHit, near + MAX_THROW_M) : 0,
           )
         : near + landed.length
-      const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
+      const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
       beam.focusDist = focusDist
       beam.land = landed.hit
       beam.edgeLand = edgeHit
@@ -1404,7 +1407,7 @@ function useBeamDirector({
         const edgeHit = landed.hit
           ? edgeLanding(emitters, SCRATCH_APEX, dir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect > 0 ? aspect : 1), aspect > 0, near, landed.hit)
           : null
-        const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
+        const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
         writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, edgeHit, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }

@@ -15,10 +15,10 @@ import {
   staticHeadQuaternion,
 } from './FixtureModel'
 import { BEAM_LENGTH } from './emitterLayout'
-import { resolveFocusDistance } from './beamOptics'
+import { resolveDeclaredFocusDistance, resolveFocusDistance } from './beamOptics'
 import { beamReach, boxCollider, type BeamHit } from './scene/beamReach'
 import { apexDistanceM } from './bodies/archetype'
-import { beamMask, packBlades } from './beamMask'
+import { beamMask, focusBlur, packBlades } from './beamMask'
 import { bodyShownFor, LOD_BILLBOARD_BELOW_PX, LOD_SIMPLE_BELOW_PX } from './bodies/StageBodies'
 import { fromThree } from '../../lib/stageCoords'
 import { longAxisLighting } from '../../lib/fixtureLength'
@@ -234,12 +234,28 @@ describe('where a beam is drawn to', () => {
     expect(coneLandingDepth(low, shallow, Math.tan(Math.PI / 6), graze, 40)).toBe(40)
   })
 
-  it('racks focus over a long throw, so full focus is sharp where the follow spot lands', () => {
+  it('racks focus over a long throw where the type declares no range, so full focus is sharp where it lands', () => {
     const balcony = new Vector3(0, 2.8, 17.3)
     const landed = landBeam(emitters, balcony, new Vector3(0, 0, -2).sub(balcony).normalize())
     expect(resolveFocusDistance(1, focusRangeM(landed.length))).toBeCloseTo(landed.length, 6)
     // A throw inside BEAM_LENGTH racks over BEAM_LENGTH, as it always has.
     expect(focusRangeM(4)).toBe(BEAM_LENGTH)
+  })
+
+  it('focuses a declared range at one distance, so a mark further upstage goes soft', () => {
+    const balcony = new Vector3(0, 2.8, 17.3)
+    const focus = {
+      type: 'slider', name: 'focus', displayName: 'Focus', category: 'focus',
+      channel: { universe: 0, channelNo: 7 }, min: 0, max: 255, focusNearM: 2, focusFarM: 40,
+    } as const
+    const downstage = landBeam(emitters, balcony, new Vector3(0, 0, 2).sub(balcony).normalize()).length
+    const upstage = landBeam(emitters, balcony, new Vector3(0, 0, -4).sub(balcony).normalize()).length
+    // The DMX that focuses on the downstage mark, read back off the declared range.
+    const param = (1 / 2 - 1 / downstage) / (1 / 2 - 1 / 40)
+    const focusDist = resolveDeclaredFocusDistance(focus, param)!
+    expect(focusDist).toBeCloseTo(downstage, 6)
+    expect(focusBlur(downstage, focusDist, 0.65)).toBeCloseTo(0, 9)
+    expect(focusBlur(upstage, focusDist, 0.65)).toBeGreaterThan(0.01)
   })
 })
 

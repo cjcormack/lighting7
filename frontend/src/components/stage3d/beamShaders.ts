@@ -4,9 +4,9 @@ import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
 import { LANDING_GLSL } from './scene/landing'
 import {
-  EDGE_SOFT_RANGE_M,
-  FOCUS_LOD_K,
   FOCUS_LOD_MAX,
+  FOCUS_SOFT_BLUR,
+  GOBO_BLUR_TEXELS,
   HAZE_LEVEL,
   VOLUMETRIC_STEPS,
   VOL_GAIN,
@@ -181,9 +181,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   uniform float uVolGain;
   uniform float uVolSpread;
   uniform float uVolLodBase;
-  uniform float uLodK;
+  uniform float uGoboBlurTexels;
   uniform float uLodMax;
-  uniform float uEdgeSoftRange;
+  uniform float uFocusSoftBlur;
   ${REGION_UNIFORMS_GLSL}
 
   varying vec3 vWorldPos;
@@ -368,8 +368,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       float cosAngle = dot(lightDir, d);
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
       // Focus is a distance from the aperture, not from the apex behind it.
-      float defocus = focusDist < 0.0 ? 0.0 : abs(relLen - near - focusDist);
-      float effEdge = beamHardness(vBeamFx.x, focusDist, defocus, uEdgeSoftRange);
+      float blur = focusBlur(relLen - near, focusDist, near);
+      float effEdge = beamHardness(vBeamFx.x, focusDist, blur, uFocusSoftBlur);
       // A segment's rectangle or an oval's narrow axis: the field edge at 1 on v too. An oval is
       // marched through the round cone of its wide field, and the mask cuts it to the oval.
       vec2 mg = aspect != 0.0 ? vec2(g.x, g.y / abs(aspect)) : g;
@@ -378,7 +378,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       float gobo = 1.0;
       if (vBeamFx.y >= 0.5 && aspect <= 0.0) {
         vec2 guv = goboUvCs(g, goboCs, goboSn);
-        float lod = clamp(uVolLodBase + uLodK * defocus, 0.0, uLodMax);
+        float lod = clamp(uVolLodBase + log2(1.0 + uGoboBlurTexels * blur), 0.0, uLodMax);
         gobo = textureLod(uGobo, vec3(guv, vBeamFx.y), lod).r;
       }
 
@@ -420,9 +420,9 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
       uVolGain: { value: VOL_GAIN },
       uVolSpread: { value: VOL_SPREAD },
       uVolLodBase: { value: VOL_LOD_BASE },
-      uLodK: { value: FOCUS_LOD_K },
+      uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
       uLodMax: { value: FOCUS_LOD_MAX },
-      uEdgeSoftRange: { value: EDGE_SOFT_RANGE_M },
+      uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
       ...makeRegionUniforms(),
     },
     vertexShader: VOLUME_VERTEX_SHADER,
