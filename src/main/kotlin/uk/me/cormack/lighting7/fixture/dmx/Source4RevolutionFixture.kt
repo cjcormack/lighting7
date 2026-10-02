@@ -146,7 +146,10 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Media frame", category = PropertyCategory.OTHER)
         val mediaFrame: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+        // Estimate: ETC publishes no focus range or direction ("soft to crisp focus for gobos",
+        // Rev E manual 7160A1002). 2 m to infinity covers the 4.9–18.2 m throws its photometrics
+        // tabulate; infinity is the Stage view's 40 m longest throw.
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
         @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM)

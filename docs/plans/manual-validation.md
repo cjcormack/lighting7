@@ -17,6 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
+| [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
 | [`FU-MANUAL-MULTI-SCREEN-S4`](#fu-manual-multi-screen-s4) | a record dragged off one screen's edge arrives on the next — the gesture is two windows by construction, so every step of it is the desk's; what one window proved is recorded in the entry | Multi-screen S4, 2026-09-17 |
@@ -158,6 +159,31 @@ which made three things visible:
    `basePitchDeg` on any that were left at 0 to look hung.
 
 20 minutes.
+
+---
+
+## `FU-MANUAL-FOCUS-DIRECTION`
+
+**What it proves**: *a focus channel's DMX runs the same way on the rig as in the Stage view*, so a
+cue's recorded focus means the same distance on both.
+
+**Why it is here**: each FOCUS slider declares a focus range (`@FixtureProperty(focusNearM =,
+focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureProperty"), and `inverted` says DMX 0 is
+far focus. Only the MAC 250's direction is published ("Infinity → 2 meters"). The Robe ColorSpot
+575's `inverted = true` is inferred from Robe's later charts; the Source Four Revolution and the
+Fusion 100 Spot MKII keep the default (DMX 0 near) because nothing says otherwise. A wrong one draws
+the focus racking backwards, and no test can catch it.
+
+**Test**, on the rig, for an LX3 Robe 575, an FOH Balcony Revolution and a Fusion 100 if one is
+patched (each with a gobo in where it has one):
+
+1. Point the head at a mark about 6 m away and bring it up.
+2. Take focus to DMX 0, then to 255, and note which end puts the gobo or the edge sharp on a near
+   surface (a hand or a flat a couple of metres from the lens) and which on the far one.
+3. DMX 0 sharp near means not inverted; DMX 0 sharp far means inverted. Where that disagrees with
+   the type's annotation, flip `inverted` on its focus slider and update its comment.
+
+10 minutes.
 
 ---
 

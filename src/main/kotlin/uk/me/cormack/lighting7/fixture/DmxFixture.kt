@@ -370,6 +370,8 @@ abstract class DmxFixture(
         degMin = prop.degMin,
         degMax = prop.degMax,
         inverted = prop.inverted.takeIf { it },
+        focusNearM = prop.focusNearM,
+        focusFarM = prop.focusFarM,
     )
 
     private fun String.formatPropertyName(): String {

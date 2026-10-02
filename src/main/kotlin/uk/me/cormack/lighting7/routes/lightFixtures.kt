@@ -309,6 +309,8 @@ data class SliderPropertyDescriptor(
     val degMin: Double? = null,
     val degMax: Double? = null,
     val inverted: Boolean? = null,
+    val focusNearM: Double? = null,
+    val focusFarM: Double? = null,
 ) : PropertyDescriptor
 
 @Serializable

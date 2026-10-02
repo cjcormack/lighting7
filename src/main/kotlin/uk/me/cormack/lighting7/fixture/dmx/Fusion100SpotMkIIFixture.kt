@@ -260,7 +260,10 @@ sealed class Fusion100SpotMkIIFixture(
         @FixtureProperty("Gobo rotation", category = PropertyCategory.GOBO_ROTATION)
         val goboRotation = DmxFixtureSetting(transaction, universe, firstChannel + 5, GoboRotation.entries.toTypedArray())
 
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+        // Estimate: the Fusion 100 Spot MKII User Manual (Prolight, EQLED069A) gives no range or
+        // direction, only focus "sharp at any distance" behind a 10° lens; 2 m to infinity (the
+        // Stage view's 40 m longest throw), as the published MAC 250's.
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
         val focus = DmxSlider(transaction, universe, firstChannel + 6)
 
         @FixtureProperty("Prism", category = PropertyCategory.PRISM)
@@ -348,7 +351,8 @@ sealed class Fusion100SpotMkIIFixture(
         @FixtureProperty("Gobo rotation", category = PropertyCategory.GOBO_ROTATION)
         val goboRotation = DmxFixtureSetting(transaction, universe, firstChannel + 9, GoboRotation.entries.toTypedArray())
 
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+        // Estimate, as the 8-channel mode's.
+        @FixtureProperty("Focus", category = PropertyCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
         val focus = DmxSlider(transaction, universe, firstChannel + 10)
 
         @FixtureProperty("Prism", category = PropertyCategory.PRISM)

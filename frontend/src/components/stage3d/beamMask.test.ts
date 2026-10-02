@@ -6,6 +6,7 @@ import {
   BLADE_DEPTH_STEPS,
   beamHardness,
   beamMask,
+  focusBlur,
   bladeLine,
   MASK_EDGE_HARD,
   MASK_EDGE_SOFT,
@@ -132,21 +133,54 @@ describe('the blades', () => {
   })
 })
 
+describe('the focus blur', () => {
+  const NEAR = 0.65 // a 19° Source Four's 170 mm lens
+
+  it('is nothing at the focal plane, or without a focus channel', () => {
+    expect(focusBlur(6, 6, NEAR)).toBe(0)
+    expect(focusBlur(3, -1, NEAR)).toBe(0)
+  })
+
+  it('is the blur circle over the field radius, from the lens geometry', () => {
+    // Focused at 10 m, landing at 5 m: the light for one image point is half the lens wide (2a·½),
+    // and the field's radius there is a·(near + 5)/near.
+    expect(focusBlur(5, 10, NEAR)).toBeCloseTo((2 * 0.5 * NEAR) / (NEAR + 5), 9)
+  })
+
+  it('is linear in |1/d − 1/focus|, so a long throw keeps its depth of focus', () => {
+    // Two metres past focus is far softer at a 4 m throw than at a 20 m one.
+    expect(focusBlur(6, 4, NEAR)).toBeGreaterThan(5 * focusBlur(22, 20, NEAR))
+    // Landing on either side of focus at the same reciprocal distance blurs about alike.
+    const f = 10
+    const near = focusBlur(1 / (1 / f + 0.02), f, NEAR)
+    const far = focusBlur(1 / (1 / f - 0.02), f, NEAR)
+    expect(near / far).toBeGreaterThan(0.85)
+    expect(near / far).toBeLessThan(1.15)
+  })
+
+  it('stays finite at and behind the aperture', () => {
+    expect(Number.isFinite(focusBlur(0, 6, NEAR))).toBe(true)
+    expect(Number.isFinite(focusBlur(-1, 6, NEAR))).toBe(true)
+    expect(Number.isFinite(focusBlur(3, 0, NEAR))).toBe(true)
+  })
+})
+
 describe('the beam edge', () => {
   it("keeps the family's hardness without a focus channel", () => {
-    expect(beamHardness(0.8, -1, 3, 1.5)).toBe(0.8)
+    expect(beamHardness(0.8, -1, 3, MASK_EDGE_SOFT)).toBe(0.8)
   })
 
   it('sharpens only at the focal plane, and never past the frost-softened hardness', () => {
-    // An unfrosted spot: hard at its focus, soft well away from it.
-    expect(beamHardness(0.9, 5, 0, 1.5)).toBeCloseTo(0.9, 9)
-    expect(beamHardness(0.9, 5, 2, 1.5)).toBe(0)
+    // An unfrosted spot: hard at its focus, soft once the blur is a fully soft edge's width.
+    expect(beamHardness(0.9, 5, 0, MASK_EDGE_SOFT)).toBeCloseTo(0.9, 9)
+    expect(beamHardness(0.9, 5, MASK_EDGE_SOFT, MASK_EDGE_SOFT)).toBe(0)
     // Frost pulled the hardness down to 0.2: it stays soft even at the focus (the Robe ColorSpot
     // has both channels, and frost did nothing there before).
-    expect(beamHardness(0.2, 5, 0, 1.5)).toBeCloseTo(0.2, 9)
+    expect(beamHardness(0.2, 5, 0, MASK_EDGE_SOFT)).toBeCloseTo(0.2, 9)
   })
 
   it('is one chunk the haze and the surfaces both call', () => {
     expect(BEAM_HARDNESS_GLSL).toContain('float beamHardness(')
+    expect(BEAM_HARDNESS_GLSL).toContain('float focusBlur(')
   })
 })

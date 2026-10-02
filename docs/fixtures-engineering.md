@@ -264,6 +264,25 @@ Marks a property as controllable. The `fixtureProperties` list on `Fixture` coll
 - REST API property enumeration
 - FX engine targeting
 
+**A slider's optics.** The Stage view reads optional fields off the property descriptor
+(`SliderPropertyDescriptor`). `NaN` means unset, because an annotation cannot default a `Double` to
+null, and reflects as null:
+
+- `degMin` / `degMax`: a PAN or TILT slider's travel in degrees (with `axis`), or a ZOOM slider's
+  full beam angle, at DMX min / max.
+- `focusNearM` / `focusFarM`: a FOCUS slider's nearest and farthest focal distance, in metres from
+  the aperture, at DMX min / max. The Stage view focuses at that fixed distance wherever the head
+  points; a slider that declares neither racks over the beam's own throw instead
+  (`frontend/docs/stage-vis-engineering.md` §"Light lands through one surface shader"). Declare both
+  or neither: `FocusRangeTest` holds every FOCUS slider in the library to a usable range.
+- `inverted`: reverses the mapping. On a FOCUS slider DMX min is far focus, as on the MAC 250, whose
+  chart runs "Infinity → 2 meters".
+
+A focus range carries a comment naming its source: the manufacturer's document, or what an estimate
+rests on where the manufacturer publishes nothing. "Infinity" is written as 40 m, the Stage view's
+longest throw. A conventional's focus is not here: it is per placement, on the patch (§"Lanterns and
+focus").
+
 ### @FixtureTrigger — one-shot triggers
 
 ```kotlin

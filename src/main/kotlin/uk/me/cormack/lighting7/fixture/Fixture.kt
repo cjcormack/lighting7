@@ -27,6 +27,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val degMin: Double? = null,
         val degMax: Double? = null,
         val inverted: Boolean = false,
+        val focusNearM: Double? = null,
+        val focusFarM: Double? = null,
     ) {
         companion object {
             /**
@@ -50,6 +52,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.degMin.takeUnless { it.isNaN() },
                 ann.degMax.takeUnless { it.isNaN() },
                 ann.inverted,
+                ann.focusNearM.takeUnless { it.isNaN() },
+                ann.focusFarM.takeUnless { it.isNaN() },
             )
         }
     }

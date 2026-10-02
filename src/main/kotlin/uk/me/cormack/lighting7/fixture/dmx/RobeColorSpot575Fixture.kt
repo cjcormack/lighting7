@@ -359,7 +359,16 @@ sealed class RobeColorSpot575Fixture(
         @FixtureProperty("Zoom", category = PropertyCategory.ZOOM)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 15)
 
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+        // Estimate: Robe publishes only "coarse focus, proportional" (ColorSpot 575 AT DMX chart
+        // v1.0). Near is the manual's 2 m minimum distance to a lit surface (user manual v1.4);
+        // far → near as Robe's later charts run; infinity is the Stage view's 40 m longest throw.
+        @FixtureProperty(
+            "Focus",
+            category = PropertyCategory.FOCUS,
+            focusNearM = 2.0,
+            focusFarM = 40.0,
+            inverted = true,
+        )
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 16)
 
         /**

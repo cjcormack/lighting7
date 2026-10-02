@@ -209,8 +209,13 @@ export type SliderPropertyDescriptor = {
   degMin?: number
   /** Slider max in degrees (mapped to DMX max). */
   degMax?: number
-  /** Reverse the direction of the slider→degrees mapping. */
+  /** Reverse the direction of the slider→degrees mapping; on a focus slider, DMX min is far focus. */
   inverted?: boolean
+  /** Focus slider: the nearest focal distance (m from the aperture), at DMX min unless inverted.
+   *  Both focus fields must be set for the 3D view to focus at a fixed distance. */
+  focusNearM?: number
+  /** Focus slider: the farthest focal distance (m from the aperture), at DMX max unless inverted. */
+  focusFarM?: number
 }
 
 export type ColourPropertyDescriptor = {
