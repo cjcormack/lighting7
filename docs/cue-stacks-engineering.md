@@ -405,11 +405,14 @@ so an edit anywhere moves the stage.
 
 A hook only queues: the recompute runs on the service's one worker thread, never inside the
 caller's transaction (a stack delete calls `deactivateStack` inside its own, and the pool is one
-SQLite connection), and reads holding no lock. Two rules ride on that queue. **A non-GO recompute
-not yet started answers every later one**, so a fader riding a layer's amount queues one read, not
-one per move. And **a GO is judged against the stack as the worker finds it**: if a second GO lands
-before the first's recompute reads, that run starts the second cue's moves on the second cue's
-clocks, and the second's own run finds nothing left to move.
+SQLite connection), and reads holding no lock. Two rules ride on that queue. **A recompute not yet
+started answers every later one**, so a fader riding a layer's amount queues one read, not one per
+move. And **a GO's moves start on the first recompute that reads it**, whatever queued that run: the
+hook records the GO beside the live table, and the run takes both at once. So an edit's recompute
+still queued when a GO lands moves the GO's changes on their clocks, two stacks going in one burst
+each move on their own cue's, and a second GO on a stack before the first's was read leaves the
+first cue's changes to land. The live table is the service's own, written by the hooks — not the
+manager's, which changes a stack's cue before `activateCueInStack` reaches `onCueLive`.
 
 **Clocks.** A change moves on its own `transition` (a cue's only; null follows the cue's fade) —
 **when it belongs to the cue just GO'd**. Everything else snaps: a stack stopping, a Look pressed, an

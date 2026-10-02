@@ -318,6 +318,94 @@ class SceneryRoutesTest : RouteIntegrationTest() {
     }
 
     /**
+     * An edit whose recompute is still queued when a GO lands. That run reads the stack as the GO
+     * left it, but it is not the GO's run: were it to resolve the new cue, its moves would snap there
+     * and the GO's own run would find nothing left to move.
+     */
+    @Test
+    fun `an edit queued ahead of a GO leaves the GO's moves to the GO`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (tabs, _) = tabsAndMoon(client)
+        val s = stack(client, "Act 1")
+        val q1 = cue(client, s, "Q1")
+        val q2 = cue(client, s, "Q2")
+        client.post("/api/rest/projects/$projectId/cue-stacks/$s/activate") {
+            contentType(ContentType.Application.Json)
+            setBody(ActivateCueStackRequest(cueId = q1))
+        }
+        state.sceneryService.awaitIdle()
+
+        val release = state.sceneryService.holdWorker()
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q2", change(tabs, open(0.0), transitionMs = 4000)).status)
+        client.post("/api/rest/projects/$projectId/cue-stacks/$s/advance") {
+            contentType(ContentType.Application.Json)
+            setBody(AdvanceCueStackRequest(direction = "FORWARD"))
+        }
+        release()
+        val drawing = entry(tabs)
+        assertEquals(0.0 to 1.0, drawing.state.open to drawing.from.open)
+        assertEquals(4000L, drawing.durationMs, "Q2's tabs draw on Q2's clock")
+    }
+
+    @Test
+    fun `two stacks that go in one burst each fly on their own cue's clock`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (tabs, moon) = tabsAndMoon(client)
+        val a = stack(client, "Act 1")
+        val a1 = cue(client, a, "Q1")
+        val a2 = cue(client, a, "Q2")
+        val b = stack(client, "Effects")
+        val b1 = cue(client, b, "Q1")
+        val b2 = cue(client, b, "Q2")
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$a2", change(tabs, open(0.0), transitionMs = 4000)).status)
+        assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$b2", change(moon, trim(3.0), transitionMs = 6000)).status)
+        for ((stackId, cueId) in listOf(a to a1, b to b1)) {
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
+                contentType(ContentType.Application.Json)
+                setBody(ActivateCueStackRequest(cueId = cueId))
+            }
+        }
+        state.sceneryService.awaitIdle()
+
+        val release = state.sceneryService.holdWorker()
+        for (stackId in listOf(a, b)) {
+            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/advance") {
+                contentType(ContentType.Application.Json)
+                setBody(AdvanceCueStackRequest(direction = "FORWARD"))
+            }
+        }
+        release()
+        assertEquals(4000L, entry(tabs).durationMs, "Act 1's tabs on its Q2's clock")
+        assertEquals(6000L, entry(moon).durationMs, "the effects stack's moon on its Q2's clock")
+    }
+
+    @Test
+    fun `an edit queued ahead of the AI's apply_cue leaves the cue's moves to the apply`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (tabs, _) = tabsAndMoon(client)
+        val s = stack(client, "Act 1")
+        val q1 = cue(client, s, "Q1")
+        val tools = AiTools(state)
+        state.sceneryService.awaitIdle()
+
+        val release = state.sceneryService.holdWorker()
+        val set = tools.executeTool("set_scenery", buildJsonObject {
+            put("cueId", q1)
+            putJsonArray("scenery") { addJsonObject { put("element", "house tabs"); put("open", 0.0); put("transitionSeconds", 2.5) } }
+        })
+        assertTrue(set.success, set.description)
+        val applied = tools.executeTool("apply_cue", buildJsonObject { put("cueId", q1) })
+        assertTrue(applied.success, applied.description)
+        release()
+        val drawing = entry(tabs)
+        assertEquals(0.0 to 1.0, drawing.state.open to drawing.from.open)
+        assertEquals(2500L, drawing.durationMs)
+    }
+
+    /**
      * A hook fired from inside a transaction — a stack delete calls `deactivateStack` inside its own —
      * while another thread is reading for a preview. The pool is one connection, so a hook that
      * waited on a lock the reader held while the reader waited for that connection would stall both

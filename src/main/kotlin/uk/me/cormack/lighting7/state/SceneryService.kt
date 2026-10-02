@@ -86,12 +86,6 @@ class SceneryService(private val state: State) {
         val durationMs: Long,
     )
 
-    /** Why a recompute ran, which decides the clocks of the moves it starts. */
-    sealed interface Cause {
-        data class Go(val stackId: Int, val cueId: Int) : Cause
-        data object Other : Cause
-    }
-
     private val lock = Any()
     private val _frame = MutableStateFlow(Frame(null, emptyList()))
     val frame: StateFlow<Frame> = _frame.asStateFlow()
@@ -99,19 +93,21 @@ class SceneryService(private val state: State) {
     private var projectId: Int? = null
     private var entries: Map<UUID, Entry> = emptyMap()
     private var seq = 0L
-    /** When each stack last went, by the stack manager's GOs. */
-    private val goSeqs = HashMap<Int, Long>()
+    /** The cue each stack last went to by the stack manager's GOs, and when. */
+    private val goes = HashMap<Int, Pair<Int, Long>>()
     /** Cues the AI's `apply_cue` applied outside the stack manager, by stack. */
     private val applied = HashMap<Int, Pair<Int, Long>>()
+    /** GOs no recompute has read yet: the cue each stack went to. */
+    private val pendingGos = HashMap<Int, Int>()
 
     private var listenedFixtures: uk.me.cormack.lighting7.show.Fixtures? = null
     private var layersJob: Job? = null
 
     private val listener = object : FixturesChangeListener {
-        override fun cueListChanged() = recompute(Cause.Other)
-        override fun cueStackListChanged() = recompute(Cause.Other)
-        override fun lookListChanged() = recompute(Cause.Other)
-        override fun stageElementListChanged() = recompute(Cause.Other)
+        override fun cueListChanged() = recompute()
+        override fun cueStackListChanged() = recompute()
+        override fun lookListChanged() = recompute()
+        override fun stageElementListChanged() = recompute()
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────────────────────
@@ -126,13 +122,14 @@ class SceneryService(private val state: State) {
             listenedFixtures?.unregisterListener(listener)
             show.fixtures.registerListener(listener)
             listenedFixtures = show.fixtures
-            goSeqs.clear()
+            goes.clear()
             applied.clear()
+            pendingGos.clear()
             entries = emptyMap()
         }
         layersJob?.cancel()
-        layersJob = show.programmerStore.layersFlow.onEach { recompute(Cause.Other) }.launchIn(scope)
-        recompute(Cause.Other)
+        layersJob = show.programmerStore.layersFlow.onEach { recompute() }.launchIn(scope)
+        recompute()
     }
 
     fun close() {
@@ -150,10 +147,11 @@ class SceneryService(private val state: State) {
     /** A stack GO — `CueStackManager.activateCueInStack`, by every path that fires one. */
     fun onCueLive(stackId: Int, cueId: Int) {
         synchronized(lock) {
-            goSeqs[stackId] = ++seq
+            goes[stackId] = cueId to ++seq
             applied.remove(stackId)
+            pendingGos[stackId] = cueId
         }
-        recompute(Cause.Go(stackId, cueId))
+        recompute()
     }
 
     /**
@@ -165,27 +163,29 @@ class SceneryService(private val state: State) {
         synchronized(lock) {
             if (replaceAll) applied.clear()
             applied[stackId] = cueId to ++seq
+            pendingGos[stackId] = cueId
         }
-        recompute(Cause.Go(stackId, cueId))
+        recompute()
     }
 
     /** `CueStackManager.deactivateStack`: the stack's set and cues let go. */
     fun onStackStopped(stackId: Int) {
         synchronized(lock) {
-            goSeqs.remove(stackId)
+            goes.remove(stackId)
             applied.remove(stackId)
+            pendingGos.remove(stackId)
         }
-        recompute(Cause.Other)
+        recompute()
     }
 
     /** `stop_cue` and the REST stop route: an applied cue lets go. */
     fun onCueStopped(cueId: Int) {
         synchronized(lock) { applied.entries.removeIf { it.value.first == cueId } }
-        recompute(Cause.Other)
+        recompute()
     }
 
     /** The programmer went blind or came back: its Looks leave or rejoin the stage. */
-    fun onBlindChanged() = recompute(Cause.Other)
+    fun onBlindChanged() = recompute()
 
     // ─── Resolution ──────────────────────────────────────────────────────────────────────────
     //
@@ -196,25 +196,28 @@ class SceneryService(private val state: State) {
     // Hikari timed out. So each hook updates the live table under [lock] and queues a recompute on
     // [worker], one thread, which keeps them in order; the worker reads with no lock held and takes
     // [lock] only to fold the result into [entries].
+    //
+    // **A GO's moves start on the first run that reads it**, whichever hook queued that run: the hook
+    // records it in [pendingGos] with the live table, and the run takes both in one step.
 
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "scenery").apply { isDaemon = true }
     }
 
     /**
-     * Whether a [Cause.Other] recompute is queued and has not started reading yet. A fader riding a
-     * layer's amount emits `layersFlow` per move, and every one of those would otherwise queue a read
-     * on the one-connection pool; one queued recompute that has not read yet answers them all.
+     * Whether a recompute is queued and has not started reading yet. A fader riding a layer's amount
+     * emits `layersFlow` per move, and every one of those would otherwise queue a read on the
+     * one-connection pool; one queued recompute that has not read yet answers them all.
      */
-    private val otherQueued = AtomicBoolean(false)
+    private val queued = AtomicBoolean(false)
 
     /** Queue a recompute. Returns at once; the frame follows on the worker. */
-    fun recompute(cause: Cause) {
-        if (cause is Cause.Other && !otherQueued.compareAndSet(false, true)) return
+    fun recompute() {
+        if (!queued.compareAndSet(false, true)) return
         try {
             worker.execute {
-                if (cause is Cause.Other) otherQueued.set(false)
-                recomputeNow(cause)
+                queued.set(false)
+                recomputeNow()
             }
         } catch (_: RejectedExecutionException) {
             // Closed: the desk is shutting down.
@@ -241,17 +244,14 @@ class SceneryService(private val state: State) {
         runCatching { worker.submit {}.get(10, TimeUnit.SECONDS) }
     }
 
-    private fun recomputeNow(queued: Cause) {
+    private fun recomputeNow() {
         try {
-            val live = synchronized(lock) { liveCues() }
-            // A GO is judged against the stack as it stands when the worker reads, not as it stood
-            // when the hook fired: a second GO landing in between has already made its own cue live,
-            // so this run is the one that sees that cue's changes move — on that cue's clock. Its own
-            // run then finds nothing moved. Judged against the queued cue instead, the later cue's
-            // changes would snap here and start no move there.
-            val cause = when (queued) {
-                is Cause.Go -> live[queued.stackId]?.let { Cause.Go(queued.stackId, it.first) } ?: queued
-                Cause.Other -> queued
+            val (live, gos) = synchronized(lock) {
+                val live = liveCues()
+                // A stack stopped, or let go of an applied cue, since its GO has nothing left to move.
+                val gos = pendingGos.filter { (stackId, cueId) -> live[stackId]?.first == cueId }
+                pendingGos.clear()
+                live to gos
             }
             val input = load(live)
             synchronized(lock) {
@@ -264,15 +264,16 @@ class SceneryService(private val state: State) {
                 val next = LinkedHashMap<UUID, Entry>()
                 val carried = if (projectId == input.projectId) entries else emptyMap()
                 for (r in resolved.values.sortedBy { it.element.name.lowercase() }) {
+                    // An element no change named until now is drawn at its base.
                     val prev = carried[r.element.uuid]
+                    val was = prev?.state ?: r.element.base
                     next[r.element.uuid] = when {
-                        prev == null -> Entry(r.element.uuid, r.element.name, r.state, r.state, now, 0)
-                        prev.state == r.state -> prev.copy(elementName = r.element.name)
+                        prev != null && prev.state == r.state -> prev.copy(elementName = r.element.name)
                         else -> Entry(
                             r.element.uuid, r.element.name, r.state,
-                            from = displayedAt(prev, now),
+                            from = prev?.let { displayedAt(it, now) } ?: was,
                             startedAtMs = now,
-                            durationMs = durationFor(r, prev.state, cause),
+                            durationMs = if (was == r.state) 0 else durationFor(r, was, gos),
                         )
                     }
                 }
@@ -298,8 +299,9 @@ class SceneryService(private val state: State) {
         val resolved = SceneryResolver.resolve(input.elements, input.stacks, input.lookScenery, input.programmerLookIds)
         return resolved.values.sortedBy { it.element.name.lowercase() }.map { r ->
             val prev = current[r.element.uuid]
-            val from = prev?.let { displayedAt(it, now) } ?: r.element.base
-            val duration = if (prev == null || prev.state == r.state) 0 else durationFor(r, prev.state, Cause.Go(stackId, cueId))
+            val was = prev?.state ?: r.element.base
+            val from = prev?.let { displayedAt(it, now) } ?: was
+            val duration = if (was == r.state) 0 else durationFor(r, was, mapOf(stackId to cueId))
             PreviewEntry(r.element.uuid, r.state, from, duration)
         }
     }
@@ -310,14 +312,12 @@ class SceneryService(private val state: State) {
         _frame.value = Frame(projectId, next.values.toList())
     }
 
-    /** The cue each live stack is on, and when it went — the manager's, with `apply_cue`'s over it. Under [lock]. */
+    /**
+     * The cue each live stack is on, and when it went — [goes], with `apply_cue`'s over it. Under
+     * [lock]. Not the manager's own table: it changes a stack's cue before the GO's hook fires.
+     */
     private fun liveCues(): Map<Int, Pair<Int, Long>> {
-        val manager = state.showOrNull?.cueStackManager ?: return emptyMap()
-        val out = HashMap<Int, Pair<Int, Long>>()
-        for (stackId in manager.getActiveStackIds()) {
-            val cueId = manager.getActiveCueId(stackId) ?: continue
-            out[stackId] = cueId to (goSeqs[stackId] ?: 0L)
-        }
+        val out = HashMap(goes)
         for ((stackId, cue) in applied) {
             val existing = out[stackId]
             if (existing == null || cue.second > existing.second) out[stackId] = cue
@@ -405,11 +405,11 @@ class SceneryService(private val state: State) {
                 .map { it.source.id }
 
         /**
-         * How long a move to [r] from [previous] takes under [cause]: the transition of a change of
-         * the cue just GO'd that decided a state that moved, the longest if several did; else a snap.
+         * How long a move to [r] from [previous] takes: the transition of a change of a cue just GO'd
+         * ([gos], the cue by stack) that decided a state that moved, the longest if several did; else
+         * a snap.
          */
-        fun durationFor(r: SceneryResolver.Resolved, previous: ElementStates, cause: Cause): Long {
-            val go = cause as? Cause.Go ?: return 0
+        fun durationFor(r: SceneryResolver.Resolved, previous: ElementStates, gos: Map<Int, Int>): Long {
             val changed = buildSet {
                 if (r.state.visible != previous.visible) add("visible")
                 if (r.state.open != previous.open) add("open")
@@ -417,7 +417,7 @@ class SceneryService(private val state: State) {
             }
             return changed.maxOfOrNull { key ->
                 val src = r.sources[key]
-                if (src is SceneryResolver.Source.CueRow && src.stackId == go.stackId && src.cueId == go.cueId) src.transitionMs else 0L
+                if (src is SceneryResolver.Source.CueRow && gos[src.stackId] == src.cueId) src.transitionMs else 0L
             } ?: 0L
         }
 
