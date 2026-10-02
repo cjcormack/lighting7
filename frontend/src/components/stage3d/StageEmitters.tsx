@@ -29,6 +29,7 @@ import {
 } from './emitterLayout'
 import { LightTable, type LightRow } from './scene/lightTable'
 import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
+import { packLanding } from './scene/landing'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import type { HazeQuality } from './scene/hazeGovernor'
 
@@ -133,8 +134,10 @@ export interface BeamWrite {
   bladesB: number
   /** Bitmask of the regions this beam can reach, from the CPU cone-vs-sphere cull. */
   shadowMask: number
-  /** Where the axis landed, whose plane the march stops at; null in open air. */
+  /** Where the axis landed; null in open air. The march stops behind it and [edgeLand] both. */
   land: SurfaceHit | null
+  /** The second face a beam split across an edge lands on (`scene/landing.ts`); null for none. */
+  edgeLand: SurfaceHit | null
 }
 
 // Per-fixture emitter writes, called from FixtureModel's per-frame loop.
@@ -460,7 +463,7 @@ export interface BuiltEmitters {
   /** (cos of the half-field, shadow mask, the two packed blade words — `beamMask.ts`'s
    *  `packBlades`) per beam. */
   volumeGate: InstancedBufferAttribute
-  /** The landing surface's plane (normal towards the light, w), or (0, 0, 0, 1) in open air. */
+  /** Where the beam lands, two planes packed (`scene/landing.ts`'s `packLanding`). */
   volumeLand: InstancedBufferAttribute
 
   /** One row per light, in the layout's slot order. */
@@ -581,6 +584,8 @@ export function writeHazeClip(materials: ReadonlyArray<ShaderMaterial>, plane: H
   }
 }
 
+const SCRATCH_LAND = [0, 0, 0, 0]
+
 export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[] = () => []): EmittersHandle {
   const layout = b.layout
   const lights = b.lights
@@ -637,9 +642,8 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, 0)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
-      const l = w.land
-      if (l) b.volumeLand.setXYZW(i, l.nx, l.ny, l.nz, -(l.nx * l.px + l.ny * l.py + l.nz * l.pz))
-      else b.volumeLand.setXYZW(i, 0, 0, 0, 1)
+      packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0)
+      b.volumeLand.setXYZW(i, SCRATCH_LAND[0], SCRATCH_LAND[1], SCRATCH_LAND[2], SCRATCH_LAND[3])
     },
 
     writeLight(slot, light, row) {

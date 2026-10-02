@@ -270,6 +270,8 @@ class SceneryRoutesTest : RouteIntegrationTest() {
             putJsonArray("scenery") { addJsonObject { put("element", "Moon"); put("open", 0.0) } }
         })
         assertTrue(!refused.success && "open is a drawn drape's" in refused.description, refused.description)
+        // The write's own recompute, still queued, would otherwise read the applied cue and snap it.
+        state.sceneryService.awaitIdle()
 
         val applied = tools.executeTool("apply_cue", buildJsonObject { put("cueId", q1) })
         assertTrue(applied.success, applied.description)

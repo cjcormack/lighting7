@@ -6,6 +6,7 @@ import {
   ColourSync,
   composeBeamHull,
   coneLandingDepth,
+  edgeLanding,
   focusRangeM,
   landBeam,
   lensLocalMatrix,
@@ -239,6 +240,97 @@ describe('where a beam is drawn to', () => {
     expect(resolveFocusDistance(1, focusRangeM(landed.length))).toBeCloseTo(landed.length, 6)
     // A throw inside BEAM_LENGTH racks over BEAM_LENGTH, as it always has.
     expect(focusRangeM(4)).toBe(BEAM_LENGTH)
+  })
+})
+
+describe('a beam split across an edge', () => {
+  // The Commemoration Hall's stage: a deck 0.95 m above the stalls floor, its riser facing the house
+  // at z 0, the deck running 7 m upstage and the floor 20 m downstage.
+  const stage = [boxCollider(0, -0.475, -3.5, 5, 0.475, 3.5), boxCollider(0, -0.96, 10, 5, 0.01, 10)]
+  const emitters = {
+    reach: (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, stage, maxT, out),
+  }
+  const balcony = new Vector3(0, 2.8, 17.3)
+  const tanHalf = Math.tan((10 * Math.PI) / 360)
+
+  function frame(dir: Vector3): { bx: Vector3; by: Vector3 } {
+    const bx = new Vector3(1, 0, 0).addScaledVector(dir, -dir.x).normalize()
+    return { bx, by: new Vector3().crossVectors(dir, bx) }
+  }
+  function behind(face: { px: number; py: number; pz: number; nx: number; ny: number; nz: number }, p: Vector3): boolean {
+    return face.nx * (p.x - face.px) + face.ny * (p.y - face.py) + face.nz * (p.z - face.pz) < -0.03
+  }
+  function land(target: Vector3, tan = tanHalf) {
+    const dir = target.clone().sub(balcony).normalize()
+    const hit = { ...landBeam(emitters, balcony, dir).hit! }
+    const { bx, by } = frame(dir)
+    const edge = edgeLanding(emitters, balcony, dir, bx, by, tan, tan, false, 0, hit)
+    return { dir, hit, edge: edge && { ...edge } }
+  }
+
+  it('lands a follow spot aimed at the riser on the deck too, and stops only inside the stage', () => {
+    const { hit, edge } = land(new Vector3(0, -0.4, 0))
+    expect(hit.nz).toBe(1)
+    expect(edge).not.toBeNull()
+    expect(edge!.ny).toBe(1)
+    expect(edge!.py).toBeCloseTo(0, 6)
+    // The deck upstage of the riser is lit and its haze drawn; inside the stage nothing is.
+    const deck = new Vector3(0, 0, -2)
+    expect(behind(hit, deck) && behind(edge!, deck)).toBe(false)
+    const inside = new Vector3(0, -0.5, -1)
+    expect(behind(hit, inside) && behind(edge!, inside)).toBe(true)
+  })
+
+  it('lands one aimed just over the edge on the riser too, from the other side', () => {
+    const { hit, edge } = land(new Vector3(0, 0, -0.3))
+    expect(hit.ny).toBe(1)
+    expect(edge).not.toBeNull()
+    expect(edge!.nz).toBe(1)
+    const riser = new Vector3(0, -0.3, 0)
+    expect(behind(hit, riser) && behind(edge!, riser)).toBe(false)
+  })
+
+  it("prefers the face next to the riser over a rostrum further upstage", () => {
+    // A rostrum 0.7 m high, 3–5 m upstage: the upper rim lands on its top, deeper behind the riser
+    // than the deck is. The deck is the face the riser's edge belongs to.
+    const rostrum = [...stage, boxCollider(0, 0.35, -4, 5, 0.35, 1)]
+    const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, rostrum, maxT, out)
+    const dir = new Vector3(0, -0.4, 0).sub(balcony).normalize()
+    const hit = { ...landBeam({ reach }, balcony, dir).hit! }
+    expect(hit.nz).toBe(1)
+    const { bx, by } = frame(dir)
+    const edge = edgeLanding({ reach }, balcony, dir, bx, by, tanHalf, tanHalf, false, 0, hit)
+    expect(edge).not.toBeNull()
+    expect(edge!.ny).toBe(1)
+    expect(edge!.py).toBeCloseTo(0, 6)
+  })
+
+  it('finds no edge for a beam the riser takes whole', () => {
+    expect(land(new Vector3(0, -0.5, 0), Math.tan((2 * Math.PI) / 360)).edge).toBeNull()
+  })
+
+  it('finds no edge in a corner, where the rim lands in front of the face the axis hit', () => {
+    // Deck and back wall: a concave corner, which the single plane already cuts right.
+    const room = [boxCollider(0, -0.5, -3.5, 5, 0.5, 3.5), boxCollider(0, 3, -7.01, 5, 3, 0.01)]
+    const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, room, maxT, out)
+    const above = new Vector3(0, 6, -3)
+    const dir = new Vector3(0, 0, -6.5).sub(above).normalize()
+    const hit = { ...landBeam({ reach }, above, dir).hit! }
+    const { bx, by } = frame(dir)
+    expect(edgeLanding({ reach }, above, dir, bx, by, 0.4, 0.4, false, 0, hit)).toBeNull()
+  })
+
+  it('leaves a flat stopping the beam when its rim lands on the wall behind', () => {
+    // The flat's plane and the wall's are parallel: one more plane cannot draw the flat's shadow,
+    // so the flat keeps stopping all of it rather than none.
+    const set = [boxCollider(0, 1.5, -2, 1, 1.5, 0.01), boxCollider(0, 3, -7.01, 6, 3, 0.01)]
+    const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, set, maxT, out)
+    const front = new Vector3(0, 1.5, 10)
+    const dir = new Vector3(0.8, 1.5, -2).sub(front).normalize()
+    const hit = { ...landBeam({ reach }, front, dir).hit! }
+    expect(hit.nz).toBe(1)
+    const { bx, by } = frame(dir)
+    expect(edgeLanding({ reach }, front, dir, bx, by, 0.1, 0.1, false, 0, hit)).toBeNull()
   })
 })
 

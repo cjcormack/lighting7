@@ -406,19 +406,35 @@ without a room — the back wall and the catch floor:
 - **Axial beam reach stands in for occlusion** (`scene/beamReach.ts`), until the quality tier's
   shadow maps (`FU-STAGE-QUALITY-TIER`). The director casts each lobe's axis against the scene's
   **colliders** — oriented boxes in three.js space turned about y, the regions' OBB maths: a wall a
-  2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m) and writes the first
-  hit's plane into the light's fourth texel. The surface shader lights nothing behind that plane
-  (`REACH_EPS` 3 cm), so a pool on the floor lands whole however oblique the beam, while the floor
-  under a deck the beam landed on stays dark. The **cone** is cut at the same plane, however far
-  away it is, so a follow spot on the Commemoration Hall's balcony reaches the stage 20 m away; the
-  hull runs on past the axial hit to where the cone's far rim meets the plane (`coneLandingDepth`,
-  capped at `MAX_THROW_M`), so a grazing beam is in the air over the whole of its pool rather than
-  ending square to its axis. The plane reaches the march as one more chord clamp (`aBeamLand`); only
-  a beam that meets nothing keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long
-  throw shows in the air is the window's Haze setting (§"Haze degrades before frame rate"): Stage
-  clips it at the proscenium, Everywhere and the Positions plan draw it whole. A focus channel racks
-  over the axial throw (`focusRangeM`): 15 % of it to all of it, never less than `BEAM_LENGTH`, so a
-  long throw at full focus is sharp where it lands.
+  2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m), and the first hit's
+  plane is where the beam lands (with a second face's for a beam split across an edge, below). The
+  surface shader lights nothing behind it (`REACH_EPS` 3 cm), so a pool on the floor lands whole
+  however oblique the beam, while the floor under a deck the beam landed on stays dark. The **cone**
+  is cut at the same plane, however far away it is, so a follow spot on the Commemoration Hall's
+  balcony reaches the stage 20 m away; the hull runs on past the axial hit to where the cone's far
+  rim meets the plane (`coneLandingDepth`, capped at `MAX_THROW_M`), so a grazing beam is in the air
+  over the whole of its pool rather than ending square to its axis. Only a beam that meets nothing
+  keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
+  window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
+  Everywhere and the Positions plan draw it whole. A focus channel racks over the axial throw
+  (`focusRangeM`): 15 % of it to all of it, never less than `BEAM_LENGTH`, so a long throw at full
+  focus is sharp where it lands.
+- **A beam split across an edge lands on both faces** (`scene/landing.ts`, `edgeLanding` in
+  `FixtureModel.tsx`). One plane cannot stand for a convex edge: a follow spot aimed at the front of
+  the stage has its axis on the riser, and cutting at the riser's plane took the half that clears
+  the lip off the deck and out of the air. The director casts eight rays round the field's rim and
+  keeps a second face when a rim lands behind the first face's plane and the first face lies behind
+  the rim's in turn (the riser and the deck, from either side); a rim that lands on something beyond
+  instead, such as the stalls floor past the lip, is bisected back to the edge and the face just past
+  it tried. Of several, the landing nearest the first face's plane wins: the deck, not a rostrum
+  further upstage. Nothing is lit or hazed **behind both** planes, which is the inside of the stage,
+  and the hull is drawn until the cone has crossed both. A rim landing beyond a parallel face (the
+  wall behind a flat) is not an edge the wedge can draw, so the flat still stops the whole beam: its
+  shadow is the shadow maps' job. Both planes ride the light's fourth texel and the `aBeamLand`
+  attribute, one `vec4` as the single plane did: a collider turns about y, so a face's normal is up,
+  down or level and one float codes it (`landNormalCode`). In the march, behind both is an interval
+  of the view ray: at an end of the chord it trims the chord, and inside it (an edge seen side-on)
+  the samples in it are skipped.
 - **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
   disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
   a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the

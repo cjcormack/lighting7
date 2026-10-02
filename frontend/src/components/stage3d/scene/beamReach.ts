@@ -7,11 +7,13 @@ import { elementBaseZ, type ElementBuild, type PartGeometry } from './sceneParts
  *
  * Every surface a beam can stop at is a **collider** — an oriented box in the desk's three.js space
  * (`lib/stageCoords.ts`: x right, y up, z towards the house), turned about y only, as the region
- * OBBs the beam shaders already shadow-test are. A wall is a thin slab behind its face, a deck its
- * whole box. [beamReach] casts the beam's axis against them and answers the nearest hit and the
- * **plane** of the face it hit. The director draws the beam's cone to the hit, and the surface
- * shader lights nothing behind that plane — so a pool on the floor lands whole, however oblique the
- * beam, while the floor under a deck the beam has landed on stays dark.
+ * OBBs the beam shaders already shadow-test are — which [`landing.ts`](./landing.ts) relies on to
+ * pack a face's normal in one float. A wall is a thin slab behind its face, a deck its whole box.
+ * [beamReach] casts the beam's axis against them and answers the nearest hit and the **plane** of
+ * the face it hit. The director draws the beam's cone to the hit, and the surface shader lights
+ * nothing behind that plane (behind it and a second face, for a beam split across an edge) — so a
+ * pool on the floor lands whole, however oblique the beam, while the floor under a deck the beam has
+ * landed on stays dark.
  *
  * Pure and three.js-free: numbers in, numbers out, allocation-free on the per-frame path.
  */

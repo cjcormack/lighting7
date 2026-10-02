@@ -5,6 +5,7 @@ import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
 import { EDGE_IRIS_STEPS, LIGHT_TEXELS, LightTable, makeLightRow, packEdgeIris, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
+import { LAND_NONE, LAND_UP } from './landing'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
 import { DEFAULT_SCENE_LAYERS, elementInLayers, parseSceneLayers } from './sceneView'
@@ -91,9 +92,13 @@ describe('the light table', () => {
     const table = new LightTable(1)
     const lit = { ...makeLightRow(), ay: 4, cosBound: 0.9, r: 1, g: 1, b: 1 }
     table.set(0, lit)
-    expect(Array.from(table.staged.subarray(12, 16))).toEqual([0, 0, 0, -1])
+    expect(Array.from(table.staged.subarray(12, 16))).toEqual([LAND_NONE, -1, LAND_NONE, -1])
     table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 } })
-    expect(Array.from(table.staged.subarray(12, 16))).toEqual([0, 1, 0, 0.5])
+    expect(Array.from(table.staged.subarray(12, 16))).toEqual([LAND_UP, 0.5, LAND_NONE, 1])
+    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 }, edgeHit: { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1 } })
+    expect(Array.from(table.staged.subarray(12, 14))).toEqual([LAND_UP, 0.5])
+    expect(table.staged[14]).toBeCloseTo(Math.PI / 2, 6)
+    expect(table.staged[15]).toBe(2)
   })
 
   it("carries the beam's frame and aperture for the surfaces' mask: right axis, tan, near, blades, aspect", () => {
