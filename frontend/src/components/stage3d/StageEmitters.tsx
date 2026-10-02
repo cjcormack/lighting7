@@ -8,6 +8,7 @@ import {
   MathUtils,
   Matrix4,
   ShaderMaterial,
+  type Vector2,
   Vector3,
   type Vector4,
 } from 'three'
@@ -75,14 +76,17 @@ export function computeRegionGeometry(regions: StageRegionDto[]): RegionGeometry
 }
 
 /**
- * Where the beams stop in the air: the lowest floor and the furthest upstage wall the view draws, in
- * lighting metres. The beam volumes clip to them, so a wide beam's flank does not poke
- * through the floor under a hung head. Without a modelled room they are the stage's own floor and
- * back wall, as before.
+ * Where the beams stop in the air: the lowest floor, the furthest upstage wall and the outermost
+ * side walls the view draws, in lighting metres. The beam volumes clip to them, so a wide beam's
+ * flank does not poke through the floor under a hung head, nor a long throw's out of the building.
+ * Without a modelled room they are the stage's own floor and back wall, and no sides.
  */
 export interface BeamClip {
   floorZ: number
   wallY: number
+  /** The outermost side walls, lighting X; ∓[NO_SIDE_X] without a room. */
+  minX: number
+  maxX: number
 }
 
 /**
@@ -129,6 +133,8 @@ export interface BeamWrite {
   bladesB: number
   /** Bitmask of the regions this beam can reach, from the CPU cone-vs-sphere cull. */
   shadowMask: number
+  /** Where the axis landed, whose plane the march stops at; null in open air. */
+  land: SurfaceHit | null
 }
 
 // Per-fixture emitter writes, called from FixtureModel's per-frame loop.
@@ -227,6 +233,7 @@ export function dirtyGroups(b: BuiltEmitters): DirtyGroup[] {
         b.volumeFx,
         b.volumeShape,
         b.volumeGate,
+        b.volumeLand,
       ],
     },
   ]
@@ -339,10 +346,13 @@ export function StageEmitters({
   const materials = useMemo(() => [volumeMaterial], [volumeMaterial])
   useEffect(() => {
     writeRegionUniforms(materials, regionGeometry, regionCount, clip.wallY)
-    for (const mat of materials) mat.uniforms.uFloorY.value = clip.floorZ
+    for (const mat of materials) {
+      mat.uniforms.uFloorY.value = clip.floorZ
+      ;(mat.uniforms.uSideX.value as Vector2).set(clip.minX, clip.maxX)
+    }
     // A uniform write is not a prop change, so the `demand` frameloop has to be asked.
     invalidate()
-  }, [materials, regionGeometry, regionCount, clip.wallY, clip.floorZ, invalidate])
+  }, [materials, regionGeometry, regionCount, clip.wallY, clip.floorZ, clip.minX, clip.maxX, invalidate])
 
   useEffect(() => {
     writeHazeClip(materials, hazeClip)
@@ -450,6 +460,8 @@ export interface BuiltEmitters {
   /** (cos of the half-field, shadow mask, the two packed blade words — `beamMask.ts`'s
    *  `packBlades`) per beam. */
   volumeGate: InstancedBufferAttribute
+  /** The landing surface's plane (normal towards the light, w), or (0, 0, 0, 1) in open air. */
+  volumeLand: InstancedBufferAttribute
 
   /** One row per light, in the layout's slot order. */
   lights: LightTable
@@ -475,8 +487,9 @@ export function buildEmitters(
   const volumeFx = vec4InstAttr(beamCap)
   const volumeShape = vec4InstAttr(beamCap)
   const volumeGate = vec4InstAttr(beamCap)
-  // Seven attributes here plus three's position, normal and uv and the instance matrix's four make
-  // fourteen of WebGL's guaranteed sixteen — `beamShaders.ts` says why they are packed: a program
+  const volumeLand = vec4InstAttr(beamCap)
+  // Eight attributes here plus three's position, normal and uv and the instance matrix's four make
+  // fifteen of WebGL's guaranteed sixteen — `beamShaders.ts` says why they are packed: a program
   // with a seventeenth does not link (ANGLE: "Too many attributes"), and every beam goes dark.
   volumeGeo.setAttribute('aBeamOrigin', volumeOrigin)
   volumeGeo.setAttribute('aBeamDir', volumeDir)
@@ -485,6 +498,7 @@ export function buildEmitters(
   volumeGeo.setAttribute('aBeamFx', volumeFx)
   volumeGeo.setAttribute('aBeamShape', volumeShape)
   volumeGeo.setAttribute('aBeamGate', volumeGate)
+  volumeGeo.setAttribute('aBeamLand', volumeLand)
 
   const volumeMesh = new InstancedMesh(volumeGeo, volumeMaterial, beamCap)
   volumeMesh.frustumCulled = false
@@ -508,6 +522,7 @@ export function buildEmitters(
     volumeFx,
     volumeShape,
     volumeGate,
+    volumeLand,
     lights: new LightTable(layout.totalLights),
   }
 }
@@ -622,6 +637,9 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, 0)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
+      const l = w.land
+      if (l) b.volumeLand.setXYZW(i, l.nx, l.ny, l.nz, -(l.nx * l.px + l.ny * l.py + l.nz * l.pz))
+      else b.volumeLand.setXYZW(i, 0, 0, 0, 1)
     },
 
     writeLight(slot, light, row) {

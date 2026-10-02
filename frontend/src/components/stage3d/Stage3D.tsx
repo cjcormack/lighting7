@@ -329,7 +329,7 @@ export function Stage3D({
     [stageDims, view.regions, regionGeometry, builds, gridSize],
   )
   const beamClip = useMemo(() => beamClipFor(stageDims, builds), [stageDims, builds])
-  // Only the scene has a house to keep clear: the Positions plan's beams reach as far as they ever did.
+  // Only the scene has a house to keep clear: the Positions plan's beams are drawn whole.
   const hazeClip = useMemo(
     () => (showScene ? hazeClipFor(layers.haze, storedElements ?? EMPTY_ELEMENTS) : null),
     [layers.haze, showScene, storedElements],

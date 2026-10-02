@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { packBlades } from '../beamMask'
+import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
@@ -206,12 +207,17 @@ describe('what the view draws and casts at', () => {
     expect(withRoom).toHaveLength(1 + 6 + 4 + 1)
   })
 
-  it('clips the beams in the air to the lowest room floor and the furthest upstage wall', () => {
-    expect(beamClipFor(stage, [])).toEqual({ floorZ: 0, wallY: 11 })
+  it('clips the beams in the air to the lowest room floor, the furthest upstage wall and the side walls', () => {
+    expect(beamClipFor(stage, [])).toEqual({ floorZ: 0, wallY: 11, minX: -NO_SIDE_X, maxX: NO_SIDE_X })
     const builds = sceneBuilds([hall, house], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() })
     const clip = beamClipFor(stage, builds)
     expect(clip.floorZ).toBe(-0.95)
     expect(clip.wallY).toBeCloseTo(5.675 + 10.65 / 2, 9)
+    expect([clip.minX, clip.maxX]).toEqual([-4.3, 4.3])
+    // A wider wing, off centre, widens only its own side.
+    const wing = element({ uuid: 'wing', kind: 'ROOM', positionX: 5, positionY: 4, widthM: 4, depthM: 4, heightM: 4 })
+    const widened = beamClipFor(stage, sceneBuilds([hall, wing], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() }))
+    expect([widened.minX, widened.maxX]).toEqual([-4.3, 7])
   })
 
   it('bounds the drawn venue for how deep a section sees', () => {

@@ -173,13 +173,14 @@ const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz:
 
 /**
  * Where a beam from [origin] along [dir] lands: the surface hit (in the scratch object) and the
- * length to draw its cone — to the surface, or [BEAM_LENGTH], whichever is nearer. The light itself
- * reaches the surface however far it is ([MAX_THROW_M]); only the drawn cone keeps the desk's
- * stylised length, so a front-of-house wash lands on the stage without a 16 m cone of haze filling
- * the hall between. Cast from the **aperture**, not the apex behind it.
+ * axial throw to it, however far within [MAX_THROW_M], so a follow spot on a balcony reaches the
+ * stage; or the desk's stylised [BEAM_LENGTH] in open air. The cone is drawn past the hit to
+ * [coneLandingDepth] and cut at the hit's plane. How much of it shows in the air is the window's
+ * Haze setting: Stage clips it at the proscenium (`hazeClipFor`), Everywhere and the Positions plan
+ * draw it whole. Cast from the **aperture**, not the apex behind it.
  */
-function landBeam(
-  emitters: EmittersHandle,
+export function landBeam(
+  emitters: Pick<EmittersHandle, 'reach'>,
   origin: Vector3,
   dir: Vector3,
 ): { hit: SurfaceHit | null; length: number } {
@@ -191,7 +192,30 @@ function landBeam(
   SCRATCH_SURFACE_HIT.nx = SCRATCH_BEAM_HIT.nx
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
-  return { hit: SCRATCH_SURFACE_HIT, length: Math.min(t, BEAM_LENGTH) }
+  return { hit: SCRATCH_SURFACE_HIT, length: t }
+}
+
+/**
+ * How far along [dir] from [apex] a cone of half-angle tangent [tanHalf] reaches before all of it
+ * has crossed the plane of [hit] (its normal towards the light): the far rim of a grazing landing,
+ * well past the axis's own hit. [cap] where the far rim never meets the plane.
+ */
+export function coneLandingDepth(apex: Vector3, dir: Vector3, tanHalf: number, hit: SurfaceHit, cap: number): number {
+  const height = (apex.x - hit.px) * hit.nx + (apex.y - hit.py) * hit.ny + (apex.z - hit.pz) * hit.nz
+  const nd = dir.x * hit.nx + dir.y * hit.ny + dir.z * hit.nz
+  if (height <= 0 || nd >= 0) return cap
+  // The steepest-away rim leans from the axis towards the plane's own direction across the beam.
+  const across = Math.sqrt(Math.max(0, 1 - nd * nd))
+  const closing = -nd - tanHalf * across
+  return closing > 1e-6 ? Math.min(cap, height / closing) : cap
+}
+
+/**
+ * The throw a focus channel racks over, from [landBeam]'s length: [BEAM_LENGTH], or the beam's own
+ * throw where it lands further away, so full focus is sharp on what a long throw lands on.
+ */
+export function focusRangeM(landedLength: number): number {
+  return Math.max(BEAM_LENGTH, landedLength)
 }
 
 /**
@@ -767,6 +791,7 @@ const SCRATCH_BEAM: BeamWrite = {
   bladesA: 0,
   bladesB: 0,
   shadowMask: 0,
+  land: null,
 }
 const SCRATCH_LIGHT: LightRow = makeLightRow()
 
@@ -1035,11 +1060,11 @@ function useBeamDirector({
     }
     const tanHalf = Math.tan(MathUtils.degToRad(beamDeg) / 2)
 
-    // Focus maps to a focal-plane distance from the aperture; the shaders soften the edge by how
-    // far a surface or a sample sits from it. Without a focus channel the edge is the family's
-    // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
+    // Focus maps to a focal-plane distance from the aperture, per lobe over its own throw
+    // ([focusRangeM]); the shaders soften the edge by how far a surface or a sample sits from it.
+    // Without a focus channel the edge is the family's softness (`bodies/archetype.ts`), moved
+    // towards soft by a frost channel.
     const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
-    const focusDist = resolveFocusDistance(focusParam, BEAM_LENGTH)
     const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
     const edge = 1 - softness
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
@@ -1124,7 +1149,6 @@ function useBeamDirector({
     const beam = SCRATCH_BEAM
     beam.cosHalf = geom.cosHalfBeam
     beam.edge = edge
-    beam.focusDist = focusDist
     beam.iris = iris
     beam.bladesA = multi ? 0 : blades[0]
     beam.bladesB = multi ? 0 : blades[1]
@@ -1175,9 +1199,17 @@ function useBeamDirector({
       SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(lobeDir, -near)
 
       // Where the lobe lands: the first surface on its axis, from the aperture. The volume is drawn
-      // to it, and the light table carries it as the plane the surfaces stop lighting behind.
+      // until all of it has crossed that surface's plane and is cut there, and the light table
+      // carries the same plane as the one the surfaces stop lighting behind.
       const landed = landBeam(emitters, SCRATCH_APERTURE, lobeDir)
-      const length = near + landed.length
+      // A segment's frustum reaches past the field circle at its corners.
+      const tanEdge = aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf
+      const length = landed.hit
+        ? coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, landed.hit, near + MAX_THROW_M)
+        : near + landed.length
+      const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
+      beam.focusDist = focusDist
+      beam.land = landed.hit
       SCRATCH_BX.copy(SCRATCH_RIGHT).addScaledVector(lobeDir, -SCRATCH_RIGHT.dot(lobeDir)).normalize()
       SCRATCH_BY.crossVectors(lobeDir, SCRATCH_BX)
       const far = length * tanHalf
@@ -1249,6 +1281,7 @@ function useBeamDirector({
         const near = apexDistanceM(halfWidth, beamDeg)
         SCRATCH_APEX.copy(SCRATCH_APERTURE).addScaledVector(dir, -near)
         const landed = landBeam(emitters, SCRATCH_APERTURE, dir)
+        const focusDist = resolveFocusDistance(focusParam, focusRangeM(landed.length))
         writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }

@@ -33,6 +33,8 @@ export const MAX_VOL_STEPS = 16
 
 // Sentinel "no wall" plane, far enough upstage that nothing reaches it.
 export const NO_WALL_Z = -1e6
+/** Sentinel side walls, far enough out that nothing reaches them. */
+export const NO_SIDE_X = 1e6
 
 const REGION_UNIFORMS_GLSL = /* glsl */ `
   uniform int uNumRegions;
@@ -101,8 +103,8 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 // a beam hides it; the back face while it starts inside, where the front faces are behind the eye
 // (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). The true
 // bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
-// clamped by the axial range, the floor, the upstage wall, the window's haze plane and camera-ray
-// region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
+// clamped by the axial range, the plane of the surface the beam landed on, the floor, the upstage
+// and side walls, the window's haze plane and camera-ray region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
 // through a box — then sampled with a per-pixel interleaved-gradient jitter so banding dissolves
 // under bloom. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
 const VOLUME_VERTEX_SHADER = /* glsl */ `
@@ -110,14 +112,16 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamDir;
   attribute vec3 aBeamRight;
   // Packed to stay inside WebGL's guaranteed sixteen vertex attributes: three's prefix declares
-  // position, normal and uv, the instance matrix takes four, and these seven take the rest —
-  // fourteen. The colour carries the opacity in .a; the gate carries the half-angle, the shadow
+  // position, normal and uv, the instance matrix takes four, and these eight take the rest —
+  // fifteen. The colour carries the opacity in .a; the gate carries the half-angle, the shadow
   // mask and the two packed blade words (stage-view plan session 7). A program past sixteen does
   // not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
   attribute vec4 aColor;
   attribute vec4 aBeamFx;
   attribute vec4 aBeamShape;
   attribute vec4 aBeamGate;
+  // The plane of the surface the beam landed on, (normal towards the light, w): nothing past it.
+  attribute vec4 aBeamLand;
 
   varying vec3 vWorldPos;
   varying vec3 vBeamOrigin;
@@ -130,6 +134,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   varying float vShadowMask;
   varying float vBeamLen;
   varying vec4 vBeamShape;
+  varying vec4 vBeamLand;
   // Flat: the blades are packed integers (beamMask.ts's packBlades), which interpolation — even of
   // three equal corners — could nudge off by an ulp and unpack as the wrong blade.
   flat varying vec2 vBeamBlades;
@@ -137,9 +142,11 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   void main() {
     vBeamShape = aBeamShape;
     vBeamBlades = aBeamGate.zw;
-    // The drawn length is the instance's y scale, from the apex: the beam ends where its axis meets
-    // a surface (the director's axial reach), or BEAM_LENGTH past its aperture in open air.
+    // The drawn length is the instance's y scale, from the apex: far enough for the whole cone to
+    // cross the plane it landed on (the director's coneLandingDepth), or BEAM_LENGTH past its
+    // aperture in open air.
     vBeamLen = length(instanceMatrix[1].xyz);
+    vBeamLand = aBeamLand;
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vWorldPos = wp.xyz;
     vBeamOrigin = aBeamOrigin;
@@ -159,6 +166,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_VOL_STEPS ${MAX_VOL_STEPS}
   uniform float uFloorY;
   uniform float uWallZ;
+  // The outermost side walls, (min x, max x).
+  uniform vec2 uSideX;
   // Where the air shows the beam: dot(p, xyz) + w >= 0. (0, 0, 0, 1) everywhere.
   uniform vec4 uHazeClip;
   uniform float uHaze;
@@ -183,6 +192,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying float vShadowMask;
   varying float vBeamLen;
   varying vec4 vBeamShape;
+  varying vec4 vBeamLand;
   flat varying vec2 vBeamBlades;
 
   ${RAY_OBB_T_GLSL}
@@ -286,9 +296,13 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // Axial range [near, vBeamLen]: from the aperture to where the beam lands. axial(t) = cod + t*vd.
     clampHalfSpace(cod - near, vd, tEnter, tExit);                // axial >= near
     clampHalfSpace(vBeamLen - cod, -vd, tEnter, tExit);           // axial <= L
+    // Nothing past the plane of the surface the beam landed on, however obliquely it lands.
+    clampHalfSpace(dot(camPos, vBeamLand.xyz) + vBeamLand.w, dot(rayDir, vBeamLand.xyz), tEnter, tExit);
     // Floor, upstage wall, and how far this window's haze reaches (hazeClipFor).
     clampHalfSpace(camPos.y - uFloorY, rayDir.y, tEnter, tExit);  // y >= floor
     clampHalfSpace(camPos.z - uWallZ, rayDir.z, tEnter, tExit);   // z >= wall
+    clampHalfSpace(camPos.x - uSideX.x, rayDir.x, tEnter, tExit); // x >= the SR side wall
+    clampHalfSpace(uSideX.y - camPos.x, -rayDir.x, tEnter, tExit); // x <= the SL side wall
     clampHalfSpace(dot(camPos, uHazeClip.xyz) + uHazeClip.w, dot(rayDir, uHazeClip.xyz), tEnter, tExit);
 
     // Cheap rejection first: a chord the clamps have already emptied must not
@@ -376,6 +390,7 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
     uniforms: {
       uFloorY: { value: 0.0 },
       uWallZ: { value: NO_WALL_Z },
+      uSideX: { value: new Vector2(-NO_SIDE_X, NO_SIDE_X) },
       uHazeClip: { value: new Vector4(0, 0, 0, 1) },
       uHaze: { value: HAZE_LEVEL },
       uGobo: { value: gobo },

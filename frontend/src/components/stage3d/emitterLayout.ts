@@ -38,8 +38,8 @@ export const MAX_LIGHTS_PER_FIXTURE = 4
 export const MAX_SLOT_LOBES = Math.max(MAX_PRISM_LOBES, MAX_CELLS)
 
 /**
- * How far a beam is drawn in the air: to the first surface on its axis, or this far, whichever is
- * nearer. The desk's stylised length — the light itself reaches further ([MAX_THROW_M]).
+ * How far a beam is drawn in open air, where its axis meets no surface within [MAX_THROW_M]. A beam
+ * that lands is drawn to the surface, however far.
  */
 export const BEAM_LENGTH = 8
 
