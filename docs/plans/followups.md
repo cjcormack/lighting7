@@ -1174,6 +1174,9 @@ as degraded rather than guessed at.
 **Trigger**: two heads on one rig whose strobes need to visibly match. Until then the percentage is
 no worse than what a per-fixture value gave.
 
+**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 6 adds `hzMin`/`hzMax` per
+strobe band. The `Hertz` grammar arm stays here.
+
 ### `FU-TMPL-WHEEL-PREVIEWS`
 
 **A wheel snap is only as good as its `colourPreview`** · Trigger · desk-simplification §Session 3, 2026-08-23
@@ -1201,6 +1204,9 @@ Not obviously worth fixing: a colour template asks "be this colour", and answeri
 once is a mixing problem the fixture's own manual barely addresses.
 
 **Trigger**: an operator asks for the second wheel by name.
+
+**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 draws the second wheel in
+the Stage view. The template half stays here.
 
 ---
 
@@ -2167,6 +2173,9 @@ projected by sampling the existing gobo atlas in light space. **Trigger**: an op
 gobo or a shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light
 table — a shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a
 starting point.
+
+**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 lands gobos on surfaces
+(its D10). Shadows stay here.
 
 ### `FU-STAGE-GLB-IMPORT`
 
