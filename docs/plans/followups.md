@@ -2110,7 +2110,7 @@ level alone and gave each window a *Haze* toggle in the View menu instead
 **Trigger**: a rig can name its hazer — a typed fixture (a hazer mode with an output and a fan
 channel), or a role on a patch. **Then**: the volume shader's haze level reads that fixture's output
 on the window's vis source (so Blind and Next GO preview it), with the constant as the fallback for
-a rig that names none; the View menu's toggle stays as the window's override. The haze governor
+a rig that names none; the View menu's Haze extent stays as the window's override. The haze governor
 (`scene/hazeGovernor.ts`) is unaffected — it scales march steps, not the level.
 
 ### `FU-LANTERN-LIBRARY-HALL`

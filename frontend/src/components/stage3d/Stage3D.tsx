@@ -29,6 +29,7 @@ import { HAZE_TIERS, HazeGovernor, type HazeQuality } from './scene/hazeGovernor
 import {
   beamClipFor,
   drawsRoom,
+  hazeClipFor,
   sceneBuilds,
   sceneColliders,
   sceneElementBounds,
@@ -328,6 +329,11 @@ export function Stage3D({
     [stageDims, view.regions, regionGeometry, builds, gridSize],
   )
   const beamClip = useMemo(() => beamClipFor(stageDims, builds), [stageDims, builds])
+  // Only the scene has a house to keep clear: the Positions plan's beams reach as far as they ever did.
+  const hazeClip = useMemo(
+    () => (showScene ? hazeClipFor(layers.haze, storedElements ?? EMPTY_ELEMENTS) : null),
+    [layers.haze, showScene, storedElements],
+  )
   const venueBounds = useMemo(() => sceneElementBounds(builds), [builds])
   // Haze degrades before frame rate (`scene/hazeGovernor.ts`): the governor in the canvas steps it.
   const [hazeQuality, setHazeQuality] = useState<HazeQuality>(HAZE_TIERS[0])
@@ -658,7 +664,8 @@ export function Stage3D({
               colliders={colliders}
               clip={beamClip}
               lightBudget={lightBudget}
-              haze={layers.haze}
+              haze={layers.haze !== 'off'}
+              hazeClip={hazeClip}
               hazeQuality={hazeQuality}
               statsRef={containerRef}
             >
