@@ -70,10 +70,10 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * the grammar Look rows and programmer entries already use (`"0".."255"`, `"#rrggbb;w128"`,
  * `"pan,tilt"`) — rather than the interpolated intent it carried before, so that arm has something
  * a Look row can hold. Nothing else read the field. A client on an older desk can tell the two
- * apart by parsing: an intent string is not a programmer value. The one literal a Look row *cannot*
- * hold — a colour-wheel slot, a `Setting` under a COLOUR property — is skipped by name under
- * `write = false` rather than answered. And the curve is spread over the heads that can take the
- * property, found first; a head that cannot is skipped and consumes no position on it.
+ * apart by parsing: an intent string is not a programmer value. A colour-wheel head answers its
+ * slot's level under its own `colourWheel`, which a Look row holds like any other. And the curve is
+ * spread over the heads that can take the property, found first; a head that cannot is skipped and
+ * consumes no position on it.
  */
 internal fun Route.routeApiRestProgrammerSpread(state: State) {
     post<ProgrammerSpreadResource> { resource ->
@@ -240,17 +240,10 @@ internal fun spreadIntoProgrammer(
             skipped += SpreadSkipDto(target, (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
             return@forEachIndexed
         }
-        // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under a property in
-        // the COLOUR category. The cook now reads a level on a slot-backed COLOUR row as a slot
-        // (`Fixture.Property.settingBacked`), but a wheel named `colour` — the MAC 250's — still
-        // has its Look rows canonicalised to `rgbColour` and dropped. The write arm passes the
-        // typed value through and is right; the answer-only arm would hand the client a literal
-        // that may not land, so under `write = false` such a head is skipped by name until
-        // `FU-LOOK-COLOUR-WHEEL-ROW` closes that.
-        if (!request.write && property == TemplateProperty.COLOUR && value is CueAssignmentResolver.PropertyValue.Setting) {
-            skipped += SpreadSkipDto(target, "colour wheel — a Look row cannot hold a wheel slot")
-            return@forEachIndexed
-        }
+        // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under its own
+        // property (`colourWheel`), and its literal is the slot's level: the cook reads a level on
+        // a slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`), so both arms land
+        // it — the write arm as a typed entry, the answer-only arm as a Look row.
         val parentKey = (head as? FixtureElement<*>)?.parentFixture?.key
         writes += ProgrammerWriter.PropertyWrite(
             head, resolution.propertyName, value,

@@ -17,7 +17,7 @@ class VarytecEasymoveXl60SpotFixtureTest {
 
         fixture.pan.value = 100u
         fixture.tilt.value = 110u
-        fixture.colour.setting = VarytecEasymoveXl60SpotFixture.Colour.COLOR_3
+        fixture.colourWheel.setting = VarytecEasymoveXl60SpotFixture.Colour.COLOR_3
         fixture.gobo.setting = VarytecEasymoveXl60SpotFixture.Gobo.GOBO_2
         fixture.goboSpin.value = 130u
         fixture.dimmer.value = 200u

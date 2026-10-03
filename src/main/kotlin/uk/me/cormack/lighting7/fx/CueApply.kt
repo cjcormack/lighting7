@@ -268,12 +268,8 @@ internal fun buildStompOverlapFromAssignments(
  * `"position"` (paired PAN+TILT), `"colour"` / `"color"` / `"rgbColour"` (RGB+W/A/UV bundle).
  * For these names [fixture] is consulted only to verify the capability exists.
  *
- * **The exact name is tried before the canonical one**, and that ordering is a fix rather than a
- * micro-optimisation. [canonicalPropertyName] rewrites `colour` → `rgbColour` unconditionally, but
- * the Martin MAC 250's colour *wheel* is a property literally named `colour` — so a stored row for
- * it resolved to nothing and was dropped with a "property not on fixture" warning, on every cook.
- * That hit any recorded Look holding a wheel colour, and it is what a colour template would have hit
- * on every wheel-only head in the rig. Exact-first is safe because no fixture declares both names.
+ * The name is canonicalised unconditionally, which is sound because no property may be named an
+ * alias (`FixturePropertyNameAliasTest`): a colour wheel is `colourWheel`, never `colour`.
  */
 internal fun fixtureCategoryFor(
     fixture: GroupableFixture,
@@ -282,15 +278,10 @@ internal fun fixtureCategoryFor(
     // The class catalogue rather than `Fixture.fixtureProperty`, so an element (a cell) answers
     // from its own `@FixtureProperty` members — the cook composes a Look's element rows onto it.
     val byName = FixturePropertyCatalogue.of(fixture::class).byName
-    if (propertyName.equals("position", ignoreCase = true)) {
-        // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
-        // any override on the pan property is honoured.
-        val panProp = byName["pan"]
-        return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
-    }
-    byName[propertyName]?.let { return it.category to it.composition }
     val canonical = canonicalPropertyName(propertyName)
     if (canonical.equals("position", ignoreCase = true)) {
+        // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
+        // any override on the pan property is honoured.
         val panProp = byName["pan"]
         return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
     }
@@ -300,14 +291,11 @@ internal fun fixtureCategoryFor(
 
 /**
  * Whether [propertyName] on [fixture] is a slot channel ([Fixture.Property.settingBacked]), looked
- * up in [fixtureCategoryFor]'s order — the exact name, then the canonical one. What a COLOUR
- * property's stored value means depends on it: a colour wheel's or gel scroller's row is a level.
+ * up by its canonical name as [fixtureCategoryFor] does. What a COLOUR property's stored value means
+ * depends on it: a colour wheel's or gel scroller's row is a level.
  */
-internal fun isSettingBacked(fixture: GroupableFixture, propertyName: String): Boolean {
-    val byName = FixturePropertyCatalogue.of(fixture::class).byName
-    val prop = byName[propertyName] ?: byName[canonicalPropertyName(propertyName)]
-    return prop?.settingBacked == true
-}
+internal fun isSettingBacked(fixture: GroupableFixture, propertyName: String): Boolean =
+    FixturePropertyCatalogue.of(fixture::class).byName[canonicalPropertyName(propertyName)]?.settingBacked == true
 
 /**
  * [propertyName]'s part in [fixture]'s `bundleWithColour` bundle — the role

@@ -94,9 +94,8 @@ class TemplateResolverTest {
         assertTrue(note.deltaE < 1.0, "an exact match against the slot's own preview: ${note.deltaE}")
 
         // And the value lands on the property that actually carries the colour on this head — the
-        // wheel is called `colour`, which `canonicalPropertyName` rewrites to `rgbColour` and would
-        // then miss entirely.
-        assertEquals("colour", r.propertyName)
+        // wheel, not the `rgbColour` the template names and this head does not have.
+        assertEquals("colourWheel", r.propertyName)
     }
 
     @Test

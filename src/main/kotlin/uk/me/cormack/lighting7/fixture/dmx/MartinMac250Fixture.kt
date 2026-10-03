@@ -215,7 +215,7 @@ sealed class MartinMac250Fixture(
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Colour wheel", category = PropertyCategory.COLOUR)
-        val colour = DmxFixtureSetting(
+        val colourWheel = DmxFixtureSetting(
             transaction, universe, firstChannel + 2, Colour.entries.toTypedArray(),
         )
 

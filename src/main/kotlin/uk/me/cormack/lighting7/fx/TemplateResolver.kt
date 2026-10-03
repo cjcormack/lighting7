@@ -36,11 +36,11 @@ import kotlin.math.sqrt
  *
  * A template names a property (`rgbColour`, `dimmer`, `zoom`, `position`) and the same name resolves
  * on nearly every head in this rig. Colour is the exception and it is not cosmetic: the MAC 250's
- * colour *wheel* is `val colour`, and [canonicalPropertyName] rewrites `colour` → `rgbColour`, so a
- * name-only lookup misses it and the head silently drops out of every colour template. So a colour
- * intent falls back to **whichever property carries the colour**, and [Resolution.propertyName]
- * reports the name that was actually resolved — which the cook must then use, because that is the
- * name [PropertyChannelWriter] will be handed downstream.
+ * colour is a wheel, `colourWheel`, and it has no `rgbColour`, so a name-only lookup misses it and
+ * the head silently drops out of every colour template. So a colour intent falls back to
+ * **whichever property carries the colour**, and [Resolution.propertyName] reports the name that was
+ * actually resolved — which the cook must then use, because that is the name [PropertyChannelWriter]
+ * will be handed downstream.
  */
 object TemplateResolver {
     private val logger = LoggerFactory.getLogger(TemplateResolver::class.java)

@@ -184,8 +184,9 @@ private fun applyValueTemplateToProgrammer(
             }
             writes += ProgrammerWriter.PropertyWrite(
                 fixture,
-                // The resolved name, not the row's: on a colour wheel the value lands on `colour`
-                // rather than `rgbColour`, and writing the row's name would address nothing.
+                // The resolved name, not the row's: on a colour wheel the value lands on
+                // `colourWheel` rather than `rgbColour`, and writing the row's name would address
+                // nothing.
                 resolution.propertyName,
                 value,
                 sourceGroup = groupHints[fixtureKey],

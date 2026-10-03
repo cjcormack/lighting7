@@ -47,7 +47,7 @@ class LocateValueResolverTest {
             "BandedStrobeChannel fullOnValue — the 246-255 'LED on' band, not 255 blindly",
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(0u), byName["colour"],
+            CueAssignmentResolver.PropertyValue.Setting(0u), byName["colourWheel"],
             "colour wheel OPEN_WHITE (#FFFFFF preview)",
         )
         assertEquals(CueAssignmentResolver.PropertyValue.Setting(0u), byName["gobo"], "gobo wheel OPEN_WHITE")
@@ -113,7 +113,7 @@ class LocateValueResolverTest {
                 "$headKey centred",
             )
             assertEquals(
-                CueAssignmentResolver.PropertyValue.Setting(58u), headByName["colour"],
+                CueAssignmentResolver.PropertyValue.Setting(58u), headByName["colourWheel"],
                 "$headKey colour preset WHITE (#FFFFFF), not the level-0 BLACKOUT slot",
             )
             assertEquals(2, head.size)

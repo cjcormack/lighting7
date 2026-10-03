@@ -50,6 +50,8 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         // Two movers with a colour wheel (7 slots + open, previews annotated) and annotated pan/tilt.
         LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "spot-1", 200)
         LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "spot-2", 220)
+        // A MAC 250, whose wheel was once a property named `colour` the alias rewrote away.
+        LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 240)
         LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
         state.show.fixtures.patchListChanged()
     }
@@ -220,17 +222,28 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         for (value in colour.written.map { it.value } + level.written.map { it.value } + position.written.map { it.value }) {
             assertTrue(!value.startsWith("pct:") && !value.startsWith("deg:") && !value.contains("policy="), value)
         }
-        // The one literal a Look row cannot hold: a colour-wheel head resolves a colour to a wheel
-        // *slot* — a `Setting` under a COLOUR property, which the cook would re-read as a colour
-        // (`"14"` → white). The write arm writes the typed slot and answers its byte; the
-        // answer-only arm skips the head by name rather than hand the client a value to land.
+        // A colour-wheel head resolves a colour to a wheel *slot*, under its own `colourWheel`. The
+        // write arm writes the typed slot and answers its byte; the answer-only arm answers the
+        // same byte, which a Look row holds and the cook reads back as that slot
+        // (`Fixture.Property.settingBacked`) — not as the hex shorthand (`"14"` → white).
         val wheel = client.run(SpreadRequest(targets = listOf(fixture("spot-1")), property = "rgbColour", from = "#ff0000", to = "#ff0000"))
         assertEquals(listOf("14"), wheel.written.map { it.value }, "the RED slot's level, written as a typed Setting")
-        assertTrue(entries().contains("spot-1" to "colour"), "the slot landed as a typed programmer entry")
-        val wheelDraft = client.run(SpreadRequest(targets = listOf(fixture("spot-1"), fixture("hex-1")), property = "rgbColour", from = "#ff0000", to = "#ff0000", write = false))
-        assertEquals(listOf("hex-1"), wheelDraft.written.map { it.target.key })
-        assertEquals(listOf("spot-1"), wheelDraft.skipped.map { it.target.key })
-        assertTrue(wheelDraft.skipped.single().reason.contains("colour wheel"), wheelDraft.skipped.single().reason)
+        assertTrue(entries().contains("spot-1" to "colourWheel"), "the slot landed as a typed programmer entry")
+        val before = entries()
+        val wheelDraft = client.run(
+            SpreadRequest(targets = listOf(fixture("spot-1"), fixture("mac-1"), fixture("hex-1")), property = "rgbColour", from = "#ff0000", to = "#ff0000", write = false),
+        )
+        assertTrue(wheelDraft.skipped.isEmpty(), "no wheel head is skipped: ${wheelDraft.skipped}")
+        assertEquals(
+            mapOf("spot-1" to ("colourWheel" to "14"), "mac-1" to ("colourWheel" to "176"), "hex-1" to ("rgbColour" to "#ff0000")),
+            wheelDraft.written.associate { it.target.key to (it.propertyName to it.value) },
+            "the MAC 250's RED slot is 176 on its wheel",
+        )
+        for (write in wheelDraft.written.filter { it.propertyName == "colourWheel" }) {
+            val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, write.propertyName, write.value, settingBacked = true)
+            assertEquals(CueAssignmentResolver.PropertyValue.Setting(write.value.toUByte()), parsed, "a Look row reads it back as the slot")
+        }
+        assertEquals(before, entries(), "write = false lands nothing")
     }
 
     @Test

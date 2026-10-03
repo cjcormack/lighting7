@@ -276,6 +276,13 @@ Marks a property as controllable. The `fixtureProperties` list on `Fixture` coll
 - REST API property enumeration
 - FX engine targeting
 
+**A property may not be named an alias.** Stored rows and FX targets name a property by its Kotlin
+name, and `canonicalPropertyName` reads `colour` / `color` / `rgbcolour` (any case) as "this head's
+RGB colour", rewriting it to `rgbColour` at every lookup. A property *named* one of those would never
+be reached: its rows would be rewritten to a name the head does not have and silently dropped. So a
+colour wheel is `colourWheel`, and `FixturePropertyNameAliasTest` walks every fixture and element
+class and fails on any name the alias would rewrite (`rgbColour` itself is its own canonical form).
+
 **A slider's optics.** The Stage view reads optional fields off the property descriptor
 (`SliderPropertyDescriptor`). `NaN` means unset, because an annotation cannot default a `Double` to
 null, and reflects as null:
@@ -657,7 +664,7 @@ beamBar.strobe.fullOn()
 
 // Per-head control
 beamBar.head(0).pan.value = 128u
-beamBar.head(0).colour.setting = SlenderBeamBarQuadFixture.Colour.RED
+beamBar.head(0).colourWheel.setting = SlenderBeamBarQuadFixture.Colour.RED
 
 // All heads same color
 beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)

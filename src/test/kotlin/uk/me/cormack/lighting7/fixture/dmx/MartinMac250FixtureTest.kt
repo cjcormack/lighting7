@@ -17,7 +17,7 @@ class MartinMac250FixtureTest {
 
         fixture.strobe.fullOn()
         fixture.dimmer.value = 200u
-        fixture.colour.setting = MartinMac250Fixture.Colour.RED
+        fixture.colourWheel.setting = MartinMac250Fixture.Colour.RED
         fixture.gobo.setting = MartinMac250Fixture.Gobo.TRIPLE
         fixture.goboRotation.value = 130u
         fixture.focus.value = 70u

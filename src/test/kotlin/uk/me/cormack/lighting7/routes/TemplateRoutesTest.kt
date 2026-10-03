@@ -579,7 +579,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertEquals("SNAPPED", onMac.outcome)
         assertNotNull(onMac.detail)
         assertNotNull(onMac.deltaE)
-        assertEquals("colour", onMac.resolvedPropertyName, "the wheel, not `rgbColour`")
+        assertEquals("colourWheel", onMac.resolvedPropertyName, "the wheel, not `rgbColour`")
 
         // A head with nothing in this family was never a candidate, so it is absent rather than
         // listed as a failure.
