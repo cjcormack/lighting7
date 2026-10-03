@@ -839,7 +839,9 @@ internal object CueComposer {
             }
             val (category, override) = categoryInfo
             val incoming = resolved?.value
-                ?: CueAssignmentResolver.parseAssignmentValue(category, canonical, p.rawValue)
+                ?: CueAssignmentResolver.parseAssignmentValue(
+                    category, canonical, p.rawValue, settingBacked = isSettingBacked(p.fixture, canonical),
+                )
             if (incoming == null) {
                 logger.warn(
                     "cue {}: {} '{}' — invalid value '{}' for {}.{} — skipping",

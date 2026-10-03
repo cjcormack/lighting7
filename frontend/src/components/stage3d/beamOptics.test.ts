@@ -5,19 +5,24 @@ import {
   FOCUS_NEAR_FRAC,
   GOBO_SLOT_COUNT,
   PRISM_FACETS,
+  combineFinePair,
   computeBeamGeom,
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  makeGoboRotation,
   prismSpinFromSlider,
   resolveDeclaredFocusDistance,
   resolveFocusDistance,
   resolveFocusParam,
+  resolveGoboRotation,
+  resolveGoboRotationMode,
   resolveGoboSlot,
   resolveGoboSpin,
   resolveMacroIndex,
   resolvePrismFacets,
   resolvePrismSpin,
+  resolveZoomDeg,
   settingBand,
 } from './beamOptics'
 import { goboLayerFor } from './goboPatterns'
@@ -492,5 +497,123 @@ describe('computeBeamGeom', () => {
 
   it('starts dirty so the first frame always computes', () => {
     expect(makeBeamGeom().beamDeg).toBeNaN()
+  })
+})
+
+// The ETC Source Four Revolution's front wheel, as its descriptor carries it: the function
+// channel's bands (manual p24) and the 16-bit index/rotation's coarse half.
+const REV_WHEEL_FUNCTION = setting(
+  opts([
+    ['INDEX', 0],
+    ['ROTATE_FWD', 14],
+    ['ROTATE_REV', 27],
+    ['RESERVED', 40],
+  ]),
+  'gobo_rotation_mode',
+)
+const REV_WHEEL_ROT = slider({
+  name: 'fbWheelRot',
+  category: 'gobo_rotation',
+  rpmMax: 30,
+  indexDegMax: 360,
+})
+
+describe('fineOf pairs', () => {
+  it('combines a coarse and fine byte into one value in coarse units', () => {
+    // The 16-bit value over 65535, in coarse units: full scale is exactly 255, and half of the
+    // 16-bit range is half the coarse span.
+    expect(combineFinePair(0, 0)).toBe(0)
+    expect(combineFinePair(255, 255)).toBe(255)
+    expect(combineFinePair(128, 0) / 255).toBeCloseTo(32768 / 65535, 12)
+    expect(combineFinePair(128, 128)).toBe(128)
+    expect(combineFinePair(64, 1)).toBeGreaterThan(combineFinePair(64, 0))
+    // A type with no fine channel reads the coarse byte as it always did.
+    expect(combineFinePair(77, null)).toBe(77)
+  })
+})
+
+describe('resolveGoboRotation', () => {
+  const out = makeGoboRotation()
+
+  it('reads the mode from the function channel\'s band names', () => {
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 0)).toBe('INDEX')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 13)).toBe('INDEX')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 14)).toBe('ROTATE_FWD')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 26)).toBe('ROTATE_FWD')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 27)).toBe('ROTATE_REV')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 39)).toBe('ROTATE_REV')
+    expect(resolveGoboRotationMode(REV_WHEEL_FUNCTION, 40)).toBeNull()
+    expect(resolveGoboRotationMode(undefined, 0)).toBeNull()
+  })
+
+  it('indexes to an angle over indexDegMax, the fine byte included', () => {
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(0, 0), REV_WHEEL_FUNCTION, 5, out)
+    expect(out.indexRad).toBe(0)
+    expect(out.spinRevPerSec).toBe(0)
+
+    // Half way through the 16-bit range is half of 360°.
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(128, 0), REV_WHEEL_FUNCTION, 5, out)
+    expect(out.indexRad).toBeCloseTo(((32768 / 65535) * 360 * Math.PI) / 180, 12)
+
+    // The fine byte moves the angle between two coarse steps.
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(64, 0), REV_WHEEL_FUNCTION, 5, out)
+    const coarseOnly = out.indexRad!
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(64, 128), REV_WHEEL_FUNCTION, 5, out)
+    expect(out.indexRad!).toBeGreaterThan(coarseOnly)
+
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(255, 255), REV_WHEEL_FUNCTION, 5, out)
+    expect(out.indexRad).toBeCloseTo(2 * Math.PI, 12)
+  })
+
+  it('spins forward in ROTATE_FWD and backward in ROTATE_REV, up to rpmMax', () => {
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(255, 255), REV_WHEEL_FUNCTION, 20, out)
+    expect(out.indexRad).toBeNull()
+    expect(out.spinRevPerSec).toBeCloseTo(30 / 60, 6)
+
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(255, 255), REV_WHEEL_FUNCTION, 30, out)
+    expect(out.indexRad).toBeNull()
+    expect(out.spinRevPerSec).toBeCloseTo(-30 / 60, 6)
+
+    // Linear in DMX: half the range is half the speed.
+    resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(128, 0), REV_WHEEL_FUNCTION, 30, out)
+    expect(out.spinRevPerSec).toBeCloseTo(-(32768 / 65535) * 0.5, 12)
+
+    // DMX 0 in a rotate band is stopped.
+    resolveGoboRotation(REV_WHEEL_ROT, 0, REV_WHEEL_FUNCTION, 14, out)
+    expect(out.spinRevPerSec).toBe(0)
+    expect(out.indexRad).toBeNull()
+  })
+
+  it('holds the wheel still in a reserved band', () => {
+    resolveGoboRotation(REV_WHEEL_ROT, 200, REV_WHEEL_FUNCTION, 100, out)
+    expect(out.indexRad).toBeNull()
+    expect(out.spinRevPerSec).toBe(0)
+  })
+
+  it('without a mode channel, decodes as the spin channel always has', () => {
+    for (const level of [0, 64, 127, 128, 200, 255]) {
+      resolveGoboRotation(REV_WHEEL_ROT, level, undefined, 0, out)
+      expect(out.indexRad).toBeNull()
+      expect(out.spinRevPerSec).toBe(resolveGoboSpin(REV_WHEEL_ROT, level))
+      // A folded fine byte never moves the coarse byte the bands are read from.
+      for (const fine of [0, 255]) {
+        resolveGoboRotation(REV_WHEEL_ROT, combineFinePair(level, fine), undefined, 0, out)
+        expect(out.spinRevPerSec).toBe(resolveGoboSpin(REV_WHEEL_ROT, level))
+      }
+    }
+  })
+})
+
+describe('resolveZoomDeg', () => {
+  it('reads the Source Four Revolution\'s zoom wide at DMX 0 and narrow at 255', () => {
+    const zoom = slider({ name: 'zoom', category: 'zoom', degMin: 35, degMax: 15 })
+    expect(resolveZoomDeg(zoom, 0)).toBe(35)
+    expect(resolveZoomDeg(zoom, 255)).toBe(15)
+    expect(resolveZoomDeg(zoom, 127.5)).toBeCloseTo(25, 6)
+  })
+
+  it('answers null for a zoom that declares no angles, and for no zoom', () => {
+    expect(resolveZoomDeg(slider({ category: 'zoom' }), 100)).toBeNull()
+    expect(resolveZoomDeg(undefined, 100)).toBeNull()
   })
 })

@@ -8,27 +8,29 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 
 /**
- * ETC Source 4 Revolution — automated yoke fixture with framing shutters,
- * two beam wheels, and a 14-frame gel scroller.
+ * ETC Source 4 Revolution — an automated yoke profile: an electronic dimmer, a 15°–35° zoom, focus,
+ * a 14-frame gel scroller, an internal media frame, and two module bays.
  *
- * The ChamSys library lists five Source 4 Revolution personalities:
- * `Base` (14ch), `Base Iris` (15ch), `15ch` (15ch), `Base Module` (23ch),
- * and `Base Frame` (31ch). Only Base Frame (the chassis WITH the four-blade
- * Framing Shutter module installed) is implemented for the TCH 2026 patch;
- * the others remain as `// TODO` enum entries per the locked decision.
+ * The authority is ETC's *Source Four Revolution User Manual*, 7160M1200 Rev E
+ * (`Manuals/S4_Revolution_User_Manual_RevE.pdf`; page numbers below are the PDF's). The ChamSys
+ * capture in `Manuals/personalities/ETC_Source4Rev_BaseFrame.md` gave the channel order and the
+ * scroller's bands, and the manual corrects it where they differ.
  *
- * Authoritative channel map:
- * `Manuals/personalities/ETC_Source4Rev_BaseFrame.md` (transcribed from
- * MagicQ `EDIT HEAD` — the on-disk `.hed` files are obfuscated). Only ch 8
- * (Zoom), ch 13 (Gel Scroller) and ch 15 (Iris) had `VIEW RANGES` detail
- * captured; the other channels are continuous controls without documented
- * value bands and are modelled as plain sliders.
+ * The ChamSys library lists five Revolution personalities: `Base` (14ch), `Base Iris` (15ch),
+ * `15ch` (15ch), `Base Module` (23ch) and `Base Frame` (31ch). Only Base Frame — the base with the
+ * framing shutter module in the rear bay — is implemented, for the TCH 2026 patch; the others remain
+ * `// TODO` entries.
  *
- * Reset (ch 12) and Reserved (ch 14) are NOT exposed as `@FixtureProperty`.
- * Reset's value bands were not captured and the TCH 2026 plan calls for
- * reset/lamp control to be unreachable from FX targeting; Reserved has no
- * documented purpose. Both default to 0 and stay there unless a script
- * writes raw values via the controller transaction.
+ * The bays (p17): the shutter module fits the rear bay only, so with it fitted channels 20–23 are
+ * reserved and not exposed. The front bay takes one of a blank, the iris or a static or rotating
+ * three-slot wheel; which one TCH's units hold is not known, so both the iris (ch 15) and the front
+ * wheel (ch 16–19) stay live (plan P3). The wheels ship empty — their slots hold the user's M-size
+ * gobos or dichroics — so the front wheel's slots name no pattern.
+ *
+ * Two channels are not exposed as `@FixtureProperty`. **Reset (ch 12)** is a command, not a value
+ * (hold a band for three seconds, then snap to 0 — p15), and a reset recorded into a Look would fire
+ * on playback; it stays at 0 unless a script writes the raw channel, and becomes a fixture command
+ * in the fixture optics plan's session 7. **Ch 20–23** are reserved with the shutter module fitted.
  */
 sealed class Source4RevolutionFixture(
     universe: Universe,
@@ -52,60 +54,103 @@ sealed class Source4RevolutionFixture(
     }
 
     /**
-     * Channel 13 — built-in gel scroller. 14 evenly-spaced bands.
+     * Channel 13 — the gel scroller, loaded with ETC's standard 12-colour string (p15): an open
+     * leader and trailer around twelve gels. ChamSys's 14 bands match ETC's starts exactly. A
+     * venue's own string is fitted media, which arrives per placement in the fixture optics plan's
+     * session 3; until then this is what every unit draws.
      *
-     * The personality capture uses generic `Frame 0..Frame 13` labels with
-     * no actual gel colours, so the enum mirrors that. Map a frame index
-     * to its physical gel from the venue's gel string.
+     * Previews: the desk's gel library (`frontend/src/data/gels.ts`) where it has the gel — R02,
+     * L203, L201, R68 — and the plan's approximate swatches
+     * (`docs/plans/fixture-optics-design/fixture-optics.html`) for the eight it lacks. The open
+     * frames are `#FFFFFF`, the library's open white, which is also what Locate looks for.
      */
-    enum class GelFrame(override val level: UByte) : DmxFixtureSettingValue {
-        FRAME_0(0u),
-        FRAME_1(18u),
-        FRAME_2(37u),
-        FRAME_3(55u),
-        FRAME_4(73u),
-        FRAME_5(91u),
-        FRAME_6(110u),
-        FRAME_7(128u),
-        FRAME_8(146u),
-        FRAME_9(165u),
-        FRAME_10(183u),
-        FRAME_11(201u),
-        FRAME_12(219u),
-        FRAME_13(238u),
+    enum class GelFrame(override val level: UByte, override val colourPreview: String) : DmxFixtureColourSettingValue {
+        // Estimate: every preview is an approximate swatch of the gel, not a measured transmission —
+        // the library's hexes for R02, L203, L201 and R68, the design record's for the other eight.
+        OPEN_LEADER(0u, "#FFFFFF"),
+        R02_BASTARD_AMBER(18u, "#fbcc9a"),
+        R05_ROSE_TINT(37u, "#f6d3d6"),
+        R09_PALE_AMBER_GOLD(55u, "#f7c587"),
+        R54_SPECIAL_LAVENDER(73u, "#dac7ea"),
+        R357_ROYAL_LAVENDER(91u, "#a87bc9"),
+        R36_MEDIUM_PINK(110u, "#ef9fb9"),
+        R25_ORANGE_RED(128u, "#e85b2b"),
+        L203_QUARTER_CT_BLUE(146u, "#dbe7f2"),
+        L201_FULL_CT_BLUE(165u, "#9bbede"),
+        R68_SKY_BLUE(183u, "#65a8db"),
+        R88_LIGHT_GREEN(201u, "#b6e09a"),
+        L_HT115_PEACOCK_BLUE(219u, "#2aa5a6"),
+        OPEN_TRAILER(238u, "#FFFFFF"),
+    }
+
+    /**
+     * Channel 6 — the internal media frame (p31–33): two gel wings the front lens moves in and out
+     * of the beam. ETC documents it as in/out only and gives no bands.
+     */
+    enum class MediaFrame(override val level: UByte) : DmxFixtureSettingValue {
+        OUT(0u),
+        // Estimate: ETC gives no bands for channel 6; half way is assumed to be the split.
+        IN(128u),
+    }
+
+    /**
+     * Channel 16 — the front bay wheel's position (p22, p24): open, then three slots; 51–255 is
+     * reserved and holds slot 3, so slot 3's band runs to the top. The slots name no pattern: the
+     * wheels ship empty, and what is loaded is fitted media (the plan's session 3).
+     */
+    enum class WheelPosition(override val level: UByte) : DmxFixtureSettingValue {
+        OPEN(0u),
+        SLOT_1(14u),
+        SLOT_2(27u),
+        SLOT_3(40u),
+    }
+
+    /**
+     * Channel 17 — the front bay wheel's function (p24): what channels 18/19 mean. Index aligns the
+     * slot at an angle; the rotate bands spin it at a speed. 40–255 is reserved.
+     */
+    enum class WheelFunction(override val level: UByte) : DmxFixtureSettingValue {
+        INDEX(0u),
+        ROTATE_FWD(14u),
+        ROTATE_REV(27u),
+        RESERVED(40u),
     }
 
     /**
      * Base Frame (31-channel) — the patched personality.
      *
-     * - Ch 1: Master dimmer (HTP, mechanical douser).
+     * Channel map: "Base + Framing", p14.
+     *
+     * - Ch 1: Intensity (HTP) — an integral PWM electronic dimmer (p4), not a douser.
      * - Ch 2/3: Pan (16-bit hi/lo).
      * - Ch 4/5: Tilt (16-bit hi/lo).
-     * - Ch 6: Media frame.
+     * - Ch 6: Internal media frame, out / in.
      * - Ch 7: Focus.
-     * - Ch 8: Zoom (wide → narrow continuous).
-     * - Ch 9: Focus fade time.
-     * - Ch 10: Colour fade time.
-     * - Ch 11: Beam fade time.
-     * - Ch 12: Reset (NOT exposed — see class doc).
-     * - Ch 13: Gel scroller (14 frames).
-     * - Ch 14: Reserved (NOT exposed).
-     * - Ch 15: Iris (open → closed continuous).
-     * - Ch 16/17: Forward beam wheel position / function.
-     * - Ch 18/19: Forward beam wheel rotation (16-bit hi/lo).
-     * - Ch 20/21: Rear beam wheel position / function.
-     * - Ch 22/23: Rear beam wheel rotation (16-bit hi/lo).
-     * - Ch 24/25: Frame 1 position / rotation.
-     * - Ch 26/27: Frame 2 position / rotation.
-     * - Ch 28/29: Frame 3 position / rotation.
-     * - Ch 30/31: Frame 4 position / rotation.
+     * - Ch 8: Zoom, 35° → 15°.
+     * - Ch 9: Focus timing. Ch 10: Colour timing. Ch 11: Beam timing (1 s per DMX step, p16).
+     * - Ch 12: Reset (NOT exposed — see the class doc).
+     * - Ch 13: Gel scroller, the standard 12-colour string.
+     * - Ch 14: Fan speed (0 full → 255 off; the thermal sensors override it, p16).
+     * - Ch 15: Iris (open → closed).
+     * - Ch 16/17: Front bay wheel position / function.
+     * - Ch 18/19: Front bay wheel index / rotation (16-bit hi/lo).
+     * - Ch 20–23: Reserved with the shutter module fitted (NOT exposed).
+     * - Ch 24/25 … 30/31: Shutters 1–4, in / rotate (±45°, p17).
      */
     @FixtureType(
         "etc-source4-revolution-base-frame",
         manufacturer = "ETC",
         model = "Source 4 Revolution",
         kind = FixtureKind.PROFILE,
-        body = FixtureBody(BodyArchetype.MOVER, MoverHead.PROFILE),
+        // The manual's dimensions (p10): the head is 317 mm wide and 344 mm deep, and the unit stands
+        // 856 mm from its base to the top of its head, which is what the Stage view reads a mover's
+        // height as.
+        widthM = 0.317,
+        lengthM = 0.344,
+        heightM = 0.856,
+        // Estimate: ETC gives no lens size. The front lens is taken as about half the 317 mm head's
+        // width.
+        body = FixtureBody(BodyArchetype.MOVER, MoverHead.PROFILE, lensDiameterM = 0.15),
     )
     class BaseFrame31Ch(
         universe: Universe,
@@ -143,8 +188,10 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Media frame", category = PropertyCategory.OTHER)
-        val mediaFrame: Slider = DmxSlider(transaction, universe, firstChannel + 5)
+        @FixtureProperty("Media frame (out / in)", category = PropertyCategory.SETTING)
+        val mediaFrame = DmxFixtureSetting(
+            transaction, universe, firstChannel + 5, MediaFrame.entries.toTypedArray(),
+        )
 
         // Estimate: ETC publishes no focus range or direction ("soft to crisp focus for gobos",
         // Rev E manual 7160A1002). 2 m to infinity covers the 4.9–18.2 m throws its photometrics
@@ -152,7 +199,9 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Focus", category = PropertyCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM)
+        // The manual's 15°–35° zoom (p4; field angles 15.3°–34.3°, p47).
+        // Estimate: the manual does not say which end is wide; DMX 0 wide is ChamSys's range names.
+        @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM, degMin = 35.0, degMax = 15.0)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
         @FixtureProperty("Focus fade time", category = PropertyCategory.SPEED)
@@ -164,41 +213,42 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Beam fade time", category = PropertyCategory.SPEED)
         val beamTime: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        // Ch 12 (Reset) intentionally not exposed — see class doc.
+        // Ch 12 (Reset) intentionally not exposed — see the class doc.
 
-        @FixtureProperty("Gel scroller", category = PropertyCategory.SETTING)
+        @FixtureProperty("Gel scroller", category = PropertyCategory.COLOUR)
         val gelScroller = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, GelFrame.entries.toTypedArray(),
         )
 
-        // Ch 14 (Reserved) intentionally not exposed — see class doc.
+        @FixtureProperty("Fan speed (full → off)", category = PropertyCategory.OTHER)
+        val fanSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
         @FixtureProperty("Iris (open → closed)", category = PropertyCategory.IRIS)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Forward beam wheel position", category = PropertyCategory.SETTING)
-        val fbWheelPos: Slider = DmxSlider(transaction, universe, firstChannel + 15)
+        @FixtureProperty("Front wheel position", category = PropertyCategory.GOBO)
+        val fbWheelPos = DmxFixtureSetting(
+            transaction, universe, firstChannel + 15, WheelPosition.entries.toTypedArray(),
+        )
 
-        @FixtureProperty("Forward beam wheel function", category = PropertyCategory.SETTING)
-        val fbWheelFunc: Slider = DmxSlider(transaction, universe, firstChannel + 16)
+        @FixtureProperty("Front wheel function", category = PropertyCategory.GOBO_ROTATION_MODE)
+        val fbWheelFunc = DmxFixtureSetting(
+            transaction, universe, firstChannel + 16, WheelFunction.entries.toTypedArray(),
+        )
 
-        @FixtureProperty("Forward beam wheel rotation (coarse)", category = PropertyCategory.SETTING)
+        // 0–30 RPM in a rotate band (p24). In index the manual says only "align the image".
+        // Estimate: index is taken to sweep one full turn over the 16-bit range, and speed to rise
+        // linearly with DMX; which way ROTATE_FWD turns is not stated, and the Stage view takes it
+        // as its positive direction.
+        @FixtureProperty("Front wheel index / rotation (coarse)", category = PropertyCategory.GOBO_ROTATION,
+            rpmMax = 30.0, indexDegMax = 360.0)
         val fbWheelRot: Slider = DmxSlider(transaction, universe, firstChannel + 17)
 
-        @FixtureProperty("Forward beam wheel rotation (fine)", category = PropertyCategory.SETTING)
+        @FixtureProperty("Front wheel index / rotation (fine)", category = PropertyCategory.GOBO_ROTATION,
+            fineOf = "fbWheelRot")
         val fbWheelRotFine: Slider = DmxSlider(transaction, universe, firstChannel + 18)
 
-        @FixtureProperty("Rear beam wheel position", category = PropertyCategory.SETTING)
-        val rbWheelPos: Slider = DmxSlider(transaction, universe, firstChannel + 19)
-
-        @FixtureProperty("Rear beam wheel function", category = PropertyCategory.SETTING)
-        val rbWheelFunc: Slider = DmxSlider(transaction, universe, firstChannel + 20)
-
-        @FixtureProperty("Rear beam wheel rotation (coarse)", category = PropertyCategory.SETTING)
-        val rbWheelRot: Slider = DmxSlider(transaction, universe, firstChannel + 21)
-
-        @FixtureProperty("Rear beam wheel rotation (fine)", category = PropertyCategory.SETTING)
-        val rbWheelRotFine: Slider = DmxSlider(transaction, universe, firstChannel + 22)
+        // Ch 20–23 are reserved with the shutter module fitted (p14, p17) — not exposed.
 
         @FixtureProperty("Frame 1 position", category = PropertyCategory.SETTING)
         val frame1Pos: Slider = DmxSlider(transaction, universe, firstChannel + 23)

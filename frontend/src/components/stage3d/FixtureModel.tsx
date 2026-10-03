@@ -34,6 +34,8 @@ import {
   findFrostProperty,
   findGoboProperties,
   findGoboRotationProperty,
+  findGoboRotationModeProperty,
+  findFineProperty,
   findPrismProperty,
   findPrismRotationProperty,
   findLedMacroProperty,
@@ -59,22 +61,25 @@ import {
   PLACEHOLDER_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_INTENSITY,
 } from '../fixtures/fixtureAppearance'
-import { dmxToDegrees, dmxToSignedDegrees, worldPositionFor } from '../../lib/stageCoords'
+import { dmxToSignedDegrees, worldPositionFor } from '../../lib/stageCoords'
 import {
+  combineFinePair,
   computeBeamGeom,
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  makeGoboRotation,
   resolveDeclaredFocusDistance,
   resolveFocusDistance,
   resolveFocusParam,
+  resolveGoboRotation,
   resolveGoboSlot,
-  resolveGoboSpin,
   resolveIris,
   resolveMacroIndex,
   resolvePrismFacets,
   resolvePrismSpin,
   resolveSoftness,
+  resolveZoomDeg,
   type BeamGeom,
   type ByteDescriptor,
   type MacroColour,
@@ -502,6 +507,16 @@ export function FixtureModel({
     () => findGoboRotationProperty(fixture?.properties),
     [fixture?.properties],
   )
+  // A 16-bit index/rotation's low byte (`fineOf`), and the wheel's function channel, which says
+  // whether the rotation is an angle or a speed. Both undefined on every type but the Revolution.
+  const goboRotFineProp = useMemo(
+    () => findFineProperty(fixture?.properties, goboRotProp),
+    [fixture?.properties, goboRotProp],
+  )
+  const goboRotModeProp = useMemo(
+    () => findGoboRotationModeProperty(fixture?.properties),
+    [fixture?.properties],
+  )
   const prismProp = useMemo(() => findPrismProperty(fixture?.properties), [fixture?.properties])
   const prismRotProp = useMemo(
     () => findPrismRotationProperty(fixture?.properties),
@@ -653,6 +668,8 @@ export function FixtureModel({
     goboProp: goboProps[0],
     goboProp2: goboProps[1],
     goboRotProp,
+    goboRotFineProp,
+    goboRotModeProp,
     prismProp,
     prismRotProp,
     ledMacroProp,
@@ -846,6 +863,10 @@ interface BeamDirectorOpts {
    *  the first wheel sits at open — see the resolve fallback in the director. */
   goboProp2: ByteDescriptor | undefined
   goboRotProp: ByteDescriptor | undefined
+  /** The rotation's fine channel (`fineOf`), folded into the coarse value. */
+  goboRotFineProp: SliderPropertyDescriptor | undefined
+  /** The wheel's function channel: index or rotate (`gobo_rotation_mode`). */
+  goboRotModeProp: ByteDescriptor | undefined
   prismProp: ByteDescriptor | undefined
   prismRotProp: ByteDescriptor | undefined
   ledMacroProp: ByteDescriptor | undefined
@@ -907,6 +928,7 @@ const SCRATCH_BEAM: BeamWrite = {
   edgeLand: null,
 }
 const SCRATCH_LIGHT: LightRow = makeLightRow()
+const SCRATCH_GOBO_ROTATION = makeGoboRotation()
 
 /** A cell's aperture in world space: its centre on the head's face. */
 function apertureWorld(cell: Cell, head: Group, out: Vector3): Vector3 {
@@ -932,6 +954,8 @@ function useBeamDirector({
   goboProp,
   goboProp2,
   goboRotProp,
+  goboRotFineProp,
+  goboRotModeProp,
   prismProp,
   prismRotProp,
   ledMacroProp,
@@ -966,6 +990,8 @@ function useBeamDirector({
       gobo: goboProp ? channelKey(goboProp.channel) : null,
       gobo2: goboProp2 ? channelKey(goboProp2.channel) : null,
       goboRot: goboRotProp ? channelKey(goboRotProp.channel) : null,
+      goboRotFine: goboRotFineProp ? channelKey(goboRotFineProp.channel) : null,
+      goboRotMode: goboRotModeProp ? channelKey(goboRotModeProp.channel) : null,
       prism: prismProp ? channelKey(prismProp.channel) : null,
       prismRot: prismRotProp ? channelKey(prismRotProp.channel) : null,
       ledMacro: ledMacroProp ? channelKey(ledMacroProp.channel) : null,
@@ -983,6 +1009,8 @@ function useBeamDirector({
       goboProp,
       goboProp2,
       goboRotProp,
+      goboRotFineProp,
+      goboRotModeProp,
       prismProp,
       prismRotProp,
       ledMacroProp,
@@ -1035,6 +1063,8 @@ function useBeamDirector({
         goboProp,
         goboProp2,
         goboRotProp,
+        goboRotFineProp,
+        goboRotModeProp,
         prismProp,
         prismRotProp,
         ledMacroProp,
@@ -1052,6 +1082,8 @@ function useBeamDirector({
       goboProp,
       goboProp2,
       goboRotProp,
+      goboRotFineProp,
+      goboRotModeProp,
       prismProp,
       prismRotProp,
       ledMacroProp,
@@ -1162,10 +1194,10 @@ function useBeamDirector({
       coneOpacity *= SCRATCH_LED_MACRO.intensityScale
     }
 
-    // Zoom overrides the static field angle. dmxToDegrees is reused as-is: on a ZOOM slider
-    // degMin/degMax are the beam angle at each end, and it returns null when the fixture declares
-    // no range (Robe, Source 4), which falls back to the patch's or the family's.
-    const zoomDeg = zoomProp ? dmxToDegrees(readChannel(channelSource, beamKeys.zoom), zoomProp) : null
+    // Zoom overrides the static field angle: on a ZOOM slider degMin/degMax are the beam angle at
+    // each end, in either order, and a type that declares none (the Robe's stepped zoom) answers
+    // null, which falls back to the patch's or the family's.
+    const zoomDeg = resolveZoomDeg(zoomProp, readChannel(channelSource, beamKeys.zoom))
     const beamDeg = zoomDeg ?? baseBeamDeg
     const geom = geomRef.current
     if (beamDeg !== geom.beamDeg) {
@@ -1193,8 +1225,22 @@ function useBeamDirector({
       goboSlot = resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
     }
     if (goboSlot > 0) {
-      const spin = resolveGoboSpin(goboRotProp, readChannel(channelSource, beamKeys.goboRot))
-      if (spin !== 0) {
+      // A wheel with a function channel indexes to an angle or spins at a speed; every other wheel
+      // spins as its rotation channel's bands say.
+      const rotation = resolveGoboRotation(
+        goboRotProp,
+        combineFinePair(
+          readChannel(channelSource, beamKeys.goboRot),
+          goboRotFineProp ? readChannel(channelSource, beamKeys.goboRotFine) : null,
+        ),
+        goboRotModeProp,
+        readChannel(channelSource, beamKeys.goboRotMode),
+        SCRATCH_GOBO_ROTATION,
+      )
+      const spin = rotation.spinRevPerSec
+      if (rotation.indexRad != null) {
+        goboAngleRef.current = rotation.indexRad
+      } else if (spin !== 0) {
         animating = true
         // Wrapped, not free-running: an unbounded accumulator loses float
         // precision within the hour and the pattern starts visibly stepping.

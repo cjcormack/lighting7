@@ -725,9 +725,10 @@ Since the editor-kit plan's session 3 the request carries `write` (default true)
 same resolve and **answers without writing** — the programmer's focused-Look-layer arm, whose
 client lands `written[].value` in the layer's draft through the ordinary Look save — and
 `written[].value` is each head's **literal** in the Look row grammar rather than the intent. Two
-things follow: a colour-wheel head's resolution is a wheel *slot*, which a Look row cannot hold
-(the cook re-reads a COLOUR row as a colour), so under `write = false` such a head is skipped by
-name; and the curve is spread over the heads that can take the property, found in a first pass, so
+things follow: a colour-wheel head's resolution is a wheel *slot*, which a Look row cannot yet
+hold on every wheel (the cook reads a level on a slot-backed COLOUR row as a slot, but a wheel
+named `colour` is canonicalised to `rgbColour` and dropped — `FU-LOOK-COLOUR-WHEEL-ROW`), so under
+`write = false` such a head is skipped by name; and the curve is spread over the heads that can take the property, found in a first pass, so
 a head that cannot — a par in a Position spread — is skipped and consumes no position on it (the
 programmer's marquee is geometric and sweeps such heads up with the rest).
 

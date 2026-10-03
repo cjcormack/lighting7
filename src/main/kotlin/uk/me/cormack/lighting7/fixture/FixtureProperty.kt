@@ -46,6 +46,11 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     // a FOCUS slider declares its range with focusNearM/focusFarM.
     GOBO(CompositionRule.LTP),
     GOBO_ROTATION(CompositionRule.LTP),
+    // A wheel's function channel: what its GOBO_ROTATION channel means right now. Its bands are
+    // named INDEX, ROTATE_FWD and ROTATE_REV (the Source Four Revolution's front wheel); in index
+    // the rotation channel is an angle over `indexDegMax`, in either rotate band a speed up to
+    // `rpmMax`, turning the way the band names.
+    GOBO_ROTATION_MODE(CompositionRule.LTP),
     PRISM(CompositionRule.LTP),
     PRISM_ROTATION(CompositionRule.LTP),
     FOCUS(CompositionRule.LTP),
@@ -120,6 +125,15 @@ enum class CompactDisplayRole {
  *                   [degMin]; a slider declares both ends or neither.
  * @param focusFarM On a FOCUS slider, the farthest focal distance in metres from the aperture,
  *                  at DMX max (DMX min when [inverted]). Defaults [Double.NaN].
+ * @param fineOf Names the coarse property this one is the low byte of, so the pair decodes as one
+ *               16-bit value (coarse × 256 + fine). Empty — the default — on every other property.
+ *               Generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair; pan and tilt keep
+ *               theirs. A fine property carries its coarse property's category, and every
+ *               Stage-view finder that picks "the" property of a category skips it.
+ * @param rpmMax On a GOBO_ROTATION slider whose wheel has a GOBO_ROTATION_MODE channel, the speed in
+ *               revolutions per minute at DMX max in a rotate band. Defaults [Double.NaN].
+ * @param indexDegMax On the same slider, the angle in degrees at DMX max in the index band (DMX min
+ *                    is 0°). Defaults [Double.NaN].
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -135,6 +149,9 @@ annotation class FixtureProperty(
     val inverted: Boolean = false,
     val focusNearM: Double = Double.NaN,
     val focusFarM: Double = Double.NaN,
+    val fineOf: String = "",
+    val rpmMax: Double = Double.NaN,
+    val indexDegMax: Double = Double.NaN,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

@@ -949,8 +949,10 @@ object ProgrammerHandler {
                 return null
             } ?: return null
         }
-        val category = PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category
-            ?: return null
-        return CueAssignmentResolver.parseAssignmentValue(category, propertyName, value)
+        val resolved = PropertyChannelWriter.resolveProperty(fixture, propertyName) ?: return null
+        return CueAssignmentResolver.parseAssignmentValue(
+            resolved.category, propertyName, value,
+            settingBacked = resolved.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
+        )
     }
 }

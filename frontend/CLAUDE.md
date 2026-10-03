@@ -2369,8 +2369,8 @@ told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `de
 colour, since it splits on `;` and tests only the head) and refused with a toast naming the desk
 rather than landing an intent in a Look row; in practice such a desk 400s the request first, its
 Json refusing the unknown key. Two things the desk does for this arm: a **colour-wheel** head's
-resolution is a wheel *slot*, which a Look row cannot hold (the cook re-reads a COLOUR row as a
-colour), so under `write: false` the desk skips it by name; and the curve is spread over the heads
+resolution is a wheel *slot*, which a Look row cannot yet hold on every wheel
+(`FU-LOOK-COLOUR-WHEEL-ROW`), so under `write: false` the desk skips it by name; and the curve is spread over the heads
 that can take the property, found in a first pass, so a par swept up by a geometric Colour marquee
 is skipped and consumes no position on it — two RGB heads among eight rows land at *from* and
 *to*, not at 0 and ⅐. Output and a focused template layer

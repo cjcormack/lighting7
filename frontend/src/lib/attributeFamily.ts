@@ -76,6 +76,7 @@ const FAMILY_BY_CATEGORY: Record<PropertyCategory, AttributeFamily> = {
   uv: 'COLOUR',
   gobo: 'BEAM',
   gobo_rotation: 'BEAM',
+  gobo_rotation_mode: 'BEAM',
   prism: 'BEAM',
   prism_rotation: 'BEAM',
   focus: 'BEAM',

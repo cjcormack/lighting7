@@ -53,6 +53,7 @@ fun PropertyCategory.maskGroup(): PropertyMaskGroup = when (this) {
 
     PropertyCategory.GOBO,
     PropertyCategory.GOBO_ROTATION,
+    PropertyCategory.GOBO_ROTATION_MODE,
     PropertyCategory.PRISM,
     PropertyCategory.PRISM_ROTATION,
     PropertyCategory.FOCUS,

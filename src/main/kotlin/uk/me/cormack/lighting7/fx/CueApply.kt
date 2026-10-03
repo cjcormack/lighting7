@@ -299,6 +299,17 @@ internal fun fixtureCategoryFor(
 }
 
 /**
+ * Whether [propertyName] on [fixture] is a slot channel ([Fixture.Property.settingBacked]), looked
+ * up in [fixtureCategoryFor]'s order — the exact name, then the canonical one. What a COLOUR
+ * property's stored value means depends on it: a colour wheel's or gel scroller's row is a level.
+ */
+internal fun isSettingBacked(fixture: GroupableFixture, propertyName: String): Boolean {
+    val byName = FixturePropertyCatalogue.of(fixture::class).byName
+    val prop = byName[propertyName] ?: byName[canonicalPropertyName(propertyName)]
+    return prop?.settingBacked == true
+}
+
+/**
  * [propertyName]'s part in [fixture]'s `bundleWithColour` bundle — the role
  * [CueAssignmentResolver.Assignment.bundleRole] carries into composition. From the class catalogue,
  * so an element (a head) answers from its own `@FixtureProperty` members. A class with no bundled
@@ -413,7 +424,9 @@ internal fun buildCueAssignmentsForCue(
             continue
         }
 
-        val parsed = CueAssignmentResolver.parseAssignmentValue(category, canonical, assignment.value) ?: run {
+        val parsed = CueAssignmentResolver.parseAssignmentValue(
+            category, canonical, assignment.value, settingBacked = isSettingBacked(referenceFixture, canonical),
+        ) ?: run {
             logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.propertyName)
             continue
         }

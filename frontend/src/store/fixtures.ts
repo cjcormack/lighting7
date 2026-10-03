@@ -180,6 +180,9 @@ export type PropertyCategory =
   // exactly as it did before, so no version check is needed anywhere.
   | 'gobo'
   | 'gobo_rotation'
+  // A wheel's function channel: its bands (INDEX, ROTATE_FWD, ROTATE_REV) say whether the
+  // gobo_rotation channel is an angle or a speed. See resolveGoboRotation in stage3d/beamOptics.ts.
+  | 'gobo_rotation_mode'
   | 'prism'
   | 'prism_rotation'
   | 'focus'
@@ -216,6 +219,14 @@ export type SliderPropertyDescriptor = {
   focusNearM?: number
   /** Focus slider: the farthest focal distance (m from the aperture), at DMX max unless inverted. */
   focusFarM?: number
+  /** The coarse property (by `name`) this slider is the low byte of: the pair reads as one 16-bit
+   *  value. A fine slider carries its coarse one's category, and the finders below skip it.
+   *  Pan and tilt keep their own `pan_fine` / `tilt_fine` categories. */
+  fineOf?: string
+  /** Gobo rotation with a `gobo_rotation_mode` channel: the speed (RPM) at DMX max in a rotate band. */
+  rpmMax?: number
+  /** Gobo rotation with a `gobo_rotation_mode` channel: the angle (degrees) at DMX max when indexing. */
+  indexDegMax?: number
 }
 
 export type ColourPropertyDescriptor = {
@@ -482,13 +493,32 @@ export function findTiltFineProperty(
 // which is what makes the 3D view's new optics degrade silently to its old
 // behaviour rather than needing a capability check.
 
+/** A fine (low-byte) slider: never "the" property of its category — see `fineOf`. */
+function isFine(p: PropertyDescriptor): boolean {
+  return p.type === 'slider' && p.fineOf != null
+}
+
 /** A continuous beam slider by category (focus / zoom / iris / frost). */
 function findSlider(
   properties: PropertyDescriptor[] | undefined,
   category: PropertyCategory,
 ): SliderPropertyDescriptor | undefined {
   return properties?.find(
-    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === category,
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === category && !isFine(p),
+  )
+}
+
+/**
+ * The fine slider declared `fineOf` the coarse property, if any: the low byte of a 16-bit pair, read
+ * with `combineFinePair` in stage3d/beamOptics.ts.
+ */
+export function findFineProperty(
+  properties: PropertyDescriptor[] | undefined,
+  coarse: PropertyDescriptor | undefined,
+): SliderPropertyDescriptor | undefined {
+  if (!coarse) return undefined
+  return properties?.find(
+    (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.fineOf === coarse.name,
   )
 }
 
@@ -503,7 +533,7 @@ export function findWheel(
 ): SliderPropertyDescriptor | SettingPropertyDescriptor | undefined {
   return properties?.find(
     (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
-      (p.type === 'slider' || p.type === 'setting') && p.category === category,
+      (p.type === 'slider' || p.type === 'setting') && p.category === category && !isFine(p),
   )
 }
 
@@ -521,13 +551,18 @@ export function findGoboProperties(
   return (
     properties?.filter(
       (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
-        (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo',
+        (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo' && !isFine(p),
     ) ?? []
   )
 }
 
 export function findGoboRotationProperty(properties: PropertyDescriptor[] | undefined) {
   return findWheel(properties, 'gobo_rotation')
+}
+
+/** A wheel's function channel, which says whether its gobo rotation is an index or a speed. */
+export function findGoboRotationModeProperty(properties: PropertyDescriptor[] | undefined) {
+  return findWheel(properties, 'gobo_rotation_mode')
 }
 
 export function findPrismProperty(properties: PropertyDescriptor[] | undefined) {
