@@ -294,8 +294,9 @@ null, and reflects as null:
   in the library to declaring both; a zoom that declares neither is silently inert, the view keeping
   the family's fixed angle. The Robe ColorSpot 575's three-step zoom is the one exemption, by name,
   until the fixture optics plan's session 5 makes it a setting.
-- `fineOf`: names the coarse property this one is the low byte of, so the pair decodes as one 16-bit
-  value (`coarse + fine / 256`). Empty, the default, on every other property, and reflected as null.
+- `fineOf`: names the coarse property this one is the low byte of, so the pair decodes as one
+  value — the 16-bit `coarse × 256 + fine`, rescaled to the coarse range (`combineFinePair`). Empty,
+  the default, on every other property, and reflected as null.
   It generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair — pan and tilt keep theirs. A
   fine property carries its coarse one's category, and every client finder that picks *the*
   property of a category skips it (`findFineProperty` in `frontend/src/store/fixtures.ts` finds it

@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: APPROVED — not started.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — session 0 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -155,7 +155,7 @@ The usual for a portable field: the sync DTO, exporter and importer, a non-defau
 Each session is one PR. It ends with `./gradlew test` and `npm run check` green, the CLAUDE.md or
 engineering-doc paragraphs written, and its done-marker here: a one-line row with the merge SHA.
 
-### Session 0 — the Revolution, corrected (backend)
+### ~~Session 0 — the Revolution, corrected (backend)~~ — done, `433367f` ([PR #46](https://github.com/cjcormack/lighting7/pull/46))
 
 - **Zoom:** `degMin = 35.0, degMax = 15.0` (DMX 0 wide, per ChamSys; the manual's nominal range).
 - **Body:** dimensions from the manual (head 317 mm wide, 344 mm deep) and an estimated

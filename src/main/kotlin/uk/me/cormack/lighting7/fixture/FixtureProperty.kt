@@ -126,7 +126,7 @@ enum class CompactDisplayRole {
  * @param focusFarM On a FOCUS slider, the farthest focal distance in metres from the aperture,
  *                  at DMX max (DMX min when [inverted]). Defaults [Double.NaN].
  * @param fineOf Names the coarse property this one is the low byte of, so the pair decodes as one
- *               16-bit value (coarse + fine / 256). Empty — the default — on every other property.
+ *               16-bit value (coarse × 256 + fine). Empty — the default — on every other property.
  *               Generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair; pan and tilt keep
  *               theirs. A fine property carries its coarse property's category, and every
  *               Stage-view finder that picks "the" property of a category skips it.
