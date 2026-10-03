@@ -165,6 +165,12 @@ class CueAssignmentResolver {
          *   and a dependency on a template is expressed by a *layer*. Letting it through would
          *   hand [parseExtendedColour] an unparseable string, which answers white — the same
          *   silent failure the retired positional-palette grammar had when its list was empty.
+         *   **Unless [settingBacked]**: a COLOUR property backed by a slot channel (a colour wheel,
+         *   a gel scroller) stores and is written slot levels, so a plain `"0".."255"` is a
+         *   [PropertyValue.Setting] there. A level is read first because the colour parse would
+         *   take `"128"` for the hex shorthand `#112288`, which a slot channel cannot take — the
+         *   writer drops a colour on anything but an RGB property. Anything else still parses as
+         *   a colour, as before.
          * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
          * - Every other category (intensity-like and axis sliders): `"0".."255"` →
          *   [PropertyValue.Slider].
@@ -176,6 +182,7 @@ class CueAssignmentResolver {
             category: PropertyCategory,
             propertyName: String,
             value: String,
+            settingBacked: Boolean = false,
         ): PropertyValue? {
             val trimmed = value.trim()
             if (propertyName.equals("position", ignoreCase = true)) {
@@ -187,7 +194,9 @@ class CueAssignmentResolver {
             }
             return when (category) {
                 PropertyCategory.COLOUR -> {
-                    if (isTemplateColourRef(trimmed)) null
+                    val level = if (settingBacked) trimmed.toUByteParam() else null
+                    if (level != null) PropertyValue.Setting(level)
+                    else if (isTemplateColourRef(trimmed)) null
                     else runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
                 }
                 // Wheel-like roles read as discrete selections. Which arm a category lands
@@ -197,6 +206,7 @@ class CueAssignmentResolver {
                 // DmxFixtureSetting on the Fusion and a DmxSlider on the MAC 250).
                 PropertyCategory.SETTING, PropertyCategory.OTHER,
                 PropertyCategory.GOBO, PropertyCategory.GOBO_ROTATION,
+                PropertyCategory.GOBO_ROTATION_MODE,
                 PropertyCategory.PRISM, PropertyCategory.PRISM_ROTATION,
                 PropertyCategory.LED_MACRO, PropertyCategory.MOVEMENT_MACRO ->
                     trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }

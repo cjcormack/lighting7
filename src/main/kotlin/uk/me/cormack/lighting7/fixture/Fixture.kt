@@ -1,10 +1,13 @@
 package uk.me.cormack.lighting7.fixture
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import java.awt.Color
+import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
+import kotlin.reflect.full.isSubclassOf
 
 sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixture {
 
@@ -29,13 +32,25 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val inverted: Boolean = false,
         val focusNearM: Double? = null,
         val focusFarM: Double? = null,
+        val fineOf: String? = null,
+        val rpmMax: Double? = null,
+        val indexDegMax: Double? = null,
+        /**
+         * Backed by a [DmxFixtureSetting] — a slot channel, whatever its category. A COLOUR
+         * property that is a colour wheel or a gel scroller is one: its stored and programmer
+         * values are slot levels, not colours, and
+         * [CueAssignmentResolver.parseAssignmentValue][uk.me.cormack.lighting7.fx.CueAssignmentResolver.Companion.parseAssignmentValue]
+         * must read them so.
+         */
+        val settingBacked: Boolean = false,
     ) {
         companion object {
             /**
              * Build a [Property] from a [@FixtureProperty] annotation. The single caller is
              * [FixturePropertyCatalogue], which is the one place that scans a class — fixture
              * or element — for annotated members. NaN sentinels for the optional Double-valued
-             * annotation fields are converted to null here in one place.
+             * annotation fields, and the empty-string sentinel for [fineOf], are converted to null
+             * here in one place.
              */
             fun fromAnnotation(
                 classProperty: KProperty1<out Fixture, *>,
@@ -54,6 +69,10 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.inverted,
                 ann.focusNearM.takeUnless { it.isNaN() },
                 ann.focusFarM.takeUnless { it.isNaN() },
+                ann.fineOf.ifEmpty { null },
+                ann.rpmMax.takeUnless { it.isNaN() },
+                ann.indexDegMax.takeUnless { it.isNaN() },
+                (classProperty.returnType.classifier as? KClass<*>)?.isSubclassOf(DmxFixtureSetting::class) == true,
             )
         }
     }

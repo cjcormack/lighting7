@@ -241,12 +241,12 @@ internal fun spreadIntoProgrammer(
             return@forEachIndexed
         }
         // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under a property in
-        // the COLOUR category, and a Look row cannot hold that: the cook re-reads a COLOUR row
-        // through the colour parser, which turns "37" into white. The write arm passes the typed
-        // value through and is right; the answer-only arm would hand the client a literal it must
-        // not land, so under `write = false` such a head is skipped by name instead. (The
-        // programmer's own colour-wheel cell edit in layer scope has the same gap —
-        // `FU-LOOK-COLOUR-WHEEL-ROW`.)
+        // the COLOUR category. The cook now reads a level on a slot-backed COLOUR row as a slot
+        // (`Fixture.Property.settingBacked`), but a wheel named `colour` — the MAC 250's — still
+        // has its Look rows canonicalised to `rgbColour` and dropped. The write arm passes the
+        // typed value through and is right; the answer-only arm would hand the client a literal
+        // that may not land, so under `write = false` such a head is skipped by name until
+        // `FU-LOOK-COLOUR-WHEEL-ROW` closes that.
         if (!request.write && property == TemplateProperty.COLOUR && value is CueAssignmentResolver.PropertyValue.Setting) {
             skipped += SpreadSkipDto(target, "colour wheel — a Look row cannot hold a wheel slot")
             return@forEachIndexed

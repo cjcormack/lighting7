@@ -311,6 +311,12 @@ data class SliderPropertyDescriptor(
     val inverted: Boolean? = null,
     val focusNearM: Double? = null,
     val focusFarM: Double? = null,
+    /** The coarse property this slider is the low byte of (`@FixtureProperty.fineOf`), or null. */
+    val fineOf: String? = null,
+    /** A GOBO_ROTATION slider's speed at DMX max in a rotate band, in RPM. */
+    val rpmMax: Double? = null,
+    /** A GOBO_ROTATION slider's angle at DMX max in the index band, in degrees. */
+    val indexDegMax: Double? = null,
 ) : PropertyDescriptor
 
 @Serializable

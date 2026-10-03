@@ -140,9 +140,10 @@ because an operator would otherwise read them as bugs; the last two it does not:
 `hooks/useChannelSource.tsx` supplies one by context, defaulting to the wire. Every reader takes a
 source; nothing but the source knows about layers.
 
-Channel level rather than property level, because `FixtureModel`'s per-frame beam director reads 13
-channels by key (pan, tilt, their fine axes, zoom, focus, two gobo wheels, gobo rotation, prism,
-prism rotation, and two macros). Substituting at property level would mean touching each of those
+Channel level rather than property level, because `FixtureModel`'s per-frame beam director reads 17
+channels by key (pan, tilt, their fine axes, zoom, focus, iris, frost, two gobo wheels, gobo
+rotation with its fine byte and its wheel's function channel, prism, prism rotation, and two
+macros). Substituting at property level would mean touching each of those
 reads and knowing which descriptor backs each; substituting at channel level means they all work
 unchanged.
 

@@ -3,6 +3,7 @@ import type {
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
 } from '../../store/fixtures'
+import { dmxToDegrees } from '../../lib/axisDegrees'
 import { MAX_PRISM_LOBES } from './emitterLayout'
 import { GOBO_SLOT_COUNT, goboLayerFor } from './goboPatterns'
 
@@ -171,6 +172,108 @@ export function resolveGoboSpin(prop: ByteDescriptor | undefined, level: number)
   const options = optionsOf(prop)
   if (options.length === 0) return spinFromSlider(level)
   return spinFromSettingBands(options, level) * MAX_SPIN_REV_PER_SEC
+}
+
+/**
+ * A 16-bit pair as one raw value in the coarse channel's units: the 16-bit value
+ * `coarse × 256 + fine`, rescaled so the pair's full range is the coarse channel's 0..255 — so a
+ * consumer that reads a fraction of the coarse span reads `value / 65535` exactly, and a lone coarse
+ * channel reads as it always did. (`coarse + fine / 256` would run to 255.996 and read every value
+ * ~0.4% high.) `fineLevel` is null where the type declares no fine channel (`fineOf`,
+ * `findFineProperty`).
+ */
+export function combineFinePair(coarseLevel: number, fineLevel: number | null): number {
+  return fineLevel == null ? coarseLevel : (coarseLevel * 256 + fineLevel) / 257
+}
+
+/** The bands a `gobo_rotation_mode` channel names, the contract with the backend category. */
+export type GoboRotationMode = 'INDEX' | 'ROTATE_FWD' | 'ROTATE_REV'
+
+/**
+ * Which band a wheel's function channel sits in, or null for a band that names none of the three
+ * (a reserved band) or a channel with no bands to read.
+ */
+export function resolveGoboRotationMode(
+  prop: ByteDescriptor | undefined,
+  level: number,
+): GoboRotationMode | null {
+  if (!prop) return null
+  const options = optionsOf(prop)
+  const { index } = settingBand(options, level)
+  if (index < 0) return null
+  const name = options[index].name
+  return name === 'INDEX' || name === 'ROTATE_FWD' || name === 'ROTATE_REV' ? name : null
+}
+
+/**
+ * A wheel's rotation this frame: an absolute angle while it indexes, else a signed speed. The
+ * director sets the gobo's angle to `indexRad` when it is non-null and otherwise integrates
+ * `spinRevPerSec` — one of the two, never both.
+ */
+export interface GoboRotation {
+  indexRad: number | null
+  spinRevPerSec: number
+}
+
+export function makeGoboRotation(): GoboRotation {
+  return { indexRad: null, spinRevPerSec: 0 }
+}
+
+/**
+ * A gobo rotation channel decoded through its wheel's function channel (the Source Four
+ * Revolution's front wheel: index, rotate >>, rotate <<).
+ *
+ * - **Index:** the angle, DMX min to max over 0..`indexDegMax`.
+ * - **Rotate:** the speed, DMX min to max over 0..`rpmMax`, forward or reverse as the band names.
+ *   Forward is the view's positive direction. Linear in DMX: a type that knows its curve says so at
+ *   its source.
+ * - **Any other band** (reserved) holds the wheel still.
+ *
+ * `rotLevel` is the rotation channel in coarse units, with its fine channel already folded in by
+ * [combineFinePair]. Without a mode channel — every type but the Revolution — the rotation decodes
+ * as it always has ([resolveGoboSpin]) from the coarse byte. Writes into `out` and returns it, so
+ * the frame loop allocates nothing.
+ */
+export function resolveGoboRotation(
+  rotProp: ByteDescriptor | undefined,
+  rotLevel: number,
+  modeProp: ByteDescriptor | undefined,
+  modeLevel: number,
+  out: GoboRotation,
+): GoboRotation {
+  out.indexRad = null
+  out.spinRevPerSec = 0
+  if (!rotProp) return out
+  if (!modeProp || optionsOf(modeProp).length === 0) {
+    // The coarse byte back out of a folded pair (`combineFinePair`'s inverse, rounded down); a lone
+    // coarse level comes back unchanged.
+    out.spinRevPerSec = resolveGoboSpin(rotProp, Math.floor((rotLevel * 257) / 256))
+    return out
+  }
+  const mode = resolveGoboRotationMode(modeProp, modeLevel)
+  if (mode == null) return out
+  const span = rotProp.type === 'slider' ? rotProp.max - rotProp.min : 255
+  const min = rotProp.type === 'slider' ? rotProp.min : 0
+  const t = span > 0 ? Math.max(0, Math.min(1, (rotLevel - min) / span)) : 0
+  if (mode === 'INDEX') {
+    const degMax = rotProp.type === 'slider' ? rotProp.indexDegMax : undefined
+    // A type that declares no index range is held still rather than guessed at.
+    if (degMax != null && Number.isFinite(degMax)) out.indexRad = (t * degMax * Math.PI) / 180
+    return out
+  }
+  const rpmMax = rotProp.type === 'slider' ? rotProp.rpmMax : undefined
+  const topRevPerSec = rpmMax != null && Number.isFinite(rpmMax) ? rpmMax / 60 : MAX_SPIN_REV_PER_SEC
+  out.spinRevPerSec = (mode === 'ROTATE_REV' ? -1 : 1) * t * topRevPerSec
+  return out
+}
+
+/**
+ * A ZOOM slider's full beam angle in degrees, or null where the type declares no angles (the view
+ * then keeps the patch's or the family's). `degMin` / `degMax` are the angle at DMX min / max, in
+ * either order: the Source Four Revolution's DMX 0 is its widest, 35°.
+ */
+export function resolveZoomDeg(prop: SliderPropertyDescriptor | undefined, level: number): number | null {
+  return prop ? dmxToDegrees(level, prop) : null
 }
 
 /**

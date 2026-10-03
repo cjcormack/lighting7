@@ -256,7 +256,19 @@ mover body agrees with the desk's own mover test (`RigBriefing.isMovingHead`).
 
 ```kotlin
 @Target(AnnotationTarget.PROPERTY)
-annotation class FixtureProperty(val description: String = "")
+annotation class FixtureProperty(
+    val description: String = "",
+    val category: PropertyCategory = PropertyCategory.OTHER,
+    // … composition, bundleWithColour, compactDisplay, axis …
+    val degMin: Double = Double.NaN,
+    val degMax: Double = Double.NaN,
+    val inverted: Boolean = false,
+    val focusNearM: Double = Double.NaN,
+    val focusFarM: Double = Double.NaN,
+    val fineOf: String = "",
+    val rpmMax: Double = Double.NaN,
+    val indexDegMax: Double = Double.NaN,
+)
 ```
 
 Marks a property as controllable. The `fixtureProperties` list on `Fixture` collects these via reflection for:
@@ -277,6 +289,29 @@ null, and reflects as null:
   or neither: `FocusRangeTest` holds every FOCUS slider in the library to a usable range.
 - `inverted`: reverses the mapping. On a FOCUS slider DMX min is far focus, as on the MAC 250, whose
   chart runs "Infinity → 2 meters".
+- A ZOOM slider's `degMin` / `degMax` may run either way: the Source Four Revolution's DMX 0 is its
+  widest, so it declares `degMin = 35.0, degMax = 15.0`. `ZoomAnglesTest` holds every ZOOM slider
+  in the library to declaring both; a zoom that declares neither is silently inert, the view keeping
+  the family's fixed angle. The Robe ColorSpot 575's three-step zoom is the one exemption, by name,
+  until the fixture optics plan's session 5 makes it a setting.
+- `fineOf`: names the coarse property this one is the low byte of, so the pair decodes as one 16-bit
+  value (`coarse + fine / 256`). Empty, the default, on every other property, and reflected as null.
+  It generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair — pan and tilt keep theirs. A
+  fine property carries its coarse one's category, and every client finder that picks *the*
+  property of a category skips it (`findFineProperty` in `frontend/src/store/fixtures.ts` finds it
+  by name).
+- `rpmMax` / `indexDegMax`: on a GOBO_ROTATION slider whose wheel has a **GOBO_ROTATION_MODE**
+  channel — a setting whose bands are named `INDEX`, `ROTATE_FWD` and `ROTATE_REV` — the speed in
+  RPM at DMX max in a rotate band, and the angle in degrees at DMX max in the index band (DMX min is
+  0°). The Stage view decodes the rotation through the mode (`resolveGoboRotation` in
+  `frontend/src/components/stage3d/beamOptics.ts`): an angle while indexing, a speed while rotating,
+  turning the way the band names, and still in any other band. A wheel with no mode channel spins as
+  its rotation channel's bands always said. The Source Four Revolution's front wheel is the one
+  today.
+
+Every value a fixture declares that its manufacturer does not state carries an `// Estimate:`
+comment at its source saying what it rests on (fixture optics plan D15); the rig checks that settle
+them are listed in `docs/plans/manual-validation.md`.
 
 A focus range carries a comment naming its source: the manufacturer's document, or what an estimate
 rests on where the manufacturer publishes nothing. "Infinity" is written as 40 m, the Stage view's
@@ -677,7 +712,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `ScantasticFixture` | scantastic | 17 | Settings (scanner effects) |
 | `ShehdsLed19RgbwFixture.Mode16Ch` | shehds-led19-rgbw-16ch | 16 | Dimmer, Colour, White, Strobe, Position |
 | `ShehdsLed19RgbwFixture.Mode24Ch` | shehds-led19-rgbw-24ch | 24 | Dimmer, Strobe, Position, MultiElementFixture (3 RGBW zones) |
-| `Source4RevolutionFixture.BaseFrame31Ch` | etc-source4-revolution-base-frame | 31 | Dimmer, Position (+ gel scroller, beam wheels, framing shutters) |
+| `Source4RevolutionFixture.BaseFrame31Ch` | etc-source4-revolution-base-frame | 31 | Dimmer, Position, Zoom, Focus, Iris (+ gel scroller, front wheel, media frame, fan speed, framing shutters) |
 | `UVFixture` | uv | 2 | Dimmer, Settings |
 | `HazerFixture` | hazer | 2 | Sliders (haze, fan) |
 | `FusionSpotFixture` | fusionspot | 14 | Dimmer, Colour, pan/tilt |
