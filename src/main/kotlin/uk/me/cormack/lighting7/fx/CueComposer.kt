@@ -799,9 +799,9 @@ internal object CueComposer {
                 continue
             }
             // A template row resolves per head **first**, because resolution is what decides which
-            // property carries the value on this head — the MAC 250's colour is a wheel called
-            // `colour`, which `canonicalPropertyName` rewrites to `rgbColour` and then misses. So
-            // the resolved name is what the mask, the category lookup and the accumulator key use.
+            // property carries the value on this head — the MAC 250's colour is its `colourWheel`,
+            // not an `rgbColour` it does not have. So the resolved name is what the mask, the
+            // category lookup and the accumulator key use.
             val pendingIntent = p.intent
             val resolved: TemplateResolver.Resolution? =
                 if (pendingIntent == null) {
@@ -821,12 +821,8 @@ internal object CueComposer {
                     }
                     resolution
                 }
-            // **Not canonicalised for a template.** `TemplateResolver` already answered with the
-            // head's own property name, and canonicalising it would undo exactly the work it did:
-            // `canonicalPropertyName("colour")` is `"rgbColour"`, so the MAC 250's colour *wheel*
-            // would be looked up under a name it does not have and the head would silently drop out
-            // of every colour template. The Look path still canonicalises, because a stored Look row
-            // may spell the property any of the three ways.
+            // A template's resolved name is already the head's own property; a stored Look row is
+            // canonicalised, because it may spell the RGB colour any of the alias's three ways.
             val canonical = resolved?.propertyName ?: canonicalPropertyName(p.propertyName)
             if (mask != null && !maskAllows(mask, maskGroupForProperty(p.fixture, canonical))) continue
             val categoryInfo = fixtureCategoryFor(p.fixture, canonical)

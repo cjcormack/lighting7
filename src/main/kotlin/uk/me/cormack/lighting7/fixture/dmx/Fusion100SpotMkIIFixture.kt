@@ -252,7 +252,7 @@ sealed class Fusion100SpotMkIIFixture(
         override val dimmer = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Colour", category = PropertyCategory.COLOUR)
-        val colour = DmxFixtureSetting(transaction, universe, firstChannel + 3, Colour.entries.toTypedArray())
+        val colourWheel = DmxFixtureSetting(transaction, universe, firstChannel + 3, Colour.entries.toTypedArray())
 
         @FixtureProperty("Gobo", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(transaction, universe, firstChannel + 4, Gobo.entries.toTypedArray())
@@ -343,7 +343,7 @@ sealed class Fusion100SpotMkIIFixture(
         )
 
         @FixtureProperty("Colour", category = PropertyCategory.COLOUR)
-        val colour = DmxFixtureSetting(transaction, universe, firstChannel + 7, Colour.entries.toTypedArray())
+        val colourWheel = DmxFixtureSetting(transaction, universe, firstChannel + 7, Colour.entries.toTypedArray())
 
         @FixtureProperty("Gobo", category = PropertyCategory.GOBO)
         val gobo = DmxFixtureSetting(transaction, universe, firstChannel + 8, Gobo.entries.toTypedArray())

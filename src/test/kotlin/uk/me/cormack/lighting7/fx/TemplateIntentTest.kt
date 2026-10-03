@@ -126,8 +126,8 @@ class TemplateIntentTest {
     @Test
     fun `the property vocabulary is closed, and that is where slotted roles are refused`() {
         assertEquals(TemplateProperty.COLOUR, TemplateProperty.ofOrNull("rgbColour"))
-        // `canonicalPropertyName` collapses the three spellings, so a wheel named `colour` and a
-        // mixer named `rgbColour` are the same vocabulary entry.
+        // `canonicalPropertyName` collapses the alias's three spellings onto `rgbColour`, so all
+        // three name the one vocabulary entry.
         assertEquals(TemplateProperty.COLOUR, TemplateProperty.ofOrNull("colour"))
         assertEquals(TemplateProperty.COLOUR, TemplateProperty.ofOrNull("color"))
         assertEquals(TemplateProperty.POSITION, TemplateProperty.ofOrNull("position"))

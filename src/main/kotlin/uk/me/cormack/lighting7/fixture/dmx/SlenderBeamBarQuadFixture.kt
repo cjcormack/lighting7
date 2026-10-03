@@ -188,7 +188,7 @@ sealed class SlenderBeamBarQuadFixture(
         override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 
         @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
-        val colour = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 2, Colour.entries.toTypedArray())
+        val colourWheel = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 2, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): BasicHead =
             BasicHead(elementIndex, transaction, headFirstChannel)
@@ -223,7 +223,7 @@ sealed class SlenderBeamBarQuadFixture(
         val speed = DmxSlider(headTransaction, universe, headFirstChannel + 4)
 
         @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
-        val colour = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 5, Colour.entries.toTypedArray())
+        val colourWheel = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 5, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): FullHead =
             FullHead(elementIndex, transaction, headFirstChannel)
@@ -359,7 +359,7 @@ sealed class SlenderBeamBarQuadFixture(
 
         /** Set all heads to the same colour */
         fun setAllHeadsColour(colour: Colour) {
-            elements.forEach { it.colour.setting = colour }
+            elements.forEach { it.colourWheel.setting = colour }
         }
     }
 
@@ -414,12 +414,12 @@ sealed class SlenderBeamBarQuadFixture(
 
         /** Set all heads to the same colour */
         fun setAllHeadsColour(colour: Colour) {
-            elements.forEach { it.colour.setting = colour }
+            elements.forEach { it.colourWheel.setting = colour }
         }
 
         override fun blackout() {
             super.blackout()
-            elements.forEach { it.colour.setting = Colour.BLACKOUT }
+            elements.forEach { it.colourWheel.setting = Colour.BLACKOUT }
         }
     }
 
@@ -481,12 +481,12 @@ sealed class SlenderBeamBarQuadFixture(
 
         /** Set all heads to the same colour */
         fun setAllHeadsColour(colour: Colour) {
-            elements.forEach { it.colour.setting = colour }
+            elements.forEach { it.colourWheel.setting = colour }
         }
 
         override fun blackout() {
             super.blackout()
-            elements.forEach { it.colour.setting = Colour.BLACKOUT }
+            elements.forEach { it.colourWheel.setting = Colour.BLACKOUT }
         }
     }
 }

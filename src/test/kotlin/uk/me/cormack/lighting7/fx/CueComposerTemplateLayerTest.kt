@@ -129,7 +129,7 @@ class CueComposerTemplateLayerTest {
 
         val onMac = rows.single { it.targetKey == "mac-1" }
         assertIs<CueAssignmentResolver.PropertyValue.Setting>(onMac.value)
-        assertEquals("colour", onMac.propertyName, "the wheel carries it, not `rgbColour`")
+        assertEquals("colourWheel", onMac.propertyName, "the wheel carries it, not `rgbColour`")
     }
 
     @Test

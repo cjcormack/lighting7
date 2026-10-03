@@ -116,7 +116,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
-| [`FU-LOOK-COLOUR-WHEEL-ROW`](#fu-look-colour-wheel-row) | Ready | Programmer | — |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -1211,25 +1210,6 @@ the Stage view. The template half stays here.
 
 ---
 
-### `FU-LOOK-COLOUR-WHEEL-ROW`
-
-**What**: let a Look row hold a colour wheel's slot everywhere, then lift the Spread route's
-`write = false` skip of colour-wheel heads (`routes/programmerSpread.kt`).
-
-**Where it stands**: the fixture optics plan's session 0 fixed the parse. A COLOUR property backed
-by a slot channel (`Fixture.Property.settingBacked` — a colour wheel, the Source Four Revolution's
-gel scroller) now reads a stored `"0".."255"` as a slot rather than the hex shorthand, on all four
-parse paths (cue apply, the Look-layer cook, `programmer.set`, Include). What is left is the name:
-the Martin MAC 250's wheel is a property literally named `colour`, and the Look-layer cook
-(`CueComposer`) canonicalises a row's name to `rgbColour` before looking it up, so that wheel's Look
-rows still resolve to nothing. Cue rows have the same canonicalise-first order in
-`buildCueAssignmentsForCue`.
-
-**Done when**: a Look row and a cue row on the MAC 250's `colour` wheel cook to the slot, and the
-Spread skip and its test (`ProgrammerSpreadRouteTest`) are gone.
-
----
-
 ## Desk accounts
 
 Everything here originates in the multi-user-auth plan, closed out 2026-08-17
@@ -2240,6 +2220,13 @@ the same `LanternLibraryTest` checks at the write boundary.
 
 One line each: slug, what shipped, commit. Full narratives live in the commit messages and in this
 file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
+
+### 2026-10
+
+- `FU-LOOK-COLOUR-WHEEL-ROW` — the six colour-wheel properties named `colour` (MAC 250, Easymove
+  XL 60 Spot, both Fusion 100 Spot MkII modes, both Slender Beam Bar heads) are `colourWheel`, so
+  the RGB alias no longer rewrites their rows away; `FixturePropertyNameAliasTest` forbids an alias
+  as a property name, and Spread's `write = false` answers a wheel slot instead of skipping it.
 
 ### 2026-09
 
