@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — session 0 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0 and 1 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -178,7 +178,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Tests:** a zoom-declares-angles test (D2) beside `FocusRangeTest`; the existing personality
   tests updated for the removed properties.
 
-### Session 1 — focus that reads (frontend, one backend route)
+### ~~Session 1 — focus that reads (frontend, one backend route)~~ — done, `b66091b` ([PR #48](https://github.com/cjcormack/lighting7/pull/48))
 
 - **Depth of field (D9):** `beamMask.ts`'s `focusBlur` takes the relative error
   `|f − d| / f` times the type's `depthOfField`. The family constants are tuned in
