@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0, 1, 2, 3 and 4 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0, 1, 2, 3, 4 and 5 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -233,7 +233,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   surfaces*, defaulting to every gobo light on SwiftShader's numbers; Safari and the iPad are step 5
   of that item.)
 
-### Session 5 — the library optics pass (backend + frontend)
+### ~~Session 5 — the library optics pass (backend + frontend)~~ — done, `49c2ec9` ([PR #52](https://github.com/cjcormack/lighting7/pull/52))
 
 - **Fixed lenses (D3):** `fieldDeg` on the Fusion 100 (10°), IMG Wash-42 (10°) and Scantastic
   (11°).
