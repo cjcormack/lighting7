@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureProperty
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.TestStrobeShutterHead
 import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
@@ -188,6 +189,16 @@ class LocateValueResolverTest {
         assertEquals(
             CueAssignmentResolver.PropertyValue.Slider(0u), byName["strobe"],
             "Whex's DmxStrobe opens at 0 — a running strobe must not survive locate",
+        )
+    }
+
+    @Test
+    fun `a setting-backed strobe opens at its OPEN position`() {
+        val fixture = TestStrobeShutterHead(universe, "shutter-1", 1)
+        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        assertEquals(
+            CueAssignmentResolver.PropertyValue.Setting(64u), byName["shutter"],
+            "a closed shutter must not survive locate, whichever form its channel takes",
         )
     }
 

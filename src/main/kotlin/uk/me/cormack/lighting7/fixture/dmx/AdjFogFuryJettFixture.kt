@@ -94,8 +94,20 @@ sealed class AdjFogFuryJettFixture(
          *
          * Only the linear strobe band (32–95) is exposed; pulse and random-
          * strobe bands are reachable by writing the raw channel value.
+         *
+         * The manual's "off" is the strobe off, not the LEDs: [fullOn] writes 0. Estimate: the
+         * strobe and random strobe at 1–20 Hz and the pulse at 0.5–2 Hz — ADJ states none. Checked
+         * on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 31, StrobeKind.OPEN),
+                StrobeBand(32, 95, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+                StrobeBand(96, 159, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0),
+                StrobeBand(160, 255, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 5,
             strobeMin = 32u, strobeMax = 95u,

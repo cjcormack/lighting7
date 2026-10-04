@@ -165,8 +165,17 @@ sealed class VarytecEasymoveXl60SpotFixture(
         /**
          * Channel 6 — electronic strobe. 0 = no strobe (LED constant on,
          * dimmer in charge of brightness), 1–255 = slow → fast.
+         *
+         * Estimate: the rate, 1–20 Hz — the manual says only "variable electronic strobo". Checked
+         * on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 0, StrobeKind.OPEN),
+                StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 5,
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,

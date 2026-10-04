@@ -341,8 +341,19 @@ sealed class Fusion100SpotMkIIFixture(
          * 15CH mode CH7 strobe. 0–9 = blackout/off, 10–245 = strobe slow →
          * fast, 246–255 = LED on. `strobe(0)` short-circuits to `fullOn()`
          * to preserve "intensity 0 = no strobe, keep LED open."
+         *
+         * Estimate: the strobe's rate, 1–20 Hz — Equinox states none. Checked on the rig by
+         * FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 9, StrobeKind.CLOSED),
+                StrobeBand(10, 245, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+                StrobeBand(246, 255, StrobeKind.OPEN),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 6,
             strobeMin = 10u, strobeMax = 245u, fullOnValue = 246u,

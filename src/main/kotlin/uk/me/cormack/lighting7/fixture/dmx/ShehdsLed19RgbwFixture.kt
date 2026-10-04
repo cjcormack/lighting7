@@ -179,7 +179,15 @@ sealed class ShehdsLed19RgbwFixture(
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        // Estimate: the manual names the channel only ("0-255 Strobe") — 0 open, as the class writes, and
+        // the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 0, StrobeKind.OPEN),
+                StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 7,
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
@@ -282,7 +290,15 @@ sealed class ShehdsLed19RgbwFixture(
         @FixtureProperty(category = PropertyCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        // Estimate: the manual names the channel only ("0-255 Strobe") — 0 open, as the class writes, and
+        // the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 0, StrobeKind.OPEN),
+                StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 6,
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,

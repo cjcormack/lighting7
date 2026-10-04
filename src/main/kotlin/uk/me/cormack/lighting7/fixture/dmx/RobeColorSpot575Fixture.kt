@@ -408,8 +408,26 @@ sealed class RobeColorSpot575Fixture(
          * prevents [WithStrobe] writes — and raw `value` writes — from straying
          * into the pulse/random bands above 95; reach those only via raw
          * transaction writes.
+         *
+         * The bands are the DMX chart's, past the clamp too. The strobe's 1–10 Hz is the user
+         * manual's ("strobe effect (1 - 10 flashes per second)", v1.4 — its spec page says "max. 15").
+         * Estimate: the pulses at 0.5–2 Hz, the random strobe at the strobe's 1–10 Hz. Checked on
+         * the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 31, StrobeKind.CLOSED),
+                StrobeBand(32, 63, StrobeKind.OPEN),
+                StrobeBand(64, 95, StrobeKind.STROBE, hzMin = 1.0, hzMax = 10.0),
+                StrobeBand(96, 127, StrobeKind.OPEN),
+                StrobeBand(128, 143, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0),
+                StrobeBand(144, 159, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0, inverted = true),
+                StrobeBand(160, 191, StrobeKind.OPEN),
+                StrobeBand(192, 223, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 10.0),
+                StrobeBand(224, 255, StrobeKind.OPEN),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 17,
             strobeMin = STROBE_BAND_MIN,

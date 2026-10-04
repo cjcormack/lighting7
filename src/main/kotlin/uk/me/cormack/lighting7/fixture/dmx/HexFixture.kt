@@ -70,7 +70,15 @@ class HexFixture(
     @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
     override val uv = DmxSlider(transaction, universe, firstChannel + 6)
 
-    @FixtureProperty(category = PropertyCategory.STROBE)
+    // Estimate: no manual to hand — 0–9 open below the strobe band the class writes, and the strobe's
+    // 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
+    @FixtureProperty(
+        category = PropertyCategory.STROBE,
+        strobe = [
+            StrobeBand(0, 9, StrobeKind.OPEN),
+            StrobeBand(10, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+        ],
+    )
     override val strobe = BandedStrobeChannel(
         transaction, universe, firstChannel + 7,
         strobeMin = 10u, strobeMax = 255u,

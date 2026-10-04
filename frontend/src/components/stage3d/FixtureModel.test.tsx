@@ -4,6 +4,7 @@ import { render } from '@testing-library/react'
 import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import {
   beamBlades,
+  CellColourSync,
   ColourSync,
   composeBeamHull,
   coneLandingDepth,
@@ -33,7 +34,9 @@ import {
 import { ChannelSourceProvider } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
 import { chan, colourProp, revolutionShutterProps, sliderProp } from '../../test/fixtureFactories'
-import { findShutterProperties } from '../../store/fixtures'
+import { findShutterProperties, type ElementDescriptor } from '../../store/fixtures'
+import type { Cell } from './bodies/archetype'
+import { createColourTicker } from './colourTicker'
 
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
@@ -447,6 +450,53 @@ describe('a cell of several takes its own element', () => {
   it("scales by the element's own dimmer", () => {
     const cell = { colour: undefined, setting: undefined, dimmer: sliderProp('dimmer', 'dimmer', chan(9)), whites: [] }
     expect(resolveCellColour(cell, new Color('#ff8800'), source({ '0:9': 51 }), new Color())).toBeCloseTo(0.2, 9)
+  })
+
+  // The Liteobar's strobe is the fixture's, not a cell's (fixture-optics plan D12): it gates every
+  // cell as a master, as a dimmer does.
+  it("gates every cell by the fixture's strobe: closed dark, open lit, a strobe flashing", () => {
+    const strobe = sliderProp('strobe', 'strobe', chan(2), {
+      strobeBands: [
+        { from: 0, to: 0, kind: 'OPEN' },
+        { from: 1, to: 9, kind: 'CLOSED' },
+        { from: 10, to: 255, kind: 'STROBE', hzMin: 1, hzMax: 1 },
+      ],
+    })
+    const elements: ElementDescriptor[] = [0, 1, 2].map((i) => ({
+      index: i,
+      key: `bar.cell-${i}`,
+      displayName: `Cell ${i + 1}`,
+      properties: [colourProp('rgbColour', chan(3 + i * 3), chan(4 + i * 3), chan(5 + i * 3))],
+    }))
+    const cells: Cell[] = [0, 1, 2].map((i) => ({ x: i * 0.2, y: 0, z: 0, shape: 'disc', halfWidthM: 0.05, halfDepthM: 0.05, element: i }))
+    const pools = (strobeLevel: number, timeS: number) => {
+      const ticker = createColourTicker(() => {})
+      ticker.frame(timeS)
+      const cellStateRef = {
+        current: { count: 3, colors: new Float32Array(9), cone: new Float32Array(3), pool: new Float32Array(3) },
+      }
+      const view = render(
+        <ChannelSourceProvider source={source({ '0:2': strobeLevel, '0:3': 255, '0:7': 255, '0:11': 255 })}>
+          <CellColourSync
+            elements={elements}
+            cells={cells}
+            dimmerProp={undefined}
+            strobes={[strobe]}
+            fallbackHex="#ffffff"
+            lensRef={{ current: null }}
+            cellStateRef={cellStateRef}
+            ticker={ticker}
+          />
+        </ChannelSourceProvider>,
+      )
+      const listening = ticker.listening
+      view.unmount()
+      return { pool: [...cellStateRef.current.pool], listening }
+    }
+    expect(pools(0, 0)).toEqual({ pool: [POOL_SCALE, POOL_SCALE, POOL_SCALE].map(Math.fround), listening: 0 })
+    expect(pools(5, 0)).toEqual({ pool: [0, 0, 0], listening: 0 })
+    expect(pools(100, 0.05)).toEqual({ pool: [POOL_SCALE, POOL_SCALE, POOL_SCALE].map(Math.fround), listening: 1 })
+    expect(pools(100, 0.5)).toEqual({ pool: [0, 0, 0], listening: 1 })
   })
 })
 

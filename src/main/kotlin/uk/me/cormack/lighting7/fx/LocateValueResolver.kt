@@ -5,12 +5,14 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.StrobeKind
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixturePrismSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureStrobeSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
@@ -157,9 +159,16 @@ object LocateValueResolver {
             // Any Strobe channel knows its shutter-open level; coerce because the raw value
             // bypasses the slider's own clamp, and a fullOnValue above a fenced-off max must
             // not drive into lamp/reset bands the setter would have refused.
-            PropertyCategory.STROBE -> if (backing is DmxSlider && backing is Strobe) {
-                CueAssignmentResolver.PropertyValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
-            } else null
+            PropertyCategory.STROBE -> when (backing) {
+                is DmxSlider -> if (backing is Strobe) {
+                    CueAssignmentResolver.PropertyValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
+                } else null
+                // A setting-backed shutter (fixture optics plan D12): its first OPEN position.
+                is DmxFixtureSetting<*> -> backing.sortedValues
+                    .firstOrNull { (it as? DmxFixtureStrobeSettingValue)?.strobeKind == StrobeKind.OPEN }
+                    ?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                else -> null
+            }
 
             PropertyCategory.COLOUR -> when (backing) {
                 is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(LOCATE_WHITE)

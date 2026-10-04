@@ -12,6 +12,7 @@ import type { ChannelSource } from '../../api/channelSource'
 import {
   findColourSource,
   findDimmerProperty,
+  findStrobeProperties,
   type Fixture,
   type FixtureTypeInfo,
 } from '../../store/fixtures'
@@ -22,6 +23,7 @@ import gelsJson from '../../../../src/main/resources/gels.json'
 import { chan, colourProp, makeFixture, settingProp, sliderProp } from '../../test/fixtureFactories'
 import { BAND_STEP_S, ColourBandClockContext, type ColourBandClock } from '../../lib/colourBands'
 import { createColourTicker, type ColourTicker } from './colourTicker'
+import { FLASH_S, SHIMMER_DEPTH, SHIMMER_LEVEL } from '../../lib/strobeBands'
 
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
@@ -124,6 +126,7 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
         gel={gel}
         filters={colourFilters(properties, colourSource)}
         dimmerProp={findDimmerProperty(properties)}
+        strobes={findStrobeProperties(properties)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
         ticker={tickerAt(timeS)}
@@ -430,6 +433,7 @@ describe('the 3D dispatch asks for frames only while a band animates', () => {
           gel={null}
           filters={colourFilters(properties, colourSource)}
           dimmerProp={findDimmerProperty(properties)}
+          strobes={findStrobeProperties(properties)}
           lensRef={{ current: null }}
           colorStateRef={colorStateRef}
           ticker={ticker}
@@ -519,5 +523,167 @@ describe('stacked colour wheels', () => {
   it("leaves an RGB head's colour preset out of the beam: it is not a second wheel", () => {
     const rgbOnly = resolveBoth({ '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0 }, makeFixture('fx-1', [DIMMER, RGB]))
     expect(resolveBoth({ '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0, '0:5': 10 }, makeFixture('fx-1', [DIMMER, RGB, WHEEL]))).toEqual(rgbOnly)
+  })
+})
+
+// ─── strobe and closed shutters (fixture-optics plan D12) ──────────────────────────────────────
+
+// The MAC 250's channel 1 as the desk sends it: its manual's bands past the slider's clamp, reset and
+// the lamp left undeclared.
+const MAC_STROBE = sliderProp('strobe', 'strobe', chan(12), {
+  max: 72,
+  strobeBands: [
+    { from: 0, to: 19, kind: 'CLOSED' },
+    { from: 20, to: 49, kind: 'OPEN' },
+    { from: 50, to: 72, kind: 'STROBE', hzMin: 1, hzMax: 10, inverted: true },
+    { from: 73, to: 79, kind: 'OPEN' },
+    { from: 80, to: 99, kind: 'PULSE', hzMin: 0.5, hzMax: 2, inverted: true },
+    { from: 128, to: 147, kind: 'RANDOM', hzMin: 8, hzMax: 8 },
+    { from: 168, to: 187, kind: 'RANDOM', hzMin: 2, hzMax: 2 },
+  ],
+})
+const MAC = makeFixture('mac-1', [DIMMER, WHEEL, MAC_STROBE])
+// An RGB head with a strobe (the Hex): the factor multiplies the colour arm too.
+const HEX_STROBE = sliderProp('strobe', 'strobe', chan(13), {
+  strobeBands: [
+    { from: 0, to: 9, kind: 'OPEN' },
+    { from: 10, to: 255, kind: 'STROBE', hzMin: 1, hzMax: 20 },
+  ],
+})
+const HEX = makeFixture('hex-1', [DIMMER, RGB, HEX_STROBE])
+// A setting-backed shutter (the Scantastic's kind): each option's band runs to the next.
+const SHUTTER = settingProp('shutter', 'strobe', chan(14), [
+  { name: 'BLACKOUT', level: 0, displayName: 'Blackout', strobeKind: 'CLOSED' },
+  { name: 'FULL_ON', level: 128, displayName: 'Full on', strobeKind: 'OPEN' },
+  { name: 'FLASH', level: 200, displayName: 'Flash', strobeKind: 'STROBE', hzMin: 2, hzMax: 2 },
+])
+const SCANNER = makeFixture('scan-1', [SHUTTER])
+
+describe('strobe and closed shutters on both dispatches (fixture-optics plan D12)', () => {
+  const both = (fixture: Fixture, values: Record<string, number>, t = 0) => {
+    const s = scenario({ fixture, values })
+    return [resolve2D(s, t), resolve3D(s, t)] as const
+  }
+
+  it('draws a MAC 250 at strobe 0 dark, as on the rig, and lit at its open level', () => {
+    const [closed2D, closed3D] = both(MAC, { '0:1': 255, '0:5': 10, '0:12': 0 })
+    expect(closed2D.intensity).toBe(0)
+    expect(closed3D.intensity).toBe(0)
+    const [open2D, open3D] = both(MAC, { '0:1': 255, '0:5': 10, '0:12': 35 })
+    expect(open2D.intensity).toBe(1)
+    expect(open3D.intensity).toBeCloseTo(1, 10)
+    expect(open3D.colour).toBe(open2D.colour)
+  })
+
+  it.each([
+    { name: 'the strobe band at its slowest, mid-flash', values: { '0:12': 72 }, t: FLASH_S / 2 },
+    { name: 'the strobe band at its slowest, between flashes', values: { '0:12': 72 }, t: 0.5 },
+    { name: 'the strobe band at its fastest (a shimmer)', values: { '0:12': 50 }, t: 0.37 },
+    { name: 'a pulse past the clamp', values: { '0:12': 90 }, t: 0.8 },
+    { name: 'a fast random strobe past the clamp (a shimmer)', values: { '0:12': 130 }, t: 1.3 },
+    { name: 'a slow random strobe past the clamp', values: { '0:12': 170 }, t: 2.21 },
+    { name: 'the undeclared reset band (open)', values: { '0:12': 210 }, t: 0 },
+  ])('resolves $name identically on both surfaces', ({ values, t }) => {
+    const [twoD, threeD] = both(MAC, { '0:1': 200, '0:5': 10, ...values }, t)
+    expect(threeD.colour).toBe(twoD.colour)
+    expect(threeD.intensity).toBeCloseTo(twoD.intensity, 10)
+  })
+
+  it('flashes at the slow end and draws a shimmer, not flashes, at the fast end', () => {
+    const level = (dmx: number, t: number) => both(MAC, { '0:1': 255, '0:5': 10, '0:12': dmx }, t)[1].intensity
+    expect(level(72, FLASH_S / 2)).toBeCloseTo(1, 10)
+    expect(level(72, 0.5)).toBe(0)
+    // 10 Hz: lit around the shimmer's level, never dark, rippling by less than WCAG's 10%.
+    for (const t of [0, 0.013, 0.05, 0.31, 0.77]) {
+      const v = level(50, t)
+      expect(v).toBeGreaterThanOrEqual(SHIMMER_LEVEL * (1 - SHIMMER_DEPTH) - 1e-9)
+      expect(v).toBeLessThanOrEqual(SHIMMER_LEVEL + 1e-9)
+    }
+  })
+
+  it("gates an RGB head's colour arm the same way", () => {
+    for (const t of [0.02, 0.4, 1.7]) {
+      const [twoD, threeD] = both(HEX, { '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0, '0:13': 20 }, t)
+      expect(threeD.colour).toBe(twoD.colour)
+      expect(threeD.intensity).toBeCloseTo(twoD.intensity, 10)
+    }
+    expect(both(HEX, { '0:1': 255, '0:2': 255, '0:13': 0 })[0].intensity).toBe(1)
+  })
+
+  it('reads a setting-backed shutter: blackout dark, full on lit, a flash band flashing', () => {
+    expect(both(SCANNER, { '0:14': 0 }).map((r) => r.intensity)).toEqual([0, 0])
+    const [on2D, on3D] = both(SCANNER, { '0:14': 128 })
+    expect(on2D.intensity).toBe(1)
+    expect(on3D.intensity).toBeCloseTo(1, 10)
+    const [flash2D, flash3D] = both(SCANNER, { '0:14': 220 }, FLASH_S / 2)
+    expect(flash2D.intensity).toBe(1)
+    expect(flash3D.intensity).toBeCloseTo(1, 10)
+    expect(both(SCANNER, { '0:14': 220 }, 0.3).map((r) => r.intensity)).toEqual([0, 0])
+  })
+})
+
+describe('the 3D dispatch asks for frames only while a strobe flashes', () => {
+  function liveSource(values: Record<string, number>) {
+    const map = new Map(Object.entries(values))
+    const listeners = new Map<string, Set<(v: number) => void>>()
+    const source: ChannelSource = {
+      get: (universe, channelNo) => map.get(`${universe}:${channelNo}`) ?? 0,
+      getByKey: (key) => map.get(key) ?? 0,
+      subscribeToChannel: (key, fn) => {
+        const set = listeners.get(key) ?? new Set()
+        set.add(fn)
+        listeners.set(key, set)
+        return { unsubscribe: () => set.delete(fn) }
+      },
+    }
+    const set = async (key: string, value: number) => {
+      map.set(key, value)
+      await act(async () => {
+        for (const fn of listeners.get(key) ?? []) fn(value)
+        await Promise.resolve()
+      })
+    }
+    return { source, set }
+  }
+
+  it('registers on a strobe band, flashes per frame, and lets go when the shutter closes', async () => {
+    const invalidate = vi.fn()
+    const ticker = createColourTicker(invalidate)
+    const { source, set } = liveSource({ '0:1': 255, '0:5': 10, '0:12': 35 })
+    const properties = MAC.properties
+    const colourSource = findColourSource(properties)
+    const colorStateRef = { current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 } }
+    const view = render(
+      <ChannelSourceProvider source={source}>
+        <ColourSync
+          hasFixture
+          colourSource={colourSource}
+          gel={null}
+          filters={colourFilters(properties, colourSource)}
+          dimmerProp={findDimmerProperty(properties)}
+          strobes={findStrobeProperties(properties)}
+          lensRef={{ current: null }}
+          colorStateRef={colorStateRef}
+          ticker={ticker}
+        />
+      </ChannelSourceProvider>,
+    )
+    expect(ticker.listening).toBe(0)
+
+    await set('0:12', 72)
+    expect(ticker.listening).toBe(1)
+    ticker.frame(FLASH_S / 2)
+    expect(colorStateRef.current.coneOpacity).toBeCloseTo(CONE_SCALE, 10)
+    ticker.frame(0.5)
+    expect(colorStateRef.current.coneOpacity).toBe(0)
+
+    invalidate.mockClear()
+    // Closed: dark, and still — nothing moves with time, so a frame asks for nothing.
+    await set('0:12', 0)
+    expect(ticker.listening).toBe(0)
+    expect(colorStateRef.current.coneOpacity).toBe(0)
+    ticker.frame(1.1)
+    expect(invalidate).not.toHaveBeenCalled()
+    view.unmount()
   })
 })

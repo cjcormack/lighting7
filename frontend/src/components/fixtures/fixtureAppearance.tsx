@@ -1,8 +1,9 @@
-import { useMemo, type ReactNode } from 'react'
+import { useCallback, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import {
   findColourSource,
   findDimmerProperty,
   findGroupColourSource,
+  findStrobeProperties,
   type ColourPropertyDescriptor,
   type Fixture,
   type FixtureTypeInfo,
@@ -14,7 +15,14 @@ import type { FixturePatch } from '../../api/patchApi'
 import { findGel } from '../../lib/gels'
 import { colourFilters, filterColour, fittedProperties } from '../../lib/fittedMedia'
 import { useGelIndex } from '../../hooks/useGelIndex'
-import { useColourValue, useSettingValue } from '../../hooks/usePropertyValues'
+import {
+  getChannelValue,
+  subscribeToChannels,
+  useColourValue,
+  useSettingValue,
+} from '../../hooks/usePropertyValues'
+import { useChannelSource } from '../../hooks/useChannelSource'
+import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import {
   isAnimatedBand,
   settingColourAt,
@@ -110,13 +118,25 @@ export function FixtureAppearanceSource({
     () => colourFilters(properties, colourSource),
     [properties, colourSource],
   )
+  // The strobe channels (fixture-optics plan D12): a level factor on every leaf's answer — a closed
+  // band dark, a strobe flashing under the three-flash rule (`lib/strobeBands.ts`). The 3D scene's
+  // `liveStrobeFactor` is the other copy.
+  const strobes = useMemo(() => findStrobeProperties(properties), [properties])
 
   if (!fixture) return <PlaceholderAppearance>{children}</PlaceholderAppearance>
+  const emit =
+    strobes.length === 0
+      ? children
+      : (appearance: FixtureAppearance) => (
+          <StrobeGate strobes={strobes} appearance={appearance}>
+            {children}
+          </StrobeGate>
+        )
 
   if (groupColour && groupColour.memberColourChannels.length > 1) {
     return (
       <MultiPixelAppearance groupColourProp={groupColour} dimmerProp={dimmerProp}>
-        {children}
+        {emit}
       </MultiPixelAppearance>
     )
   }
@@ -124,7 +144,7 @@ export function FixtureAppearanceSource({
   if (colourSource?.type === 'colour') {
     return (
       <ColourAppearance colourProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
-        {children}
+        {emit}
       </ColourAppearance>
     )
   }
@@ -132,7 +152,7 @@ export function FixtureAppearanceSource({
   if (colourSource?.type === 'setting') {
     return (
       <SettingColourAppearance settingProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
-        {children}
+        {emit}
       </SettingColourAppearance>
     )
   }
@@ -140,19 +160,71 @@ export function FixtureAppearanceSource({
   if (gel) {
     return (
       <FixedColourAppearance hex={gel.color} dimmerProp={dimmerProp} filters={filters}>
-        {children}
+        {emit}
       </FixedColourAppearance>
     )
   }
 
   return (
     <FixedColourAppearance hex={DEFAULT_FIXTURE_COLOUR} dimmerProp={dimmerProp} filters={filters}>
-      {children}
+      {emit}
     </FixedColourAppearance>
   )
 }
 
 type LeafProps = { children: (appearance: FixtureAppearance) => ReactNode }
+
+type StrobeProperty = SliderPropertyDescriptor | SettingPropertyDescriptor
+
+/**
+ * [appearance] with its level — and every pixel's — multiplied by the strobe channels' factor at the
+ * band clock's time, which ticks only while a band flashes (`useColourBandTime`). Its own component
+ * so its hook set is fixed whatever leaf answered, and so a flashing strobe re-renders only this.
+ */
+function StrobeGate({
+  strobes,
+  appearance,
+  children,
+}: {
+  strobes: readonly StrobeProperty[]
+  appearance: FixtureAppearance
+  children: (appearance: FixtureAppearance) => ReactNode
+}) {
+  const levels = useStrobeLevels(strobes)
+  const read = useCallback((p: StrobeProperty) => levels[strobes.indexOf(p)] ?? 0, [levels, strobes])
+  const timeS = useColourBandTime(strobeAnimates(strobes, read))
+  const factor = strobeFactor(strobes, read, timeS)
+  if (factor === 1) return <>{children(appearance)}</>
+  return (
+    <>
+      {children({
+        ...appearance,
+        intensity: appearance.intensity * factor,
+        segments: appearance.segments?.map((s) => ({ ...s, intensity: s.intensity * factor })),
+      })}
+    </>
+  )
+}
+
+/**
+ * The strobe channels' DMX values, re-rendering when any moves. The snapshot is the values joined
+ * into a string, which compares by value, so an unchanged batch is the same snapshot and renders
+ * nothing.
+ */
+function useStrobeLevels(strobes: readonly StrobeProperty[]): number[] {
+  const source = useChannelSource()
+  const channels = useMemo(() => strobes.map((p) => p.channel), [strobes])
+  const subscribe = useCallback(
+    (onChange: () => void) => subscribeToChannels(channels, onChange, source),
+    [channels, source],
+  )
+  const getSnapshot = useCallback(
+    () => channels.map((c) => getChannelValue(c, source)).join(','),
+    [channels, source],
+  )
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return useMemo(() => snapshot.split(',').map(Number), [snapshot])
+}
 
 /**
  * `hex` through each filter's current slot colour, one component per filter so each has a fixed

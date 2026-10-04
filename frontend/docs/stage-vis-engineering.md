@@ -346,6 +346,48 @@ annotated — a slot whose content names no pattern (empty, or a dichroic) draws
 gobo draws its pattern. The Revolution's stock wheel, which ships empty, therefore draws open in
 every slot until a unit is fitted.
 
+### Strobe and closed shutters
+
+A strobe channel's bands say what they do to the light (fixture-optics plan D12; lighting7
+`docs/fixtures-engineering.md` §"Beam vocabulary"): closed, open, strobe, random or pulse, a flashing
+band with its rate in Hz. Until session 6 the view read no strobe channel, so a closed band — dark
+on the rig — drew lit: a MAC 250 at strobe 0 drew at full. The rules are one pure module,
+`lib/strobeBands.ts`, which both colour dispatches call:
+
+- **A strobe is a level factor**, multiplied into the dimmer's: `strobeFactor(props, read, timeS)` is
+  the product over every strobe channel the fixture has (`findStrobeProperties` — a slider declaring
+  `strobeBands`, or a setting whose options carry `strobeKind`; the LED Lightbar has two). Because it
+  is the level, the lens, the beam, the pool and the 2D markers all follow it, and a closed band culls
+  the beam exactly as a dimmer at 0 does (`LIGHT_OFF_OPACITY`).
+- **Closed is 0, open is 1**, and a value no band covers — a reset band, or a channel from a desk
+  that declares nothing — is 1: it draws as it always did.
+- **The three-flash rule** (WCAG 2.3.1): the Stage view is on screens other people watch, so it never
+  draws more than three flashes in any second. A **strobe** flashes at its rate up to `FLASH_HZ_MAX`
+  (3 Hz), one `FLASH_S` (0.1 s) flash at the top of each cycle; a **random** band flashes once a cycle
+  at a hashed point up to `RANDOM_HZ_MAX` (2 Hz — its flashes can fall back to back, and at 2 Hz any
+  second still overlaps at most three cycles), seeded by the channel's address so two heads keep their
+  own dice; a **pulse** swells and fades (a raised cosine) up to 3 Hz. Anything faster draws a
+  **shimmer**: lit at `SHIMMER_LEVEL` (0.6, an estimate) and rippling by `SHIMMER_DEPTH` (8%), under
+  WCAG's 10% change in luminance that makes a flash. `strobeBands.test.ts` samples every kind at rates
+  from 0.5 to 30 Hz and holds every one-second window to three flashes.
+- **Time is passed in, never read inside it** — the `colourBands.ts` rule — so the parity test and the
+  profile harness stay reproducible.
+
+**Both dispatches.** The 3D syncs subscribe to the strobe channels beside the dimmer and multiply
+`liveStrobeFactor` into each arm's intensity at the ticker's time; `CellColourSync` multiplies it into
+every cell's master, as the dimmer's. The 2D dispatch wraps whichever leaf answered in a `StrobeGate`
+— its own component, so its hook set is fixed — which scales the leaf's level and every pixel's by the
+factor at `useColourBandTime`'s time, ticking at 15 Hz only while a band flashes (15 Hz samples a
+0.1 s flash at least once). `colourDispatchParity.test.tsx` holds 2D = 3D for a MAC 250 closed, open,
+flashing, mid-flash and between flashes, shimmering, on a pulse and a random band past its clamp, on
+the undeclared reset band, for an RGB head, and for a setting-backed shutter.
+
+**The 3D path asks for frames only while a strobe flashes**, through the same `colourTicker.ts` an
+animated colour band uses: `useLiveColour`'s `apply` answers `strobeAnimates` (a channel on a flashing
+band, and none closed — a closed one holds the product at 0) beside the colour bands' answer, so the
+arm registers while it flashes and lets go when the shutter closes or opens. A slow strobe keeps the
+canvas drawing through its dark part of the cycle; a closed or open one costs nothing.
+
 ## Paired lanterns (extra placements)
 
 A paired dimmer is one patch drawn more than once: one circuit, an SL and an SR lantern on the same
@@ -438,7 +480,8 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   `stepGoboLayers`' `spinning`; a static wheel never asks) and a turning prism move with the clock, not with
   DMX, so while one runs the director asks for the next frame itself. An **animated colour band**
   (a scroll or random wheel band) asks through `colourTicker.ts` while it is live (§"Animated colour
-  bands"). That is the one case where the
+  bands"), and so does a **flashing strobe** (§"Strobe and closed shutters"). That is the one case
+  where the
   canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or

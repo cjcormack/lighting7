@@ -67,11 +67,12 @@ enum class WhitePolicy {
  * whether the emitter exists at all, and that is answered by resolution, not by the value.
  *
  * **Strobe is a percentage, not a rate**, and that is a departure from the design worth knowing.
- * `BeamColour.dc.html` promises "strobe in Hz, which is the only unit two fixtures agree on" — but
- * nothing in this codebase's fixture definitions declares a Hz range for a strobe channel the way
- * `@FixtureProperty(degMin=, degMax=)` declares a pan range, so a `hz:` intent would have nothing to
- * resolve against and would be inventing a curve per head. It is a percentage of each head's own
- * strobe channel until a `hzMin`/`hzMax` annotation exists. (Strobe is also in the **intensity**
+ * `BeamColour.dc.html` promises "strobe in Hz, which is the only unit two fixtures agree on". Since
+ * the fixture optics plan's session 6 every STROBE channel declares its bands and each flashing
+ * band's `hzMin`/`hzMax` (`@FixtureProperty(strobe = […])`) — but almost every rate is an estimate
+ * (no manual but the Robe's states one), and a `hz:` intent would make the desk solve a DMX value
+ * per head from them. It stays a percentage of each head's own strobe channel; the `Hertz` arm is
+ * `FU-TMPL-STROBE-HZ`. (Strobe is also in the **intensity**
  * family, not beam — `PropertyCategory.STROBE.maskGroup()` is `INTENSITY`, because it is an
  * intensity modulation operators reach for alongside level.)
  *

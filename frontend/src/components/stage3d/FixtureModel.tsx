@@ -17,6 +17,7 @@ import type { RiggingDto } from '../../api/riggingApi'
 import {
   findColourSource,
   findDimmerProperty,
+  findStrobeProperties,
   type ChannelRef,
   type ColourPropertyDescriptor,
   type ElementDescriptor,
@@ -60,6 +61,7 @@ import {
 import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
 import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedMedia'
 import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from '../../lib/colourBands'
+import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
 import {
   DEFAULT_FIXTURE_COLOUR,
@@ -536,6 +538,9 @@ export function FixtureModel({
     () => findDimmerProperty(unitProps),
     [unitProps],
   )
+  // The strobe channels whose bands say what they do (fixture-optics plan D12): a level factor
+  // beside the dimmer's, applied by the colour syncs below exactly as the 2D dispatch applies it.
+  const strobeProps = useMemo(() => findStrobeProperties(unitProps), [unitProps])
   // Beam-shaping channels. All undefined against a backend that predates the categories,
   // which is what makes the optics below degrade to the old look.
   const focusProp = useMemo(() => findFocusProperty(unitProps), [unitProps])
@@ -708,9 +713,10 @@ export function FixtureModel({
     invalidate()
   }, [bodies, slot, active, invalidate])
 
-  // An animated colour band (a scroll or random wheel band) moves with time rather than DMX, so
-  // ColourSync registers with this while one is live; it re-applies the colour and asks for the next
-  // frame — before the beam director runs, so the director reads this frame's colour.
+  // An animated colour band (a scroll or random wheel band) or a flashing strobe moves with time
+  // rather than DMX, so ColourSync registers with this while one is live; it re-applies the colour and
+  // level and asks for the next frame — before the beam director runs, so the director reads this
+  // frame's colour and level.
   const colourTicker = useMemo(() => createColourTicker(invalidate), [invalidate])
   useFrame((state) => colourTicker.frame(state.clock.elapsedTime))
 
@@ -790,6 +796,7 @@ export function FixtureModel({
           elements={fixture?.elements}
           cells={spec.cells}
           dimmerProp={dimmerProp}
+          strobes={strobeProps}
           fallbackHex={gel?.color ?? DEFAULT_FIXTURE_COLOUR}
           lensRef={lensRef}
           cellStateRef={cellStateRef}
@@ -802,6 +809,7 @@ export function FixtureModel({
           gel={gel}
           filters={filterProps}
           dimmerProp={dimmerProp}
+          strobes={strobeProps}
           lensRef={lensRef}
           colorStateRef={colorStateRef}
           ticker={colourTicker}
@@ -1758,6 +1766,13 @@ function writeLightRow(
 
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
+  /**
+   * The strobe channels (`findStrobeProperties`): each band's level factor multiplies the dimmer's
+   * (`lib/strobeBands.ts`) — a closed band dark, a strobe flashing under the three-flash rule — and an
+   * arm on a flashing band registers with the ticker while it flashes, as an animated colour band
+   * does. Absent or empty gates nothing.
+   */
+  strobes?: readonly StrobeProperty[]
   /** The unit's colour filters (`colourFilters`): settings whose current slot's colour multiplies
    *  the beam's — a second colour wheel, a media frame's gel, a dichroic in a wheel. Absent or empty
    *  filters nothing. */
@@ -1813,6 +1828,21 @@ interface ColourApplyRefs {
 }
 
 const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
+
+type StrobeProperty = SliderPropertyDescriptor | SettingPropertyDescriptor
+const NO_STROBES: readonly StrobeProperty[] = []
+
+/** The strobe channels' level factor at [timeS], read from `source` — the 2D `StrobeGate` twin. */
+function liveStrobeFactor(strobes: readonly StrobeProperty[], source: ChannelSource, timeS: number): number {
+  if (strobes.length === 0) return 1
+  return strobeFactor(strobes, (p) => getChannelValue(p.channel, source), timeS)
+}
+
+/** Whether any strobe channel sits on a band that moves with time, so the arm re-applies each frame. */
+function strobesAnimate(strobes: readonly StrobeProperty[], source: ChannelSource): boolean {
+  if (strobes.length === 0) return false
+  return strobeAnimates(strobes, (p) => getChannelValue(p.channel, source))
+}
 
 /**
  * `hex` through each filter's current slot colour at [timeS] (`filterColour`, `settingColourAt`),
@@ -1873,7 +1903,8 @@ function liveDimmerFactor(
 // which is what repaints the scene on a vis-source flip.
 //
 // `apply` answers whether what it drew **animates** — a wheel or a filter on a band with no single
-// colour (`lib/colourBands.ts`). While it does, the arm is registered with the [ticker] and
+// colour (`lib/colourBands.ts`), or a strobe channel on a band that flashes (`lib/strobeBands.ts`).
+// While it does, the arm is registered with the [ticker] and
 // re-applied every frame, which asks for the next; the first apply that answers false unregisters
 // it, so the canvas goes back to drawing only when something changes. The registration is made and
 // dropped from inside `apply` because the answer is a channel fact, known only there.
@@ -1939,6 +1970,7 @@ function ColourBeamSync({
   colourProp,
   dimmerProp,
   filters = NO_FILTERS,
+  strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
@@ -1954,8 +1986,9 @@ function ColourBeamSync({
     if (colourProp.uvChannel) cs.push(colourProp.uvChannel)
     if (dimmerProp) cs.push(dimmerProp.channel)
     for (const f of filters) cs.push(f.channel)
+    for (const p of strobes) cs.push(p.channel)
     return cs
-  }, [colourProp, dimmerProp, filters])
+  }, [colourProp, dimmerProp, filters, strobes])
 
   useLiveColour(
     channels,
@@ -1973,13 +2006,15 @@ function ColourBeamSync({
       // Effective intensity = dimmer × colour so a colour-only fixture at RGB 0
       // reads as dark rather than beaming at full. Hue is normalised to full so a
       // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
-      const intensity = liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv)
+      const timeS = ticker.now()
+      const intensity =
+        liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv) * liveStrobeFactor(strobes, source, timeS)
       applyColour(
-        filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source, ticker.now()),
+        filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source, timeS),
         intensity,
         refs,
       )
-      return filtersAnimate(filters, source)
+      return filtersAnimate(filters, source) || strobesAnimate(strobes, source)
     },
     source,
     ticker,
@@ -1991,6 +2026,7 @@ function SettingColourBeamSync({
   settingProp,
   dimmerProp,
   filters = NO_FILTERS,
+  strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
@@ -1999,8 +2035,9 @@ function SettingColourBeamSync({
     const cs: ChannelRef[] = [settingProp.channel]
     if (dimmerProp) cs.push(dimmerProp.channel)
     for (const f of filters) cs.push(f.channel)
+    for (const p of strobes) cs.push(p.channel)
     return cs
-  }, [settingProp, dimmerProp, filters])
+  }, [settingProp, dimmerProp, filters, strobes])
 
   useLiveColour(
     channels,
@@ -2011,9 +2048,10 @@ function SettingColourBeamSync({
       // this time — else open white, never black for want of data; a blackout band is dark
       // (`lib/colourBands.ts`, the 2D dispatch's `SettingColourAppearance` twin).
       const colour = settingColourAt(settingProp.options, level, timeS)
-      const intensity = liveDimmerFactor(dimmerProp, source) * sourceBandLevel(colour)
+      const intensity =
+        liveDimmerFactor(dimmerProp, source) * sourceBandLevel(colour) * liveStrobeFactor(strobes, source, timeS)
       applyColour(filteredHex(sourceBandColour(colour), filters, source, timeS), intensity, refs)
-      return isAnimatedAt(settingProp.options, level) || filtersAnimate(filters, source)
+      return isAnimatedAt(settingProp.options, level) || filtersAnimate(filters, source) || strobesAnimate(strobes, source)
     },
     source,
     ticker,
@@ -2025,6 +2063,7 @@ function FixedColourBeamSync({
   hex,
   dimmerProp,
   filters = NO_FILTERS,
+  strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { hex: string }) {
@@ -2033,14 +2072,23 @@ function FixedColourBeamSync({
   // full by design (no brightness signal to gate on).
   const source = useChannelSource()
   const channels = useMemo(
-    () => [...(dimmerProp ? [dimmerProp.channel] : []), ...filters.map((f) => f.channel)],
-    [dimmerProp, filters],
+    () => [
+      ...(dimmerProp ? [dimmerProp.channel] : []),
+      ...filters.map((f) => f.channel),
+      ...strobes.map((p) => p.channel),
+    ],
+    [dimmerProp, filters, strobes],
   )
   useLiveColour(
     channels,
     () => {
-      applyColour(filteredHex(hex, filters, source, ticker.now()), liveDimmerFactor(dimmerProp, source), refs)
-      return filtersAnimate(filters, source)
+      const timeS = ticker.now()
+      applyColour(
+        filteredHex(hex, filters, source, timeS),
+        liveDimmerFactor(dimmerProp, source) * liveStrobeFactor(strobes, source, timeS),
+        refs,
+      )
+      return filtersAnimate(filters, source) || strobesAnimate(strobes, source)
     },
     source,
     ticker,
@@ -2157,10 +2205,12 @@ export function resolveCellColour(
   return Math.max(0, Math.min(1, level))
 }
 
-function CellColourSync({
+/** Exported for the unit test, as [ColourSync] is: it cannot be rendered inside `FixtureModel` there. */
+export function CellColourSync({
   elements,
   cells,
   dimmerProp,
+  strobes = NO_STROBES,
   fallbackHex,
   lensRef,
   cellStateRef,
@@ -2169,6 +2219,8 @@ function CellColourSync({
   elements: ElementDescriptor[] | undefined
   cells: Cell[]
   dimmerProp: SliderPropertyDescriptor | undefined
+  /** The fixture's strobe channels: a master gate on every cell, as its dimmer is. */
+  strobes?: readonly StrobeProperty[]
   fallbackHex: string
   lensRef: React.RefObject<LensPainter | null>
   cellStateRef: React.RefObject<CellState | null>
@@ -2194,16 +2246,17 @@ function CellColourSync({
       for (const w of src.whites) cs.push(w.slider.channel)
     }
     if (dimmerProp) cs.push(dimmerProp.channel)
+    for (const p of strobes) cs.push(p.channel)
     return cs
-  }, [sources, dimmerProp])
+  }, [sources, dimmerProp, strobes])
 
   useLiveColour(
     channels,
     () => {
       const state = cellStateRef.current
-      const master = liveDimmerFactor(dimmerProp, source)
       const timeS = ticker.now()
-      let animated = false
+      const master = liveDimmerFactor(dimmerProp, source) * liveStrobeFactor(strobes, source, timeS)
+      let animated = strobesAnimate(strobes, source)
       for (let i = 0; i < sources.length; i++) {
         const setting = sources[i].setting
         if (setting && isAnimatedAt(setting.options, getChannelValue(setting.channel, source))) animated = true

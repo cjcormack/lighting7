@@ -152,10 +152,21 @@ interface AggregateColour : Colour {
 
 ```kotlin
 interface Strobe {
-    fun fullOn()                    // Disable strobe, full output
-    fun strobe(intensity: UByte)    // Enable strobe at speed
+    val fullOnValue: UByte get() = 0u  // What fullOn() writes: the shutter open
+    fun fullOn()                       // Disable strobe, full output
+    fun strobe(intensity: UByte)       // Enable strobe at speed
 }
 ```
+
+Most library strobes are a `BandedStrobeChannel` (`fixture/dmx/`): a `DmxSlider` that maps
+`strobe(0..255)` linearly onto one band `strobeMin..strobeMax` and writes `fullOnValue` for
+`fullOn()`; `zeroIntensityIsFullOn` makes `strobe(0)` "no strobe", and `max` clamps the slider
+below the bands it must not reach (the MAC 250's reset and lamp, the Robe's pulses and random
+strobe). A higher intensity is always a faster strobe: `fastToSlow` runs it down a band whose
+fastest end is its first value (the MAC 250's "strobe, fast → slow", where `strobe()` wrote the
+slowest rate for 255 until session 6). `strobeLevel(intensity)` is the pure value `strobe` writes. What each range of the channel *does* — closed, open, strobe at a rate — is the
+property's declared bands, not the class's (§"Beam vocabulary"); `StrobeBandsTest` holds the two to
+one answer.
 
 ## DMX Property Implementations
 
@@ -304,6 +315,7 @@ annotation class FixtureProperty(
     val media: MediaSlot = MediaSlot.NONE,
     val activeMin: Int = -1,
     val activeMax: Int = -1,
+    val strobe: Array<StrobeBand> = [],
 )
 ```
 
@@ -460,6 +472,7 @@ because one channel mixes bands:
 | `prismFacets` | `DmxFixturePrismSettingValue` | The prism's facet count; null is out. |
 | `zoomDeg` | `DmxFixtureZoomSettingValue` | A stepped zoom's full beam angle at this position (D2). |
 | `loadable` | `DmxFixtureSettingValue` | On a loadable setting, whether this position takes media (§"Fitted media"). |
+| `strobeKind` / `hzMin` / `hzMax` / `strobeInverted` | `DmxFixtureStrobeSettingValue` | On a STROBE setting, what this position's band does to the light, and a flashing band's rate (D12, below). |
 
 **Every COLOUR option is a colour or a no-colour band** (D8): `ColourPreviewTest` fails any option of
 a COLOUR setting, fixture or cell, that carries neither a `#RRGGBB` preview nor `noColour` — or both
@@ -485,6 +498,58 @@ bar's), which the view draws dark and a template never snaps to.
 | `blade` / `depthMax` | SHUTTER, SHUTTER_ROTATION | Which blade, and an insertion's depth at DMX max (`ShutterBladesTest`). |
 | `activeMin` / `activeMax` | any | The proportional band; the view holds its ends outside it. |
 | `fineOf` | a low byte | The coarse property it refines, read as one 16-bit value. |
+| `strobeBands` | STROBE | What each band of the channel does to the light (below). |
+
+**A strobe channel's bands** (fixture-optics plan D12). A STROBE channel mixes bands that do
+different things to the light — the MAC 250's runs closed, open, strobe, pulses, random strobes, a
+reset and the lamp — and the view drew all of them lit until session 6, so a MAC 250 at strobe 0,
+dark on the rig, drew at full. Each band is declared from the manual as a `StrobeBand` in the
+slider's `@FixtureProperty(strobe = […])`:
+
+```kotlin
+@FixtureProperty(
+    category = PropertyCategory.STROBE,
+    strobe = [
+        StrobeBand(0, 19, StrobeKind.CLOSED),
+        StrobeBand(20, 49, StrobeKind.OPEN),
+        StrobeBand(50, 72, StrobeKind.STROBE, hzMin = 1.0, hzMax = 10.0, inverted = true),
+        // …
+    ],
+)
+```
+
+- `StrobeKind` is `CLOSED` (dark whatever the dimmer says), `OPEN` (no effect), `STROBE` (regular
+  flashes), `RANDOM` (flashes or pulses at irregular intervals) or `PULSE` (the level ramps rather
+  than snaps).
+- A **flashing** band (`STROBE`, `RANDOM`, `PULSE`) declares its rate: `hzMin` at `from`, `hzMax` at
+  `to`, linear between, with `hzMin <= hzMax` — or the other way round where `inverted` (the MAC
+  250's "strobe, fast → slow"). A band with one rate declares it twice. `CLOSED` and `OPEN` declare
+  none.
+- The bands are in DMX order, never overlap, and **cover the slider's own range** (`min..max`, what
+  composition can write). They may reach **past a clamp**, to describe what a raw channel write would
+  find there — the MAC 250's pulses and random strobes above its 72 — and a value no band covers
+  draws open: the MAC 250's reset and lamp bands are left undeclared, for session 7's
+  fixture commands.
+- A **setting-backed** STROBE channel declares the same per option instead:
+  `DmxFixtureStrobeSettingValue` (`strobeKind`, `hzMin`, `hzMax`, `strobeInverted`), the band running
+  from the option's level to the next option's, on the wire as `SettingOption.strobeKind` and friends.
+  The library has none yet; Locate opens one at its first `OPEN` option.
+
+On the wire it is `SliderPropertyDescriptor.strobeBands` (`[{from, to, kind, hzMin?, hzMax?,
+inverted?}]`), null on every other slider. `StrobeBandsTest` holds the library to it: every STROBE
+slider declares bands, well formed and covering its range; every flashing band a positive rate and no
+other band one; nothing but a STROBE property declares bands; every STROBE setting's options declare a
+kind; and every strobe writer agrees with its bands — `fullOnValue` (what `fullOn()` and Locate
+write) lands in an `OPEN` band and every `strobe(1..255)` in a flashing one, never at a lower declared
+rate than the intensity below it.
+
+**The rates are mostly estimates** (D15): of the library's manuals only the Robe's states one
+("strobe effect (1 - 10 flashes per second)"). The rest are marked `// Estimate:` at each fixture and
+listed in `FU-MANUAL-S6-STROBE` — a mechanical shutter at 1–10 Hz, an LED strobe at 1–20 Hz, a pulse
+at 0.5–2 Hz. The Stage view draws closed dark and flashes a strobe at its rate up to 3 Hz, faster
+reading as a shimmer (WCAG 2.3.1's three-flash limit; `frontend/docs/stage-vis-engineering.md`
+§"Strobe and closed shutters"). A template's strobe is still a percentage of each head's own channel:
+the `Hertz` arm is `FU-TMPL-STROBE-HZ`.
 
 **On the type** — `@FixtureType`: `body` (archetype, mover head, lens diameter), `depthOfField`
 (D9), `fieldDeg` (a fixed lens, D3), `acceptsBeamAngle` and `acceptsLantern`. The beam angle the

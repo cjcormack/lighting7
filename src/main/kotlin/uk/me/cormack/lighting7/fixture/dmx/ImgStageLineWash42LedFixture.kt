@@ -166,7 +166,17 @@ sealed class ImgStageLineWash42LedFixture(
             transaction, universe, firstChannel + 5, max = DIM_MAX,
         )
 
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        // The strobe's view of the shared channel: the dimmer's range is open (the dimmer alone sets
+        // the level), then the manual's strobe and full-on bands. Estimate: the strobe's 1–20 Hz —
+        // the manual states none. Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 134, StrobeKind.OPEN),
+                StrobeBand(135, 239, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+                StrobeBand(240, 255, StrobeKind.OPEN),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 5,
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = FULL_ON,

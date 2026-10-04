@@ -277,7 +277,16 @@ sealed class LedLightbar12PixelFixture(
         @FixtureProperty("Speed", category = PropertyCategory.SPEED)
         val speed = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 3)
     }
 
@@ -359,7 +368,16 @@ sealed class LedLightbar12PixelFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         @FixtureProperty(category = PropertyCategory.COLOUR)
@@ -408,7 +426,16 @@ sealed class LedLightbar12PixelFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<RgbwPixel> = (0 until 2).map { idx ->
@@ -474,10 +501,28 @@ sealed class LedLightbar12PixelFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Random strobe", category = PropertyCategory.STROBE)
+        // Random flashes at the strobe channel's rates. Estimate: no manual to hand. Checked on the rig
+        // by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Random strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         val randomStrobe = StrobeChannel(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Color preset", category = PropertyCategory.COLOUR)
@@ -543,7 +588,16 @@ sealed class LedLightbar12PixelFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 1, StrobeKind.OPEN),
+                StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<RgbwPixel> = (0 until 4).map { idx ->

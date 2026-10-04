@@ -165,7 +165,16 @@ sealed class Scantastic4Fixture(
         @FixtureProperty("Shutter (blackout/full on)", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // Estimate: no manual to hand — 0 open (what [Strobe.fullOn] writes), 1–255 strobe at 1–20 Hz.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 0, StrobeKind.OPEN),
+                StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 1,
             strobeMin = 0u, strobeMax = 255u,
@@ -274,7 +283,16 @@ sealed class Scantastic4Fixture(
         @FixtureProperty("Shutter (blackout/full on)", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // Estimate: no manual to hand — 0 open (what [Strobe.fullOn] writes), 1–255 strobe at 1–20 Hz.
+        // Checked on the rig by FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 0, StrobeKind.OPEN),
+                StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 1,
             strobeMin = 0u, strobeMax = 255u,

@@ -327,7 +327,27 @@ data class SliderPropertyDescriptor(
     val activeMin: Int? = null,
     /** The DMX at which it ends — above it the channel is effects, and the view holds the end value. Null for [max]. */
     val activeMax: Int? = null,
+    /**
+     * A STROBE slider's bands (`@FixtureProperty.strobe`, fixture optics plan D12), in DMX order —
+     * what each range of the channel does to the light. Null on every other slider.
+     */
+    val strobeBands: List<StrobeBandInfo>? = null,
 ) : PropertyDescriptor
+
+/**
+ * One band of a STROBE channel on the wire: DMX [from]..[to] does [kind] (`CLOSED`, `OPEN`,
+ * `STROBE`, `RANDOM`, `PULSE`); a flashing band's rate runs [hzMin] at [from] to [hzMax] at [to],
+ * the other way round where [inverted]. See `docs/fixtures-engineering.md` §"Beam vocabulary".
+ */
+@Serializable
+data class StrobeBandInfo(
+    val from: Int,
+    val to: Int,
+    val kind: String,
+    val hzMin: Double? = null,
+    val hzMax: Double? = null,
+    val inverted: Boolean? = null,
+)
 
 @Serializable
 @kotlinx.serialization.SerialName("colour")
@@ -420,6 +440,15 @@ data class SettingOption(
      *  rainbow program, an auto change, or a band handing colour to other channels. Null on every
      *  other option: a COLOUR option is either this or carries a [colourPreview]. */
     val noColour: Boolean? = null,
+    /** On a STROBE setting, what this option's band does to the light (`CLOSED`, `OPEN`, `STROBE`,
+     *  `RANDOM`, `PULSE` — fixture optics plan D12). Null on every other option. */
+    val strobeKind: String? = null,
+    /** On a flashing STROBE option, its rate in Hz at the band's first value ([strobeInverted]: last). */
+    val hzMin: Double? = null,
+    /** On a flashing STROBE option, its rate in Hz at the band's last value ([strobeInverted]: first). */
+    val hzMax: Double? = null,
+    /** On a flashing STROBE option, true where the rate falls as the value rises. */
+    val strobeInverted: Boolean? = null,
 )
 
 @Serializable

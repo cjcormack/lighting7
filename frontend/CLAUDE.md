@@ -341,6 +341,18 @@ leaves tick through `useColourBandTime` only while animated. The beam angle is t
 else the family's — `resolveBeamDeg` in `bodies/archetype.ts` — and iris and frost hold their end
 value past a slider's `activeMax`. See the stage-vis doc's §"Animated colour bands".
 
+**A strobe channel is a level factor, and the view keeps to three flashes a second**
+(fixture-optics session 6). A strobe channel's bands are declared (`strobeBands` on a slider,
+`strobeKind` on a setting's options; `findStrobeProperties`), and one pure decode,
+`lib/strobeBands.ts` (time passed in), turns them into a 0..1 factor **both** colour dispatches
+multiply into the dimmer's — the 2D `StrobeGate` around whichever leaf answered, the 3D syncs'
+`liveStrobeFactor` (cells take it as their master) — so a closed band is dark on the lens, the beam,
+the pool and the markers, and an undeclared value draws open. A strobe flashes at its rate up to 3 Hz,
+a random band up to 2 Hz, a pulse swells up to 3 Hz, and anything faster is a shimmer under WCAG's
+10% flash threshold (WCAG 2.3.1). The 3D arms ask for frames through the same `colourTicker.ts` while
+— and only while — a strobe flashes, and `colourDispatchParity.test.tsx` holds 2D = 3D. See the
+stage-vis doc's §"Strobe and closed shutters".
+
 **Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
 — a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
 streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage

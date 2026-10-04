@@ -202,14 +202,45 @@ sealed class MartinMac250Fixture(
          * and random-strobe bands are reachable only via raw transaction
          * writes. Lamp on/off and reset are explicit methods on this class
          * that bypass the slider clamp.
+         *
+         * The bands are the user manual's (UM_MAC250_EN_D, DMX protocol), past the clamp too, so the
+         * Stage view draws a raw write as the fixture would; reset and the lamp bands are left
+         * undeclared (fixture optics plan session 7 makes them commands). Martin states no rates.
+         * Estimate: the strobe at 1–10 Hz (the Robe ColorSpot's stated range, the same kind of
+         * mechanical dimmer/shutter); the pulses at 0.5–2 Hz; random fast, medium and slow at 8, 4
+         * and 2 Hz, its pulses at 2 and 1 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 19, StrobeKind.CLOSED),
+                StrobeBand(20, 49, StrobeKind.OPEN),
+                StrobeBand(50, 72, StrobeKind.STROBE, hzMin = 1.0, hzMax = 10.0, inverted = true),
+                StrobeBand(73, 79, StrobeKind.OPEN),
+                StrobeBand(80, 99, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0, inverted = true),
+                StrobeBand(100, 119, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0, inverted = true),
+                StrobeBand(120, 127, StrobeKind.OPEN),
+                StrobeBand(128, 147, StrobeKind.RANDOM, hzMin = 8.0, hzMax = 8.0),
+                StrobeBand(148, 167, StrobeKind.RANDOM, hzMin = 4.0, hzMax = 4.0),
+                StrobeBand(168, 187, StrobeKind.RANDOM, hzMin = 2.0, hzMax = 2.0),
+                StrobeBand(188, 190, StrobeKind.OPEN),
+                StrobeBand(191, 193, StrobeKind.RANDOM, hzMin = 2.0, hzMax = 2.0),
+                StrobeBand(194, 196, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 1.0),
+                StrobeBand(197, 199, StrobeKind.RANDOM, hzMin = 2.0, hzMax = 2.0),
+                StrobeBand(200, 202, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 1.0),
+                StrobeBand(203, 207, StrobeKind.OPEN),
+                StrobeBand(218, 227, StrobeKind.OPEN),
+                StrobeBand(238, 247, StrobeKind.OPEN),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel,
             strobeMin = STROBE_BAND_MIN,
             strobeMax = STROBE_BAND_MAX,
             fullOnValue = OPEN_DEFAULT,
             max = STROBE_BAND_MAX,
+            // The manual's band runs "strobe, fast → slow": a higher intensity is a lower value.
+            fastToSlow = true,
         )
 
         @FixtureProperty(category = PropertyCategory.DIMMER)
