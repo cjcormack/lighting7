@@ -2,7 +2,10 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { buildHarness, isHarnessActive } from "./profileHarness"
+import { buildHarness, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive } from "./profileHarness"
+import { resolveDeclaredFocusDistance, resolveFocusParam } from "./beamOptics"
+import type { SliderPropertyDescriptor } from "../../store/fixtures"
+import focusInverse from "../../../../src/test/resources/stage/focusInverse.fixture.json"
 
 describe("buildHarness", () => {
   it("returns exactly 50 patches, 16 regions, 8 riggings", () => {
@@ -33,6 +36,36 @@ describe("buildHarness", () => {
   })
 })
 
+describe("the focus scene", () => {
+  const data = buildHarness(10, 8, 6, "focus")
+
+  it("hangs three Revolutions, each with a focus channel of its own, throwing 24 m at the back wall", () => {
+    expect(data.patches.map((p) => p.key)).toEqual(FOCUS_HARNESS_HEADS.map((h) => h.key))
+    for (const p of data.patches) {
+      // The back wall is the stage's depth; a level, upstage beam from 24 m in front of it.
+      expect(8 - (p.stageY ?? 0)).toBe(FOCUS_HARNESS_THROW_M)
+      expect(p.basePitchDeg).toBe(-90)
+      const fixture = data.fixtureFor?.get(p.key)
+      expect(fixture?.properties[0]).toMatchObject({ category: "focus", focusNearM: 2, focusFarM: 40 })
+    }
+    const channels = data.patches.map((p) => (data.fixtureFor?.get(p.key)?.properties[0] as SliderPropertyDescriptor).channel.channelNo)
+    expect(new Set(channels).size).toBe(3)
+    // No depth of field of its own: the family's constant is what the scene tunes.
+    expect(data.syntheticType.depthOfField).toBeUndefined()
+    expect(data.syntheticType.body).toEqual({ archetype: "mover", head: "profile", lensDiameterM: 0.15 })
+  })
+
+  it("names the levels the desk solves for 21, 24 and 27 m — the shared vector's", () => {
+    const revolution = focusInverse.cases.find((c) => c.name.startsWith("Source Four Revolution"))!
+    for (const head of FOCUS_HARNESS_HEADS) {
+      expect(revolution.points.find((p) => p.distanceM === head.focusM)?.level).toBe(head.dmx)
+      const prop = data.fixtureFor?.get(head.key)?.properties[0] as SliderPropertyDescriptor
+      // Within a DMX step's distance: the byte draws 21.1, 24.0 and 27.6 m.
+      expect(Math.abs(resolveDeclaredFocusDistance(prop, resolveFocusParam(prop, head.dmx))! - head.focusM)).toBeLessThan(0.7)
+    }
+  })
+})
+
 describe("isHarnessActive", () => {
   const originalSearch = window.location.search
 
@@ -52,6 +85,14 @@ describe("isHarnessActive", () => {
   it("returns true when ?profileHarness=1 is present", () => {
     setSearch("?profileHarness=1")
     expect(isHarnessActive()).toBe(true)
+  })
+
+  it("returns the focus scene for ?profileHarness=focus", () => {
+    setSearch("?profileHarness=focus")
+    expect(isHarnessActive()).toBe(true)
+    expect(harnessMode()).toBe("focus")
+    setSearch("?profileHarness=1")
+    expect(harnessMode()).toBe("load")
   })
 
   it("returns false when the flag is absent", () => {

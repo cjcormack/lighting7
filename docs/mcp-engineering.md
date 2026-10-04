@@ -284,6 +284,17 @@ the specials on DSC": a model reading a plot knows where a region or a mark is i
 `get_patch`) and has no way to turn that into DMX itself. Heads it cannot aim come back by name
 (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 
+Its `focus: true` (fixture-optics plan session 1) also focuses each aimed head on the aim point — the
+same `focusIntoProgrammer` as `POST …/programmer/focus`, the Stage view's *Focus here*: each head's
+FOCUS channel solved for its distance from its lens through its declared range, written beside the
+aim. A head aim skipped is not focused, since it is not pointing there. The answer adds `focused`
+(each head's focus literal and the distance it was solved for) and `focusSkipped` (a head that was
+not aimed, has no focus channel or range, or a point outside it, by name); `dryRun` answers both and
+writes neither. `saveAsTemplate` still saves the position only: the template
+grammar holds focus, but a template is one family and focus is beam, so a focus is kept with
+`record_cue` (`docs/fixtures-engineering.md` §"Focusing a head on a point"). With `render_view`,
+that is the plan's MCP check: aim and focus a Revolution on the back wall, then look at it.
+
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup
 readers below (`list_projects`, `list_fixture_types`, `get_patch`, `get_prompt_book`, `get_scene`)

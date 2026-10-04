@@ -116,6 +116,7 @@ function beamWrite(): BeamWrite {
     goboAngle: 1.2,
     focusDist: 6,
     near: 0.5,
+    dof: 3,
     iris: 0.6,
     aspect: 0.3,
     bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
@@ -173,6 +174,12 @@ describe('emitter dirty groups', () => {
     expect(packed[3]).toBe(-2.5)
     expect(packed.slice(4, 8)).toEqual([LAND_UP, 0.25, LAND_NONE, 1])
     expect(packed.slice(8, 12)).toEqual([LAND_NONE, -1, LAND_NONE, -1])
+  })
+
+  it("carries the depth of field in the haze's shape attribute, beside near, iris and aspect", () => {
+    const b = build()
+    makeHandle(b).writeBeam(0, 0, beamWrite())
+    expect(Array.from(b.volumeShape.array.slice(0, 4))).toEqual([0.5, Math.fround(0.6), Math.fround(0.3), 3])
   })
 
   it('flags the matrices hideLobes parks', () => {

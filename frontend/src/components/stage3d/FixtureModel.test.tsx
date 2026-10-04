@@ -17,7 +17,7 @@ import {
 import { BEAM_LENGTH } from './emitterLayout'
 import { resolveDeclaredFocusDistance, resolveFocusDistance } from './beamOptics'
 import { beamReach, boxCollider, type BeamHit } from './scene/beamReach'
-import { apexDistanceM } from './bodies/archetype'
+import { apexDistanceM, DEPTH_OF_FIELD } from './bodies/archetype'
 import { beamMask, focusBlur, packBlades } from './beamMask'
 import { bodyShownFor, LOD_BILLBOARD_BELOW_PX, LOD_SIMPLE_BELOW_PX } from './bodies/StageBodies'
 import { fromThree } from '../../lib/stageCoords'
@@ -254,8 +254,9 @@ describe('where a beam is drawn to', () => {
     const param = (1 / 2 - 1 / downstage) / (1 / 2 - 1 / 40)
     const focusDist = resolveDeclaredFocusDistance(focus, param)!
     expect(focusDist).toBeCloseTo(downstage, 6)
-    expect(focusBlur(downstage, focusDist, 0.65)).toBeCloseTo(0, 9)
-    expect(focusBlur(upstage, focusDist, 0.65)).toBeGreaterThan(0.01)
+    const dof = DEPTH_OF_FIELD['mover:spot']
+    expect(focusBlur(downstage, focusDist, dof)).toBeCloseTo(0, 9)
+    expect(focusBlur(upstage, focusDist, dof)).toBeGreaterThan(0.01)
   })
 })
 

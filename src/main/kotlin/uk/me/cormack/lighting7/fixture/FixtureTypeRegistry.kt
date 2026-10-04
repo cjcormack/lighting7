@@ -82,6 +82,9 @@ object FixtureTypeRegistry {
         val body: FixtureBodyInfo? = null,
         /** Whether a patch names a lantern and carries its focus — see [FixtureType.acceptsLantern]. */
         val acceptsLantern: Boolean = false,
+        /** The declared depth of field ([FixtureType.depthOfField]); null when the view uses its
+         *  family's. Never the `-1.0` sentinel. */
+        val depthOfField: Double? = null,
     )
 
     /**
@@ -249,6 +252,9 @@ object FixtureTypeRegistry {
         return caps
     }
 
+    /** [discoverTypes] for one class — how a test reads the type info of a class no patch can name. */
+    internal fun typeInfosFor(klass: KClass<out Fixture>): List<FixtureTypeInfo> = discoverTypes(klass)
+
     private fun discoverTypes(klass: KClass<out Fixture>): List<FixtureTypeInfo> {
         val subclasses = klass.sealedSubclasses
         if (subclasses.isNotEmpty()) {
@@ -303,6 +309,7 @@ object FixtureTypeRegistry {
                 beamEdge = beamEdge,
                 body = annotation.body.resolve(),
                 acceptsLantern = annotation.acceptsLantern,
+                depthOfField = annotation.depthOfField.takeIf { it > 0.0 },
             )
         )
     }

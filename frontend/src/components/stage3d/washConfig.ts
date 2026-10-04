@@ -17,21 +17,25 @@ export const HAZE_LEVEL = 1
 // exception, with the cone shell every open beam used to be.)
 
 // — focal model ————————————————————————————————————————————————————
-// Focus maps the fixture's focus channel to a focal *distance* along the
-// throw; pattern blur and rim softness both grow with the blur circle a
-// receiving surface sees, which is linear in |1/d − 1/focus| (focusBlur in
-// beamMask; the distance is resolveFocusDistance's in beamOptics).
+// Focus maps the fixture's focus channel to a focal *distance* from the
+// aperture (resolveDeclaredFocusDistance / resolveFocusDistance in beamOptics);
+// rim softness and the in-air gobo's blur both grow with the blur a point sees,
+// the relative focus error |f − d| / f times the type's depth of field
+// (focusBlur in beamMask, fixture-optics plan D9). Only the edge was tuned to it
+// (DEPTH_OF_FIELD in bodies/archetype.ts); the gobo constants below were not.
 
-/** A gobo tile's texels across the field's radius. A blur circle `b` field
- *  radii wide spans `b ×` this many texels and each mip level averages twice
- *  as many, so the in-air gobo samples at LOD log2(1 + b × this). */
+/** A gobo tile's texels across the field's radius. A blur `b` field radii wide
+ *  spans `b ×` this many texels and each mip level averages twice as many, so the
+ *  in-air gobo samples at LOD log2(1 + b × this). The blur is the relative-error
+ *  one since fixture-optics session 1, which runs larger than the old blur circle
+ *  on a long throw (a 24 m Revolution one DMX step off focus is about LOD 3). */
 export const GOBO_BLUR_TEXELS = GOBO_TILE_PX / 2
 
 /** LOD ceiling for defocus blur (128px atlas has 8 mip levels; 6 is mush). */
 export const FOCUS_LOD_MAX = 6
 
-/** The blur circle, in field radii, at which the edge is fully soft: a fully
- *  soft beam's own roll-off, so the edge rolls off over the width of the blur. */
+/** The blur, in field radii, at which the edge is fully soft: a fully soft
+ *  beam's own roll-off, so the edge rolls off over the width of the blur. */
 export const FOCUS_SOFT_BLUR = MASK_EDGE_SOFT
 
 // — volumetric beam ————————————————————————————————————————————————

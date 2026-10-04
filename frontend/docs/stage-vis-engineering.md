@@ -444,18 +444,11 @@ without a room — the back wall and the catch floor:
   throw is focused in the last few percent of the channel, as on the rig. A type that declares no
   range racks over the axial throw instead (`focusRangeM`): 15 % of it to all of it, quadratic, never
   less than `BEAM_LENGTH`, so full focus is sharp wherever it lands.
-- **Defocus is a blur circle, not a distance** (`focusBlur` in `beamMask.ts`, shared by the surfaces
-  and the haze): the lens images the gate at the focal distance, so at `d` from the aperture the
-  light bound for one image point is `2a·|1 − d/focus|` wide against a field radius of
-  `a·(near + d)/near` (a the lens radius, near the apex distance). That is linear in
-  |1/d − 1/focus|, as a real lens's blur is: two metres past focus blurs about seventeen times as
-  much at a 4 m throw as at a 20 m one, and a wide aperture holds less depth of focus than a small
-  one. A field edge therefore stays fairly crisp over the focus a cue is likely to be off by, and the
-  gobo, whose detail is a fraction of the field, is what goes soft — as on a real spot. The edge is
-  fully soft at a blur of `MASK_EDGE_SOFT` field radii (`FOCUS_SOFT_BLUR`), where it rolls off over
-  the blur's own width; the in-air gobo samples at mip `log2(1 + blur × GOBO_BLUR_TEXELS)`. It
-  replaced a defocus in metres (soft 1.5 m either side of the plane), which with a fixed focus made
-  a balcony throw sharp within a DMX step or two.
+- **Defocus is the relative focus error, scaled by the type's depth of field** (`focusBlur` in
+  `beamMask.ts`, shared by the surfaces and the haze; fixture-optics plan D9): `dof · |f − d| / f`
+  field radii at `d` from the aperture, and an unfrosted edge on the focal plane is as hard as the
+  mask draws one. It replaced a lens-radius blur circle that made a 24 m wall look the same from DMX
+  ~140 to 255. See §"Focus" under §"Fixture bodies" for the model, the constants and *Focus here*.
 - **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
   disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
   a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the
@@ -1006,8 +999,9 @@ front of what used to be the whole rule):
   per-install length (`acceptsLength`) — `BLINDER` a blinder, `LASER` and `EFFECT` an effect box,
   `GENERIC` a house downlight (the prototype's default for a generic dimmer).
 
-The field angle is the patch's `beamAngleDeg`, then a zoom channel, then the **lantern's** (at the
-focus's zoom where it has one), then the **family's**
+The field angle is a **zoom channel** that declares its angles (`resolveZoomDeg`: a ZOOM slider's
+`degMin`/`degMax`; a zoom that declares none answers nothing and falls through), then the patch's
+`beamAngleDeg`, then the **lantern's** (at the focus's zoom where it has one), then the **family's**
 (`FIELD_DEG`: a profile 26°, a fresnel 45°, a PAR 32°, a spot 16°, a wash 25°, a batten 30°, a
 blinder 60°…) — it was 30° for everything. Which bodies emit: a batten and a blinder always (their
 types have no beam angle to set, so `acceptsBeamAngle` could not say), tape and the cannon never,
@@ -1114,9 +1108,9 @@ group`).
 - **The light on the surfaces uses the same apex** for its cone test and measures its focus from
   the aperture; its reach is cast from the aperture.
 - **Edge softness is data**: the family's (`SOFTNESS` — profiles and spots hard, everything else
-  soft), moved towards soft by a **frost** channel (`resolveSoftness`); a focus channel still
-  sharpens the edge at its focal distance, and softens it by the blur circle away from it
-  (§"Light lands through one surface shader"). `FixtureTypeInfo.beamEdge` still only picks a mover's
+  soft), moved towards soft by a **frost** channel (`resolveSoftness`); a focus channel lifts the
+  family's cap, sharpening the edge fully at its focal distance and softening it by the blur away
+  from it (`resolveEdgeHardness`, §"Focus"). `FixtureTypeInfo.beamEdge` still only picks a mover's
   head.
 - **A DMX iris is drawn** (`resolveIris`: the channel runs open → closed, down to 12 % of the field).
 
@@ -1151,6 +1145,65 @@ on (every dimmer up but the house lights, 58 of 58 lights packed, a 1606 × 2236
 DPR cap): an orbit drag ran at a median of 17–21 ms a frame and the governor held tier 0. So the
 sizes stay as they were — 12 steps, a 64-light default budget — until the Safari and iPad passes.
 `data-lights` and `data-haze-tier` on the container are what to read.
+
+### Focus
+
+Fixture-optics plan session 1 ("focus that reads"; D9, D11). The symptom was a Source Four
+Revolution on the Commemoration Hall's balcony whose focus reached the back wall, 24 m away, but
+could not be seen to: every focal distance past about 4 m drew the same edge on the wall.
+
+- **The focal distance.** A FOCUS slider that declares a range (`@FixtureProperty(focusNearM =,
+  focusFarM =)`) focuses at one distance from the aperture wherever the head points, DMX linear in
+  1 / distance between the ends (`resolveDeclaredFocusDistance`; the derivation is in §"Light lands
+  through one surface shader"). On 2–40 m, 10–40 m is the top 16 % of the fader and one DMX step is
+  about a metre at 24 m. A slider with no range racks over the throw instead.
+- **The blur is a relative error times a depth of field** (`focusBlur` in `beamMask.ts`, the GLSL
+  and its twin together): `dof · |f − d| / f` field radii at `d` from the aperture. The same relative
+  error is the same blur at 4 m and at 24 m. `dof` is the type's `depthOfField`
+  (`@FixtureType(depthOfField =)`, `FixtureTypeInfo.depthOfField`, `BodySpec.depthOfField`), else its
+  family's (`DEPTH_OF_FIELD` in `bodies/archetype.ts`: 3 for a profile, 2.5 for a spot). It used to
+  be a lens's blur circle, `2a·|1 − d/f|` over the field radius `a·(near + d)/near`, which scaled
+  with a lens radius the Revolution never declared and on a long throw stayed under the edge's hard
+  limit across the whole far end of the range.
+- **The cap lifts at the focal plane** (`resolveEdgeHardness` in `beamOptics.ts`). Without a focus
+  channel the edge is the family's softness with frost folded in, as before. With one, the family's
+  softness — which stood in for a defocus nobody modelled — is dropped, and only frost caps the edge;
+  `beamHardness` then caps it by the blur. So on the plane an unfrosted beam is as hard as the mask
+  draws (`mover:profile` was held at 0.88), a frosted one stays soft even there, and off the plane the
+  blur softens it, fully soft at `FOCUS_SOFT_BLUR`.
+- **The depth of field rides texel 0** of the light table, packed with the focal distance
+  (`packFocus` in `scene/lightTable.ts`: centimetres in the low 15 bits, twentieths of `dof` above, 24
+  bits exact in a float32; `unpackFocus` in the surface shader), since all six texels were full. The
+  haze carries it unpacked, in `aBeamShape.w`, its one free slot.
+- **The constants are judged, not measured** (D15), and each says so with an `// Estimate:` comment.
+  The profile family's 3 was tuned by eye in Chromium against a Revolution throwing 24 m at a wall:
+  sharp with focus on the wall, a little soft one DMX step either side, clearly soft 3 m either side
+  (`archetype.test.ts` pins those three in numbers). `?profileHarness=focus` (`profileHarness.ts`'s
+  focus scene) builds that wall: three Revolutions on separate focus channels to write 243 / 246 / 249
+  to, viewed on Front. The rig check is `FU-MANUAL-S4REV-OPTICS` step 8.
+- **Locate parks a declared range at its middle distance** (lighting7's `LocateValueResolver`): 21 m
+  on the Revolution's 2–40 m, solved back to DMX, where mid-DMX was 3.8 m. An undeclared focus keeps
+  mid-DMX.
+- **Focus here** (D11). A DMX fixture whose focus declares a range gets a *Focus here* button on the
+  Focus tab (`StageFocusPanel`), on the live project only. It sends where the beam lands in the view
+  to `POST /programmer/focus` (lighting7 `docs/fixtures-engineering.md` §"Focusing a head on a
+  point"), which solves the focus channel for the distance from the head's lens to that point and
+  writes it into the programmer; this side never solves, the `templateIntent.ts` rule, and draws the
+  answer's skip by name.
+  - The landing is the beam director's own cast along the beam's axis from its first aperture
+    (`landedPoints.ts`), lit or dark — a head is focused before it is brought up as often as after.
+    Only the selected fixture on an on-screen canvas records one (`FixtureModel`'s `reportLanding`,
+    never a `render_view` capture), kept per reporting canvas and forgotten when it stops
+    reporting, so a deselected head never answers with a point from before it was re-aimed. A
+    module map the panel reads at the press. A beam that lands on nothing sends nothing and says so.
+  - The desk measures from the **lens**, so it carries the view's mover proportions (`MoverLens`):
+    the pivot `0.6 × height` up the body (`bodyGeometry.ts`'s `moverSize`) and the lens half the
+    head's length beyond it (the mover cell in `bodies/archetype.ts`). Change them together: the
+    shared vector `src/test/resources/stage/focusInverse.fixture.json` pins both the proportions
+    (`heads`, read by `archetype.test.ts`) and the inverse (`cases`, read by `beamOptics.test.ts`),
+    and lighting7's `FixtureFocusTest` reads the same file.
+- **The Focus tab's note** names only the optics channels a DMX type has; a type with none is told
+  its optics are fixed, never that its channels set them.
 
 ### The lantern's focus: the cut, the gate and the oval
 
@@ -1199,7 +1252,8 @@ array into the cache, so a paint that assigned the draft's own array would diffe
 the effect that repaints on each new `patch` looped until React gave up (found on a desk: any blade
 key crashed the Stage view). It saves one `PUT` after a 350 ms pause (a placement's through the whole `extraPlacements` list, which
 `toPlacementInput` carries the focus in); a refused write re-reads the list. A DMX fixture's tab
-names the optics its channels drive instead. The patch list's **Lantern** column picks the lantern
+names the optics its channels drive instead, and offers *Focus here* where its focus declares a
+range (§"Focus"). The patch list's **Lantern** column picks the lantern
 from the library, or reads out a DMX type's declared body, and its **Mount** column says *standing*
 for a unit on a ledge or a floor stand.
 

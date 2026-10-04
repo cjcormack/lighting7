@@ -12,7 +12,7 @@ import {
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { FOCUS_SOFT_BLUR } from '../washConfig'
 import { LANDING_GLSL } from './landing'
-import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
+import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
 /**
@@ -122,6 +122,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${BEAM_MASK_GLSL}
   ${BEAM_HARDNESS_GLSL}
   ${UNPACK_EDGE_IRIS_GLSL}
+  ${UNPACK_FOCUS_GLSL}
   ${LANDING_GLSL}
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -189,8 +190,10 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       // A segment's rectangle, or an oval's narrow axis: the field edge at 1 on v too.
       if (aperture.z != 0.0) uv.y /= abs(aperture.z);
       vec2 edgeIris = unpackEdgeIris(colour.w);
-      // Focus is a distance from the aperture — the lens — not from the apex behind it.
-      float hard = beamHardness(edgeIris.x, apex.w, focusBlur(dist - aperture.x, apex.w, aperture.x), uFocusSoftBlur);
+      // Focus is a distance from the aperture — the lens — not from the apex behind it; the blur is
+      // the relative error from it times the type's depth of field, both in apex.w.
+      vec2 focus = unpackFocus(apex.w);
+      float hard = beamHardness(edgeIris.x, focus.x, focusBlur(dist - aperture.x, focus.x, focus.y), uFocusSoftBlur);
       float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - hard, aperture.yw);
       if (m <= 0.0) continue;
       acc += colour.rgb * m * (0.3 + 0.7 * facing);

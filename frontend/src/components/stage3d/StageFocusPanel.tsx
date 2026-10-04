@@ -10,12 +10,17 @@ import {
   resolveFixtureKind,
   type Fixture,
   type FixtureTypeInfo,
+  type SliderPropertyDescriptor,
 } from '@/store/fixtures'
 import { patchesApi, useUpdatePatchMutation } from '@/store/patches'
 import { useDispatch } from 'react-redux'
 import type { store } from '@/store'
 import { restApi } from '@/store/restApi'
 import { FocusCard, type FocusUnit } from '@/components/lanterns/FocusCard'
+import { Button } from '@/components/ui/button'
+import { Focus, Loader2 } from 'lucide-react'
+import { useFocusHereMutation, type FocusResponse } from '@/store/programmerOps'
+import { landedPoint } from './landedPoints'
 
 /** How long a pause in the edits before they are saved: a drag writes once, after it rests. */
 const SAVE_AFTER_MS = 350
@@ -30,6 +35,8 @@ interface StageFocusPanelProps {
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
   lanterns: LanternIndex
+  /** Whether the project is the live one: *Focus here* writes the programmer, so only then. */
+  canFocus?: boolean
 }
 
 /**
@@ -51,9 +58,10 @@ interface StageFocusPanelProps {
  * whole `extraPlacements` list, which is the only way the route takes one.
  *
  * A DMX fixture has no focus data: its zoom, focus and iris are its channels, which its looks drive
- * (D14), so its tab says which of them it has instead.
+ * (D14), so its tab says which of them it has instead — or that its optics are fixed, when it has
+ * none. A DMX fixture whose focus declares a range also gets *Focus here* (fixture-optics plan D11).
  */
-export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanterns }: StageFocusPanelProps) {
+export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanterns, canFocus = false }: StageFocusPanelProps) {
   const dispatch = useDispatch<typeof store.dispatch>()
   const [updatePatch] = useUpdatePatchMutation()
   const [active, setActive] = useState(0)
@@ -128,7 +136,13 @@ export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanter
   useEffect(() => () => flush(), [flush])
 
   if (fixtureType?.acceptsLantern !== true) {
-    return <DmxFocusNote fixture={fixture} />
+    const focusProp = findFocusProperty(fixture?.properties)
+    return (
+      <div className="space-y-4">
+        <DmxFocusNote fixture={fixture} />
+        {canFocus && declaresFocusRange(focusProp) && <FocusHere projectId={projectId} patchKey={patch.key} />}
+      </div>
+    )
   }
 
   const draftOf = (unit: string): Draft => drafts.current.get(unit) ?? {}
@@ -198,7 +212,18 @@ function paintDraft(target: object, draft: Draft) {
   }
 }
 
-/** What a DMX fixture's own channels drive, where a conventional has a spanner. */
+/** Whether a focus slider declares the range *Focus here* solves (`@FixtureProperty(focusNearM =, focusFarM =)`). */
+function declaresFocusRange(prop: SliderPropertyDescriptor | undefined): boolean {
+  const near = prop?.focusNearM
+  const far = prop?.focusFarM
+  return near != null && far != null && near > 0 && far > near
+}
+
+/**
+ * What a DMX fixture's own channels drive, where a conventional has a spanner — and only those: a
+ * type with none of them is told its optics are fixed, never that they come from channels it does
+ * not have (the design record's §"Noticed on the way").
+ */
 function DmxFocusNote({ fixture }: { fixture: Fixture | undefined }) {
   const props = fixture?.properties
   const driven = [
@@ -207,12 +232,67 @@ function DmxFocusNote({ fixture }: { fixture: Fixture | undefined }) {
     findIrisProperty(props) && 'iris',
     findFrostProperty(props) && 'frost',
   ].filter((x): x is string => typeof x === 'string')
+  const name = fixture?.name ?? 'This fixture'
   return (
     <p className="text-sm text-muted-foreground">
       {driven.length > 0
-        ? `${fixture?.name ?? 'This fixture'} drives its ${joinWords(driven)} from its channels, so its looks set them — there is nothing to focus with a spanner.`
-        : `${fixture?.name ?? 'This fixture'} has no focus data: its optics are fixed, or set from its channels.`}
+        ? `${name} drives its ${joinWords(driven)} from its channels, so its looks set them — there is nothing to focus with a spanner.`
+        : `${name} has no zoom, focus, iris or frost channel, and no lantern to focus: its optics are fixed.`}
     </p>
+  )
+}
+
+/**
+ * *Focus here* (fixture-optics plan D11): focus the head on where its beam lands in the view. The
+ * landing is the Stage canvas's own (`landedPoints.ts`, the beam director's cast), sent to
+ * `POST /programmer/focus`, which solves the head's focus channel for its distance from the lens
+ * (as the view draws it) and writes it into the programmer — so the answer rides the programmer feed
+ * back to the view, and Record keeps it. The answer's skip, if any, is drawn by name.
+ */
+function FocusHere({ projectId, patchKey }: { projectId: number; patchKey: string }) {
+  const [focusHere, { isLoading }] = useFocusHereMutation()
+  const [result, setResult] = useState<FocusResponse | null>(null)
+  const [missed, setMissed] = useState(false)
+
+  const submit = async () => {
+    const point = landedPoint(patchKey)
+    setMissed(point == null)
+    setResult(null)
+    if (point == null) return
+    try {
+      setResult(await focusHere({ projectId, targets: [{ type: 'fixture', key: patchKey }], point }).unwrap())
+    } catch {
+      // Refusals are toasted by the error middleware under the endpoint's id.
+    }
+  }
+
+  const written = result?.written?.[0]
+  const skipped = result?.skipped?.[0]
+  return (
+    <section className="space-y-2" aria-label="Focus here">
+      <Button size="sm" variant="outline" className="w-full" disabled={isLoading} onClick={submit}>
+        {isLoading ? <Loader2 className="mr-1 size-3.5 animate-spin" /> : <Focus className="mr-1 size-3.5" />}
+        Focus here
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Sets the focus for where the beam lands in this view, measured from the lens.
+      </p>
+      {missed && (
+        <p className="text-xs text-muted-foreground" role="status">
+          The beam lands on nothing in this view — point it at a surface first.
+        </p>
+      )}
+      {written && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Focused at {written.distanceM.toFixed(1)} m (DMX {written.value}).
+        </p>
+      )}
+      {skipped && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Not focused: {skipped.reason}.
+        </p>
+      )}
+    </section>
   )
 }
 

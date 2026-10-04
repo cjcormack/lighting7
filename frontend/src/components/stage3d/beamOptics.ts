@@ -415,6 +415,24 @@ export function resolveSoftness(
   return base + (1 - base) * frost
 }
 
+/**
+ * The edge hardness the shaders are handed (`beamMask.ts`'s `beamHardness`, which caps it further
+ * by the focus blur): 1 minus the softness. Without a focus channel that is the family's softness
+ * with frost folded in, as it always was. **With one, the family's cap lifts** (fixture-optics plan
+ * D9): the family's softness stood in for an unmodelled defocus, which the blur now draws, so only
+ * frost caps the edge — on the focal plane an unfrosted beam is as hard as the mask draws one (the
+ * mover:profile family's 0.88 cap no longer holds it soft), a frosted one stays soft even there, and
+ * off the plane the blur softens it.
+ */
+export function resolveEdgeHardness(
+  familySoftness: number,
+  frostProp: SliderPropertyDescriptor | undefined,
+  frostLevel: number,
+  focused: boolean,
+): number {
+  return 1 - resolveSoftness(focused ? 0 : familySoftness, frostProp, frostLevel)
+}
+
 /** "Always in focus" sentinel — a fixture with no focus channel renders with
  *  zero defocus everywhere, which is byte-identical to the pre-focal look. */
 export const FOCUS_ALWAYS_SHARP = -1

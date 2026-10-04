@@ -138,6 +138,9 @@ export type FixtureTypeInfo = {
   /** A patch of this type names a lantern from `GET /lanterns` and carries its focus — a generic
    *  dimmer. Optional so an older desk reads as "no". */
   acceptsLantern?: boolean
+  /** The type's depth-of-field constant (`@FixtureType.depthOfField`, fixture-optics plan D9): how
+   *  fast its focus goes soft off the focal plane. Null or absent uses its family's. */
+  depthOfField?: number | null
 }
 
 /** A declared body on the wire (backend `FixtureBodyInfo`). */

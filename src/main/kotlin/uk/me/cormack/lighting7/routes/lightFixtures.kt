@@ -213,6 +213,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 beamEdge = info.beamEdge.name,
                 body = info.body,
                 acceptsLantern = info.acceptsLantern,
+                depthOfField = info.depthOfField,
             )
         })
     }
@@ -439,4 +440,6 @@ data class FixtureTypeDetails(
     val body: FixtureBodyInfo? = null,
     /** A patch of this type names a lantern from `GET /lanterns` and carries its focus. */
     val acceptsLantern: Boolean = false,
+    /** The type's depth-of-field constant (`@FixtureType.depthOfField`); null for the family's. */
+    val depthOfField: Double? = null,
 )

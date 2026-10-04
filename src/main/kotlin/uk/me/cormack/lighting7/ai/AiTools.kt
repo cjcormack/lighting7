@@ -737,6 +737,7 @@ class AiTools(private val state: State) {
         val z = input["z"]?.jsonPrimitive?.doubleOrNull ?: return errorResult("Missing 'z'")
         val fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull
         val dryRun = input["dryRun"]?.jsonPrimitive?.booleanOrNull ?: false
+        val focus = input["focus"]?.jsonPrimitive?.booleanOrNull ?: false
         val saveAs = when (val raw = input["saveAsTemplate"]) {
             null, JsonNull -> null
             else -> (raw as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
@@ -776,15 +777,49 @@ class AiTools(private val state: State) {
             is AimOutcome.Invalid -> return errorResult(outcome.message)
             is AimOutcome.Done -> outcome.response
         }
+        // The same solve as the Stage view's Focus here, on the same point — for the heads aim
+        // pointed there only: a head aim skipped is not pointing at the point, so focusing it there
+        // would be a focus for nowhere. Aim has already refused anything focus would (a point off
+        // the stage, a negative fade), and an empty list of aimed heads skips the call.
+        val focused = if (!focus) null else {
+            val notAimed = response.skipped.map { SpreadSkipDto(it.target, "not aimed, so not focused — ${it.reason}") }
+            val aimed = response.written.map { it.target }
+            if (aimed.isEmpty()) FocusResponse(skipped = notAimed) else when (
+                val outcome = focusIntoProgrammer(state, project, aimed, FocusPointDto(x, y, z), fadeMs, write = !dryRun)
+            ) {
+                is FocusOutcome.Invalid -> return errorResult(outcome.message)
+                is FocusOutcome.Done -> outcome.response.copy(skipped = outcome.response.skipped + notAimed)
+            }
+        }
 
         val verb = if (dryRun) "Would aim" else "Aimed"
         return ToolExecutionResult(
             success = true,
             description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
                 (if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}") +
+                (focused?.let { ", ${if (dryRun) "would focus" else "focused"} ${it.written.size}" } ?: "") +
                 (savedTemplate?.let { " and saved them as template '${it.name}'" } ?: ""),
             result = buildJsonObject {
                 put("dryRun", dryRun)
+                focused?.let { f ->
+                    put("focused", buildJsonArray {
+                        f.written.forEach { w ->
+                            addJsonObject {
+                                put("fixture", w.target.key)
+                                put("focus", w.value)
+                                put("distanceM", w.distanceM)
+                            }
+                        }
+                    })
+                    put("focusSkipped", buildJsonArray {
+                        f.skipped.forEach { s ->
+                            addJsonObject {
+                                put("target", s.target.key)
+                                put("reason", s.reason)
+                            }
+                        }
+                    })
+                }
                 savedTemplate?.let { t ->
                     putJsonObject("template") {
                         put("templateId", t.id)

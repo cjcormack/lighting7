@@ -4,6 +4,10 @@
 // project's real patches/regions/riggings with a deterministic high-load
 // synthetic scene (50 fixtures × 16 regions × 8 riggings) so GPU/CPU profiling
 // runs against a representative worst-case layout. Consumed by `useStageData`.
+//
+// `?profileHarness=focus` swaps in the **focus scene** instead (fixture-optics
+// plan session 1): the scene the depth-of-field constants (`DEPTH_OF_FIELD` in
+// `bodies/archetype.ts`) were tuned in. See [FOCUS_HARNESS_HEADS].
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
@@ -12,13 +16,21 @@ import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/f
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
 
-export function isHarnessActive(): boolean {
-  if (typeof window === 'undefined') return false
+/** Which synthetic scene: the load profile (`=1`) or the focus scene (`=focus`). */
+export type HarnessMode = 'load' | 'focus'
+
+export function harnessMode(): HarnessMode | null {
+  if (typeof window === 'undefined') return null
   try {
-    return new URLSearchParams(window.location.search).get('profileHarness') === '1'
+    const flag = new URLSearchParams(window.location.search).get('profileHarness')
+    return flag === '1' ? 'load' : flag === 'focus' ? 'focus' : null
   } catch {
-    return false
+    return null
   }
+}
+
+export function isHarnessActive(): boolean {
+  return harnessMode() != null
 }
 
 export interface HarnessData {
@@ -27,6 +39,9 @@ export interface HarnessData {
   riggings: RiggingDto[]
   syntheticFixture: Fixture
   syntheticType: FixtureTypeInfo
+  /** A fixture of its own for a patch that needs one (the focus scene's heads each have their own
+   *  focus channel); every other patch is [syntheticFixture]. */
+  fixtureFor?: ReadonlyMap<string, Fixture>
 }
 
 // Stage is W (X right) × D (Y upstage) × H (Z up) in metres.
@@ -93,7 +108,13 @@ function makeBeamShapingProperties(): PropertyDescriptor[] {
   ]
 }
 
-export function buildHarness(stageW: number, stageD: number, stageH: number): HarnessData {
+export function buildHarness(
+  stageW: number,
+  stageD: number,
+  stageH: number,
+  mode: HarnessMode = harnessMode() ?? 'load',
+): HarnessData {
+  if (mode === 'focus') return buildFocusHarness(stageD)
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
@@ -298,5 +319,114 @@ function makePatch(
     gelCode: null,
     kindOverride: null,
     stageHidden: false,
+  }
+}
+
+// — the focus scene ——————————————————————————————————————————————————————
+
+const FOCUS_TYPE_KEY = '__profileHarness_focus_type__'
+
+/** How far the focus scene's heads throw: the Commemoration Hall's balcony to its back wall. */
+export const FOCUS_HARNESS_THROW_M = 24
+
+/**
+ * The focus scene (`?profileHarness=focus`, fixture-optics plan session 1): three Source Four
+ * Revolutions — a `mover:profile` with the Revolution's declared 2–40 m focus and no depth of field
+ * of its own, so the family's constant draws it — on a balcony at the Commemoration Hall's height,
+ * each throwing [FOCUS_HARNESS_THROW_M] straight upstage at the stage's back wall, side by side. Each
+ * has its own focus channel on universe 1, at nothing until written; write each `dmx` here (the
+ * shared vector's levels for those distances, `src/test/resources/stage/focusInverse.fixture.json`)
+ * and the wall shows a head focused 3 m short of it, one on it, and one 3 m past it (the bytes draw
+ * 21.1, 24.0 and 27.6 m: a DMX step is over a metre out there). Write the
+ * middle head's channel a step either side (245, 247) to see what one DMX step does at 24 m. The
+ * Front camera looks at the wall square on. The constants are judged here, by eye, against the
+ * plan's check: soft at ±3 m, sharp on the wall.
+ */
+export const FOCUS_HARNESS_HEADS: ReadonlyArray<{ key: string; x: number; focusM: number; channelNo: number; dmx: number }> = [
+  { key: 'focus-short', x: -3.4, focusM: 21, channelNo: 21, dmx: 243 },
+  { key: 'focus-wall', x: 0, focusM: 24, channelNo: 22, dmx: 246 },
+  { key: 'focus-long', x: 3.4, focusM: 27, channelNo: 23, dmx: 249 },
+]
+
+/** The balcony's height: the Revolutions hang at z = 2.8 m (fixture-optics design record). */
+const FOCUS_HARNESS_Z = 2.8
+
+function buildFocusHarness(stageD: number): HarnessData {
+  const focusProperty = (channelNo: number): PropertyDescriptor => ({
+    type: 'slider',
+    name: 'focus',
+    displayName: 'Focus',
+    category: 'focus',
+    channel: { universe: 1, channelNo },
+    min: 0,
+    max: 255,
+    focusNearM: 2,
+    focusFarM: 40,
+  })
+  const syntheticType: FixtureTypeInfo = {
+    typeKey: FOCUS_TYPE_KEY,
+    manufacturer: 'Harness',
+    model: 'Revolution',
+    modeName: 'Focus',
+    channelCount: 1,
+    isRegistered: true,
+    capabilities: [],
+    properties: [focusProperty(FOCUS_HARNESS_HEADS[0].channelNo)],
+    elementGroupProperties: null,
+    acceptsBeamAngle: true,
+    acceptsGel: false,
+    kind: 'PROFILE',
+    body: { archetype: 'mover', head: 'profile', lensDiameterM: 0.15 },
+  }
+  const fixtureFor = new Map<string, Fixture>()
+  const patches: FixturePatch[] = FOCUS_HARNESS_HEADS.map((head, i) => {
+    fixtureFor.set(head.key, {
+      key: head.key,
+      name: `Rev · focus ${head.focusM} m`,
+      typeKey: FOCUS_TYPE_KEY,
+      universe: 1,
+      firstChannel: head.channelNo,
+      channelCount: 1,
+      channels: [],
+      properties: [focusProperty(head.channelNo)],
+      capabilities: [],
+      groups: [],
+      compatibleLookIds: [],
+    })
+    return {
+      id: i + 1,
+      key: head.key,
+      displayName: `Focus ${head.focusM} m`,
+      fixtureTypeKey: FOCUS_TYPE_KEY,
+      startChannel: head.channelNo,
+      channelCount: 1,
+      manufacturer: 'Harness',
+      model: 'Revolution',
+      modeName: 'Focus',
+      universe: 1,
+      subnet: 0,
+      sortOrder: i + 1,
+      groups: [],
+      stageX: head.x,
+      stageY: stageD - FOCUS_HARNESS_THROW_M,
+      stageZ: FOCUS_HARNESS_Z,
+      baseYawDeg: 0,
+      // A mover's beam runs up its body at rest; −90° lays it level, aimed upstage.
+      basePitchDeg: -90,
+      riggingUuid: null,
+      // Narrow, so the three pools sit side by side on a 10 m stage's wall rather than overlapping.
+      beamAngleDeg: 6,
+      gelCode: null,
+      kindOverride: null,
+      stageHidden: false,
+    }
+  })
+  return {
+    patches,
+    regions: [],
+    riggings: [],
+    syntheticFixture: fixtureFor.get(FOCUS_HARNESS_HEADS[1].key)!,
+    syntheticType,
+    fixtureFor,
   }
 }

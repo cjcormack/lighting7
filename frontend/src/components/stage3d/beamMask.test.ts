@@ -14,6 +14,8 @@ import {
   packBlade,
   packBlades,
 } from './beamMask'
+import { resolveEdgeHardness } from './beamOptics'
+import type { SliderPropertyDescriptor } from '../../store/fixtures'
 
 /** Blades in the wire's order: top, bottom, left, right. */
 function blades(...b: Array<[number, number]>) {
@@ -134,40 +136,61 @@ describe('the blades', () => {
 })
 
 describe('the focus blur', () => {
-  const NEAR = 0.65 // a 19° Source Four's 170 mm lens
+  // A profile family's depth of field (`DEPTH_OF_FIELD`, pinned against the Revolution in
+  // archetype.test.ts, which can import the archetype).
+  const DOF = 3
 
   it('is nothing at the focal plane, or without a focus channel', () => {
-    expect(focusBlur(6, 6, NEAR)).toBe(0)
-    expect(focusBlur(3, -1, NEAR)).toBe(0)
+    expect(focusBlur(6, 6, DOF)).toBe(0)
+    expect(focusBlur(24, 24, DOF)).toBe(0)
+    expect(focusBlur(3, -1, DOF)).toBe(0)
   })
 
-  it('is the blur circle over the field radius, from the lens geometry', () => {
-    // Focused at 10 m, landing at 5 m: the light for one image point is half the lens wide (2a·½),
-    // and the field's radius there is a·(near + 5)/near.
-    expect(focusBlur(5, 10, NEAR)).toBeCloseTo((2 * 0.5 * NEAR) / (NEAR + 5), 9)
+  it('is the relative focus error times the depth of field, at any throw', () => {
+    // Focused at 10 m, landing at 5 m: half the focal distance out.
+    expect(focusBlur(5, 10, 3)).toBeCloseTo(1.5, 9)
+    // The same relative error is the same blur at 4 m and at 24 m — a lens radius no longer scales it.
+    expect(focusBlur(4.5, 4, 3)).toBeCloseTo(focusBlur(27, 24, 3), 9)
   })
 
-  it('is linear in |1/d − 1/focus|, so a long throw keeps its depth of focus', () => {
-    // Two metres past focus is far softer at a 4 m throw than at a 20 m one.
-    expect(focusBlur(6, 4, NEAR)).toBeGreaterThan(5 * focusBlur(22, 20, NEAR))
-    // Landing on either side of focus at the same reciprocal distance blurs about alike.
-    const f = 10
-    const near = focusBlur(1 / (1 / f + 0.02), f, NEAR)
-    const far = focusBlur(1 / (1 / f - 0.02), f, NEAR)
-    expect(near / far).toBeGreaterThan(0.85)
-    expect(near / far).toBeLessThan(1.15)
+  it('is symmetric in the relative error', () => {
+    for (const f of [3, 10, 24]) {
+      for (const e of [0.01, 0.05, 0.125, 0.3]) {
+        expect(focusBlur(f * (1 + e), f, DOF)).toBeCloseTo(focusBlur(f * (1 - e), f, DOF), 9)
+        expect(focusBlur(f * (1 + e), f, DOF)).toBeCloseTo(e * DOF, 9)
+      }
+    }
+  })
+
+  it('is softer for a larger depth of field', () => {
+    expect(focusBlur(27, 24, 4.5)).toBeGreaterThan(focusBlur(27, 24, 3))
+    expect(focusBlur(27, 24, 3)).toBeGreaterThan(focusBlur(27, 24, 1))
+    expect(focusBlur(27, 24, 0)).toBe(0)
   })
 
   it('stays finite at and behind the aperture', () => {
-    expect(Number.isFinite(focusBlur(0, 6, NEAR))).toBe(true)
-    expect(Number.isFinite(focusBlur(-1, 6, NEAR))).toBe(true)
-    expect(Number.isFinite(focusBlur(3, 0, NEAR))).toBe(true)
+    expect(Number.isFinite(focusBlur(0, 6, DOF))).toBe(true)
+    expect(Number.isFinite(focusBlur(-1, 6, DOF))).toBe(true)
+    expect(Number.isFinite(focusBlur(3, 0, DOF))).toBe(true)
   })
 })
 
 describe('the beam edge', () => {
+  /** The mover:profile family's softness (`SOFTNESS` in bodies/archetype.ts): a 0.88 cap. */
+  const PROFILE_SOFTNESS = 0.12
+
   it("keeps the family's hardness without a focus channel", () => {
     expect(beamHardness(0.8, -1, 3, MASK_EDGE_SOFT)).toBe(0.8)
+    expect(resolveEdgeHardness(PROFILE_SOFTNESS, undefined, 0, false)).toBeCloseTo(0.88, 9)
+  })
+
+  it("lifts the family's cap at the focal plane, so the edge there is as hard as the mask draws", () => {
+    const capped = resolveEdgeHardness(PROFILE_SOFTNESS, undefined, 0, false)
+    const lifted = resolveEdgeHardness(PROFILE_SOFTNESS, undefined, 0, true)
+    expect(capped).toBeCloseTo(0.88, 9)
+    expect(beamHardness(lifted, 24, focusBlur(24, 24, 3), MASK_EDGE_SOFT)).toBe(1)
+    // Off the plane the blur softens it below what the cap would have held.
+    expect(beamHardness(lifted, 21, focusBlur(24, 21, 3), MASK_EDGE_SOFT)).toBeLessThan(capped)
   })
 
   it('sharpens only at the focal plane, and never past the frost-softened hardness', () => {
@@ -175,8 +198,13 @@ describe('the beam edge', () => {
     expect(beamHardness(0.9, 5, 0, MASK_EDGE_SOFT)).toBeCloseTo(0.9, 9)
     expect(beamHardness(0.9, 5, MASK_EDGE_SOFT, MASK_EDGE_SOFT)).toBe(0)
     // Frost pulled the hardness down to 0.2: it stays soft even at the focus (the Robe ColorSpot
-    // has both channels, and frost did nothing there before).
+    // has both channels, and frost did nothing there before) — the lift does not lift frost.
     expect(beamHardness(0.2, 5, 0, MASK_EDGE_SOFT)).toBeCloseTo(0.2, 9)
+    const frost: SliderPropertyDescriptor = {
+      type: 'slider', name: 'frost', displayName: 'Frost', category: 'frost', channel: { universe: 1, channelNo: 1 }, min: 0, max: 255,
+    }
+    expect(resolveEdgeHardness(0.12, frost, 255, true)).toBeCloseTo(0, 9)
+    expect(resolveEdgeHardness(0.12, frost, 0, true)).toBe(1)
   })
 
   it('is one chunk the haze and the surfaces both call', () => {

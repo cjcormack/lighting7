@@ -135,23 +135,7 @@ internal fun aimIntoProgrammer(
 
     val fixtures = state.show.fixtures
     val skipped = ArrayList<SpreadSkipDto>()
-
-    // A group to its members in member order, a fixture to itself. Distinct by key.
-    val heads = LinkedHashMap<String, GroupableFixture>()
-    for (target in targets) {
-        val members: List<GroupableFixture>? = runCatching {
-            when (val ref = TargetRef.ofOrNull(target.type, target.key)) {
-                is TargetRef.Group -> fixtures.untypedGroup(ref.key).fixtures
-                is TargetRef.Fixture -> listOf(fixtures.untypedGroupableFixture(ref.key))
-                null -> null
-            }
-        }.getOrNull()
-        if (members == null) {
-            skipped += SpreadSkipDto(target, "not patched")
-            continue
-        }
-        for (member in members) heads.putIfAbsent(member.targetKey, member)
-    }
+    val heads = headsOf(state, targets, skipped)
 
     val placements = aimPlacements(state, project, heads.keys)
     val point = StagePoint(x, y, z)
@@ -177,8 +161,33 @@ internal fun aimIntoProgrammer(
     return AimOutcome.Done(AimResponse(written, skipped))
 }
 
+/**
+ * The heads [targets] name — a group to its members in member order, a fixture to itself, distinct
+ * by key — with a target that names nothing patched added to [skipped] as `not patched`. Shared by
+ * aim and focus.
+ */
+internal fun headsOf(state: State, targets: List<CueTargetDto>, skipped: MutableList<SpreadSkipDto>): LinkedHashMap<String, GroupableFixture> {
+    val fixtures = state.show.fixtures
+    val heads = LinkedHashMap<String, GroupableFixture>()
+    for (target in targets) {
+        val members: List<GroupableFixture>? = runCatching {
+            when (val ref = TargetRef.ofOrNull(target.type, target.key)) {
+                is TargetRef.Group -> fixtures.untypedGroup(ref.key).fixtures
+                is TargetRef.Fixture -> listOf(fixtures.untypedGroupableFixture(ref.key))
+                null -> null
+            }
+        }.getOrNull()
+        if (members == null) {
+            skipped += SpreadSkipDto(target, "not patched")
+            continue
+        }
+        for (member in members) heads.putIfAbsent(member.targetKey, member)
+    }
+    return heads
+}
+
 /** Where a patched fixture is and how its body is turned. [world] is null when it is unplaced. */
-private data class AimPlacement(
+internal data class AimPlacement(
     val world: StagePoint?,
     val baseYawDeg: Double?,
     val basePitchDeg: Double?,
@@ -186,7 +195,7 @@ private data class AimPlacement(
 )
 
 /** The placements of the patches keyed [keys] in [project], composed through their riggings. */
-private fun aimPlacements(state: State, project: DaoProject, keys: Collection<String>): Map<String, AimPlacement> {
+internal fun aimPlacements(state: State, project: DaoProject, keys: Collection<String>): Map<String, AimPlacement> {
     if (keys.isEmpty()) return emptyMap()
     return transaction(state.database) {
         val poses = DaoRigging.find { DaoRiggings.project eq project.id }.associate { r ->

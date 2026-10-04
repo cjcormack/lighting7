@@ -26,8 +26,17 @@ vi.mock('@/store/patches', () => ({
   },
 }))
 vi.mock('react-redux', () => ({ useDispatch: () => dispatch }))
+const focusHere = vi.fn((_body: Record<string, unknown>) => ({
+  unwrap: (): Promise<unknown> =>
+    Promise.resolve({ written: [{ target: { type: 'fixture', key: 'rev-1' }, value: '246', distanceM: 24.0 }] }),
+}))
+vi.mock('@/store/programmerOps', () => ({ useFocusHereMutation: () => [focusHere, { isLoading: false }] }))
 
 import { StageFocusPanel } from './StageFocusPanel'
+import { forgetLanding, recordLanding } from './landedPoints'
+
+/** The Stage canvas's beam director, as `landedPoints.ts` keys its reports. */
+const REPORTER = {}
 
 const lanterns = indexLanterns(libraryJson as Lantern[])
 const DIMMER_TYPE = { typeKey: 'generic-dimmer', kind: 'GENERIC', acceptsLantern: true } as unknown as FixtureTypeInfo
@@ -88,6 +97,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
   updatePatch.mockClear()
   dispatch.mockClear()
+  focusHere.mockClear()
+  forgetLanding(REPORTER, 'rev-1')
 })
 
 describe('StageFocusPanel', () => {
@@ -233,5 +244,76 @@ describe('StageFocusPanel', () => {
     )
     expect(screen.queryByRole('slider')).toBeNull()
     expect(screen.getByText(/Spot 1/)).toBeInTheDocument()
+  })
+
+  it('tells a DMX fixture with no optics channels that its optics are fixed — not that its channels set them', () => {
+    const fixture = { name: 'Par 1', properties: [{ name: 'dimmer', type: 'slider', category: 'dimmer' }] } as unknown as Fixture
+    render(
+      <StageFocusPanel
+        projectId={1}
+        patch={patch({ key: 'par-1', fixtureTypeKey: 'hex', lanternType: null })}
+        fixture={fixture}
+        fixtureType={{ typeKey: 'hex', kind: 'PAR', acceptsLantern: false } as unknown as FixtureTypeInfo}
+        lanterns={lanterns}
+        canFocus
+      />,
+    )
+    expect(screen.getByText(/its optics are fixed/)).toBeInTheDocument()
+    expect(screen.queryByText(/from its channels/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Focus here/ })).toBeNull()
+  })
+
+  describe('Focus here', () => {
+    const REV_FOCUS = {
+      name: 'focus', type: 'slider', category: 'focus', channel: { universe: 1, channelNo: 7 }, min: 0, max: 255,
+      focusNearM: 2, focusFarM: 40,
+    }
+    const revolution = { name: 'Rev 1', properties: [REV_FOCUS] } as unknown as Fixture
+    const REV_TYPE = { typeKey: 'etc-source4-revolution-base-frame', kind: 'PROFILE', acceptsLantern: false } as unknown as FixtureTypeInfo
+    const panel = (over: { fixture?: Fixture; canFocus?: boolean } = {}) =>
+      render(
+        <StageFocusPanel
+          projectId={15}
+          patch={patch({ key: 'rev-1', fixtureTypeKey: REV_TYPE.typeKey, lanternType: null })}
+          fixture={over.fixture ?? revolution}
+          fixtureType={REV_TYPE}
+          lanterns={lanterns}
+          canFocus={over.canFocus ?? true}
+        />,
+      )
+
+    it('sends where the beam lands in the view, and says what the desk focused', async () => {
+      recordLanding(REPORTER, 'rev-1', { x: 0, y: 6.7, z: 2.8 })
+      panel()
+      expect(screen.getByText(/drives its focus from its channels/)).toBeInTheDocument()
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Focus here/ }))
+      })
+      expect(focusHere).toHaveBeenCalledWith({
+        projectId: 15,
+        targets: [{ type: 'fixture', key: 'rev-1' }],
+        point: { x: 0, y: 6.7, z: 2.8 },
+      })
+      expect(screen.getByRole('status')).toHaveTextContent('Focused at 24.0 m (DMX 246).')
+    })
+
+    it('sends nothing while the beam lands on nothing, and says so', async () => {
+      recordLanding(REPORTER, 'rev-1', null)
+      panel()
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Focus here/ }))
+      })
+      expect(focusHere).not.toHaveBeenCalled()
+      expect(screen.getByRole('status')).toHaveTextContent(/lands on nothing/)
+    })
+
+    it('is offered only on the live project, and only for a focus that declares its range', () => {
+      panel({ canFocus: false })
+      expect(screen.queryByRole('button', { name: /Focus here/ })).toBeNull()
+      cleanup()
+      const unranged = { name: 'Rev 1', properties: [{ ...REV_FOCUS, focusNearM: undefined, focusFarM: undefined }] } as unknown as Fixture
+      panel({ fixture: unranged })
+      expect(screen.queryByRole('button', { name: /Focus here/ })).toBeNull()
+    })
   })
 })

@@ -234,6 +234,7 @@ annotation class FixtureType(
     // … kind, lengthM, acceptsLength …
     val body: FixtureBody = FixtureBody(),   // the 3D body the Stage view draws
     val acceptsLantern: Boolean = false,     // hung with a lantern from the library
+    val depthOfField: Double = -1.0,         // how fast focus goes soft; -1.0 = the family's
 )
 ```
 
@@ -251,6 +252,15 @@ presentational only, like every stage field. `acceptsLantern` is the other half:
 is **the lantern the operator hangs it with** (§"Lanterns and focus"), which today is the generic
 dimmer alone. A type declares one or the other; `LanternLibraryTest` pins that every declared
 mover body agrees with the desk's own mover test (`RigBriefing.isMovingHead`).
+
+`depthOfField` (fixture-optics plan D9) says how fast the type's focus goes soft off its focal
+plane: the Stage view's blur, in field radii, per unit of **relative** focus error `|f − d| / f` —
+larger is softer. `-1.0` (the default, like the dimensions') leaves it to the body's family
+(`DEPTH_OF_FIELD` in the frontend's `stage3d/bodies/archetype.ts`, 3 for a profile, tuned by eye
+against a Source Four Revolution throwing 24 m — `frontend/docs/stage-vis-engineering.md`
+§"Focus"), and reflects as `depthOfField: null` on `GET /fixture-types`. Only a type with a FOCUS
+channel is drawn by it, and no type in the library declares one today: the family's value serves
+the Revolution. Like `body`, it is presentational; nothing on the desk reads it.
 
 ### @FixtureProperty
 
@@ -293,7 +303,10 @@ null, and reflects as null:
   the aperture, at DMX min / max. The Stage view focuses at that fixed distance wherever the head
   points; a slider that declares neither racks over the beam's own throw instead
   (`frontend/docs/stage-vis-engineering.md` §"Light lands through one surface shader"). Declare both
-  or neither: `FocusRangeTest` holds every FOCUS slider in the library to a usable range.
+  or neither: `FocusRangeTest` holds every FOCUS slider in the library to a usable range. The
+  desk solves the same mapping backwards — *Focus here* (§"Focusing a head on a point") and Locate,
+  which parks a declared range at its middle **distance** (21 m on 2–40 m) rather than mid-DMX
+  (3.8 m), since DMX is linear in 1 / distance.
 - `inverted`: reverses the mapping. On a FOCUS slider DMX min is far focus, as on the MAC 250, whose
   chart runs "Infinity → 2 meters".
 - A ZOOM slider's `degMin` / `degMax` may run either way: the Source Four Revolution's DMX 0 is its
@@ -1234,3 +1247,43 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   palette cues, Looks and busk pads can reference, and it outlives the programmer. The template is
   created before the programmer is written, so a taken name refuses the call with no head moved;
   `dryRun` creates nothing.
+
+### Focusing a head on a point
+
+`POST /api/rest/projects/{projectId}/programmer/focus` `{targets, point: {x, y, z}, fadeMs?, write?}`
+is *Focus here* (fixture-optics plan D11): it focuses each head's FOCUS channel on a stage coordinate
+and writes the level into the programmer as owner `WEB`, as an aim does. It answers
+`{written: [{target, value, distanceM}], skipped: [{target, reason}]}` — `value` the focus slider's
+DMX literal, `distanceM` the distance it was solved for, to the centimetre. `write: false` (default
+true) answers without writing, as Spread's does. The Stage view's Focus tab sends the point its beam
+lands on (`frontend/docs/stage-vis-engineering.md` §"Focus"), and `aim_fixtures`' `focus: true`
+sends its aim point through the same `focusIntoProgrammer`, for the heads aim aimed only — a head
+aim skipped is not pointing there, and is listed as not focused.
+
+- **The solve is the view's mapping backwards.** `show/FixtureFocus.kt`'s `FocusRange` is the
+  declared range over the slider's own `min..max`: `distanceAt` is the Stage view's
+  `resolveDeclaredFocusDistance` (linear in 1 / distance, `inverted` putting the far end at DMX min)
+  and `levelFor` its inverse, rounded to the slider's step by `dmxFor`. One test vector,
+  `src/test/resources/stage/focusInverse.fixture.json`, pins both sides — `FixtureFocusTest` here and
+  `beamOptics.test.ts` in the view — so a head the desk focuses at a distance is the head the view
+  draws sharp at it. Change the rule, the vector and both pins in one commit.
+- **The distance is from the lens, as the view draws it.** The head's placement composed through its
+  rigging (`worldPosition`, `routes/programmerAim.kt`'s `aimPlacements`, aim's own maths), then up the
+  body's axis to the head's pivot and along the beam to its lens: `MoverLens` and `lensDistance` in
+  `show/FixtureFocus.kt`, the Stage view's mover proportions (the pivot 0.6 of the unit's height up
+  the body, the lens half the head's length beyond it — 0.51 m and 0.22 m on a Revolution). The
+  point is on the beam's axis — *Focus here* sends where the axis lands, and an aimed head points
+  at its aim — so the distance is the pivot's less the lens's offset. That 0.22 m is under 1 % of a
+  24 m throw but 7 % of a 3 m one, about a DMX step's softness, which is why it is measured. The
+  vector's `heads` pins the proportions on both sides (`FixtureFocusTest`, `archetype.test.ts`), and
+  `FixtureFocusTest` holds every focus type to a declared mover body and head, so the desk never
+  has to guess the view's words; a type without one would be measured from its placement point.
+- **Everything else is skipped by name**: a head with no focus channel, a focus that declares no
+  range, an unplaced fixture, a cell (it has no placement of its own), a point outside the head's
+  range (the reason gives the distance and the range). An empty selection is 400
+  `FOCUS_NEEDS_SELECTION`; a missing point or one off any stage (`checkStageCoord`'s ±500 m) is 400
+  `FOCUS_INVALID` — aim's two refusals, the selection checked first.
+- **A focus is not saved as a template by aim.** The template grammar holds focus (`pct:`), but a
+  template is one family, and focus is beam where an aim is position, so `aim_fixtures`'
+  `saveAsTemplate` stays position-only; `record_cue` keeps a focus.
+

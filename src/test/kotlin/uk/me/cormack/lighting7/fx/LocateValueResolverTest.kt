@@ -52,7 +52,10 @@ class LocateValueResolverTest {
         )
         assertEquals(CueAssignmentResolver.PropertyValue.Setting(0u), byName["gobo"], "gobo wheel OPEN_WHITE")
         assertEquals(CueAssignmentResolver.PropertyValue.Setting(0u), byName["prism"], "prism OPEN (facets == null)")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(128u), byName["focus"], "focus to mid-range")
+        assertEquals(
+            CueAssignmentResolver.PropertyValue.Slider(243u), byName["focus"],
+            "focus to the middle distance of its declared 2–40 m (21 m), not mid-DMX (3.8 m)",
+        )
         assertEquals(9, assignments.size, "speed, rotation and macro channels are left alone")
 
         assertNull(byName["pan"], "coarse axes are folded into the position write")
