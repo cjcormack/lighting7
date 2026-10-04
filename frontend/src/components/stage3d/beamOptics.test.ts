@@ -13,8 +13,12 @@ import {
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  makeBladeStates,
   makeGoboRotation,
   prismSpinFromSlider,
+  resolveBladeAngleDeg,
+  resolveBladeDepth,
+  resolveDmxBlades,
   resolveDeclaredFocusDistance,
   resolveFocusDistance,
   resolveFocusParam,
@@ -29,9 +33,12 @@ import {
   settingBand,
 } from './beamOptics'
 import { goboLayerFor } from './goboPatterns'
+import { beamMask, packBlade, packBlades, unpackBlade } from './beamMask'
+import { revolutionShutterProps } from '../../test/fixtureFactories'
 import type {
   SettingOption,
   SettingPropertyDescriptor,
+  ShutterProperties,
   SliderPropertyDescriptor,
 } from '../../store/fixtures'
 
@@ -651,5 +658,64 @@ describe('resolveZoomDeg', () => {
   it('answers null for a zoom that declares no angles, and for no zoom', () => {
     expect(resolveZoomDeg(slider({ category: 'zoom' }), 100)).toBeNull()
     expect(resolveZoomDeg(undefined, 100)).toBeNull()
+  })
+})
+
+describe('framing shutters from DMX', () => {
+  // The Revolution's, as its descriptors carry them, in the wire's order (top, bottom, left, right).
+  const props = revolutionShutterProps()
+  const shutters: ShutterProperties = {
+    depth: props.filter((p) => p.category === 'shutter'),
+    rotation: props.filter((p) => p.category === 'shutter_rotation'),
+  }
+  const [frame1Pos, frame1Rot] = props
+
+  it('takes a blade in over 0..depthMax, linearly, out at DMX min', () => {
+    expect(resolveBladeDepth(frame1Pos, 0)).toBe(0)
+    expect(resolveBladeDepth(frame1Pos, 255)).toBe(0.5)
+    expect(resolveBladeDepth(frame1Pos, 51)).toBeCloseTo(0.1, 9)
+    // Inverted: DMX max is out, DMX min in to depthMax.
+    const inverted = { ...frame1Pos, inverted: true }
+    expect(resolveBladeDepth(inverted, 255)).toBe(0)
+    expect(resolveBladeDepth(inverted, 0)).toBe(0.5)
+    // Without a declared depth the blade is out, whatever the channel says.
+    expect(resolveBladeDepth({ ...frame1Pos, depthMax: undefined }, 255)).toBe(0)
+    expect(resolveBladeDepth(undefined, 255)).toBe(0)
+  })
+
+  it('turns a blade over degMin..degMax, square between them', () => {
+    expect(resolveBladeAngleDeg(frame1Rot, 0)).toBe(-45)
+    expect(resolveBladeAngleDeg(frame1Rot, 255)).toBe(45)
+    expect(resolveBladeAngleDeg(frame1Rot, 127.5)).toBeCloseTo(0, 9)
+    // 128, where Locate squares it, is within one 1.5° step of square.
+    expect(Math.abs(resolveBladeAngleDeg(frame1Rot, 128))).toBeLessThan(0.75)
+    const inverted = { ...frame1Rot, inverted: true }
+    expect(resolveBladeAngleDeg(inverted, 0)).toBe(45)
+    expect(resolveBladeAngleDeg(inverted, 255)).toBe(-45)
+    expect(resolveBladeAngleDeg({ ...frame1Rot, degMin: undefined }, 255)).toBe(0)
+    expect(resolveBladeAngleDeg(undefined, 255)).toBe(0)
+  })
+
+  it('reads each blade from its own two channels, in the wire order', () => {
+    const out = makeBladeStates()
+    resolveDmxBlades(shutters, [0, 255, 0, 51], [127.5, 0, 255, 127.5], out)
+    expect(out[0]).toEqual({ depth: 0, angleDeg: expect.closeTo(0, 9) })
+    expect(out[1]).toEqual({ depth: 0.5, angleDeg: -45 })
+    expect(out[2]).toEqual({ depth: 0, angleDeg: 45 })
+    expect(out[3].depth).toBeCloseTo(0.1, 9)
+    // A blade with no channel of either kind is out and square.
+    resolveDmxBlades({ depth: [undefined, undefined, undefined, undefined], rotation: shutters.rotation }, [255, 255, 255, 255], [0, 0, 0, 0], out)
+    expect(out.every((b) => b.depth === 0)).toBe(true)
+  })
+
+  it('cuts to the centre with a blade at DMX max', () => {
+    const blades = resolveDmxBlades(shutters, [255, 0, 0, 0], [127.5, 127.5, 127.5, 127.5], makeBladeStates())
+    const [a, b] = packBlades(blades)
+    // The top blade at depth 0.5 packs to exactly half way, so its edge is the field's centre: just
+    // above it is dark, just below it lit, and the bottom of the field untouched.
+    expect(unpackBlade(packBlade(0.5, 0))?.depth).toBe(0.5)
+    expect(beamMask(0, 0.01, 0, 1, 0, a, b)).toBe(0)
+    expect(beamMask(0, -0.02, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
+    expect(beamMask(0, -0.9, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
   })
 })

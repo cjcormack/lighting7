@@ -184,6 +184,14 @@ answers correct the annotations afterwards.
    (from the lens's point of view, with the head at pan/tilt home)? Does it reach the centre or
    cross it? Then take its rotation to 0 and to 255: which way does the edge turn, by about how
    much, and is 128 square?
+   - **And on the wall** (fixture-optics session 2): aim the unit at the back wall with
+     `aim_fixtures` (pan centre, tilt out positive, as the desk solves it) and take each frame to
+     255. The Stage view draws frame 1 cutting the top of the pool, 2 the bottom, 3 the left, 4 the
+     right (seen from the house), and rotation 255 bringing the edge down on the right. If the rig
+     cuts them half a turn round (frame 1 at the bottom, 3 on the right), drop the half-turn
+     (`MOVER_BLADE_SLOTS` in `frontend/src/components/stage3d/FixtureModel.tsx`); if two sides are
+     swapped, change the frames' `blade`s in `Source4RevolutionFixture.kt`; if the edge turns the
+     other way, swap the rotations' `degMin` / `degMax`.
 5. **Media frame.** Sweep ch 6: at what value do the wings go in, and is there a band where they
    come out again?
 6. **Wheel.** If a rotating wheel is fitted: in index mode, does the 16-bit range turn the image

@@ -19,6 +19,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.show.focusRange
 import uk.me.cormack.lighting7.show.middleDmx
 import java.awt.Color
+import kotlin.math.roundToInt
 
 /**
  * Computes the property values a console "Locate" asserts on a fixture: centre the beam and
@@ -26,10 +27,11 @@ import java.awt.Color
  *
  * Per category: pan/tilt to the middle of their range (fine channels to 0 — the 16-bit
  * midpoint is coarse-mid + fine-0), dimmer full, shutter open, colour white, gobo open,
- * prism out, iris/frost open, zoom mid, and focus at the middle *distance* of a declared range
- * (mid-DMX where none is declared). "Colour white" adapts to the engine: RGB
- * mixers get full RGB *and* full white (the fan-out in [PropertyChannelWriter.resolveColour]
- * also zeroes amber/uv); colour wheels pick their open/white slot — unless an RGB engine
+ * prism out, iris/frost open, zoom mid, focus at the middle *distance* of a declared range
+ * (mid-DMX where none is declared), and every framing shutter out and square to the gate.
+ * "Colour white" adapts to the engine: RGB mixers get full RGB *and* full white (the fan-out in
+ * [PropertyChannelWriter.resolveColour] also zeroes amber/uv); colour wheels pick their open/white
+ * slot — unless an RGB engine
  * coexists on the same target, in which case the wheel is *disengaged* (its off slot) so the
  * RGB white wins. Standalone WHITE/AMBER/UV sliders go to full only when there is no RGB
  * engine to fan out from — white/amber-only blinders and UV cannons must still light.
@@ -184,6 +186,17 @@ object LocateValueResolver {
                 CueAssignmentResolver.PropertyValue.Slider(range?.middleDmx()?.toUByte() ?: midValue(slider))
             }
 
+            // A framing shutter out: DMX min, its depth 0 — DMX max where the slider is inverted.
+            PropertyCategory.SHUTTER -> (backing as? DmxSlider)?.let { slider ->
+                CueAssignmentResolver.PropertyValue.Slider(if (declared?.inverted == true) slider.max else slider.min)
+            }
+
+            // A blade square to the gate: the DMX for 0°, solved through its declared angles (128 on
+            // the Revolution's ±45°). Mid-DMX where it declares none.
+            PropertyCategory.SHUTTER_ROTATION -> (backing as? DmxSlider)?.let { slider ->
+                CueAssignmentResolver.PropertyValue.Slider(declared?.let { squareDmx(it, slider) } ?: midValue(slider))
+            }
+
             // Standalone white/amber/UV engines with no RGB property to fan out from — the
             // whole light output of white/amber blinders and UV cannons. With an RGB engine
             // present these are written (or zeroed) by the Colour fan-out instead.
@@ -228,6 +241,22 @@ object LocateValueResolver {
     // with fine at 0), not 127.
     private fun midValue(slider: DmxSlider): UByte =
         ((slider.min.toInt() + slider.max.toInt() + 1) / 2).toUByte()
+
+    /**
+     * The DMX a SHUTTER_ROTATION slider turns its blade square at: 0° over its declared
+     * `degMin..degMax`, honouring `inverted`, rounded to the slider's step and kept inside its range
+     * (so a range that never reaches 0° parks at its nearer end). Null where no range is declared.
+     */
+    private fun squareDmx(declared: Fixture.Property, slider: DmxSlider): UByte? {
+        val degMin = declared.degMin ?: return null
+        val degMax = declared.degMax ?: return null
+        if (degMin == degMax) return null
+        val p = ((0.0 - degMin) / (degMax - degMin)).coerceIn(0.0, 1.0)
+        val t = if (declared.inverted) 1.0 - p else p
+        val min = slider.min.toInt()
+        val max = slider.max.toInt()
+        return (min + t * (max - min)).roundToInt().coerceIn(min, max).toUByte()
+    }
 
     /** The wheel slot that renders white: annotated `#FFFFFF` preview, else an OPEN/WHITE name. */
     private fun whiteSetting(setting: DmxFixtureSetting<*>): DmxFixtureSettingValue? =

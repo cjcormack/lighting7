@@ -278,6 +278,8 @@ annotation class FixtureProperty(
     val fineOf: String = "",
     val rpmMax: Double = Double.NaN,
     val indexDegMax: Double = Double.NaN,
+    val blade: Blade = Blade.NONE,
+    val depthMax: Double = Double.NaN,
 )
 ```
 
@@ -329,6 +331,9 @@ null, and reflects as null:
   turning the way the band names, and still in any other band. A wheel with no mode channel spins as
   its rotation channel's bands always said. The Source Four Revolution's front wheel is the one
   today.
+- `blade` / `depthMax`: on a framing shutter's SHUTTER or SHUTTER_ROTATION slider, which blade it
+  drives (`Blade.NONE`, the default, reflects as null) and, on the insertion, its depth at DMX max.
+  See §"Framing shutters".
 
 Every value a fixture declares that its manufacturer does not state carries an `// Estimate:`
 comment at its source saying what it rests on (fixture optics plan D15); the rig checks that settle
@@ -338,6 +343,45 @@ A focus range carries a comment naming its source: the manufacturer's document, 
 rests on where the manufacturer publishes nothing. "Infinity" is written as 40 m, the Stage view's
 longest throw. A conventional's focus is not here: it is per placement, on the patch (§"Lanterns and
 focus").
+
+### Framing shutters
+
+A profile's framing shutters are four blades in its gate, each pushed in and turned. A DMX head that
+drives them from its channels (the Source Four Revolution's shutter module, ch 24–31) declares each
+blade as two sliders in two categories (fixture optics plan D4):
+
+- **SHUTTER** — the blade's insertion. It names its `blade` and declares `depthMax`, its depth at DMX
+  max, in the lantern focus's unit: a **fraction of the field's diameter**, so 0.5 reaches the
+  centre and 1 closes the field. DMX min is out, and depth rises linearly to `depthMax`; `inverted`
+  puts the blade fully in at DMX min instead.
+- **SHUTTER_ROTATION** — the blade's angle. It names its `blade` and declares `degMin` / `degMax`,
+  the angle at DMX min and max (the zoom's and pan's fields, honouring `inverted` the same way). The
+  blade turns about the middle of its own edge, positive clockwise as seen from behind the head.
+
+`Blade` is `TOP · BOTTOM · LEFT · RIGHT` — the lantern focus's wire order — named for the edge of the
+light it cuts, seen from behind the head down its beam. The blades are fixed in the **head**, so they
+turn with its pan and tilt, as the metal does. A moving head's are named as a **hung** head tilted out
+(positive tilt, which is how `POST /programmer/aim` reaches the stage from a balcony at pan centre)
+shows them: there the top blade cuts the top of the pool. The same head swung over the top to reach
+the point the other way cuts it at the bottom, and so does a standing head tilted out positive — a
+standing head is a hung one turned over. Which side of the real head each frame sits on is an
+estimate (`FU-MANUAL-S4REV-OPTICS` step 4).
+
+Both categories are LTP and in the BEAM mask group, and stored and recorded like any other slider;
+neither is in the template grammar or Spread's vocabulary, so neither can be spread. **Locate** takes every blade out
+(the DMX for depth 0: DMX min, or max where inverted) and squares every rotation (the DMX for 0°,
+solved through its degree range — 128 on the Revolution's ±45°), as ChamSys locates them.
+
+The Stage view draws a DMX head's blades through the same shader path as a lantern's
+(`frontend/docs/stage-vis-engineering.md` §"The lantern's focus: the cut, the gate and the oval"):
+the director reads the eight channels every frame and packs them where a lantern's focus would be,
+and a fixture with DMX blades never draws a lantern's beside them.
+
+`ShutterBladesTest` holds the library to it: every SHUTTER names a blade and declares `depthMax`,
+every SHUTTER_ROTATION names a blade and declares a degree range, a fixture (or cell) declares at
+most one of each per blade, nothing else declares `blade` or `depthMax`, and no type with framing
+shutters is `acceptsLantern` — so a unit's blades have one source. The Revolution's blade sides,
+depth and rotation sign are estimates (`// Estimate:` at the source; `FU-MANUAL-S4REV-OPTICS`).
 
 ### @FixtureTrigger — one-shot triggers
 
@@ -991,8 +1035,8 @@ both: base from the patch, current pan/tilt from the live channel feed.
 A conventional's body is not a fact of its type: a generic dimmer is whatever lantern is plugged
 into it. So a type that says so (`@FixtureType(acceptsLantern = true)`) is hung with a lantern from
 the desk's **lantern library**, and each unit carries how it was focused (stage-view plan session 7,
-D9 and D14). A DMX fixture never takes either — its body is its type's `body`, and its zoom, focus
-and iris are its channels, which its looks drive.
+D9 and D14). A DMX fixture never takes either — its body is its type's `body`, and its zoom, focus,
+iris and framing shutters are its channels, which its looks drive.
 
 **The library** is a desk resource, `src/main/resources/lanterns/library.json`, shipped the way the
 `.fx.kts` effects are and read once by `fixture/lantern/LanternLibrary.kt`; `GET /lanterns` answers

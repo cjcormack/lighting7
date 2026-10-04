@@ -3,13 +3,16 @@ import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { Color, Euler, MathUtils, Matrix4, OrthographicCamera, PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import {
+  beamBlades,
   ColourSync,
   composeBeamHull,
   coneLandingDepth,
   edgeLanding,
   focusRangeM,
   landBeam,
+  lanternBladesFor,
   lensLocalMatrix,
+  makeBladeScratch,
   pixelsPerMetre,
   resolveCellColour,
   staticHeadQuaternion,
@@ -29,7 +32,8 @@ import {
 } from '../fixtures/fixtureAppearance'
 import { ChannelSourceProvider } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
-import { chan, colourProp, sliderProp } from '../../test/fixtureFactories'
+import { chan, colourProp, revolutionShutterProps, sliderProp } from '../../test/fixtureFactories'
+import { findShutterProperties } from '../../store/fixtures'
 
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
@@ -522,7 +526,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
     const { dir, right } = axes(head(180, 50, 0))
     const apex = new Vector3(0, 6, 4)
     const [a, b] = packBlades([
-      { depth: 21 / 63, angleDeg: 0 },
+      { depth: 21 / 62, angleDeg: 0 },
       { depth: 0, angleDeg: 0 },
       { depth: 0, angleDeg: 0 },
       { depth: 0, angleDeg: 0 },
@@ -594,5 +598,152 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
     const turned = right.clone().applyAxisAngle(dir, Math.PI / 2)
     expect(along(turned, wide)).toBe(0)
     expect(along(turned, across)).toBeGreaterThan(0.2)
+  })
+})
+
+describe("a DMX head's framing shutters, in the head's own frame", () => {
+  // The Revolution's frames, found as the director finds them.
+  const shutters = findShutterProperties(revolutionShutterProps())!
+  // A mover's rig as FixtureModel builds it: the mount's base turn (YXZ), the yoke panning about its
+  // Y, the head tilting about its X, the beam along the head's +Y (a mover's emitAxis).
+  const moverHead = (basePitchDeg: number, panDeg: number, tiltDeg: number) => {
+    const m = new Matrix4()
+      .makeRotationFromEuler(new Euler(MathUtils.degToRad(basePitchDeg), 0, 0, 'YXZ'))
+      .multiply(new Matrix4().makeRotationY(MathUtils.degToRad(panDeg)))
+      .multiply(new Matrix4().makeRotationX(MathUtils.degToRad(tiltDeg)))
+    return {
+      dir: new Vector3(0, 1, 0).transformDirection(m),
+      right: new Vector3(1, 0, 0).transformDirection(m),
+    }
+  }
+  // One blade's DMX levels at full, every rotation square — as the director reads them.
+  const oneBladeIn = (blade: number, rotation = [127.5, 127.5, 127.5, 127.5]) => {
+    const scratch = makeBladeScratch()
+    scratch.depthLevels = [0, 0, 0, 0]
+    scratch.depthLevels[blade] = 255
+    scratch.rotationLevels = [...rotation]
+    return [...beamBlades([0, 0], shutters, scratch, true)] as [number, number]
+  }
+  // Where a point offset from the beam's middle, `reach` metres out, falls in the light.
+  const litAt = (head: { dir: Vector3; right: Vector3 }, packed: [number, number], offset: Vector3) => {
+    const apex = new Vector3(0, 6, 0)
+    const reach = 10
+    const point = apex.clone().addScaledVector(head.dir, reach).addScaledVector(offset, reach * Math.tan((19 * Math.PI) / 360) * 0.6)
+    const [u, v] = beamUv(point, apex, head.dir, head.right, 19)
+    return beamMask(u, v, 0, 1, 0.04, packed[0], packed[1])
+  }
+  const sides = (head: { dir: Vector3 }) => {
+    const up = new Vector3(0, 1, 0)
+    const viewersRight = new Vector3().crossVectors(head.dir, up).normalize()
+    return [up, up.clone().negate(), viewersRight.clone().negate(), viewersRight]
+  }
+
+  for (const [label, pitch, pan, tilt] of [
+    // The balcony's: hung, at pan centre, tilted out positive to the stage — what aim solves.
+    ['hung, tilted out positive', 180, 0, 90],
+    ['hung, panned round and tilted out positive', 180, 180, 90],
+    // A standing head is a hung one turned over, so it reads right tilted out the other way.
+    ['standing, tilted out negative', 0, 0, -90],
+  ] as const) {
+    it(`cuts the side each blade is named for, ${label}`, () => {
+      const head = moverHead(pitch, pan, tilt)
+      expect(Math.abs(head.dir.y)).toBeLessThan(1e-9)
+      const [top, bottom, left, right] = sides(head)
+      const named = [top, bottom, left, right]
+      for (let blade = 0; blade < 4; blade++) {
+        const packed = oneBladeIn(blade)
+        // Its own side is dark, the opposite side lit: a blade at full reaches the centre, no further.
+        expect(litAt(head, packed, named[blade])).toBe(0)
+        const opposite = named[blade ^ 1]
+        expect(litAt(head, packed, opposite)).toBeGreaterThan(0.99)
+      }
+    })
+  }
+
+  it('keeps its blades in the head, so a head swung over the top cuts the other way', () => {
+    // The same beam reached by tilting out negative: the head has turned over, and its top blade
+    // with it — as a standing head tilted out positive is.
+    for (const [pitch, pan, tilt] of [
+      [180, 180, -90],
+      [180, 0, -90],
+      [0, 0, 90],
+    ] as const) {
+      const head = moverHead(pitch, pan, tilt)
+      const [top, bottom, left, right] = sides(head)
+      expect(litAt(head, oneBladeIn(0), bottom)).toBe(0)
+      expect(litAt(head, oneBladeIn(0), top)).toBeGreaterThan(0.99)
+      expect(litAt(head, oneBladeIn(2), right)).toBe(0)
+      expect(litAt(head, oneBladeIn(2), left)).toBeGreaterThan(0.99)
+    }
+  })
+
+  it('turns a rotated blade about its own edge', () => {
+    // Frame 1 half in and turned to +45° (DMX 255): the edge's middle stays on the beam's vertical
+    // axis, half way up, and the two ends of the edge sit either side of it.
+    const head = moverHead(180, 0, 90)
+    const scratch = makeBladeScratch()
+    scratch.depthLevels = [127.5, 0, 0, 0]
+    scratch.rotationLevels = [255, 127.5, 127.5, 127.5]
+    const turned = [...beamBlades([0, 0], shutters, scratch, true)] as [number, number]
+    const unturnedScratch = makeBladeScratch()
+    unturnedScratch.depthLevels = [127.5, 0, 0, 0]
+    unturnedScratch.rotationLevels = [127.5, 127.5, 127.5, 127.5]
+    const square = [...beamBlades([0, 0], shutters, unturnedScratch, true)] as [number, number]
+    // On the axis, the cut is where it was square.
+    const [up] = sides(head)
+    const onAxis = (packed: [number, number], f: number) => litAt(head, packed, up.clone().multiplyScalar(f))
+    for (const f of [0.6, 0.9]) expect(onAxis(turned, f)).toBeCloseTo(onAxis(square, f), 6)
+    // Off the axis, square it cuts both sides alike; turned, one side and not the other.
+    const [, , leftSide, rightSide] = sides(head)
+    const at = (packed: [number, number], side: Vector3) =>
+      litAt(head, packed, up.clone().multiplyScalar(0.75).addScaledVector(side, 0.6))
+    expect(at(square, leftSide)).toBeCloseTo(at(square, rightSide), 6)
+    expect(Math.abs(at(turned, leftSide) - at(turned, rightSide))).toBeGreaterThan(0.9)
+    // A positive turn is clockwise as seen from behind the head: the top blade comes down on the
+    // viewer's right.
+    expect(at(turned, rightSide)).toBe(0)
+    expect(at(turned, leftSide)).toBeGreaterThan(0.99)
+  })
+
+  it("prefers the head's own blades, and never draws a lantern's beside them", () => {
+    const lanternBlades = [
+      { depth: 0.3, angleDeg: 10 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+      { depth: 0, angleDeg: 0 },
+    ]
+    const spec = { cells: [{} as never], blades: lanternBlades }
+    // A lantern's blades are the beam's only where the fixture drives none of its own…
+    expect(lanternBladesFor(spec, undefined)).toBe(lanternBlades)
+    expect(lanternBladesFor(spec, shutters)).toBeNull()
+    // …and never on a body of several cells.
+    expect(lanternBladesFor({ cells: [{} as never, {} as never], blades: lanternBlades }, undefined)).toBeNull()
+
+    const lanternPacked = packBlades(lanternBlades)
+    const scratch = makeBladeScratch()
+    // A DMX head with every blade out draws no blade — not the lantern's.
+    expect([...beamBlades(lanternPacked, shutters, scratch)]).toEqual([0, 0])
+    // With none of its own, the lantern's packed pair passes through untouched.
+    expect(beamBlades(lanternPacked, undefined, scratch)).toBe(lanternPacked)
+    // A DMX blade in is exactly that blade, packed.
+    scratch.depthLevels = [0, 0, 255, 0]
+    scratch.rotationLevels = [127.5, 127.5, 127.5, 127.5]
+    expect([...beamBlades(lanternPacked, shutters, scratch)]).toEqual(
+      packBlades([
+        { depth: 0, angleDeg: 0 },
+        { depth: 0, angleDeg: 0 },
+        { depth: 0.5, angleDeg: 0 },
+        { depth: 0, angleDeg: 0 },
+      ]),
+    )
+    // On a mover the frame is turned a half-turn: the left blade sits in the right's slot.
+    expect([...beamBlades(lanternPacked, shutters, scratch, true)]).toEqual(
+      packBlades([
+        { depth: 0, angleDeg: 0 },
+        { depth: 0, angleDeg: 0 },
+        { depth: 0, angleDeg: 0 },
+        { depth: 0.5, angleDeg: 0 },
+      ]),
+    )
   })
 })

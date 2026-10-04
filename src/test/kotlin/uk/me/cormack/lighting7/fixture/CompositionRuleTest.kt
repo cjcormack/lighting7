@@ -37,6 +37,8 @@ class CompositionRuleTest {
         assertEquals(CompositionRule.LTP, PropertyCategory.ZOOM.defaultComposition)
         assertEquals(CompositionRule.LTP, PropertyCategory.IRIS.defaultComposition)
         assertEquals(CompositionRule.LTP, PropertyCategory.FROST.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.SHUTTER.defaultComposition)
+        assertEquals(CompositionRule.LTP, PropertyCategory.SHUTTER_ROTATION.defaultComposition)
         assertEquals(CompositionRule.LTP, PropertyCategory.LED_MACRO.defaultComposition)
         assertEquals(CompositionRule.LTP, PropertyCategory.MOVEMENT_MACRO.defaultComposition)
     }

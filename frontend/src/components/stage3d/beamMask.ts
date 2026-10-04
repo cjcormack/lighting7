@@ -20,7 +20,9 @@
  * - `blades` is the four shutters (or barn doors), **packed** two to a float ([packBlades]) so a light
  *   carries them in the light table's six texels without a seventh. Each blade is a straight edge in
  *   this frame: its depth moves it in from the field edge and its angle turns it about its own
- *   middle.
+ *   middle. They come from one of two sources, never both (`FixtureModel.tsx`'s director): a
+ *   lantern's focus, packed once per body spec, or a DMX head's framing-shutter channels, packed
+ *   every frame (fixture-optics plan D5).
  *
  * The **gate rotation** and a PAR's **lamp rotation** are not arguments: they turn the frame itself.
  * The director turns the head's right axis about the beam before it writes `u`, so every blade (and
@@ -48,15 +50,26 @@ const BLADE_EDGE = 0.6
 
 /**
  * A blade's code, 12 bits: its depth in [BLADE_DEPTH_STEPS] steps above its angle's six bits
- * (whole degrees, offset by [BLADE_ANGLE_OFFSET]). Two codes make a float of 24 bits — every integer
- * a float32 holds exactly — and every division the decode makes is by a power of two, so the GPU
- * unpacks exactly what the director packed. Depth 0 is a blade that is out, whatever its angle.
+ * ([BLADE_ANGLE_STEP_DEG] steps, offset by [BLADE_ANGLE_OFFSET]). Two codes make a float of 24 bits
+ * — every integer a float32 holds exactly — and every division the decode makes is by a power of
+ * two, so the GPU unpacks exactly what the director packed. Depth 0 is a blade that is out, whatever
+ * its angle.
+ *
+ * The angle reaches ±[MAX_PACKED_BLADE_ANGLE_DEG] — a DMX framing shutter's ±45° (the Source Four
+ * Revolution's) — in 1.5° steps: 61 values, still six bits. A seventh bit would push two blades past
+ * the float's 24-bit mantissa (fixture-optics plan D5). A lantern's blades are stored to ±30°
+ * (`MAX_BLADE_ANGLE_DEG` in `lib/lanterns.ts`, the Focus card's slider and `LanternFocus`'s
+ * validation); only the drawing's resolution changed for them, from 1° to 1.5°.
  */
-export const BLADE_DEPTH_STEPS = 63
+// Even, so a blade half in — the field's centre, a DMX framing shutter's `depthMax` 0.5 — is a step
+// exactly rather than half a step past it.
+export const BLADE_DEPTH_STEPS = 62
 export const BLADE_ANGLE_OFFSET = 32
-export const MAX_BLADE_ANGLE_DEG = 30
+export const BLADE_ANGLE_STEP_DEG = 1.5
+export const MAX_PACKED_BLADE_ANGLE_DEG = 45
 const CODE = 64
 const PAIR = 4096
+const MAX_ANGLE_STEPS = MAX_PACKED_BLADE_ANGLE_DEG / BLADE_ANGLE_STEP_DEG
 
 /** The four blades' normals in the beam's frame: top, bottom, left, right — the wire's order. */
 export const BLADE_NORMALS: ReadonlyArray<readonly [number, number]> = [
@@ -74,7 +87,7 @@ export const BEAM_MASK_GLSL = /* glsl */ `
   float bladeCut(vec2 uv, float code, vec2 n, float w) {
     float dq = floor(code / ${CODE}.0);
     if (dq < 0.5) return 1.0;
-    float a = radians(code - dq * ${CODE}.0 - ${BLADE_ANGLE_OFFSET}.0);
+    float a = radians((code - dq * ${CODE}.0 - ${BLADE_ANGLE_OFFSET}.0) * ${f(BLADE_ANGLE_STEP_DEG)});
     vec2 p0 = n * (1.0 - 2.0 * dq / ${BLADE_DEPTH_STEPS}.0);
     float c = cos(a);
     float s = sin(a);
@@ -105,12 +118,27 @@ export const BEAM_MASK_GLSL = /* glsl */ `
   }
 `
 
-/** One blade's code ([BLADE_DEPTH_STEPS] depth steps × whole degrees), 0 for a blade that is out. */
+/** A blade's angle as the packing holds it: clamped to ±[MAX_PACKED_BLADE_ANGLE_DEG], in whole steps. */
+function angleSteps(angleDeg: number): number {
+  const a = Number.isFinite(angleDeg) ? angleDeg : 0
+  return Math.round(Math.min(MAX_ANGLE_STEPS, Math.max(-MAX_ANGLE_STEPS, a / BLADE_ANGLE_STEP_DEG)))
+}
+
+/**
+ * One blade's code ([BLADE_DEPTH_STEPS] depth steps × [BLADE_ANGLE_STEP_DEG] steps), 0 for a blade
+ * that is out.
+ */
 export function packBlade(depth: number, angleDeg: number): number {
   const d = Math.round(Math.min(1, Math.max(0, Number.isFinite(depth) ? depth : 0)) * BLADE_DEPTH_STEPS)
   if (d === 0) return 0
-  const a = Math.round(Math.min(MAX_BLADE_ANGLE_DEG, Math.max(-MAX_BLADE_ANGLE_DEG, Number.isFinite(angleDeg) ? angleDeg : 0)))
-  return d * CODE + a + BLADE_ANGLE_OFFSET
+  return d * CODE + angleSteps(angleDeg) + BLADE_ANGLE_OFFSET
+}
+
+/** A code back to its blade — the decode the GLSL makes, for the twin and its test. Null for out. */
+export function unpackBlade(code: number): { depth: number; angleDeg: number } | null {
+  const dq = Math.floor(code / CODE)
+  if (dq < 0.5) return null
+  return { depth: dq / BLADE_DEPTH_STEPS, angleDeg: (code - dq * CODE - BLADE_ANGLE_OFFSET) * BLADE_ANGLE_STEP_DEG }
 }
 
 /**
@@ -133,12 +161,15 @@ export function packBlades(
 
 /**
  * A blade's edge in the beam's frame — where its middle sits and which way it faces (the side it
- * cuts). The Focus card draws its preview from this, so the picture and the pool agree.
+ * cuts). The Focus card draws its preview from this, so the picture and the pool agree: its angle is
+ * the packing's, in [BLADE_ANGLE_STEP_DEG] steps to ±[MAX_PACKED_BLADE_ANGLE_DEG]. A lantern's own
+ * blades never reach past ±30° (the card's slider, and `LanternFocus`'s validation), so only the
+ * step changes what the preview shows for one.
  */
 export function bladeLine(index: number, depth: number, angleDeg: number): { px: number; py: number; nx: number; ny: number } {
   const [bx, by] = BLADE_NORMALS[index]
   const d = Math.min(1, Math.max(0, depth))
-  const a = (Math.min(MAX_BLADE_ANGLE_DEG, Math.max(-MAX_BLADE_ANGLE_DEG, angleDeg)) * Math.PI) / 180
+  const a = (angleSteps(angleDeg) * BLADE_ANGLE_STEP_DEG * Math.PI) / 180
   const c = Math.cos(a)
   const s = Math.sin(a)
   return { px: bx * (1 - 2 * d), py: by * (1 - 2 * d), nx: c * bx - s * by, ny: s * bx + c * by }
@@ -197,10 +228,10 @@ function smoothstep(e0: number, e1: number, x: number): number {
 }
 
 function bladeCut(u: number, v: number, code: number, nx: number, ny: number, w: number): number {
-  const dq = Math.floor(code / CODE)
-  if (dq < 0.5) return 1
-  const a = ((code - dq * CODE - BLADE_ANGLE_OFFSET) * Math.PI) / 180
-  const k = 1 - (2 * dq) / BLADE_DEPTH_STEPS
+  const blade = unpackBlade(code)
+  if (!blade) return 1
+  const a = (blade.angleDeg * Math.PI) / 180
+  const k = 1 - 2 * blade.depth
   const c = Math.cos(a)
   const s = Math.sin(a)
   const rx = c * nx - s * ny

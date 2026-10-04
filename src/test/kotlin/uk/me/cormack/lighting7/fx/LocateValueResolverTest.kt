@@ -1,13 +1,21 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.Blade
+import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureType
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
+import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.GenericDimmerFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.ImgStageLineWash42LedFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
+import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
 import uk.me.cormack.lighting7.fixture.dmx.UVFixture
 import uk.me.cormack.lighting7.fixture.dmx.WhexFixture
 import java.awt.Color
@@ -212,4 +220,64 @@ class LocateValueResolverTest {
         )
         assertNull(byName["white"], "the white slider rides along with the colour fan-out")
     }
+
+    // ─── Framing shutters ────────────────────────────────────────────────────
+
+    @Test
+    fun `framing shutters are taken out and squared`() {
+        val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
+        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        for (n in 1..4) {
+            assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["frame${n}Pos"], "frame $n out")
+            assertEquals(
+                CueAssignmentResolver.PropertyValue.Slider(128u), byName["frame${n}Rot"],
+                "frame $n square: 0° on −45°…+45° is DMX 127.5, rounded up as ChamSys locates it",
+            )
+        }
+    }
+
+    @Test
+    fun `an inverted shutter is out at DMX max, and a rotation is squared through its own range`() {
+        val fixture = TestShutterHead(universe, "shutters-1", 1)
+        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), byName["inverted"], "inverted: depth 0 at DMX max")
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["plain"])
+        // −30°…+60°: 0° is a third of the way along — DMX 85 — and two thirds when inverted, DMX 170.
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(85u), byName["lopsided"])
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(170u), byName["invertedRotation"])
+        // A range that never reaches 0° parks at its nearer end.
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["offSquare"])
+    }
+}
+
+/** Framing shutters no library type has: inverted, a lopsided range, a range that misses 0°. */
+@FixtureType("test-shutter-head")
+internal class TestShutterHead(
+    universe: Universe,
+    key: String,
+    firstChannel: Int,
+    private val transaction: ControllerTransaction? = null,
+) : DmxFixture(universe, firstChannel, 5, key, key) {
+
+    override fun withTransaction(transaction: ControllerTransaction): TestShutterHead =
+        TestShutterHead(universe, key, firstChannel, transaction)
+
+    @FixtureProperty("Plain", category = PropertyCategory.SHUTTER, blade = Blade.TOP, depthMax = 0.5)
+    val plain = DmxSlider(transaction, universe, firstChannel)
+
+    @FixtureProperty("Inverted", category = PropertyCategory.SHUTTER, blade = Blade.BOTTOM, depthMax = 0.5,
+        inverted = true)
+    val inverted = DmxSlider(transaction, universe, firstChannel + 1)
+
+    @FixtureProperty("Lopsided", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.TOP,
+        degMin = -30.0, degMax = 60.0)
+    val lopsided = DmxSlider(transaction, universe, firstChannel + 2)
+
+    @FixtureProperty("Inverted rotation", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.BOTTOM,
+        degMin = -30.0, degMax = 60.0, inverted = true)
+    val invertedRotation = DmxSlider(transaction, universe, firstChannel + 3)
+
+    @FixtureProperty("Off square", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.LEFT,
+        degMin = 10.0, degMax = 40.0)
+    val offSquare = DmxSlider(transaction, universe, firstChannel + 4)
 }

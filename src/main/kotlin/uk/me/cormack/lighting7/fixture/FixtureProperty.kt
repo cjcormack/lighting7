@@ -57,6 +57,12 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     ZOOM(CompositionRule.LTP),
     IRIS(CompositionRule.LTP),
     FROST(CompositionRule.LTP),
+    // A framing shutter: SHUTTER is a blade's insertion, SHUTTER_ROTATION its angle. Each names its
+    // blade (`FixtureProperty.blade`); an insertion declares its depth at DMX max (`depthMax`), a
+    // rotation its angles at DMX min and max (`degMin`/`degMax`). Not STROBE: that is the light's
+    // shutter, an intensity modulation, and these are four blades in the gate.
+    SHUTTER(CompositionRule.LTP),
+    SHUTTER_ROTATION(CompositionRule.LTP),
     LED_MACRO(CompositionRule.LTP),
     MOVEMENT_MACRO(CompositionRule.LTP),
 
@@ -73,6 +79,22 @@ enum class PanTiltAxis {
     NONE,
     PAN,
     TILT;
+
+    fun serialized(): String? = if (this == NONE) null else name
+}
+
+/**
+ * The framing-shutter blade a [PropertyCategory.SHUTTER] or [PropertyCategory.SHUTTER_ROTATION]
+ * slider drives, named for the edge of the light it cuts — the lantern focus's wire order (top,
+ * bottom, left, right), so a DMX head's blades and a lantern's are drawn by one shader path.
+ * [NONE] is the annotation's sentinel for "no blade", as [PanTiltAxis.NONE] is for "no axis".
+ */
+enum class Blade {
+    NONE,
+    TOP,
+    BOTTOM,
+    LEFT,
+    RIGHT;
 
     fun serialized(): String? = if (this == NONE) null else name
 }
@@ -134,6 +156,13 @@ enum class CompactDisplayRole {
  *               revolutions per minute at DMX max in a rotate band. Defaults [Double.NaN].
  * @param indexDegMax On the same slider, the angle in degrees at DMX max in the index band (DMX min
  *                    is 0°). Defaults [Double.NaN].
+ * @param blade On a SHUTTER or SHUTTER_ROTATION slider, the blade it drives. [Blade.NONE] — the
+ *              default — on every other property. On a SHUTTER_ROTATION slider [degMin]/[degMax]
+ *              are the blade's angle at DMX min and max (and [inverted] reverses them), turning it
+ *              about the middle of its own edge.
+ * @param depthMax On a SHUTTER slider, the blade's depth at DMX max (DMX min when [inverted]) in
+ *                 the lantern focus's unit — a fraction of the field's diameter, so 0.5 reaches the
+ *                 centre; DMX min is out. Defaults [Double.NaN].
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -152,6 +181,8 @@ annotation class FixtureProperty(
     val fineOf: String = "",
     val rpmMax: Double = Double.NaN,
     val indexDegMax: Double = Double.NaN,
+    val blade: Blade = Blade.NONE,
+    val depthMax: Double = Double.NaN,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

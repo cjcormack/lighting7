@@ -225,6 +225,16 @@ In or out only; neither ChamSys nor the manual gives bands.
 - Ch 16 → a `GOBO` setting (open, slots 1–3); ch 17 → a `GOBO_ROTATION_MODE`
   setting (`INDEX`, `ROTATE_FWD`, `ROTATE_REV`, `RESERVED`); ch 18/19 → a
   `GOBO_ROTATION` slider and its `fineOf` low byte.
-- Ch 24–31 → plain sliders (the fixture optics plan's session 2 models them).
+- Ch 24–31 → the framing shutters (fixture optics plan session 2): each frame's
+  position a `SHUTTER` slider and its rotation a `SHUTTER_ROTATION` slider, both
+  naming the blade — frame 1 `TOP`, 2 `BOTTOM`, 3 `LEFT`, 4 `RIGHT` — with
+  `depthMax = 0.5` (full reaches the centre of the field) and rotation
+  `degMin = -45.0, degMax = 45.0` (square at 128, where ChamSys locates it).
+  **Estimate:** the manual states only four blades rotating ±45° (p17 [13]).
+  Which side each frame cuts (the Stage view names them as a hung head tilted
+  out to the stage shows them), how far a blade reaches at full, that depth is
+  linear in DMX, and which way a positive rotation turns are all assumed, and
+  checked by `FU-MANUAL-S4REV-OPTICS`. Locate takes each blade out (000) and
+  squares it (128).
 - Ch 12 (Reset) is not exposed: it is a command, not a value, and a reset held
   in a Look would fire on playback. Ch 20–23 are not exposed: reserved.

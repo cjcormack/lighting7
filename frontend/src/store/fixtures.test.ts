@@ -8,10 +8,12 @@ import {
   findFineProperty,
   findGoboRotationModeProperty,
   findGoboRotationProperty,
+  findShutterProperties,
   findZoomProperty,
   type PropertyDescriptor,
   type SliderPropertyDescriptor,
 } from './fixtures'
+import { revolutionShutterProps } from '@/test/fixtureFactories'
 
 function slider(over: Partial<SliderPropertyDescriptor>): SliderPropertyDescriptor {
   return {
@@ -63,5 +65,31 @@ describe('fineOf', () => {
     }
     expect(findGoboRotationModeProperty([ROT, mode])).toBe(mode)
     expect(findGoboRotationModeProperty([ROT])).toBeUndefined()
+  })
+})
+
+describe('findShutterProperties', () => {
+  it("files each frame under its blade, in the wire's order, whatever the descriptor order", () => {
+    const props = revolutionShutterProps()
+    const byName = new Map(props.map((p) => [p.name, p]))
+    // Reversed, as reflection order guarantees nothing.
+    const found = findShutterProperties([...props].reverse())
+    expect(found?.depth).toEqual(['frame1Pos', 'frame2Pos', 'frame3Pos', 'frame4Pos'].map((n) => byName.get(n)))
+    expect(found?.rotation).toEqual(['frame1Rot', 'frame2Rot', 'frame3Rot', 'frame4Rot'].map((n) => byName.get(n)))
+  })
+
+  it('finds nothing on a fixture that drives no blade, or one whose blades declare no scale', () => {
+    expect(findShutterProperties(undefined)).toBeUndefined()
+    expect(findShutterProperties([slider({ category: 'zoom', degMin: 35, degMax: 15 })])).toBeUndefined()
+    expect(findShutterProperties([slider({ category: 'shutter', blade: 'TOP' })])).toBeUndefined()
+    expect(findShutterProperties([slider({ category: 'shutter_rotation', blade: 'TOP', degMin: -45 })])).toBeUndefined()
+    expect(findShutterProperties([slider({ category: 'shutter', depthMax: 0.5 })])).toBeUndefined()
+  })
+
+  it('keeps a blade with only one of its channels', () => {
+    const left = slider({ name: 'leftIn', category: 'shutter', blade: 'LEFT', depthMax: 0.5 })
+    const found = findShutterProperties([left])
+    expect(found?.depth).toEqual([undefined, undefined, left, undefined])
+    expect(found?.rotation).toEqual([undefined, undefined, undefined, undefined])
   })
 })

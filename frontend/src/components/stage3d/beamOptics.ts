@@ -1,6 +1,7 @@
 import type {
   SettingOption,
   SettingPropertyDescriptor,
+  ShutterProperties,
   SliderPropertyDescriptor,
 } from '../../store/fixtures'
 import { dmxToDegrees } from '../../lib/axisDegrees'
@@ -274,6 +275,57 @@ export function resolveGoboRotation(
  */
 export function resolveZoomDeg(prop: SliderPropertyDescriptor | undefined, level: number): number | null {
   return prop ? dmxToDegrees(level, prop) : null
+}
+
+/**
+ * A SHUTTER slider's blade depth, as the lantern focus measures one: a fraction of the field's
+ * diameter, 0 out and 0.5 reaching the centre. Linear from DMX min (out) to `depthMax` at DMX max,
+ * reversed when `inverted`. 0 where the slider declares no `depthMax`.
+ */
+export function resolveBladeDepth(prop: SliderPropertyDescriptor | undefined, level: number): number {
+  if (!prop || prop.depthMax == null) return 0
+  const span = prop.max - prop.min
+  if (span <= 0) return 0
+  const t = Math.max(0, Math.min(1, (level - prop.min) / span))
+  return (prop.inverted ? 1 - t : t) * prop.depthMax
+}
+
+/**
+ * A SHUTTER_ROTATION slider's blade angle in degrees over its declared `degMin` / `degMax`,
+ * honouring `inverted` — the same mapping a zoom's or a pan's angle takes. 0 (square) where it
+ * declares none.
+ */
+export function resolveBladeAngleDeg(prop: SliderPropertyDescriptor | undefined, level: number): number {
+  return prop ? dmxToDegrees(level, prop) ?? 0 : 0
+}
+
+/** One blade as `packBlades` takes it; the director keeps four in scratch. */
+export interface BladeState {
+  depth: number
+  angleDeg: number
+}
+
+export function makeBladeStates(): BladeState[] {
+  return [0, 1, 2, 3].map(() => ({ depth: 0, angleDeg: 0 }))
+}
+
+/**
+ * A DMX head's four blades from its framing-shutter channels, written into [out] (allocation-free:
+ * the director calls it every frame). [depthLevels] and [rotationLevels] are the raw DMX of each
+ * blade's insertion and rotation in the wire's order, read by the caller; a blade with no insertion
+ * channel is out, and one with no rotation channel square.
+ */
+export function resolveDmxBlades(
+  shutters: ShutterProperties,
+  depthLevels: ArrayLike<number>,
+  rotationLevels: ArrayLike<number>,
+  out: BladeState[],
+): BladeState[] {
+  for (let i = 0; i < 4; i++) {
+    out[i].depth = resolveBladeDepth(shutters.depth[i], depthLevels[i])
+    out[i].angleDeg = resolveBladeAngleDeg(shutters.rotation[i], rotationLevels[i])
+  }
+  return out
 }
 
 /**

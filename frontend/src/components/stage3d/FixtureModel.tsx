@@ -40,6 +40,8 @@ import {
   findPrismRotationProperty,
   findLedMacroProperty,
   findMovementMacroProperty,
+  findShutterProperties,
+  type ShutterProperties,
 } from '../../store/fixtures'
 import {
   channelKey,
@@ -68,8 +70,10 @@ import {
   evalLedMacro,
   evalMovementMacro,
   makeBeamGeom,
+  makeBladeStates,
   makeGoboRotation,
   resolveDeclaredFocusDistance,
+  resolveDmxBlades,
   resolveEdgeHardness,
   resolveFocusDistance,
   resolveFocusParam,
@@ -81,6 +85,7 @@ import {
   resolvePrismSpin,
   resolveZoomDeg,
   type BeamGeom,
+  type BladeState,
   type ByteDescriptor,
   type MacroColour,
   type MacroMovement,
@@ -536,6 +541,7 @@ export function FixtureModel({
     [fixture?.properties],
   )
 
+  const shutterProps = useMemo(() => findShutterProperties(fixture?.properties), [fixture?.properties])
   const panProp = useMemo(() => findPanProperty(fixture?.properties), [fixture?.properties])
   const tiltProp = useMemo(() => findTiltProperty(fixture?.properties), [fixture?.properties])
   const panFineProp = useMemo(() => findPanFineProperty(fixture?.properties), [fixture?.properties])
@@ -680,6 +686,7 @@ export function FixtureModel({
     prismRotProp,
     ledMacroProp,
     moveMacroProp,
+    shutterProps,
     groupRef,
     yokeRef,
     headRef,
@@ -879,6 +886,8 @@ interface BeamDirectorOpts {
   prismRotProp: ByteDescriptor | undefined
   ledMacroProp: ByteDescriptor | undefined
   moveMacroProp: ByteDescriptor | undefined
+  /** The framing shutters a DMX head drives from its channels; replaces a lantern's blades. */
+  shutterProps: ShutterProperties | undefined
   groupRef: React.RefObject<Group | null>
   yokeRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
@@ -912,6 +921,94 @@ function combineFine(
 ): number {
   if (!coarseProp) return 0
   return fineProp ? coarseRaw + fineRaw / FINE_STEPS : coarseRaw
+}
+
+/** No blades: what a body of several cells draws. */
+const NO_BLADES: readonly [number, number] = [0, 0]
+
+/**
+ * The lantern focus's blades a beam draws: a single-cell body's — unless the fixture drives its own
+ * blades from DMX, when its channels' are the beam's and a lantern's are never mixed in
+ * (fixture-optics plan D5). The library never patches a lantern on a type with framing shutters
+ * (`ShutterBladesTest`); this is what keeps a stored focus from drawing over one if it did.
+ */
+export function lanternBladesFor(
+  spec: Pick<BodySpec, 'cells' | 'blades'>,
+  shutters: ShutterProperties | undefined,
+): BodySpec['blades'] {
+  return spec.cells.length === 1 && !shutters ? spec.blades : null
+}
+
+/** A director's scratch for its DMX blades: the raw levels, the blades, and their packed pair. */
+export interface BladeScratch {
+  depthLevels: number[]
+  rotationLevels: number[]
+  blades: BladeState[]
+  /** The blades in the frame's slots once a mover's half-turn is applied. */
+  framed: BladeState[]
+  packed: [number, number]
+}
+
+export function makeBladeScratch(): BladeScratch {
+  return {
+    depthLevels: [0, 0, 0, 0],
+    rotationLevels: [0, 0, 0, 0],
+    blades: makeBladeStates(),
+    framed: [],
+    packed: [0, 0],
+  }
+}
+
+/**
+ * A mover's DMX blades sit in the frame's opposite slots — top in the bottom's, left in the right's:
+ * the frame turned a half-turn about the beam, which keeps each blade's angle (a rotation, not a
+ * mirror). The beam frame's `v` is the head's own −Z, which points *away* from a mover's base when
+ * it tilts out positive — up for a standing head, down for a hung one. A profile mover hangs (the
+ * Source Four Revolutions on the hall's balcony do, and aim tilts them out positive to reach the
+ * stage), so its blades are named as a hung head tilted out shows them: the top blade is the side
+ * toward its base. The frame stays the head's, so a head that turns over to reach a point turns its
+ * cut over with it, as the metal does. Estimate (fixture-optics plan D15): which side of the head
+ * each frame sits on is `FU-MANUAL-S4REV-OPTICS` step 4's to settle.
+ */
+const MOVER_BLADE_SLOTS = [1, 0, 3, 2] as const
+
+interface ShutterKeys {
+  depth: Array<string | null>
+  rotation: Array<string | null>
+}
+
+function shutterChannelKeys(shutters: ShutterProperties): ShutterKeys {
+  return {
+    depth: shutters.depth.map((p) => (p ? channelKey(p.channel) : null)),
+    rotation: shutters.rotation.map((p) => (p ? channelKey(p.channel) : null)),
+  }
+}
+
+/** Each blade channel's raw DMX into [scratch], allocation-free. */
+function readShutterLevels(source: ChannelSource, keys: ShutterKeys, scratch: BladeScratch): BladeScratch {
+  for (let i = 0; i < 4; i++) {
+    scratch.depthLevels[i] = readChannel(source, keys.depth[i])
+    scratch.rotationLevels[i] = readChannel(source, keys.rotation[i])
+  }
+  return scratch
+}
+
+/**
+ * The packed blades a beam draws this frame: a DMX head's, from its channels' levels in [scratch],
+ * where it has framing shutters — else [lanternPacked], the lantern's packed once per spec. One or
+ * the other, never both. A [mover]'s are framed as a hung head shows them ([MOVER_BLADE_SLOTS]).
+ */
+export function beamBlades(
+  lanternPacked: readonly [number, number],
+  shutters: ShutterProperties | undefined,
+  scratch: BladeScratch,
+  mover = false,
+): readonly [number, number] {
+  if (!shutters) return lanternPacked
+  const blades = resolveDmxBlades(shutters, scratch.depthLevels, scratch.rotationLevels, scratch.blades)
+  if (!mover) return packBlades(blades, scratch.packed)
+  for (let i = 0; i < 4; i++) scratch.framed[i] = blades[MOVER_BLADE_SLOTS[i]]
+  return packBlades(scratch.framed, scratch.packed)
 }
 
 const SCRATCH_BEAM: BeamWrite = {
@@ -991,6 +1088,7 @@ function useBeamDirector({
   prismRotProp,
   ledMacroProp,
   moveMacroProp,
+  shutterProps,
   groupRef,
   yokeRef,
   headRef,
@@ -1068,9 +1166,13 @@ function useBeamDirector({
     () => (spec.cells.length > 1 ? lightRuns(spec.cells.length, MAX_LIGHTS_PER_FIXTURE) : []),
     [spec],
   )
-  // The lantern's blades, packed once per spec (`beamMask.ts`): the director writes the two floats
-  // into the beam and its light each frame, and the GPU unpacks them.
-  const blades = useMemo(() => packBlades(spec.cells.length === 1 ? spec.blades : null), [spec])
+  // The blades, packed (`beamMask.ts`): the director writes the two floats into the beam and its
+  // light each frame, and the GPU unpacks them. A lantern's are packed once per spec; a DMX head's
+  // are read off its channels and packed every frame, into this director's own scratch — and a
+  // fixture with DMX blades never draws a lantern's (fixture-optics plan D5).
+  const lanternBlades = useMemo(() => packBlades(lanternBladesFor(spec, shutterProps)), [spec, shutterProps])
+  const shutterKeys = useMemo(() => (shutterProps ? shutterChannelKeys(shutterProps) : null), [shutterProps])
+  const [bladeScratch] = useState(makeBladeScratch)
   // The frame's turn about the beam — the gate's, and a PAR lamp's — in radians.
   const frameTurnRad = MathUtils.degToRad(spec.cells.length === 1 ? spec.frameTurnDeg : 0)
 
@@ -1100,6 +1202,7 @@ function useBeamDirector({
         prismRotProp,
         ledMacroProp,
         moveMacroProp,
+        ...(shutterProps ? [...shutterProps.depth, ...shutterProps.rotation] : []),
       ].flatMap((p) => (p ? [p.channel] : [])),
     [
       panProp,
@@ -1119,6 +1222,7 @@ function useBeamDirector({
       prismRotProp,
       ledMacroProp,
       moveMacroProp,
+      shutterProps,
     ],
   )
   useEffect(() => {
@@ -1358,12 +1462,23 @@ function useBeamDirector({
     const lobes = Math.min(multi ? cellCount : prismFacets > 0 ? prismFacets : 1, emitters.lobesFor(slot))
     const splay = MathUtils.degToRad(beamDeg / 2) * PRISM_SPLAY
 
+    const blades = multi
+      ? NO_BLADES
+      : shutterProps && shutterKeys
+        ? beamBlades(
+            lanternBlades,
+            shutterProps,
+            readShutterLevels(channelSource, shutterKeys, bladeScratch),
+            spec.archetype === 'mover',
+          )
+        : lanternBlades
+
     const beam = SCRATCH_BEAM
     beam.cosHalf = geom.cosHalfBeam
     beam.edge = edge
     beam.iris = iris
-    beam.bladesA = multi ? 0 : blades[0]
-    beam.bladesB = multi ? 0 : blades[1]
+    beam.bladesA = blades[0]
+    beam.bladesB = blades[1]
     beam.goboSlot = goboSlot
     beam.goboAngle = goboAngleRef.current
 

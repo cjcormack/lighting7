@@ -297,8 +297,11 @@ pool and haze share `beamMask.ts`; every beam is raymarched now. A `LEDGE` or `F
 its units (`bodies/mount.ts`, pinned to the desk's `STANDING_RIGGING_KINDS`), but a mover's
 orientation is still its `basePitchDeg`. **A conventional's focus is drawn**: shutters, the gate's
 turn, the iris and a PAR's oval are arguments to `beamMask` in the head's frame, **packed into the
-light table's six texels** (the blades 12 bits each, two to a float; a gate or lamp turn rotates the
-frame rather than the mask; an oval is a negative aspect) — the GLSL and its twin change together.
+light table's six texels** (the blades 12 bits each, two to a float, the angle ±45° in 1.5° steps; a
+gate or lamp turn rotates the frame rather than the mask; an oval is a negative aspect) — the GLSL
+and its twin change together. A DMX head's **framing shutters** (SHUTTER / SHUTTER_ROTATION sliders
+naming their blade) are read every frame and packed the same way, in place of a lantern's — never
+both (fixture-optics session 2).
 The Stage view's **Focus** tab and the patch editor's **Lantern** box mount one `FocusCard`, and a
 pair's lanterns are focused separately. See the stage-vis doc's §"Fixture bodies".
 

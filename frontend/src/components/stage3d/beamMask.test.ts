@@ -3,6 +3,7 @@ import {
   BEAM_HARDNESS_GLSL,
   BEAM_MASK_GLSL,
   BLADE_ANGLE_OFFSET,
+  BLADE_ANGLE_STEP_DEG,
   BLADE_DEPTH_STEPS,
   beamHardness,
   beamMask,
@@ -11,8 +12,10 @@ import {
   MASK_EDGE_HARD,
   MASK_EDGE_SOFT,
   MASK_SOFT_CENTRE,
+  MAX_PACKED_BLADE_ANGLE_DEG,
   packBlade,
   packBlades,
+  unpackBlade,
 } from './beamMask'
 import { resolveEdgeHardness } from './beamOptics'
 import type { SliderPropertyDescriptor } from '../../store/fixtures'
@@ -59,6 +62,7 @@ describe('the beam mask', () => {
     expect(BEAM_MASK_GLSL).toContain(MASK_SOFT_CENTRE.toFixed(4))
     expect(BEAM_MASK_GLSL).toContain(`${BLADE_DEPTH_STEPS}.0`)
     expect(BEAM_MASK_GLSL).toContain(`${BLADE_ANGLE_OFFSET}.0`)
+    expect(BEAM_MASK_GLSL).toContain(`* ${BLADE_ANGLE_STEP_DEG.toFixed(4)}`)
     expect(BEAM_MASK_GLSL).toContain('float beamMask(vec2 uv, float aspect, float iris, float soft, vec2 blades)')
   })
 
@@ -118,15 +122,85 @@ describe('the blades', () => {
     const left = beamMask(0.6, 0.5, 0, 1, 0, a, b)
     const right = beamMask(-0.6, 0.5, 0, 1, 0, a, b)
     expect(Math.abs(left - right)).toBeGreaterThan(0.9)
-    // The preview's line is the same line (at a depth the packing holds exactly: 21 of 63 steps).
-    const exact = 21 / 63
+    // The preview's line is the same line (at a depth the packing holds exactly: 21 steps).
+    const exact = 21 / BLADE_DEPTH_STEPS
     const [ea, eb] = packBlades(blades([exact, 20], [0, 0], [0, 0], [0, 0]))
     const line = bladeLine(0, exact, 20)
     expect(line.px).toBeCloseTo(0, 9)
-    expect(line.py).toBeCloseTo(1 / 3, 9)
+    expect(line.py).toBeCloseTo(1 - 2 * exact, 9)
     const onLine = beamMask(line.px - line.ny * 0.5, line.py + line.nx * 0.5, 0, 1, 0, ea, eb)
     expect(onLine).toBeGreaterThan(0.1)
     expect(onLine).toBeLessThan(0.9)
+  })
+
+  it('pack the angle in 1.5° steps to ±45°, exactly in a float32, at every step', () => {
+    expect(BLADE_ANGLE_STEP_DEG).toBe(1.5)
+    expect(MAX_PACKED_BLADE_ANGLE_DEG).toBe(45)
+    const steps = MAX_PACKED_BLADE_ANGLE_DEG / BLADE_ANGLE_STEP_DEG
+    // 61 values in six bits, offset clear of 0 and 63.
+    expect(steps * 2 + 1).toBe(61)
+    expect(BLADE_ANGLE_OFFSET - steps).toBeGreaterThan(0)
+    expect(BLADE_ANGLE_OFFSET + steps).toBeLessThan(64)
+    for (let k = -steps; k <= steps; k++) {
+      const angle = k * BLADE_ANGLE_STEP_DEG
+      for (const depth of [1 / BLADE_DEPTH_STEPS, 0.5, 1]) {
+        const [a, b] = packBlades(blades([depth, angle], [depth, 0 - angle], [depth, angle], [depth, 0 - angle]))
+        expect(Math.max(a, b)).toBeLessThan(2 ** 24)
+        expect(Math.fround(a)).toBe(a)
+        expect(Math.fround(b)).toBe(b)
+        // The decode the GLSL makes gives back the exact angle, on both halves of both floats.
+        const top = Math.floor(a / 4096)
+        const left = Math.floor(b / 4096)
+        expect(unpackBlade(top)?.angleDeg).toBe(angle)
+        expect(unpackBlade(a - top * 4096)?.angleDeg).toBe(0 - angle)
+        expect(unpackBlade(left)?.angleDeg).toBe(angle)
+        expect(unpackBlade(b - left * 4096)?.angleDeg).toBe(0 - angle)
+        expect(unpackBlade(top)?.depth).toBeCloseTo(depth, 1)
+      }
+    }
+  })
+
+  it('round an angle to the nearest step and clamp it to ±45°', () => {
+    // A lantern's whole degrees land on the nearest step; its ±30° is a step exactly.
+    expect(unpackBlade(packBlade(1, 1))?.angleDeg).toBe(1.5)
+    expect(unpackBlade(packBlade(1, 30))?.angleDeg).toBe(30)
+    expect(unpackBlade(packBlade(1, -30))?.angleDeg).toBe(-30)
+    expect(unpackBlade(packBlade(1, 60))?.angleDeg).toBe(45)
+    expect(unpackBlade(packBlade(1, -90))?.angleDeg).toBe(-45)
+    expect(unpackBlade(packBlade(1, Number.NaN))?.angleDeg).toBe(0)
+    expect(unpackBlade(packBlade(0, 30))).toBeNull()
+  })
+
+  it('turn about the middle of their own edge at the full ±45°', () => {
+    const exact = 21 / BLADE_DEPTH_STEPS
+    for (const angle of [45, -45]) {
+      const [a, b] = packBlades(blades([exact, angle], [0, 0], [0, 0], [0, 0]))
+      const line = bladeLine(0, exact, angle)
+      // The middle of the edge has not moved: on the axis, a third of the way in from the top.
+      expect(line.px).toBeCloseTo(0, 9)
+      expect(line.py).toBeCloseTo(1 - 2 * exact, 9)
+      // Along the turned edge, both ways from its middle, the mask is on the edge…
+      const tx = -line.ny
+      const ty = line.nx
+      for (const t of [-0.3, 0, 0.3]) {
+        const m = beamMask(line.px + tx * t, line.py + ty * t, 0, 1, 0, a, b)
+        expect(m).toBeGreaterThan(0.1)
+        expect(m).toBeLessThan(0.9)
+      }
+      // …past it the light is cut, and short of it lit.
+      expect(beamMask(line.px + line.nx * 0.1, line.py + line.ny * 0.1, 0, 1, 0, a, b)).toBe(0)
+      expect(beamMask(line.px - line.nx * 0.1, line.py - line.ny * 0.1, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
+      // And the edge is turned 45° from square: its normal is half up, half across.
+      expect(Math.abs(line.nx)).toBeCloseTo(Math.SQRT1_2, 9)
+    }
+  })
+
+  it('turn clockwise for a positive angle, as seen from behind the lantern', () => {
+    // The viewer's left is +u. A positive turn brings the top blade down on the viewer's right
+    // (−u) and lifts it on their left — clockwise to someone behind the lantern.
+    const [a, b] = packBlades(blades([0.25, 20], [0, 0], [0, 0], [0, 0]))
+    expect(beamMask(-0.6, 0.4, 0, 1, 0, a, b)).toBe(0)
+    expect(beamMask(0.6, 0.4, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
   })
 
   it('close the beam at full depth', () => {
