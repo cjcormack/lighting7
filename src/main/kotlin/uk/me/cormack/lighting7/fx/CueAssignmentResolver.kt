@@ -173,7 +173,10 @@ class CueAssignmentResolver {
          *   a colour, as before.
          * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
          * - Every other category (intensity-like and axis sliders): `"0".."255"` →
-         *   [PropertyValue.Slider].
+         *   [PropertyValue.Slider] — **unless [settingBacked]**: a slider-category property backed
+         *   by a slot channel (the Robe ColorSpot 575's stepped zoom, fixture-optics plan D2) is a
+         *   [PropertyValue.Setting], because the cue layer picks its output target from the value's
+         *   type and a slider target finds no slider on a setting, silently writing nothing.
          *
          * Returns `null` if the string doesn't parse for the given category — the caller should
          * log at warn and skip the assignment, never throw.
@@ -210,9 +213,10 @@ class CueAssignmentResolver {
                 PropertyCategory.PRISM, PropertyCategory.PRISM_ROTATION,
                 PropertyCategory.LED_MACRO, PropertyCategory.MOVEMENT_MACRO ->
                     trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
-                // Continuous positions: FOCUS, ZOOM, IRIS, FROST, PAN/TILT, DIMMER…
+                // Continuous positions: FOCUS, ZOOM, IRIS, FROST, PAN/TILT, DIMMER… — a slot level
+                // where the property is backed by a setting (a stepped zoom).
                 else ->
-                    trimmed.toUByteParam()?.let { PropertyValue.Slider(it) }
+                    trimmed.toUByteParam()?.let { if (settingBacked) PropertyValue.Setting(it) else PropertyValue.Slider(it) }
             }
         }
     }

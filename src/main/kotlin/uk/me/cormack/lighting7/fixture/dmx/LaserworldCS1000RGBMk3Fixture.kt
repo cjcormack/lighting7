@@ -70,6 +70,10 @@ class LaserworldCS1000RGBMk3Fixture(
         WHITE(175u, "#FFFFFF"),
         AUTO_COLOUR_CHANGE(200u, null),
         MULTI_COLOUR_STEP(225u, null),
+        ;
+
+        /** The pattern's own colours (ORIGINAL), an auto change and a multi-colour step have none. */
+        override val noColour: Boolean get() = colourPreview == null
     }
 
     @FixtureProperty(category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)

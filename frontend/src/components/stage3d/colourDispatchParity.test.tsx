@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import { Color } from 'three'
 import { ColourSync } from './FixtureModel'
 import {
@@ -20,6 +20,8 @@ import { findGel, indexGels, type Gel } from '../../lib/gels'
 import { colourFilters, fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
 import gelsJson from '../../../../src/main/resources/gels.json'
 import { chan, colourProp, makeFixture, settingProp, sliderProp } from '../../test/fixtureFactories'
+import { BAND_STEP_S, ColourBandClockContext, type ColourBandClock } from '../../lib/colourBands'
+import { createColourTicker, type ColourTicker } from './colourTicker'
 
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
@@ -55,6 +57,18 @@ interface Resolved {
   intensity: number
 }
 
+/**
+ * Both surfaces at one time, so an animated band compares: the 2D clock and the 3D ticker are each
+ * handed [timeS] — the decode itself reads no clock (`lib/colourBands.ts`).
+ */
+function clockAt(timeS: number): ColourBandClock {
+  return { now: () => timeS, subscribe: () => () => {} }
+}
+
+function tickerAt(timeS: number): ColourTicker {
+  return { now: () => timeS, onFrame: () => () => {} }
+}
+
 function sourceOf(values: Record<string, number>): ChannelSource {
   const map = new Map(Object.entries(values))
   return {
@@ -69,27 +83,29 @@ function hex(css: string): string {
   return `#${new Color(css).getHexString()}`
 }
 
-function resolve2D(scenario: Scenario): Resolved {
+function resolve2D(scenario: Scenario, timeS = 0): Resolved {
   let captured: FixtureAppearance | undefined
   render(
-    <ChannelSourceProvider source={sourceOf(scenario.values)}>
-      <FixtureAppearanceSource
-        patch={scenario.patch}
-        fixture={scenario.fixture}
-        fixtureType={scenario.fixtureType}
-      >
-        {(appearance) => {
-          captured = appearance
-          return null
-        }}
-      </FixtureAppearanceSource>
-    </ChannelSourceProvider>,
+    <ColourBandClockContext.Provider value={clockAt(timeS)}>
+      <ChannelSourceProvider source={sourceOf(scenario.values)}>
+        <FixtureAppearanceSource
+          patch={scenario.patch}
+          fixture={scenario.fixture}
+          fixtureType={scenario.fixtureType}
+        >
+          {(appearance) => {
+            captured = appearance
+            return null
+          }}
+        </FixtureAppearanceSource>
+      </ChannelSourceProvider>
+    </ColourBandClockContext.Provider>,
   )
   if (!captured) throw new Error('render prop never ran')
   return { colour: hex(captured.color), intensity: captured.intensity }
 }
 
-function resolve3D(scenario: Scenario): Resolved {
+function resolve3D(scenario: Scenario, timeS = 0): Resolved {
   // The derivation FixtureModel performs before handing ColourSync its props. Duplicated here
   // rather than exported, because the seam under test is the *dispatch*, not the lookups.
   const { patch, fixture, fixtureType } = scenario
@@ -110,6 +126,7 @@ function resolve3D(scenario: Scenario): Resolved {
         dimmerProp={findDimmerProperty(properties)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
+        ticker={tickerAt(timeS)}
       />
     </ChannelSourceProvider>,
   )
@@ -161,18 +178,19 @@ const REVOLUTION = makeFixture('rev-1', [DIMMER, MEDIA_FRAME, SCROLLER, MODULE_W
 const R26: FittedMedia = { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' } } } }
 
 // The Robe ColorSpot 575's two colour wheels (fixture-optics plan session 4): the second's dichroics
-// sit in series with the first's, so its slot multiplies the beam. A scroll band carries no colour.
+// sit in series with the first's, so its slot multiplies the beam. A scroll band carries no single
+// colour, and animates through its own wheel's (fixture-optics plan D8).
 const ROBE_WHEEL_1 = settingProp('colour1', 'colour', chan(9), [
   { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#FFFFFF' },
   { name: 'LIGHT_BLUE', level: 133, displayName: 'Light blue', colourPreview: '#ADD8E6' },
   { name: 'YELLOW', level: 160, displayName: 'Yellow', colourPreview: '#FFFF00' },
-  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW' },
+  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW', noColour: true },
 ])
 const ROBE_WHEEL_2 = settingProp('colour2', 'colour', chan(10), [
   { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#FFFFFF' },
   { name: 'DEEP_RED', level: 133, displayName: 'Deep red', colourPreview: '#8B0000' },
   { name: 'CYAN', level: 155, displayName: 'Cyan', colourPreview: '#00FFFF' },
-  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW' },
+  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW', noColour: true },
 ])
 const ROBE = makeFixture('robe-1', [DIMMER, ROBE_WHEEL_1, ROBE_WHEEL_2])
 
@@ -271,8 +289,12 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
     scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 0, '0:10': 133 } }),
   },
   {
-    name: 'a two-wheel head with wheel 2 on a scroll band, which carries no colour',
+    name: 'a two-wheel head with wheel 2 on a scroll band',
     scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 133, '0:10': 200 } }),
+  },
+  {
+    name: 'a two-wheel head with wheel 1 on a scroll band',
+    scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 200, '0:10': 0 } }),
   },
   {
     name: 'an RGB head whose colour preset setting is not glass in the beam',
@@ -296,6 +318,160 @@ describe('2D and 3D colour dispatch parity', () => {
     const threeD = resolve3D(s)
     expect(threeD.colour).toBe(twoD.colour)
     expect(threeD.intensity).toBeCloseTo(twoD.intensity, 10)
+  })
+
+  // An animated band at a given time: a scroll on a single wheel, and a scroll on the Robe's second
+  // wheel filtering the first — mid-hold and mid-move.
+  const TIMES = [0, BAND_STEP_S * 1.2, BAND_STEP_S * 1.85, BAND_STEP_S * 6.5]
+  it.each(
+    TIMES.flatMap((t) => [
+      { name: `a single wheel scrolling, at ${t.toFixed(2)} s`, t, values: { '0:1': 255, '0:9': 200, '0:10': 0 } },
+      { name: `the second wheel scrolling over yellow, at ${t.toFixed(2)} s`, t, values: { '0:1': 255, '0:9': 160, '0:10': 200 } },
+    ]),
+  )('resolves $name identically on both surfaces', ({ t, values }) => {
+    const s = scenario({ fixture: ROBE, values })
+    expect(resolve3D(s, t).colour).toBe(resolve2D(s, t).colour)
+    expect(resolve3D(s, t).intensity).toBeCloseTo(resolve2D(s, t).intensity, 10)
+  })
+})
+
+describe('animated colour bands (fixture-optics plan D8)', () => {
+  const at = (values: Record<string, number>, t: number) => {
+    const s = scenario({ fixture: ROBE, values })
+    return [resolve2D(s, t).colour, resolve3D(s, t).colour]
+  }
+
+  it("cycles a scrolling wheel through its own colours over time, on both dispatches, never black", () => {
+    const seen = new Set<string>()
+    for (let step = 0; step < 3; step++) {
+      const [twoD, threeD] = at({ '0:1': 255, '0:9': 200 }, BAND_STEP_S * (step + 0.1))
+      expect(threeD).toBe(twoD)
+      expect(twoD).not.toBe('#000000')
+      seen.add(twoD)
+    }
+    // Open, light blue, yellow — the wheel's own previews in level order.
+    expect([...seen]).toEqual(['#ffffff', '#add8e6', '#ffff00'])
+  })
+
+  it('cycles the second wheel as a filter: the first wheel passes through its colours in turn', () => {
+    // Yellow on wheel 1; wheel 2 scrolling open → deep red → cyan.
+    expect(at({ '0:1': 255, '0:9': 160, '0:10': 200 }, BAND_STEP_S * 0.1)).toEqual(['#ffff00', '#ffff00'])
+    expect(at({ '0:1': 255, '0:9': 160, '0:10': 200 }, BAND_STEP_S * 1.1)).toEqual(['#8b0000', '#8b0000'])
+    expect(at({ '0:1': 255, '0:9': 160, '0:10': 200 }, BAND_STEP_S * 2.1)).toEqual(['#00ff00', '#00ff00'])
+  })
+})
+
+describe('the Varytec Easymove XL 60 (fixture-optics plan D8)', () => {
+  // Its wheel as the desk sends it since session 5: a preview on every position, the rainbow bands
+  // marked as having no single colour. It used to carry no previews, and its beam drew black.
+  const VARYTEC_WHEEL = settingProp('colourWheel', 'colour', chan(11), [
+    { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#FFFFFF' },
+    { name: 'COLOR_1', level: 20, displayName: 'Color 1', colourPreview: '#FF0000' },
+    { name: 'COLOR_2', level: 40, displayName: 'Color 2', colourPreview: '#00FF00' },
+    { name: 'COLOR_3', level: 60, displayName: 'Color 3', colourPreview: '#0000FF' },
+    { name: 'COLOR_4', level: 80, displayName: 'Color 4', colourPreview: '#FFFF00' },
+    { name: 'COLOR_5', level: 95, displayName: 'Color 5', colourPreview: '#FF00FF' },
+    { name: 'COLOR_6', level: 110, displayName: 'Color 6', colourPreview: '#00FFFF' },
+    { name: 'COLOR_7', level: 123, displayName: 'Color 7', colourPreview: '#FFA500' },
+    { name: 'RAINBOW_FORWARD', level: 160, displayName: 'Rainbow forward', noColour: true },
+    { name: 'RAINBOW_REVERSE', level: 225, displayName: 'Rainbow reverse', noColour: true },
+  ])
+  const VARYTEC = makeFixture('vary-1', [DIMMER, VARYTEC_WHEEL])
+
+  it('draws a colour at every DMX value, lit, on both dispatches — never black', () => {
+    for (let level = 0; level <= 255; level += 5) {
+      for (const t of [0, 2.5]) {
+        const s = scenario({ fixture: VARYTEC, values: { '0:1': 255, '0:11': level } })
+        const twoD = resolve2D(s, t)
+        const threeD = resolve3D(s, t)
+        expect(threeD.colour).toBe(twoD.colour)
+        expect(twoD.colour).not.toBe('#000000')
+        expect(twoD.intensity).toBe(1)
+        expect(threeD.intensity).toBeCloseTo(1, 10)
+      }
+    }
+  })
+})
+
+describe('the 3D dispatch asks for frames only while a band animates', () => {
+  // A source whose values can move, notifying its subscribers as the live feed does.
+  function mutableSource(values: Record<string, number>) {
+    const map = new Map(Object.entries(values))
+    const listeners = new Map<string, Set<(v: number) => void>>()
+    const source: ChannelSource = {
+      get: (universe, channelNo) => map.get(`${universe}:${channelNo}`) ?? 0,
+      getByKey: (key) => map.get(key) ?? 0,
+      subscribeToChannel: (key, fn) => {
+        const set = listeners.get(key) ?? new Set()
+        set.add(fn)
+        listeners.set(key, set)
+        return { unsubscribe: () => set.delete(fn) }
+      },
+    }
+    const set = async (key: string, value: number) => {
+      map.set(key, value)
+      await act(async () => {
+        for (const fn of listeners.get(key) ?? []) fn(value)
+        await Promise.resolve()
+      })
+    }
+    return { source, set }
+  }
+
+  function mount(source: ChannelSource, ticker: ColourTicker) {
+    const properties = ROBE.properties
+    const colourSource = findColourSource(properties)
+    const colorStateRef = { current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 } }
+    const view = render(
+      <ChannelSourceProvider source={source}>
+        <ColourSync
+          hasFixture
+          colourSource={colourSource}
+          gel={null}
+          filters={colourFilters(properties, colourSource)}
+          dimmerProp={findDimmerProperty(properties)}
+          lensRef={{ current: null }}
+          colorStateRef={colorStateRef}
+          ticker={ticker}
+        />
+      </ChannelSourceProvider>,
+    )
+    return { colorStateRef, view }
+  }
+
+  it('registers while the wheel scrolls, re-applies per frame, and lets go when it stops', async () => {
+    const invalidate = vi.fn()
+    const ticker = createColourTicker(invalidate)
+    const { source, set } = mutableSource({ '0:1': 255, '0:9': 133, '0:10': 0 })
+    const { colorStateRef, view } = mount(source, ticker)
+    expect(ticker.listening).toBe(0)
+
+    await set('0:9', 200)
+    expect(ticker.listening).toBe(1)
+    ticker.frame(BAND_STEP_S * 1.1)
+    expect(`#${colorStateRef.current.color.getHexString()}`).toBe('#add8e6')
+    ticker.frame(BAND_STEP_S * 2.1)
+    expect(`#${colorStateRef.current.color.getHexString()}`).toBe('#ffff00')
+
+    invalidate.mockClear()
+    // Light blue: a fixed colour, so the arm lets go and a frame redraws nothing.
+    await set('0:9', 133)
+    expect(ticker.listening).toBe(0)
+    expect(`#${colorStateRef.current.color.getHexString()}`).toBe('#add8e6')
+    ticker.frame(BAND_STEP_S * 3.1)
+    expect(invalidate).not.toHaveBeenCalled()
+    expect(`#${colorStateRef.current.color.getHexString()}`).toBe('#add8e6')
+    view.unmount()
+  })
+
+  it('registers for a scrolling second wheel too, and unregisters on unmount', async () => {
+    const ticker = createColourTicker(() => {})
+    const { source, set } = mutableSource({ '0:1': 255, '0:9': 160, '0:10': 0 })
+    const { view } = mount(source, ticker)
+    await set('0:10', 200)
+    expect(ticker.listening).toBe(1)
+    view.unmount()
+    expect(ticker.listening).toBe(0)
   })
 })
 

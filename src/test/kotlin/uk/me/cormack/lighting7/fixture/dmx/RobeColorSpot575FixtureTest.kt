@@ -30,7 +30,7 @@ class RobeColorSpot575FixtureTest {
         fixture.prismRotation.value = 200u
         fixture.frost.value = 90u
         fixture.iris.value = 100u
-        fixture.zoom.value = 80u
+        fixture.zoom.setting = RobeColorSpot575Fixture.Zoom.ZOOM_22
         fixture.focus.value = 70u
         fixture.strobe.fullOn()
         fixture.dimmer.value = 220u

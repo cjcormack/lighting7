@@ -121,14 +121,30 @@ describe('FixtureAppearanceSource', () => {
     expect(a.intensity).toBe(1)
   })
 
-  it('reads a wheel option with no preview as dark', () => {
+  // Fixture-optics plan D8: nothing draws black for want of data. An option that says nothing (an
+  // older desk) is open white and lit; a blackout band says so with a black preview.
+  it('reads a wheel option with no preview as open white, lit — never dark for want of data', () => {
     const fixture = makeFixture('fx-1', [
       sliderProp('dimmer', 'dimmer', chan(1)),
       settingProp('colourWheel', 'colour', chan(2), [
         { name: 'open', level: 0, displayName: 'Open' },
       ]),
     ])
-    expect(appearanceOf({ '0:1': 255 }, fixture).intensity).toBe(0)
+    const a = appearanceOf({ '0:1': 255 }, fixture)
+    expect(a.intensity).toBe(1)
+    expect(a.color.toLowerCase()).toBe('#ffffff')
+  })
+
+  it('reads a blackout band — a black preview — as dark', () => {
+    const fixture = makeFixture('fx-1', [
+      sliderProp('dimmer', 'dimmer', chan(1)),
+      settingProp('colourWheel', 'colour', chan(2), [
+        { name: 'BLACKOUT', level: 0, displayName: 'Blackout', colourPreview: '#000000' },
+        { name: 'RED', level: 8, displayName: 'Red', colourPreview: '#FF0000' },
+      ]),
+    ])
+    expect(appearanceOf({ '0:1': 255, '0:2': 0 }, fixture).intensity).toBe(0)
+    expect(appearanceOf({ '0:1': 255, '0:2': 8 }, fixture).intensity).toBe(1)
   })
 
   it('uses the gel colour when the type accepts gel and there is no colour source', () => {

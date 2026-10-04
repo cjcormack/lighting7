@@ -6,6 +6,8 @@ import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.colourOf
@@ -360,8 +362,9 @@ object TemplateResolver {
      * ΔE is only as good as the annotation: `colourPreview` values are documented as "best-effort
      * approximations for the UI" (see `RobeColorSpot575Fixture`), so this number says "how close
      * the desk *believes* it got", which is exactly what the editor needs to show before a save.
-     * Slots with no preview are not candidates — a null preview means "nobody annotated this",
-     * never "this slot is black".
+     * Slots with no preview are not candidates — a null preview means a band with no single colour
+     * (`noColour`) or an empty fitted slot, never "this slot is black" — and nor is a black preview,
+     * which is a blackout band (the Slender bar's), not a colour a template asks for.
      *
      * Each slot's colour is the **unit's**: its fitted gel where it has one, else the type's stock
      * preview ([colourOf]), so a template snaps a scroller to the frame that actually holds the
@@ -378,6 +381,7 @@ object TemplateResolver {
         for (slot in setting.sortedValues) {
             val preview = media.colourOf(propertyName, slot) ?: continue
             val colour = parseHex(preview) ?: continue
+            if (colour.red == 0 && colour.green == 0 && colour.blue == 0) continue
             val delta = labDistance(targetLab, toLab(colour))
             if (best == null || delta < best.deltaE) {
                 // A fitted gel is named beside its frame, so the editor reads "the frame holding R26".
@@ -493,8 +497,9 @@ object TemplateResolver {
                 if (slots.isEmpty()) {
                     return Resolution(null, propertyName, Note.Unsupported("$propertyName has no settings"))
                 }
+                val stepped = steppedZoomSlot(slots, fraction)
                 val wanted = fraction * 255.0
-                val slot = slots.minBy { abs(it.level.toInt() - wanted) }
+                val slot = stepped ?: slots.minBy { abs(it.level.toInt() - wanted) }
                 Resolution(
                     CueAssignmentResolver.PropertyValue.Setting(slot.level),
                     propertyName,
@@ -509,6 +514,22 @@ object TemplateResolver {
                 Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
             }
         }
+    }
+
+    /**
+     * A percent on a **stepped zoom** (fixture-optics plan D2): the slot whose angle is nearest the
+     * requested proportion of the way from DMX min's angle to the angle farthest from it — the way a
+     * slider zoom's percent runs from its DMX-min angle to its DMX-max one. Level order breaks a tie,
+     * so the Robe's 50% is ZOOM_18, not its focus-corrected twin far up the channel. Null for a
+     * setting whose options carry no angle.
+     */
+    private fun steppedZoomSlot(slots: List<DmxFixtureSettingValue>, fraction: Double): DmxFixtureSettingValue? {
+        val angled = slots.filterIsInstance<DmxFixtureZoomSettingValue>()
+        if (angled.isEmpty()) return null
+        val from = angled.first().zoomDeg
+        val to = angled.maxBy { abs(it.zoomDeg - from) }.zoomDeg
+        val wanted = from + fraction * (to - from)
+        return angled.minBy { abs(it.zoomDeg - wanted) }
     }
 
     // ─── Level ──────────────────────────────────────────────────────────────

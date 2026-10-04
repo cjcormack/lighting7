@@ -295,9 +295,50 @@ subscription on each dispatch and one parity test; a separate path would have be
 all three on both sides. Only where the colour source is itself a **wheel**: beside an RGB colour
 property a COLOUR setting is a preset or macro on the same emitters (the Hex's, the Orbit's), not
 glass, and is left out. `colourDispatchParity.test.tsx` holds the 2D and 3D answers to one result for
-a two-wheel head (yellow through cyan is green; a scroll band on wheel 2 passes wheel 1), and for an
-RGB head with a preset setting. A **template** still cannot address the second wheel
+a two-wheel head (yellow through cyan is green), a scroll band on wheel 2 (below), and an RGB head
+with a preset setting. A **template** still cannot address the second wheel
 (`FU-TMPL-SECOND-COLOUR-WHEEL`).
+
+### Animated colour bands
+
+A colour band with **no single colour** — a scroll, a random or rainbow program, an auto change —
+**animates through the wheel's own previews** (fixture-optics plan D8), where until session 5 it drew
+black (as a source) or passed the beam unchanged (as a filter). The desk marks such an option
+`noColour` (lighting7 `docs/fixtures-engineering.md` §"Beam vocabulary"); every other COLOUR option
+carries a preview, which `ColourPreviewTest` enforces, so a COLOUR band is never silent. The rules
+are in one pure module, `lib/colourBands.ts`, which both dispatches call, so they cannot disagree:
+
+- **`settingColourAt(options, level, timeS)`** is the band's colour: its preview; for an animated
+  band its wheel's palette (`wheelPalette` — the options' previews in level order, each once, a
+  blackout left out) at that time, each colour held for most of `BAND_STEP_S` (1.2 s) and eased into
+  the next over the rest; `undefined` where the band says nothing.
+- **A source draws `undefined` open white and lit** (`sourceBandColour` / `sourceBandLevel`) — never
+  black for want of data, which is how every Varytec beam drew before its wheel carried previews —
+  and a black preview (a blackout band) dark. A **filter** passes the beam through `undefined`.
+- **Time is passed in, never read from a clock inside the decode**, so the parity test and the
+  profile harness stay reproducible. The 3D path hands in the scene clock; the 2D path a shared clock.
+
+**Both dispatches, and the second wheel.** The 2D leaves (`SettingColourAppearance`, `FilterStep`)
+read the band through `useSettingBandColour`, whose time is `useColourBandTime(animated)` — a
+`ColourBandClockContext` that ticks at 15 Hz and re-renders the leaf **only while its band animates**
+(a colour change, not a frame-rate animation; the test supplies a fixed clock). The 3D syncs read
+`settingColourAt` at the ticker's time in `SettingColourBeamSync` and in `filteredHex`, so a scroll
+band on the Robe's second wheel passes the first wheel's colour through its own wheel's colours in
+turn, on both dispatches. Cells (`CellColourSync`) take the same rule per cell.
+`colourDispatchParity.test.tsx` holds 2D = 3D for an animated band at several times — mid-hold and
+mid-move — on a single wheel and on the second wheel, and pins the Varytec drawing a colour, lit, at
+every DMX value.
+
+**The 3D path invalidates every frame while — and only while — a band is live.**
+`stage3d/colourTicker.ts` is a plain object `FixtureModel` drives from a `useFrame` (registered before
+the beam director, so the director reads this frame's colour) with the scene clock's elapsed time.
+`useLiveColour`'s `apply` answers whether what it drew animates — the source's band or any filter's —
+and the arm registers with the ticker while it does: each frame re-applies the colour at the new
+time and asks for the next. The first apply that answers false — the channel moved to a fixed colour
+— unregisters it, and a frame with no listener asks for nothing, so a wheel parked on a colour costs
+the canvas no frames. Registration happens inside `apply` because whether the band animates is a
+channel fact known only there. The ticker is passed as a prop, not a context, because `ColourSync`
+is rendered outside a canvas by its tests and the capture root bridges only `ChannelSourceContext`.
 
 **A loadable wheel is never index-guessed.** `resolveGoboSlot` falls back to an option's position on
 a wholly unannotated wheel; a loadable wheel's options always carry `loadable`, so they count as
@@ -395,7 +436,9 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   outside a canvas by their tests.
 - **Time.** A movement or LED macro, a spinning gobo (the turned wheel's, while it shows a pattern —
   `stepGoboLayers`' `spinning`; a static wheel never asks) and a turning prism move with the clock, not with
-  DMX, so while one runs the director asks for the next frame itself. That is the one case where the
+  DMX, so while one runs the director asks for the next frame itself. An **animated colour band**
+  (a scroll or random wheel band) asks through `colourTicker.ts` while it is live (§"Animated colour
+  bands"). That is the one case where the
   canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
@@ -1069,11 +1112,16 @@ front of what used to be the whole rule):
   per-install length (`acceptsLength`) — `BLINDER` a blinder, `LASER` and `EFFECT` an effect box,
   `GENERIC` a house downlight (the prototype's default for a generic dimmer).
 
-The field angle is a **zoom channel** that declares its angles (`resolveZoomDeg`: a ZOOM slider's
-`degMin`/`degMax`; a zoom that declares none answers nothing and falls through), then the patch's
-`beamAngleDeg`, then the **lantern's** (at the focus's zoom where it has one), then the **family's**
-(`FIELD_DEG`: a profile 26°, a fresnel 45°, a PAR 32°, a spot 16°, a wash 25°, a batten 30°, a
-blinder 60°…) — it was 30° for everything. Which bodies emit: a batten and a blinder always (their
+The field angle is one precedence for every fixture (fixture-optics plan D3, `resolveBeamDeg`): a
+**zoom channel** that declares its angles, then the patch's `beamAngleDeg`, then the **lantern's**
+(at the focus's zoom where it has one) or the **type's fixed lens** (`@FixtureType.fieldDeg` — the
+Fusion 100's 10°, the Scantastic's 11°), then the **family's** (`FIELD_DEG`: a profile 26°, a fresnel
+45°, a PAR 32°, a spot 16°, a wash 25°, a batten 30°, a blinder 60°…) — it was 30° for everything.
+`resolveZoomDeg` reads a zoom in either form: a ZOOM slider's `degMin`/`degMax`, or a **stepped
+zoom** — a ZOOM setting whose band carries `zoomDeg` (the Robe ColorSpot 575's 15°, 18° and 22°,
+each again with focus correction), every DMX value in a band drawing that band's angle and never one
+between two steps (D2). A zoom that declares neither answers nothing and falls through.
+`findZoomProperty` finds either form. Which bodies emit: a batten and a blinder always (their
 types have no beam angle to set, so `acceptsBeamAngle` could not say), tape and the cannon never,
 everything else as `acceptsBeamAngle` said before.
 
@@ -1183,6 +1231,11 @@ group`).
   from it (`resolveEdgeHardness`, §"Focus"). `FixtureTypeInfo.beamEdge` still only picks a mover's
   head.
 - **A DMX iris is drawn** (`resolveIris`: the channel runs open → closed, down to 12 % of the field).
+- **Iris and frost are read over their proportional band** (`proportionalBand`): a slider declaring
+  `activeMin` / `activeMax` — the Robe's iris and frost, 1–179, with closed, pulse and ramp bands
+  above — is proportional only across that band, and **holds its end value** outside it, so an effect
+  band draws as the band's last value (the iris at its smallest, full frost) rather than as more of
+  the same; a slider declaring none runs over its own min..max.
 
 ### One beam mask, and every beam marched
 

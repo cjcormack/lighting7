@@ -120,6 +120,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-S4REV-PERSONALITIES`](#fu-s4rev-personalities) | Trigger | Fixtures | a rig patches a Revolution in its 14, 15 or 23-channel mode |
 | [`FU-MEDIA-LIVE-RESNAP`](#fu-media-live-resnap) | Trigger | Fixtures | an operator re-gels a scroller mid-show and expects the live cue to follow |
 | [`FU-MEDIA-CONTROL-SWATCHES`](#fu-media-control-swatches) | Trigger | Frontend | an operator sets a scroller frame from a stock swatch that is not what the unit holds |
+| [`FU-STAGE-PROGRAM-MACROS`](#fu-stage-program-macros) | Trigger | Stage | an operator needs to see a head's built-in LED or movement program in the Stage view |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2280,6 +2281,24 @@ colour to show. **Trigger**: an operator picks a frame by its stock swatch on a 
 something else and lands the wrong colour. **Then**: the cell and the visualisers overlay the
 **patch's** media (`fittedProperties` with `patch.media`), naming a frame by what unit 1 holds and
 noting where a placement differs, as `SettingCell`'s option list already takes a display name.
+
+### `FU-STAGE-PROGRAM-MACROS`
+
+**Built-in programs are settings the Stage view never draws** · Trigger · fixture optics plan §7–§8
+(session 5), 2026-10-04
+
+Most heads carry built-in LED and movement programs — the Wash-42's eight automatic programs (ch 13),
+the Whex's auto programs, the Orbit's built-in program, the Lightbar's pixel and colour-running
+programs, the Slender bar's show presets — declared as `SETTING`, which the view never reads. The
+view's `LED_MACRO` / `MOVEMENT_MACRO` categories draw *canned* animations (`evalLedMacro`,
+`evalMovementMacro` in `frontend/src/components/stage3d/beamOptics.ts`), and the plan's §7 left the
+programs as settings because drawing a guessed program is worse than drawing none: a head running
+one on the rig is still drawn at its plain channels. **Trigger**: an operator needs to see that a
+head is running its own program in the Stage view (a preview misleads at a desk check). **Then**:
+recategorise each program setting as `LED_MACRO` or `MOVEMENT_MACRO`, from its manual band by band
+(a program that mixes both is a movement macro whose colour is left to the LED path), with each
+recategorised channel's composition unchanged (LTP), and add the categories to whichever guard test
+then walks them.
 
 ## Completed
 

@@ -188,6 +188,13 @@ enum class CompactDisplayRole {
  * @param media On a setting-backed property, what its options can be loaded with — fitted media,
  *              per unit ([MediaSlot]). [MediaSlot.NONE] — the default — on every other property.
  *              `docs/fixtures-engineering.md` §"Fitted media" holds the rules a declaration obeys.
+ * @param activeMin On a slider whose range is not all proportional, the DMX at which its proportional
+ *                  band starts — the Robe ColorSpot's iris and frost run 1–179, 0 being open. Below
+ *                  it the Stage view holds the band's start value. `-1` — the default — means the
+ *                  slider's own min. Declared with [activeMax] or alone.
+ * @param activeMax The DMX at which the proportional band ends: above it the channel is effects
+ *                  (pulses, ramps, random), which the view does not draw, holding the band's end
+ *                  value instead. `-1` — the default — means the slider's own max.
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -209,6 +216,8 @@ annotation class FixtureProperty(
     val blade: Blade = Blade.NONE,
     val depthMax: Double = Double.NaN,
     val media: MediaSlot = MediaSlot.NONE,
+    val activeMin: Int = -1,
+    val activeMax: Int = -1,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

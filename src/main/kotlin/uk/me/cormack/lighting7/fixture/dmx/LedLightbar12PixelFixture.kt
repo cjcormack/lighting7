@@ -113,9 +113,11 @@ sealed class LedLightbar12PixelFixture(
      */
     enum class ColorPreset(
         override val level: UByte,
-        override val colourPreview: String?
+        override val colourPreview: String?,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
-        OFF(0u, null),
+        // Presets off: the RGB channels decide the colour.
+        OFF(0u, null, noColour = true),
         COLOR_1_RED(2u, "#FF0000"),
         COLOR_2_RED_WHITE(7u, "#FF6464"),
         COLOR_3_RED_WHITE_BRIGHT(14u, "#FFC8C8"),
@@ -143,7 +145,8 @@ sealed class LedLightbar12PixelFixture(
         COLOR_25_PINK(168u, "#FF0064"),
         COLOR_26_PINK_WHITE(175u, "#FF3264"),
         COLOR_27_SALMON(182u, "#FF0019"),
-        COLOR_28_SALMON_WHITE(189u, "#FF001919"),
+        // Estimate: an eight-digit typo fixed to its neighbours' pattern (PINK → PINK_WHITE adds #32 green).
+        COLOR_28_SALMON_WHITE(189u, "#FF3219"),
         COLOR_29_RED_DIM(196u, "#FF0019"),
         COLOR_30_WHITE(203u, "#FFFFFF"),
         COLOR_31_WARM_WHITE(210u, "#FFFF4B"),

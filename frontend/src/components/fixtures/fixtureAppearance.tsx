@@ -14,10 +14,14 @@ import type { FixturePatch } from '../../api/patchApi'
 import { findGel } from '../../lib/gels'
 import { colourFilters, filterColour, fittedProperties } from '../../lib/fittedMedia'
 import { useGelIndex } from '../../hooks/useGelIndex'
+import { useColourValue, useSettingValue } from '../../hooks/usePropertyValues'
 import {
-  useColourValue,
-  useSettingColourPreview,
-} from '../../hooks/usePropertyValues'
+  isAnimatedBand,
+  settingColourAt,
+  sourceBandColour,
+  sourceBandLevel,
+  useColourBandTime,
+} from '../../lib/colourBands'
 import { useGroupColourValues } from '../../hooks/useGroupPropertyValues'
 import { colourFactor, useNormalizedIntensity } from '../../hooks/useNormalizedIntensity'
 import { computeNormalizedHueCss } from '../../lib/colourMath'
@@ -182,12 +186,25 @@ function FilterStep({
   rest: readonly SettingPropertyDescriptor[]
   children: (hex: string) => ReactNode
 }) {
-  const preview = useSettingColourPreview(filter)
+  // The filter's slot colour, or — on a band with no single colour (the Robe's second wheel
+  // scrolling) — its wheel's own colours in turn (`lib/colourBands.ts`); the 3D `filteredHex` twin.
+  const colour = useSettingBandColour(filter)
   return (
-    <Filtered hex={filterColour(hex, [preview])} filters={rest}>
+    <Filtered hex={filterColour(hex, [colour])} filters={rest}>
       {children}
     </Filtered>
   )
+}
+
+/**
+ * A colour setting's current band colour, ticking while the band animates (`useColourBandTime`):
+ * its preview, its wheel's palette at the time for a scroll or random band, or undefined where the
+ * band says nothing. The 3D dispatch reads `settingColourAt` at the scene clock's time instead.
+ */
+function useSettingBandColour(setting: SettingPropertyDescriptor): string | undefined {
+  const { level, option } = useSettingValue(setting)
+  const timeS = useColourBandTime(isAnimatedBand(option))
+  return settingColourAt(setting.options, level, timeS)
 }
 
 const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
@@ -230,12 +247,16 @@ function SettingColourAppearance({
   dimmerProp?: SliderPropertyDescriptor
   filters?: readonly SettingPropertyDescriptor[]
 }) {
-  const preview = useSettingColourPreview(settingProp)
-  // A selected colour preset reads as fully on; no selection ⇒ dark. A separate dimmer at 0
-  // still wins through the dimmer factor.
-  const intensity = useNormalizedIntensity(dimmerProp) * (preview ? 1 : 0)
-  if (!preview) return <>{children({ color: '#888888', intensity })}</>
-  return <Filtered hex={preview} filters={filters}>{(hex) => children({ color: hex, intensity })}</Filtered>
+  // The band's colour — a preview, or a scroll or random band's wheel colours in turn — else open
+  // white, never black for want of data; a blackout band is dark (`lib/colourBands.ts`). A dimmer at
+  // 0 still wins through the dimmer factor. The 3D `SettingColourBeamSync` is the other copy.
+  const colour = useSettingBandColour(settingProp)
+  const intensity = useNormalizedIntensity(dimmerProp) * sourceBandLevel(colour)
+  return (
+    <Filtered hex={sourceBandColour(colour)} filters={filters}>
+      {(hex) => children({ color: hex, intensity })}
+    </Filtered>
+  )
 }
 
 function FixedColourAppearance({

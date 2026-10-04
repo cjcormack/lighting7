@@ -330,6 +330,17 @@ both dispatches (`colourFilters`). The View menu's *Gobos on surfaces* (per brow
 pass to the selected heads; it defaults to every gobo light. See the stage-vis doc's §"Gobos on
 surfaces".
 
+**A colour band with no single colour animates, and the beam angle has one precedence**
+(fixture-optics session 5). A scroll, random or rainbow band — an option the desk marks `noColour` —
+cycles through its wheel's own previews on **both** dispatches and on a second wheel as a filter,
+through one pure decode (`lib/colourBands.ts`, time passed in, never read inside it); a band that
+says nothing draws open white, never black. The 3D arms register with `stage3d/colourTicker.ts`
+while — and only while — such a band is live, which re-applies them and asks for every frame; the 2D
+leaves tick through `useColourBandTime` only while animated. The beam angle is the zoom channel
+(a slider's degrees or a stepped zoom's `zoomDeg`), else the patch's, else the type's `fieldDeg`,
+else the family's — `resolveBeamDeg` in `bodies/archetype.ts` — and iris and frost hold their end
+value past a slider's `activeMax`. See the stage-vis doc's §"Animated colour bands".
+
 **Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
 — a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
 streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage
@@ -3154,7 +3165,10 @@ is a percent — `toPct` / `fromPct`, 0 ↔ 0, 50 ↔ 128, 100 ↔ 255, pinned a
 `SliderCell.test.tsx` — and the byte is the read-out (*204 of 255 · 0–255 on every head*, or *on the
 first head · ranges differ*). The slider stays in bytes. The DMX sheet reads *204*, so `LevelCell`
 keeps bytes; the percent is its read-out. Strobe, zoom, focus and iris are slider cells and take the
-percent for the same reason — a template of them is a percent already.
+percent for the same reason — a template of them is a percent already. The one exception is a
+**stepped zoom** (the Robe ColorSpot 575's, fixture-optics session 5): a setting, so its cell is the
+setting cell listing the steps, and a template's percent on it snaps to the step nearest that
+proportion of its angles.
 
 **Position types degrees where the head annotates, bytes where it does not** (D14). `PositionCell`
 draws a 120px XY pad beside Pan · Tilt — a drag writes both axes in one commit — and where **every**

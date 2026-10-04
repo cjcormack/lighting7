@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixturePrismSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -350,6 +351,8 @@ abstract class DmxFixture(
                 gobo = (settingValue as? DmxFixtureGoboSettingValue)?.gobo?.serialized(),
                 prismFacets = (settingValue as? DmxFixturePrismSettingValue)?.prismFacets,
                 loadable = if (prop.media != null) settingValue.loadable else null,
+                zoomDeg = (settingValue as? DmxFixtureZoomSettingValue)?.zoomDeg,
+                noColour = (settingValue as? DmxFixtureColourSettingValue)?.noColour?.takeIf { it },
             )
         },
         compactDisplay = prop.compactDisplay.serialized(),
@@ -379,6 +382,8 @@ abstract class DmxFixture(
         indexDegMax = prop.indexDegMax,
         blade = prop.blade?.serialized(),
         depthMax = prop.depthMax,
+        activeMin = prop.activeMin,
+        activeMax = prop.activeMax,
     )
 
     private fun String.formatPropertyName(): String {

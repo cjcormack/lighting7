@@ -44,4 +44,10 @@ annotation class FixtureType(
      *  Only a type with a FOCUS channel is ever drawn by it. See `docs/fixtures-engineering.md`
      *  §"@FixtureType". */
     val depthOfField: Double = -1.0,
+    /** A **fixed lens's** full beam angle in degrees (fixture-optics plan D3) — the Fusion 100's 10°,
+     *  the Scantastic's 11°. The Stage view's beam angle is the zoom channel's, else the patch's
+     *  `beamAngleDeg`, else this, else the family's default: a type with a ZOOM channel never needs
+     *  it. `-1.0` means "unset", as for [depthOfField]. See `docs/fixtures-engineering.md`
+     *  §"Beam vocabulary". */
+    val fieldDeg: Double = -1.0,
 )

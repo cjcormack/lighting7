@@ -38,7 +38,10 @@ class UVFixture (
 
     override fun withTransaction(transaction: ControllerTransaction): UVFixture = UVFixture(this, transaction)
 
-    @FixtureProperty(category = PropertyCategory.UV)
+    // Its one channel is its intensity, so it is the fixture's DIMMER: everything that finds a
+    // fixture's level by category — the Stage view, the busk rig, the intensity mask — finds it.
+    // Category UV is a colour emitter beside an RGB head's (`bundleWithColour`), which this is not.
+    @FixtureProperty(category = PropertyCategory.DIMMER)
     override val dimmer = DmxSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
 
     override val uv: Slider

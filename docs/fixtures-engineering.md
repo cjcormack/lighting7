@@ -231,10 +231,22 @@ The `valueForLevel()` method finds the appropriate enum value for a raw DMX leve
 @Target(AnnotationTarget.CLASS)
 annotation class FixtureType(
     val typeKey: String,
-    // … kind, lengthM, acceptsLength …
+    val manufacturer: String = "",
+    val model: String = "",
+    val acceptsBeamAngle: Boolean = false,   // a patch may set its own beam angle
+    val acceptsGel: Boolean = false,         // a patch may name a gel
+    val gelCompactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
+    val kind: FixtureKind = FixtureKind.GENERIC,
+    val lengthM: Double = -1.0,              // bounding size; -1.0 = the kind's
+    val widthM: Double = -1.0,
+    val heightM: Double = -1.0,
+    val acceptsLength: Boolean = false,      // cut to its run (§"Variable-length fixtures")
+    val beamShape: BeamShape = BeamShape.INHERIT,
+    val beamEdge: BeamEdge = BeamEdge.INHERIT,
     val body: FixtureBody = FixtureBody(),   // the 3D body the Stage view draws
     val acceptsLantern: Boolean = false,     // hung with a lantern from the library
     val depthOfField: Double = -1.0,         // how fast focus goes soft; -1.0 = the family's
+    val fieldDeg: Double = -1.0,             // a fixed lens's beam angle; -1.0 = none declared
 )
 ```
 
@@ -262,6 +274,15 @@ against a Source Four Revolution throwing 24 m — `frontend/docs/stage-vis-engi
 channel is drawn by it, and no type in the library declares one today: the family's value serves
 the Revolution. Like `body`, it is presentational; nothing on the desk reads it.
 
+`fieldDeg` (fixture-optics plan D3) is a **fixed lens's** full beam angle in degrees: the Equinox
+Fusion 100's 10° and the IMG Wash-42's 10° (each manual's), and the Scantastic's 11° (the product
+sheet's), declared as a constant on the family so every mode carries it. It reflects as `fieldDeg`
+on `FixtureTypeDetails` (null when unset), and the Stage view's beam angle is one precedence for
+every fixture: **the zoom channel, else the patch's `beamAngleDeg`, else the type's `fieldDeg`, else
+the family's default** (`resolveBeamDeg` in `frontend/src/components/stage3d/bodies/archetype.ts`).
+A type with a ZOOM channel never declares it — `LibraryOpticsTest` refuses both on one type — and a
+conventional's field is its lantern's (§"Lanterns and focus").
+
 ### @FixtureProperty
 
 ```kotlin
@@ -281,6 +302,8 @@ annotation class FixtureProperty(
     val blade: Blade = Blade.NONE,
     val depthMax: Double = Double.NaN,
     val media: MediaSlot = MediaSlot.NONE,
+    val activeMin: Int = -1,
+    val activeMax: Int = -1,
 )
 ```
 
@@ -288,6 +311,11 @@ Marks a property as controllable. The `fixtureProperties` list on `Fixture` coll
 - Channel description generation
 - REST API property enumeration
 - FX engine targeting
+
+`composition` overrides the category's HTP/LTP rule (`CompositionRule.UNSET` inherits it);
+`bundleWithColour` folds a white, amber or UV slider into the RGB colour property; `compactDisplay`
+promotes the property to the compact card; `axis` marks a slider as pan or tilt. The rest are the
+beam vocabulary, below and in §"Beam vocabulary".
 
 **A property may not be named an alias.** Stored rows and FX targets name a property by its Kotlin
 name, and `canonicalPropertyName` reads `colour` / `color` / `rgbcolour` (any case) as "this head's
@@ -313,10 +341,24 @@ null, and reflects as null:
 - `inverted`: reverses the mapping. On a FOCUS slider DMX min is far focus, as on the MAC 250, whose
   chart runs "Infinity → 2 meters".
 - A ZOOM slider's `degMin` / `degMax` may run either way: the Source Four Revolution's DMX 0 is its
-  widest, so it declares `degMin = 35.0, degMax = 15.0`. `ZoomAnglesTest` holds every ZOOM slider
-  in the library to declaring both; a zoom that declares neither is silently inert, the view keeping
-  the family's fixed angle. The Robe ColorSpot 575's three-step zoom is the one exemption, by name,
-  until the fixture optics plan's session 5 makes it a setting.
+  widest, so it declares `degMin = 35.0, degMax = 15.0`. A zoom that declares no angle is silently
+  inert, the view keeping the patch's, the type's or the family's fixed angle — so `ZoomAnglesTest`
+  holds every zoom in the library, fixture and cell, to one of two forms with no exemption: a
+  **slider** declaring both ends, or a **stepped zoom** — a ZOOM *setting* whose every option is a
+  `DmxFixtureZoomSettingValue` carrying its `zoomDeg` (fixture-optics plan D2). The Robe ColorSpot
+  575's is the one stepped zoom: 15°, 18° and 22°, each again with focus correction, which a slider
+  would have drawn as a sweep through angles the lens never takes. Its readers make sense of a
+  setting: Locate parks it at the step nearest its middle angle (18°, the plain band before its
+  focus-corrected twin), a template's `pct:` runs across its angles from DMX min's (0% → 15°,
+  50% → 18°, 100% → 22°), and the programmer's grid and fixture cards draw it as a setting.
+- `activeMin` / `activeMax`: the DMX range of a slider's **proportional band**, where the rest of the
+  channel is something else — the Robe's iris and frost are 0 open, 1–179 proportional, then
+  closed, pulse, ramp and random bands, so both declare `activeMin = 1, activeMax = 179`. `-1`, the
+  default, means the slider's own `min` / `max` and reflects as null. The Stage view reads iris and
+  frost over the band and **holds the end value** outside it (`proportionalBand` in
+  `frontend/src/components/stage3d/beamOptics.ts`): above `activeMax` an effect band is drawn as the
+  band's last value, never read as more of the same. `LibraryOpticsTest` holds every declared band
+  inside its slider and running upwards.
 - `fineOf`: names the coarse property this one is the low byte of, so the pair decodes as one
   value — the 16-bit `coarse × 256 + fine`, rescaled to the coarse range (`combineFinePair`). Empty,
   the default, on every other property, and reflected as null.
@@ -388,6 +430,66 @@ every SHUTTER_ROTATION names a blade and declares a degree range, a fixture (or 
 most one of each per blade, nothing else declares `blade` or `depthMax`, and no type with framing
 shutters is `acceptsLantern` — so a unit's blades have one source. The Revolution's blade sides,
 depth and rotation sign are estimates (`// Estimate:` at the source; `FU-MANUAL-S4REV-OPTICS`).
+
+### Beam vocabulary
+
+Everything the Stage view can draw of a beam is declared on the type, as annotations and as fields
+on a setting's options — no table holds it, and nothing a Look stores names it (fixture-optics plan
+D1). It reaches the client on `GET /fixture-types` (`FixtureTypeDetails`, `SliderPropertyDescriptor`,
+`SettingOption`) and on `GET /fixtures`, and `frontend/src/store/fixtures.ts` mirrors each field. A
+value no manufacturer states carries `// Estimate:` at its source (D15).
+
+**Categories** (`PropertyCategory`). A channel's category is how the view knows what it is:
+`DIMMER`, `COLOUR` (an RGB property, a colour wheel, a scroller, an RGB head's colour preset),
+`WHITE` / `AMBER` / `UV` (emitters, usually `bundleWithColour`), `STROBE`, `PAN` / `TILT` and their
+`_FINE` bytes, `SPEED`; the beam roles `GOBO`, `GOBO_ROTATION`, `GOBO_ROTATION_MODE` (a wheel's
+function: `INDEX`, `ROTATE_FWD`, `ROTATE_REV` bands), `PRISM`, `PRISM_ROTATION`, `FOCUS`, `ZOOM`,
+`IRIS`, `FROST`, `SHUTTER` / `SHUTTER_ROTATION` (§"Framing shutters"); `LED_MACRO` and
+`MOVEMENT_MACRO`, which the view draws as canned animations; and `SETTING` / `OTHER`, which it never
+reads. The LED and movement *programs* most heads carry are still `SETTING` — drawing a guessed
+program would be worse than drawing none (`FU-STAGE-PROGRAM-MACROS`).
+
+**On a setting's options** — each an interface the option's enum implements, declared per position
+because one channel mixes bands:
+
+| Field | Interface | Means |
+|---|---|---|
+| `colourPreview` | `DmxFixtureColourSettingValue` | The colour this position puts in the beam, `#RRGGBB`. |
+| `noColour` | `DmxFixtureColourSettingValue` | A band with **no single colour** — a scroll, a random or rainbow program, an auto change, a rotation stop, a band handing colour to other channels. Animated through the wheel's own previews (below). |
+| `gobo` | `DmxFixtureGoboSettingValue` | The `GoboPattern` at this position; null is deliberately open. |
+| `prismFacets` | `DmxFixturePrismSettingValue` | The prism's facet count; null is out. |
+| `zoomDeg` | `DmxFixtureZoomSettingValue` | A stepped zoom's full beam angle at this position (D2). |
+| `loadable` | `DmxFixtureSettingValue` | On a loadable setting, whether this position takes media (§"Fitted media"). |
+
+**Every COLOUR option is a colour or a no-colour band** (D8): `ColourPreviewTest` fails any option of
+a COLOUR setting, fixture or cell, that carries neither a `#RRGGBB` preview nor `noColour` — or both
+— and any preview anywhere that is not six hex digits. An option that said nothing drew its beam
+black, which is how every Varytec beam and every scroll band did until session 5. The marker is an
+annotation rather than a guess from the option's name because the names are every manufacturer's
+own (`SCROLL_CW`, `RAINBOW_EFFECT`, `AUTOMATIC_COLOUR_CHANGE`, `ALL_COL`, `ORIGINAL`), and a name
+list that missed one would draw it black again; the test can then close the hole. Where the setting
+is the beam's colour — a colour wheel, or the Robe's second wheel as a filter — the Stage view
+**animates a no-colour band through the wheel's own previews** on both colour dispatches
+(`frontend/src/lib/colourBands.ts`); beside an RGB property the setting is a preset on the same
+emitters and the view never reads it. A blackout band is a black preview (`#000000`, the Slender
+bar's), which the view draws dark and a template never snaps to.
+
+**On a slider** — `SliderPropertyDescriptor`, each null when unset:
+
+| Field | On | Means |
+|---|---|---|
+| `degMin` / `degMax` | PAN, TILT, ZOOM, SHUTTER_ROTATION | Degrees at DMX min / max: travel, a zoom's full beam angle, a blade's turn. |
+| `inverted` | any of those, FOCUS, SHUTTER | Reverses the mapping. |
+| `focusNearM` / `focusFarM` | FOCUS | The focal range in metres from the aperture (`FocusRangeTest`). |
+| `rpmMax` / `indexDegMax` | GOBO_ROTATION with a mode channel | Speed at DMX max in a rotate band; angle at DMX max when indexing. |
+| `blade` / `depthMax` | SHUTTER, SHUTTER_ROTATION | Which blade, and an insertion's depth at DMX max (`ShutterBladesTest`). |
+| `activeMin` / `activeMax` | any | The proportional band; the view holds its ends outside it. |
+| `fineOf` | a low byte | The coarse property it refines, read as one 16-bit value. |
+
+**On the type** — `@FixtureType`: `body` (archetype, mover head, lens diameter), `depthOfField`
+(D9), `fieldDeg` (a fixed lens, D3), `acceptsBeamAngle` and `acceptsLantern`. The beam angle the
+view draws is the zoom channel's, else the patch's `beamAngleDeg`, else `fieldDeg`, else the
+family's.
 
 ### @FixtureTrigger — one-shot triggers
 
@@ -762,38 +864,54 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 
 ## Existing Fixture Implementations
 
-| Class | Type Key | Channels | Traits |
-|-------|----------|----------|--------|
-| `AdjFogFuryJettFixture.Mode7Ch` | adj-fog-fury-jett-7ch | 7 | Dimmer, Colour, Amber, Strobe (+ fog trigger slider) |
-| `China2CellLedBlinderFixture` | china-2-cell-led-blinder-8ch | 8 | Dimmer, Strobe, MultiElementFixture (2 WW/CW cells + programs) |
-| `EquinoxTwinShotMkIIFixture` | equinox-twin-shot-mkii | 3 | None — pyro-adjacent, plain trigger sliders only |
-| `Gear4MusicOrbit70Fixture.Mode13Ch` | gear4music-orbit-70-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
-| `Gear4MusicSolParty12BFixture` | gear4music-sol-party-12b-8ch | 8 | Dimmer, Colour (+ colour-wheel macros, FX slider) |
-| `GenericDimmerFixture` | generic-dimmer | 1 | Dimmer |
-| `HexFixture` | hex | 12 | Dimmer, Colour, UV, Strobe |
-| `ImgStageLineWash42LedFixture.Mode13Ch` | imgstageline-wash-42led-13ch | 13 | Dimmer, Colour, White, Strobe, Position |
-| `KamLiteobar252Fixture` | kam-liteobar-252-11ch | 11 | Strobe, MultiElementFixture (3 RGB cells + macro modes) |
-| `MartinMac250Fixture.Mode4Ch` | martin-mac-250-mode-4 | 13 | Dimmer, Position, Strobe (+ colour/gobo/prism wheels, lamp/reset methods) |
-| `RobeColorSpot575Fixture.Mode2Ch` | robe-color-spot-575-mode-2 | 19 | Dimmer, Position, Strobe (+ dual colour wheels, static/rotating gobos, prism, frost, iris, zoom, focus, lamp/reset methods) |
-| `WhexFixture` | whex | 12 | Dimmer, Colour (RGBW variant) |
-| `QuadBarFixture` | quadbar | 1 | Settings only (show modes) |
-| `LightstripFixture` | lightstrip | 5 | Colour, White (variable length) |
-| `LightstripRgbFixture` | lightstrip-rgb | 3 | Colour (variable length) |
-| `StarClusterFixture` | starcluster | 2 | Dimmer, Settings |
-| `ScantasticFixture` | scantastic | 17 | Settings (scanner effects) |
-| `ShehdsLed19RgbwFixture.Mode16Ch` | shehds-led19-rgbw-16ch | 16 | Dimmer, Colour, White, Strobe, Position |
-| `ShehdsLed19RgbwFixture.Mode24Ch` | shehds-led19-rgbw-24ch | 24 | Dimmer, Strobe, Position, MultiElementFixture (3 RGBW zones) |
-| `Source4RevolutionFixture.BaseFrame31Ch` | etc-source4-revolution-base-frame | 31 | Dimmer, Position, Zoom, Focus, Iris (+ gel scroller, front wheel, media frame, fan speed, framing shutters) |
-| `UVFixture` | uv | 2 | Dimmer, Settings |
-| `HazerFixture` | hazer | 2 | Sliders (haze, fan) |
-| `FusionSpotFixture` | fusionspot | 14 | Dimmer, Colour, pan/tilt |
-| `LaserworldCS100Fixture` | laserworld-cs-100 | 7 | Settings, pattern control |
-| `SlenderBeamBarQuadFixture.Mode1Ch` | slender-beam-bar-quad-1ch | 1 | Settings (show presets) |
-| `SlenderBeamBarQuadFixture.Mode6Ch` | slender-beam-bar-quad-6ch | 6 | Dimmer, Strobe |
-| `SlenderBeamBarQuadFixture.Mode12Ch` | slender-beam-bar-quad-12ch | 12 | MultiElementFixture (4 heads) |
-| `SlenderBeamBarQuadFixture.Mode14Ch` | slender-beam-bar-quad-14ch | 14 | Dimmer, Strobe, MultiElementFixture |
-| `SlenderBeamBarQuadFixture.Mode27Ch` | slender-beam-bar-quad-27ch | 27 | Dimmer, Strobe, MultiElementFixture (full) |
-| `VarytecEasymoveXl60SpotFixture.Mode11Ch` | varytec-easymove-xl-60-spot-11ch | 11 | Dimmer, Position, Strobe (+ colour/gobo wheels) |
+Every type `FixtureTypeRegistry` serves, as `GET /fixture-types` answered it at the fixture optics
+plan's session 5 (2026-10-04). **Capabilities** is the type's `capabilities` list — what a template
+or an effect can find on it — and a type's full beam vocabulary is in its descriptors
+(§"Beam vocabulary"). Classes are in `fixture/dmx/`; a multi-mode family is a sealed class with one
+`@FixtureType` per mode.
+
+| Class | Type key | Model — mode | Channels | Capabilities |
+|---|---|---|---|---|
+| `AdjFogFuryJettFixture.Mode7Ch` | `adj-fog-fury-jett-7ch` | ADJ Fog Fury Jett — 7-Channel (Fog + RGBA + Strobe + Dimmer) | 7 | dimmer, colour, amber, strobe |
+| `China2CellLedBlinderFixture` | `china-2-cell-led-blinder-8ch` | China 2-Cell LED Blinder | 8 | dimmer, strobe, multi-element |
+| `EquinoxTwinShotMkIIFixture` | `equinox-twin-shot-mkii` | Equinox Twin Shot MKII | 3 | — |
+| `Fusion100SpotMkIIFixture.Mode15Ch` | `fusion-100-spot-mkii-15ch` | Equinox Fusion 100 Spot MKII — 15-Channel (Full Control) | 15 | dimmer, position, strobe · fixed 10° lens |
+| `Fusion100SpotMkIIFixture.Mode5Ch` | `fusion-100-spot-mkii-5ch` | Equinox Fusion 100 Spot MKII — 5-Channel (Basic) | 5 | position · fixed 10° lens |
+| `Fusion100SpotMkIIFixture.Mode8Ch` | `fusion-100-spot-mkii-8ch` | Equinox Fusion 100 Spot MKII — 8-Channel (Standard) | 8 | dimmer, position · fixed 10° lens |
+| `Gear4MusicOrbit70Fixture.Mode13Ch` | `gear4music-orbit-70-13ch` | Gear4music Orbit-70 — 13-Channel | 13 | dimmer, colour, position, white, strobe |
+| `Gear4MusicSolParty12BFixture` | `gear4music-sol-party-12b-8ch` | Gear4music SOL Party 12B | 8 | dimmer, colour |
+| `GenericDimmerFixture` | `generic-dimmer` | Generic Single-channel dimmer | 1 | dimmer |
+| `HazerFixture` | `hazer` | — | 2 | — |
+| `HexFixture` | `hex` | Chauvet Freedom Par Hex | 12 | dimmer, colour, white, amber, uv, strobe |
+| `ImgStageLineWash42LedFixture.Mode13Ch` | `imgstageline-wash-42led-13ch` | IMG Stageline Wash-42LED — 13-Channel | 13 | dimmer, colour, position, white, strobe · fixed 10° lens |
+| `KamLiteobar252Fixture` | `kam-liteobar-252-11ch` | Kam Liteobar 252 | 11 | strobe, multi-element, colour |
+| `LaserworldCS1000RGBMk3Fixture` | `laserworld-cs1000rgb-mk3` | Laserworld CS-1000RGB MK3 | 13 | — |
+| `LedLightbar12PixelFixture.Mode10Ch` | `led-lightbar-12-pixel-10ch` | Showtec LED Lightbar 12 Pixel — 10-Channel (2 Sections) | 10 | dimmer, strobe, multi-element, colour |
+| `LedLightbar12PixelFixture.Mode12Ch` | `led-lightbar-12-pixel-12ch` | Showtec LED Lightbar 12 Pixel — 12-Channel (Full Features) | 12 | dimmer, colour, white, strobe |
+| `LedLightbar12PixelFixture.Mode18Ch` | `led-lightbar-12-pixel-18ch` | Showtec LED Lightbar 12 Pixel — 18-Channel (4 Sections) | 18 | dimmer, strobe, multi-element, colour |
+| `LedLightbar12PixelFixture.Mode48Ch` | `led-lightbar-12-pixel-48ch` | Showtec LED Lightbar 12 Pixel — 48-Channel (Pixel Control) | 48 | multi-element, colour |
+| `LedLightbar12PixelFixture.Mode4ChProgram` | `led-lightbar-12-pixel-4ch-program` | Showtec LED Lightbar 12 Pixel — 4-Channel (Programs) | 4 | strobe |
+| `LedLightbar12PixelFixture.Mode4ChRgbw` | `led-lightbar-12-pixel-4ch-rgbw` | Showtec LED Lightbar 12 Pixel — 4-Channel (RGBW) | 4 | colour, white |
+| `LedLightbar12PixelFixture.Mode6Ch` | `led-lightbar-12-pixel-6ch` | Showtec LED Lightbar 12 Pixel — 6-Channel (Dimmer + RGBW) | 6 | dimmer, colour, white, strobe |
+| `LightstripFixture` | `lightstrip` | — | 5 | colour, white |
+| `LightstripRgbFixture` | `lightstrip-rgb` | Generic RGB lightstrip | 3 | colour |
+| `MartinMac250Fixture.Mode4Ch` | `martin-mac-250-mode-4` | Martin MAC 250 | 13 | dimmer, position, strobe |
+| `RobeColorSpot575Fixture.Mode2Ch` | `robe-color-spot-575-mode-2` | Robe ColorSpot 575 AT | 19 | dimmer, position, strobe |
+| `Scantastic4Fixture.Mode12Ch` | `scantastic-4-12ch` | Equinox Scantastic 4 — 12-Channel (Per-Head) | 12 | multi-element, position · fixed 11° lens |
+| `Scantastic4Fixture.Mode17Ch` | `scantastic-4-17ch` | Equinox Scantastic 4 — 17-Channel (Full Control) | 17 | strobe, multi-element, position · fixed 11° lens |
+| `Scantastic4Fixture.Mode8Ch` | `scantastic-4-8ch` | Equinox Scantastic 4 — 8-Channel (Macro/Effect) | 8 | strobe · fixed 11° lens |
+| `ShehdsLed19RgbwFixture.Mode16Ch` | `shehds-led19-rgbw-16ch` | Shehds LED 19x15W RGBW Zoom — 16-Channel | 16 | dimmer, colour, position, white, strobe |
+| `ShehdsLed19RgbwFixture.Mode24Ch` | `shehds-led19-rgbw-24ch` | Shehds LED 19x15W RGBW Zoom — 24-Channel | 24 | dimmer, position, strobe, multi-element, colour |
+| `SlenderBeamBarQuadFixture.Mode12Ch` | `slender-beam-bar-quad-12ch` | Equinox Slender Beam Bar Quad — 12-Channel (Per-Head) | 12 | multi-element, position |
+| `SlenderBeamBarQuadFixture.Mode14Ch` | `slender-beam-bar-quad-14ch` | Equinox Slender Beam Bar Quad — 14-Channel (Global + Per-Head) | 14 | dimmer, strobe, multi-element, position |
+| `SlenderBeamBarQuadFixture.Mode1Ch` | `slender-beam-bar-quad-1ch` | Equinox Slender Beam Bar Quad — 1-Channel (Show Presets) | 1 | — |
+| `SlenderBeamBarQuadFixture.Mode27Ch` | `slender-beam-bar-quad-27ch` | Equinox Slender Beam Bar Quad — 27-Channel (Full Control) | 27 | dimmer, strobe, multi-element, position |
+| `SlenderBeamBarQuadFixture.Mode6Ch` | `slender-beam-bar-quad-6ch` | Equinox Slender Beam Bar Quad — 6-Channel (Basic Control) | 6 | dimmer, strobe |
+| `Source4RevolutionFixture.BaseFrame31Ch` | `etc-source4-revolution-base-frame` | ETC Source 4 Revolution | 31 | dimmer, position |
+| `StarClusterFixture` | `starcluster` | — | 5 | — |
+| `UVFixture` | `uv` | — | 1 | dimmer, uv |
+| `VarytecEasymoveXl60SpotFixture.Mode11Ch` | `varytec-easymove-xl-60-spot-11ch` | Varytec Easymove XL 60 Spot — 11-Channel | 11 | dimmer, position, strobe |
+| `WhexFixture` | `whex` | — | 12 | dimmer, colour, white, amber, uv, strobe |
 
 ## Infrastructure fixtures
 

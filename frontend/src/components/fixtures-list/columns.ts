@@ -241,8 +241,10 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
         : { kind: 'setting', property: wheel }
     }
     case 'zoom': {
+      // A slider, or a stepped zoom's setting (the Robe ColorSpot 575's three angles).
       const prop = findZoomProperty(properties)
-      return prop ? { kind: 'slider', property: prop } : null
+      if (!prop) return null
+      return prop.type === 'slider' ? { kind: 'slider', property: prop } : { kind: 'setting', property: prop }
     }
     case 'focus': {
       const prop = findFocusProperty(properties)

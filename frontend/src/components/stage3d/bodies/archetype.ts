@@ -111,7 +111,10 @@ export interface BodySpec {
   cells: Cell[]
   /** Whether its cells throw beams and light at all. */
   emits: boolean
-  /** Field angle when neither the patch nor a zoom channel gives one. */
+  /**
+   * Field angle when neither a zoom channel nor the patch gives one: a lantern's, else the type's
+   * fixed lens (`@FixtureType.fieldDeg`), else the family's. [resolveBeamDeg] is the whole order.
+   */
   fieldDeg: number
   /** Edge softness from the family: profiles and spots hard (low), everything else soft. */
   softness: number
@@ -212,8 +215,8 @@ export const DEPTH_OF_FIELD: Readonly<Record<Archetype | `mover:${MoverHead}`, n
   tape: 2,
 }
 
-/** Field angle by family, for a fixture whose patch and channels say nothing. */
-const FIELD_DEG: Readonly<Record<Archetype | `mover:${MoverHead}`, number>> = {
+/** Field angle by family, for a fixture whose zoom channel, patch and type say nothing. */
+export const FIELD_DEG: Readonly<Record<Archetype | `mover:${MoverHead}`, number>> = {
   profile: 26,
   boxProfile: 26,
   fresnel: 45,
@@ -273,6 +276,8 @@ export interface BodyInput {
   body?: FixtureBodyInfo | null
   /** The type's declared depth of field (`@FixtureType.depthOfField`); null or absent is the family's. */
   depthOfField?: number | null
+  /** The type's fixed lens (`@FixtureType.fieldDeg`); null or absent is the family's. */
+  fieldDeg?: number | null
   /** The lantern's focus — the patch's own, or a placement's. */
   focus?: LanternFocus | null
 }
@@ -322,6 +327,7 @@ export function bodyInputFor(
     lantern,
     body: fixtureType?.body ?? null,
     depthOfField: fixtureType?.depthOfField ?? null,
+    fieldDeg: fixtureType?.fieldDeg ?? null,
     focus: patch,
   }
 }
@@ -567,7 +573,9 @@ export function bodySpecFor(input: BodyInput): BodySpec {
     heightM: H,
     cells,
     emits,
-    fieldDeg: lantern ? lanternFieldDeg(lantern, focus?.zoomDeg) : FIELD_DEG[family],
+    fieldDeg: lantern
+      ? lanternFieldDeg(lantern, focus?.zoomDeg)
+      : positiveAngle(input.fieldDeg) ?? FIELD_DEG[family],
     softness,
     depthOfField:
       input.depthOfField != null && Number.isFinite(input.depthOfField) && input.depthOfField > 0
@@ -581,6 +589,27 @@ export function bodySpecFor(input: BodyInput): BodySpec {
     iris,
   }
   return { ...spec, key: specKey(spec) }
+}
+
+/** A usable full beam angle in degrees, or null. */
+function positiveAngle(deg: number | null | undefined): number | null {
+  return deg != null && Number.isFinite(deg) && deg > 0 && deg < 180 ? deg : null
+}
+
+/**
+ * The beam angle a fixture draws this frame (fixture-optics plan D3), one precedence for every
+ * fixture: its **zoom channel** (a slider's `degMin`/`degMax`, a stepped zoom's band's `zoomDeg` —
+ * `resolveZoomDeg`), else the **patch's** `beamAngleDeg`, else the spec's [BodySpec.fieldDeg] — which
+ * is a lantern's field, else the **type's** fixed lens (`@FixtureType.fieldDeg`), else the
+ * **family's** default. The zoom wins over the patch because it is live: a patched angle is what a
+ * head with no zoom channel is set to, and a zoom head's channel is where its angle is.
+ */
+export function resolveBeamDeg(
+  zoomDeg: number | null,
+  patchBeamAngleDeg: number | null | undefined,
+  spec: Pick<BodySpec, 'fieldDeg'>,
+): number {
+  return zoomDeg ?? positiveAngle(patchBeamAngleDeg) ?? spec.fieldDeg
 }
 
 /** A PC's edge: between a profile's and a fresnel's (the prototype's `SOFT.PC`). */

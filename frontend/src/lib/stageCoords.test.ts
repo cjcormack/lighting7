@@ -202,7 +202,9 @@ describe("axisCentreDeg / dmxToSignedDegrees", () => {
     [0, 630], // pan, Varytec Easymove XL 60
     [0, 180], // pan, Scantastic 4
     [0, 270], // tilt, several
-    [0, 257], // tilt, Martin MAC 250 / Robe ColorSpot 575
+    [0, 530], // pan, Robe ColorSpot 575
+    [0, 257], // tilt, Martin MAC 250
+    [0, 280], // tilt, Robe ColorSpot 575
     [0, 210], // tilt, Fusion 100 Spot MKII
     [0, 90], // tilt, Scantastic 4
   ]

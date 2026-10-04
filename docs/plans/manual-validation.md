@@ -18,6 +18,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
 | [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
+| [`FU-MANUAL-S5-LIBRARY-OPTICS`](#fu-manual-s5-library-optics) | the library optics pass's estimates match the units — the Varytec's and the Wash-42's colours, the Whex's first program, the Robe's three zoom steps and its iris and frost holding past 179, and an animated colour band reading as the wheel does | Fixture optics plan S5, 2026-10-04 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -230,6 +231,45 @@ Where an answer disagrees with the annotation, correct the annotation and its co
 `FU-MANUAL-FOCUS-DIRECTION` in the same visit.
 
 45 minutes.
+
+---
+
+## `FU-MANUAL-S5-LIBRARY-OPTICS`
+
+**What it proves**: *the values the fixture optics plan's session 5 took on estimate describe the
+units*, so a cue's colours and zoom draw on the Stage view as they land on the rig.
+
+**Why it is here**: the session's D8 and D2 needed a colour for every COLOUR band and an angle for
+every zoom step, and the manuals state only some of them. Each guess is marked `// Estimate:` at its
+source (D15); this lists them. The plan's §9 desk check — a Varytec beam never black, the Robe
+zooming in three steps, in project 15 — is the first two steps.
+
+**Test**, on the rig, beside the Stage view (Front, haze off):
+
+1. **Varytec Easymove XL 60** (`VarytecEasymoveXl60SpotFixture.Colour`). The manual names the seven
+   positions only Color1..Color7. Take the wheel to each (DMX 20, 40, 60, 80, 95, 110, 123) and note
+   the colour on the floor; correct each `colourPreview` and drop the estimate. The beam must never
+   draw black, and a rainbow band (160, 225) must cycle through the wheel's colours.
+2. **Robe ColorSpot 575 zoom** (`RobeColorSpot575Fixture.Zoom`, the DMX chart's bands). Take ch 16
+   to 0, 40 and 80: the pool changes size three times, as the Stage view's does. Then 128, 170, 220
+   (focus corrected): the same three sizes.
+3. **Robe iris and frost past 179**: take each to 179, then 200: the view holds the smallest iris and
+   full frost; on the rig 180–191 closes the iris and 180–189 is 100% frost, so they should agree up
+   to the effect bands.
+4. **IMG Stageline Wash-42 colour macros** (`ImgStageLineWash42LedFixture.ColourMacro`). The manual
+   (p17) numbers the sixteen macros and names none. Step ch 11 through them and correct each
+   `colourPreview`.
+5. **Whex** (`WhexFixture.ProgramMode`). No manual to hand: program 1 is set to DMX 11, continuing
+   the programs' spacing (61, 111, 161). Check 11 runs a program distinct from 111's.
+6. **LED Lightbar 12 Pixel** (`LedLightbar12PixelFixture.ColorPreset.COLOR_28_SALMON_WHITE`): its
+   preview was an eight-digit typo, set to `#FF3219` from its neighbours; check it on the bar.
+7. **An animated band** on any wheel (a Robe or MAC 250 scroll band): the view cycles the wheel's
+   own colours, about a second each. If the cycle reads too fast or too slow beside the real wheel,
+   adjust `BAND_STEP_S` in `frontend/src/lib/colourBands.ts`.
+
+Where an answer disagrees, correct the value and its comment, and drop the `Estimate:` marker.
+
+30 minutes.
 
 ---
 

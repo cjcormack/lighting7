@@ -214,6 +214,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 body = info.body,
                 acceptsLantern = info.acceptsLantern,
                 depthOfField = info.depthOfField,
+                fieldDeg = info.fieldDeg,
             )
         })
     }
@@ -322,6 +323,10 @@ data class SliderPropertyDescriptor(
     val blade: String? = null,
     /** A SHUTTER slider's blade depth at DMX max, as a fraction of the field's diameter (0.5 the centre). */
     val depthMax: Double? = null,
+    /** The DMX at which the slider's proportional band starts (`@FixtureProperty.activeMin`), or null for [min]. */
+    val activeMin: Int? = null,
+    /** The DMX at which it ends — above it the channel is effects, and the view holds the end value. Null for [max]. */
+    val activeMax: Int? = null,
 ) : PropertyDescriptor
 
 @Serializable
@@ -409,6 +414,12 @@ data class SettingOption(
     /** On a loadable setting (its `media` set), whether this option is a slot that takes media —
      *  false for an open hole or an out position. Null on every other setting. */
     val loadable: Boolean? = null,
+    /** On a stepped zoom (a ZOOM setting), the full beam angle in degrees at this position. */
+    val zoomDeg: Double? = null,
+    /** On a COLOUR setting, true for a band with no single colour of its own — a scroll, a random or
+     *  rainbow program, an auto change, or a band handing colour to other channels. Null on every
+     *  other option: a COLOUR option is either this or carries a [colourPreview]. */
+    val noColour: Boolean? = null,
 )
 
 @Serializable
@@ -455,4 +466,6 @@ data class FixtureTypeDetails(
     val acceptsLantern: Boolean = false,
     /** The type's depth-of-field constant (`@FixtureType.depthOfField`); null for the family's. */
     val depthOfField: Double? = null,
+    /** A fixed lens's full beam angle (`@FixtureType.fieldDeg`); null when the type declares none. */
+    val fieldDeg: Double? = null,
 )

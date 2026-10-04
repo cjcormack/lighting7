@@ -158,7 +158,7 @@ class LocateValueResolverTest {
     fun `UV-only fixture locates its dimmer to full`() {
         val fixture = UVFixture(universe, key = "uv-1", fixtureName = "UV 1", firstChannel = 1)
         val assignments = LocateValueResolver.resolve(fixture)
-        assertEquals(1, assignments.size, "the UV-category dimmer is the fixture's whole output")
+        assertEquals(1, assignments.size, "its one channel is its dimmer, the fixture's whole output")
         assertEquals("dimmer", assignments.single().propertyName)
         assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), assignments.single().value)
     }
