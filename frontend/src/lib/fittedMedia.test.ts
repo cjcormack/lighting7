@@ -9,6 +9,7 @@ import {
   loadableSettings,
   mediaEqual,
   mediaFilters,
+  colourFilters,
   mediaOver,
   normaliseMedia,
   OPEN_WHITE,
@@ -106,6 +107,19 @@ describe('filters and the stored shape', () => {
   it('finds every other gel-taking loadable setting as a filter, not the colour source', () => {
     expect(loadableSettings([SCROLLER, WHEEL, FRAME, PLAIN]).map((s) => s.name)).toEqual(['gelScroller', 'fbWheelPos', 'mediaFrame'])
     expect(mediaFilters([SCROLLER, WHEEL, FRAME, PLAIN], 'gelScroller').map((s) => s.name)).toEqual(['fbWheelPos', 'mediaFrame'])
+  })
+
+  it("adds a wheel head's other colour wheels ahead of its media filters, in channel order, and an RGB head's none", () => {
+    const wheel = (name: string, channelNo: number): SettingPropertyDescriptor => ({
+      type: 'setting', name, displayName: name, category: 'colour', channel: { universe: 1, channelNo }, options: [],
+    })
+    const [w1, w2, w3] = [wheel('colour1', 7), wheel('colour2', 8), wheel('colour3', 9)]
+    const source = { type: 'setting' as const, property: w1 }
+    expect(colourFilters([w3, w1, FRAME, w2], source).map((s) => s.name)).toEqual(['colour2', 'colour3', 'mediaFrame'])
+    // The Revolution: its scroller is the source and its only colour setting, so only the media filter.
+    expect(colourFilters([SCROLLER, WHEEL, FRAME], { type: 'setting', property: SCROLLER }).map((s) => s.name)).toEqual(['fbWheelPos', 'mediaFrame'])
+    // Beside an RGB property a colour setting is a preset, not glass in the beam.
+    expect(colourFilters([w1, w2], { type: 'colour', property: { name: 'rgb' } })).toEqual([])
   })
 
   it('multiplies filters in series and passes through a filter with no colour', () => {

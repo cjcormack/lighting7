@@ -120,7 +120,19 @@ the desk Mac with a GPU (not Safari), the Commemoration Hall at a full look with
 lights packed, a 1606 × 2236 px canvas: an orbit drag at a 17–21 ms median frame, the governor at
 tier 0 throughout. Safari and the iPad are still owed.
 
-30 minutes; all of it is the desk's.
+**Since fixture-optics session 4 gobos land on surfaces** too: every gobo light reads the gobo atlas
+on every lit pixel it reaches, two layers for the Robe. On SwiftShader (Chromium, 2200 × 1500, haze
+off, three gobo heads with pools over most of the canvas, one spinning) that was +8 % of a frame
+against the same rig with the surface gobos off, and the frame change under it +2–3 % against
+`main` — no reason to narrow it by default, and still no GPU's number. So:
+
+5. With a gobo in every head that has one (the show's real gobos, or the MAC 250's and the Robe's) and
+   one spinning, orbit at the default budget with the View menu's **Gobos on surfaces** on *Every gobo
+   light*, then on *Selected heads only* with nothing selected: the difference is the gobo pass. If
+   the budget runs short with it on, make *Selected heads only* the default (`DEFAULT_GOBO_SURFACES`
+   in `scene/sceneView.ts`) in the same commit, and say so here.
+
+40 minutes; all of it is the desk's.
 
 ---
 

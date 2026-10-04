@@ -219,14 +219,19 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 
 ### Session 4 — gobos on surfaces, and stacked wheels (frontend)
 
-- **Surfaces (D10):** `scene/surfaceShader.ts` samples the gobo layer and angle in light space,
-  using `aBeamShape.w` for the second layer. Gobos are drawn on every lit surface a gobo light
-  reaches, blurred by session 1's term.
+- **Surfaces (D10):** `scene/surfaceShader.ts` samples the gobo layers in light space, in the frame
+  `beamMask` cuts in, through the haze's own sampler (`goboLayers.ts`). Gobos are drawn on every lit
+  surface a gobo light reaches, blurred by session 1's term. (As built: `aBeamShape.w` had gone to
+  the depth of field in session 1, so both layers pack into one float — the haze's `aBeamFx.y`, the
+  light table's texel 4 `.z` — and texel 4's frame became `(cos, sin)` in a basis built from the
+  axis; still six texels.)
 - **Stacked wheels:** a second gobo layer multiplied over the first (the Robe's static and rotating
   wheels), and the Robe's second colour wheel multiplied subtractively over the first.
 - **Budget:** measured in Safari on the operator's Mac and an iPad before merging; if it runs
   short, the surface sample is limited to the selected heads and the rest keep today's pool.
-  Recorded against `FU-MANUAL-STAGE-LIGHT-BUDGET`.
+  Recorded against `FU-MANUAL-STAGE-LIGHT-BUDGET`. (As built: the limit is the View menu's *Gobos on
+  surfaces*, defaulting to every gobo light on SwiftShader's numbers; Safari and the iPad are step 5
+  of that item.)
 
 ### Session 5 — the library optics pass (backend + frontend)
 

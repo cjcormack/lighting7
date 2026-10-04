@@ -23,7 +23,13 @@ import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageE
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
 import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { StageConfetti } from './StageConfetti'
-import { DEFAULT_SCENE_LAYERS, type SceneLayers } from './scene/sceneView'
+import {
+  DEFAULT_GOBO_SURFACES,
+  DEFAULT_SCENE_LAYERS,
+  goboLandsOnSurfaces,
+  type GoboSurfaces,
+  type SceneLayers,
+} from './scene/sceneView'
 import { DEFAULT_LIGHT_BUDGET } from './scene/lightTable'
 import { HAZE_TIERS, HazeGovernor, type HazeQuality } from './scene/hazeGovernor'
 import {
@@ -199,6 +205,8 @@ interface Stage3DProps {
   layers?: SceneLayers
   /** How many lights the surfaces take (`scene/lightTable.ts`). */
   lightBudget?: number
+  /** Whose gobos land on surfaces: every gobo light's, or the selected heads' only (`scene/sceneView.ts`). */
+  goboSurfaces?: GoboSurfaces
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
@@ -238,6 +246,7 @@ export function Stage3D({
   showScene = false,
   layers = DEFAULT_SCENE_LAYERS,
   lightBudget = DEFAULT_LIGHT_BUDGET,
+  goboSurfaces = DEFAULT_GOBO_SURFACES,
   seatPicking = null,
   framingRef,
   capture = null,
@@ -575,6 +584,7 @@ export function Stage3D({
         onClick={interactable ? () => handleFixtureClick(patch) : undefined}
         onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
         reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
+        goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
       />
     )
   })
@@ -598,6 +608,7 @@ export function Stage3D({
         selected={isSelected({ kind: 'patch', patchKey: patch.key })}
         editMode={interactable}
         onClick={interactable ? () => handleFixtureClick(source) : undefined}
+        goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
       />
     )
   })

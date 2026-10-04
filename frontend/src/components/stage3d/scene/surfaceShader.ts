@@ -1,6 +1,7 @@
 import {
   AdditiveBlending,
   Color,
+  DataArrayTexture,
   DataTexture,
   DoubleSide,
   FloatType,
@@ -10,9 +11,11 @@ import {
   ShaderMaterial,
 } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
-import { FOCUS_SOFT_BLUR } from '../washConfig'
+import { getGoboTexture } from '../goboAtlas'
+import { GOBO_LAYERS_GLSL } from '../goboLayers'
+import { FOCUS_LOD_MAX, FOCUS_SOFT_BLUR, GOBO_BLUR_TEXELS } from '../washConfig'
 import { LANDING_GLSL } from './landing'
-import { LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
+import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
 /**
@@ -31,7 +34,15 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * iris, and an edge softened by the family and by how far the surface sits from the focal plane,
  * which is measured from the aperture. **No falloff with distance**, for `washConfig.ts`'s reason: the
  * desk draws a stylised, consistent beam, and a pool that dimmed with throw would disagree with the
- * uniform cone above it. Gobos land in the air but not on surfaces until the quality tier
+ * uniform cone above it.
+ *
+ * **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers (texel 4,
+ * `../goboLayers.ts`) samples the atlas in the same frame the mask cuts in, turned by each layer's
+ * angle, multiplied over the mask — so the blades, the iris and an oval cut the gobo as they cut the
+ * pool — at the mip level of the focus blur the edge is softened by, or of the pixel's footprint
+ * where that is wider. The haze samples it through the same function, so a gobo sharp in the air at
+ * a distance is sharp on a wall at that distance. What still does not land is a **shadow**: the
+ * axial beam reach stands in for occlusion until the quality tier's shadow maps
  * (`FU-STAGE-QUALITY-TIER`).
  *
  * The colour is the finish lit by the lights plus a little of the light itself (`uSheen`), so a
@@ -49,6 +60,9 @@ export interface SurfaceUniforms {
   uLightGain: { value: number }
   uSheen: { value: number }
   uFocusSoftBlur: { value: number }
+  uGobo: { value: DataArrayTexture }
+  uGoboBlurTexels: { value: number }
+  uLodMax: { value: number }
 }
 
 /** A canvas's light texture: [MAX_LIGHT_BUDGET] rows of [LIGHT_TEXELS] RGBA float texels. */
@@ -71,6 +85,9 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
     uLightGain: { value: 1.6 },
     uSheen: { value: 0.18 },
     uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
+    uGobo: { value: getGoboTexture() },
+    uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
+    uLodMax: { value: FOCUS_LOD_MAX },
   }
 }
 
@@ -106,6 +123,9 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform float uLightGain;
   uniform float uSheen;
   uniform float uFocusSoftBlur;
+  uniform sampler2DArray uGobo;
+  uniform float uGoboBlurTexels;
+  uniform float uLodMax;
   uniform vec3 uAlbedo;
   uniform int uPattern;
   uniform float uOpacity;
@@ -124,6 +144,8 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${UNPACK_EDGE_IRIS_GLSL}
   ${UNPACK_FOCUS_GLSL}
   ${LANDING_GLSL}
+  ${BEAM_FRAME_GLSL}
+  ${GOBO_LAYERS_GLSL}
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -163,6 +185,12 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     return;
     #endif
 
+    // How wide this pixel is on the surface, in metres — taken here, in uniform control flow, since
+    // derivatives inside the light loop (after its continues) are undefined. A gobo is read at the
+    // mip level of this footprint where it is wider than the focus blur, so a sharp pattern far
+    // away is filtered rather than aliased.
+    float footprint = length(fwidth(vWorldPos));
+
     vec3 acc = vec3(0.0);
     for (int i = 0; i < uLightCount; i++) {
       vec4 axis = texelFetch(uLights, ivec2(1, i), 0);
@@ -183,19 +211,33 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       vec4 frame = texelFetch(uLights, ivec2(4, i), 0);
       vec4 colour = texelFetch(uLights, ivec2(2, i), 0);
       // Where the point sits in the beam's cross-section, the field edge at 1 — the frame the haze
-      // uses, so a soft edge and an iris shape the pool along the same line as the air.
-      vec3 bx = normalize(frame.xyz - axis.xyz * dot(frame.xyz, axis.xyz));
-      vec3 by = cross(axis.xyz, bx);
-      vec2 uv = vec2(dot(v, bx), dot(v, by)) / max(1e-4, axial * frame.w);
+      // uses, so a soft edge and an iris shape the pool along the same line as the air. Texel 4
+      // carries the frame as (cos, sin) in the axis's own basis (lightTable.ts's frameInBasis).
+      vec3 bx;
+      vec3 by;
+      beamFrame(axis.xyz, frame.xy, bx, by);
+      float radius = max(1e-4, axial * frame.w);
+      vec2 g = vec2(dot(v, bx), dot(v, by)) / radius;
+      vec2 uv = g;
       // A segment's rectangle, or an oval's narrow axis: the field edge at 1 on v too.
       if (aperture.z != 0.0) uv.y /= abs(aperture.z);
       vec2 edgeIris = unpackEdgeIris(colour.w);
       // Focus is a distance from the aperture — the lens — not from the apex behind it; the blur is
       // the relative error from it times the type's depth of field, both in apex.w.
       vec2 focus = unpackFocus(apex.w);
-      float hard = beamHardness(edgeIris.x, focus.x, focusBlur(dist - aperture.x, focus.x, focus.y), uFocusSoftBlur);
+      float blur = focusBlur(dist - aperture.x, focus.x, focus.y);
+      float hard = beamHardness(edgeIris.x, focus.x, blur, uFocusSoftBlur);
       float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - hard, aperture.yw);
       if (m <= 0.0) continue;
+      // The gobos, in the haze's frame (g, before an oval's division), as the haze reads them: a
+      // segment carries none. Blurred by the same blur the edge is softened by.
+      if (aperture.z <= 0.0 && frame.z > 0.5) {
+        vec4 rotA;
+        vec4 rotB;
+        goboRots(frame.z, rotA, rotB);
+        m *= goboPair(g, rotA, rotB, goboLod(blur, footprint / radius, uGoboBlurTexels, uLodMax));
+        if (m <= 0.0) continue;
+      }
       acc += colour.rgb * m * (0.3 + 0.7 * facing);
     }
 

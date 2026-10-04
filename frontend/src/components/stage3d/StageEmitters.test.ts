@@ -26,6 +26,7 @@ import {
 } from './StageEmitters'
 import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
+import { packGobos } from './goboLayers'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { LAND_NONE, LAND_UP } from './scene/landing'
 import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
@@ -112,8 +113,7 @@ function beamWrite(): BeamWrite {
     opacity: 0.4,
     cosHalf: 0.97,
     edge: 0.7,
-    goboSlot: 3,
-    goboAngle: 1.2,
+    gobos: packGobos(3, 9, 0, 1.2),
     focusDist: 6,
     near: 0.5,
     dof: 3,
@@ -180,6 +180,12 @@ describe('emitter dirty groups', () => {
     const b = build()
     makeHandle(b).writeBeam(0, 0, beamWrite())
     expect(Array.from(b.volumeShape.array.slice(0, 4))).toEqual([0.5, Math.fround(0.6), Math.fround(0.3), 3])
+  })
+
+  it("carries both gobo layers in the haze's fx attribute, packed exactly, between the edge and the focus", () => {
+    const b = build()
+    makeHandle(b).writeBeam(0, 0, beamWrite())
+    expect(Array.from(b.volumeFx.array.slice(0, 4))).toEqual([Math.fround(0.7), packGobos(3, 9, 0, 1.2), 0, 6])
   })
 
   it('flags the matrices hideLobes parks', () => {

@@ -117,10 +117,8 @@ export interface BeamWrite {
   cosHalf: number
   /** Edge hardness 0..1 — 1 minus the softness. */
   edge: number
-  /** 0 = open. */
-  goboSlot: number
-  /** Radians. */
-  goboAngle: number
+  /** The gobo layers, both patterns and the turned one's angle (`goboLayers.ts`'s `packGobos`); 0 = open. */
+  gobos: number
   /** Metres from the aperture, or negative ("always sharp") with no focus channel. */
   focusDist: number
   /** Apex → aperture. */
@@ -641,7 +639,7 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeDir.setXYZ(i, w.dir.x, w.dir.y, w.dir.z)
       b.volumeRight.setXYZ(i, w.right.x, w.right.y, w.right.z)
       b.volumeColor.setXYZW(i, w.color.r, w.color.g, w.color.b, w.opacity)
-      b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
+      b.volumeFx.setXYZW(i, w.edge, w.gobos, 0, w.focusDist)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, w.dof)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
       packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0)

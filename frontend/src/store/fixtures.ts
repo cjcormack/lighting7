@@ -573,22 +573,45 @@ export function findWheel(
 }
 
 /**
- * Every gobo wheel, in descriptor order. The Robe ColorSpot 575 exposes two
- * (static + rotating), and the backend emits descriptors in Kotlin reflection
- * order — alphabetical in practice, guaranteed nothing — so no single pick is
- * principled. The stage view renders the first wheel whose *current DMX value*
- * selects a pattern, so engaging either wheel shows its gobo regardless of
- * descriptor order.
+ * Every gobo wheel, in **DMX channel order** — the layer order the Stage view draws them in
+ * (fixture-optics plan session 4): the first wheel is layer A, the second layer B, and a beam
+ * multiplies the two. The Robe ColorSpot 575 has two (its static wheel on channel 9, its rotating
+ * wheel on 10), every other type one. Descriptor order is Kotlin reflection's — alphabetical in
+ * practice, guaranteed nothing — so the channel decides, and a rig's layers never swap with a
+ * build. Fine (low-byte) sliders are never a wheel.
  */
 export function findGoboProperties(
   properties: PropertyDescriptor[] | undefined,
 ): Array<SliderPropertyDescriptor | SettingPropertyDescriptor> {
-  return (
+  const wheels =
     properties?.filter(
       (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
         (p.type === 'slider' || p.type === 'setting') && p.category === 'gobo' && !isFine(p),
     ) ?? []
-  )
+  // Stable, so two wheels on one channel (never in the library) keep descriptor order.
+  return wheels.sort((a, b) => a.channel.universe - b.channel.universe || a.channel.channelNo - b.channel.channelNo)
+}
+
+/**
+ * Which of [wheels] (as [findGoboProperties] orders them) a gobo rotation channel turns: the wheel
+ * it **follows** — the nearest at or below its channel — which is how every type in the library lays
+ * them out (the MAC 250's wheel then its rotation; the Robe's static wheel, rotating wheel, then the
+ * rotating wheel's index/speed; the Revolution's position, function, rotation). A rotation channel
+ * before every wheel turns the first. -1 with no rotation channel or no wheel: nothing turns.
+ */
+export function goboRotationWheel(
+  wheels: ReadonlyArray<SliderPropertyDescriptor | SettingPropertyDescriptor>,
+  rotation: SliderPropertyDescriptor | SettingPropertyDescriptor | undefined,
+): number {
+  if (!rotation || wheels.length === 0) return -1
+  const at = rotation.channel
+  let best = -1
+  for (let i = 0; i < wheels.length; i++) {
+    const c = wheels[i].channel
+    if (c.universe !== at.universe || c.channelNo > at.channelNo) continue
+    if (best < 0 || c.channelNo >= wheels[best].channel.channelNo) best = i
+  }
+  return best < 0 ? 0 : best
 }
 
 export function findGoboRotationProperty(properties: PropertyDescriptor[] | undefined) {

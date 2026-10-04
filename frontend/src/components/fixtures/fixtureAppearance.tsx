@@ -12,7 +12,7 @@ import {
 import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import type { FixturePatch } from '../../api/patchApi'
 import { findGel } from '../../lib/gels'
-import { filterColour, fittedProperties, mediaFilters } from '../../lib/fittedMedia'
+import { colourFilters, filterColour, fittedProperties } from '../../lib/fittedMedia'
 import { useGelIndex } from '../../hooks/useGelIndex'
 import {
   useColourValue,
@@ -100,10 +100,10 @@ export function FixtureAppearanceSource({
   // colouring by it would contradict both other surfaces.
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
-  // The unit's colour filters — a media frame's gel, a dichroic in a wheel (`mediaFilters`). The
-  // 3D scene's `filteredHex` is the other copy of this step.
+  // The unit's colour filters — a second colour wheel, a media frame's gel, a dichroic in a wheel
+  // (`colourFilters`). The 3D scene's `filteredHex` is the other copy of this step.
   const filters = useMemo(
-    () => mediaFilters(properties, colourSource?.property.name),
+    () => colourFilters(properties, colourSource),
     [properties, colourSource],
   )
 

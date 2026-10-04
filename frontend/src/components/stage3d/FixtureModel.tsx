@@ -35,6 +35,7 @@ import {
   findGoboProperties,
   findGoboRotationProperty,
   findGoboRotationModeProperty,
+  goboRotationWheel,
   findFineProperty,
   findPrismProperty,
   findPrismRotationProperty,
@@ -58,7 +59,7 @@ import {
   perceptualBrightness,
 } from '../../lib/colourMath'
 import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
-import { fittedProperties, filterColour, mediaFilters } from '../../lib/fittedMedia'
+import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedMedia'
 import {
   DEFAULT_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_COLOUR,
@@ -72,6 +73,7 @@ import {
   evalMovementMacro,
   makeBeamGeom,
   makeBladeStates,
+  makeGoboLayers,
   makeGoboRotation,
   resolveDeclaredFocusDistance,
   resolveDmxBlades,
@@ -85,9 +87,11 @@ import {
   resolvePrismFacets,
   resolvePrismSpin,
   resolveZoomDeg,
+  stepGoboLayers,
   type BeamGeom,
   type BladeState,
   type ByteDescriptor,
+  type GoboRotation,
   type MacroColour,
   type MacroMovement,
 } from './beamOptics'
@@ -107,6 +111,7 @@ import { useStageInvalidate } from './stageInvalidate'
 import { forgetLanding, recordLanding } from './landedPoints'
 import { bodySpecOf } from './emitterNeeds'
 import { packBlades } from './beamMask'
+import { MAX_GOBO_LAYERS } from './goboLayers'
 import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
 import { apexDistanceM, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec, type Cell } from './bodies/archetype'
 import { bodyFrames } from './bodies/bodyGeometry'
@@ -421,6 +426,10 @@ interface FixtureModelProps {
   /** Report where this fixture's beam lands (`landedPoints.ts`) — the selected fixture on an
    *  on-screen canvas, for the Focus tab's *Focus here*. */
   reportLanding?: boolean
+  /** Whether this unit's gobos land on surfaces as well as in the air (fixture-optics plan session
+   *  4): every gobo light's by default, the selected heads' only under the View menu's *Gobos on
+   *  surfaces → Selected heads* (`scene/sceneView.ts`). Off, the pool is drawn without them. */
+  goboOnSurfaces?: boolean
 }
 
 /**
@@ -453,6 +462,7 @@ export function FixtureModel({
   onClick,
   onEditFocus,
   reportLanding = false,
+  goboOnSurfaces = true,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
@@ -539,6 +549,12 @@ export function FixtureModel({
     () => findGoboRotationModeProperty(unitProps),
     [unitProps],
   )
+  // Which wheel the rotation channel turns: the one it follows (`goboRotationWheel`). The other —
+  // the Robe's static wheel — holds still.
+  const goboTurned = useMemo(
+    () => goboRotationWheel(goboProps.slice(0, MAX_GOBO_LAYERS), goboRotProp),
+    [goboProps, goboRotProp],
+  )
   const prismProp = useMemo(() => findPrismProperty(unitProps), [unitProps])
   const prismRotProp = useMemo(
     () => findPrismRotationProperty(unitProps),
@@ -560,10 +576,11 @@ export function FixtureModel({
   const tiltFineProp = useMemo(() => findTiltFineProperty(unitProps), [unitProps])
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
-  // A unit's other gel-taking loadable settings — a media frame's wing, a module wheel's dichroic —
-  // filter the beam's colour while their current slot holds one.
+  // A unit's other colour wheels (the Robe's second) and its other gel-taking loadable settings — a
+  // media frame's wing, a module wheel's dichroic — filter the beam's colour while their current
+  // slot holds one (`colourFilters`).
   const filterProps = useMemo(
-    () => mediaFilters(unitProps, colourSource?.property.name),
+    () => colourFilters(unitProps, colourSource),
     [unitProps, colourSource],
   )
 
@@ -697,6 +714,8 @@ export function FixtureModel({
     frostProp,
     goboProp: goboProps[0],
     goboProp2: goboProps[1],
+    goboTurned,
+    goboOnSurfaces,
     goboRotProp,
     goboRotFineProp,
     goboRotModeProp,
@@ -892,10 +911,15 @@ interface BeamDirectorOpts {
   zoomProp: SliderPropertyDescriptor | undefined
   irisProp: SliderPropertyDescriptor | undefined
   frostProp: SliderPropertyDescriptor | undefined
+  /** Gobo layer A: the first wheel in channel order (`findGoboProperties`). */
   goboProp: ByteDescriptor | undefined
-  /** Second gobo wheel where one exists (Robe: static + rotating). Drawn when
-   *  the first wheel sits at open — see the resolve fallback in the director. */
+  /** Gobo layer B: the second wheel where one exists (the Robe: static, then rotating), multiplied
+   *  over layer A in the air and on every surface. */
   goboProp2: ByteDescriptor | undefined
+  /** Which layer the rotation channel turns (`goboRotationWheel`): 0, 1, or −1 for none. */
+  goboTurned: number
+  /** Whether the light table carries this unit's gobos, so they land on surfaces too. */
+  goboOnSurfaces: boolean
   goboRotProp: ByteDescriptor | undefined
   /** The rotation's fine channel (`fineOf`), folded into the coarse value. */
   goboRotFineProp: SliderPropertyDescriptor | undefined
@@ -1039,8 +1063,7 @@ const SCRATCH_BEAM: BeamWrite = {
   opacity: 0,
   cosHalf: 1,
   edge: 0,
-  goboSlot: 0,
-  goboAngle: 0,
+  gobos: 0,
   focusDist: -1,
   near: 0,
   dof: 0,
@@ -1057,6 +1080,9 @@ const SCRATCH_REPORT_ORIGIN = new Vector3()
 const SCRATCH_REPORT_DIR = new Vector3()
 const SCRATCH_REPORT_POINT = new Vector3()
 const SCRATCH_GOBO_ROTATION = makeGoboRotation()
+/** A wheel that is not turned this frame: no index, no spin. Never written. */
+const NO_GOBO_ROTATION: Readonly<GoboRotation> = makeGoboRotation()
+const SCRATCH_GOBOS = makeGoboLayers()
 
 /**
  * Record where the beam's own **axis** lands, from its first aperture — what *Focus here* focuses
@@ -1100,6 +1126,8 @@ function useBeamDirector({
   frostProp,
   goboProp,
   goboProp2,
+  goboTurned,
+  goboOnSurfaces,
   goboRotProp,
   goboRotFineProp,
   goboRotModeProp,
@@ -1174,8 +1202,12 @@ function useBeamDirector({
   // Gobo and prism rotation are integrated angles, so they persist across
   // frames. The prism angle spins the lobe *arrangement*; the gobo angle spins
   // the image inside each lobe — the two compose independently, as on the
-  // real fixture.
+  // real fixture. Only the turned wheel's gobo has an angle (`stepGoboLayers`).
   const goboAngleRef = useRef(0)
+  // Read in the frame loop through a ref, so the View menu's switch takes effect on the next
+  // frame without re-registering it; flipping it asks for that frame.
+  const goboOnSurfacesRef = useRef(goboOnSurfaces)
+  goboOnSurfacesRef.current = goboOnSurfaces
   const prismAngleRef = useRef(0)
   // Lobes written last frame, so a shrinking facet count parks the excess
   // exactly once instead of every frame.
@@ -1248,6 +1280,10 @@ function useBeamDirector({
     invalidate()
     return subscribeToChannels(beamChannels, invalidate, source)
   }, [beamChannels, source, invalidate])
+  // The gobos-on-surfaces switch changes the light table, not a prop R3F applies.
+  useEffect(() => {
+    invalidate()
+  }, [goboOnSurfaces, invalidate])
   // This director's identity in `landedPoints.ts`: another canvas may report the same fixture.
   const [reporter] = useState(() => ({}))
   // Asked to report (the fixture was just selected): draw a frame, so the landing is this frame's;
@@ -1390,41 +1426,30 @@ function useBeamDirector({
     // tighter of the two wins.
     const iris = Math.min(spec.iris, resolveIris(irisProp, readChannel(channelSource, beamKeys.iris)))
 
-    // A fixture can carry two gobo wheels in series (Robe: static + rotating);
-    // the renderer projects one pattern, so draw whichever wheel currently
-    // selects one — descriptor order decides only the tie when both do.
-    let goboSlot = multi ? 0 : resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
-    if (!multi && goboSlot === 0 && goboProp2) {
-      goboSlot = resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
-    }
-    if (goboSlot > 0) {
-      // A wheel with a function channel indexes to an angle or spins at a speed; every other wheel
-      // spins as its rotation channel's bands say.
-      const rotation = resolveGoboRotation(
-        goboRotProp,
-        combineFinePair(
-          readChannel(channelSource, beamKeys.goboRot),
-          goboRotFineProp ? readChannel(channelSource, beamKeys.goboRotFine) : null,
-        ),
-        goboRotModeProp,
-        readChannel(channelSource, beamKeys.goboRotMode),
-        SCRATCH_GOBO_ROTATION,
-      )
-      const spin = rotation.spinRevPerSec
-      if (rotation.indexRad != null) {
-        goboAngleRef.current = rotation.indexRad
-      } else if (spin !== 0) {
-        animating = true
-        // Wrapped, not free-running: an unbounded accumulator loses float
-        // precision within the hour and the pattern starts visibly stepping.
-        // delta is clamped because a backgrounded tab (or an idle `demand`
-        // canvas) hands back seconds.
-        goboAngleRef.current =
-          (goboAngleRef.current + spin * TAU * Math.min(delta, 0.1)) % TAU
-      }
-    } else {
-      goboAngleRef.current = 0
-    }
+    // Up to two gobo wheels in series (the Robe: static, then rotating), each a layer the beam is
+    // multiplied by, in the air and on every surface (fixture-optics plan session 4). Only the wheel
+    // the rotation channel turns moves; a wheel with a function channel indexes to an angle or spins
+    // at a speed, every other spins as its rotation channel's bands say. A body of several cells
+    // carries none.
+    const slotA = multi ? 0 : resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
+    const slotB = multi ? 0 : resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
+    const turnedSlot = goboTurned === 0 ? slotA : goboTurned === 1 ? slotB : 0
+    const rotation =
+      turnedSlot > 0
+        ? resolveGoboRotation(
+            goboRotProp,
+            combineFinePair(
+              readChannel(channelSource, beamKeys.goboRot),
+              goboRotFineProp ? readChannel(channelSource, beamKeys.goboRotFine) : null,
+            ),
+            goboRotModeProp,
+            readChannel(channelSource, beamKeys.goboRotMode),
+            SCRATCH_GOBO_ROTATION,
+          )
+        : NO_GOBO_ROTATION
+    const gobos = stepGoboLayers(slotA, slotB, goboTurned, rotation, goboAngleRef.current, delta, SCRATCH_GOBOS)
+    goboAngleRef.current = gobos.angle
+    if (gobos.spinning) animating = true
 
     const group = groupRef.current
     if (!group || !head) {
@@ -1498,8 +1523,10 @@ function useBeamDirector({
     beam.iris = iris
     beam.bladesA = blades[0]
     beam.bladesB = blades[1]
-    beam.goboSlot = goboSlot
-    beam.goboAngle = goboAngleRef.current
+    beam.gobos = gobos.packed
+    // The surfaces take the same layers unless the View menu limits them to the selected heads; the
+    // haze always draws them.
+    const surfaceGobos = goboOnSurfacesRef.current ? gobos.packed : 0
 
     for (let lobe = 0; lobe < lobes; lobe++) {
       const cell = spec.cells[multi ? lobe : 0]
@@ -1596,7 +1623,7 @@ function useBeamDirector({
       if (!multi) {
         // A single cell: each lobe lands as its own light.
         const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1])
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1], surfaceGobos)
         emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
       }
     }
@@ -1641,7 +1668,7 @@ function useBeamDirector({
           ? edgeLanding(emitters, SCRATCH_APEX, dir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect > 0 ? aspect : 1), aspect > 0, near, landed.hit)
           : null
         const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }
     } else if (lobes < litLobesRef.current) {
@@ -1674,6 +1701,7 @@ function writeLightRow(
   edgeHit: SurfaceHit | null,
   bladesA: number,
   bladesB: number,
+  gobos: number,
 ): void {
   row.ax = apex.x
   row.ay = apex.y
@@ -1699,6 +1727,7 @@ function writeLightRow(
   row.aspect = aspect
   row.bladesA = bladesA
   row.bladesB = bladesB
+  row.gobos = gobos
 }
 
 // — colour sync (event-driven via live channel subscriptions) —————————
@@ -1713,8 +1742,9 @@ function writeLightRow(
 
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
-  /** The unit's colour filters (`mediaFilters`): settings whose current slot's colour multiplies
-   *  the beam's — a media frame's gel, a dichroic in a wheel. Absent or empty filters nothing. */
+  /** The unit's colour filters (`colourFilters`): settings whose current slot's colour multiplies
+   *  the beam's — a second colour wheel, a media frame's gel, a dichroic in a wheel. Absent or empty
+   *  filters nothing. */
   filters?: readonly SettingPropertyDescriptor[]
   /** Paints the body's lens; null outside a canvas (the tests) and before the bodies exist. */
   lensRef: React.RefObject<LensPainter | null>

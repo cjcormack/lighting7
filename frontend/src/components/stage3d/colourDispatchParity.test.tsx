@@ -17,7 +17,7 @@ import {
 } from '../../store/fixtures'
 import type { FixturePatch } from '../../api/patchApi'
 import { findGel, indexGels, type Gel } from '../../lib/gels'
-import { fittedProperties, mediaFilters, type FittedMedia } from '../../lib/fittedMedia'
+import { colourFilters, fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
 import gelsJson from '../../../../src/main/resources/gels.json'
 import { chan, colourProp, makeFixture, settingProp, sliderProp } from '../../test/fixtureFactories'
 
@@ -106,7 +106,7 @@ function resolve3D(scenario: Scenario): Resolved {
         hasFixture={!!fixture}
         colourSource={colourSource}
         gel={gel}
-        filters={mediaFilters(properties, colourSource?.property.name)}
+        filters={colourFilters(properties, colourSource)}
         dimmerProp={findDimmerProperty(properties)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
@@ -159,6 +159,22 @@ const MODULE_WHEEL = {
 }
 const REVOLUTION = makeFixture('rev-1', [DIMMER, MEDIA_FRAME, SCROLLER, MODULE_WHEEL])
 const R26: FittedMedia = { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' } } } }
+
+// The Robe ColorSpot 575's two colour wheels (fixture-optics plan session 4): the second's dichroics
+// sit in series with the first's, so its slot multiplies the beam. A scroll band carries no colour.
+const ROBE_WHEEL_1 = settingProp('colour1', 'colour', chan(9), [
+  { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#FFFFFF' },
+  { name: 'LIGHT_BLUE', level: 133, displayName: 'Light blue', colourPreview: '#ADD8E6' },
+  { name: 'YELLOW', level: 160, displayName: 'Yellow', colourPreview: '#FFFF00' },
+  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW' },
+])
+const ROBE_WHEEL_2 = settingProp('colour2', 'colour', chan(10), [
+  { name: 'OPEN', level: 0, displayName: 'Open', colourPreview: '#FFFFFF' },
+  { name: 'DEEP_RED', level: 133, displayName: 'Deep red', colourPreview: '#8B0000' },
+  { name: 'CYAN', level: 155, displayName: 'Cyan', colourPreview: '#00FFFF' },
+  { name: 'SCROLL_CW', level: 190, displayName: 'Scroll CW' },
+])
+const ROBE = makeFixture('robe-1', [DIMMER, ROBE_WHEEL_1, ROBE_WHEEL_2])
 
 function scenario(over: Partial<Scenario>): Scenario {
   return { patch: PATCH, fixture: undefined, fixtureType: undefined, values: {}, ...over }
@@ -247,6 +263,25 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
     }),
   },
   {
+    name: 'a two-wheel head with yellow on wheel 1 and cyan on wheel 2',
+    scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 160, '0:10': 155 } }),
+  },
+  {
+    name: 'a two-wheel head with wheel 1 open and deep red on wheel 2',
+    scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 0, '0:10': 133 } }),
+  },
+  {
+    name: 'a two-wheel head with wheel 2 on a scroll band, which carries no colour',
+    scenario: scenario({ fixture: ROBE, values: { '0:1': 255, '0:9': 133, '0:10': 200 } }),
+  },
+  {
+    name: 'an RGB head whose colour preset setting is not glass in the beam',
+    scenario: scenario({
+      fixture: makeFixture('fx-1', [DIMMER, RGB, WHEEL]),
+      values: { '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0, '0:5': 10 },
+    }),
+  },
+  {
     name: 'a colour-wheel fixture parked at open',
     scenario: scenario({
       fixture: makeFixture('fx-1', [DIMMER, WHEEL]),
@@ -283,5 +318,30 @@ describe('fitted media, per unit', () => {
     expect(inFrame.colour).toBe(GELS.byCode.get('L106')!.color.toLowerCase())
     const outFrame = resolve3D(scenario({ patch: { ...PATCH, media } as FixturePatch, fixture: REVOLUTION, values: { '0:1': 255, '0:6': 0, '0:7': 0 } }))
     expect(outFrame.colour).toBe('#ffffff')
+  })
+})
+
+describe('stacked colour wheels', () => {
+  const resolveBoth = (values: Record<string, number>, fixture: Fixture = ROBE) => {
+    const s = scenario({ fixture, values })
+    return [resolve2D(s).colour, resolve3D(s).colour]
+  }
+
+  it("multiplies the second wheel's slot over the first's, subtractively, on both dispatches", () => {
+    // Yellow passes red and green, cyan green and blue: in series only green gets through.
+    expect(resolveBoth({ '0:1': 255, '0:9': 160, '0:10': 155 })).toEqual(['#00ff00', '#00ff00'])
+    expect(resolveBoth({ '0:1': 255, '0:9': 0, '0:10': 133 })).toEqual(['#8b0000', '#8b0000'])
+    // A light blue through a deep red: each channel the product of the two (0xad × 0x8b / 255).
+    expect(resolveBoth({ '0:1': 255, '0:9': 133, '0:10': 133 })).toEqual(['#5e0000', '#5e0000'])
+  })
+
+  it('passes the first wheel unchanged while the second is open or on a band with no colour', () => {
+    expect(resolveBoth({ '0:1': 255, '0:9': 133, '0:10': 0 })).toEqual(['#add8e6', '#add8e6'])
+    expect(resolveBoth({ '0:1': 255, '0:9': 133, '0:10': 200 })).toEqual(['#add8e6', '#add8e6'])
+  })
+
+  it("leaves an RGB head's colour preset out of the beam: it is not a second wheel", () => {
+    const rgbOnly = resolveBoth({ '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0 }, makeFixture('fx-1', [DIMMER, RGB]))
+    expect(resolveBoth({ '0:1': 255, '0:2': 255, '0:3': 40, '0:4': 0, '0:5': 10 }, makeFixture('fx-1', [DIMMER, RGB, WHEEL]))).toEqual(rgbOnly)
   })
 })

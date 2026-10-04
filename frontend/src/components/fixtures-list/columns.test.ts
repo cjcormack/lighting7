@@ -64,6 +64,13 @@ describe('resolveCell', () => {
     expect(resolveCell([sliderWheel], 'gobo')).toEqual({ kind: 'slider', property: sliderWheel })
   })
 
+  it('picks the gobo wheel on the lowest channel, whatever the descriptor order', () => {
+    // The Robe ColorSpot 575 as the backend's reflection emits it: rotating (ch 10) before static (ch 9).
+    const rotating = settingProp('rotatingGobo', 'gobo', chan(10))
+    const fixed = settingProp('staticGobo', 'gobo', chan(9))
+    expect(resolveCell([rotating, fixed], 'gobo')).toEqual({ kind: 'setting', property: fixed })
+  })
+
   it('resolves wheel-like strobe/speed as slider or setting by descriptor type', () => {
     const strobeSetting = settingProp('strobe', 'strobe', chan(1))
     expect(resolveCell([strobeSetting], 'strobe')).toEqual({

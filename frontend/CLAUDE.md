@@ -319,6 +319,17 @@ like the lanterns, never inside the scene, which a `render_view` capture would n
 sheet's **Media** box edits it, the Focus tab lists it.
 See the stage-vis doc's §"Fitted media: where a beam's colour and gobo come from".
 
+**Gobos land on surfaces, and wheels stack** (fixture-optics session 4): the surface shader samples
+the gobo atlas per gobo light in the frame `beamMask` cuts in, through the same `goboLayers.ts`
+sampler and blur the haze uses, so shutters cut the gobo and it focuses on a wall as in the air. A
+beam carries **two layers** packed in one float (`packGobos`: the wheels in DMX-channel order, the
+rotation channel turning the wheel it follows), in the haze's `aBeamFx.y` and the light table's
+texel 4 `.z` — still six texels, because texel 4's frame became `(cos, sin)` in a basis built from
+the axis (`lightTable.ts`'s header says why not an angle). A second **colour** wheel is a filter on
+both dispatches (`colourFilters`). The View menu's *Gobos on surfaces* (per browser) can limit the
+pass to the selected heads; it defaults to every gobo light. See the stage-vis doc's §"Gobos on
+surfaces".
+
 **Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
 — a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
 streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage

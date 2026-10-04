@@ -273,7 +273,8 @@ one fitted colour for its swatch to show. Teaching them the patch's own is
 `FU-MEDIA-CONTROL-SWATCHES`.
 
 **A gel in a filter slot multiplies the beam.** A unit's other gel-taking loadable settings — the
-Revolution's media frame and its module wheel holding a dichroic — are **filters** (`mediaFilters`):
+Revolution's media frame and its module wheel holding a dichroic — are **filters** (`mediaFilters`,
+and since session 4 `colourFilters`, which adds a second colour wheel ahead of them — below):
 each multiplies the beam's colour by its current slot's colour (`filterColour`, subtractive, gels
 in series), and a slot with none — out of the beam, empty, a gobo — passes it unchanged. Both
 dispatches apply them: the 3D syncs subscribe to the filters' channels and pass the hue through
@@ -281,6 +282,22 @@ dispatches apply them: the 3D syncs subscribe to the filters' channels and pass 
 fixed-hook-set rule. `colourDispatchParity.test.tsx` holds the two to one answer for a fitted
 frame, an empty frame, a media frame in, a dichroic, and two units of one type drawing different
 colours from the same scroller DMX. Only the colour is multiplied: a filter does not dim the beam.
+
+**A second colour wheel is a filter too** (fixture-optics plan session 4). The Robe ColorSpot 575
+has two wheels in series, the second of deep and corrective dichroics, and until session 4 the view
+drew only the first. It **joins the filter path** rather than standing beside it: `colourFilters`
+(`lib/fittedMedia.ts`) returns a wheel head's other COLOUR settings, in channel order, ahead of its
+media filters, and both dispatches apply the list exactly as they applied `mediaFilters` — the 3D
+syncs' `filteredHex`, the 2D leaves' `Filtered`. Physically it is the same thing as a media frame's
+gel: glass in series whose current slot's colour multiplies the beam's, subtractively, and a slot
+with none — open white, a scroll band — passes it. Joining keeps one multiply, one per-filter
+subscription on each dispatch and one parity test; a separate path would have been a second copy of
+all three on both sides. Only where the colour source is itself a **wheel**: beside an RGB colour
+property a COLOUR setting is a preset or macro on the same emitters (the Hex's, the Orbit's), not
+glass, and is left out. `colourDispatchParity.test.tsx` holds the 2D and 3D answers to one result for
+a two-wheel head (yellow through cyan is green; a scroll band on wheel 2 passes wheel 1), and for an
+RGB head with a preset setting. A **template** still cannot address the second wheel
+(`FU-TMPL-SECOND-COLOUR-WHEEL`).
 
 **A loadable wheel is never index-guessed.** `resolveGoboSlot` falls back to an option's position on
 a wholly unannotated wheel; a loadable wheel's options always carry `loadable`, so they count as
@@ -376,7 +393,8 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   asks after every imperative colour write. Both go through `useStageInvalidate`
   (`stageInvalidate.tsx`), a context rather than `useThree`, because the colour syncs are rendered
   outside a canvas by their tests.
-- **Time.** A movement or LED macro, a spinning gobo and a turning prism move with the clock, not with
+- **Time.** A movement or LED macro, a spinning gobo (the turned wheel's, while it shows a pattern —
+  `stepGoboLayers`' `spinning`; a static wheel never asks) and a turning prism move with the clock, not with
   DMX, so while one runs the director asks for the next frame itself. That is the one case where the
   canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
@@ -444,8 +462,10 @@ without a room — the back wall and the catch floor:
   write their slot each frame (`writeLight`, `clearLight`), and the emitters' flush packs the
   **budget**'s worth of the brightest lit slots into the texture, in slot order. Since session 6 a
   light carries its beam's **apex** (behind the aperture), its frame (the head's right axis and the
-  tangent of the half-field) and its aperture (the apex → aperture distance, the iris and a
-  segment's aspect) — what the surface shader's `beamMask` shapes the pool with.
+  tangent of the half-field; since fixture-optics session 4 the right axis is written as a direction
+  in a basis built from the beam's axis, beside the gobo layers — §"Gobos on surfaces") and its
+  aperture (the apex → aperture distance, the iris and a segment's aspect) — what the surface
+  shader's `beamMask` shapes the pool with.
 - **The light budget is the viewer's** — the View menu's *Light budget*, 32 · 64 · 128 · 256, default
   64, per browser in `localStorage` (`stage.lightBudget`, `scene/sceneView.ts`): the shader's cost is
   pixels × lights, and what a machine's GPU affords is the machine's fact, not a window's. A light
@@ -502,7 +522,10 @@ without a room — the back wall and the catch floor:
   **focus** is measured from instead (§"Fixture bodies"). The lit colour is the finish × (fill + an exponential
   roll-off of the light) plus a little of the light itself (`uSheen`), so a pool still reads as the
   beam's colour on the near-black finishes a hall is painted in, and a rig at full does not clip to
-  white. Gobos show in the air, not yet on surfaces.
+  white.
+- **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers samples the
+  gobo atlas in its own frame, blurred by the same focus term as its edge — §"Gobos on surfaces"
+  under §"Fixture bodies".
 - **The beam volumes still shadow on regions** — `regionShadowMask` (`beamLobes.ts`, which was
   `beamCookies.ts`) and the region uniforms below. Only the receivers went.
 
@@ -1251,6 +1274,77 @@ could not be seen to: every focal distance past about 4 m drew the same edge on 
     and lighting7's `FixtureFocusTest` reads the same file.
 - **The Focus tab's note** names only the optics channels a DMX type has; a type with none is told
   its optics are fixed, never that its channels set them.
+
+### Gobos on surfaces
+
+Fixture-optics plan session 4 (D10). Until then a gobo was drawn in the air, in the haze's march,
+and never where the beam landed — so a gobo, which is how anyone judges focus and placement on a
+real rig, could not be placed or focused from the Stage view. Now the surface shader draws it on the
+wall and the deck.
+
+- **One sampler, both programs** (`goboLayers.ts`'s `GOBO_LAYERS_GLSL`). The surface shader, per light
+  and fragment, after `beamMask` has shaped the pool: in the beam's own frame (`g`, the field edge at
+  1 along the head's right axis and the one at right angles — the frame the mask cuts in, before an
+  oval's division, as the haze reads it), each layer turned by its angle, read from the gobo atlas,
+  and multiplied over the mask. So the blades, the iris and an oval cut the gobo exactly as they cut
+  the pool (session 2's framing shutters included), and a gate rotation turns it, because it turns
+  the frame. A segment (a rectangular aperture) carries none, as in the air.
+- **Blurred by the edge's own blur.** The mip level is `goboLod(blur, footprint)`: the relative
+  focus error times the type's depth of field (`focusBlur`, §"Focus") — the number the pool's edge
+  softens by — or the pixel's footprint on the surface in field radii, whichever is wider, both at
+  `GOBO_BLUR_TEXELS` (64) texels to a field radius. The haze reads the same level from the same blur,
+  so a gobo sharp in the air at a distance is sharp on a wall at that distance. The footprint is
+  `fwidth(vWorldPos)`, taken before the light loop: derivatives after its `continue`s are undefined.
+- **Two layers, multiplied** — stacked wheels. The Robe ColorSpot 575's static wheel and its rotating
+  one are both drawn, in the air and on every surface; until session 4 the view drew whichever wheel
+  selected a pattern and the other only while the first was open. The rule is one, in
+  `store/fixtures.ts`: `findGoboProperties` orders the wheels by **DMX channel** (layer A, then B;
+  descriptor order is Kotlin reflection's and guarantees nothing), and `goboRotationWheel` gives the
+  rotation channel to the wheel it **follows** — the nearest at or below its channel, which is how
+  every type in the library lays them out (the Patch List's gobo column reads the same first wheel,
+  so on the Robe it is now the static one). Only that wheel turns (`stepGoboLayers` in
+  `beamOptics.ts`, which indexes it or spins it); the other holds still in the frame. Session 3's
+  rules carry over unchanged: a loadable wheel reads the unit's fitted gobos, and is never
+  index-guessed, so the Revolution's stock wheel lands an open pool.
+- **Packed into one float** (`packGobos`): layer A's and layer B's pattern (5 bits each), which one
+  turns (1 bit) and its angle (13 bits, 0.044° a step) — 24 bits, exact in a float32, every decode a
+  division by a power of two. One angle suffices because a type has one gobo rotation channel. It
+  rides the haze's `aBeamFx.y` (`aBeamFx.z` is now spare) as a flat varying, and the light table's
+  texel 4 `.z`.
+- **Where texel 4 found the room** (`scene/lightTable.ts`'s header has the long form). Every packed
+  float was full but texel 2's alpha, which has four bits spare. Texel 4 spent three floats on the
+  frame's `u`, of which the shader only ever used the direction at right angles to the beam — a
+  direction in a plane. It now holds that as `(cos, sin)` in an orthonormal basis built from the axis
+  alone (`BEAM_FRAME_GLSL`'s `beamBasis`, Duff et al. 2017), and the third float holds the gobos.
+  `frameInBasis` reads the axis as the GPU will (float32, `>= 0` for the basis's sign), so the two
+  agree on which side of the basis's seam a beam pointing straight across the stage lies; the round
+  trip is pinned from every side of it (`scene.test.ts`). The first cut stored one *angle*, which
+  freed two floats but put a `cos` and a `sin` on every light of every lit fragment — about 5 % of a
+  SwiftShader frame with no gobo in it, so the pair replaced it.
+- **Asking for frames.** A spinning gobo moves the picture with no channel moving, so the director
+  invalidates each frame while — and only while — the turned wheel shows a pattern and spins
+  (`stepGoboLayers`' `spinning`, `goboLayers.test.ts`); an indexed, stopped or static wheel asks for
+  nothing. The *Gobos on surfaces* switch invalidates when it flips.
+- **The budget's fallback: *Gobos on surfaces*** (the View menu, per browser in `localStorage` as
+  `stage.goboSurfaces`, beside the light budget: it is the machine's GPU's fact). *Every gobo light*
+  (the default) or *Selected heads only*, which keeps every other head's pool plain — its gobo still
+  shows in the air (`goboLandsOnSurfaces` in `scene/sceneView.ts`; the director zeroes the light
+  row's gobos, never the haze's). A `render_view` capture keeps the default: it draws one frame, so
+  there is no frame rate to guard, and no selection to narrow to.
+- **Measured on SwiftShader only** (Chromium's software renderer, which prices every pixel on the CPU,
+  so these are relative costs, never a frame rate): three gobo heads (a MAC 250, a Robe with both
+  wheels, a Revolution with a fitted gobo) throwing 24 m onto a back wall, pools over most of a 2200 ×
+  1500 canvas, haze off, one gobo spinning to keep frames coming, the mean rAF interval over 25 s per
+  run, runs interleaved. Surface gobos on: **+8 %** against the same rig with them off (704 vs
+  650 ms). The frame change under them, gobos off, against `main`: **+2–3 %** (643 vs 627 ms, four
+  pairs). Neither gave a reason to default to the selection, so the switch defaults to every gobo
+  light. The Safari and iPad pass is step 5 of `FU-MANUAL-STAGE-LIGHT-BUDGET`.
+- **Checked in Chromium**, Front, haze off, three heads hung at 2.8 m, 16 m downstage, aimed at the
+  back wall 24 m away: a MAC 250's TRIPLE sharp at focus DMX 9 (the distance *Focus here* solves for
+  the wall), mush at DMX 13 and 5 (about 4 m and 6 m either side); the Robe's static dots and rotating
+  swirl multiplying to the dots on the swirl's arms, and its yellow and cyan wheels to green; the
+  Revolution's stock wheel an open pool, a stars gobo fitted through the patch sheet's Media box
+  landing, and its top and left framing shutters cutting a fitted breakup as they cut the pool.
 
 ### The lantern's focus: the cut, the gate and the oval
 

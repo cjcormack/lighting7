@@ -63,7 +63,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | a click on a mixed group spawns nothing where ⌥click lights the capable heads |
 | [`FU-TMPL-STROBE-HZ`](#fu-tmpl-strobe-hz) | Trigger | Tmpl | two heads whose strobe rates need to match |
 | [`FU-TMPL-WHEEL-PREVIEWS`](#fu-tmpl-wheel-previews) | Trigger | Tmpl | a colour template snaps visibly wrong on a wheel |
-| [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a two-wheel head's second wheel is wanted |
+| [`FU-TMPL-SECOND-COLOUR-WHEEL`](#fu-tmpl-second-colour-wheel) | Trigger | Tmpl | a template is asked to address a two-wheel head's second wheel |
 | [`FU-FE-CUEGRID-PER-CELL-LAYER`](#fu-fe-cuegrid-per-cell-layer) | Trigger | FE | a cue read against two layers reads as against none |
 | [`FU-FE-FX-PARAM-RANGE`](#fu-fe-fx-param-range) | Trigger | FE | a script-defined effect declares a numeric parameter outside the guessed range |
 | [`FU-FE-FILTER-FLEX-SPLIT`](#fu-fe-filter-flex-split) | Ready | FE | — |
@@ -111,7 +111,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LANTERN-LIBRARY-HALL`](#fu-lantern-library-hall) | Trigger | Stage | Chris answers which lanterns the Commemoration Hall owns (stage-view plan §11 Q4) |
 | [`FU-STAGE-FOCUS-ON-POOL`](#fu-stage-focus-on-pool) | Trigger | Stage | an operator focuses a rig from the Stage view rather than the card |
 | [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
-| [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a gobo or a shadow land, not just the beam |
+| [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a shadow land, not just the beam reach |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
@@ -1198,19 +1198,21 @@ you would notice.
 
 ### `FU-TMPL-SECOND-COLOUR-WHEEL`
 
-**A two-wheel head's second colour wheel is unreachable** · Trigger · desk-simplification §Session 3, 2026-08-23
+**A template cannot address a two-wheel head's second colour wheel** · Trigger · desk-simplification §Session 3, 2026-08-23
 
 `resolveCell` shows the *first* wheel only (its own doc records the cut), and
 `TemplateResolver.resolveColour` picks the first COLOUR-category setting for the same reason. The Robe
 ColorSpot 575 has two, so its second wheel takes no part in a colour template — nor in the grid.
 
+**The view draws it now** (fixture-optics plan session 4): the Stage view and the 2D appearance leaf
+multiply the second wheel's slot over the first's as a colour filter (`colourFilters`,
+`frontend/docs/stage-vis-engineering.md` §"Fitted media"), so what a raw DMX write or a Look row puts on
+it is seen. What is left is the template's half: a template still cannot ask for it.
+
 Not obviously worth fixing: a colour template asks "be this colour", and answering it on two wheels at
 once is a mixing problem the fixture's own manual barely addresses.
 
-**Trigger**: an operator asks for the second wheel by name.
-
-**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 draws the second wheel in
-the Stage view. The template half stays here.
+**Trigger**: an operator asks a template for the second wheel by name.
 
 ---
 
@@ -2153,33 +2155,35 @@ frame — the inverse of `beamMask`'s blade line through the surface's plane.
 
 ### `FU-STAGE-SURFACE-LOOP-COST`
 
-**Three unmeasured costs in the surface-light loop, and session 7 added a fourth** · Trigger ·
+**Unmeasured costs in the surface-light loop: three, session 7's fourth, and fixture-optics session 4's measured fifth** · Trigger ·
 stage-view plan sessions 6–7, 2026-09-30
 
 Session 6's review left three notes it could not measure in a container: dark cells still raycast
 in the multi-cell loop, fixture housings run the full surface-light loop (every light, every
 fragment), and `LightTable.set` marks the texture dirty on every write. Session 7 adds a little to the
 second: every light's edge and iris are unpacked from one float (`unpackEdgeIris`), and a light with
-a blade in evaluates four half-plane cuts (skipped when every blade is out). **Trigger**: the Safari
+a blade in evaluates four half-plane cuts (skipped when every blade is out). Fixture-optics session 4
+adds a fifth, measured this time on SwiftShader (not a GPU): the frame rebuilt from `(cos, sin)` in a
+basis made from the axis and a `fwidth` per fragment (+2–3 % of a frame with no gobo landing, against
+`main`), and a gobo light's atlas reads (+8 % with three gobo pools over most of the canvas) — not
+material, so *Gobos on surfaces → Selected heads only* stays off by default. **Trigger**: the Safari
 and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
 cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
 
 ### `FU-STAGE-QUALITY-TIER`
 
-**No shadows, and gobos are drawn in the beam but never on a surface** · Trigger · stage-view plan
-§8, 2026-10-01
+**No shadows** · Trigger · stage-view plan §8, 2026-10-01
 
 The surface shader lands every light as a pool through one loop over the light table, and beam reach
 stops at the first surface on the axis — crude occlusion, no shadow maps. The design record's
 §"Lighting the room" sketched a quality tier: shadow maps for up to four selected heads, and gobos
-projected by sampling the existing gobo atlas in light space. **Trigger**: an operator needs to see a
-gobo or a shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light
-table — a shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a
-starting point.
-
-**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 lands gobos on surfaces
-(its D10). Shadows stay here.
+projected by sampling the existing gobo atlas in light space — the gobo half landed on every surface
+without a tier in [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 (D10,
+`frontend/docs/stage-vis-engineering.md` §"Gobos on surfaces"). **Trigger**: an operator needs to see a
+shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light table — a
+shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a starting point.
+The gobo pass's *Selected heads only* switch is the precedent for narrowing a cost to the selection.
 
 ### `FU-STAGE-GLB-IMPORT`
 
