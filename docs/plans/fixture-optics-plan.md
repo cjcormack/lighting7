@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0, 1 and 2 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0, 1, 2 and 3 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -205,7 +205,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Locate:** blades out, rotation square.
 - **Docs:** `docs/fixtures-engineering.md` §"Framing shutters".
 
-### Session 3 — fitted media (backend + frontend)
+### ~~Session 3 — fitted media (backend + frontend)~~ — done, `827c5dd` ([PR #50](https://github.com/cjcormack/lighting7/pull/50))
 
 - **The gel library (D7):** `frontend/src/data/gels.ts` moves to a backend resource
   (`src/main/resources/gels.json`), served at `GET /api/rest/gels`; R05, R09, R54, R357, R36, R25,
