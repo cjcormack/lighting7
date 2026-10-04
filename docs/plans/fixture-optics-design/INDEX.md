@@ -95,7 +95,8 @@ The Stage view finds every beam channel by category (`store/fixtures.ts:431–56
 - **Shutters** exist in the renderer only as a lantern's focus data: four `{depth, angleDeg}`
   blades packed into the light table once per body spec (`FixtureModel.tsx:1014`,
   `beamMask.ts:109`). Depth is a fraction of the field's diameter; angle is ±30° in whole degrees,
-  six bits each, two blades per float.
+  six bits each, two blades per float. (Session 2 widened the packing to ±45° in 1.5° steps, D5, and
+  draws a DMX head's blades through it; a lantern's are still stored to ±30°.)
 - **Colour** comes from one source: an RGB property, else the first COLOUR setting's option preview,
   else a patch gel on an `acceptsGel` type. An option without a preview draws the beam black
   (`FixtureModel.tsx:1655`). The scroller's `GelFrame` options carry none.

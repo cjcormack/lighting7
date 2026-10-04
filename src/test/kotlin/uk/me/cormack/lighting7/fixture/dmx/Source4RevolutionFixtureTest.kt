@@ -1,10 +1,12 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.Blade
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.createTestTransaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -145,5 +147,27 @@ class Source4RevolutionFixtureTest {
         // Every exposed channel is described; reset (12) and the reserved 20–23 are not.
         val described = fixture.channelDescriptions().filterValues { it.isNotEmpty() }.keys
         assertEquals((1..31).toSet() - setOf(12, 20, 21, 22, 23), described)
+    }
+
+    @Test
+    fun `the four frames are framing shutters, each naming its blade and its scale`() {
+        val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "s4rev-1", "S4 Rev 1", 1)
+        val blades = listOf(Blade.TOP, Blade.BOTTOM, Blade.LEFT, Blade.RIGHT)
+        for ((i, blade) in blades.withIndex()) {
+            val n = i + 1
+            val pos = assertNotNull(fixture.fixtureProperty("frame${n}Pos"))
+            assertEquals(PropertyCategory.SHUTTER, pos.category, "frame $n position")
+            assertEquals(blade, pos.blade, "frame $n cuts the $blade")
+            assertEquals(0.5, pos.depthMax, "frame $n reaches the centre at full")
+            assertFalse(pos.inverted)
+
+            val rot = assertNotNull(fixture.fixtureProperty("frame${n}Rot"))
+            assertEquals(PropertyCategory.SHUTTER_ROTATION, rot.category, "frame $n rotation")
+            assertEquals(blade, rot.blade)
+            assertEquals(-45.0, rot.degMin, "the manual's ±45°")
+            assertEquals(45.0, rot.degMax)
+            assertNull(rot.depthMax)
+            assertFalse(rot.inverted)
+        }
     }
 }

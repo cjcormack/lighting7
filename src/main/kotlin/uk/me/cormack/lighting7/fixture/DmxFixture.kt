@@ -375,6 +375,8 @@ abstract class DmxFixture(
         fineOf = prop.fineOf,
         rpmMax = prop.rpmMax,
         indexDegMax = prop.indexDegMax,
+        blade = prop.blade?.serialized(),
+        depthMax = prop.depthMax,
     )
 
     private fun String.formatPropertyName(): String {

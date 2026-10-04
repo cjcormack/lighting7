@@ -192,6 +192,10 @@ export type PropertyCategory =
   | 'zoom'
   | 'iris'
   | 'frost'
+  // A framing shutter: a blade's insertion and its angle, each naming its blade (`blade`). See
+  // resolveDmxBlades in stage3d/beamOptics.ts.
+  | 'shutter'
+  | 'shutter_rotation'
   | 'led_macro'
   | 'movement_macro'
   | 'setting'
@@ -230,7 +234,19 @@ export type SliderPropertyDescriptor = {
   rpmMax?: number
   /** Gobo rotation with a `gobo_rotation_mode` channel: the angle (degrees) at DMX max when indexing. */
   indexDegMax?: number
+  /** A `shutter` / `shutter_rotation` slider's blade, named for the edge of the light it cuts. A
+   *  rotation's angle at DMX min / max is `degMin` / `degMax`. */
+  blade?: ShutterBladeName
+  /** A `shutter` slider: the blade's depth at DMX max (DMX min when `inverted`), as a fraction of
+   *  the field's diameter — the lantern focus's unit, so 0.5 reaches the centre. DMX min is out. */
+  depthMax?: number
 }
+
+/** A framing shutter's blade, in the lantern focus's wire order (`BLADE_ORDER`). */
+export type ShutterBladeName = 'TOP' | 'BOTTOM' | 'LEFT' | 'RIGHT'
+
+/** The blades in the wire's order — top, bottom, left, right — which `packBlades` packs in. */
+export const BLADE_ORDER: readonly ShutterBladeName[] = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT']
 
 export type ColourPropertyDescriptor = {
   type: 'colour'
@@ -591,6 +607,40 @@ export function findFocusProperty(properties: PropertyDescriptor[] | undefined) 
 /** Zoom carries degMin/degMax as the full beam angle at DMX min/max. */
 export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
   return findSlider(properties, 'zoom')
+}
+
+/**
+ * A fixture's framing shutters, by blade in [BLADE_ORDER]: each blade's insertion (`shutter`) and
+ * rotation (`shutter_rotation`) slider, either absent. Undefined when the fixture drives no blade
+ * from its channels — then a lantern's focus blades, if any, are the beam's. A blade's slider that
+ * declares no scale (`depthMax`, or `degMin`/`degMax`) is left out, as the library's guard test
+ * (`ShutterBladesTest`) refuses one.
+ */
+export interface ShutterProperties {
+  depth: Array<SliderPropertyDescriptor | undefined>
+  rotation: Array<SliderPropertyDescriptor | undefined>
+}
+
+export function findShutterProperties(
+  properties: PropertyDescriptor[] | undefined,
+): ShutterProperties | undefined {
+  if (!properties) return undefined
+  let found = false
+  const depth: Array<SliderPropertyDescriptor | undefined> = [undefined, undefined, undefined, undefined]
+  const rotation: Array<SliderPropertyDescriptor | undefined> = [undefined, undefined, undefined, undefined]
+  for (const p of properties) {
+    if (p.type !== 'slider' || isFine(p) || p.blade == null) continue
+    const i = BLADE_ORDER.indexOf(p.blade)
+    if (i < 0) continue
+    if (p.category === 'shutter' && p.depthMax != null && depth[i] == null) {
+      depth[i] = p
+      found = true
+    } else if (p.category === 'shutter_rotation' && p.degMin != null && p.degMax != null && rotation[i] == null) {
+      rotation[i] = p
+      found = true
+    }
+  }
+  return found ? { depth, rotation } : undefined
 }
 
 export function findIrisProperty(properties: PropertyDescriptor[] | undefined) {

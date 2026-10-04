@@ -6,6 +6,7 @@ import type { FixturePatch } from '@/api/patchApi'
 import libraryJson from '../../../../src/main/resources/lanterns/library.json'
 import { indexLanterns, type Lantern } from '@/lib/lanterns'
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
+import { revolutionShutterProps } from '@/test/fixtureFactories'
 
 /**
  * The Stage view's Focus tab (stage-view plan session 7): a change lands in the patch list's cache
@@ -244,6 +245,24 @@ describe('StageFocusPanel', () => {
     )
     expect(screen.queryByRole('slider')).toBeNull()
     expect(screen.getByText(/Spot 1/)).toBeInTheDocument()
+  })
+
+  it('names framing shutters among the optics a DMX fixture drives from its channels', () => {
+    const fixture = {
+      name: 'Rev 1',
+      properties: [{ name: 'zoom', type: 'slider', category: 'zoom' }, ...revolutionShutterProps()],
+    } as unknown as Fixture
+    render(
+      <StageFocusPanel
+        projectId={1}
+        patch={patch({ key: 'rev-1', fixtureTypeKey: 'etc-source4-revolution-base-frame', lanternType: null })}
+        fixture={fixture}
+        fixtureType={{ typeKey: 'etc-source4-revolution-base-frame', kind: 'MOVING_HEAD', acceptsLantern: false } as unknown as FixtureTypeInfo}
+        lanterns={lanterns}
+      />,
+    )
+    expect(screen.getByText(/Rev 1 drives its zoom and framing shutters from its channels/)).toBeInTheDocument()
+    expect(screen.queryByRole('slider')).toBeNull()
   })
 
   it('tells a DMX fixture with no optics channels that its optics are fixed — not that its channels set them', () => {

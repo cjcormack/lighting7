@@ -9,7 +9,8 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
 
 /**
  * ETC Source 4 Revolution — an automated yoke profile: an electronic dimmer, a 15°–35° zoom, focus,
- * a 14-frame gel scroller, an internal media frame, and two module bays.
+ * a 14-frame gel scroller, an internal media frame, and two module bays — the rear holding the
+ * four-blade framing shutter module.
  *
  * The authority is ETC's *Source Four Revolution User Manual*, 7160M1200 Rev E
  * (`Manuals/S4_Revolution_User_Manual_RevE.pdf`; page numbers below are the PDF's). The ChamSys
@@ -135,7 +136,10 @@ sealed class Source4RevolutionFixture(
      * - Ch 16/17: Front bay wheel position / function.
      * - Ch 18/19: Front bay wheel index / rotation (16-bit hi/lo).
      * - Ch 20–23: Reserved with the shutter module fitted (NOT exposed).
-     * - Ch 24/25 … 30/31: Shutters 1–4, in / rotate (±45°, p17).
+     * - Ch 24/25 … 30/31: Shutters 1–4, in / rotate (±45°, p17) — `SHUTTER` / `SHUTTER_ROTATION`
+     *   sliders naming their blade: 1 top, 2 bottom, 3 left, 4 right, each reaching the centre at
+     *   full and square at 128. Which side each frame cuts, the depth and the rotation's sign are
+     *   estimates (the manual states only the four blades and ±45°).
      */
     @FixtureType(
         "etc-source4-revolution-base-frame",
@@ -250,28 +254,44 @@ sealed class Source4RevolutionFixture(
 
         // Ch 20–23 are reserved with the shutter module fitted (p14, p17) — not exposed.
 
-        @FixtureProperty("Frame 1 position", category = PropertyCategory.SETTING)
+        // Ch 24–31: the shutter module's four framing shutters (p17), each an insertion and a
+        // rotation. The manual says only "four blades, each rotating ±45°".
+        // Estimate: which side each frame cuts (1 top, 2 bottom, 3 left, 4 right, as a hung head
+        // tilted out to the stage shows them — the Stage view's mover convention), that DMX 0 is out
+        // and 255 reaches the centre of the field
+        // (depthMax 0.5), that depth rises linearly with DMX, and that rotation runs −45° at DMX 0 to
+        // +45° at 255, square at 128 (where ChamSys locates it), positive turning the blade
+        // clockwise as seen from behind the head looking along its beam.
+        @FixtureProperty("Frame 1 position", category = PropertyCategory.SHUTTER,
+            blade = Blade.TOP, depthMax = 0.5)
         val frame1Pos: Slider = DmxSlider(transaction, universe, firstChannel + 23)
 
-        @FixtureProperty("Frame 1 rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 1 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+            blade = Blade.TOP, degMin = -45.0, degMax = 45.0)
         val frame1Rot: Slider = DmxSlider(transaction, universe, firstChannel + 24)
 
-        @FixtureProperty("Frame 2 position", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 2 position", category = PropertyCategory.SHUTTER,
+            blade = Blade.BOTTOM, depthMax = 0.5)
         val frame2Pos: Slider = DmxSlider(transaction, universe, firstChannel + 25)
 
-        @FixtureProperty("Frame 2 rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 2 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+            blade = Blade.BOTTOM, degMin = -45.0, degMax = 45.0)
         val frame2Rot: Slider = DmxSlider(transaction, universe, firstChannel + 26)
 
-        @FixtureProperty("Frame 3 position", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 3 position", category = PropertyCategory.SHUTTER,
+            blade = Blade.LEFT, depthMax = 0.5)
         val frame3Pos: Slider = DmxSlider(transaction, universe, firstChannel + 27)
 
-        @FixtureProperty("Frame 3 rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 3 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+            blade = Blade.LEFT, degMin = -45.0, degMax = 45.0)
         val frame3Rot: Slider = DmxSlider(transaction, universe, firstChannel + 28)
 
-        @FixtureProperty("Frame 4 position", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 4 position", category = PropertyCategory.SHUTTER,
+            blade = Blade.RIGHT, depthMax = 0.5)
         val frame4Pos: Slider = DmxSlider(transaction, universe, firstChannel + 29)
 
-        @FixtureProperty("Frame 4 rotation", category = PropertyCategory.SETTING)
+        @FixtureProperty("Frame 4 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+            blade = Blade.RIGHT, degMin = -45.0, degMax = 45.0)
         val frame4Rot: Slider = DmxSlider(transaction, universe, firstChannel + 30)
     }
 }

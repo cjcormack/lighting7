@@ -6,6 +6,7 @@ import {
   findFocusProperty,
   findFrostProperty,
   findIrisProperty,
+  findShutterProperties,
   findZoomProperty,
   resolveFixtureKind,
   type Fixture,
@@ -57,9 +58,9 @@ interface StageFocusPanelProps {
  * does not know, say) is never re-sent, and never refused. A placement's focus goes out through the
  * whole `extraPlacements` list, which is the only way the route takes one.
  *
- * A DMX fixture has no focus data: its zoom, focus and iris are its channels, which its looks drive
- * (D14), so its tab says which of them it has instead — or that its optics are fixed, when it has
- * none. A DMX fixture whose focus declares a range also gets *Focus here* (fixture-optics plan D11).
+ * A DMX fixture has no focus data: its zoom, focus, iris and framing shutters are its channels,
+ * which its looks drive (D14), so its tab says which of them it has instead — or that its optics are
+ * fixed, when it has none. A DMX fixture whose focus declares a range also gets *Focus here* (fixture-optics plan D11).
  */
 export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanterns, canFocus = false }: StageFocusPanelProps) {
   const dispatch = useDispatch<typeof store.dispatch>()
@@ -231,13 +232,14 @@ function DmxFocusNote({ fixture }: { fixture: Fixture | undefined }) {
     findFocusProperty(props) && 'focus',
     findIrisProperty(props) && 'iris',
     findFrostProperty(props) && 'frost',
+    findShutterProperties(props) && 'framing shutters',
   ].filter((x): x is string => typeof x === 'string')
   const name = fixture?.name ?? 'This fixture'
   return (
     <p className="text-sm text-muted-foreground">
       {driven.length > 0
         ? `${name} drives its ${joinWords(driven)} from its channels, so its looks set them — there is nothing to focus with a spanner.`
-        : `${name} has no zoom, focus, iris or frost channel, and no lantern to focus: its optics are fixed.`}
+        : `${name} has no zoom, focus, iris, frost or shutter channel, and no lantern to focus: its optics are fixed.`}
     </p>
   )
 }

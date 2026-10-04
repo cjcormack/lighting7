@@ -39,6 +39,23 @@ export function sliderProp(
   }
 }
 
+/**
+ * The ETC Source Four Revolution's four framing shutters (channels 24–31), as the backend's
+ * descriptors carry them: frame 1 top, 2 bottom, 3 left, 4 right, each reaching the centre at DMX
+ * max (`depthMax` 0.5) and turning −45° → +45°.
+ */
+export function revolutionShutterProps(firstChannel = 1, universe = 0): SliderPropertyDescriptor[] {
+  const blades = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT'] as const
+  return blades.flatMap((blade, i) => [
+    sliderProp(`frame${i + 1}Pos`, 'shutter', chan(firstChannel + 23 + 2 * i, universe), { blade, depthMax: 0.5 }),
+    sliderProp(`frame${i + 1}Rot`, 'shutter_rotation', chan(firstChannel + 24 + 2 * i, universe), {
+      blade,
+      degMin: -45,
+      degMax: 45,
+    }),
+  ])
+}
+
 export function colourProp(
   name: string,
   red: ChannelRef,

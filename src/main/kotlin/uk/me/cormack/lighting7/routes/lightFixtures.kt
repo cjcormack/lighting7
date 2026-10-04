@@ -318,6 +318,10 @@ data class SliderPropertyDescriptor(
     val rpmMax: Double? = null,
     /** A GOBO_ROTATION slider's angle at DMX max in the index band, in degrees. */
     val indexDegMax: Double? = null,
+    /** A SHUTTER / SHUTTER_ROTATION slider's blade (`TOP`, `BOTTOM`, `LEFT`, `RIGHT`), or null. */
+    val blade: String? = null,
+    /** A SHUTTER slider's blade depth at DMX max, as a fraction of the field's diameter (0.5 the centre). */
+    val depthMax: Double? = null,
 ) : PropertyDescriptor
 
 @Serializable

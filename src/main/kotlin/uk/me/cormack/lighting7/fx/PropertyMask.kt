@@ -60,6 +60,8 @@ fun PropertyCategory.maskGroup(): PropertyMaskGroup = when (this) {
     PropertyCategory.ZOOM,
     PropertyCategory.IRIS,
     PropertyCategory.FROST,
+    PropertyCategory.SHUTTER,
+    PropertyCategory.SHUTTER_ROTATION,
     PropertyCategory.LED_MACRO,
     PropertyCategory.MOVEMENT_MACRO,
     PropertyCategory.SPEED,

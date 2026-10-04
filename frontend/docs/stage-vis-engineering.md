@@ -143,7 +143,7 @@ source; nothing but the source knows about layers.
 Channel level rather than property level, because `FixtureModel`'s per-frame beam director reads 17
 channels by key (pan, tilt, their fine axes, zoom, focus, iris, frost, two gobo wheels, gobo
 rotation with its fine byte and its wheel's function channel, prism, prism rotation, and two
-macros). Substituting at property level would mean touching each of those
+macros), and a head with framing shutters eight more (each blade's insertion and rotation). Substituting at property level would mean touching each of those
 reads and knowing which descriptor backs each; substituting at channel level means they all work
 unchanged.
 
@@ -1220,13 +1220,39 @@ than a profile at its softest. Focus applies to a single-cell body only; a lante
 `u` along the head's right axis, `v` = beam × `u`, up for a level lantern — so the pool and the haze
 cut by one rule. A blade is a straight line `depth` in from the field's edge (0.5 reaches the centre)
 turned by its angle about the middle of its edge; everything past it is dark, softened by the same
-edge as the field. **They are packed, not given a texel**: each blade is 12 bits — 63 depth steps
-× 64 angle steps (±30° by the degree, `packBlade`) — two to a float, so the four fit texel 5's `.y`
-and `.w` (`packBlades`), and the iris moved into texel 2's alpha beside the edge hardness
-(`packEdgeIris`, both to 1/1023). The haze takes them as one more instanced attribute
+edge as the field. **They are packed, not given a texel**: each blade is 12 bits — 62 depth steps
+× 64 angle codes (±45° in 1.5° steps, 61 values, `packBlade`) — two to a float, so the four fit
+texel 5's `.y` and `.w` (`packBlades`), and the iris moved into texel 2's alpha beside the edge
+hardness (`packEdgeIris`, both to 1/1023). The haze takes them as one more instanced attribute
 (`aBeamBlades`, flat varying). The GLSL and the TypeScript twin changed together and
 `beamMask.test.ts` pins them — a quarter-in top blade cuts a straight edge, an angled one a sloped
-one, a gate turn turns the lot.
+one, a gate turn turns the lot, and every step from −45° to +45° packs and unpacks exactly.
+
+**The angle's step is 1.5°, not the degree** (fixture-optics plan D5, session 2): a DMX framing
+shutter turns ±45° (the Source Four Revolution's), and a seventh bit of angle would push two blades
+past a float's 24-bit mantissa, so the six bits cover ±45° at 1.5° instead of ±30° at 1°. A
+lantern's blades are still **stored** to ±30° (`LanternFocus`'s validation, the Focus card's slider,
+`MAX_BLADE_ANGLE_DEG` in `lib/lanterns.ts`); only what the pool draws of them is rounded to the
+nearest 1.5°, and the Focus card's preview (`bladeLine`, which reads the packing's
+`MAX_PACKED_BLADE_ANGLE_DEG`) rounds the same way so the picture and the pool agree.
+
+**A DMX head's framing shutters take the same path** (session 2; `docs/fixtures-engineering.md`
+§"Framing shutters"). `findShutterProperties` files a fixture's SHUTTER and SHUTTER_ROTATION
+sliders by blade, in the wire's order, and the beam director reads their eight channels every
+frame — depth over `0..depthMax`, angle over `degMin..degMax`, each honouring `inverted`
+(`resolveDmxBlades` in `beamOptics.ts`) — and packs them with `packBlades` into its own scratch, in
+place of the per-spec memo a lantern's are packed once into. A fixture with DMX blades never draws a
+lantern's (`lanternBladesFor`, `beamBlades`): one source or the other, never both. The blades sit in
+the head's frame, so they turn with pan and tilt. A **mover's** are packed into the frame's opposite
+slots (`MOVER_BLADE_SLOTS`, a half-turn, which keeps each angle): the frame's `v` is the head's −Z,
+which points away from a mover's base when it tilts out positive — down on a hung head — and a
+profile mover hangs, so its blades are named as a hung head tilted out shows them (the balcony
+Revolutions as aim points them: top blade, top of the pool). A head swung over the top, or a standing
+one tilted out positive, cuts its top blade at the bottom, as the metal would. `FixtureModel.test.tsx`
+pins each case, and a rotated blade turning about its own edge clockwise. Checked in Chromium on three
+hung Revolutions aimed at a back wall 24 m away (Front camera): each frame at 255 cuts its named side
+to the centre; a half-in frame 1 turns ±45° about the same point at rotation 0 and 255; a Source Four
+19° lantern's blades draw as before.
 
 **A gate or lamp turn rotates the frame, not the mask**: the director turns the head's right axis
 about the beam by `frameTurnDeg` before it writes the light row and the hull, so the mask never
@@ -1252,8 +1278,8 @@ array into the cache, so a paint that assigned the draft's own array would diffe
 the effect that repaints on each new `patch` looped until React gave up (found on a desk: any blade
 key crashed the Stage view). It saves one `PUT` after a 350 ms pause (a placement's through the whole `extraPlacements` list, which
 `toPlacementInput` carries the focus in); a refused write re-reads the list. A DMX fixture's tab
-names the optics its channels drive instead, and offers *Focus here* where its focus declares a
-range (§"Focus"). The patch list's **Lantern** column picks the lantern
+names the optics its channels drive instead — zoom, focus, iris, frost and framing shutters, those it
+has — and offers *Focus here* where its focus declares a range (§"Focus"). The patch list's **Lantern** column picks the lantern
 from the library, or reads out a DMX type's declared body, and its **Mount** column says *standing*
 for a unit on a ledge or a floor stand.
 
