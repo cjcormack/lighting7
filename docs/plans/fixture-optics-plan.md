@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0 and 1 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0, 1 and 2 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -192,7 +192,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Focus" and its stale beam-angle precedence
   line.
 
-### Session 2 — DMX framing shutters (backend + frontend)
+### ~~Session 2 — DMX framing shutters (backend + frontend)~~ — done, `70d9436` ([PR #49](https://github.com/cjcormack/lighting7/pull/49))
 
 - **Vocabulary (D4)** in `FixtureProperty.kt`, the descriptor and `fixtures.ts`.
 - **The Revolution's frames:** `frame1Pos…frame4Rot` take the categories, with blades mapped
