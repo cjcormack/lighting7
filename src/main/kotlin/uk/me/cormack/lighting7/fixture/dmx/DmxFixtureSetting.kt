@@ -4,6 +4,8 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.DmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.FixtureSettingValue
+import uk.me.cormack.lighting7.fixture.StrobeBand
+import uk.me.cormack.lighting7.fixture.StrobeKind
 
 interface DmxFixtureSettingValue: FixtureSettingValue {
     val level: UByte
@@ -49,6 +51,21 @@ interface DmxFixtureColourSettingValue : DmxFixtureSettingValue {
 interface DmxFixtureZoomSettingValue : DmxFixtureSettingValue {
     /** The full beam angle in degrees while the channel is in this band. */
     val zoomDeg: Double
+}
+
+/**
+ * A position of a **setting-backed STROBE channel** (fixture optics plan D12): what its band does
+ * to the light — the option's band runs from its level to the next option's. The same vocabulary a
+ * STROBE slider declares per band with `@FixtureProperty(strobe = […])` ([StrobeBand]): a flashing
+ * kind ([StrobeKind.flashes]) declares its rate, [hzMin] at the band's first value and [hzMax] at
+ * its last (`hzMin <= hzMax`, swapped where [strobeInverted]); [StrobeKind.CLOSED] and
+ * [StrobeKind.OPEN] declare none. `StrobeBandsTest` enforces it on every STROBE setting.
+ */
+interface DmxFixtureStrobeSettingValue : DmxFixtureSettingValue {
+    val strobeKind: StrobeKind
+    val hzMin: Double? get() = null
+    val hzMax: Double? get() = null
+    val strobeInverted: Boolean get() = false
 }
 
 /**

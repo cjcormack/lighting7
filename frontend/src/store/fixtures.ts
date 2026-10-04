@@ -257,6 +257,24 @@ export type SliderPropertyDescriptor = {
   /** The DMX at which it ends — above it the channel is effects (the Robe's iris and frost pulse
    *  above 179), and the view holds the band's end value. Absent is `max`. */
   activeMax?: number
+  /** A `strobe` slider's bands, in DMX order (`@FixtureProperty.strobe`, fixture-optics plan D12):
+   *  what each range of the channel does to the light. Decoded by `lib/strobeBands.ts`. */
+  strobeBands?: StrobeBand[]
+}
+
+/** What a band of a strobe channel does to the light (backend `StrobeKind`). */
+export type StrobeKind = 'CLOSED' | 'OPEN' | 'STROBE' | 'RANDOM' | 'PULSE'
+
+/** One band of a strobe channel (backend `StrobeBandInfo`): DMX `from`..`to` inclusive does `kind`;
+ *  a flashing band's rate runs `hzMin` at `from` to `hzMax` at `to`, the other way round where
+ *  `inverted`. */
+export type StrobeBand = {
+  from: number
+  to: number
+  kind: StrobeKind
+  hzMin?: number
+  hzMax?: number
+  inverted?: boolean
 }
 
 /** A framing shutter's blade, in the lantern focus's wire order (`BLADE_ORDER`). */
@@ -317,6 +335,17 @@ export type SettingOption = {
    *  an auto change, a band handing colour to other channels. The Stage view animates it through the
    *  wheel's own previews (`lib/colourBands.ts`); every other colour option carries `colourPreview`. */
   noColour?: boolean
+  /** On a setting-backed strobe channel: what this option's band does to the light (fixture-optics
+   *  plan D12). Its band runs from its level to the next option's. */
+  strobeKind?: StrobeKind
+  /** On a flashing strobe option: its rate in Hz at the band's first value (last where
+   *  `strobeInverted`). */
+  hzMin?: number
+  /** On a flashing strobe option: its rate in Hz at the band's last value (first where
+   *  `strobeInverted`). */
+  hzMax?: number
+  /** On a flashing strobe option: the rate falls as the value rises. */
+  strobeInverted?: boolean
 }
 
 /** What a loadable setting's slots take (`@FixtureProperty(media =)`, fixture optics plan D6). */
@@ -496,6 +525,26 @@ export function findDimmerProperty(
 ): SliderPropertyDescriptor | undefined {
   return properties?.find(
     (p): p is SliderPropertyDescriptor => p.type === 'slider' && p.category === 'dimmer',
+  )
+}
+
+/**
+ * Every strobe channel that says what its bands do (fixture-optics plan D12): a `strobe` slider with
+ * `strobeBands`, or a `strobe` setting whose options carry a `strobeKind`. A fixture may have two —
+ * the LED Lightbar's strobe and random strobe — and the light is gated by both. A channel from an
+ * older desk, declaring nothing, is left out: it draws open, as it always did.
+ */
+export function findStrobeProperties(
+  properties: PropertyDescriptor[] | undefined,
+): Array<SliderPropertyDescriptor | SettingPropertyDescriptor> {
+  return (
+    properties?.filter(
+      (p): p is SliderPropertyDescriptor | SettingPropertyDescriptor =>
+        p.category === 'strobe' &&
+        !isFine(p) &&
+        ((p.type === 'slider' && (p.strobeBands?.length ?? 0) > 0) ||
+          (p.type === 'setting' && p.options.some((o) => o.strobeKind != null))),
+    ) ?? []
   )
 }
 

@@ -6,6 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixturePrismSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureStrobeSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.*
@@ -353,6 +354,10 @@ abstract class DmxFixture(
                 loadable = if (prop.media != null) settingValue.loadable else null,
                 zoomDeg = (settingValue as? DmxFixtureZoomSettingValue)?.zoomDeg,
                 noColour = (settingValue as? DmxFixtureColourSettingValue)?.noColour?.takeIf { it },
+                strobeKind = (settingValue as? DmxFixtureStrobeSettingValue)?.strobeKind?.name,
+                hzMin = (settingValue as? DmxFixtureStrobeSettingValue)?.hzMin,
+                hzMax = (settingValue as? DmxFixtureStrobeSettingValue)?.hzMax,
+                strobeInverted = (settingValue as? DmxFixtureStrobeSettingValue)?.strobeInverted?.takeIf { it },
             )
         },
         compactDisplay = prop.compactDisplay.serialized(),
@@ -384,6 +389,16 @@ abstract class DmxFixture(
         depthMax = prop.depthMax,
         activeMin = prop.activeMin,
         activeMax = prop.activeMax,
+        strobeBands = prop.strobeBands.takeIf { it.isNotEmpty() }?.map {
+            StrobeBandInfo(
+                from = it.from,
+                to = it.to,
+                kind = it.kind.name,
+                hzMin = it.hzMin,
+                hzMax = it.hzMax,
+                inverted = it.inverted.takeIf { inv -> inv },
+            )
+        },
     )
 
     private fun String.formatPropertyName(): String {

@@ -104,7 +104,15 @@ class KamLiteobar252Fixture(
      * sub-bands — modelled like the Varytec Easymove: 0 = constant on
      * (no strobe), 1–255 = slow → fast.
      */
-    @FixtureProperty(category = PropertyCategory.STROBE)
+    // Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
+    // FU-MANUAL-S6-STROBE.
+    @FixtureProperty(
+        category = PropertyCategory.STROBE,
+        strobe = [
+            StrobeBand(0, 0, StrobeKind.OPEN),
+            StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+        ],
+    )
     override val strobe = BandedStrobeChannel(
         transaction, universe, firstChannel + 1,
         strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,

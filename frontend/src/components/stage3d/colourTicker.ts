@@ -1,8 +1,9 @@
 /**
- * The 3D scene's clock for an **animated colour band** (fixture-optics plan D8, `lib/colourBands.ts`):
- * a scroll or random band on a colour wheel changes the picture with no channel moving, so on the
- * canvas's `demand` frameloop something has to ask for every frame while one is live — and only
- * while one is.
+ * The 3D scene's clock for an **animated colour band** (fixture-optics plan D8, `lib/colourBands.ts`)
+ * and a **flashing strobe** (D12, `lib/strobeBands.ts`): a scroll or random band on a colour wheel,
+ * or a strobe, random or pulse band on a strobe channel, changes the picture with no channel moving,
+ * so on the canvas's `demand` frameloop something has to ask for every frame while one is live — and
+ * only while one is.
  *
  * `ColourSync` is imperative (it writes the scene from a channel callback, never through React), so
  * its arms register with this ticker while their band animates and unregister when it stops;

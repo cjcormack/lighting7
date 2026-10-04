@@ -52,13 +52,14 @@ class MartinMac250FixtureTest {
         val fixture = MartinMac250Fixture.Mode4Ch(universe, "mac-1", "MAC 1", 1)
             .withTransaction(transaction)
 
+        // The manual's band runs "strobe, fast → slow": the slowest intensity is the top of the band.
         fixture.strobe.strobe(0u)
         transaction.apply()
-        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MIN, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MAX, controller.getValue(1))
 
         fixture.strobe.strobe(255u)
         transaction.apply()
-        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MAX, controller.getValue(1))
+        assertEquals(MartinMac250Fixture.Mode4Ch.STROBE_BAND_MIN, controller.getValue(1))
 
         fixture.strobe.fullOn()
         transaction.apply()

@@ -301,7 +301,16 @@ sealed class SlenderBeamBarQuadFixture(
         @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
+        // FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 7, StrobeKind.OPEN),
+                StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Movement preset", category = PropertyCategory.SETTING)
@@ -399,7 +408,16 @@ sealed class SlenderBeamBarQuadFixture(
         @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Master strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
+        // FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Master strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 7, StrobeKind.OPEN),
+                StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<BasicHead> = (0 until 4).map { idx ->
@@ -463,7 +481,16 @@ sealed class SlenderBeamBarQuadFixture(
         @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Master strobe", category = PropertyCategory.STROBE)
+        // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
+        // FU-MANUAL-S6-STROBE.
+        @FixtureProperty(
+            "Master strobe",
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 7, StrobeKind.OPEN),
+                StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+            ],
+        )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
         override val elements: List<FullHead> = (0 until 4).map { idx ->

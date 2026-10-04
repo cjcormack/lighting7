@@ -19,6 +19,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
 | [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
 | [`FU-MANUAL-S5-LIBRARY-OPTICS`](#fu-manual-s5-library-optics) | the library optics pass's estimates match the units — the Varytec's and the Wash-42's colours, the Whex's first program, the Robe's three zoom steps and its iris and frost holding past 179, and an animated colour band reading as the wheel does | Fixture optics plan S5, 2026-10-04 |
+| [`FU-MANUAL-S6-STROBE`](#fu-manual-s6-strobe) | the strobe bands' estimated rates and readings match the units — a MAC 250 dark at strobe 0 as in the view, each type's strobe rate at the ends of its band, the bands no manual to hand names, and the view's shimmer reading as a fast strobe does | Fixture optics plan S6, 2026-10-04 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -270,6 +271,49 @@ zooming in three steps, in project 15 — is the first two steps.
 Where an answer disagrees, correct the value and its comment, and drop the `Estimate:` marker.
 
 30 minutes.
+
+---
+
+## `FU-MANUAL-S6-STROBE`
+
+**What it proves**: *what each strobe channel's declared bands say matches what the unit does*, so a
+closed shutter, a strobe and its rate read on the Stage view as they do on the rig.
+
+**Why it is here**: the fixture optics plan's session 6 declares every STROBE channel's bands
+(`@FixtureProperty(strobe = […])`, `docs/fixtures-engineering.md` §"Beam vocabulary"), and of the
+library's manuals only the Robe's states a rate ("strobe effect (1 - 10 flashes per second)"). Each
+guess is marked `// Estimate:` at its source (D15); this lists them. The plan's §9 desk check — a MAC
+250 at strobe 0 dark in the view, as on the rig, and a 20 Hz strobe drawn as a shimmer, not 20
+flashes, in project 15 — is steps 1 and 6.
+
+**Test**, on the rig, beside the Stage view (Front, haze off), each head up on its dimmer:
+
+1. **Martin MAC 250** (`MartinMac250Fixture.Mode4Ch.strobe`, the manual's DMX protocol). Strobe at 0:
+   dark on the rig and in the view. At 35: lit on both. Then the strobe band's ends, 50 and 72:
+   count flashes over 10 s on the rig (the view draws 1–10 Hz, fast at 50 — an estimate); the pulses
+   at 80 and 99 (0.5–2 Hz); and the random strobes at 130, 150 and 170 (8, 4 and 2 Hz).
+2. **Robe ColorSpot 575** (`RobeColorSpot575Fixture.Mode2Ch.strobe`, the DMX chart). Strobe at 0
+   dark, at 35 lit. The strobe band's 1–10 Hz is the manual's; check the pulses at 128–159 (0.5–2 Hz)
+   and the random strobe at 192–223 (1–10 Hz).
+3. **The LED strobes**, each at the bottom and top of its strobe band, counting flashes over 10 s
+   (every one drawn at 1–20 Hz on estimate): the Fusion 100 (10, 245 — and 0–9 dark), the Orbit-70
+   (16, 131 — and 0–7 dark, 140–231 pulses, 240–247 random), the Wash-42 (135, 239), the Varytec
+   (1, 255), the Kam Liteobar (1, 255), the China blinder (11, 255), the Shehds LED19 (1, 255), the
+   Fog Fury Jett (32, 95; its pulse at 96–159 and random at 160–255).
+4. **The heads with no manual to hand** — the Hex and the Whex (open below 10), the Scantastic (open at
+   0 only), the Slender bar (open 0–7) and the LED Lightbar (open 0–1, its own random-strobe channel):
+   check the bottom of each strobe band is where the view says it starts, and that the open band
+   really is steady.
+5. **The Fog Fury Jett's 0–31** is read as the strobe off (the LEDs steady), as its `fullOn()`
+   writes 0. If the LEDs are dark there, it is `CLOSED` and `fullOnValue` needs moving.
+6. **The view's flash rules** (`frontend/src/lib/strobeBands.ts`): any strobe at its fastest draws a
+   steady shimmer, not flashes; a strobe at 3 Hz or under flashes once a cycle, about a tenth of a
+   second. If the shimmer reads too dark or too bright beside the real strobe, adjust
+   `SHIMMER_LEVEL` (an estimate); `SHIMMER_DEPTH` stays under 10%.
+
+Where an answer disagrees, correct the band and its comment, and drop the `Estimate:` marker.
+
+40 minutes.
 
 ---
 

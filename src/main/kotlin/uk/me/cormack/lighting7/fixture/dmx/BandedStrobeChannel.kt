@@ -13,15 +13,21 @@ import kotlin.math.roundToInt
  * `strobe(intensity)` linearly maps the input `0..255` onto `strobeMin..strobeMax`.
  * `fullOn()` writes [fullOnValue].
  *
- * For fixtures whose shutter channel hides Reset / Lamp control bands above
- * the strobe band (e.g. MAC 250, Robe ColorSpot 575), pass [max] equal to
- * `strobeMax` so neither raw `value` writes nor [strobe] calls can wander
- * into those bands. Lamp/reset bands above the clamp are then only reachable
- * via raw transaction writes from explicit safety methods.
+ * For fixtures whose shutter channel hides bands above the strobe band that
+ * composition must not reach (the MAC 250's reset and lamp, the Robe ColorSpot
+ * 575's pulses and random strobe), pass [max] equal to `strobeMax` so neither
+ * raw `value` writes nor [strobe] calls can wander into them. Bands above the
+ * clamp are then only reachable via raw transaction writes (the MAC 250's lamp
+ * and reset from its explicit safety methods).
  *
  * Some fixtures interpret an input intensity of 0 as "no strobe, just keep
  * the LED open" rather than the slowest strobe step. Set
  * [zeroIntensityIsFullOn] to short-circuit `strobe(0)` to [fullOn] for those.
+ *
+ * A higher intensity is always a faster strobe. Where the band runs the other way on the channel —
+ * the MAC 250's "strobe, fast → slow" — set [fastToSlow], so `strobe(255)` writes [strobeMin] (the
+ * fastest) and `strobe(1)` near [strobeMax]; `StrobeBandsTest` holds every writer to its declared
+ * rates.
  *
  * @param strobeMin Lower bound of the linear strobe band.
  * @param strobeMax Upper bound of the linear strobe band.
@@ -31,7 +37,9 @@ import kotlin.math.roundToInt
  *            should be set to `strobeMax` when the channel has dangerous bands
  *            above the strobe range.
  * @param zeroIntensityIsFullOn If true, `strobe(0u)` writes [fullOnValue]
- *                              instead of `strobeMin`.
+ *                              instead of the slowest strobe.
+ * @param fastToSlow The band's fastest rate is at [strobeMin]: intensity runs
+ *                   down the band rather than up it.
  */
 open class BandedStrobeChannel(
     transaction: ControllerTransaction?,
@@ -42,17 +50,24 @@ open class BandedStrobeChannel(
     override val fullOnValue: UByte = 0u,
     max: UByte = 255u,
     private val zeroIntensityIsFullOn: Boolean = false,
+    private val fastToSlow: Boolean = false,
 ) : DmxSlider(transaction, universe, channelNo, max = max), Strobe {
     override fun fullOn() {
         value = fullOnValue
     }
 
     override fun strobe(intensity: UByte) {
-        if (zeroIntensityIsFullOn && intensity == 0u.toUByte()) {
-            fullOn()
-            return
-        }
+        value = strobeLevel(intensity)
+    }
+
+    /**
+     * The channel value [strobe] writes for [intensity] — pure, so `StrobeBandsTest` can hold every
+     * level it reaches inside the property's declared strobe bands without a transaction.
+     */
+    fun strobeLevel(intensity: UByte): UByte {
+        if (zeroIntensityIsFullOn && intensity == 0u.toUByte()) return fullOnValue
         val span = (strobeMax - strobeMin).toFloat()
-        value = ((span / 255F * intensity.toFloat()).roundToInt() + strobeMin.toInt()).toUByte()
+        val step = (span / 255F * intensity.toFloat()).roundToInt()
+        return (if (fastToSlow) strobeMax.toInt() - step else strobeMin.toInt() + step).toUByte()
     }
 }

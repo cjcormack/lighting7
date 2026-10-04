@@ -121,8 +121,26 @@ sealed class Gear4MusicOrbit70Fixture(
          * Only the linear strobe band (016–131) and the LED-open band
          * (248–255) are exposed via [WithStrobe]. Pulse, quick-start and
          * random-flash bands are reachable by writing the raw channel value.
+         *
+         * The bands are the manual's; "LED quick start" is read as the LEDs on. Estimate: the
+         * strobe at 1–20 Hz, the pulses at 0.5–2 Hz and the random flash at 4 Hz — gear4music
+         * states none. Checked on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(category = PropertyCategory.STROBE)
+        @FixtureProperty(
+            category = PropertyCategory.STROBE,
+            strobe = [
+                StrobeBand(0, 7, StrobeKind.CLOSED),
+                StrobeBand(8, 15, StrobeKind.OPEN),
+                StrobeBand(16, 131, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+                StrobeBand(132, 139, StrobeKind.OPEN),
+                StrobeBand(140, 181, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0),
+                StrobeBand(182, 189, StrobeKind.OPEN),
+                StrobeBand(190, 231, StrobeKind.PULSE, hzMin = 0.5, hzMax = 2.0),
+                StrobeBand(232, 239, StrobeKind.OPEN),
+                StrobeBand(240, 247, StrobeKind.RANDOM, hzMin = 4.0, hzMax = 4.0),
+                StrobeBand(248, 255, StrobeKind.OPEN),
+            ],
+        )
         override val strobe = BandedStrobeChannel(
             transaction, universe, firstChannel + 6,
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = LED_OPEN,

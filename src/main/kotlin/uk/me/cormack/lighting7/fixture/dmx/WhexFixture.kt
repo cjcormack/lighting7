@@ -48,8 +48,12 @@ class WhexFixture(
         }
 
         override fun strobe(intensity: UByte) {
-            this.value = (STROBE_MIN + (intensity.toFloat() * (255 - STROBE_MIN) / 255F).roundToInt()).toUByte()
+            this.value = strobeLevel(intensity)
         }
+
+        /** The channel value [strobe] writes for [intensity] — pure, for `StrobeBandsTest`. */
+        fun strobeLevel(intensity: UByte): UByte =
+            (STROBE_MIN + (intensity.toFloat() * (255 - STROBE_MIN) / 255F).roundToInt()).toUByte()
 
         companion object {
             /** The strobe band's slowest level. */
@@ -98,7 +102,15 @@ class WhexFixture(
     @FixtureProperty(category = PropertyCategory.UV, bundleWithColour = true)
     override val uv = DmxSlider(transaction, universe, firstChannel + 6)
 
-    @FixtureProperty(category = PropertyCategory.STROBE)
+    // Estimate: no manual to hand — 0–9 open below the strobe band [DmxStrobe] writes (its KDoc names
+    // only 0), and the strobe's 1–20 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
+    @FixtureProperty(
+        category = PropertyCategory.STROBE,
+        strobe = [
+            StrobeBand(0, 9, StrobeKind.OPEN),
+            StrobeBand(10, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
+        ],
+    )
     override val strobe = DmxStrobe(transaction, universe, firstChannel + 7)
 
     @FixtureProperty(category = PropertyCategory.SETTING)

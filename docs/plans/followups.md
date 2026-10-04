@@ -121,6 +121,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-MEDIA-LIVE-RESNAP`](#fu-media-live-resnap) | Trigger | Fixtures | an operator re-gels a scroller mid-show and expects the live cue to follow |
 | [`FU-MEDIA-CONTROL-SWATCHES`](#fu-media-control-swatches) | Trigger | Frontend | an operator sets a scroller frame from a stock swatch that is not what the unit holds |
 | [`FU-STAGE-PROGRAM-MACROS`](#fu-stage-program-macros) | Trigger | Stage | an operator needs to see a head's built-in LED or movement program in the Stage view |
+| [`FU-STAGE-SETTING-SHUTTER`](#fu-stage-setting-shutter) | Trigger | Stage | a Scantastic blacked out on its shutter draws lit at a desk check |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -1166,21 +1167,25 @@ about one fixture is what sharing it prevented.
 
 **Strobe as a rate rather than a percentage** · Trigger · desk-simplification §Session 3, 2026-08-23
 
-`BeamColour.dc.html` calls Hz "the only unit two fixtures agree on", and it is right — but nothing in
-this codebase's fixture definitions declares a Hz range for a strobe channel the way
-`@FixtureProperty(degMin=, degMax=)` declares a pan range. A `hz:` intent would have nothing to
-resolve against and would be inventing a curve per head, so strobe is a percentage of each head's own
-channel (`TemplateIntent` records this).
+`BeamColour.dc.html` calls Hz "the only unit two fixtures agree on", and it is right. When this was
+written nothing in the fixture definitions declared a Hz range for a strobe channel, so a `hz:` intent
+would have had nothing to resolve against; strobe is a percentage of each head's own channel
+(`TemplateIntent` records this).
 
-The work is annotation before code: `hzMin`/`hzMax` on the strobe properties that have a documented
-range, then a `Hertz` arm in the grammar and the resolver, with heads lacking the annotation reported
-as degraded rather than guessed at.
+The work was annotation before code — `hzMin`/`hzMax` per strobe band, which has landed (below) —
+then a `Hertz` arm in the grammar and the resolver, with heads lacking the annotation reported as
+degraded rather than guessed at.
 
 **Trigger**: two heads on one rig whose strobes need to visibly match. Until then the percentage is
 no worse than what a per-fixture value gave.
 
-**Partly planned**: [`fixture-optics-plan.md`](fixture-optics-plan.md) session 6 adds `hzMin`/`hzMax` per
-strobe band. The `Hertz` grammar arm stays here.
+**Annotation half done** (fixture optics plan session 6): every STROBE channel declares its bands and
+each flashing band's `hzMin`/`hzMax` (`@FixtureProperty(strobe = […])`, `docs/fixtures-engineering.md`
+§"Beam vocabulary"), so a `hz:` intent now has something to resolve against. What stays here is the
+`Hertz` arm in the grammar and the resolver: solve each head's DMX for the rate within its strobe band
+(the inverse of `strobeRateAt` in `frontend/src/lib/strobeBands.ts`), report a head whose band cannot
+reach the rate as degraded rather than guessed at — and note that most declared rates are estimates
+until `FU-MANUAL-S6-STROBE` has run.
 
 ### `FU-TMPL-WHEEL-PREVIEWS`
 
@@ -2299,6 +2304,26 @@ recategorise each program setting as `LED_MACRO` or `MOVEMENT_MACRO`, from its m
 (a program that mixes both is a movement macro whose colour is left to the LED path), with each
 recategorised channel's composition unchanged (LTP), and add the categories to whichever guard test
 then walks them.
+
+### `FU-STAGE-SETTING-SHUTTER`
+
+**A binary shutter that is a SETTING is never drawn** · Trigger · fixture optics plan session 6,
+2026-10-04
+
+The Equinox Scantastic 4's channel 1 (8- and 17-channel modes) is a binary shutter — 0–127 blackout,
+128–255 full on — declared as a `SETTING` (`Scantastic4Fixture.Shutter`), which the Stage view never
+reads; the type has no dimmer, so a Scantastic blacked out on its shutter draws lit. Session 6 drew
+every STROBE channel's closed band dark and added the vocabulary for exactly this —
+`DmxFixtureStrobeSettingValue` (a setting-backed STROBE channel's options declaring `strobeKind`),
+which the client already decodes (`findStrobeProperties`, `lib/strobeBands.ts`) and Locate already
+opens — but left the Scantastic's channel where it was, because recategorising it is not only the
+view's business: a STROBE property is HTP by default (it would need `composition = LTP` to keep its
+composition), sits in the INTENSITY mask group rather than BEAM (what a masked Record captures), is
+scaled by the grand master and the global scalers (`GlobalScalerState.isIntensityLike` — 64 is
+blackout), and becomes the programmer's strobe column ahead of the strobe slider (`findWheel` takes the
+first). **Trigger**: a Scantastic blacked out on its shutter draws lit at a desk check. **Then**:
+recategorise it as STROBE with `composition = LTP`, BLACKOUT `CLOSED` and FULL_ON `OPEN`, and decide the
+mask, scaler and column questions above in the same change.
 
 ## Completed
 

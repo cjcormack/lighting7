@@ -122,6 +122,77 @@ enum class MediaSlot {
 }
 
 /**
+ * What a band of a [PropertyCategory.STROBE] channel does to the light (fixture optics plan D12).
+ * Declared per band, because one channel mixes them: the MAC 250's runs closed, open, strobe,
+ * pulses, random strobes, a reset and the lamp.
+ *
+ * - [CLOSED] — the shutter is shut, or the LEDs are off: the light is dark whatever the dimmer says.
+ * - [OPEN] — no effect: the dimmer alone sets the level.
+ * - [STROBE] — regular flashes, at a rate between the band's `hzMin` and `hzMax`.
+ * - [RANDOM] — flashes (or pulses) at irregular intervals, at that average rate.
+ * - [PULSE] — the level ramps up and down rather than snapping, at that rate.
+ *
+ * The three that move with time declare their rate; [CLOSED] and [OPEN] declare none.
+ * `StrobeBandsTest` enforces both.
+ */
+enum class StrobeKind {
+    CLOSED,
+    OPEN,
+    STROBE,
+    RANDOM,
+    PULSE;
+
+    /** True for the kinds that change the light with time, so a band of one declares a rate. */
+    val flashes: Boolean get() = this == STROBE || this == RANDOM || this == PULSE
+}
+
+/**
+ * One band of a [PropertyCategory.STROBE] slider — `@FixtureProperty(strobe = […])` — from its
+ * manual: DMX [from]..[to] inclusive does [kind] (fixture optics plan D12).
+ *
+ * A flashing band ([StrobeKind.flashes]) declares its rate: [hzMin] at [from] and [hzMax] at [to],
+ * linear between, with `hzMin <= hzMax` — or the other way round where [inverted] (the MAC 250's
+ * "strobe, fast → slow"). A band with one rate (the MAC 250's "random strobe, fast") declares it
+ * twice. [Double.NaN] is the "unset" sentinel, as on [FixtureProperty.degMin].
+ *
+ * The bands of one slider are in DMX order, never overlap, and together cover the slider's own
+ * range (`min..max`, which is what composition can write); they may reach past `max` to name what a
+ * raw channel write would find there (the MAC 250's pulses above its clamp). A value no band covers
+ * draws open. `StrobeBandsTest` enforces all of it.
+ */
+@Target()
+@Retention(AnnotationRetention.RUNTIME)
+annotation class StrobeBand(
+    val from: Int,
+    val to: Int,
+    val kind: StrobeKind,
+    val hzMin: Double = Double.NaN,
+    val hzMax: Double = Double.NaN,
+    val inverted: Boolean = false,
+)
+
+/** A resolved [StrobeBand], its NaN sentinels as nulls — what [Fixture.Property.strobeBands] holds. */
+data class StrobeBandSpec(
+    val from: Int,
+    val to: Int,
+    val kind: StrobeKind,
+    val hzMin: Double?,
+    val hzMax: Double?,
+    val inverted: Boolean,
+) {
+    operator fun contains(level: Int): Boolean = level in from..to
+}
+
+fun StrobeBand.toSpec(): StrobeBandSpec = StrobeBandSpec(
+    from = from,
+    to = to,
+    kind = kind,
+    hzMin = hzMin.takeUnless { it.isNaN() },
+    hzMax = hzMax.takeUnless { it.isNaN() },
+    inverted = inverted,
+)
+
+/**
  * Roles for promoting a property to the compact fixture card display.
  * Up to two properties can be promoted: one primary (top row) and one secondary (bottom row).
  */
@@ -195,6 +266,11 @@ enum class CompactDisplayRole {
  * @param activeMax The DMX at which the proportional band ends: above it the channel is effects
  *                  (pulses, ramps, random), which the view does not draw, holding the band's end
  *                  value instead. `-1` — the default — means the slider's own max.
+ * @param strobe On a STROBE slider, what each band of its channel does ([StrobeBand]): closed,
+ *               open, strobe, random or pulse, a flashing band with its rate in Hz. Empty — the
+ *               default — on every other property; every STROBE slider declares its bands, which
+ *               `StrobeBandsTest` enforces. A setting-backed STROBE property declares the same per
+ *               option instead (`DmxFixtureStrobeSettingValue`).
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -218,6 +294,7 @@ annotation class FixtureProperty(
     val media: MediaSlot = MediaSlot.NONE,
     val activeMin: Int = -1,
     val activeMax: Int = -1,
+    val strobe: Array<StrobeBand> = [],
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

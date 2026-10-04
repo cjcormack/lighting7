@@ -43,6 +43,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val activeMin: Int? = null,
         /** The proportional band's last DMX value ([FixtureProperty.activeMax]); null for the slider's max. */
         val activeMax: Int? = null,
+        /** A STROBE slider's bands ([FixtureProperty.strobe]), in DMX order; empty on every other property. */
+        val strobeBands: List<StrobeBandSpec> = emptyList(),
         /**
          * Backed by a [DmxFixtureSetting] — a slot channel, whatever its category. A COLOUR
          * property that is a colour wheel or a gel scroller is one: its stored and programmer
@@ -86,6 +88,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.media.takeUnless { it == MediaSlot.NONE },
                 ann.activeMin.takeUnless { it < 0 },
                 ann.activeMax.takeUnless { it < 0 },
+                ann.strobe.map { it.toSpec() },
                 (classProperty.returnType.classifier as? KClass<*>)?.isSubclassOf(DmxFixtureSetting::class) == true,
             )
         }
