@@ -69,7 +69,9 @@ fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUu
                                # the operator's `headNumber` (v16+); the lantern and its
                                # focus — `lanternType`, `zoomDeg`, `lampRotationDeg`, `shutters`
                                # (four `{depth, angleDeg}`), `gateRotationDeg`, `iris`,
-                               # `focusSoftness` — on the patch and on each placement (v19+)
+                               # `focusSoftness` — on the patch and on each placement (v19+);
+                               # the unit's fitted `media` — `{slots: {<setting>: {<option>:
+                               # {gel?, gobo?}}}}` — on the patch and on each placement (v22+)
 universeConfigs/{uuid}.json    # `address` deliberately omitted (machine-local)
 riggings/{uuid}.json           # truss/bar/boom pose; fixtures hang off these (v3+)
 stageRegions/{uuid}.json       # rectangular platforms describing the deck (v3+)
@@ -201,7 +203,7 @@ deterministic ahead of the type change.
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 21`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 22`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -243,6 +245,34 @@ with an `ImportError`. Move both, or neither.
 **5**, because every removed field has a default — a v5 or v6 archive still imports and simply drops
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
+
+### Version 22 — fitted media
+
+**v22 adds one optional field in two places** (fixture optics plan session 3, D6; P2 is the plan's
+one bump): `FixturePatchJson` and `PatchPlacementJson` each carry `media` — what a unit has loaded in
+its loadable settings, `docs/fixtures-engineering.md` §"Fitted media". It is null by default and
+omitted then, so a rig with nothing fitted exports byte-for-byte as at v21. `RichProjectFixture`
+patches a Revolution (`rev-1`) whose patch fits a gel, a gobo and an empty frame and whose placement
+fits its own frame and a media-frame gel, all off the default. Two things about the shape:
+
+- **`media` travels as a nested object**, `{slots: {<property>: {<option>: {gel?, gobo?}}}}`, not as
+  the JSON text the column stores, so a diff reads per slot; canonical JSON sorts its keys like any
+  other object's. An empty slot travels as `{}` — fitted with nothing, which is not the same as no
+  entry — and is kept. A column that will not parse exports as nothing fitted, the tolerance every
+  reader of it has.
+- **A placement's media is its own**, layered over the patch's option by option when it is drawn,
+  so the round trip carries each placement's as it stands; nothing is flattened into the patch.
+
+**Imported as stored**: neither the gel library nor the fixture type is consulted, so a gel a newer
+desk's library holds — or a slot a newer definition declares — survives a round trip through this
+one, and the unit draws that slot as its stock. The write boundary checks what an operator or a model
+writes, not what an archive carries.
+
+**It bumped `formatVersion`** by the sharp-edge rule, v19's reason exactly: a v21 reader ignores the
+key, imports every unit with the type's stock string, and its next wipe-then-export push rewrites the
+patch files without it — reloading every peer's scrollers with ETC's stock string. `minReader` stays
+at 5: missing media is the stock. No table is added (`media` is a column on two portable tables), so
+`SyncCoverageTest`'s dispositions are unchanged; cloning carries it because the exporter does.
 
 ### Version 21 — cue events
 

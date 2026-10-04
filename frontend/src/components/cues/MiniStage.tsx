@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { findGel } from '@/data/gels'
+import { findGel, type GelIndex } from '@/lib/gels'
+import { useGelIndex } from '@/hooks/useGelIndex'
 import { DEFAULT_FIXTURE_COLOUR } from '@/components/fixtures/fixtureAppearance'
 import { StageBackdrop } from '@/components/stage/StageBackdrop'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -41,6 +42,7 @@ export function MiniStage({
     [primaryPoints, extraPoints],
   )
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
+  const gels = useGelIndex()
 
   const groupTargetNames = useMemo(
     () => new Set(targets.filter((t) => t.type === 'group').map((t) => t.key)),
@@ -105,7 +107,7 @@ export function MiniStage({
         const fixtureType = fixture ? typeByKey.get(fixture.typeKey) : undefined
         const showCone = !!fixtureType?.acceptsBeamAngle
         const beamDeg = patch.beamAngleDeg ?? 30
-        const colour = pickColour(patch.gelCode, !!fixtureType?.acceptsGel)
+        const colour = pickColour(gels, patch.gelCode, !!fixtureType?.acceptsGel)
         return (
           <div
             key={placement ? `${patch.id}:${placement.uuid}` : patch.id}
@@ -132,9 +134,9 @@ export function MiniStage({
  * on a fixture whose type doesn't take gel is stale data, and honouring it here would tint a
  * colour-mixing LED that every other surface leaves at the default warm tungsten.
  */
-function pickColour(gelCode: string | null, acceptsGel: boolean): string {
+function pickColour(gels: GelIndex, gelCode: string | null, acceptsGel: boolean): string {
   if (acceptsGel && gelCode) {
-    const gel = findGel(gelCode)
+    const gel = findGel(gels, gelCode)
     if (gel) return gel.color
   }
   return DEFAULT_FIXTURE_COLOUR

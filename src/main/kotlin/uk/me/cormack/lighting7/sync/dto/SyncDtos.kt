@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.sync.dto
 
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
@@ -28,6 +29,15 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v22: fitted media (fixture optics plan session 3). `FixturePatchJson` and `PatchPlacementJson`
+    // each gain `media` ([FittedMedia]): what a unit has loaded in its loadable settings, as a nested
+    // `{slots: {<property>: {<option>: {gel?, gobo?}}}}` naming only the options that differ from the
+    // type's stock. Null is omitted, so a rig with nothing fitted exports byte-for-byte as at v21. The
+    // writer's number moves by the sharp-edge rule: a v21 reader imports every unit with the stock
+    // string and its next wipe-then-export push writes the fitted media away for every peer.
+    // `minReader` stays at **5** — missing media is the stock. See `docs/sync-engineering.md`
+    // §"Version 22 — fitted media".
+    //
     // v21: cue events (stage-view plan session 9). `CueJson` gains an `events` list
     // ([CueEventJson]): a patch by uuid, the trigger's name on its fixture type, an `offsetMs` and a
     // sort order. Empty is omitted, so a show with no cannon cues exports byte-for-byte as at v20.
@@ -178,7 +188,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 21,
+    val formatVersion: Int = 22,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -443,6 +453,9 @@ data class FixturePatchJson(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** The unit's fitted media (v22); null is the type's stock in every slot. See
+     *  `docs/sync-engineering.md` §"Version 22 — fitted media". */
+    val media: FittedMedia? = null,
     /**
      * The other places this fixture hangs — a paired dimmer's second lantern. Embedded in
      * list order (so no `sortOrder`), like a group's `members`, and omitted by canonical JSON
@@ -483,6 +496,9 @@ data class PatchPlacementJson(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** This unit's own fitted media (v22), layered over the patch's option by option; null fits
+     *  nothing of its own. */
+    val media: FittedMedia? = null,
 )
 
 /**

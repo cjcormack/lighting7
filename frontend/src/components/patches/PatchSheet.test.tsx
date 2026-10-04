@@ -24,6 +24,12 @@ vi.mock('@/store/patches', () => ({
   useDeletePatchMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
 }))
 vi.mock('@/store/fixtures', () => ({ useFixtureListQuery: () => ({ data: [] }) }))
+// The served gel library, read from the resource the desk serves it from (`GET /gels`).
+vi.mock('@/hooks/useGelIndex', async () => {
+  const { indexGels } = await import('@/lib/gels')
+  const gels = (await import('../../../../src/main/resources/gels.json')).default
+  return { useGelIndex: () => indexGels(gels) }
+})
 vi.mock('@/store/locate', () => ({
   useLocateStateQuery: () => ({ data: { targets: [] } }),
   useToggleLocateMutation: () => [vi.fn()],

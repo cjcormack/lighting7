@@ -215,7 +215,7 @@ internal fun spreadIntoProgrammer(
     // at `0` and `1/7` and *to* never reached the rig. Support is a property of the head and the
     // shape, not of the fraction, so it is asked with `from`.
     val ordered = rigOrdered.filter { head ->
-        val probe = TemplateResolver.resolve(head, property.propertyName, from)
+        val probe = TemplateResolver.resolve(head, property.propertyName, from, fixtures.fittedMediaFor(head.targetKey))
         if (probe.value == null) {
             skipped += SpreadSkipDto(
                 CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey),
@@ -234,7 +234,7 @@ internal fun spreadIntoProgrammer(
     ordered.forEachIndexed { index, head ->
         val target = CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey)
         val intent = interpolateIntent(from, to, fractions[index])
-        val resolution = TemplateResolver.resolve(head, property.propertyName, intent)
+        val resolution = TemplateResolver.resolve(head, property.propertyName, intent, fixtures.fittedMediaFor(head.targetKey))
         val value = resolution.value
         if (value == null) {
             skipped += SpreadSkipDto(target, (resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")

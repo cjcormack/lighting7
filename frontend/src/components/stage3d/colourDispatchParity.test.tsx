@@ -16,12 +16,22 @@ import {
   type FixtureTypeInfo,
 } from '../../store/fixtures'
 import type { FixturePatch } from '../../api/patchApi'
-import { findGel } from '../../data/gels'
+import { findGel, indexGels, type Gel } from '../../lib/gels'
+import { fittedProperties, mediaFilters, type FittedMedia } from '../../lib/fittedMedia'
+import gelsJson from '../../../../src/main/resources/gels.json'
 import { chan, colourProp, makeFixture, settingProp, sliderProp } from '../../test/fixtureFactories'
 
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+
+// The served gel library (`GET /gels`), read from the resource the desk serves it from.
+const GELS = indexGels(gelsJson as Gel[])
+vi.mock('@/hooks/useGelIndex', async () => {
+  const { indexGels } = await import('@/lib/gels')
+  const gels = (await import('../../../../src/main/resources/gels.json')).default
+  return { useGelIndex: () => indexGels(gels) }
+})
 
 /**
  * The 2D and 3D colour dispatches must agree, arm for arm.
@@ -83,8 +93,9 @@ function resolve3D(scenario: Scenario): Resolved {
   // The derivation FixtureModel performs before handing ColourSync its props. Duplicated here
   // rather than exported, because the seam under test is the *dispatch*, not the lookups.
   const { patch, fixture, fixtureType } = scenario
-  const colourSource = fixture?.properties ? findColourSource(fixture.properties) : undefined
-  const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
+  const properties = fittedProperties(fixture?.properties, patch.media, GELS)
+  const colourSource = properties ? findColourSource(properties) : undefined
+  const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(GELS, patch.gelCode) : null
 
   const colorStateRef = {
     current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 },
@@ -95,7 +106,8 @@ function resolve3D(scenario: Scenario): Resolved {
         hasFixture={!!fixture}
         colourSource={colourSource}
         gel={gel}
-        dimmerProp={findDimmerProperty(fixture?.properties)}
+        filters={mediaFilters(properties, colourSource?.property.name)}
+        dimmerProp={findDimmerProperty(properties)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
       />
@@ -121,6 +133,32 @@ const WHEEL = settingProp('colourWheel', 'colour', chan(5), [
   { name: 'open', level: 0, displayName: 'Open' },
   { name: 'red', level: 10, displayName: 'Red', colourPreview: '#ff0000' },
 ])
+
+// A Revolution's three loadable settings, as `GET /fixture-types` carries them: a gel scroller (the
+// colour source), a media frame whose wing takes a gel, and a module wheel slot that takes either.
+const SCROLLER = {
+  ...settingProp('gelScroller', 'colour', chan(6), [
+    { name: 'OPEN_LEADER', level: 0, displayName: 'Open', colourPreview: '#FFFFFF', loadable: true },
+    { name: 'L201_FULL_CT_BLUE', level: 165, displayName: 'L201', colourPreview: '#9bbede', loadable: true },
+  ]),
+  media: 'GEL' as const,
+}
+const MEDIA_FRAME = {
+  ...settingProp('mediaFrame', 'setting', chan(7), [
+    { name: 'OUT', level: 0, displayName: 'Out', loadable: false },
+    { name: 'IN', level: 128, displayName: 'In', loadable: true },
+  ]),
+  media: 'GEL' as const,
+}
+const MODULE_WHEEL = {
+  ...settingProp('fbWheelPos', 'gobo', chan(8), [
+    { name: 'OPEN', level: 0, displayName: 'Open', loadable: false },
+    { name: 'SLOT_1', level: 14, displayName: 'Slot 1', loadable: true },
+  ]),
+  media: 'GOBO_OR_GEL' as const,
+}
+const REVOLUTION = makeFixture('rev-1', [DIMMER, MEDIA_FRAME, SCROLLER, MODULE_WHEEL])
+const R26: FittedMedia = { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' } } } }
 
 function scenario(over: Partial<Scenario>): Scenario {
   return { patch: PATCH, fixture: undefined, fixtureType: undefined, values: {}, ...over }
@@ -173,6 +211,42 @@ const SCENARIOS: Array<{ name: string; scenario: Scenario }> = [
     }),
   },
   {
+    name: 'a scroller unit on frame 9 with nothing fitted (the stock L201)',
+    scenario: scenario({ fixture: REVOLUTION, values: { '0:1': 255, '0:6': 165 } }),
+  },
+  {
+    name: 'a scroller unit with R26 fitted where frame 9 holds L201',
+    scenario: scenario({
+      patch: { ...PATCH, media: R26 } as FixturePatch,
+      fixture: REVOLUTION,
+      values: { '0:1': 255, '0:6': 165 },
+    }),
+  },
+  {
+    name: 'a scroller unit with an empty fitted frame (open white)',
+    scenario: scenario({
+      patch: { ...PATCH, media: { slots: { gelScroller: { L201_FULL_CT_BLUE: {} } } } } as FixturePatch,
+      fixture: REVOLUTION,
+      values: { '0:1': 255, '0:6': 165 },
+    }),
+  },
+  {
+    name: 'a media frame in with a fitted gel, filtering the scroller',
+    scenario: scenario({
+      patch: { ...PATCH, media: { slots: { mediaFrame: { IN: { gel: 'L106' } } } } } as FixturePatch,
+      fixture: REVOLUTION,
+      values: { '0:1': 255, '0:6': 165, '0:7': 128 },
+    }),
+  },
+  {
+    name: 'a dichroic in the module wheel and the frame out',
+    scenario: scenario({
+      patch: { ...PATCH, media: { slots: { fbWheelPos: { SLOT_1: { gel: 'R26' } }, mediaFrame: { IN: { gel: 'L106' } } } } } as FixturePatch,
+      fixture: REVOLUTION,
+      values: { '0:1': 255, '0:6': 0, '0:7': 0, '0:8': 14 },
+    }),
+  },
+  {
     name: 'a colour-wheel fixture parked at open',
     scenario: scenario({
       fixture: makeFixture('fx-1', [DIMMER, WHEEL]),
@@ -187,5 +261,27 @@ describe('2D and 3D colour dispatch parity', () => {
     const threeD = resolve3D(s)
     expect(threeD.colour).toBe(twoD.colour)
     expect(threeD.intensity).toBeCloseTo(twoD.intensity, 10)
+  })
+})
+
+describe('fitted media, per unit', () => {
+  // The session's symptom: every unit drew ETC's stock string. Two units of one type, the same
+  // scroller DMX, one fitted with R26 where frame 9 holds L201 — each draws its own on both surfaces.
+  it('two units of one type draw different colours from the same scroller DMX', () => {
+    const values = { '0:1': 255, '0:6': 165 }
+    const fitted = scenario({ patch: { ...PATCH, media: R26 } as FixturePatch, fixture: REVOLUTION, values })
+    const stock = scenario({ patch: { ...PATCH, key: 'rev-2' } as FixturePatch, fixture: REVOLUTION, values })
+    expect(resolve3D(fitted).colour).toBe(GELS.byCode.get('R26')!.color)
+    expect(resolve2D(fitted).colour).toBe(GELS.byCode.get('R26')!.color)
+    expect(resolve3D(stock).colour).toBe('#9bbede')
+    expect(resolve2D(stock).colour).toBe('#9bbede')
+  })
+
+  it('a media frame in multiplies its fitted gel into the beam, and out passes it unchanged', () => {
+    const media: FittedMedia = { slots: { mediaFrame: { IN: { gel: 'L106' } } } }
+    const inFrame = resolve3D(scenario({ patch: { ...PATCH, media } as FixturePatch, fixture: REVOLUTION, values: { '0:1': 255, '0:6': 0, '0:7': 128 } }))
+    expect(inFrame.colour).toBe(GELS.byCode.get('L106')!.color.toLowerCase())
+    const outFrame = resolve3D(scenario({ patch: { ...PATCH, media } as FixturePatch, fixture: REVOLUTION, values: { '0:1': 255, '0:6': 0, '0:7': 0 } }))
+    expect(outFrame.colour).toBe('#ffffff')
   })
 })

@@ -100,6 +100,28 @@ enum class Blade {
 }
 
 /**
+ * What can be loaded into a setting's options — fitted media (fixture optics plan D1, D6). A
+ * setting declaring one is **loadable**: what is in each of its slots is the unit's, not the type's,
+ * and each option's stock content is its existing `colourPreview` or `gobo`. [NONE] is the
+ * annotation's sentinel for "not loadable", as [Blade.NONE] is for "no blade".
+ *
+ * - [GEL] — a slot takes a gel from the desk's library (a scroller's frame, a media frame's wing).
+ * - [GOBO] — a slot takes a gobo pattern.
+ * - [GOBO_OR_GEL] — a slot takes either (a module wheel's slot holds a gobo or a dichroic).
+ */
+enum class MediaSlot {
+    NONE,
+    GEL,
+    GOBO,
+    GOBO_OR_GEL;
+
+    fun serialized(): String? = if (this == NONE) null else name
+
+    val takesGel: Boolean get() = this == GEL || this == GOBO_OR_GEL
+    val takesGobo: Boolean get() = this == GOBO || this == GOBO_OR_GEL
+}
+
+/**
  * Roles for promoting a property to the compact fixture card display.
  * Up to two properties can be promoted: one primary (top row) and one secondary (bottom row).
  */
@@ -163,6 +185,9 @@ enum class CompactDisplayRole {
  * @param depthMax On a SHUTTER slider, the blade's depth at DMX max (DMX min when [inverted]) in
  *                 the lantern focus's unit — a fraction of the field's diameter, so 0.5 reaches the
  *                 centre; DMX min is out. Defaults [Double.NaN].
+ * @param media On a setting-backed property, what its options can be loaded with — fitted media,
+ *              per unit ([MediaSlot]). [MediaSlot.NONE] — the default — on every other property.
+ *              `docs/fixtures-engineering.md` §"Fitted media" holds the rules a declaration obeys.
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -183,6 +208,7 @@ annotation class FixtureProperty(
     val indexDegMax: Double = Double.NaN,
     val blade: Blade = Blade.NONE,
     val depthMax: Double = Double.NaN,
+    val media: MediaSlot = MediaSlot.NONE,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

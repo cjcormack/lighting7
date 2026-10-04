@@ -305,6 +305,20 @@ both (fixture-optics session 2).
 The Stage view's **Focus** tab and the patch editor's **Lantern** box mount one `FocusCard`, and a
 pair's lanterns are focused separately. See the stage-vis doc's §"Fixture bodies".
 
+**What is loaded in a unit is the unit's** (fixture-optics session 3): a scroller's string, a module
+wheel's slots and a media frame's gel are **fitted media** on the patch and each placement
+(`FixturePatch.media`), laid over the type's stock option by option — the placement's, else the
+patch's, else the stock — by `lib/fittedMedia.ts`'s `fittedProperties`, which `FixtureModel` and
+`FixtureAppearanceSource` both run before they dispatch, so every finder in the two dispatches reads
+the unit's own. A gel in a filter slot (a media frame in, a dichroic) multiplies the beam on both
+dispatches. The controls that *set* a slot — the programmer's setting cell, the property
+visualisers, the fixture card — still name the type's stock string (`FU-MEDIA-CONTROL-SWATCHES`).
+The gel library is the desk's (`GET /gels`, `useGelIndex`; `data/gels.ts` is gone — a test reads
+`src/main/resources/gels.json`), and the Stage view reads it in `useStageData` and passes it down
+like the lanterns, never inside the scene, which a `render_view` capture would not bridge. The patch
+sheet's **Media** box edits it, the Focus tab lists it.
+See the stage-vis doc's §"Fitted media: where a beam's colour and gobo come from".
+
 **Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
 — a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
 streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage

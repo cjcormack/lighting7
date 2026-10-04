@@ -280,6 +280,7 @@ annotation class FixtureProperty(
     val indexDegMax: Double = Double.NaN,
     val blade: Blade = Blade.NONE,
     val depthMax: Double = Double.NaN,
+    val media: MediaSlot = MediaSlot.NONE,
 )
 ```
 
@@ -334,6 +335,11 @@ null, and reflects as null:
 - `blade` / `depthMax`: on a framing shutter's SHUTTER or SHUTTER_ROTATION slider, which blade it
   drives (`Blade.NONE`, the default, reflects as null) and, on the insertion, its depth at DMX max.
   See §"Framing shutters".
+
+**A setting's media.** `media` (`MediaSlot.NONE`, the default, reflects as null) marks a setting
+whose options can be **loaded** — `GEL`, `GOBO` or `GOBO_OR_GEL` — and rides the setting's
+descriptor (`SettingPropertyDescriptor.media`, each option's `loadable`). What is loaded is each
+unit's, not the type's: see §"Fitted media".
 
 Every value a fixture declares that its manufacturer does not state carries an `// Estimate:`
 comment at its source saying what it rests on (fixture optics plan D15); the rig checks that settle
@@ -1092,6 +1098,97 @@ are in `METADATA_ONLY_PUT_KEYS`: `DbFixtureLoader` never reads them, so a focus 
 the rig. They round-trip through sync on `formatVersion` 19 (`docs/sync-engineering.md`
 §"Version 19 — lanterns and focus"). The frontend reads the library through `useLanternIndex` and
 draws the lantern, the cut and the oval — `frontend/docs/stage-vis-engineering.md` §"Fixture bodies".
+
+### Fitted media
+
+What is loaded into a unit — the gel string in its scroller, the gobos or dichroics in its module
+wheel's slots, the gel in its media frame — is that **unit's**, not its type's (fixture optics plan
+D1, D6): the manual settles the bands, the venue settles what is in the slots, and two units in one
+rig can carry different strings. The type declares which settings are loadable and their stock
+contents; each unit overrides them slot by slot.
+
+**The vocabulary.** `@FixtureProperty(media = …)` on a setting: `GEL` (a slot takes a gel — a
+scroller's frame, a media frame's wing), `GOBO` (a pattern) or `GOBO_OR_GEL` (either — a module
+wheel holds a gobo or a dichroic). Each option's **stock** content is what it already declares: its
+`colourPreview` (`DmxFixtureColourSettingValue`) or its `gobo` (`DmxFixtureGoboSettingValue`). An
+option whose `loadable` is false — an open hole, an out position — takes nothing
+(`DmxFixtureSettingValue.loadable`, true by default). The Source Four Revolution is the one loadable
+type: its gel scroller is `GEL` (every frame, the open leader and trailer included — they are frames
+of the string), its front wheel position `GOBO_OR_GEL` (OPEN takes nothing; the three slots ship
+empty) and its media frame `GEL` (IN takes the wing's gel, OUT nothing; the wings ship empty).
+
+**The rules**, which `MediaSlotsTest` holds every library type to:
+
+1. `media` only on a **setting-backed** property, and only on the fixture itself — never a slider,
+   never a cell, since a cell is no unit.
+2. `GEL` and `GOBO_OR_GEL` only where the options can carry a colour (the option type implements
+   `DmxFixtureColourSettingValue`); `GOBO` and `GOBO_OR_GEL` only where they can carry a pattern
+   (`DmxFixtureGoboSettingValue`). A stock with nowhere to live has nothing to be replaced.
+3. At least one option is a slot.
+4. **Nothing else declares it**: the test lists the library's loadable settings by name, so a new
+   one is a recorded decision rather than an annotation nobody noticed.
+
+**The JSON shape** — one nullable `media` text column on `fixture_patches` **and** on
+`fixture_patch_placements`, canonical JSON with keys sorted (`fixture/media/FittedMedia.kt`):
+
+```json
+{"slots": {"gelScroller": {"L201_FULL_CT_BLUE": {"gel": "R26"}, "OPEN_LEADER": {}},
+           "fbWheelPos": {"SLOT_1": {"gobo": "breakup"}}}}
+```
+
+keyed by the setting's property name, then the option's name, naming only the options that differ
+from the stock. A slot holds `{gel: code}` (a code from the desk's gel library, `GET /gels`),
+`{gobo: pattern}` (one of the 16 `GoboPattern` names, lowercase) or `{}` — **an empty slot**, fitted
+with nothing, so the frame is open; that is not the same as no entry, which leaves the stock. Null,
+or nothing fitted, is the stock everywhere. Custom gobo artwork is `FU-GOBO-CUSTOM-IMAGES`.
+
+**The write boundary** is `routes/patchMedia.kt`'s `patchMediaRefusal`, which `POST` and
+`PUT /patches`, the bulk `PUT /patches/placements` and the MCP `patch_fixtures` / `place_fixtures`
+all call, following `resolvePatchFocus`: on a patch a `media` key absent is **kept** and `null`
+**clears**; within an `extraPlacements` entry it is plain, as every placement field is (the entry is
+a whole placement), so a client that re-sends the list carries each placement's media. It refuses,
+**every problem at once** and each by its path: a type with no loadable settings, an unknown
+property, one that is not loadable, an unknown option, an option that is no slot, an unknown gel
+code or gobo pattern, a gel where the slot takes none, a gobo where it takes none, and a slot holding
+both. `FittedMedia.parse` refuses the shape first (a wrong JSON type is a problem named, never a 500).
+An MCP re-patch to another type drops stored media the new type cannot hold. Import is **not**
+checked (`docs/sync-engineering.md` §"Version 22 — fitted media"), so a gel a newer desk's library
+holds survives a round trip; such a slot draws as its stock.
+
+`media` is in **`METADATA_ONLY_PUT_KEYS`**: `DbFixtureLoader` never builds a fixture from it, so a
+media write never rebuilds the rig — but the runtime patch metadata (`Fixtures.FixturePatchMetadata`)
+carries the patch's media for the template resolver, and the metadata-only path refreshes it there
+as it refreshes `gelCode`. That is also what lets the Stage view's Focus tab and the bulk route
+write it. **It recomposes nothing**: a live cue, or a programmer layer, whose colour template snapped
+a scroller or wheel frame keeps that frame until it is next composed (its next GO, or a recook), as
+with every metadata edit — a loaded-media change is a between-shows job, and a scroller moving under
+a live cue unasked is a visible jump. Re-snapping live consumers on a media write is
+`FU-MEDIA-LIVE-RESNAP`.
+
+**The resolution order** is *the placement's slot, else the patch's, else the type's stock*,
+option by option (`FittedMedia.over`). A fitted gel resolves to its library colour, a fitted gobo to
+its pattern and no colour, an empty slot to open white and no pattern
+(`FittedMedia.colourOf` / `goboOf`). Where it happens:
+
+- **The client overlays it, per unit**, on the type's descriptor (`frontend/src/lib/fittedMedia.ts`'s
+  `fittedProperties`). A descriptor is per fixture, and a fixture with extra placements is several
+  units — two scrollers on one address, each its own string — so only the surface drawing a
+  placement knows which unit it is drawing; a backend-resolved descriptor could answer for the
+  patch alone. The Stage view, the 2D appearance and the patch sheet all overlay the same way
+  (`frontend/docs/stage-vis-engineering.md` §"Fitted media").
+- **The desk resolves it for what it answers alone**: `TemplateResolver.nearestColourSlot` snaps a
+  colour against the unit's fitted colours (the patch's own: a placement's DMX is the patch's, so a
+  snap can answer for one unit, and the note names the fitted gel, *L201_FULL_CT_BLUE (R26)*);
+  Locate's white frame is the one open on this unit; `describe_rig` lists each unit's fitted media.
+  The resolver takes the media as a **required** argument (`Fixtures.fittedMediaFor`), so no caller
+  can snap against the stock string by forgetting it.
+
+**The gel library** is `src/main/resources/gels.json`, read once by `fixture/media/GelLibrary.kt`
+and served whole at `GET /gels` (fixture optics plan D7); it moved from the frontend so the desk can
+turn a fitted gel into a colour. `parse` refuses a bad code, a bad hex, a duplicate code or an unknown
+brand, every problem at once. Eight gels of the Revolution's stock string were added with the
+string's swatches and are marked `estimate` (D15). A patch's `gelCode` is not checked against it: a
+gel the plot names and the library lacks is still the plot's.
 
 ### Per-project fields (stage dimensions)
 

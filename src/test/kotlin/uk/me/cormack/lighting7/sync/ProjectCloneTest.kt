@@ -10,7 +10,13 @@ import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.models.extraPlacementsOf
+import org.jetbrains.exposed.v1.core.and
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
@@ -115,6 +121,27 @@ class ProjectCloneTest {
         )
         // Every identity in the export is a row the clone copied, plus the project row itself.
         assertEquals(cloneUuids.size - 1, result.recordsCloned, "recordsCloned does not match the graph")
+    }
+
+    /**
+     * Fitted media (v22) is cloned because it is exported — cloning is derived, never a path of its
+     * own. The byte comparison above already covers it; this names the failure if it ever goes.
+     */
+    @Test
+    fun `clone carries fitted media on the patch and its placement`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-media", description = null)
+
+        transaction(state.database) {
+            val rev = DaoFixturePatch.find {
+                (DaoFixturePatches.project eq result.projectId) and (DaoFixturePatches.key eq "rev-1")
+            }.single()
+            assertEquals(FittedSlot(gel = "R26"), rev.fittedMedia?.slot("gelScroller", "L201_FULL_CT_BLUE"))
+            assertEquals(FittedSlot(gobo = "breakup"), rev.fittedMedia?.slot("fbWheelPos", "SLOT_1"))
+            val sl = extraPlacementsOf(rev).single()
+            assertEquals(FittedSlot(gel = "R80"), sl.fittedMedia?.slot("gelScroller", "L201_FULL_CT_BLUE"))
+            assertEquals(FittedSlot(gel = "L202"), sl.fittedMedia?.slot("mediaFrame", "IN"))
+        }
     }
 
     /**

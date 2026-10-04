@@ -26,6 +26,8 @@ import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.DbFixtureLoader
 import uk.me.cormack.lighting7.show.Fixtures
@@ -140,6 +142,15 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid focus"))
                 return@withProject
             }
+            // Fitted media: its shape, then the type's loadable settings, every problem at once.
+            val requestedMedia = FittedMedia.parse(request.media).getOrElse {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid media"))
+                return@withProject
+            }
+            patchMediaRefusal(typeInfo.typeKey, requestedMedia, patchMediaSent = true, placements = null)?.let {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+                return@withProject
+            }
 
             val result = transaction(state.database) {
                 val rigging = request.riggingUuid?.let { resolveRiggingForProject(project, it) }
@@ -215,6 +226,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.infrastructure = request.infrastructure
                 }
                 if (!focusWrite.focus.isEmpty) patch.focus = focusWrite.focus
+                if (requestedMedia != null) patch.fittedMedia = requestedMedia
 
                 // Assign to group if specified
                 request.groupName?.takeIf { it.isNotBlank() }?.let { groupName ->
@@ -298,6 +310,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid focus"))
                 return@withProject
             }
+            // Absent keeps the stored media, null clears it — read only when sent.
+            val parsedMedia: FittedMedia? = if ("media" in body) {
+                FittedMedia.parse(body["media"]).getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(it.message ?: "Invalid media"))
+                    return@withProject
+                }
+            } else null
 
             var sweptCellTiles = 0
             var infrastructureFlipped = false
@@ -334,6 +353,11 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 placementInputs?.let { inputs ->
                     placementFocusRefusal(patch.fixtureTypeKey, focusWrite.kindOverride, focusWrite.focus.lanternType, inputs)
                 }?.let {
+                    refusedAsBadRequest = true
+                    return@transaction Pair<FixturePatchDto?, String?>(null, it)
+                }
+                // The patch's media and every placement's, against the type's loadable settings.
+                patchMediaRefusal(patch.fixtureTypeKey, parsedMedia, "media" in body, placementInputs)?.let {
                     refusedAsBadRequest = true
                     return@transaction Pair<FixturePatchDto?, String?>(null, it)
                 }
@@ -399,6 +423,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         clearStaleInheritedZooms(patch.fixtureTypeKey, focusWrite.kindOverride, focusWrite.focus.lanternType, extraPlacementsOf(patch))
                     }
                 }
+                if ("media" in body) patch.fittedMedia = parsedMedia
                 // Non-nullable column: an explicit JSON null is read as "show it".
                 if ("stageHidden" in body) {
                     patch.stageHidden = body["stageHidden"].nullableBoolean() ?: false
@@ -458,7 +483,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 // Metadata-only edits skip the rebuild, so refresh the cache directly.
                 state.show.fixtures.setPatchMetadata(
                     patchDto!!.key,
-                    Fixtures.FixturePatchMetadata(gelCode = patchDto.gelCode, infrastructure = patchDto.infrastructure),
+                    Fixtures.FixturePatchMetadata(
+                        gelCode = patchDto.gelCode, infrastructure = patchDto.infrastructure, media = patchDto.media,
+                    ),
                 )
                 // A rebuild would have announced this itself; without one, the fixture list's
                 // contents still changed, and every window has to drop (or regain) the fixture.
@@ -513,6 +540,8 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val focusById = mutableMapOf<Int, LanternFocus>()
             // Only the entries that carry the key — a null value is an explicit clear.
             val headNumbersById = mutableMapOf<Int, Int?>()
+            // Likewise: only the entries that carry `media`, a null clearing it.
+            val mediaById = mutableMapOf<Int, FittedMedia?>()
             for (entry in request.updates) {
                 val patchId = entry["patchId"].nullableInt()
                 if (patchId == null) {
@@ -574,6 +603,19 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     continue
                 }
                 focusById[patchId] = focusParsed.getOrThrow()
+                if ("media" in entry) {
+                    val parsed = FittedMedia.parse(entry["media"])
+                    val mediaError = parsed.exceptionOrNull()?.message
+                    if (mediaError != null) {
+                        if (request.atomic) {
+                            call.respond(HttpStatusCode.BadRequest, ErrorResponse("patch $patchId: $mediaError"))
+                            return@withProject
+                        }
+                        failures.add(BulkPlacementFailure(patchId, mediaError))
+                        continue
+                    }
+                    mediaById[patchId] = parsed.getOrThrow()
+                }
                 if ("extraPlacements" in entry) {
                     val parsed = parseExtraPlacements(entry["extraPlacements"])
                     val placementError = parsed.exceptionOrNull()?.message
@@ -667,6 +709,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         fatal.add(BulkPlacementFailure(patchId, it))
                         continue
                     }
+                    patchMediaRefusal(target.fixtureTypeKey, mediaById[patchId], patchId in mediaById, placementInputsById[patchId])?.let {
+                        fatal.add(BulkPlacementFailure(patchId, it))
+                        continue
+                    }
                     focusWrites[patchId] = focusWrite
                     placementInputsById[patchId]?.let { inputs ->
                         val resolved = placementRiggingsFrom(riggingByUuid, inputs)
@@ -726,6 +772,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     if ("stageHidden" in entry) {
                         patch.stageHidden = entry["stageHidden"].nullableBoolean() ?: false
                     }
+                    if (patchId in mediaById) patch.fittedMedia = mediaById[patchId]
                     placementInputsById[patchId]?.let { inputs ->
                         applyExtraPlacements(patch, inputs, placementRiggingsById.getValue(patchId))
                     }
@@ -772,7 +819,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 for (dto in updated) {
                     state.show.fixtures.setPatchMetadata(
                         dto.key,
-                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode, infrastructure = dto.infrastructure),
+                        Fixtures.FixturePatchMetadata(gelCode = dto.gelCode, infrastructure = dto.infrastructure, media = dto.media),
                     )
                 }
             }
@@ -939,6 +986,13 @@ data class FixturePatchDto(
     /** Sharp 0 to soft 1; null is the lantern's own edge. */
     val focusSoftness: Double? = null,
     /**
+     * The unit's **fitted media** (fixture optics plan D6): what is loaded in its loadable settings —
+     * `{slots: {<property>: {<option>: {gel?, gobo?}}}}`, naming only the options that differ from
+     * the type's stock. Null is the stock everywhere. Each extra placement carries its own, layered
+     * over this option by option. See `docs/fixtures-engineering.md` §"Fitted media".
+     */
+    val media: FittedMedia? = null,
+    /**
      * The other places this fixture hangs — a paired dimmer's second lantern, SL beside SR.
      * One fixture to control, several to draw. In order; empty for almost every patch.
      */
@@ -986,6 +1040,9 @@ data class CreatePatchRequest(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** Only for a type with loadable settings; see [FixturePatchDto.media]. Raw JSON so it is
+     *  checked by the same parser as `PUT`'s, every problem at once. */
+    val media: JsonElement? = null,
 ) {
     fun focus() = LanternFocus(
         lanternType?.trim()?.takeIf { it.isNotEmpty() }, zoomDeg, lampRotationDeg, shutters, gateRotationDeg, iris, focusSoftness,
@@ -1019,6 +1076,9 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     "stageHidden",
     // A paired fixture's other placements — its own table, which the loader never reads.
     "extraPlacements",
+    // Fitted media (fixture optics plan session 3) — drawn and snapped to, never built from: the
+    // runtime patch metadata carries it, refreshed on this path as `gelCode` is.
+    "media",
     // The lantern and its focus (stage-view plan session 7) — drawn, never built from.
     "lanternType",
     "zoomDeg",
@@ -1083,6 +1143,7 @@ private fun DaoFixturePatch.toDto(
         gateRotationDeg = f.gateRotationDeg,
         iris = f.iris,
         focusSoftness = f.focusSoftness,
+        media = fittedMedia,
         extraPlacements = placements.map { it.toDto() },
     )
 }

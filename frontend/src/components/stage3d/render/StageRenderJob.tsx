@@ -92,6 +92,9 @@ export default function StageRenderJob({
       // A generic dimmer is drawn as its lantern (session 7): without the library in, every one
       // would be its kind's default, with no cut and no oval.
       ['the lantern library', dispatch(fixturesApi.endpoints.lanternList.initiate(undefined, FRESH))],
+      // A unit's fitted gel is drawn in its library colour (fixture optics session 3): without the
+      // library in, a fitted frame would draw its stock colour.
+      ['the gel library', dispatch(fixturesApi.endpoints.gelList.initiate(undefined, FRESH))],
     ] as const
     let cancelled = false
     void Promise.all(pending.map(([, p]) => p)).then((results) => {

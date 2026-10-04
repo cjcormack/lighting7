@@ -56,14 +56,15 @@ sealed class Source4RevolutionFixture(
 
     /**
      * Channel 13 — the gel scroller, loaded with ETC's standard 12-colour string (p15): an open
-     * leader and trailer around twelve gels. ChamSys's 14 bands match ETC's starts exactly. A
-     * venue's own string is fitted media, which arrives per placement in the fixture optics plan's
-     * session 3; until then this is what every unit draws.
+     * leader and trailer around twelve gels. ChamSys's 14 bands match ETC's starts exactly. This is
+     * the **stock** string: the scroller is loadable (`media = GEL`), so a venue's own string is
+     * each unit's fitted media, frame by frame, and draws instead (`docs/fixtures-engineering.md`
+     * §"Fitted media"). Every frame takes a gel, the open leader and trailer included.
      *
-     * Previews: the desk's gel library (`frontend/src/data/gels.ts`) where it has the gel — R02,
-     * L203, L201, R68 — and the plan's approximate swatches
-     * (`docs/plans/fixture-optics-design/fixture-optics.html`) for the eight it lacks. The open
-     * frames are `#FFFFFF`, the library's open white, which is also what Locate looks for.
+     * Previews: the desk's gel library (`src/main/resources/gels.json`) for all twelve — R02, L203,
+     * L201 and R68 were in it, and the other eight were added to it from this string's swatches
+     * (fixture optics plan D7), marked as estimates there too. The open frames are `#FFFFFF`, the
+     * library's open white, which is also what Locate looks for.
      */
     enum class GelFrame(override val level: UByte, override val colourPreview: String) : DmxFixtureColourSettingValue {
         // Estimate: every preview is an approximate swatch of the gel, not a measured transmission —
@@ -86,24 +87,42 @@ sealed class Source4RevolutionFixture(
 
     /**
      * Channel 6 — the internal media frame (p31–33): two gel wings the front lens moves in and out
-     * of the beam. ETC documents it as in/out only and gives no bands.
+     * of the beam. ETC documents it as in/out only and gives no bands. Loadable (`media = GEL`): the
+     * wings ship empty, so IN carries no stock colour, and the gel a unit has fitted there filters
+     * the scroller's colour while the frame is in.
      */
-    enum class MediaFrame(override val level: UByte) : DmxFixtureSettingValue {
-        OUT(0u),
+    enum class MediaFrame(
+        override val level: UByte,
+        override val loadable: Boolean = true,
+    ) : DmxFixtureColourSettingValue {
+        // Out of the beam: nothing fitted there reaches it.
+        OUT(0u, loadable = false),
         // Estimate: ETC gives no bands for channel 6; half way is assumed to be the split.
         IN(128u),
+        ;
+
+        /** The wings ship empty: a fitted gel is the only colour either position carries. */
+        override val colourPreview: String? get() = null
     }
 
     /**
      * Channel 16 — the front bay wheel's position (p22, p24): open, then three slots; 51–255 is
-     * reserved and holds slot 3, so slot 3's band runs to the top. The slots name no pattern: the
-     * wheels ship empty, and what is loaded is fitted media (the plan's session 3).
+     * reserved and holds slot 3, so slot 3's band runs to the top. The slots name no pattern and no
+     * colour: the wheels ship empty, and what is loaded — an M-size gobo or a dichroic — is each
+     * unit's fitted media (`media = GOBO_OR_GEL`). OPEN is the hole, which takes nothing.
      */
-    enum class WheelPosition(override val level: UByte) : DmxFixtureSettingValue {
-        OPEN(0u),
+    enum class WheelPosition(
+        override val level: UByte,
+        override val loadable: Boolean = true,
+    ) : DmxFixtureGoboSettingValue, DmxFixtureColourSettingValue {
+        OPEN(0u, loadable = false),
         SLOT_1(14u),
         SLOT_2(27u),
         SLOT_3(40u),
+        ;
+
+        override val gobo: GoboPattern? get() = null
+        override val colourPreview: String? get() = null
     }
 
     /**
@@ -192,7 +211,7 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Media frame (out / in)", category = PropertyCategory.SETTING)
+        @FixtureProperty("Media frame (out / in)", category = PropertyCategory.SETTING, media = MediaSlot.GEL)
         val mediaFrame = DmxFixtureSetting(
             transaction, universe, firstChannel + 5, MediaFrame.entries.toTypedArray(),
         )
@@ -219,7 +238,7 @@ sealed class Source4RevolutionFixture(
 
         // Ch 12 (Reset) intentionally not exposed — see the class doc.
 
-        @FixtureProperty("Gel scroller", category = PropertyCategory.COLOUR)
+        @FixtureProperty("Gel scroller", category = PropertyCategory.COLOUR, media = MediaSlot.GEL)
         val gelScroller = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, GelFrame.entries.toTypedArray(),
         )
@@ -230,7 +249,7 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Iris (open → closed)", category = PropertyCategory.IRIS)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Front wheel position", category = PropertyCategory.GOBO)
+        @FixtureProperty("Front wheel position", category = PropertyCategory.GOBO, media = MediaSlot.GOBO_OR_GEL)
         val fbWheelPos = DmxFixtureSetting(
             transaction, universe, firstChannel + 15, WheelPosition.entries.toTypedArray(),
         )

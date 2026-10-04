@@ -10,6 +10,8 @@ import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
 import { buildHarness, isHarnessActive } from './profileHarness'
 import { useLanternIndex } from '../../hooks/useLanternIndex'
 import type { LanternIndex } from '../../lib/lanterns'
+import { useGelIndex } from '../../hooks/useGelIndex'
+import type { GelIndex } from '../../lib/gels'
 
 interface StageData {
   patches: FixturePatch[] | undefined
@@ -19,6 +21,9 @@ interface StageData {
   typeByKey: Map<string, FixtureTypeInfo>
   /** The lantern library, which a generic dimmer's body is chosen from. */
   lanterns: LanternIndex
+  /** The gel library, which a unit's fitted gels and a `gelCode` are drawn from. Read here and
+   *  passed down, never in the scene: a capture canvas bridges only the channel source. */
+  gels: GelIndex
 }
 
 // Single source of truth for Stage 3D's input data. When the profiling
@@ -37,6 +42,7 @@ export function useStageData(
   const { data: riggings } = useRiggingListQuery(projectId)
   const { fixtureByKey, typeByKey } = useFixtureLookup()
   const lanterns = useLanternIndex()
+  const gels = useGelIndex()
 
   const harness = useMemo(() => {
     if (!isHarnessActive()) return null
@@ -45,7 +51,7 @@ export function useStageData(
 
   return useMemo(() => {
     if (!harness) {
-      return { patches, regions, riggings, fixtureByKey, typeByKey, lanterns }
+      return { patches, regions, riggings, fixtureByKey, typeByKey, lanterns, gels }
     }
     const mergedFixtureByKey = new Map(fixtureByKey)
     for (const p of harness.patches) mergedFixtureByKey.set(p.key, harness.fixtureFor?.get(p.key) ?? harness.syntheticFixture)
@@ -58,6 +64,7 @@ export function useStageData(
       fixtureByKey: mergedFixtureByKey,
       typeByKey: mergedTypeByKey,
       lanterns,
+      gels,
     }
-  }, [harness, patches, regions, riggings, fixtureByKey, typeByKey, lanterns])
+  }, [harness, patches, regions, riggings, fixtureByKey, typeByKey, lanterns, gels])
 }

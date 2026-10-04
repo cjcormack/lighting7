@@ -1558,7 +1558,7 @@ private fun resolveTemplateAgainstPatch(
                 if (target is TargetRef.Fixture && target.key != fixture.key) null
                 else row.propertyName to intent
             }
-            put(fixture.key, TemplateResolver.unmetColourRequirement(fixture, applicable))
+            put(fixture.key, TemplateResolver.unmetColourRequirement(fixture, applicable, fixtures.fittedMediaFor(fixture.key)))
         }
     }
 
@@ -1572,7 +1572,7 @@ private fun resolveTemplateAgainstPatch(
             else -> candidates
         }
         for (fixture in forThisRow) {
-            val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent)
+            val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent, fixtures.fittedMediaFor(fixture.key))
             val requirement = if (isColourRow) colourRequirement[fixture.key] else null
             // A head with nothing in this family was never a candidate — omitted rather than listed
             // as a failure, which is what the resolver's own `NotACandidate` arm says. It used to be

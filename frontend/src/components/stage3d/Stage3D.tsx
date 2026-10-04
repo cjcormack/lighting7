@@ -246,7 +246,7 @@ export function Stage3D({
   const stageW = project?.stageWidthM ?? 10
   const stageD = project?.stageDepthM ?? 8
   const stageH = project?.stageHeightM ?? 6
-  const { patches, regions, riggings, fixtureByKey, typeByKey, lanterns: lanternLibrary } = useStageData(
+  const { patches, regions, riggings, fixtureByKey, typeByKey, lanterns: lanternLibrary, gels } = useStageData(
     projectId,
     stageW,
     stageD,
@@ -566,6 +566,7 @@ export function Stage3D({
         fixture={fixture}
         fixtureType={fixtureType}
         lanterns={lanternLibrary}
+        gels={gels}
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={slot}
@@ -590,6 +591,7 @@ export function Stage3D({
         fixture={fixture}
         fixtureType={fixtureType}
         lanterns={lanternLibrary}
+        gels={gels}
         riggings={safeRiggings}
         regionGeometry={regionGeometry}
         slot={visiblePatches.length + i}

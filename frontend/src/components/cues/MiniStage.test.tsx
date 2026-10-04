@@ -7,6 +7,12 @@ const bar = { ...makePixelBar('bar', 4), name: 'Pixel Bar' }
 const par = { ...makeFixture('par-1', []), name: 'Par One' }
 
 // No placed patches, so the stage draws its fallback row of dots — one per fixture, titled by name.
+// The served gel library (`GET /gels`), read from the resource the desk serves it from.
+vi.mock('@/hooks/useGelIndex', async () => {
+  const { indexGels } = await import('@/lib/gels')
+  const gels = (await import('../../../../src/main/resources/gels.json')).default
+  return { useGelIndex: () => indexGels(gels) }
+})
 vi.mock('@/hooks/useProjectedPatches', () => ({
   useProjectedPatches: () => ({ points: [], extraPoints: [] }),
 }))

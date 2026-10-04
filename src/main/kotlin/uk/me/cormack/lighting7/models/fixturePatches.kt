@@ -83,6 +83,14 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
     val iris = double("iris").nullable()
     /** The focus knob, sharp 0 to soft 1. Null is the lantern's own edge. */
     val focusSoftness = double("focus_softness").nullable()
+    /** The unit's **fitted media** (fixture optics plan D6): what is loaded in its loadable settings
+     *  — a scroller's string, a wheel's slots, a media frame's gel — as canonical JSON
+     *  `{slots: {<property>: {<option>: {gel?, gobo?}}}}` (`FittedMedia`). Null is the type's stock in
+     *  every slot. Physical, portable, never in a look; checked against the type's loadable settings
+     *  at the write boundary. The loader never builds a fixture from it, but the runtime patch
+     *  metadata carries it for the template resolver's wheel snap. See `docs/fixtures-engineering.md`
+     *  §"Fitted media". */
+    val media = text("media").nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -121,6 +129,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var gateRotationDeg by DaoFixturePatches.gateRotationDeg
     var iris by DaoFixturePatches.iris
     var focusSoftness by DaoFixturePatches.focusSoftness
+    var media by DaoFixturePatches.media
     var uuid by DaoFixturePatches.uuid
 }
 

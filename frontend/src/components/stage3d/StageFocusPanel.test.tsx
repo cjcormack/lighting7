@@ -32,6 +32,12 @@ const focusHere = vi.fn((_body: Record<string, unknown>) => ({
     Promise.resolve({ written: [{ target: { type: 'fixture', key: 'rev-1' }, value: '246', distanceM: 24.0 }] }),
 }))
 vi.mock('@/store/programmerOps', () => ({ useFocusHereMutation: () => [focusHere, { isLoading: false }] }))
+// The served gel library (`GET /gels`), read from the resource the desk serves it from.
+vi.mock('@/hooks/useGelIndex', async () => {
+  const { indexGels } = await import('@/lib/gels')
+  const gels = (await import('../../../../src/main/resources/gels.json')).default
+  return { useGelIndex: () => indexGels(gels) }
+})
 
 import { StageFocusPanel } from './StageFocusPanel'
 import { forgetLanding, recordLanding } from './landedPoints'
@@ -263,6 +269,59 @@ describe('StageFocusPanel', () => {
     )
     expect(screen.getByText(/Rev 1 drives its zoom and framing shutters from its channels/)).toBeInTheDocument()
     expect(screen.queryByRole('slider')).toBeNull()
+  })
+
+  it("lists each unit's fitted media for a type with loadable settings, and none for one without", () => {
+    const scroller = {
+      type: 'setting', name: 'gelScroller', displayName: 'Gel scroller', category: 'colour', media: 'GEL',
+      channel: { universe: 1, channelNo: 13 },
+      options: [
+        { name: 'OPEN_LEADER', level: 0, displayName: 'Open Leader', colourPreview: '#FFFFFF', loadable: true },
+        { name: 'R02_BASTARD_AMBER', level: 18, displayName: 'R02', colourPreview: '#fbcc9a', loadable: true },
+        { name: 'L201_FULL_CT_BLUE', level: 165, displayName: 'L201', colourPreview: '#9bbede', loadable: true },
+      ],
+    }
+    const fixture = { name: 'Rev 1', properties: [scroller] } as unknown as Fixture
+    const revType = { typeKey: 'etc-source4-revolution-base-frame', kind: 'MOVING_HEAD', acceptsLantern: false } as unknown as FixtureTypeInfo
+    render(
+      <StageFocusPanel
+        projectId={1}
+        patch={patch({
+          key: 'rev-1', fixtureTypeKey: revType.typeKey, lanternType: null,
+          media: { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' } } } },
+          extraPlacements: [
+            {
+              uuid: 'sl', label: 'SL', riggingUuid: null, stageX: 4, stageY: -16, stageZ: 2.8, baseYawDeg: null, basePitchDeg: 180,
+              media: { slots: { gelScroller: { R02_BASTARD_AMBER: {} } } },
+            },
+          ],
+        })}
+        fixture={fixture}
+        fixtureType={revType}
+        lanterns={lanterns}
+      />,
+    )
+    const list = screen.getByRole('region', { name: 'Fitted media' })
+    const own = list.querySelector('[data-media-unit="fixture"]') as HTMLElement
+    expect(own).toHaveTextContent('Unit 1')
+    expect(own).toHaveTextContent('Gel scroller · frame 2R26 Light Red')
+    const sl = list.querySelector('[data-media-unit="sl"]') as HTMLElement
+    expect(sl).toHaveTextContent('Unit 2 · SL')
+    // The placement's own over the patch's: its emptied frame 1, and frame 2's R26 from unit 1.
+    expect(sl).toHaveTextContent('frame 1empty')
+    expect(sl).toHaveTextContent('frame 2R26 Light Red')
+
+    cleanup()
+    render(
+      <StageFocusPanel
+        projectId={1}
+        patch={patch({ key: 'rev-2', fixtureTypeKey: revType.typeKey, lanternType: null })}
+        fixture={fixture}
+        fixtureType={revType}
+        lanterns={lanterns}
+      />,
+    )
+    expect(screen.getByRole('region', { name: 'Fitted media' })).toHaveTextContent('Stock in every slot.')
   })
 
   it('tells a DMX fixture with no optics channels that its optics are fixed — not that its channels set them', () => {

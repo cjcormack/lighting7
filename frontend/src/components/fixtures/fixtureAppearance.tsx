@@ -11,7 +11,9 @@ import {
 } from '../../store/fixtures'
 import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
 import type { FixturePatch } from '../../api/patchApi'
-import { findGel } from '../../data/gels'
+import { findGel } from '../../lib/gels'
+import { filterColour, fittedProperties, mediaFilters } from '../../lib/fittedMedia'
+import { useGelIndex } from '../../hooks/useGelIndex'
 import {
   useColourValue,
   useSettingColourPreview,
@@ -76,20 +78,34 @@ export function FixtureAppearanceSource({
   fixtureType,
   children,
 }: FixtureAppearanceProps) {
+  // The type's descriptors as this unit holds them: a loadable setting's options overlaid with the
+  // patch's fitted media (`lib/fittedMedia.ts`), so a scroller draws the unit's own string. The 3D
+  // scene makes the same overlay, per placement.
+  const gels = useGelIndex()
+  const properties = useMemo(
+    () => fittedProperties(fixture?.properties, patch.media, gels),
+    [fixture?.properties, patch.media, gels],
+  )
   // The discriminator is pure, so it resolves here rather than through hooks.
   const colourSource = useMemo(
-    () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
-    [fixture?.properties],
+    () => (properties ? findColourSource(properties) : undefined),
+    [properties],
   )
   const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
   const dimmerProp = useMemo(
-    () => findDimmerProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findDimmerProperty(properties),
+    [properties],
   )
   // `acceptsGel` matters: a gel code on a fixture whose type doesn't take gel is stale data, and
   // colouring by it would contradict both other surfaces.
   const gel =
-    !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
+    !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
+  // The unit's colour filters — a media frame's gel, a dichroic in a wheel (`mediaFilters`). The
+  // 3D scene's `filteredHex` is the other copy of this step.
+  const filters = useMemo(
+    () => mediaFilters(properties, colourSource?.property.name),
+    [properties, colourSource],
+  )
 
   if (!fixture) return <PlaceholderAppearance>{children}</PlaceholderAppearance>
 
@@ -103,7 +119,7 @@ export function FixtureAppearanceSource({
 
   if (colourSource?.type === 'colour') {
     return (
-      <ColourAppearance colourProp={colourSource.property} dimmerProp={dimmerProp}>
+      <ColourAppearance colourProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
         {children}
       </ColourAppearance>
     )
@@ -111,7 +127,7 @@ export function FixtureAppearanceSource({
 
   if (colourSource?.type === 'setting') {
     return (
-      <SettingColourAppearance settingProp={colourSource.property} dimmerProp={dimmerProp}>
+      <SettingColourAppearance settingProp={colourSource.property} dimmerProp={dimmerProp} filters={filters}>
         {children}
       </SettingColourAppearance>
     )
@@ -119,14 +135,14 @@ export function FixtureAppearanceSource({
 
   if (gel) {
     return (
-      <FixedColourAppearance hex={gel.color} dimmerProp={dimmerProp}>
+      <FixedColourAppearance hex={gel.color} dimmerProp={dimmerProp} filters={filters}>
         {children}
       </FixedColourAppearance>
     )
   }
 
   return (
-    <FixedColourAppearance hex={DEFAULT_FIXTURE_COLOUR} dimmerProp={dimmerProp}>
+    <FixedColourAppearance hex={DEFAULT_FIXTURE_COLOUR} dimmerProp={dimmerProp} filters={filters}>
       {children}
     </FixedColourAppearance>
   )
@@ -134,13 +150,57 @@ export function FixtureAppearanceSource({
 
 type LeafProps = { children: (appearance: FixtureAppearance) => ReactNode }
 
+/**
+ * `hex` through each filter's current slot colour, one component per filter so each has a fixed
+ * hook set (the render-prop reason above). A filter whose slot holds no colour passes it unchanged.
+ */
+function Filtered({
+  hex,
+  filters,
+  children,
+}: {
+  hex: string
+  filters: readonly SettingPropertyDescriptor[]
+  children: (hex: string) => ReactNode
+}) {
+  if (filters.length === 0) return <>{children(hex)}</>
+  return (
+    <FilterStep hex={hex} filter={filters[0]} rest={filters.slice(1)}>
+      {children}
+    </FilterStep>
+  )
+}
+
+function FilterStep({
+  hex,
+  filter,
+  rest,
+  children,
+}: {
+  hex: string
+  filter: SettingPropertyDescriptor
+  rest: readonly SettingPropertyDescriptor[]
+  children: (hex: string) => ReactNode
+}) {
+  const preview = useSettingColourPreview(filter)
+  return (
+    <Filtered hex={filterColour(hex, [preview])} filters={rest}>
+      {children}
+    </Filtered>
+  )
+}
+
+const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
+
 function ColourAppearance({
   colourProp,
   dimmerProp,
+  filters = NO_FILTERS,
   children,
 }: LeafProps & {
   colourProp: ColourPropertyDescriptor
   dimmerProp?: SliderPropertyDescriptor
+  filters?: readonly SettingPropertyDescriptor[]
 }) {
   const colour = useColourValue(colourProp)
   // Effective intensity = dimmer × colour, so a colour-only fixture at RGB 0 reads as dark
@@ -157,33 +217,38 @@ function ColourAppearance({
     colour.a,
     colour.uv,
   )
-  return <>{children({ color, intensity })}</>
+  return <Filtered hex={color} filters={filters}>{(hex) => children({ color: hex, intensity })}</Filtered>
 }
 
 function SettingColourAppearance({
   settingProp,
   dimmerProp,
+  filters = NO_FILTERS,
   children,
 }: LeafProps & {
   settingProp: SettingPropertyDescriptor
   dimmerProp?: SliderPropertyDescriptor
+  filters?: readonly SettingPropertyDescriptor[]
 }) {
   const preview = useSettingColourPreview(settingProp)
   // A selected colour preset reads as fully on; no selection ⇒ dark. A separate dimmer at 0
   // still wins through the dimmer factor.
   const intensity = useNormalizedIntensity(dimmerProp) * (preview ? 1 : 0)
-  return <>{children({ color: preview ?? '#888888', intensity })}</>
+  if (!preview) return <>{children({ color: '#888888', intensity })}</>
+  return <Filtered hex={preview} filters={filters}>{(hex) => children({ color: hex, intensity })}</Filtered>
 }
 
 function FixedColourAppearance({
   hex,
   dimmerProp,
+  filters = NO_FILTERS,
   children,
-}: LeafProps & { hex: string; dimmerProp?: SliderPropertyDescriptor }) {
+}: LeafProps & { hex: string; dimmerProp?: SliderPropertyDescriptor; filters?: readonly SettingPropertyDescriptor[] }) {
   // No colour channels (gel or dimmer-only), so the colour magnitude is implicitly 1 and the
   // dimmer alone is the level. A gel fixture with no dimmer reads full on by design — there is
   // no brightness signal to gate it on.
-  return <>{children({ color: hex, intensity: useNormalizedIntensity(dimmerProp) })}</>
+  const intensity = useNormalizedIntensity(dimmerProp)
+  return <Filtered hex={hex} filters={filters}>{(filtered) => children({ color: filtered, intensity })}</Filtered>
 }
 
 function PlaceholderAppearance({ children }: LeafProps) {

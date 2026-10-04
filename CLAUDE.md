@@ -400,6 +400,10 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST /api/rest/fx/{id}/pause` / `resume` - Control effect
 - `GET /api/rest/fx/library` - Available effect types
 
+### Library Endpoints
+- `GET /api/rest/gels` - The gel library (fixture optics plan D7), the desk's resource `gels.json` served whole: `{code, name, color, brand, estimate?}` per gel. A unit's fitted gel names one by code; see `docs/fixtures-engineering.md` §"Fitted media"
+- `GET /api/rest/lanterns` - The lantern library a generic dimmer is hung with (§"Lanterns and focus" there)
+
 ### Remote Access Endpoints
 - `GET/PUT /api/rest/install/tunnel` - Remote access (the ngrok tunnel), admin only, machine-local. The authtoken is **write-only** (answers say `hasAuthtoken`); every PUT field is optional, an empty `authtoken` or `domain` clears it and turns remote access off; turning it on needs a desk account, a domain and a token (`REMOTE_ACCESS_INVALID`). Live status streams as `tunnel.state`. See `docs/mcp-engineering.md` §"Remote access"
 

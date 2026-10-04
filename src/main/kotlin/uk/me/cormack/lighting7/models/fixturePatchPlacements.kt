@@ -71,6 +71,9 @@ object DaoFixturePatchPlacements : IntIdTable("fixture_patch_placements") {
     val gateRotationDeg = double("gate_rotation_deg").nullable()
     val iris = double("iris").nullable()
     val focusSoftness = double("focus_softness").nullable()
+    /** This unit's own fitted media, layered over its patch's option by option — an option it names
+     *  is its own, every other the patch's ([DaoFixturePatches.media]). Null fits nothing of its own. */
+    val media = text("media").nullable()
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -95,6 +98,7 @@ class DaoFixturePatchPlacement(id: EntityID<Int>) : IntEntity(id) {
     var gateRotationDeg by DaoFixturePatchPlacements.gateRotationDeg
     var iris by DaoFixturePatchPlacements.iris
     var focusSoftness by DaoFixturePatchPlacements.focusSoftness
+    var media by DaoFixturePatchPlacements.media
     var sortOrder by DaoFixturePatchPlacements.sortOrder
     var uuid by DaoFixturePatchPlacements.uuid
 }

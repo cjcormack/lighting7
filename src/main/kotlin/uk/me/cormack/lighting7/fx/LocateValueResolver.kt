@@ -13,6 +13,9 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.OPEN_WHITE
+import uk.me.cormack.lighting7.fixture.media.colourOf
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -65,8 +68,13 @@ object LocateValueResolver {
     /** Parent channels a single-element locate must still raise for the head to emit light. */
     private val PARENT_MASTER_CATEGORIES = setOf(PropertyCategory.DIMMER, PropertyCategory.STROBE)
 
-    fun resolve(fixture: GroupableFixture): List<LocateAssignment> = buildList {
-        addAll(resolveSingle(fixture))
+    /**
+     * [media] is the fixture's fitted media (`Fixtures.fittedMediaFor`): Locate's white frame is the
+     * one that is open **on this unit**, so a venue string with a gel in the stock open leader still
+     * locates to white. Defaulted only for the tests, which hold no patch; the route passes it.
+     */
+    fun resolve(fixture: GroupableFixture, media: FittedMedia? = null): List<LocateAssignment> = buildList {
+        addAll(resolveSingle(fixture, media = media))
         when (fixture) {
             is MultiElementFixture<*> -> for (element in fixture.elements) {
                 addAll(resolveSingle(element))
@@ -81,6 +89,7 @@ object LocateValueResolver {
     private fun resolveSingle(
         target: GroupableFixture,
         onlyCategories: Set<PropertyCategory>? = null,
+        media: FittedMedia? = null,
     ): List<LocateAssignment> {
         val properties = PropertyChannelWriter.resolvedProperties(target)
         val hasRgbEngine = properties.any {
@@ -106,7 +115,8 @@ object LocateValueResolver {
             ) {
                 continue
             }
-            val value = locateValueFor(property.category, property.value, hasRgbEngine, declared[property.name]) ?: continue
+            val value = locateValueFor(property.name, property.category, property.value, hasRgbEngine, declared[property.name], media)
+                ?: continue
             candidates += property to value
         }
 
@@ -125,10 +135,12 @@ object LocateValueResolver {
     }
 
     private fun locateValueFor(
+        propertyName: String,
         category: PropertyCategory,
         backing: Any,
         hasRgbEngine: Boolean,
         declared: Fixture.Property?,
+        media: FittedMedia?,
     ): CueAssignmentResolver.PropertyValue? =
         when (category) {
             PropertyCategory.DIMMER ->
@@ -153,7 +165,7 @@ object LocateValueResolver {
                 is DmxFixtureSetting<*> -> {
                     // With an RGB engine on the same target the wheel must be *disengaged*,
                     // not set to a white preset — its macro slots override the RGB channels.
-                    val slot = if (hasRgbEngine) disengagedSetting(backing) else whiteSetting(backing)
+                    val slot = if (hasRgbEngine) disengagedSetting(backing) else whiteSetting(backing, propertyName, media)
                     slot?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
                 }
                 else -> null
@@ -258,12 +270,17 @@ object LocateValueResolver {
         return (min + t * (max - min)).roundToInt().coerceIn(min, max).toUByte()
     }
 
-    /** The wheel slot that renders white: annotated `#FFFFFF` preview, else an OPEN/WHITE name. */
-    private fun whiteSetting(setting: DmxFixtureSetting<*>): DmxFixtureSettingValue? =
+    /**
+     * The wheel slot that renders white **on this unit**: a `#FFFFFF` preview — its fitted content
+     * where it has some, else the stock ([colourOf]) — else an OPEN/WHITE name the unit has not
+     * fitted a gel into.
+     */
+    private fun whiteSetting(setting: DmxFixtureSetting<*>, propertyName: String, media: FittedMedia?): DmxFixtureSettingValue? =
         setting.sortedValues.firstOrNull {
-            (it as? DmxFixtureColourSettingValue)?.colourPreview?.equals("#FFFFFF", ignoreCase = true) == true
+            media.colourOf(propertyName, it)?.equals(OPEN_WHITE, ignoreCase = true) == true
         } ?: setting.sortedValues.firstOrNull {
-            it.name.contains("OPEN", ignoreCase = true) || it.name.contains("WHITE", ignoreCase = true)
+            (it.name.contains("OPEN", ignoreCase = true) || it.name.contains("WHITE", ignoreCase = true)) &&
+                media?.slot(propertyName, it.name)?.gel == null
         }
 
     /**

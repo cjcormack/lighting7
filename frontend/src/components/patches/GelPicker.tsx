@@ -1,7 +1,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { GEL_BRANDS, searchGels, type Gel, type GelBrand } from '@/data/gels'
+import { searchGels, type Gel, type GelBrand } from '@/lib/gels'
+import { useGelIndex } from '@/hooks/useGelIndex'
 
 type BrandFilter = 'All' | GelBrand
 
@@ -36,7 +37,8 @@ export function GelPicker({
   const [query, setQuery] = useState(initialQuery)
   const [brand, setBrand] = useState<BrandFilter>('All')
   const listId = useId()
-  const results = useMemo(() => searchGels(query, brand), [query, brand])
+  const gels = useGelIndex()
+  const results = useMemo(() => searchGels(gels, query, brand), [gels, query, brand])
   /** The rows in list order: open white, then the matches. */
   const items = useMemo<(Gel | null)[]>(() => [null, ...results], [results])
 
@@ -95,7 +97,7 @@ export function GelPicker({
         autoFocus={autoFocus}
       />
       <div className="flex gap-1 border-b border-border px-2 py-1.5">
-        {(['All', ...GEL_BRANDS] as BrandFilter[]).map((b) => {
+        {(['All', ...gels.brands] as BrandFilter[]).map((b) => {
           const selected = brand === b
           return (
             <button

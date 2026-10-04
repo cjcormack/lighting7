@@ -3,9 +3,13 @@ package uk.me.cormack.lighting7.ai
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
+import uk.me.cormack.lighting7.routes.patchMediaRefusal
 import uk.me.cormack.lighting7.routes.PatchFocusWrite
 import uk.me.cormack.lighting7.routes.placementFocusRefusal
 import uk.me.cormack.lighting7.routes.resolvePatchFocus
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -213,6 +217,26 @@ class SetupTools(
                             put("defaultLengthM", t.lengthM)
                         }
                         if (t.acceptsLantern) put("acceptsLantern", true)
+                        // Its loadable settings — what `media` may name — and each one's slots.
+                        val loadable = FittedMedia.loadableSettings(t.typeKey)
+                        if (loadable.isNotEmpty()) {
+                            putJsonObject("loadable") {
+                                loadable.values.forEach { setting ->
+                                    putJsonObject(setting.name) {
+                                        put("takes", setting.media)
+                                        putJsonArray("slots") {
+                                            setting.options.filter { it.loadable == true }.forEach { o ->
+                                                addJsonObject {
+                                                    put("option", o.name)
+                                                    o.colourPreview?.let { put("stockColour", it) }
+                                                    o.gobo?.let { put("stockGobo", it) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
                     }
                 }
@@ -311,6 +335,7 @@ class SetupTools(
                             p.kindOverride?.let { put("kind", it) }
                             putOptional("lengthM", p.lengthM)
                             putFocus(p.focus)
+                            putMedia(p.fittedMedia)
                             if (p.stageHidden) put("stageHidden", true)
                             if (p.infrastructure) put("infrastructure", true)
                             val alsoAt = placementsByPatch[p.id.value].orEmpty()
@@ -327,6 +352,7 @@ class SetupTools(
                                             putOptional("rollDeg", pl.baseRollDeg)
                                             putOptional("lengthM", pl.lengthM)
                                             putFocus(pl.focus)
+                                            putMedia(pl.fittedMedia)
                                         }
                                     }
                                 }
@@ -362,6 +388,8 @@ class SetupTools(
         /** The row turns a patch that could hold a lantern into a type that cannot: its focus, its
          *  placements' and the kind a lantern derived all go, whatever the row sent. */
         val dropsLantern: Boolean,
+        /** The row changes an existing patch's type: stored media the new type cannot hold goes. */
+        val typeChanged: Boolean,
     )
 
     private fun patchFixtures(input: JsonObject): ToolExecutionResult {
@@ -450,7 +478,7 @@ class SetupTools(
             } else {
                 parsed += PatchRow(
                     index, key, name, typeKey, universe!!, start!!, end!!, groups, placement, infrastructure, headNumber,
-                    focusWrite!!, dropsLantern,
+                    focusWrite!!, dropsLantern, typeChanged = before != null && before.typeKey != typeKey,
                 )
             }
         }
@@ -547,6 +575,19 @@ class SetupTools(
                 patch.startChannel = row.startChannel
                 row.placement.applyTo(patch, row.focusWrite, force = row.dropsLantern)
                 if (row.dropsLantern) extraPlacementsOf(patch).forEach { it.focus = LanternFocus() }
+                // A type change leaves no media the new type cannot hold — the fixture's (unless the
+                // row sends its own) and each lantern's (unless the row sends `alsoAt`) — so the next
+                // write does not trip on a string loaded into a scroller the unit no longer has.
+                if (row.typeChanged) {
+                    if (row.placement.media == null && patch.fittedMedia?.typeProblems(row.typeKey)?.isNotEmpty() == true) {
+                        patch.fittedMedia = null
+                    }
+                    if (row.placement.alsoAt == null) {
+                        extraPlacementsOf(patch)
+                            .filter { it.fittedMedia?.typeProblems(row.typeKey)?.isNotEmpty() == true }
+                            .forEach { it.fittedMedia = null }
+                    }
+                }
                 row.infrastructure?.let { patch.infrastructure = it }
                 row.headNumber?.let { patch.headNumber = it.value }
                 for (groupName in row.groups) {
@@ -670,6 +711,8 @@ class SetupTools(
         /** The focus keys the row carried, and their values (range-checked). */
         val focusSent: Set<String>,
         val focus: LanternFocus,
+        /** The fixture's fitted media when the row carried `media` (`Some(null)` clears it). */
+        val media: Optional<FittedMedia?>?,
     ) {
         /**
          * The fixture's lantern, focus and kind once this row lands on [stored] — the REST routes'
@@ -679,13 +722,14 @@ class SetupTools(
         fun resolveFocus(typeKey: String, stored: LanternFocus, storedKind: String?, problems: MutableList<String>): PatchFocusWrite? {
             val write = resolvePatchFocus(typeKey, stored, storedKind, focusSent, focus, kind != null, kind?.value)
                 .getOrElse { problems += it.message.orEmpty(); return null }
-            alsoAt?.let { list ->
-                val inputs = list.map { a ->
-                    PlacementInput(null, a.label, null, a.x, a.y, a.z, a.yawDeg, a.pitchDeg, a.lengthM, a.rollDeg, a.focus)
-                }
-                placementFocusRefusal(typeKey, write.kindOverride, write.focus.lanternType, inputs)
-                    ?.let { problems += it.replace("extraPlacements", "alsoAt"); return null }
+            val inputs = alsoAt?.map { a ->
+                PlacementInput(null, a.label, null, a.x, a.y, a.z, a.yawDeg, a.pitchDeg, a.lengthM, a.rollDeg, a.focus, a.media)
             }
+            inputs?.let { placementFocusRefusal(typeKey, write.kindOverride, write.focus.lanternType, it) }
+                ?.let { problems += it.replace("extraPlacements", "alsoAt"); return null }
+            // Fitted media, the fixture's and each `alsoAt` lantern's: the REST routes' rule.
+            patchMediaRefusal(typeKey, media?.value, media != null, inputs)
+                ?.let { problems += it.replace("extraPlacements", "alsoAt"); return null }
             return write
         }
 
@@ -716,6 +760,7 @@ class SetupTools(
                 patch.focus = focusWrite.focus
             }
             lengthM?.let { patch.lengthM = it.value }
+            media?.let { patch.fittedMedia = it.value }
             stageHidden?.let { patch.stageHidden = it }
             alsoAt?.let { list ->
                 // Positional identity: the n-th lantern listed keeps the n-th placement's uuid, so
@@ -734,6 +779,7 @@ class SetupTools(
                         baseYawDeg = a.yawDeg, basePitchDeg = a.pitchDeg, baseRollDeg = a.rollDeg,
                         lengthM = a.lengthM,
                         focus = a.focus,
+                        media = a.media,
                     )
                 }
                 applyExtraPlacements(patch, inputs, riggings)
@@ -753,6 +799,7 @@ class SetupTools(
         val yawDeg: Double?, val pitchDeg: Double?, val rollDeg: Double?,
         val lengthM: Double?,
         val focus: LanternFocus,
+        val media: FittedMedia?,
     )
 
     /** A present value, which may itself be null (an explicit clear). */
@@ -810,7 +857,10 @@ class SetupTools(
         val alsoAt = parseAlsoAt(row["alsoAt"], riggingIds, problems)
         val focus = LanternFocus.parse(row).getOrElse { problems += it.message.orEmpty(); LanternFocus() }
         val focusSent = row.keys.filter { it in LanternFocus.KEYS }.toSet()
-        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, gel, kind, length, hidden, alsoAt, focusSent, focus)
+        val media = if ("media" in row) {
+            FittedMedia.parse(row["media"]).fold({ Optional(it) }, { problems += it.message.orEmpty(); null })
+        } else null
+        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, gel, kind, length, hidden, alsoAt, focusSent, focus, media)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -853,9 +903,10 @@ class SetupTools(
                 }
             }
             val focus = LanternFocus.parse(entry, "alsoAt[$i]").getOrElse { problems += it.message.orEmpty(); LanternFocus() }
+            val media = FittedMedia.parse(entry["media"], "alsoAt[$i].media").getOrElse { problems += it.message.orEmpty(); null }
             val a = AlsoAt(
                 label, riggingId, number("x"), number("y"), number("z"), number("yawDeg"), number("pitchDeg"),
-                number("rollDeg"), number("lengthM"), focus,
+                number("rollDeg"), number("lengthM"), focus, media,
             )
             validateStageMetadata(a.x, a.y, a.z, a.yawDeg, a.pitchDeg, null, a.lengthM, a.rollDeg)?.let { problems += "alsoAt[$i]: $it" }
             out += a
@@ -898,13 +949,15 @@ class SetupTools(
             parsed.map { (patchId, placement, focusWrite) ->
                 val patch = DaoFixturePatch.findById(patchId)!!
                 placement.applyTo(patch, focusWrite)
-                patch.key to Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure)
+                patch.key to Fixtures.FixturePatchMetadata(
+                    gelCode = patch.gelCode, infrastructure = patch.infrastructure, media = patch.fittedMedia,
+                )
             }
         }
         // Metadata only — the same set `METADATA_ONLY_PUT_KEYS` lets the patch route skip the
-        // fixture rebuild for — so the runtime rig is untouched. The one thing the running show
-        // does cache from these columns is the gel (`GET /fixtures` reads it), refreshed here as
-        // both REST placement paths refresh it.
+        // fixture rebuild for — so the runtime rig is untouched. What the running show does cache
+        // from these columns is the gel (`GET /fixtures` reads it) and the fitted media (the
+        // template resolver's snap), refreshed here as both REST placement paths refresh them.
         for ((key, metadata) in gels) {
             state.show.fixtures.setPatchMetadata(key, metadata)
         }
@@ -1492,6 +1545,12 @@ class SetupTools(
             val element = row[name] ?: return@filter false
             element !is JsonNull && (element as? JsonPrimitive)?.doubleOrNull == null
         }.map { "$where: $it must be a number" }
+
+    /** A unit's fitted media, as `patch_fixtures` takes it back — absent when nothing is fitted. */
+    private fun JsonObjectBuilder.putMedia(media: FittedMedia?) {
+        val text = FittedMedia.toText(media) ?: return
+        put("media", Json.parseToJsonElement(text))
+    }
 
     /** A lantern and its focus, each field only where set — an unfocused lantern adds nothing. */
     private fun JsonObjectBuilder.putFocus(f: LanternFocus) {

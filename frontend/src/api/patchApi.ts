@@ -1,6 +1,7 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import type { LanternFocus } from "../lib/lanterns";
+import type { FittedMedia } from "../lib/fittedMedia";
 
 /**
  * A patch carries its lantern and focus (`LanternFocus`, stage-view plan session 7) for a type
@@ -70,6 +71,13 @@ export interface FixturePatch extends LanternFocus {
    * Optional because a desk that predates the field omits it; read it as `?? []`.
    */
   extraPlacements?: PatchPlacement[];
+  /**
+   * The unit's **fitted media** (fixture optics plan D6): what is loaded in its loadable settings,
+   * naming only the options that differ from the type's stock. Null or absent is the stock
+   * everywhere. Each extra placement carries its own, layered over this option by option
+   * (`lib/fittedMedia.ts`'s `mediaOver`). Optional because a desk that predates it omits it.
+   */
+  media?: FittedMedia | null;
 }
 
 /**
@@ -94,6 +102,10 @@ export interface PatchPlacement extends LanternFocus {
   /** This segment's own length, for a variable-length type laid in segments (a lightstrip ring,
    *  one side per placement). Null or absent takes the patch's `lengthM`. */
   lengthM?: number | null;
+  /** This unit's own fitted media, layered over the patch's option by option; null fits nothing of
+   *  its own. Carried whole on every write of the list, as the focus is — an entry without it clears
+   *  it. */
+  media?: FittedMedia | null;
 }
 
 /**
@@ -173,6 +185,8 @@ export interface CreatePatchRequest {
   gateRotationDeg?: number | null;
   iris?: number | null;
   focusSoftness?: number | null;
+  /** Only for a type with loadable settings; see `FixturePatch.media`. */
+  media?: FittedMedia | null;
 }
 
 export interface UpdatePatchRequest extends LanternFocus {
@@ -199,6 +213,8 @@ export interface UpdatePatchRequest extends LanternFocus {
   infrastructure?: boolean;
   /** The whole list, replacing the stored one; null or `[]` removes every extra placement. */
   extraPlacements?: PatchPlacementInput[] | null;
+  /** The whole fitted media, replacing the stored; null clears it, absent keeps it. */
+  media?: FittedMedia | null;
 }
 
 export interface PatchGroup {

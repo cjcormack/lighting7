@@ -57,7 +57,8 @@ import {
   computeNormalizedHueCss,
   perceptualBrightness,
 } from '../../lib/colourMath'
-import { findGel } from '../../data/gels'
+import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
+import { fittedProperties, filterColour, mediaFilters } from '../../lib/fittedMedia'
 import {
   DEFAULT_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_COLOUR,
@@ -405,6 +406,8 @@ interface FixtureModelProps {
   /** The lantern library a generic dimmer's body is chosen from — `Stage3D`'s, passed rather than
    *  read, since a capture canvas bridges only the channel source into its tree. */
   lanterns?: LanternIndex
+  /** The gel library a fitted gel and a `gelCode` are read from — passed for the same reason. */
+  gels?: GelIndex
   riggings: RiggingDto[]
   regionGeometry: ReadonlyArray<RegionGeometry>
   slot: number
@@ -441,6 +444,7 @@ export function FixtureModel({
   fixture,
   fixtureType,
   lanterns = EMPTY_LANTERNS,
+  gels = EMPTY_GELS,
   riggings,
   regionGeometry,
   slot,
@@ -498,56 +502,70 @@ export function FixtureModel({
   const cellCount = spec.cells.length
   const multiCell = cellCount > 1
 
+  // The type's descriptors as **this unit** holds them (fixture optics plan session 3): every
+  // loadable setting's options overlaid with the unit's fitted media — `patch.media`, which for an
+  // extra placement is already its own layered over the patch's (`patchAtPlacement`). Everything
+  // below reads these, so a scroller's colour and a wheel's gobo are the unit's own.
+  const unitProps = useMemo(
+    () => fittedProperties(fixture?.properties, patch.media, gels),
+    [fixture?.properties, patch.media, gels],
+  )
   const colourSource = useMemo(
-    () => (fixture?.properties ? findColourSource(fixture.properties) : undefined),
-    [fixture?.properties],
+    () => (unitProps ? findColourSource(unitProps) : undefined),
+    [unitProps],
   )
   const dimmerProp = useMemo(
-    () => findDimmerProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findDimmerProperty(unitProps),
+    [unitProps],
   )
   // Beam-shaping channels. All undefined against a backend that predates the categories,
   // which is what makes the optics below degrade to the old look.
-  const focusProp = useMemo(() => findFocusProperty(fixture?.properties), [fixture?.properties])
-  const zoomProp = useMemo(() => findZoomProperty(fixture?.properties), [fixture?.properties])
-  const irisProp = useMemo(() => findIrisProperty(fixture?.properties), [fixture?.properties])
-  const frostProp = useMemo(() => findFrostProperty(fixture?.properties), [fixture?.properties])
-  const goboProps = useMemo(() => findGoboProperties(fixture?.properties), [fixture?.properties])
+  const focusProp = useMemo(() => findFocusProperty(unitProps), [unitProps])
+  const zoomProp = useMemo(() => findZoomProperty(unitProps), [unitProps])
+  const irisProp = useMemo(() => findIrisProperty(unitProps), [unitProps])
+  const frostProp = useMemo(() => findFrostProperty(unitProps), [unitProps])
+  const goboProps = useMemo(() => findGoboProperties(unitProps), [unitProps])
   const goboRotProp = useMemo(
-    () => findGoboRotationProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findGoboRotationProperty(unitProps),
+    [unitProps],
   )
   // A 16-bit index/rotation's low byte (`fineOf`), and the wheel's function channel, which says
   // whether the rotation is an angle or a speed. Both undefined on every type but the Revolution.
   const goboRotFineProp = useMemo(
-    () => findFineProperty(fixture?.properties, goboRotProp),
-    [fixture?.properties, goboRotProp],
+    () => findFineProperty(unitProps, goboRotProp),
+    [unitProps, goboRotProp],
   )
   const goboRotModeProp = useMemo(
-    () => findGoboRotationModeProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findGoboRotationModeProperty(unitProps),
+    [unitProps],
   )
-  const prismProp = useMemo(() => findPrismProperty(fixture?.properties), [fixture?.properties])
+  const prismProp = useMemo(() => findPrismProperty(unitProps), [unitProps])
   const prismRotProp = useMemo(
-    () => findPrismRotationProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findPrismRotationProperty(unitProps),
+    [unitProps],
   )
   const ledMacroProp = useMemo(
-    () => findLedMacroProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findLedMacroProperty(unitProps),
+    [unitProps],
   )
   const moveMacroProp = useMemo(
-    () => findMovementMacroProperty(fixture?.properties),
-    [fixture?.properties],
+    () => findMovementMacroProperty(unitProps),
+    [unitProps],
   )
 
-  const shutterProps = useMemo(() => findShutterProperties(fixture?.properties), [fixture?.properties])
-  const panProp = useMemo(() => findPanProperty(fixture?.properties), [fixture?.properties])
-  const tiltProp = useMemo(() => findTiltProperty(fixture?.properties), [fixture?.properties])
-  const panFineProp = useMemo(() => findPanFineProperty(fixture?.properties), [fixture?.properties])
-  const tiltFineProp = useMemo(() => findTiltFineProperty(fixture?.properties), [fixture?.properties])
+  const shutterProps = useMemo(() => findShutterProperties(unitProps), [unitProps])
+  const panProp = useMemo(() => findPanProperty(unitProps), [unitProps])
+  const tiltProp = useMemo(() => findTiltProperty(unitProps), [unitProps])
+  const panFineProp = useMemo(() => findPanFineProperty(unitProps), [unitProps])
+  const tiltFineProp = useMemo(() => findTiltFineProperty(unitProps), [unitProps])
   const gel =
-    !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(patch.gelCode) : null
+    !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
+  // A unit's other gel-taking loadable settings — a media frame's wing, a module wheel's dichroic —
+  // filter the beam's colour while their current slot holds one.
+  const filterProps = useMemo(
+    () => mediaFilters(unitProps, colourSource?.property.name),
+    [unitProps, colourSource],
+  )
 
   const fixturePos = useMemo(() => {
     const v = worldPositionFor(patch, riggings)
@@ -748,6 +766,7 @@ export function FixtureModel({
           hasFixture={!!fixture}
           colourSource={colourSource}
           gel={gel}
+          filters={filterProps}
           dimmerProp={dimmerProp}
           lensRef={lensRef}
           colorStateRef={colorStateRef}
@@ -1694,6 +1713,9 @@ function writeLightRow(
 
 interface ColourSyncBaseProps {
   dimmerProp: SliderPropertyDescriptor | undefined
+  /** The unit's colour filters (`mediaFilters`): settings whose current slot's colour multiplies
+   *  the beam's — a media frame's gel, a dichroic in a wheel. Absent or empty filters nothing. */
+  filters?: readonly SettingPropertyDescriptor[]
   /** Paints the body's lens; null outside a canvas (the tests) and before the bodies exist. */
   lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
@@ -1736,6 +1758,21 @@ export function ColourSync({
 interface ColourApplyRefs {
   lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
+}
+
+const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
+
+/** `hex` through each filter's current slot colour (`filterColour`), read from `source`. */
+function filteredHex(
+  hex: string,
+  filters: readonly SettingPropertyDescriptor[],
+  source: ChannelSource,
+): string {
+  if (filters.length === 0) return hex
+  return filterColour(
+    hex,
+    filters.map((f) => resolveSettingOption(f.options, getChannelValue(f.channel, source))?.colourPreview),
+  )
 }
 
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
@@ -1809,6 +1846,7 @@ function useLiveColour(channels: ChannelRef[], apply: () => void, source: Channe
 function ColourBeamSync({
   colourProp,
   dimmerProp,
+  filters = NO_FILTERS,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
   const source = useChannelSource()
@@ -1822,8 +1860,9 @@ function ColourBeamSync({
     if (colourProp.amberChannel) cs.push(colourProp.amberChannel)
     if (colourProp.uvChannel) cs.push(colourProp.uvChannel)
     if (dimmerProp) cs.push(dimmerProp.channel)
+    for (const f of filters) cs.push(f.channel)
     return cs
-  }, [colourProp, dimmerProp])
+  }, [colourProp, dimmerProp, filters])
 
   useLiveColour(
     channels,
@@ -1842,7 +1881,7 @@ function ColourBeamSync({
       // reads as dark rather than beaming at full. Hue is normalised to full so a
       // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
       const intensity = liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv)
-      applyColour(computeNormalizedHueCss(r, g, b, w, a, uv), intensity, refs)
+      applyColour(filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source), intensity, refs)
     },
     source,
   )
@@ -1852,14 +1891,16 @@ function ColourBeamSync({
 function SettingColourBeamSync({
   settingProp,
   dimmerProp,
+  filters = NO_FILTERS,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
   const source = useChannelSource()
   const channels = useMemo(() => {
     const cs: ChannelRef[] = [settingProp.channel]
     if (dimmerProp) cs.push(dimmerProp.channel)
+    for (const f of filters) cs.push(f.channel)
     return cs
-  }, [settingProp, dimmerProp])
+  }, [settingProp, dimmerProp, filters])
 
   useLiveColour(
     channels,
@@ -1869,7 +1910,7 @@ function SettingColourBeamSync({
       // A selected colour preset reads as fully on; no selection ⇒ dark. A separate
       // dimmer at 0 still wins via the dimmer factor.
       const intensity = liveDimmerFactor(dimmerProp, source) * (preview ? 1 : 0)
-      applyColour(preview ?? '#888888', intensity, refs)
+      applyColour(preview ? filteredHex(preview, filters, source) : '#888888', intensity, refs)
     },
     source,
   )
@@ -1879,17 +1920,21 @@ function SettingColourBeamSync({
 function FixedColourBeamSync({
   hex,
   dimmerProp,
+  filters = NO_FILTERS,
   ...refs
 }: ColourSyncBaseProps & { hex: string }) {
   // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
   // intensity is the dimmer alone. A gel/setting fixture with no dimmer beams
   // full by design (no brightness signal to gate on).
   const source = useChannelSource()
-  const channels = useMemo(() => (dimmerProp ? [dimmerProp.channel] : []), [dimmerProp])
+  const channels = useMemo(
+    () => [...(dimmerProp ? [dimmerProp.channel] : []), ...filters.map((f) => f.channel)],
+    [dimmerProp, filters],
+  )
   useLiveColour(
     channels,
     () => {
-      applyColour(hex, liveDimmerFactor(dimmerProp, source), refs)
+      applyColour(filteredHex(hex, filters, source), liveDimmerFactor(dimmerProp, source), refs)
     },
     source,
   )

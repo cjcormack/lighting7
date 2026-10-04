@@ -1,4 +1,5 @@
 import type { FixturePatch, PatchPlacement } from '../../api/patchApi'
+import { mediaOver } from '../../lib/fittedMedia'
 
 /** One lantern to draw: a paired dimmer's extra placement, as a patch `FixtureModel` can take. */
 export interface Lantern {
@@ -40,6 +41,10 @@ export function lanternsFor(patches: readonly FixturePatch[]): Lantern[] {
  * `lanternType` wins and a null one takes the patch's, and its six focus fields are its own —
  * never the patch's, since a blade pushed in on one unit is not in on the other. The body then
  * derives the kind from the placement's lantern, so a pair can be a profile and a fresnel.
+ *
+ * **Its fitted media is layered, option by option** (fixture optics plan D6): a slot the placement
+ * has fitted is its own, every other the patch's, every other again the type's stock — so a pair
+ * whose SR unit carries one different frame needs only that frame on the placement.
  */
 export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement): FixturePatch {
   const label = placement.label?.trim()
@@ -61,5 +66,6 @@ export function patchAtPlacement(patch: FixturePatch, placement: PatchPlacement)
     gateRotationDeg: placement.gateRotationDeg ?? null,
     iris: placement.iris ?? null,
     focusSoftness: placement.focusSoftness ?? null,
+    media: mediaOver(placement.media, patch.media),
   }
 }

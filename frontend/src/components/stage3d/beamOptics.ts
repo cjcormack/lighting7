@@ -95,6 +95,11 @@ function hasGoboAnnotation(o: SettingOption): boolean {
   return o.gobo != null
 }
 
+/** An option of a loadable setting (`media` declared): its `loadable` flag is always present. */
+function isLoadableOption(o: SettingOption): boolean {
+  return o.loadable != null
+}
+
 function hasPrismAnnotation(o: SettingOption): boolean {
   return o.prismFacets != null
 }
@@ -112,6 +117,11 @@ function hasPrismAnnotation(o: SettingOption): boolean {
  * names them GOBO_1..GOBO_5 but the Martin MAC 250 uses descriptive names
  * (FIBROID, DEC_BEAM, CONE_SHAKE) with no numbers at all. Index works for both,
  * and which pattern an unannotated slot maps to is arbitrary anyway.
+ *
+ * A **loadable** wheel (fixture optics plan session 3 — the Revolution's module wheel) is never
+ * guessed at: what is in each slot is the unit's fitted media laid over the type's stock
+ * (`lib/fittedMedia.ts`), so a slot whose content names no pattern — an empty slot, or one holding a
+ * dichroic — is open, exactly as on an annotated wheel.
  */
 export function resolveGoboSlot(prop: ByteDescriptor | undefined, level: number): number {
   if (!prop) return 0
@@ -126,7 +136,7 @@ export function resolveGoboSlot(prop: ByteDescriptor | undefined, level: number)
   const option = options[index]
   const named = goboLayerFor(option.gobo)
   if (named != null) return named
-  if (options.some(hasGoboAnnotation)) return 0
+  if (options.some(hasGoboAnnotation) || options.some(isLoadableOption)) return 0
   if (isNoOpOption(option.name)) return 0
   return ((index - 1 + GOBO_SLOT_COUNT - 1) % (GOBO_SLOT_COUNT - 1)) + 1
 }

@@ -364,7 +364,13 @@ data class SettingPropertyDescriptor(
     override val category: String,
     val channel: ChannelRef,
     val options: List<SettingOption>,
-    override val compactDisplay: String? = null
+    override val compactDisplay: String? = null,
+    /**
+     * What this setting's options can be loaded with — `GEL`, `GOBO` or `GOBO_OR_GEL` — or null when
+     * it is not loadable (fixture optics plan D6). The options are the type's stock; a unit's fitted
+     * media overlays them (`docs/fixtures-engineering.md` §"Fitted media").
+     */
+    val media: String? = null,
 ) : PropertyDescriptor
 
 /**
@@ -400,6 +406,9 @@ data class SettingOption(
     val gobo: String? = null,
     /** Prism facet count at this position, or null when the prism is out. */
     val prismFacets: Int? = null,
+    /** On a loadable setting (its `media` set), whether this option is a slot that takes media —
+     *  false for an open hole or an out position. Null on every other setting. */
+    val loadable: Boolean? = null,
 )
 
 @Serializable

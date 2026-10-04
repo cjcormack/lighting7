@@ -29,7 +29,8 @@ import { CannonPanel } from '../effects/CannonPanel'
 import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
 import { GelSwatch, useDimmerBrightness } from './GelSwatch'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
-import { findGel } from '../../data/gels'
+import { findGel } from '../../lib/gels'
+import { useGelIndex } from '../../hooks/useGelIndex'
 import { cn } from '@/lib/utils'
 
 export type FixtureViewMode = 'properties' | 'channels'
@@ -126,8 +127,9 @@ function PropertiesView({
     [fixtureTypes, fixture.typeKey],
   )
   const dimmerSliderProp = dimmerProps[0] as SliderPropertyDescriptor | undefined
+  const gels = useGelIndex()
   const gel = !fixtureColourProp && !egpColourProp && fixtureType?.gelCompactDisplay && fixture.gelCode
-    ? findGel(fixture.gelCode)
+    ? findGel(gels, fixture.gelCode)
     : null
 
   return (

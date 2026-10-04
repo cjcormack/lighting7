@@ -1,5 +1,6 @@
 import { memo, useCallback } from 'react'
-import { findGel } from '@/data/gels'
+import { findGel } from '@/lib/gels'
+import { useGelIndex } from '@/hooks/useGelIndex'
 import { EditorSurface } from '@/components/editor/EditorSurface'
 import { EditorLabelLine } from '@/components/editor/EditorLabelLine'
 import { EditorReadout } from '@/components/editor/EditorReadout'
@@ -52,7 +53,8 @@ export const GelCell = memo(function GelCell({
     },
     [onCommit, setOpen],
   )
-  const gel = findGel(value)
+  const gels = useGelIndex()
+  const gel = findGel(gels, value)
 
   return (
     <EditorSurface

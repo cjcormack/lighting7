@@ -22,6 +22,12 @@ import {
 // usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+// The served gel library (`GET /gels`), read from the resource the desk serves it from.
+vi.mock('@/hooks/useGelIndex', async () => {
+  const { indexGels } = await import('@/lib/gels')
+  const gels = (await import('../../../../src/main/resources/gels.json')).default
+  return { useGelIndex: () => indexGels(gels) }
+})
 
 /** A ChannelSource over a fixed map, so a test can state the DMX frame it wants. */
 function sourceOf(values: Record<string, number>): ChannelSource {

@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.show
 
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.dmx.*
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -155,6 +156,10 @@ class Fixtures {
         val gelCode: String?,
         /** The patch's `infrastructure` flag — see `DaoFixturePatches.infrastructure`. */
         val infrastructure: Boolean = false,
+        /** The patch's own fitted media (`DaoFixturePatches.media`): what the template resolver's
+         *  wheel snap reads the unit's colours from. A placement's is not here — its DMX is the
+         *  patch's, so a snap can answer for one unit only, and the patch is the fixture's own. */
+        val media: FittedMedia? = null,
     )
     private val patchMetadataRegister: MutableMap<String, FixturePatchMetadata> = mutableMapOf()
 
@@ -408,6 +413,13 @@ class Fixtures {
     fun patchMetadataFor(fixtureKey: String): FixturePatchMetadata? = registerLock.read {
         patchMetadataRegister[fixtureKey]
     }
+
+    /**
+     * The fitted media of the patch keyed [fixtureKey] — what [TemplateResolver][uk.me.cormack.lighting7.fx.TemplateResolver]
+     * and Locate resolve a loadable setting's options through. Null for nothing fitted, a cell
+     * key, a Hue fixture or an unknown key: every option its stock.
+     */
+    fun fittedMediaFor(fixtureKey: String): FittedMedia? = patchMetadataFor(fixtureKey)?.media
 
     /**
      * Whether the fixture keyed [fixtureKey] is patched as infrastructure. False for a key with no
