@@ -25,7 +25,8 @@ import { useColourAppearance } from '../../hooks/useColourAppearance'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
 import { useGroupSliderValues } from '../../hooks/useGroupPropertyValues'
 import { useVirtualDimmer, useGroupVirtualDimmer } from '../../hooks/useVirtualDimmer'
-import { findGel } from '../../data/gels'
+import { findGel } from '../../lib/gels'
+import { useGelIndex } from '../../hooks/useGelIndex'
 import { GelSwatch, useDimmerBrightness } from '../fixtures/GelSwatch'
 import { cn } from '@/lib/utils'
 
@@ -122,6 +123,7 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
   const hasActiveFx = allEffects.length > 0
   const anyRunning = allEffects.some((e) => e.isRunning)
+  const gels = useGelIndex()
 
   if (!fixture) {
     return (
@@ -155,7 +157,7 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
   // Gel falls back to the colour-row slot only when no real colour source is present —
   // a coloured fixture's own swatch always wins.
   const gel = !hasColour && fixtureType?.gelCompactDisplay && fixture.gelCode
-    ? findGel(fixture.gelCode)
+    ? findGel(gels, fixture.gelCode)
     : null
 
   // Compact display fallbacks for fixtures without colour/dimmer

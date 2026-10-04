@@ -60,6 +60,20 @@ describe('patchAtPlacement', () => {
   })
 })
 
+describe('patchAtPlacement media', () => {
+  // Fitted media layers option by option (fixture optics session 3): the placement's slot, else
+  // the patch's — the stock below both is the overlay's (`fittedProperties`).
+  it("lays the placement's fitted slots over the patch's, slot by slot", () => {
+    const patch = { ...base, media: { slots: { gelScroller: { L201: { gel: 'R26' }, R25: { gel: 'R80' } } } } }
+    const placement = { ...sr, media: { slots: { gelScroller: { L201: { gel: 'L106' } }, mediaFrame: { IN: { gel: 'L202' } } } } }
+    expect(patchAtPlacement(patch, placement).media).toEqual({
+      slots: { gelScroller: { L201: { gel: 'L106' }, R25: { gel: 'R80' } }, mediaFrame: { IN: { gel: 'L202' } } },
+    })
+    expect(patchAtPlacement(patch, sr).media).toBe(patch.media)
+    expect(patchAtPlacement(base, sr).media).toBeNull()
+  })
+})
+
 describe('patchAtPlacement labels', () => {
   it('keeps the fixture name for an unlabelled lantern', () => {
     expect(patchAtPlacement(base, { ...sr, label: null }).displayName).toBe('Pair')

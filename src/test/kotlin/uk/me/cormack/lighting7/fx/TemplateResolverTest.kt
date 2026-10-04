@@ -5,6 +5,9 @@ import uk.me.cormack.lighting7.fixture.dmx.HazerFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.MartinMac250Fixture
 import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
+import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -45,7 +48,7 @@ class TemplateResolverTest {
     fun `extract moves the neutral component into white and takes it out of RGB`() {
         // #FF9D4A is (255, 157, 74), so the neutral part is 74. Extract is what makes the result
         // brighter and cleaner at the same hue, which is why it is the default for a wash.
-        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT))
+        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
         assertEquals(255 - 74, value.value.color.red)
         assertEquals(157 - 74, value.value.color.green)
@@ -61,7 +64,7 @@ class TemplateResolverTest {
 
     @Test
     fun `additive drives the emitter alongside RGB rather than instead of part of it`() {
-        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.ADDITIVE))
+        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.ADDITIVE), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
         assertEquals(255, value.value.color.red, "RGB is untouched")
         assertEquals(157, value.value.color.green)
@@ -71,7 +74,7 @@ class TemplateResolverTest {
 
     @Test
     fun `RGB only leaves every extra emitter at zero`() {
-        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.RGB_ONLY))
+        val r = TemplateResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.RGB_ONLY), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
         assertEquals(255, value.value.color.red)
         assertEquals(74, value.value.color.blue)
@@ -86,7 +89,7 @@ class TemplateResolverTest {
         // and the reason the ΔE has to come from here rather than from the editor: an operator has
         // to be able to read "this is roughly amber" before saving, and only one implementation can
         // be right about it.
-        val r = TemplateResolver.resolve(mac(), "rgbColour", colour("#FFA500", WhitePolicy.EXTRACT))
+        val r = TemplateResolver.resolve(mac(), "rgbColour", colour("#FFA500", WhitePolicy.EXTRACT), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Setting>(r.value)
         assertEquals(MartinMac250Fixture.Colour.ORANGE.level, value.channelValue)
         val note = assertIs<TemplateResolver.Note.Snapped>(r.note)
@@ -99,11 +102,37 @@ class TemplateResolverTest {
     }
 
     @Test
+    fun `a scroller snaps against the unit's fitted colours rather than the stock string`() {
+        // R26 Light Red is not on ETC's stock string. Fitted where frame 9 holds L201, the snap lands
+        // on frame 9 exactly; on a unit with nothing fitted it lands on whatever stock frame is nearest.
+        val rev = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 100)
+        val red = colour("#ee5b5e", WhitePolicy.RGB_ONLY)
+        val stock = TemplateResolver.resolve(rev, "rgbColour", red, media = null)
+        val stockValue = assertIs<CueAssignmentResolver.PropertyValue.Setting>(stock.value)
+        assertTrue(stockValue.channelValue != Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level, "stock frame 9 is blue")
+        assertTrue(assertIs<TemplateResolver.Note.Snapped>(stock.note).deltaE > 0.0)
+
+        val fitted = FittedMedia(mapOf("gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot(gel = "R26"))))
+        val r = TemplateResolver.resolve(rev, "rgbColour", red, media = fitted)
+        assertEquals("gelScroller", r.propertyName)
+        val value = assertIs<CueAssignmentResolver.PropertyValue.Setting>(r.value)
+        assertEquals(Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level, value.channelValue)
+        val note = assertIs<TemplateResolver.Note.Snapped>(r.note)
+        assertEquals("L201_FULL_CT_BLUE (R26)", note.slot)
+        assertEquals(0.0, note.deltaE, 1e-9)
+
+        // A unit whose frame 9 is empty: L201's blue is no longer on it, so a request for L201 lands elsewhere.
+        val empty = FittedMedia(mapOf("gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot())))
+        val blue = TemplateResolver.resolve(rev, "rgbColour", colour("#9bbede", WhitePolicy.RGB_ONLY), media = empty)
+        assertTrue(assertIs<CueAssignmentResolver.PropertyValue.Setting>(blue.value).channelValue != Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level)
+    }
+
+    @Test
     fun `a wheel snap names a nearby slot rather than refusing an inexact colour`() {
         // #FF9D4A (amber) has no slot on this wheel. Snapping to the nearest with a stated ΔE is the
         // honest answer; refusing would drop the head out of a template that is meant to work on
         // anything with colour.
-        val r = TemplateResolver.resolve(mac(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT))
+        val r = TemplateResolver.resolve(mac(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT), media = null)
         val note = assertIs<TemplateResolver.Note.Snapped>(r.note)
         assertNotNull(r.value)
         assertTrue(note.deltaE > 0.0, "an approximation should say so")
@@ -111,7 +140,7 @@ class TemplateResolverTest {
 
     @Test
     fun `a head with no colour at all resolves to nothing`() {
-        val r = TemplateResolver.resolve(hazer(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT))
+        val r = TemplateResolver.resolve(hazer(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT), media = null)
         assertNull(r.value)
         assertEquals(TemplateResolver.Note.Unsupported("no colour"), r.note)
     }
@@ -122,7 +151,7 @@ class TemplateResolverTest {
     fun `an emitter level is written straight at the head's own slider`() {
         // A byte, not a percentage — the one literal in the grammar. A Hex has all three.
         for ((property, expected) in listOf("white" to 180, "amber" to 64, "uv" to 255)) {
-            val r = TemplateResolver.resolve(hex(), property, TemplateIntent.Level(expected))
+            val r = TemplateResolver.resolve(hex(), property, TemplateIntent.Level(expected), media = null)
             val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value, property)
             assertEquals(expected.toUByte(), value.value, property)
             assertEquals(TemplateResolver.Note.Exact, r.note, property)
@@ -135,11 +164,11 @@ class TemplateResolverTest {
     fun `a head without that emitter says so, and that is the capability check`() {
         // Nothing else probes a head for an emitter — `unmetColourRequirement` is a fold over this,
         // and the reason string is what an apply skip carries and the resolves-to panel prints.
-        val r = TemplateResolver.resolve(mover(), "amber", TemplateIntent.Level(200))
+        val r = TemplateResolver.resolve(mover(), "amber", TemplateIntent.Level(200), media = null)
         assertNull(r.value, "the Shehds mover is RGBW — no amber")
         assertEquals(TemplateResolver.Note.Unsupported("no amber"), r.note)
 
-        val uv = TemplateResolver.resolve(mover(), "uv", TemplateIntent.Level(200))
+        val uv = TemplateResolver.resolve(mover(), "uv", TemplateIntent.Level(200), media = null)
         assertNull(uv.value)
         assertEquals(TemplateResolver.Note.Unsupported("no uv"), uv.note)
     }
@@ -155,7 +184,7 @@ class TemplateResolverTest {
         )
         assertEquals(
             TemplateResolver.ColourRequirement.Met,
-            TemplateResolver.unmetColourRequirement(hex(), rows),
+            TemplateResolver.unmetColourRequirement(hex(), rows, media = null),
         )
     }
 
@@ -170,7 +199,7 @@ class TemplateResolverTest {
         )
         assertEquals(
             TemplateResolver.ColourRequirement.Unmet("no amber", "amber"),
-            TemplateResolver.unmetColourRequirement(mover(), rows),
+            TemplateResolver.unmetColourRequirement(mover(), rows, media = null),
         )
     }
 
@@ -185,16 +214,16 @@ class TemplateResolverTest {
         )
         assertEquals(
             TemplateResolver.ColourRequirement.NotACandidate("no colour"),
-            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst),
+            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst, media = null),
         )
         assertEquals(
             TemplateResolver.ColourRequirement.NotACandidate("no colour"),
-            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst.reversed()),
+            TemplateResolver.unmetColourRequirement(hazer(), withHexFirst.reversed(), media = null),
         )
         // And with no colour row at all to infer it from — an emitter-only template.
         assertEquals(
             TemplateResolver.ColourRequirement.NotACandidate("no colour"),
-            TemplateResolver.unmetColourRequirement(hazer(), listOf("uv" to TemplateIntent.Level(255))),
+            TemplateResolver.unmetColourRequirement(hazer(), listOf("uv" to TemplateIntent.Level(255)), media = null),
         )
     }
 
@@ -209,7 +238,7 @@ class TemplateResolverTest {
         )
         assertEquals(
             TemplateResolver.ColourRequirement.Met,
-            TemplateResolver.unmetColourRequirement(hazer(), rows),
+            TemplateResolver.unmetColourRequirement(hazer(), rows, media = null),
         )
     }
 
@@ -221,11 +250,11 @@ class TemplateResolverTest {
         val rows = listOf("rgbColour" to colour("#FF9D4A", WhitePolicy.EXTRACT))
         assertEquals(
             TemplateResolver.ColourRequirement.Met,
-            TemplateResolver.unmetColourRequirement(mover(), rows),
+            TemplateResolver.unmetColourRequirement(mover(), rows, media = null),
         )
         assertEquals(
             TemplateResolver.ColourRequirement.Met,
-            TemplateResolver.unmetColourRequirement(mac(), rows),
+            TemplateResolver.unmetColourRequirement(mac(), rows, media = null),
         )
     }
 
@@ -283,7 +312,7 @@ class TemplateResolverTest {
 
     @Test
     fun `a level is a percentage of the head's own dimmer range`() {
-        val r = TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(75.0))
+        val r = TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(75.0), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value)
         assertEquals(191u.toUByte(), value.value, "75% of 0..255")
         assertEquals(TemplateResolver.Note.Exact, r.note)
@@ -294,13 +323,13 @@ class TemplateResolverTest {
         assertEquals(
             255u.toUByte(),
             assertIs<CueAssignmentResolver.PropertyValue.Slider>(
-                TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(100.0)).value,
+                TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(100.0), media = null).value,
             ).value,
         )
         assertEquals(
             0u.toUByte(),
             assertIs<CueAssignmentResolver.PropertyValue.Slider>(
-                TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(0.0)).value,
+                TemplateResolver.resolve(hex(), "dimmer", TemplateIntent.Percent(0.0), media = null).value,
             ).value,
         )
     }
@@ -311,7 +340,7 @@ class TemplateResolverTest {
         // path on this backend — the only virtual dimmer is a *group* gesture the client fans out —
         // so the resolver says so and the editor's panel shows it. Recorded as a follow-up rather
         // than invented inside a resolver.
-        val r = TemplateResolver.resolve(hazer(), "dimmer", TemplateIntent.Percent(75.0))
+        val r = TemplateResolver.resolve(hazer(), "dimmer", TemplateIntent.Percent(75.0), media = null)
         assertNull(r.value)
         assertIs<TemplateResolver.Note.Unsupported>(r.note)
     }
@@ -322,7 +351,7 @@ class TemplateResolverTest {
     fun `degrees resolve through each head's own annotated range`() {
         // The mover's pan is 0–540° and its tilt 0–270°, so the same degrees land on *different*
         // DMX values per axis — which is the whole reason a template stores degrees rather than DMX.
-        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(270.0, 135.0))
+        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(270.0, 135.0), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
         assertEquals(128u.toUByte(), value.pan, "half of 540°")
         assertEquals(128u.toUByte(), value.tilt, "half of 270°")
@@ -335,10 +364,10 @@ class TemplateResolverTest {
         // A MAC 250 tilts 0–257°, a Shehds 0–270°. 128° is past the middle of one and short of the
         // other, and a template that stored DMX could not express the difference at all.
         val onMover = assertIs<CueAssignmentResolver.PropertyValue.Position>(
-            TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(90.0, 128.0)).value,
+            TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(90.0, 128.0), media = null).value,
         )
         val onMac = assertIs<CueAssignmentResolver.PropertyValue.Position>(
-            TemplateResolver.resolve(mac(), "position", TemplateIntent.Position(90.0, 128.0)).value,
+            TemplateResolver.resolve(mac(), "position", TemplateIntent.Position(90.0, 128.0), media = null).value,
         )
         assertEquals(onMover.pan, onMac.pan, "both pan 0–540°, so pan agrees")
         assertTrue(onMover.tilt != onMac.tilt, "but the tilt ranges differ, so the DMX must too")
@@ -348,7 +377,7 @@ class TemplateResolverTest {
     fun `out of range degrees are clamped and the clamp is reported`() {
         // Reported, not silent: an operator pointing a template at a head that cannot reach the spot
         // needs to know it is aimed somewhere else, which is exactly what the panel shows.
-        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(700.0, 135.0))
+        val r = TemplateResolver.resolve(mover(), "position", TemplateIntent.Position(700.0, 135.0), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
         assertEquals(255u.toUByte(), value.pan)
         val note = assertIs<TemplateResolver.Note.Clamped>(r.note)
@@ -357,7 +386,7 @@ class TemplateResolverTest {
 
     @Test
     fun `a fixed head takes no position at all`() {
-        val r = TemplateResolver.resolve(hex(), "position", TemplateIntent.Position(45.0, 12.0))
+        val r = TemplateResolver.resolve(hex(), "position", TemplateIntent.Position(45.0, 12.0), media = null)
         assertNull(r.value)
         assertIs<TemplateResolver.Note.Unsupported>(r.note)
     }
@@ -366,23 +395,23 @@ class TemplateResolverTest {
 
     @Test
     fun `a continuous beam role is a percentage of the head's own range`() {
-        val r = TemplateResolver.resolve(mac(), "focus", TemplateIntent.Percent(70.0))
+        val r = TemplateResolver.resolve(mac(), "focus", TemplateIntent.Percent(70.0), media = null)
         val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value)
         assertEquals(179u.toUByte(), value.value, "70% of 0..255")
     }
 
     @Test
     fun `prism resolves to a wheel slot on a head whose prism is a wheel`() {
-        val on = TemplateResolver.resolve(mac(), "prism", TemplateIntent.Switch(true))
+        val on = TemplateResolver.resolve(mac(), "prism", TemplateIntent.Switch(true), media = null)
         assertNotNull(on.value)
-        val off = TemplateResolver.resolve(mac(), "prism", TemplateIntent.Switch(false))
+        val off = TemplateResolver.resolve(mac(), "prism", TemplateIntent.Switch(false), media = null)
         assertNotNull(off.value)
         assertTrue(on.value != off.value, "on and off must not be the same slot")
     }
 
     @Test
     fun `a head without the beam role reports it rather than resolving to zero`() {
-        val r = TemplateResolver.resolve(hex(), "zoom", TemplateIntent.Percent(14.0))
+        val r = TemplateResolver.resolve(hex(), "zoom", TemplateIntent.Percent(14.0), media = null)
         assertNull(r.value)
         assertIs<TemplateResolver.Note.Unsupported>(r.note)
     }

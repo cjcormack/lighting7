@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Label } from '@/components/ui/label'
 import { ChevronDown, X } from 'lucide-react'
-import { findGel } from '@/data/gels'
+import { findGel } from '@/lib/gels'
+import { useGelIndex } from '@/hooks/useGelIndex'
 import { GelPicker } from './GelPicker'
 
 interface GelPickerFieldProps {
@@ -13,7 +14,8 @@ interface GelPickerFieldProps {
 
 export function GelPickerField({ id, value, onChange }: GelPickerFieldProps) {
   const [open, setOpen] = useState(false)
-  const current = useMemo(() => findGel(value), [value])
+  const gels = useGelIndex()
+  const current = useMemo(() => findGel(gels, value), [gels, value])
 
   const select = (code: string | null) => {
     onChange(code)

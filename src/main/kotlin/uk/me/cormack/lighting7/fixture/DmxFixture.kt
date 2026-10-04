@@ -349,9 +349,11 @@ abstract class DmxFixture(
                 colourPreview = (settingValue as? DmxFixtureColourSettingValue)?.colourPreview,
                 gobo = (settingValue as? DmxFixtureGoboSettingValue)?.gobo?.serialized(),
                 prismFacets = (settingValue as? DmxFixturePrismSettingValue)?.prismFacets,
+                loadable = if (prop.media != null) settingValue.loadable else null,
             )
         },
-        compactDisplay = prop.compactDisplay.serialized()
+        compactDisplay = prop.compactDisplay.serialized(),
+        media = prop.media?.serialized(),
     )
 
     private fun buildSliderDescriptor(

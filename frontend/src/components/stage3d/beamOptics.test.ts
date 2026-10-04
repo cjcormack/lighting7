@@ -158,6 +158,25 @@ describe('resolveGoboSlot', () => {
     expect(resolveGoboSlot(setting(MAC_GOBO), 220)).toBe(0)
   })
 
+  // A loadable wheel (the Revolution's module wheel, fixture optics session 3): its options carry
+  // `loadable`, and a slot's content is the unit's fitted media over the type's empty stock.
+  it('never index-guesses a loadable wheel: an empty or dichroic slot is open, a fitted gobo draws', () => {
+    const stock = opts([
+      ['OPEN', 0, { loadable: false }],
+      ['SLOT_1', 14, { loadable: true }],
+      ['SLOT_2', 27, { loadable: true }],
+    ])
+    expect(resolveGoboSlot(setting(stock), 14)).toBe(0)
+    expect(resolveGoboSlot(setting(stock), 27)).toBe(0)
+    const fitted = opts([
+      ['OPEN', 0, { loadable: false }],
+      ['SLOT_1', 14, { loadable: true, gobo: 'breakup' }],
+      ['SLOT_2', 27, { loadable: true, colourPreview: '#ee5b5e' }],
+    ])
+    expect(resolveGoboSlot(setting(fitted), 14)).toBe(goboLayerFor('breakup'))
+    expect(resolveGoboSlot(setting(fitted), 27)).toBe(0)
+  })
+
   it('renders a pattern name this build does not know as open', () => {
     const future = setting(opts([
       ['OPEN', 0],

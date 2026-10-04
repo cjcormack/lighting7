@@ -159,3 +159,31 @@ describe("a lantern's focus on a placement", () => {
     expect(placementListsEqual([a], [{ ...a, focusSoftness: undefined }])).toBe(true)
   })
 })
+
+describe("a unit's fitted media on a placement", () => {
+  const media = { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' }, R02_BASTARD_AMBER: {} } } }
+
+  it('is carried whole, so a list sent back does not clear it', () => {
+    expect(toPlacementInput({ ...stored, media }).media).toEqual(media)
+    // A placement with nothing fitted sends null: the whole entry replaces the stored one.
+    expect(toPlacementInput(stored).media).toBeNull()
+  })
+
+  it('is an edit when only the media moves, and not when the desk spells it differently', () => {
+    const a = toPlacementInput({ ...stored, media })
+    expect(placementListsEqual([a], [{ ...a }])).toBe(true)
+    expect(
+      placementListsEqual([a], [{ ...a, media: { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'L106' }, R02_BASTARD_AMBER: {} } } } }]),
+    ).toBe(false)
+    // An empty frame is fitted with nothing — not the same as the stock.
+    expect(placementListsEqual([a], [{ ...a, media: { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26' } } } } }])).toBe(false)
+    expect(placementListsEqual([a], [{ ...a, media: null }])).toBe(false)
+    // The desk encodes an unset half as null; that is the same slot.
+    expect(
+      placementListsEqual(
+        [a],
+        [{ ...a, media: { slots: { gelScroller: { L201_FULL_CT_BLUE: { gel: 'R26', gobo: null }, R02_BASTARD_AMBER: { gel: null, gobo: null } } } } }],
+      ),
+    ).toBe(true)
+  })
+})

@@ -116,6 +116,10 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
+| [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
+| [`FU-S4REV-PERSONALITIES`](#fu-s4rev-personalities) | Trigger | Fixtures | a rig patches a Revolution in its 14, 15 or 23-channel mode |
+| [`FU-MEDIA-LIVE-RESNAP`](#fu-media-live-resnap) | Trigger | Fixtures | an operator re-gels a scroller mid-show and expects the live cue to follow |
+| [`FU-MEDIA-CONTROL-SWATCHES`](#fu-media-control-swatches) | Trigger | Frontend | an operator sets a scroller frame from a stock swatch that is not what the unit holds |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2215,6 +2219,63 @@ The library ships as a resource (`lanterns/library.json`), so a fix reaches ever
 show cannot add a lantern of its own. **Trigger**: a show hangs a lantern the library lacks.
 **Then**: per-project lanterns in a portable table, resolved before the shipped library by key, with
 the same `LanternLibraryTest` checks at the write boundary.
+
+### `FU-GOBO-CUSTOM-IMAGES`
+
+**A fitted gobo is one of sixteen patterns** · Trigger · fixture optics plan §8 (session 3),
+2026-10-04
+
+A unit's fitted media (`docs/fixtures-engineering.md` §"Fitted media") names a gobo by its
+`GoboPattern` — the Stage view's sixteen procedural patterns — so a module wheel loaded with a
+venue's own M-size gobos draws the nearest stand-in. **Trigger**: a venue fits a gobo none of the
+sixteen can stand in for (a logo, a window gobo a designer needs to see land). **Then**: per-project
+gobo artwork — an image asset uploaded once, a portable table keyed by uuid, a fitted slot naming it
+(`{gobo: "img:<uuid>"}` beside the pattern names), and the atlas build taking an image layer, which
+`goboPatterns.ts` already names as its image-swap seam.
+
+### `FU-S4REV-PERSONALITIES`
+
+**The Revolution's other personalities** · Trigger · fixture optics plan §7–§8 (session 0),
+2026-10-02
+
+`Source4RevolutionFixture` implements only Base Frame (31 channels) — the base with the framing
+shutter module in the rear bay, which is how the hall's units are patched. ChamSys lists four more:
+Base (14ch), Base Iris (15ch), 15ch (15ch) and Base Module (23ch), each a `// TODO` in the `Mode`
+enum. **Trigger**: a rig patches a Revolution in one of them. **Then**: one `@FixtureType` per mode
+in the sealed family, the channel order from the ChamSys capture checked against the manual's
+p14 tables, the same estimates (`// Estimate:`) and loadable settings as Base Frame where the
+channels are the same, and `ZoomAnglesTest`, `FocusRangeTest`, `ShutterBladesTest` and
+`MediaSlotsTest` extended by the guard tests' own walk of the library.
+
+### `FU-MEDIA-LIVE-RESNAP`
+
+**A media write leaves live cues on the frame they snapped** · Trigger · fixture optics plan §3.3
+(session 3), 2026-10-04
+
+`media` is a metadata-only patch key (`docs/fixtures-engineering.md` §"Fitted media"): a write
+refreshes `Fixtures.FixturePatchMetadata` and nothing is recomposed, so a live cue or programmer layer
+whose colour template snapped a scroller frame keeps it until its next GO or recook. Chris chose this
+on 2026-10-04 over re-snapping, matching every other metadata edit. **Trigger**: an operator re-gels a
+scroller mid-show and expects the live look to move to the frame that now holds the asked colour.
+**Then**: the media write path republishes the live cues and programmer layers that compose a colour
+template onto that fixture, through `republishForSourceEdit`'s ordering (recook the programmer
+unpublished, replace the cues' rows, publish), and fires `cuesRecomposed` for them.
+
+### `FU-MEDIA-CONTROL-SWATCHES`
+
+**The controls name a setting's stock string** · Trigger · fixture optics plan §4 (session 3),
+2026-10-04
+
+Fitted media is overlaid by the surfaces that *draw* a unit — the Stage view, the 2D appearance
+leaf, the Media box and the Focus tab (`frontend/docs/stage-vis-engineering.md` §"Fitted media") —
+and not by the ones that *set* a slot: the programmer's setting cell and its column, the property
+visualisers, the fixture card and `EffectParameterForm` list a Revolution's scroller frames with the
+type's stock swatches and names. They write a DMX slot, which is the type's, and on a fixture with
+extra placements one cell drives several units with different strings, so there is no single fitted
+colour to show. **Trigger**: an operator picks a frame by its stock swatch on a unit fitted with
+something else and lands the wrong colour. **Then**: the cell and the visualisers overlay the
+**patch's** media (`fittedProperties` with `patch.media`), naming a frame by what unit 1 holds and
+noting where a placement differs, as `SettingCell`'s option list already takes a display name.
 
 ## Completed
 

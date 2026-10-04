@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button'
 import { Focus, Loader2 } from 'lucide-react'
 import { useFocusHereMutation, type FocusResponse } from '@/store/programmerOps'
 import { landedPoint } from './landedPoints'
+import { loadableSettings } from '@/lib/fittedMedia'
+import { FittedMediaList } from '@/components/media/FittedMediaList'
 
 /** How long a pause in the edits before they are saved: a drag writes once, after it rests. */
 const SAVE_AFTER_MS = 350
@@ -60,7 +62,8 @@ interface StageFocusPanelProps {
  *
  * A DMX fixture has no focus data: its zoom, focus, iris and framing shutters are its channels,
  * which its looks drive (D14), so its tab says which of them it has instead — or that its optics are
- * fixed, when it has none. A DMX fixture whose focus declares a range also gets *Focus here* (fixture-optics plan D11).
+ * fixed, when it has none. A DMX fixture whose focus declares a range also gets *Focus here* (fixture-optics plan D11),
+ * and one with loadable settings lists each unit's fitted media (fixture-optics plan session 3).
  */
 export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanterns, canFocus = false }: StageFocusPanelProps) {
   const dispatch = useDispatch<typeof store.dispatch>()
@@ -138,10 +141,12 @@ export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanter
 
   if (fixtureType?.acceptsLantern !== true) {
     const focusProp = findFocusProperty(fixture?.properties)
+    const mediaSettings = loadableSettings(fixture?.properties)
     return (
       <div className="space-y-4">
         <DmxFocusNote fixture={fixture} />
         {canFocus && declaresFocusRange(focusProp) && <FocusHere projectId={projectId} patchKey={patch.key} />}
+        {mediaSettings.length > 0 && <FittedMediaList patch={patch} settings={mediaSettings} />}
       </div>
     )
   }

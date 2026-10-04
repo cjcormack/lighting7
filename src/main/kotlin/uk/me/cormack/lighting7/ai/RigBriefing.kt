@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.GelLibrary
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -46,6 +49,9 @@ class RigBriefing(private val state: State) {
         // Each conventional's lantern (stage-view plan session 7), read from the patch as the head
         // numbers are: which unit a dimmer drives is what "the fresnel on 12" means to an operator.
         val lanterns = patchLanterns()
+        // Each unit's fitted media (fixture optics plan session 3): which gel a scroller frame holds is
+        // the unit's, so "frame 9" says nothing until the model can see what is loaded there.
+        val media = patchMedia()
         for (fixture in lighting) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
             // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
@@ -53,6 +59,7 @@ class RigBriefing(private val state: State) {
             sb.appendLine("- **${fixture.fixtureName}** (" + headLabel(headNumbers, fixture.key) +
                     "key=`${fixture.key}`, type=`${fixture.typeKey}`" +
                     (lanterns[fixture.key]?.let { ", $it" } ?: "") +
+                    (media[fixture.key]?.let { ", $it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     triggerLabel(fixture) +
                     ")")
@@ -432,6 +439,46 @@ class RigBriefing(private val state: State) {
                 }
             }
         }
+    }
+
+    /**
+     * Each loadable patch's fitted media, in a phrase, by fixture key: `media=…` for one unit and
+     * `media=[…]` for a pair, each placement by its label with its own layered over the patch's.
+     * Only the slots a unit has fitted are named — `gelScroller L201_FULL_CT_BLUE: R26 Light Red` —
+     * and a unit with none says `stock`. Patches of a type with no loadable settings are absent.
+     */
+    private fun patchMedia(): Map<String, String> {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val patches = DaoFixturePatch.find { DaoFixturePatches.project eq project.id }
+                .filter { FittedMedia.loadableSettings(it.fixtureTypeKey).isNotEmpty() }
+            if (patches.isEmpty()) return@transaction emptyMap()
+            val placements = extraPlacementsByPatch(patches.map { it.id })
+            patches.associate { p ->
+                val own = p.fittedMedia
+                val others = placements[p.id.value].orEmpty()
+                p.key to if (others.isEmpty()) {
+                    "media=${describeMedia(own)}"
+                } else {
+                    "media=[" + (listOf(describeMedia(own)) + others.map { pl ->
+                        (pl.label?.takeIf { it.isNotBlank() }?.let { "$it: " } ?: "") +
+                            describeMedia(pl.fittedMedia?.over(own) ?: own)
+                    }).joinToString("; ") + "]"
+                }
+            }
+        }
+    }
+
+    private fun describeMedia(media: FittedMedia?): String {
+        if (media == null || media.isEmpty) return "stock"
+        return media.slots.toSortedMap().entries.joinToString(", ") { (property, options) ->
+            property + " " + options.toSortedMap().entries.joinToString(", ") { (option, slot) ->
+                val content = slot.gel?.let { code -> GelLibrary.byCode(code)?.let { "$code ${it.name}" } ?: code }
+                    ?: slot.gobo?.let { "gobo $it" }
+                    ?: "empty"
+                "$option: $content"
+            }
+        } + "; the rest stock"
     }
 
     private fun m1(v: Double?): String =

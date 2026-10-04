@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.mcp
 
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -572,6 +574,81 @@ class McpSetupToolsTest : RouteIntegrationTest() {
             assertNull(foh2.lampRotationDeg)
             assertNull(foh2.iris)
             assertNull(foh2.kindOverride, "the kind the lantern derived goes with it")
+        }
+    }
+
+    @Test
+    fun `patch_fixtures and place_fixtures fit media per unit, get_patch and describe_rig name it`() {
+        val types = call("list_fixture_types", """{"query":"revolution"}""").json()["fixtureTypes"]!!.jsonArray.map { it.jsonObject }
+        val loadable = types.single()["loadable"]!!.jsonObject
+        assertEquals("GEL", loadable["gelScroller"]!!.jsonObject["takes"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("SLOT_1", "SLOT_2", "SLOT_3"),
+            loadable["fbWheelPos"]!!.jsonObject["slots"]!!.jsonArray.map { it.jsonObject["option"]!!.jsonPrimitive.content },
+            "the open hole is no slot",
+        )
+
+        val patched = call(
+            "patch_fixtures",
+            """{"fixtures":[
+                {"key":"rev-1","name":"Rev 1","fixtureTypeKey":"etc-source4-revolution-base-frame","universe":0,"startChannel":1,
+                 "media":{"slots":{"gelScroller":{"L201_FULL_CT_BLUE":{"gel":"R26"}}}}},
+                {"key":"rev-2","name":"Rev 2","fixtureTypeKey":"etc-source4-revolution-base-frame","universe":0,"startChannel":41}
+            ]}""",
+        )
+        assertTrue(patched.success, patched.result)
+        val placed = call(
+            "place_fixtures",
+            """{"placements":[{"key":"rev-1","x":-4,
+                "alsoAt":[{"label":"SL","x":4,"media":{"slots":{"gelScroller":{"L201_FULL_CT_BLUE":{"gel":"R80"}},"fbWheelPos":{"SLOT_1":{"gobo":"breakup"}}}}}]}]}""",
+        )
+        assertTrue(placed.success, placed.result)
+        transaction(state.database) {
+            val rev1 = DaoFixturePatch.find { DaoFixturePatches.key eq "rev-1" }.single()
+            assertEquals(FittedSlot(gel = "R26"), rev1.fittedMedia?.slot("gelScroller", "L201_FULL_CT_BLUE"), "a row without media keeps it")
+            assertEquals(FittedSlot(gobo = "breakup"), extraPlacementsOf(rev1).single().fittedMedia?.slot("fbWheelPos", "SLOT_1"))
+        }
+        assertEquals(
+            FittedSlot(gel = "R26"), state.show.fixtures.fittedMediaFor("rev-1")?.slot("gelScroller", "L201_FULL_CT_BLUE"),
+            "the runtime metadata the snap reads is refreshed",
+        )
+
+        val listed = call("get_patch", "{}").json()["fixtures"]!!.jsonArray.map { it.jsonObject }.associateBy { it["key"]!!.jsonPrimitive.content }
+        assertEquals(
+            "R26",
+            listed.getValue("rev-1")["media"]!!.jsonObject["slots"]!!.jsonObject["gelScroller"]!!.jsonObject["L201_FULL_CT_BLUE"]!!.jsonObject["gel"]!!.jsonPrimitive.content,
+        )
+        assertNull(listed.getValue("rev-2")["media"], "nothing fitted, nothing listed")
+
+        val briefing = RigBriefing(state).describeRig()
+        assertTrue(
+            "media=[gelScroller L201_FULL_CT_BLUE: R26 Light Red; the rest stock; " +
+                "SL: fbWheelPos SLOT_1: gobo breakup, gelScroller L201_FULL_CT_BLUE: R80 Primary Blue; the rest stock]" in briefing,
+            briefing,
+        )
+        assertTrue("media=stock" in briefing, briefing)
+
+        // Refused as a whole, the fixture's and each lantern's problems together.
+        val refused = call(
+            "place_fixtures",
+            """{"placements":[{"key":"rev-2","media":{"slots":{"gelScroller":{"OPEN_LEADER":{"gel":"R999"}}}},
+                "alsoAt":[{"media":{"slots":{"mediaFrame":{"OUT":{"gel":"R26"}}}}}]}]}""",
+        )
+        assertFalse(refused.success)
+        val problems = refused.problems().joinToString("\n")
+        assertTrue("unknown gel 'R999'" in problems, refused.result)
+        assertTrue("alsoAt[0].media.slots.mediaFrame.OUT" in problems, refused.result)
+
+        // Re-patched as a type with no loadable settings, rev-1 keeps no media.
+        val retyped = call(
+            "patch_fixtures",
+            """{"fixtures":[{"key":"rev-1","name":"Rev 1","fixtureTypeKey":"hex","universe":0,"startChannel":1}]}""",
+        )
+        assertTrue(retyped.success, retyped.result)
+        transaction(state.database) {
+            val rev1 = DaoFixturePatch.find { DaoFixturePatches.key eq "rev-1" }.single()
+            assertNull(rev1.fittedMedia)
+            assertTrue(extraPlacementsOf(rev1).all { it.fittedMedia == null })
         }
     }
 

@@ -4,6 +4,8 @@ import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.dmx.ArtNetController
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.ParkSource
@@ -67,6 +69,7 @@ object DbFixtureLoader {
                         beamAngleDeg = it.beamAngleDeg,
                         gelCode = it.gelCode,
                         infrastructure = it.infrastructure,
+                        media = it.fittedMedia,
                     )
                 }
 
@@ -140,7 +143,7 @@ object DbFixtureLoader {
 
                 setPatchMetadata(
                     patch.key,
-                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure),
+                    Fixtures.FixturePatchMetadata(gelCode = patch.gelCode, infrastructure = patch.infrastructure, media = patch.media),
                 )
             }
 
@@ -191,6 +194,7 @@ object DbFixtureLoader {
         val beamAngleDeg: Int?,
         val gelCode: String?,
         val infrastructure: Boolean,
+        val media: FittedMedia?,
     )
 
     private data class GroupMemberData(

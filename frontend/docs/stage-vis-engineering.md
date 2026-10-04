@@ -241,6 +241,53 @@ store-driven re-renders drop beat-rate changes, so the 3D path writes straight t
 channel callback. Three copies of the shape, two of the code; changing the dispatch means changing
 `fixtureAppearance.tsx` and `FixtureModel`'s `ColourSync` together.
 
+### Fitted media: where a beam's colour and gobo come from
+
+Since the fixture optics plan's session 3 a beam's colour and gobo are the **unit's**, not the
+type's. The type's descriptor carries the stock — each option's `colourPreview` or `gobo` — and a
+loadable setting (`SettingPropertyDescriptor.media`, `GEL` · `GOBO` · `GOBO_OR_GEL`) can be loaded
+differently per unit: `FixturePatch.media` and each `PatchPlacement.media`, `{slots: {<setting>:
+{<option>: {gel?, gobo?}}}}`. Backend contract in lighting7 `docs/fixtures-engineering.md` §"Fitted
+media".
+
+**The overlay is the client's, per unit, and every surface that draws a unit goes through it.** `lib/fittedMedia.ts`'s
+`fittedProperties(properties, media, gels)` lays a unit's slots over the type's options — a fitted
+gel becomes its library colour (`GET /gels`, read through `useGelIndex`), a fitted gobo the pattern
+and no colour, an empty slot open white and no pattern, a slot not fitted the stock — and every
+finder below it (`findColourSource`, `findGoboProperties`, …) reads the result, so the dispatch
+itself did not change. `FixtureModel` and `FixtureAppearanceSource` both overlay **before** they
+dispatch, and for a placement `patchAtPlacement` has already laid its own over the patch's, option by
+option (`mediaOver`): *the placement's slot, else the patch's, else the stock*. It is the client's
+because a descriptor is per fixture and a fixture with extra placements is several units; only the
+surface drawing a placement knows which one it is drawing. It returns the descriptor list itself
+when nothing is fitted, so a memo keyed on it does not churn for the common rig.
+
+**The controls still name the stock string.** The surfaces that *draw* a unit overlay it — the 3D
+view, the 2D appearance leaf (the Positions chips, the busk tiles, the side sheet's fold, the colour
+editor's Pick) and the patch sheet's Media box and the Focus tab's list. The surfaces that *set* a
+value do not: the programmer's setting cell and its column, the property visualisers, the fixture
+card and `EffectParameterForm` list a setting's options with the type's stock `colourPreview`,
+because they write a DMX slot and a slot is the type's, whichever gel a unit has in it — and on a
+fixture with extra placements one cell drives several units with different strings, so there is no
+one fitted colour for its swatch to show. Teaching them the patch's own is
+`FU-MEDIA-CONTROL-SWATCHES`.
+
+**A gel in a filter slot multiplies the beam.** A unit's other gel-taking loadable settings — the
+Revolution's media frame and its module wheel holding a dichroic — are **filters** (`mediaFilters`):
+each multiplies the beam's colour by its current slot's colour (`filterColour`, subtractive, gels
+in series), and a slot with none — out of the beam, empty, a gobo — passes it unchanged. Both
+dispatches apply them: the 3D syncs subscribe to the filters' channels and pass the hue through
+`filteredHex`, and the 2D leaves through `Filtered` — one component per filter, the render prop's
+fixed-hook-set rule. `colourDispatchParity.test.tsx` holds the two to one answer for a fitted
+frame, an empty frame, a media frame in, a dichroic, and two units of one type drawing different
+colours from the same scroller DMX. Only the colour is multiplied: a filter does not dim the beam.
+
+**A loadable wheel is never index-guessed.** `resolveGoboSlot` falls back to an option's position on
+a wholly unannotated wheel; a loadable wheel's options always carry `loadable`, so they count as
+annotated — a slot whose content names no pattern (empty, or a dichroic) draws open, and a fitted
+gobo draws its pattern. The Revolution's stock wheel, which ships empty, therefore draws open in
+every slot until a unit is fitted.
+
 ## Paired lanterns (extra placements)
 
 A paired dimmer is one patch drawn more than once: one circuit, an SL and an SR lantern on the same

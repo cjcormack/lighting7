@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, waitFor } from '@testing-library/react'
 import { Provider } from 'react-redux'
-import { installRecordingFetch, installRelativeUrlRequest } from '@/test/backendMock'
+import { failWith, installRecordingFetch, installRelativeUrlRequest } from '@/test/backendMock'
 
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -59,6 +59,7 @@ const routes = {
   'fixture-types': [],
   fixtures: [],
   lanterns: [],
+  gels: [],
 }
 
 const request = (over: Partial<StageRenderRequest> = {}): StageRenderRequest => ({
@@ -74,6 +75,7 @@ const request = (over: Partial<StageRenderRequest> = {}): StageRenderRequest => 
 })
 
 const outcomes: StageRenderOutcome[] = []
+let fetchMock: ReturnType<typeof installRecordingFetch>
 
 function mount(r: StageRenderRequest) {
   return render(
@@ -87,7 +89,7 @@ beforeEach(() => {
   drawn.length = 0
   outcomes.length = 0
   installRelativeUrlRequest()
-  installRecordingFetch(routes)
+  fetchMock = installRecordingFetch(routes)
   sessionStorage.clear()
 })
 
@@ -151,6 +153,21 @@ describe('StageRenderJob', () => {
       last().capture!.onError('and again')
     })
     expect(outcomes).toEqual([{ reason: 'the graphics context was lost' }])
+  })
+
+  it('reads the gel library before it draws, so a fitted gel is drawn in its own colour', async () => {
+    mount(request())
+    await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
+    const urls = fetchMock.mock.calls.map(([input]) => (input instanceof Request ? input.url : String(input)))
+    expect(urls.some((u) => u.endsWith('/gels'))).toBe(true)
+  })
+
+  it('names the gel library when it cannot be read, without drawing', async () => {
+    fetchMock = installRecordingFetch({ ...routes, gels: failWith(500) })
+    mount(request())
+    await waitFor(() => expect(outcomes).toHaveLength(1))
+    expect(outcomes[0]).toEqual({ reason: 'it could not read the gel library' })
+    expect(drawn).toEqual([])
   })
 
   it('refuses a viewpoint the project no longer has, without drawing', async () => {

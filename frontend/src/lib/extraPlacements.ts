@@ -1,5 +1,6 @@
 import type { PatchPlacement, PatchPlacementInput } from '../api/patchApi'
 import { focusFields, type LanternFocus } from './lanterns'
+import { mediaEqual } from './fittedMedia'
 
 /** The geometry a placement shares with the patch's own: rigging, position and body orientation. */
 export interface PlacementGeometry {
@@ -57,6 +58,8 @@ export function toPlacementInput(p: PatchPlacement): PatchPlacementInput {
     // The lantern and its focus (stage-view plan session 7), carried whole for the roll's reason:
     // an entry without them would clear a focus set on the Stage view's Focus tab or over MCP.
     ...focusFields(p),
+    // Fitted media likewise: the list is sent whole, so an entry without it would clear it.
+    media: p.media ?? null,
   }
 }
 
@@ -110,7 +113,8 @@ export function placementListsEqual(
       (x.baseRollDeg ?? null) === (y.baseRollDeg ?? null) &&
       // Absent and null both mean "the patch's own length", as the desk stores them.
       (x.lengthM ?? null) === (y.lengthM ?? null) &&
-      focusEqual(x, y)
+      focusEqual(x, y) &&
+      mediaEqual(x.media, y.media)
     )
   })
 }

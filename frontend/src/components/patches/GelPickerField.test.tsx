@@ -2,6 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { GelPickerField } from './GelPickerField'
+import { indexGels, type Gel } from '@/lib/gels'
+import gelsJson from '../../../../src/main/resources/gels.json'
+
+// The served gel library (`GET /gels`), read here from the resource the desk serves it from.
+vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => indexGels(gelsJson as Gel[]) }))
 
 /**
  * The patch editor's gel field, now a host of the shared `GelPicker` (the patch list's Gel cell is

@@ -37,6 +37,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val indexDegMax: Double? = null,
         val blade: Blade? = null,
         val depthMax: Double? = null,
+        /** What the setting's options can be loaded with; null when it is not loadable. */
+        val media: MediaSlot? = null,
         /**
          * Backed by a [DmxFixtureSetting] — a slot channel, whatever its category. A COLOUR
          * property that is a colour wheel or a gel scroller is one: its stored and programmer
@@ -51,8 +53,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
              * Build a [Property] from a [@FixtureProperty] annotation. The single caller is
              * [FixturePropertyCatalogue], which is the one place that scans a class — fixture
              * or element — for annotated members. NaN sentinels for the optional Double-valued
-             * annotation fields, the empty-string sentinel for [fineOf] and [Blade.NONE] for
-             * [blade], are converted to null here in one place.
+             * annotation fields, the empty-string sentinel for [fineOf], [Blade.NONE] for
+             * [blade] and [MediaSlot.NONE] for [media], are converted to null here in one place.
              */
             fun fromAnnotation(
                 classProperty: KProperty1<out Fixture, *>,
@@ -76,6 +78,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.indexDegMax.takeUnless { it.isNaN() },
                 ann.blade.takeUnless { it == Blade.NONE },
                 ann.depthMax.takeUnless { it.isNaN() },
+                ann.media.takeUnless { it == MediaSlot.NONE },
                 (classProperty.returnType.classifier as? KClass<*>)?.isSubclassOf(DmxFixtureSetting::class) == true,
             )
         }

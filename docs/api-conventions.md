@@ -41,6 +41,8 @@ authored, are kebab-case plural nouns naming the thing enumerated. One spelling 
 * `GET /api/rest/groups/distribution-strategies` — the phase-distribution strategies.
 * `GET /api/rest/lanterns` — the lantern library a generic dimmer is hung with (stage-view plan
   session 7; `docs/fixtures-engineering.md` §"Lanterns and focus").
+* `GET /api/rest/gels` — the gel library a unit's fitted media names its gels from (fixture optics
+  plan session 3; `docs/fixtures-engineering.md` §"Fitted media").
 * `GET /api/rest/fx/library` — the effect vocabulary. The odd one out, and deliberately: it is not
   a list of *types* but of registrations, script-defined ones included, so it changes at runtime.
 

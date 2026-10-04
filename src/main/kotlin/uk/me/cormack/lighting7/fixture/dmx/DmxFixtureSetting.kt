@@ -7,6 +7,13 @@ import uk.me.cormack.lighting7.fixture.FixtureSettingValue
 
 interface DmxFixtureSettingValue: FixtureSettingValue {
     val level: UByte
+
+    /**
+     * On a loadable setting (`@FixtureProperty(media =)`), whether this option is a slot something
+     * can be loaded into. An open hole in a wheel, or a media frame's out position, is not: nothing
+     * fitted there would ever reach the beam. Unread on every other setting.
+     */
+    val loadable: Boolean get() = true
 }
 
 /**

@@ -1,5 +1,8 @@
 package uk.me.cormack.lighting7.testsupport
 
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -344,6 +347,34 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         gateRotationDeg = -20.0
         iris = 0.6
         focusSoftness = 0.9
+        sortOrder = 0
+    }
+    // A Revolution with fitted media (v22): a venue string on the patch — R26 where the stock frame 9
+    // holds L201, a gobo in a wheel slot, an empty frame — and a placement fitted with its own frame
+    // 9 and a media-frame gel. Non-default on both, so a copier that lost either would show in the
+    // round-trip and clone tests.
+    val revolution = DaoFixturePatch.new {
+        this.project = project
+        universeConfig = u0
+        fixtureTypeKey = "etc-source4-revolution-base-frame"
+        key = "rev-1"; displayName = "Rev 1"; startChannel = 440; sortOrder = 9
+        fittedMedia = FittedMedia(
+            mapOf(
+                "gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot(gel = "R26"), "R02_BASTARD_AMBER" to FittedSlot()),
+                "fbWheelPos" to mapOf("SLOT_1" to FittedSlot(gobo = "breakup")),
+            ),
+        )
+    }
+    DaoFixturePatchPlacement.new {
+        fixturePatch = revolution
+        label = "SL"
+        stageX = -4.0; stageY = -16.0; stageZ = 2.8
+        fittedMedia = FittedMedia(
+            mapOf(
+                "gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot(gel = "R80")),
+                "mediaFrame" to mapOf("IN" to FittedSlot(gel = "L202")),
+            ),
+        )
         sortOrder = 0
     }
     val groupA = DaoFixtureGroup.new { this.project = project; name = "front-wash" }

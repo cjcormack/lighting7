@@ -18,6 +18,8 @@ import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
 import uk.me.cormack.lighting7.fixture.dmx.UVFixture
 import uk.me.cormack.lighting7.fixture.dmx.WhexFixture
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -219,6 +221,38 @@ class LocateValueResolverTest {
             byName["rgbColour"],
         )
         assertNull(byName["white"], "the white slider rides along with the colour fan-out")
+    }
+
+    // ─── Fitted media ────────────────────────────────────────────────────────
+
+    @Test
+    fun `a scroller locates to the frame that is open on this unit`() {
+        val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
+        assertEquals(
+            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_LEADER.level),
+            LocateValueResolver.resolve(fixture).single { it.propertyName == "gelScroller" }.value,
+            "stock: the open leader",
+        )
+        // A venue string with a gel in the leader: the trailer is the unit's open frame.
+        val leaderGelled = FittedMedia(mapOf("gelScroller" to mapOf("OPEN_LEADER" to FittedSlot(gel = "R02"))))
+        assertEquals(
+            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_TRAILER.level),
+            LocateValueResolver.resolve(fixture, leaderGelled).single { it.propertyName == "gelScroller" }.value,
+        )
+        // And an empty frame fitted mid-string is open too.
+        val bothGelled = FittedMedia(
+            mapOf(
+                "gelScroller" to mapOf(
+                    "OPEN_LEADER" to FittedSlot(gel = "R02"),
+                    "R54_SPECIAL_LAVENDER" to FittedSlot(),
+                    "OPEN_TRAILER" to FittedSlot(gel = "R80"),
+                ),
+            ),
+        )
+        assertEquals(
+            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.R54_SPECIAL_LAVENDER.level),
+            LocateValueResolver.resolve(fixture, bothGelled).single { it.propertyName == "gelScroller" }.value,
+        )
     }
 
     // ─── Framing shutters ────────────────────────────────────────────────────

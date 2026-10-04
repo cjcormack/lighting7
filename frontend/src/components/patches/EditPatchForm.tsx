@@ -11,6 +11,9 @@ import { resolveFixtureKind, useFixtureTypeListQuery } from '@/store/fixtures'
 import { useLanternIndex } from '@/hooks/useLanternIndex'
 import { effectiveLantern, focusFields, FOCUS_KEYS, LANTERN_FAMILY_KIND, type LanternFocus } from '@/lib/lanterns'
 import { LanternBox } from './LanternBox'
+import { MediaBox } from './MediaBox'
+import { useGelIndex } from '@/hooks/useGelIndex'
+import { loadableSettings, mediaEqual, normaliseMedia, type FittedMedia } from '@/lib/fittedMedia'
 import { KindOverrideField } from './KindOverrideField'
 import { GroupComboInput } from './GroupComboInput'
 import { PatchPlacementFields, type PatchPlacementValue } from './PatchPlacementFields'
@@ -71,6 +74,9 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   // The lantern and its focus (stage-view plan session 7), for a type hung with one.
   const [focus, setFocus] = useState<Required<LanternFocus>>(() => focusFields(patch))
   const focusChanged = !focusEqual(focus, patch)
+  // What is loaded in the unit's loadable settings (fixture optics plan session 3).
+  const [media, setMedia] = useState<FittedMedia | null>(() => normaliseMedia(patch.media))
+  const mediaChanged = !mediaEqual(media, patch.media)
   const [lengthM, setLengthM] = useState<number | null>(patch.lengthM ?? null)
   const [stageHidden, setStageHidden] = useState(patch.stageHidden)
   const [infrastructure, setInfrastructure] = useState(patch.infrastructure ?? false)
@@ -86,6 +92,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   const { data: patchGroups } = usePatchGroupListQuery(projectId)
   const { data: fixtureTypes } = useFixtureTypeListQuery()
   const lanterns = useLanternIndex()
+  const gels = useGelIndex()
 
   useImperativeHandle(ref, () => ({
     // Merged, not replaced: the Stage view's drag sends position, yaw and pitch, and a roll it does
@@ -111,6 +118,8 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   // A conventional dimmer is hung with a lantern, and the lantern is its shape: the Lantern box
   // replaces *Beam & Gel* and *3D shape* for it, and the desk derives its kind from the lantern.
   const acceptsLantern = fixtureType?.acceptsLantern === true
+  // A type with loadable settings — a gel scroller, a module wheel — carries fitted media per unit.
+  const mediaSettings = loadableSettings(fixtureType?.properties)
   // Only expose the override picker for types whose declared kind is GENERIC — a UV fixture ships
   // without a shape hint, and a dimmer feeds whatever is plugged into it. Every other type already
   // renders distinctly per kind. A dimmer with a lantern named takes the lantern's kind, which the
@@ -152,6 +161,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
     stageHidden !== patch.stageHidden ||
     infrastructure !== (patch.infrastructure ?? false) ||
     focusChanged ||
+    mediaChanged ||
     extraPlacementsChanged
 
   const handleSave = async () => {
@@ -181,6 +191,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
         if (!focusEqual({ [k]: focus[k] }, { [k]: stored[k] })) body[k] = focus[k]
       }
     }
+    if (mediaChanged) body.media = media
     if (extraPlacementsChanged) body.extraPlacements = extraPlacements
     // Errors are reported by errorToastMiddleware; don't close over a save that failed, or the
     // operator loses their edits with no indication the form still holds unsaved changes.
@@ -328,6 +339,17 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
             onGelChange={setGelCode}
             beamAngleDeg={beamAngleDeg}
             onBeamAngleChange={setBeamAngleDeg}
+            placements={extraPlacements}
+            onPlacementsChange={setExtraPlacements}
+          />
+        )}
+
+        {mediaSettings.length > 0 && (
+          <MediaBox
+            settings={mediaSettings}
+            gels={gels}
+            media={media}
+            onMediaChange={setMedia}
             placements={extraPlacements}
             onPlacementsChange={setExtraPlacements}
           />

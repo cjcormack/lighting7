@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.builtins.ListSerializer
@@ -142,6 +143,13 @@ import uk.me.cormack.lighting7.models.asDuration
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
+// v22 added fitted media to `FixturePatchJson` and `PatchPlacementJson` — `media`, a nested
+// `{slots: {<property>: {<option>: {gel?, gobo?}}}}` (fixture optics plan session 3). SUPPORTED moved
+// for v14's reason — a v21 reader would import every unit with the stock string and write the fitted
+// media away on its next push; MIN stays at 5 because the field defaults to null. Imported as stored:
+// neither the gel library nor the type is consulted, so a gel a newer desk's library holds survives a
+// round trip through this one, and a unit draws such a slot as its stock.
+//
 // v9 added `templateGroups/` and `TemplateJson.groupUuid`; v10 removed both again when the busk
 // page took over ordering and exclusivity. SUPPORTED moved for v6's reason (a v8 reader would
 // import every template ungrouped and write the groups away on its next push); MIN stays at 5
@@ -167,7 +175,7 @@ import uk.me.cormack.lighting7.models.asDuration
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 21
+internal const val SUPPORTED_FORMAT_VERSION = 22
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -798,6 +806,7 @@ class ProjectImporter(private val state: State) {
             gateRotationDeg = p.gateRotationDeg
             iris = p.iris
             focusSoftness = p.focusSoftness
+            fittedMedia = p.media
             this.uuid = uuid
         }
         p.extraPlacements.forEachIndexed { index, pl ->
@@ -824,6 +833,7 @@ class ProjectImporter(private val state: State) {
                 gateRotationDeg = pl.gateRotationDeg
                 iris = pl.iris
                 focusSoftness = pl.focusSoftness
+                fittedMedia = pl.media
                 sortOrder = index
                 this.uuid = UUID.fromString(pl.uuid)
             }

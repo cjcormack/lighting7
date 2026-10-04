@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
@@ -342,6 +343,7 @@ class ProjectExporter(private val state: State) {
                     gateRotationDeg = p.gateRotationDeg,
                     iris = p.iris,
                     focusSoftness = p.focusSoftness,
+                    media = p.fittedMedia,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(
                             uuid = pl.uuid.toString(),
@@ -361,6 +363,7 @@ class ProjectExporter(private val state: State) {
                             gateRotationDeg = pl.gateRotationDeg,
                             iris = pl.iris,
                             focusSoftness = pl.focusSoftness,
+                            media = pl.fittedMedia,
                         )
                     },
                 )

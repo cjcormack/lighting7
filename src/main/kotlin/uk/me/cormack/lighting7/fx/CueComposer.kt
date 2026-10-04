@@ -764,7 +764,7 @@ internal object CueComposer {
             pending.groupBy { it.fixture.targetKey }.mapNotNull { (key, forFixture) ->
                 val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
                 val requirement =
-                    TemplateResolver.unmetColourRequirement(forFixture.first().fixture, applicable)
+                    TemplateResolver.unmetColourRequirement(forFixture.first().fixture, applicable, fixtures.fittedMediaFor(key))
                 // Both arms drop the head's colour rows; the cook has no panel to stay quiet for, so
                 // "no colour at all" and "no amber" are the same answer to it.
                 when (requirement) {
@@ -807,7 +807,9 @@ internal object CueComposer {
                 if (pendingIntent == null) {
                     null
                 } else {
-                    val resolution = TemplateResolver.resolve(p.fixture, p.propertyName, pendingIntent)
+                    val resolution = TemplateResolver.resolve(
+                        p.fixture, p.propertyName, pendingIntent, fixtures.fittedMediaFor(p.fixture.targetKey),
+                    )
                     if (!resolution.isSupported) {
                         // **Debug, not warn.** A head that cannot take the intent is the normal
                         // case for a template pointed at a mixed rig — a PAR with no pan is not a

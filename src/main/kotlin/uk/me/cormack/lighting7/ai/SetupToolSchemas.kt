@@ -8,6 +8,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.StageViewpointKind
@@ -125,6 +127,24 @@ private fun JsonObjectBuilder.focusProps(whose: String) {
     prop("focusSoftness", "number", "The focus knob, 0 sharp to 1 soft. Null is the lantern's own edge.")
 }
 
+/** The gel library's codes, for the schema text — what a fitted gel may name. */
+private val GEL_CHOICES: String by lazy { GelLibrary.all.joinToString(", ") { "${it.code} ${it.name}" } }
+
+/**
+ * Fitted media (fixture optics plan session 3): what is loaded in a unit's loadable settings — the
+ * same object on a fixture and on each `alsoAt` entry, which layers over the fixture's per slot.
+ */
+private fun JsonObjectBuilder.mediaProp(whose: String) {
+    prop(
+        "media", "object",
+        "What is loaded in $whose's loadable settings — only for a fixture type list_fixture_types lists with `loadable` (a gel scroller, a module wheel, a media frame). " +
+            "Shape: {\"slots\": {<setting>: {<slot option>: {\"gel\": <code>} or {\"gobo\": <pattern>} or {} for an empty slot}}}. " +
+            "Name only the slots that differ from the type's stock; every other keeps its stock content. A setting that takes GEL takes gels, GOBO gobos, GOBO_OR_GEL either. " +
+            "Gels: $GEL_CHOICES. Gobos: ${FittedMedia.GOBO_NAMES.joinToString()}. " +
+            "The object replaces the stored media; null clears it. Every problem is reported at once.",
+    )
+}
+
 /** The fields a fixture's physical placement shares between patch_fixtures and place_fixtures. */
 private fun JsonObjectBuilder.placementProps() {
     prop("rigging", "string", "Name of the rigging (truss, bar, boom…) it hangs from, as set_stage created it. When set, x/y/z are offsets along that rigging's own frame (x along its length) rather than world coordinates.")
@@ -140,6 +160,7 @@ private fun JsonObjectBuilder.placementProps() {
     prop("lengthM", "number", "Installed length in metres along the unit's long axis (0.01–100), only for fixture types that take one (list_fixture_types marks them acceptsLength — a lightstrip, cut to its run). Refused for every other type; null returns to the type's default. A run laid round several sides (a ring round the stage edge) is one fixture: its own placement is one side, and each other side is an `alsoAt` entry with its own lengthM.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
     focusProps("the fixture's own lantern")
+    mediaProp("the fixture")
     arrayProp(
         "alsoAt",
         alsoAtSchema,
@@ -161,6 +182,7 @@ private val alsoAtSchema = objectSchema {
     prop("rollDeg", "number", "Body roll, as for the fixture — 90 stands this segment on end.")
     prop("lengthM", "number", "This segment's length in metres, for a fixture type that takes one (acceptsLength); absent takes the fixture's own lengthM.")
     focusProps("this lantern — a pair on one dimmer are two lanterns, each focused separately")
+    mediaProp("this unit (its own, layered over the fixture's slot by slot)")
 }
 
 
@@ -193,7 +215,7 @@ internal val switchProjectTool = AnthropicToolDef(
 
 internal val listFixtureTypesTool = AnthropicToolDef(
     name = "list_fixture_types",
-    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then. A type marked acceptsLantern (generic-dimmer) is hung with a lantern from the desk's library: give each its lanternType when the plot names one.",
+    description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then. A type marked acceptsLantern (generic-dimmer) is hung with a lantern from the desk's library: give each its lanternType when the plot names one. A type listed with `loadable` has settings whose slots hold fitted media — a gel scroller's string, a module wheel's gobos or dichroics, a media frame's gel — each listed with its slots and their stock content: give a unit its `media` when the plot names what is loaded.",
     inputSchema = objectSchema {
         prop("query", "string", "Optional case-insensitive filter on manufacturer, model, mode or typeKey.")
     },

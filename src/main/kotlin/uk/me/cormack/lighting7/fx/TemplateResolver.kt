@@ -5,9 +5,10 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
-import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.colourOf
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
@@ -81,12 +82,18 @@ object TemplateResolver {
         val isSupported: Boolean get() = value != null
     }
 
+    /**
+     * [media] is the head's fitted media (`Fixtures.fittedMediaFor`) — the colours its wheel's or
+     * scroller's slots actually hold. Required, not defaulted, so no caller can snap against the
+     * type's stock string by forgetting it; null is a head with nothing fitted.
+     */
     fun resolve(
         fixture: GroupableFixture,
         propertyName: String,
         intent: TemplateIntent,
+        media: FittedMedia?,
     ): Resolution = when (intent) {
-        is TemplateIntent.Colour -> resolveColour(fixture, propertyName, intent)
+        is TemplateIntent.Colour -> resolveColour(fixture, propertyName, intent, media)
         is TemplateIntent.Position -> resolvePosition(fixture, propertyName, intent)
         is TemplateIntent.Percent -> resolvePercent(fixture, propertyName, intent)
         is TemplateIntent.Level -> resolveLevel(fixture, propertyName, intent)
@@ -142,6 +149,7 @@ object TemplateResolver {
     fun unmetColourRequirement(
         fixture: GroupableFixture,
         rows: List<Pair<String, TemplateIntent>>,
+        media: FittedMedia?,
     ): ColourRequirement {
         val colourFamily = rows.filter {
             TemplateProperty.ofOrNull(it.first)?.family == PropertyMaskGroup.COLOUR
@@ -157,11 +165,12 @@ object TemplateResolver {
             fixture,
             TemplateProperty.COLOUR.propertyName,
             TemplateIntent.Colour("#000000", WhitePolicy.RGB_ONLY),
+            media,
         ).note !is Note.Unsupported
         if (!hasColour) return ColourRequirement.NotACandidate("no colour")
 
         for ((propertyName, intent) in colourFamily) {
-            val note = resolve(fixture, propertyName, intent).note
+            val note = resolve(fixture, propertyName, intent, media).note
             if (note is Note.Unsupported) return ColourRequirement.Unmet(note.reason, propertyName)
         }
         return ColourRequirement.Met
@@ -249,6 +258,7 @@ object TemplateResolver {
         fixture: GroupableFixture,
         propertyName: String,
         intent: TemplateIntent.Colour,
+        media: FittedMedia?,
     ): Resolution {
         val target = parseHex(intent.hex)
             ?: return Resolution(null, propertyName, Note.Unsupported("'${intent.hex}' is not a colour"))
@@ -272,7 +282,7 @@ object TemplateResolver {
             .firstOrNull { it.category == PropertyCategory.COLOUR && it.value is DmxFixtureSetting<*> }
         if (wheel != null) {
             val setting = wheel.value as DmxFixtureSetting<*>
-            val snapped = nearestColourSlot(setting, target)
+            val snapped = nearestColourSlot(setting, wheel.name, media, target)
                 ?: return Resolution(
                     null, wheel.name,
                     Note.Unsupported("colour wheel has no annotated slot previews"),
@@ -352,16 +362,27 @@ object TemplateResolver {
      * the desk *believes* it got", which is exactly what the editor needs to show before a save.
      * Slots with no preview are not candidates — a null preview means "nobody annotated this",
      * never "this slot is black".
+     *
+     * Each slot's colour is the **unit's**: its fitted gel where it has one, else the type's stock
+     * preview ([colourOf]), so a template snaps a scroller to the frame that actually holds the
+     * nearest gel on this unit rather than the frame ETC's stock string would have it in.
      */
-    private fun nearestColourSlot(setting: DmxFixtureSetting<*>, target: Color): SnappedSlot? {
+    private fun nearestColourSlot(
+        setting: DmxFixtureSetting<*>,
+        propertyName: String,
+        media: FittedMedia?,
+        target: Color,
+    ): SnappedSlot? {
         val targetLab = toLab(target)
         var best: SnappedSlot? = null
         for (slot in setting.sortedValues) {
-            val preview = (slot as? DmxFixtureColourSettingValue)?.colourPreview ?: continue
+            val preview = media.colourOf(propertyName, slot) ?: continue
             val colour = parseHex(preview) ?: continue
             val delta = labDistance(targetLab, toLab(colour))
             if (best == null || delta < best.deltaE) {
-                best = SnappedSlot(slot.name, slot.level, delta)
+                // A fitted gel is named beside its frame, so the editor reads "the frame holding R26".
+                val fitted = media?.slot(propertyName, slot.name)?.gel
+                best = SnappedSlot(if (fitted != null) "${slot.name} ($fitted)" else slot.name, slot.level, delta)
             }
         }
         return best

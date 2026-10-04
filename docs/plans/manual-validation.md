@@ -17,7 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
-| [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on | Fixture optics plan, 2026-10-02 |
+| [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -204,11 +204,20 @@ answers correct the annotations afterwards.
    `frontend/src/components/stage3d/bodies/archetype.ts` (or declare the Revolution's own
    `depthOfField`); if it goes soft sooner, raise them.
 
+9. **Fitted media** (fixture-optics session 3). With the string from step 1 fitted in the patch
+   sheet's Media box (a frame the venue changed fitted, the rest left stock), take the scroller to
+   each fitted frame: does the Stage view's beam match the gel on the wall? The eight swatches the
+   gel library took from the stock string — R05, R09, R54, R357, R36, R25, R88 and L-HT115 — are
+   approximations (`estimate` in `gels.json`); correct a hex that reads wrong and drop its
+   `estimate`. If the front bay holds a wheel, fit what step 1 found in its slots and check each
+   lands open, as a pattern or as a colour. With a gel in the media frame's wings, sweep ch 6: the
+   view multiplies that gel into the beam from 128 up (step 5's split).
+
 Where an answer disagrees with the annotation, correct the annotation and its comment, and drop the
 `Estimate:` marker. Step 1 answers the plan's §11 questions. Run the Revolution's half of
 `FU-MANUAL-FOCUS-DIRECTION` in the same visit.
 
-35 minutes.
+45 minutes.
 
 ---
 

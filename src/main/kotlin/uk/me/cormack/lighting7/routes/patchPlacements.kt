@@ -8,6 +8,8 @@ import kotlinx.serialization.json.JsonObject
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import uk.me.cormack.lighting7.fixture.lantern.focus
+import uk.me.cormack.lighting7.fixture.media.FittedMedia
+import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.DaoProject
@@ -46,6 +48,9 @@ data class PatchPlacementDto(
     val gateRotationDeg: Double? = null,
     val iris: Double? = null,
     val focusSoftness: Double? = null,
+    /** This unit's own fitted media, layered over the patch's option by option; null fits nothing of
+     *  its own. See `FixturePatchDto.media`. */
+    val media: FittedMedia? = null,
 )
 
 /**
@@ -69,6 +74,9 @@ internal data class PlacementInput(
     /** This lantern's focus data (stage-view plan D9, D14), range-checked; the type's and the
      *  library's rules need the patch and run where it is known ([placementFocusRefusal]). */
     val focus: LanternFocus = LanternFocus(),
+    /** This unit's own fitted media, its shape checked; the type's rules need the patch and run
+     *  where it is known ([patchMediaRefusal]). */
+    val media: FittedMedia? = null,
 )
 
 /**
@@ -117,6 +125,9 @@ internal fun parseExtraPlacements(value: JsonElement?): Result<List<PlacementInp
                 baseRollDeg = entry["baseRollDeg"].nullableDouble(),
                 focus = LanternFocus.parse(entry).getOrElse {
                     return Result.failure(IllegalArgumentException("$where: ${it.message}"))
+                },
+                media = FittedMedia.parse(entry["media"], "$where.media").getOrElse {
+                    return Result.failure(IllegalArgumentException(it.message))
                 },
             )
         } catch (e: IllegalArgumentException) {
@@ -200,6 +211,7 @@ internal fun applyExtraPlacements(
         row.baseRollDeg = input.baseRollDeg
         row.lengthM = input.lengthM
         row.focus = input.focus
+        row.fittedMedia = input.media
         row.sortOrder = index
     }
     existing.values.filter { it.uuid !in kept }.forEach { it.delete() }
@@ -223,6 +235,7 @@ internal fun DaoFixturePatchPlacement.toDto(): PatchPlacementDto = focus.let { f
     gateRotationDeg = f.gateRotationDeg,
     iris = f.iris,
     focusSoftness = f.focusSoftness,
+    media = fittedMedia,
 ) }
 
 /**

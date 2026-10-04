@@ -129,7 +129,9 @@ private fun applyValueTemplateToProgrammer(
             val target = row.target
             if (target is TargetRef.Fixture && target.key != fixtureKey) null else row.propertyName to intent
         }
-        when (val requirement = TemplateResolver.unmetColourRequirement(fixture, applicable)) {
+        when (val requirement = TemplateResolver.unmetColourRequirement(
+            fixture, applicable, state.show.fixtures.fittedMediaFor(fixtureKey),
+        )) {
             // Reported for both arms: a click that lands on nothing must say why, and unlike the
             // editor's panel there is no "was never a candidate" to stay quiet about — the operator
             // selected this head deliberately.
@@ -172,7 +174,9 @@ private fun applyValueTemplateToProgrammer(
             ) {
                 continue
             }
-            val resolution = TemplateResolver.resolve(fixture, row.propertyName, intent)
+            val resolution = TemplateResolver.resolve(
+                fixture, row.propertyName, intent, state.show.fixtures.fittedMediaFor(fixtureKey),
+            )
             val value = resolution.value
             if (value == null) {
                 skips += TemplateSkipDto(

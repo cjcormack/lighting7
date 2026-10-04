@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.sync
 
+import uk.me.cormack.lighting7.fixture.media.FittedSlot
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.core.eq
@@ -37,6 +38,7 @@ import java.nio.file.Path
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -152,7 +154,7 @@ class ProjectRoundTripTest {
         assertEquals(foh.uuid, sr.riggingUuid, "a placement names its rigging by uuid")
         assertEquals(null, hex2.extraPlacements[1].riggingUuid)
 
-        val paired = setOf("hex-2", "ring-1", "adv2-1")
+        val paired = setOf("hex-2", "ring-1", "adv2-1", "rev-1")
         val unpaired = docs.filter { doc -> paired.none { doc.contains("\"$it\"") } }
         assertEquals(patches.size - paired.size, unpaired.size)
         assertTrue(
@@ -282,6 +284,45 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
         }.single { it.key == "adv2-1" }
         assertEquals(adv2, back, "the importer keeps the lantern and every focus field, on the patch and the placement")
+    }
+
+    /**
+     * v22: fitted media, on the patch and on a placement, and absent where unset — a patch with
+     * nothing fitted carries no key, so an export of a rig with nothing fitted is v21's byte for byte.
+     */
+    @Test
+    fun `fitted media exports on the patch and its placement`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        assertTrue(
+            Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": 22"),
+            "the writer stamps v22",
+        )
+        assertEquals(22, SUPPORTED_FORMAT_VERSION)
+        val docs = Files.list(exportDirA.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { Files.readString(it) }
+        }
+        val rev = docs.map { canonicalDecode(FixturePatchJson.serializer(), it) }.single { it.key == "rev-1" }
+        val media = assertNotNull(rev.media)
+        assertEquals(FittedSlot(gel = "R26"), media.slot("gelScroller", "L201_FULL_CT_BLUE"))
+        assertEquals(FittedSlot(), media.slot("gelScroller", "R02_BASTARD_AMBER"), "an empty frame travels as fitted")
+        assertEquals(FittedSlot(gobo = "breakup"), media.slot("fbWheelPos", "SLOT_1"))
+        val sl = rev.extraPlacements.single()
+        assertEquals(FittedSlot(gel = "R80"), sl.media?.slot("gelScroller", "L201_FULL_CT_BLUE"))
+        assertEquals(FittedSlot(gel = "L202"), sl.media?.slot("mediaFrame", "IN"))
+        assertTrue(
+            docs.filter { !it.contains("\"rev-1\"") }.none { it.contains("\"media\"") },
+            "a patch with nothing fitted must not carry media",
+        )
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        ProjectExporter(state).export(imported.projectId, exportDirB)
+        val back = Files.list(exportDirB.resolve("fixturePatches")).use { stream ->
+            stream.toList().map { canonicalDecode(FixturePatchJson.serializer(), Files.readString(it)) }
+        }.single { it.key == "rev-1" }
+        assertEquals(rev, back, "the importer keeps the fitted media, on the patch and the placement")
     }
 
     /**

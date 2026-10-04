@@ -4,6 +4,7 @@ import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
 import type { GroupColourPropertyDescriptor, GroupPropertyDescriptor } from "../api/groupsApi"
 import type { Lantern } from "../lib/lanterns"
+import type { Gel } from "../lib/gels"
 
 // `GroupList` rides along because `GET /groups` reads the same runtime register the
 // `fixturesChanged` frame announces: groups only ever change inside `Fixtures.register {}`
@@ -38,13 +39,19 @@ export const fixturesApi = restApi.injectEndpoints({
         query: () => 'lanterns',
         keepUnusedDataFor: 3600,
       }),
+      // The gel library (fixture optics plan D7): the desk's, fixed for the life of the desk
+      // process like the lantern library, so read once and kept.
+      gelList: build.query<Array<Gel>, void>({
+        query: () => 'gels',
+        keepUnusedDataFor: 3600,
+      }),
     }
   },
   overrideExisting: false,
 })
 
 export const {
-  useFixtureListQuery, useFixtureTypeListQuery, useLanternListQuery,
+  useFixtureListQuery, useFixtureTypeListQuery, useLanternListQuery, useGelListQuery,
 } = fixturesApi
 
 export const FIXTURE_KINDS = [
@@ -290,7 +297,13 @@ export type SettingOption = {
   /** Prism facet count at this wheel position; absent when the prism is out
    *  (or the wheel is unannotated — see resolvePrismFacets). */
   prismFacets?: number
+  /** On a loadable setting (its `media` set), whether this option is a slot media can be loaded
+   *  into — false for an open hole or an out position. Absent on every other setting. */
+  loadable?: boolean
 }
+
+/** What a loadable setting's slots take (`@FixtureProperty(media =)`, fixture optics plan D6). */
+export type MediaSlot = 'GEL' | 'GOBO' | 'GOBO_OR_GEL'
 
 export type SettingPropertyDescriptor = {
   type: 'setting'
@@ -300,6 +313,9 @@ export type SettingPropertyDescriptor = {
   channel: ChannelRef
   options: SettingOption[]
   compactDisplay?: CompactDisplayRole
+  /** Set on a **loadable** setting: what its options can be loaded with. The options are the type's
+   *  stock; a unit's fitted media overlays them (`lib/fittedMedia.ts`). Absent from an older desk. */
+  media?: MediaSlot
 }
 
 /**

@@ -141,7 +141,7 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     }
 
     val (assignments, unpublishable) = fixtures
-        .flatMap { LocateValueResolver.resolve(it) }
+        .flatMap { LocateValueResolver.resolve(it, state.show.fixtures.fittedMediaFor(it.targetKey)) }
         .partition {
             engine.programmer.publishability(it.target, it.propertyName) ==
                 ProgrammerWriter.Publishability.PUBLISHABLE
