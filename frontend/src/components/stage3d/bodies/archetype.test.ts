@@ -5,7 +5,18 @@ import { describe, expect, it } from 'vitest'
 import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../../store/fixtures'
 import { chan, colourProp, element, sliderProp } from '../../../test/fixtureFactories'
 import { bodySpecOf } from '../emitterNeeds'
-import { apexDistanceM, archetypeFor, bodyInputFor, DEPTH_OF_FIELD, lightRuns, MAX_CELLS, SOFTNESS, type BodyInput } from './archetype'
+import {
+  apexDistanceM,
+  archetypeFor,
+  bodyInputFor,
+  DEPTH_OF_FIELD,
+  FIELD_DEG,
+  lightRuns,
+  MAX_CELLS,
+  resolveBeamDeg,
+  SOFTNESS,
+  type BodyInput,
+} from './archetype'
 import { beamHardness, focusBlur, MASK_EDGE_SOFT } from '../beamMask'
 import { resolveEdgeHardness } from '../beamOptics'
 import { bodyFrames } from './bodyGeometry'
@@ -424,6 +435,48 @@ describe('depth of field (fixture-optics plan D9)', () => {
     for (const off of [21, 27]) expect(hard(off)).toBeLessThan(0.4)
     // The cap the family used to hold it at, whatever the focus.
     expect(1 - SOFTNESS['mover:profile']).toBeCloseTo(0.88, 9)
+  })
+})
+
+describe('the beam angle (fixture-optics plan D3)', () => {
+  // The Fusion 100 as the desk sends it: a fixed 10° lens, `@FixtureType(fieldDeg = 10.0)`.
+  const fusion = type({
+    typeKey: 'fusion-100-spot-mkii-8ch',
+    kind: 'MOVING_HEAD',
+    acceptsBeamAngle: true,
+    body: { archetype: 'mover', head: 'spot' },
+    fieldDeg: 10,
+  })
+  const f = fixture({ properties: [TILT] })
+  const spec = (t: FixtureTypeInfo) => bodySpecOf({ kindOverride: null, lengthM: null }, f, t)
+
+  it("draws a fixed lens at the type's declared field, and the family's where it declares none", () => {
+    expect(spec(fusion).fieldDeg).toBe(10)
+    expect(spec({ ...fusion, fieldDeg: null }).fieldDeg).toBe(FIELD_DEG['mover:spot'])
+    expect(FIELD_DEG['mover:spot']).not.toBe(10)
+    // Nothing but a usable angle counts as declared.
+    expect(spec({ ...fusion, fieldDeg: 0 }).fieldDeg).toBe(FIELD_DEG['mover:spot'])
+  })
+
+  it('takes the zoom channel over the patch, the patch over the type, the type over the family', () => {
+    const typed = spec(fusion)
+    const familyOnly = spec({ ...fusion, fieldDeg: null })
+    expect(resolveBeamDeg(22, 30, typed)).toBe(22)
+    expect(resolveBeamDeg(null, 30, typed)).toBe(30)
+    expect(resolveBeamDeg(null, null, typed)).toBe(10)
+    expect(resolveBeamDeg(null, undefined, familyOnly)).toBe(FIELD_DEG['mover:spot'])
+    // A patched angle that is no angle does not hide the type's.
+    expect(resolveBeamDeg(null, 0, typed)).toBe(10)
+  })
+
+  it("keeps a lantern's field over a type's: a conventional is the lantern it is hung with", () => {
+    const withLantern = bodySpecOf(
+      { kindOverride: null, lengthM: null, lanternType: 's4-19' },
+      dimmer,
+      { ...DIMMER, fieldDeg: 40 },
+      LANTERNS,
+    )
+    expect(withLantern.fieldDeg).toBe(19)
   })
 })
 

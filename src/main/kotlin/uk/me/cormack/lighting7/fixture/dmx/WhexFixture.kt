@@ -37,19 +37,32 @@ class WhexFixture(
 
     override fun withTransaction(transaction: ControllerTransaction): WhexFixture = WhexFixture(this, transaction)
 
+    /**
+     * 0 is no strobe; 10–255 strobes slow → fast. [strobe] spreads its 0..255 intensity over that
+     * band — 245 steps above 10, so 255 lands on 255. (It used to scale *up* by 255/245 and then add
+     * 10, which ran past 255 from intensity 236 and wrapped a near-full strobe round to a slow one.)
+     */
     class DmxStrobe(transaction: ControllerTransaction?, universe: Universe, channelNo: Int): DmxSlider(transaction, universe, channelNo), Strobe {
         override fun fullOn() {
             this.value = 0u
         }
 
         override fun strobe(intensity: UByte) {
-            this.value = ((255F / 245F * intensity.toFloat()).roundToInt() + 10).toUByte()
+            this.value = (STROBE_MIN + (intensity.toFloat() * (255 - STROBE_MIN) / 255F).roundToInt()).toUByte()
+        }
+
+        companion object {
+            /** The strobe band's slowest level. */
+            const val STROBE_MIN = 10
         }
     }
 
+    // Program 1 used to share 111 with program 3, so no level reached it.
+    // Estimate: no manual to hand; 11 continues the programs' 50-step spacing (61, 111, 161).
+    // Checked on the rig by FU-MANUAL-S5-LIBRARY-OPTICS.
     enum class ProgramMode(override val level: UByte) : DmxFixtureSettingValue {
         NONE(0u),
-        AUTO_PROGRAM_1(111u),
+        AUTO_PROGRAM_1(11u),
         AUTO_PROGRAM_2(61u),
         AUTO_PROGRAM_3(111u),
         AUTO_PROGRAM_4(161u),

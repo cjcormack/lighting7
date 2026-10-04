@@ -148,6 +148,10 @@ export type FixtureTypeInfo = {
   /** The type's depth-of-field constant (`@FixtureType.depthOfField`, fixture-optics plan D9): how
    *  fast its focus goes soft off the focal plane. Null or absent uses its family's. */
   depthOfField?: number | null
+  /** A fixed lens's full beam angle (`@FixtureType.fieldDeg`, fixture-optics plan D3) — the Fusion
+   *  100's 10°. The beam angle is the zoom channel's, else the patch's, else this, else the family's
+   *  (`resolveBeamDeg` in stage3d/bodies/archetype.ts). Null or absent declares none. */
+  fieldDeg?: number | null
 }
 
 /** A declared body on the wire (backend `FixtureBodyInfo`). */
@@ -247,6 +251,12 @@ export type SliderPropertyDescriptor = {
   /** A `shutter` slider: the blade's depth at DMX max (DMX min when `inverted`), as a fraction of
    *  the field's diameter — the lantern focus's unit, so 0.5 reaches the centre. DMX min is out. */
   depthMax?: number
+  /** The DMX at which the slider's proportional band starts (`@FixtureProperty.activeMin`); absent
+   *  is `min`. Below it the Stage view holds the band's start value. */
+  activeMin?: number
+  /** The DMX at which it ends — above it the channel is effects (the Robe's iris and frost pulse
+   *  above 179), and the view holds the band's end value. Absent is `max`. */
+  activeMax?: number
 }
 
 /** A framing shutter's blade, in the lantern focus's wire order (`BLADE_ORDER`). */
@@ -300,6 +310,13 @@ export type SettingOption = {
   /** On a loadable setting (its `media` set), whether this option is a slot media can be loaded
    *  into — false for an open hole or an out position. Absent on every other setting. */
   loadable?: boolean
+  /** On a **stepped zoom** (a `zoom` setting, fixture-optics plan D2): the full beam angle at this
+   *  position — the Robe ColorSpot's 15°, 18° or 22°. */
+  zoomDeg?: number
+  /** On a colour setting: a band with **no single colour** — a scroll, a random or rainbow program,
+   *  an auto change, a band handing colour to other channels. The Stage view animates it through the
+   *  wheel's own previews (`lib/colourBands.ts`); every other colour option carries `colourPreview`. */
+  noColour?: boolean
 }
 
 /** What a loadable setting's slots take (`@FixtureProperty(media =)`, fixture optics plan D6). */
@@ -643,9 +660,13 @@ export function findFocusProperty(properties: PropertyDescriptor[] | undefined) 
   return findSlider(properties, 'focus')
 }
 
-/** Zoom carries degMin/degMax as the full beam angle at DMX min/max. */
+/**
+ * The zoom channel, in either form (fixture-optics plan D2): a **slider** carrying `degMin`/`degMax`
+ * as the full beam angle at DMX min/max, or a **stepped zoom** — a setting whose options carry
+ * `zoomDeg` (the Robe ColorSpot 575's three angles). `resolveZoomDeg` reads both.
+ */
 export function findZoomProperty(properties: PropertyDescriptor[] | undefined) {
-  return findSlider(properties, 'zoom')
+  return findWheel(properties, 'zoom')
 }
 
 /**

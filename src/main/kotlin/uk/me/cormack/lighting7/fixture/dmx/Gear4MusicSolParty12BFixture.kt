@@ -58,6 +58,7 @@ class Gear4MusicSolParty12BFixture(
         override val level: UByte,
         override val colourPreview: String?,
     ) : DmxFixtureColourSettingValue {
+        // Hands the colour to the RGB channels.
         ALL_COL(0u, null),
         RED(40u, "#FF0000"),
         GREEN(50u, "#00FF00"),
@@ -77,6 +78,10 @@ class Gear4MusicSolParty12BFixture(
         GREEN_BLUE(190u, null),
         R_G_B(200u, null),
         R_G_B_RAINBOW(201u, null),
+        ;
+
+        /** The blends and rainbows move between colours; ALL_COL hands it to RGB. */
+        override val noColour: Boolean get() = colourPreview == null
     }
 
     @FixtureProperty("Internal mode", category = PropertyCategory.SETTING)

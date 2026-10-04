@@ -63,6 +63,7 @@ sealed class RobeColorSpot575Fixture(
     enum class Colour1(
         override val level: UByte,
         override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
         OPEN(0u, "#FFFFFF"),
         LIGHT_BLUE(133u, "#ADD8E6"),
@@ -74,10 +75,10 @@ sealed class RobeColorSpot575Fixture(
         CYAN(173u, "#00FFFF"),
         GREEN(180u, "#00FF00"),
         ORANGE(186u, "#FFA500"),
-        SCROLL_CW(190u),
-        SCROLL_CCW(218u),
-        RANDOM(244u),
-        AUTO_RANDOM(250u),
+        SCROLL_CW(190u, noColour = true),
+        SCROLL_CCW(218u, noColour = true),
+        RANDOM(244u, noColour = true),
+        AUTO_RANDOM(250u, noColour = true),
     }
 
     /**
@@ -90,6 +91,7 @@ sealed class RobeColorSpot575Fixture(
     enum class Colour2(
         override val level: UByte,
         override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
         OPEN(0u, "#FFFFFF"),
         DEEP_RED(133u, "#8B0000"),
@@ -100,10 +102,10 @@ sealed class RobeColorSpot575Fixture(
         YELLOW(170u, "#FFFF00"),
         CTC_3200K(178u, "#FFE0C0"),
         UV_FILTER(185u, "#4B0082"),
-        SCROLL_CW(190u),
-        SCROLL_CCW(218u),
-        RANDOM(244u),
-        AUTO_RANDOM(250u),
+        SCROLL_CW(190u, noColour = true),
+        SCROLL_CCW(218u, noColour = true),
+        RANDOM(244u, noColour = true),
+        AUTO_RANDOM(250u, noColour = true),
     }
 
     /**
@@ -245,6 +247,25 @@ sealed class RobeColorSpot575Fixture(
     }
 
     /**
+     * Channel 16 — Zoom: three fixed angles, each with and without focus correction (DMX chart v1.0;
+     * `Manuals/personalities/Robe_ColorSpot575AT_Mode2.md`). A **stepped zoom** (fixture-optics plan
+     * D2): the chart's bands are positions, not a sweep, so it is a setting whose options carry their
+     * angle — a slider would draw every DMX value between them as an angle the lens never takes.
+     * Levels are the band starts.
+     */
+    enum class Zoom(
+        override val level: UByte,
+        override val zoomDeg: Double,
+    ) : DmxFixtureZoomSettingValue {
+        ZOOM_15(0u, 15.0),
+        ZOOM_18(40u, 18.0),
+        ZOOM_22(80u, 22.0),
+        ZOOM_15_FOCUS_CORRECTED(128u, 15.0),
+        ZOOM_18_FOCUS_CORRECTED(170u, 18.0),
+        ZOOM_22_FOCUS_CORRECTED(220u, 22.0),
+    }
+
+    /**
      * Mode 2 (19-channel) — the patched personality.
      *
      * - Ch 1/2: Pan (16-bit hi/lo).
@@ -263,7 +284,7 @@ sealed class RobeColorSpot575Fixture(
      * - Ch 13: Prism rotation (CW / no-rot / CCW).
      * - Ch 14: Frost (open / 0–100% / pulse / ramp bands).
      * - Ch 15: Iris (open / closed / pulse / random-pulse bands).
-     * - Ch 16: Zoom (three preset positions × with/without focus correction).
+     * - Ch 16: Zoom (three preset positions × with/without focus correction — [Zoom]).
      * - Ch 17: Focus.
      * - Ch 18: Shutter / strobe (clamped to safe band 0–95).
      * - Ch 19: Master dimmer (HTP).
@@ -294,15 +315,16 @@ sealed class RobeColorSpot575Fixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode2Ch =
             Mode2Ch(this, transaction)
 
+        // Pan 530° and tilt 280° (user manual v1.4, technical specifications).
         @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
-            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 530.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
         @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
-            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 257.0)
+            axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 280.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
@@ -350,14 +372,20 @@ sealed class RobeColorSpot575Fixture(
         )
         val prismRotation: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
-        @FixtureProperty("Frost", category = PropertyCategory.FROST)
+        // DMX chart: 0 open, 1–179 frost 0→100%, then 100% frost, pulses and ramps — effects the
+        // view does not draw, so it holds full frost above 179.
+        @FixtureProperty("Frost", category = PropertyCategory.FROST, activeMin = 1, activeMax = 179)
         val frost: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
-        @FixtureProperty("Iris", category = PropertyCategory.IRIS)
+        // DMX chart: 0 open, 1–179 max→min diameter, 180–191 closed, then pulses — held at the
+        // smallest diameter above 179.
+        @FixtureProperty("Iris", category = PropertyCategory.IRIS, activeMin = 1, activeMax = 179)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
         @FixtureProperty("Zoom", category = PropertyCategory.ZOOM)
-        val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 15)
+        val zoom = DmxFixtureSetting(
+            transaction, universe, firstChannel + 15, Zoom.entries.toTypedArray(),
+        )
 
         // Estimate: Robe publishes only "coarse focus, proportional" (ColorSpot 575 AT DMX chart
         // v1.0). Near is the manual's 2 m minimum distance to a lit surface (user manual v1.4);

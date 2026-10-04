@@ -21,8 +21,34 @@ interface DmxFixtureSettingValue: FixtureSettingValue {
  * Use this for colour preset enums (e.g., RED, GREEN, BLUE presets).
  */
 interface DmxFixtureColourSettingValue : DmxFixtureSettingValue {
-    /** Hex colour string for UI preview (e.g., "#FF0000"), or null for no preview */
+    /**
+     * The colour this position puts in the beam, as `#RRGGBB` — or null where it has none of its own
+     * ([noColour]), or where a loadable setting's slot ships empty. On a COLOUR setting every option
+     * is exactly one of the two, which `ColourPreviewTest` enforces (fixture-optics plan D8).
+     */
     val colourPreview: String?
+
+    /**
+     * True for a band with **no single colour** — a scroll, a random or rainbow program, an auto
+     * colour change, a wheel's rotation stop, or a band that hands the colour to other channels (an
+     * RGB head's "direct" preset). Declared on the option rather than guessed from its name, because
+     * the names are every manufacturer's own (SCROLL_CW, RAINBOW_EFFECT, AUTOMATIC_COLOUR_CHANGE,
+     * ALL_COL, ORIGINAL) and a guess that misses draws black. Where the setting is the beam's colour
+     * the Stage view animates such a band through the wheel's own previews; nothing draws it black
+     * for want of a colour.
+     */
+    val noColour: Boolean get() = false
+}
+
+/**
+ * A position of a **stepped zoom** (fixture-optics plan D2): a ZOOM setting rather than a slider,
+ * whose bands are fixed angles — the Robe ColorSpot 575's 15°, 18° and 22°, each with and without
+ * focus correction. A continuous zoom is a ZOOM slider declaring `degMin`/`degMax` instead;
+ * `ZoomAnglesTest` enforces one or the other.
+ */
+interface DmxFixtureZoomSettingValue : DmxFixtureSettingValue {
+    /** The full beam angle in degrees while the channel is in this band. */
+    val zoomDeg: Double
 }
 
 /**

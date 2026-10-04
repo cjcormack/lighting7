@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureGoboSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixturePrismSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
@@ -188,8 +189,13 @@ object LocateValueResolver {
             PropertyCategory.IRIS, PropertyCategory.FROST ->
                 (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.min) }
 
-            PropertyCategory.ZOOM ->
-                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(midValue(it)) }
+            PropertyCategory.ZOOM -> when (backing) {
+                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(midValue(backing))
+                // A stepped zoom (fixture-optics plan D2): the step nearest its middle angle, the
+                // first in level order on a tie — the Robe's 18°, not its focus-corrected twin.
+                is DmxFixtureSetting<*> -> middleZoomStep(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                else -> null
+            }
 
             // A declared range is linear in 1 / distance, so mid-DMX is near its near end (3.8 m on a
             // Revolution's 2–40 m): park at the range's middle distance instead. Undeclared, mid-DMX.
@@ -282,6 +288,14 @@ object LocateValueResolver {
             (it.name.contains("OPEN", ignoreCase = true) || it.name.contains("WHITE", ignoreCase = true)) &&
                 media?.slot(propertyName, it.name)?.gel == null
         }
+
+    /** A stepped zoom's step nearest the middle of its angles; null where no option declares one. */
+    private fun middleZoomStep(setting: DmxFixtureSetting<*>): DmxFixtureSettingValue? {
+        val steps = setting.sortedValues.filterIsInstance<DmxFixtureZoomSettingValue>()
+        if (steps.isEmpty()) return null
+        val middle = (steps.minOf { it.zoomDeg } + steps.maxOf { it.zoomDeg }) / 2
+        return steps.minBy { kotlin.math.abs(it.zoomDeg - middle) }
+    }
 
     /**
      * The slot that takes a colour-macro wheel out of the signal path so a coexisting RGB

@@ -37,6 +37,11 @@ sealed class Scantastic4Fixture(
 ) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName),
     MultiModeFixtureFamily<Scantastic4Fixture.Mode> {
 
+    companion object {
+        /** Each head's fixed beam angle, every mode (the product sheet's "Beam: 11 degrees"; D3). */
+        const val FIELD_DEG = 11.0
+    }
+
     // ============================================
     // Channel Mode Enum
     // ============================================
@@ -136,7 +141,7 @@ sealed class Scantastic4Fixture(
      * - Ch 7: Movement macros
      * - Ch 8: Scanning speed
      */
-    @FixtureType("scantastic-4-8ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER)
+    @FixtureType("scantastic-4-8ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER, fieldDeg = FIELD_DEG)
     class Mode8Ch(
         universe: Universe,
         key: String,
@@ -195,7 +200,7 @@ sealed class Scantastic4Fixture(
      *   - +1: Pan (0-255 maps to 0-180 degrees)
      *   - +2: Tilt (0-255 maps to 0-90 degrees)
      */
-    @FixtureType("scantastic-4-12ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER)
+    @FixtureType("scantastic-4-12ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER, fieldDeg = FIELD_DEG)
     class Mode12Ch(
         universe: Universe,
         key: String,
@@ -245,7 +250,7 @@ sealed class Scantastic4Fixture(
      * - Ch 16: Scanning speed
      * - Ch 17: Sound active (0-127 blackout, 128-255 sound active)
      */
-    @FixtureType("scantastic-4-17ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER)
+    @FixtureType("scantastic-4-17ch", manufacturer = "Equinox", model = "Scantastic 4", kind = FixtureKind.SCANNER, fieldDeg = FIELD_DEG)
     class Mode17Ch(
         universe: Universe,
         key: String,

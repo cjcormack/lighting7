@@ -26,11 +26,15 @@ import {
   resolveGoboRotationMode,
   resolveGoboSlot,
   resolveGoboSpin,
+  resolveIris,
   resolveMacroIndex,
   resolvePrismFacets,
   resolvePrismSpin,
+  resolveSoftness,
   resolveZoomDeg,
   settingBand,
+  IRIS_MIN_OPEN,
+  proportionalBand,
 } from './beamOptics'
 import { goboLayerFor } from './goboPatterns'
 import { beamMask, packBlade, packBlades, unpackBlade } from './beamMask'
@@ -677,6 +681,71 @@ describe('resolveZoomDeg', () => {
   it('answers null for a zoom that declares no angles, and for no zoom', () => {
     expect(resolveZoomDeg(slider({ category: 'zoom' }), 100)).toBeNull()
     expect(resolveZoomDeg(undefined, 100)).toBeNull()
+  })
+
+  // The Robe ColorSpot 575's stepped zoom (fixture-optics plan D2), as the desk sends it: three
+  // angles, each again with focus correction, the levels the band starts.
+  const robeZoom = setting(
+    opts([
+      ['ZOOM_15', 0, { zoomDeg: 15 }],
+      ['ZOOM_18', 40, { zoomDeg: 18 }],
+      ['ZOOM_22', 80, { zoomDeg: 22 }],
+      ['ZOOM_15_FOCUS_CORRECTED', 128, { zoomDeg: 15 }],
+      ['ZOOM_18_FOCUS_CORRECTED', 170, { zoomDeg: 18 }],
+      ['ZOOM_22_FOCUS_CORRECTED', 220, { zoomDeg: 22 }],
+    ]),
+    'zoom',
+  )
+
+  it("reads a stepped zoom's band as that band's angle, and never an angle between two steps", () => {
+    expect(resolveZoomDeg(robeZoom, 0)).toBe(15)
+    expect(resolveZoomDeg(robeZoom, 39)).toBe(15)
+    expect(resolveZoomDeg(robeZoom, 40)).toBe(18)
+    expect(resolveZoomDeg(robeZoom, 79)).toBe(18)
+    expect(resolveZoomDeg(robeZoom, 80)).toBe(22)
+    expect(resolveZoomDeg(robeZoom, 127)).toBe(22)
+    expect(resolveZoomDeg(robeZoom, 150)).toBe(15)
+    expect(resolveZoomDeg(robeZoom, 200)).toBe(18)
+    expect(resolveZoomDeg(robeZoom, 255)).toBe(22)
+  })
+
+  it('answers null for a zoom setting whose band carries no angle', () => {
+    expect(resolveZoomDeg(setting(opts([['A', 0], ['B', 128]]), 'zoom'), 200)).toBeNull()
+  })
+})
+
+describe('proportional bands (activeMin / activeMax)', () => {
+  // The Robe's iris and frost: 0 open, 1–179 proportional, effects above 179.
+  const robeIris = slider({ name: 'iris', category: 'iris', activeMin: 1, activeMax: 179 })
+  const robeFrost = slider({ name: 'frost', category: 'frost', activeMin: 1, activeMax: 179 })
+
+  it('runs over the declared band and holds its ends outside it', () => {
+    expect(proportionalBand(robeIris, 0)).toBe(0)
+    expect(proportionalBand(robeIris, 1)).toBe(0)
+    expect(proportionalBand(robeIris, 90)).toBeCloseTo(0.5, 9)
+    expect(proportionalBand(robeIris, 179)).toBe(1)
+    expect(proportionalBand(robeIris, 200)).toBe(1)
+    expect(proportionalBand(robeIris, 255)).toBe(1)
+  })
+
+  it("holds the Robe's iris at its smallest past 179, where it used to open back up the scale", () => {
+    expect(resolveIris(robeIris, 0)).toBe(1)
+    expect(resolveIris(robeIris, 179)).toBeCloseTo(IRIS_MIN_OPEN, 9)
+    for (const level of [180, 200, 230, 255]) expect(resolveIris(robeIris, level)).toBeCloseTo(IRIS_MIN_OPEN, 9)
+    // Without the band, 179 was only 70% of the way closed.
+    expect(resolveIris(slider({ category: 'iris' }), 179)).toBeGreaterThan(IRIS_MIN_OPEN + 0.2)
+  })
+
+  it("holds the Robe's frost at full past 179", () => {
+    expect(resolveSoftness(0.2, robeFrost, 0)).toBeCloseTo(0.2, 9)
+    expect(resolveSoftness(0.2, robeFrost, 179)).toBe(1)
+    for (const level of [180, 212, 255]) expect(resolveSoftness(0.2, robeFrost, level)).toBe(1)
+  })
+
+  it('keeps a slider with no band on its own min..max', () => {
+    expect(proportionalBand(slider(), 0)).toBe(0)
+    expect(proportionalBand(slider(), 255)).toBe(1)
+    expect(proportionalBand(slider({ min: 10, max: 10 }), 10)).toBeNull()
   })
 })
 

@@ -39,10 +39,11 @@ sealed class VarytecEasymoveXl60SpotFixture(
     /**
      * Channel 3 — colour wheel.
      *
-     * The manual labels the seven discrete positions only as `Color1`..`Color7`
-     * without specifying which actual colour is at each index, so no
-     * [DmxFixtureColourSettingValue.colourPreview] is set. Update once the
-     * physical fixture has been inspected.
+     * The manual says only "7 colours + open, rainbow effect" and labels the
+     * positions `Color1`..`Color7`, so the previews below are estimates: a
+     * plausible spread for a wheel of this class, so the beam draws a colour
+     * rather than black (fixture-optics plan D8). The rainbow bands spin the
+     * wheel and carry no single colour.
      *
      * 0–17 open, 18–127 indexed colours, 128–192 forward rotation
      * (slow → fast), 193–255 reverse rotation (slow → fast).
@@ -50,17 +51,19 @@ sealed class VarytecEasymoveXl60SpotFixture(
     enum class Colour(
         override val level: UByte,
         override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
-        OPEN(0u),
-        COLOR_1(20u),
-        COLOR_2(40u),
-        COLOR_3(60u),
-        COLOR_4(80u),
-        COLOR_5(95u),
-        COLOR_6(110u),
-        COLOR_7(123u),
-        RAINBOW_FORWARD(160u),
-        RAINBOW_REVERSE(225u),
+        OPEN(0u, "#FFFFFF"),
+        // Estimate: the manual names no colours; checked on the rig by FU-MANUAL-S5-LIBRARY-OPTICS.
+        COLOR_1(20u, "#FF0000"),
+        COLOR_2(40u, "#00FF00"),
+        COLOR_3(60u, "#0000FF"),
+        COLOR_4(80u, "#FFFF00"),
+        COLOR_5(95u, "#FF00FF"),
+        COLOR_6(110u, "#00FFFF"),
+        COLOR_7(123u, "#FFA500"),
+        RAINBOW_FORWARD(160u, noColour = true),
+        RAINBOW_REVERSE(225u, noColour = true),
     }
 
     /**

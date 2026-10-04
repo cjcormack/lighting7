@@ -47,7 +47,6 @@ import {
 import {
   channelKey,
   getChannelValue,
-  resolveSettingOption,
   subscribeToChannels,
 } from '../../hooks/usePropertyValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
@@ -60,6 +59,8 @@ import {
 } from '../../lib/colourMath'
 import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
 import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedMedia'
+import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from '../../lib/colourBands'
+import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
 import {
   DEFAULT_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_COLOUR,
@@ -113,7 +114,14 @@ import { bodySpecOf } from './emitterNeeds'
 import { packBlades } from './beamMask'
 import { MAX_GOBO_LAYERS } from './goboLayers'
 import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
-import { apexDistanceM, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec, type Cell } from './bodies/archetype'
+import {
+  apexDistanceM,
+  lightRuns,
+  MAX_LIGHTS_PER_FIXTURE,
+  resolveBeamDeg,
+  type BodySpec,
+  type Cell,
+} from './bodies/archetype'
 import { bodyFrames } from './bodies/bodyGeometry'
 import { hangerLengthM, mountFor, type Mount } from './bodies/mount'
 import { lensColour } from './bodies/palette'
@@ -606,10 +614,10 @@ export function FixtureModel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rigging, patch.stageX, patch.stageY, patch.riggingUuid, riggings])
 
-  // Fallback beam angle. A ZOOM channel overrides this per frame inside the director. The patch's
-  // own angle first, then the body's — a lantern's field at its zoom, else the family's
-  // (`bodies/archetype.ts`).
-  const baseBeamDeg = patch.beamAngleDeg ?? spec.fieldDeg
+  // Fallback beam angle: the patch's own, else the body's — a lantern's field at its zoom, the
+  // type's fixed lens, else the family's. A zoom channel overrides it per frame inside the director;
+  // `resolveBeamDeg` (`bodies/archetype.ts`) is the whole precedence, in one place.
+  const baseBeamDeg = resolveBeamDeg(null, patch.beamAngleDeg, spec)
   const showCone = spec.emits && cellCount > 0 && !!emitters
 
   const groupRef = useRef<Group>(null)
@@ -700,6 +708,12 @@ export function FixtureModel({
     invalidate()
   }, [bodies, slot, active, invalidate])
 
+  // An animated colour band (a scroll or random wheel band) moves with time rather than DMX, so
+  // ColourSync registers with this while one is live; it re-applies the colour and asks for the next
+  // frame — before the beam director runs, so the director reads this frame's colour.
+  const colourTicker = useMemo(() => createColourTicker(invalidate), [invalidate])
+  useFrame((state) => colourTicker.frame(state.clock.elapsedTime))
+
   useBeamDirector({
     spec,
     reportKey: reportLanding ? patch.key : null,
@@ -779,6 +793,7 @@ export function FixtureModel({
           fallbackHex={gel?.color ?? DEFAULT_FIXTURE_COLOUR}
           lensRef={lensRef}
           cellStateRef={cellStateRef}
+          ticker={colourTicker}
         />
       ) : (
         <ColourSync
@@ -789,6 +804,7 @@ export function FixtureModel({
           dimmerProp={dimmerProp}
           lensRef={lensRef}
           colorStateRef={colorStateRef}
+          ticker={colourTicker}
         />
       )}
     </group>
@@ -908,7 +924,8 @@ interface BeamDirectorOpts {
   tiltFineProp: SliderPropertyDescriptor | undefined
   baseBeamDeg: number
   focusProp: SliderPropertyDescriptor | undefined
-  zoomProp: SliderPropertyDescriptor | undefined
+  /** A zoom slider, or a stepped zoom's setting (`findZoomProperty`). */
+  zoomProp: ByteDescriptor | undefined
   irisProp: SliderPropertyDescriptor | undefined
   frostProp: SliderPropertyDescriptor | undefined
   /** Gobo layer A: the first wheel in channel order (`findGoboProperties`). */
@@ -1401,9 +1418,8 @@ function useBeamDirector({
       coneOpacity *= SCRATCH_LED_MACRO.intensityScale
     }
 
-    // Zoom overrides the static field angle: on a ZOOM slider degMin/degMax are the beam angle at
-    // each end, in either order, and a type that declares none (the Robe's stepped zoom) answers
-    // null, which falls back to the patch's or the family's.
+    // Zoom overrides the static field angle (`resolveBeamDeg`): a ZOOM slider's degMin/degMax, or a
+    // stepped zoom's band's zoomDeg; a zoom that declares no angle answers null and the base stands.
     const zoomDeg = resolveZoomDeg(zoomProp, readChannel(channelSource, beamKeys.zoom))
     const beamDeg = zoomDeg ?? baseBeamDeg
     const geom = geomRef.current
@@ -1749,6 +1765,12 @@ interface ColourSyncBaseProps {
   /** Paints the body's lens; null outside a canvas (the tests) and before the bodies exist. */
   lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
+  /**
+   * The scene's clock for an animated colour band (`colourTicker.ts`): an arm whose wheel — or one of
+   * whose filters — sits on a band with no single colour registers with it while it does, and
+   * re-applies at its time each frame. Absent, time stands at 0 and nothing animates.
+   */
+  ticker?: ColourTicker
 }
 
 /** Exported for the unit test — the arms are the interesting part and the enclosing
@@ -1792,17 +1814,28 @@ interface ColourApplyRefs {
 
 const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
 
-/** `hex` through each filter's current slot colour (`filterColour`), read from `source`. */
+/**
+ * `hex` through each filter's current slot colour at [timeS] (`filterColour`, `settingColourAt`),
+ * read from `source`: a filter on an animated band — the Robe's second wheel scrolling — passes the
+ * beam through its own wheel's colours in turn.
+ */
 function filteredHex(
   hex: string,
   filters: readonly SettingPropertyDescriptor[],
   source: ChannelSource,
+  timeS: number,
 ): string {
   if (filters.length === 0) return hex
   return filterColour(
     hex,
-    filters.map((f) => resolveSettingOption(f.options, getChannelValue(f.channel, source))?.colourPreview),
+    filters.map((f) => settingColourAt(f.options, getChannelValue(f.channel, source), timeS)),
   )
+}
+
+/** Whether any filter sits on an animated band, so the arm must re-apply every frame. */
+function filtersAnimate(filters: readonly SettingPropertyDescriptor[], source: ChannelSource): boolean {
+  for (const f of filters) if (isAnimatedAt(f.options, getChannelValue(f.channel, source))) return true
+  return false
 }
 
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
@@ -1838,9 +1871,38 @@ function liveDimmerFactor(
 // `source` is passed in rather than read here because `apply` has to read the same one this
 // subscribes to, and the caller builds `apply`. A change of source re-subscribes and re-applies,
 // which is what repaints the scene on a vis-source flip.
-function useLiveColour(channels: ChannelRef[], apply: () => void, source: ChannelSource) {
-  const applyRef = useRef(apply)
-  applyRef.current = apply
+//
+// `apply` answers whether what it drew **animates** — a wheel or a filter on a band with no single
+// colour (`lib/colourBands.ts`). While it does, the arm is registered with the [ticker] and
+// re-applied every frame, which asks for the next; the first apply that answers false unregisters
+// it, so the canvas goes back to drawing only when something changes. The registration is made and
+// dropped from inside `apply` because the answer is a channel fact, known only there.
+function useLiveColour(
+  channels: ChannelRef[],
+  apply: () => boolean,
+  source: ChannelSource,
+  ticker: ColourTicker = STILL_COLOUR_TICKER,
+) {
+  const unregisterRef = useRef<(() => void) | null>(null)
+  const run = () => {
+    const animated = apply()
+    if (animated && !unregisterRef.current) {
+      unregisterRef.current = ticker.onFrame(() => applyRef.current())
+    } else if (!animated && unregisterRef.current) {
+      unregisterRef.current()
+      unregisterRef.current = null
+    }
+  }
+  const applyRef = useRef(run)
+  applyRef.current = run
+  // A ticker swapped (a remount of its owner) or an arm unmounted leaves nothing registered.
+  useEffect(
+    () => () => {
+      unregisterRef.current?.()
+      unregisterRef.current = null
+    },
+    [ticker],
+  )
   // The writes `apply` makes are imperative — a material colour, the beam's colour state — so on
   // the canvas's `demand` frameloop each one has to ask for the frame that shows it.
   const invalidate = useStageInvalidate()
@@ -1877,6 +1939,7 @@ function ColourBeamSync({
   colourProp,
   dimmerProp,
   filters = NO_FILTERS,
+  ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
   const source = useChannelSource()
@@ -1911,9 +1974,15 @@ function ColourBeamSync({
       // reads as dark rather than beaming at full. Hue is normalised to full so a
       // dimmerless fixture at r:20 shows dim orange (via the level) not near-black.
       const intensity = liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv)
-      applyColour(filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source), intensity, refs)
+      applyColour(
+        filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source, ticker.now()),
+        intensity,
+        refs,
+      )
+      return filtersAnimate(filters, source)
     },
     source,
+    ticker,
   )
   return null
 }
@@ -1922,6 +1991,7 @@ function SettingColourBeamSync({
   settingProp,
   dimmerProp,
   filters = NO_FILTERS,
+  ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
   const source = useChannelSource()
@@ -1936,13 +2006,17 @@ function SettingColourBeamSync({
     channels,
     () => {
       const level = getChannelValue(settingProp.channel, source)
-      const preview = resolveSettingOption(settingProp.options, level)?.colourPreview
-      // A selected colour preset reads as fully on; no selection ⇒ dark. A separate
-      // dimmer at 0 still wins via the dimmer factor.
-      const intensity = liveDimmerFactor(dimmerProp, source) * (preview ? 1 : 0)
-      applyColour(preview ? filteredHex(preview, filters, source) : '#888888', intensity, refs)
+      const timeS = ticker.now()
+      // The band's colour — its preview, or for a scroll or random band its wheel's own colours at
+      // this time — else open white, never black for want of data; a blackout band is dark
+      // (`lib/colourBands.ts`, the 2D dispatch's `SettingColourAppearance` twin).
+      const colour = settingColourAt(settingProp.options, level, timeS)
+      const intensity = liveDimmerFactor(dimmerProp, source) * sourceBandLevel(colour)
+      applyColour(filteredHex(sourceBandColour(colour), filters, source, timeS), intensity, refs)
+      return isAnimatedAt(settingProp.options, level) || filtersAnimate(filters, source)
     },
     source,
+    ticker,
   )
   return null
 }
@@ -1951,6 +2025,7 @@ function FixedColourBeamSync({
   hex,
   dimmerProp,
   filters = NO_FILTERS,
+  ticker = STILL_COLOUR_TICKER,
   ...refs
 }: ColourSyncBaseProps & { hex: string }) {
   // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
@@ -1964,9 +2039,11 @@ function FixedColourBeamSync({
   useLiveColour(
     channels,
     () => {
-      applyColour(filteredHex(hex, filters, source), liveDimmerFactor(dimmerProp, source), refs)
+      applyColour(filteredHex(hex, filters, source, ticker.now()), liveDimmerFactor(dimmerProp, source), refs)
+      return filtersAnimate(filters, source)
     },
     source,
+    ticker,
   )
   return null
 }
@@ -2037,6 +2114,7 @@ export function resolveCellColour(
   fallback: Color,
   source: ChannelSource,
   out: Color,
+  timeS = 0,
 ): number {
   let level = 1
   if (src.colour) {
@@ -2051,9 +2129,10 @@ export function resolveCellColour(
     out.set(`rgb(${hue.r}, ${hue.g}, ${hue.b})`)
     level = colourFactor(r, g, b, w, a, uv)
   } else if (src.setting) {
-    const preview = resolveSettingOption(src.setting.options, getChannelValue(src.setting.channel, source))?.colourPreview
-    out.set(preview ?? '#888888')
-    level = preview ? 1 : 0
+    // The fixture dispatch's band rule, per cell (`lib/colourBands.ts`).
+    const colour = settingColourAt(src.setting.options, getChannelValue(src.setting.channel, source), timeS)
+    out.set(sourceBandColour(colour))
+    level = sourceBandLevel(colour)
   } else if (src.whites.length > 0) {
     // Mixed by level: each white adds its colour in proportion, and the cell is as bright as its
     // brightest white.
@@ -2085,6 +2164,7 @@ function CellColourSync({
   fallbackHex,
   lensRef,
   cellStateRef,
+  ticker = STILL_COLOUR_TICKER,
 }: {
   elements: ElementDescriptor[] | undefined
   cells: Cell[]
@@ -2092,6 +2172,7 @@ function CellColourSync({
   fallbackHex: string
   lensRef: React.RefObject<LensPainter | null>
   cellStateRef: React.RefObject<CellState | null>
+  ticker?: ColourTicker
 }) {
   const source = useChannelSource()
   const sources = useMemo(
@@ -2121,8 +2202,12 @@ function CellColourSync({
     () => {
       const state = cellStateRef.current
       const master = liveDimmerFactor(dimmerProp, source)
+      const timeS = ticker.now()
+      let animated = false
       for (let i = 0; i < sources.length; i++) {
-        const level = resolveCellColour(sources[i], fallback, source, CELL_COLOR) * master
+        const setting = sources[i].setting
+        if (setting && isAnimatedAt(setting.options, getChannelValue(setting.channel, source))) animated = true
+        const level = resolveCellColour(sources[i], fallback, source, CELL_COLOR, timeS) * master
         lensRef.current?.(i, CELL_COLOR, perceptualBrightness(level))
         if (state && i < state.count) {
           state.colors[i * 3] = CELL_COLOR.r
@@ -2132,8 +2217,10 @@ function CellColourSync({
           state.pool[i] = POOL_SCALE * level
         }
       }
+      return animated
     },
     source,
+    ticker,
   )
   return null
 }

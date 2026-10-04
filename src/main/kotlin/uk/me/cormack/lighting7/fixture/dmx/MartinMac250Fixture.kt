@@ -63,6 +63,7 @@ sealed class MartinMac250Fixture(
     enum class Colour(
         override val level: UByte,
         override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
         OPEN(0u, "#FFFFFF"),
         PURPLE(156u, "#800080"),
@@ -78,11 +79,11 @@ sealed class MartinMac250Fixture(
         YELLOW(196u, "#FFFF00"),
         CTC(200u, "#FFE0C0"),
         WHITE(204u, "#FFFFFF"),
-        SCROLL_CW(208u),
-        SCROLL_CCW(227u),
-        RANDOM_FAST(246u),
-        RANDOM_MEDIUM(249u),
-        RANDOM_SLOW(252u),
+        SCROLL_CW(208u, noColour = true),
+        SCROLL_CCW(227u, noColour = true),
+        RANDOM_FAST(246u, noColour = true),
+        RANDOM_MEDIUM(249u, noColour = true),
+        RANDOM_SLOW(252u, noColour = true),
     }
 
     /**

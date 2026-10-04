@@ -7,11 +7,13 @@ import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripFixture
+import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
 import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -429,6 +431,45 @@ class PropertyChannelWriterTest {
         assertEquals(cueBytes[5], writerBytes[5], "amber channel matches cue-apply")
         assertEquals(cueBytes[6], writerBytes[6], "white channel matches cue-apply")
         assertEquals(cueBytes[7], writerBytes[7], "uv channel matches cue-apply")
+    }
+
+    @Test
+    fun `a stored zoom row on a stepped zoom reaches DMX through the cue layer`() {
+        // The Robe ColorSpot 575's zoom is a setting (fixture-optics plan D2), category ZOOM. A
+        // stored row is parsed with the property's own `settingBacked`, as the cook does; parsed as
+        // a slider it would build a SliderTarget, find no slider and write nothing.
+        val controller = MockDmxController(universe)
+        val fixtures = Fixtures()
+        fixtures.register {
+            addController(controller)
+            addFixture(RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1))
+        }
+        val programmerStore = ProgrammerStore()
+        val engine = FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+        val zoom = assertNotNull(RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1).fixtureProperty("zoom"))
+        assertTrue(zoom.settingBacked)
+        val stored = RobeColorSpot575Fixture.Zoom.ZOOM_18.level.toString()
+        val value = assertNotNull(
+            CueAssignmentResolver.parseAssignmentValue(zoom.category, "zoom", stored, settingBacked = zoom.settingBacked),
+        )
+        assertEquals(CueAssignmentResolver.PropertyValue.Setting(RobeColorSpot575Fixture.Zoom.ZOOM_18.level), value)
+
+        engine.cueLayer.setAssignments(1, listOf(
+            CueAssignmentResolver.Assignment(
+                cueId = 1, priority = 1, fadeWeight = 1.0,
+                targetKey = "robe-1", targetIsGroup = false,
+                propertyName = "zoom",
+                category = PropertyCategory.ZOOM,
+                value = value,
+            ),
+        ))
+        // Ch 16 is the zoom.
+        assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_18.level, controller.currentValues[16])
     }
 
     @Test

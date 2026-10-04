@@ -68,7 +68,8 @@ sealed class SlenderBeamBarQuadFixture(
         override val level: UByte,
         override val colourPreview: String?
     ) : DmxFixtureColourSettingValue {
-        BLACKOUT(0u, null),
+        // A head in blackout: dark, which a black preview says (the Stage view draws it unlit).
+        BLACKOUT(0u, "#000000"),
         RED(8u, "#FF0000"),
         GREEN(25u, "#00FF00"),
         BLUE(42u, "#0000FF"),

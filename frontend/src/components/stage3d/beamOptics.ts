@@ -340,12 +340,36 @@ export function stepGoboLayers(
 }
 
 /**
- * A ZOOM slider's full beam angle in degrees, or null where the type declares no angles (the view
- * then keeps the patch's or the family's). `degMin` / `degMax` are the angle at DMX min / max, in
- * either order: the Source Four Revolution's DMX 0 is its widest, 35°.
+ * A zoom channel's full beam angle in degrees, or null where the type declares no angles (the view
+ * then keeps the patch's, the type's fixed lens or the family's — `resolveBeamDeg`). Either form
+ * (fixture-optics plan D2):
+ *
+ * - a **slider**'s `degMin` / `degMax` are the angle at DMX min / max, in either order: the Source
+ *   Four Revolution's DMX 0 is its widest, 35°. One without both is no angle at all.
+ * - a **stepped zoom**'s band carries its angle (`zoomDeg`): the Robe ColorSpot 575's 15°, 18° and
+ *   22°, which the lens jumps between — every DMX value in a band is that band's angle, never one
+ *   between two steps.
  */
-export function resolveZoomDeg(prop: SliderPropertyDescriptor | undefined, level: number): number | null {
-  return prop ? dmxToDegrees(level, prop) : null
+export function resolveZoomDeg(prop: ByteDescriptor | undefined, level: number): number | null {
+  if (!prop) return null
+  if (prop.type === 'slider') return dmxToDegrees(level, prop)
+  const { index } = settingBand(prop.options, level)
+  const deg = index < 0 ? undefined : prop.options[index].zoomDeg
+  return deg != null && Number.isFinite(deg) && deg > 0 ? deg : null
+}
+
+/**
+ * Where [level] sits in a slider's **proportional band**, 0..1: `activeMin` to `activeMax` where
+ * the type declares them (the Robe's iris and frost run 1–179), else the slider's own `min` to
+ * `max`. Outside the band the view holds its end: above `activeMax` the channel is effects — pulses,
+ * ramps, random — which a still picture cannot draw, so it stays at the band's last value rather
+ * than reading the effect's DMX as more of the same. Null for a slider with no span.
+ */
+export function proportionalBand(prop: SliderPropertyDescriptor, level: number): number | null {
+  const lo = prop.activeMin ?? prop.min
+  const hi = prop.activeMax ?? prop.max
+  if (!(hi > lo)) return null
+  return Math.max(0, Math.min(1, (level - lo) / (hi - lo)))
 }
 
 /**
@@ -511,12 +535,13 @@ export const IRIS_MIN_OPEN = 0.12
  * A DMX iris as the open fraction of the field (1 = fully open), or 1 where the fixture has no
  * iris channel. The desk's iris channels run open → closed — the Source Four Revolution's says so
  * in its name, and the Robe ColorSpot's is the same way round — so the channel's minimum is open.
+ * The fraction runs over the slider's proportional band ([proportionalBand]).
  */
 export function resolveIris(prop: SliderPropertyDescriptor | undefined, level: number): number {
   if (!prop) return 1
-  const span = prop.max - prop.min
-  if (span <= 0) return 1
-  const closed = Math.max(0, Math.min(1, (level - prop.min) / span))
+  // Over its proportional band (`proportionalBand`): the Robe's 1–179, held closed-down above it.
+  const closed = proportionalBand(prop, level)
+  if (closed == null) return 1
   return 1 - (1 - IRIS_MIN_OPEN) * closed
 }
 
@@ -532,9 +557,9 @@ export function resolveSoftness(
 ): number {
   const base = Math.max(0, Math.min(1, familySoftness))
   if (!frostProp) return base
-  const span = frostProp.max - frostProp.min
-  if (span <= 0) return base
-  const frost = Math.max(0, Math.min(1, (frostLevel - frostProp.min) / span))
+  // Over its proportional band, held at full frost above it (the Robe's pulses and ramps).
+  const frost = proportionalBand(frostProp, frostLevel)
+  if (frost == null) return base
   return base + (1 - base) * frost
 }
 

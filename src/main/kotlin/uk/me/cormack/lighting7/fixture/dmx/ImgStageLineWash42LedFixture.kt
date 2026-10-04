@@ -36,29 +36,35 @@ sealed class ImgStageLineWash42LedFixture(
         MODE_13CH(13, "13-Channel"),
     }
 
-    /** Channel 11 — colour macros. 0–7 hands control back to channels 7–10 (direct RGBW). */
+    /**
+     * Channel 11 — colour macros. 0–7 hands control back to channels 7–10 (direct RGBW); 232–255
+     * changes colour automatically. Neither carries a colour of its own.
+     */
     enum class ColourMacro(
         override val level: UByte,
         override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
-        DIRECT_RGBW(0u),
-        COLOUR_1(8u),
-        COLOUR_2(22u),
-        COLOUR_3(35u),
-        COLOUR_4(50u),
-        COLOUR_5(64u),
-        COLOUR_6(78u),
-        COLOUR_7(92u),
-        COLOUR_8(106u),
-        COLOUR_9(120u),
-        COLOUR_10(134u),
-        COLOUR_11(148u),
-        COLOUR_12(162u),
-        COLOUR_13(176u),
-        COLOUR_14(190u),
-        COLOUR_15(204u),
-        COLOUR_16(218u),
-        AUTOMATIC_COLOUR_CHANGE(232u),
+        DIRECT_RGBW(0u, noColour = true),
+        // Estimate: the manual (p17) numbers the macros 1–16 and names none; a plausible RGBW spread
+        // so a macro draws a colour. Checked on the rig by FU-MANUAL-S5-LIBRARY-OPTICS.
+        COLOUR_1(8u, "#FF0000"),
+        COLOUR_2(22u, "#00FF00"),
+        COLOUR_3(35u, "#0000FF"),
+        COLOUR_4(50u, "#FFFFFF"),
+        COLOUR_5(64u, "#FFFF00"),
+        COLOUR_6(78u, "#FF00FF"),
+        COLOUR_7(92u, "#00FFFF"),
+        COLOUR_8(106u, "#FF8000"),
+        COLOUR_9(120u, "#FF0080"),
+        COLOUR_10(134u, "#80FF00"),
+        COLOUR_11(148u, "#0080FF"),
+        COLOUR_12(162u, "#8000FF"),
+        COLOUR_13(176u, "#FFC080"),
+        COLOUR_14(190u, "#FF8080"),
+        COLOUR_15(204u, "#80FF80"),
+        COLOUR_16(218u, "#8080FF"),
+        AUTOMATIC_COLOUR_CHANGE(232u, noColour = true),
     }
 
     /**
@@ -105,7 +111,8 @@ sealed class ImgStageLineWash42LedFixture(
      * - Ch 12: Colour-change speed (slow → fast).
      * - Ch 13: Built-in programs.
      */
-    @FixtureType("imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
+    // A fixed 10° lens (manual p17, "Abstrahlwinkel 10°").
+    @FixtureType("imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH), fieldDeg = 10.0)
     class Mode13Ch(
         universe: Universe,
         key: String,

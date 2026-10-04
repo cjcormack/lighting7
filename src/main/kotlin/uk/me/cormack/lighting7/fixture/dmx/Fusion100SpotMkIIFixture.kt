@@ -31,6 +31,11 @@ sealed class Fusion100SpotMkIIFixture(
 ) : DmxFixture(universe, firstChannel, channelCount, key, fixtureName),
     MultiModeFixtureFamily<Fusion100SpotMkIIFixture.Mode> {
 
+    companion object {
+        /** The fixed lens's beam angle, every mode (the user manual's "10° lens"; fixture-optics plan D3). */
+        const val FIELD_DEG = 10.0
+    }
+
     // ============================================
     // Channel Mode Enum
     // ============================================
@@ -54,7 +59,8 @@ sealed class Fusion100SpotMkIIFixture(
      */
     enum class Colour(
         override val level: UByte,
-        override val colourPreview: String? = null
+        override val colourPreview: String? = null,
+        override val noColour: Boolean = false,
     ) : DmxFixtureColourSettingValue {
         OPEN_WHITE(0u, "#FFFFFF"),
         RED(14u, "#FF0000"),
@@ -65,9 +71,10 @@ sealed class Fusion100SpotMkIIFixture(
         MAGENTA(104u, "#FF00FF"),
         BLUE(122u, "#0000FF"),
         OPEN_WHITE_2(131u, "#FFFFFF"),
-        RAINBOW_EFFECT(140u),
-        ROTATION_STOP(196u),
-        REVERSE_RAINBOW_EFFECT(200u);
+        RAINBOW_EFFECT(140u, noColour = true),
+        // The wheel stops wherever the rainbow left it: no colour the desk can know.
+        ROTATION_STOP(196u, noColour = true),
+        REVERSE_RAINBOW_EFFECT(200u, noColour = true);
     }
 
     /**
@@ -169,7 +176,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 4: Pan/Tilt Macros / Sound active
      * - Ch 5: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
+    @FixtureType("fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
     class Mode5Ch(
         universe: Universe,
         key: String,
@@ -220,7 +227,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 7: Focus
      * - Ch 8: Prism (open/3-facet)
      */
-    @FixtureType("fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
+    @FixtureType("fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
     class Mode8Ch(
         universe: Universe,
         key: String,
@@ -290,7 +297,7 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 14: Pan/Tilt Macros / Sound active
      * - Ch 15: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
+    @FixtureType("fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
     class Mode15Ch(
         universe: Universe,
         key: String,

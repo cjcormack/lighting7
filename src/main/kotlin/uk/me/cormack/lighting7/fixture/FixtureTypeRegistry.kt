@@ -85,6 +85,9 @@ object FixtureTypeRegistry {
         /** The declared depth of field ([FixtureType.depthOfField]); null when the view uses its
          *  family's. Never the `-1.0` sentinel. */
         val depthOfField: Double? = null,
+        /** The declared fixed-lens field ([FixtureType.fieldDeg]); null when none is declared. Never
+         *  the `-1.0` sentinel. */
+        val fieldDeg: Double? = null,
     )
 
     /**
@@ -310,6 +313,7 @@ object FixtureTypeRegistry {
                 body = annotation.body.resolve(),
                 acceptsLantern = annotation.acceptsLantern,
                 depthOfField = annotation.depthOfField.takeIf { it > 0.0 },
+                fieldDeg = annotation.fieldDeg.takeIf { it > 0.0 },
             )
         )
     }
