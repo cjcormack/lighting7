@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0, 1, 2, 3, 4 and 5 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0, 1, 2, 3, 4, 5 and 6 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -249,7 +249,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   annotations, slider optics); its stale `@FixtureProperty` signature and fixture table are
   rewritten.
 
-### Session 6 — strobe and closed shutters (backend + frontend)
+### ~~Session 6 — strobe and closed shutters (backend + frontend)~~ — done, `455e1ee` ([PR #53](https://github.com/cjcormack/lighting7/pull/53))
 
 - **Vocabulary (D12)** on every STROBE property in the library, from its manual where it has one.
 - **Renderer:** a closed band draws the beam dark; a strobe band flashes at its rate under the
