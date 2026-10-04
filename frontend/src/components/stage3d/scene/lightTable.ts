@@ -21,16 +21,17 @@
  * | 1 | axis (unit) | cos of the bounding half-angle — the field, or a segment's corner |
  * | 2 | colour × level | edge hardness and iris, packed ([packEdgeIris]) |
  * | 3 | where the beam lands, two planes packed (`landing.ts`'s `packLanding`) | |
- * | 4 | the head's right axis, the beam frame's `u` | tan of the half-field along `u` |
+ * | 4 | the frame's `u` in the axis's own basis, `(cos, sin)` ([frameInBasis]); the gobo layers (`goboLayers.ts`'s `packGobos`) | tan of the half-field along `u` |
  * | 5 | apex → aperture distance, the (top, bottom) blades, aspect (0 a disc, > 0 a segment's depth over its width, < 0 an oval's narrow over wide) | the (left, right) blades |
  *
  * Texels 4 and 5 are what the surface shader's `beamMask` reads, as the haze's does, so a soft edge,
- * an iris and a shutter shape the pool exactly as they shape the air.
+ * an iris and a shutter shape the pool exactly as they shape the air — and texel 4 the gobos it
+ * samples in the same frame.
  *
  * **Still six texels** (stage-view plan session 7). The four blades ride texel 5 packed two to a
  * float (`beamMask.ts`'s `packBlades`), which texel 5's free slot and the iris's old one hold, and
  * the iris moved in beside the edge hardness in texel 2, both quantised to 1/1023. The gate
- * rotation and a PAR's lamp rotation turn the right axis in texel 4 before it is written, and an
+ * rotation and a PAR's lamp rotation turn the frame in texel 4 before it is written, and an
  * oval is a negative aspect. A seventh texel would have cost every surface fragment a fetch per
  * light, which the plan says to measure first — and the packing costs nothing measurable.
  *
@@ -38,6 +39,22 @@
  * times the type's **depth of field**, a number per light the table had no slot for, so it rides
  * texel 0's alpha beside the focal distance — the distance to the centimetre in the low 15 bits, the
  * depth of field in twentieths above them ([packFocus]). 24 bits, every integer a float32 holds.
+ *
+ * **And still six** (fixture-optics plan session 4, D10): gobos land on surfaces, so a light carries
+ * its gobo layers — two patterns and the turned one's angle, packed into one float (`packGobos`: 5 + 5
+ * bits of pattern, 1 of which turns, 13 of angle). No packed float had 24 bits to spare (texel 2's
+ * alpha has four), but texel 4 spent three floats on two numbers' worth. The frame's `u` was the
+ * head's right axis, and the shader only ever used its direction **at right angles to the beam** (it
+ * took out the component along the axis and normalised): given the axis, that is a direction in a
+ * plane — a unit 2-vector. So texel 4 now holds it as `(cos, sin)` in a basis the shader builds from
+ * the axis alone ([BEAM_FRAME_GLSL], Duff et al.'s branchless orthonormal basis), and the float it
+ * freed holds the gobos. An angle in one float would have freed two, and cost a `cos` and a `sin`
+ * per lit fragment and light — measured on SwiftShader at about 5 % of a frame with no gobo in it, so
+ * the pair was chosen over it: building the basis is a reciprocal and a few multiply-adds, as the
+ * normalise and projection it replaced were. [frameInBasis] builds the basis from the axis exactly
+ * as the GPU will read it (float32), so the two agree on which side of the basis's seam a beam
+ * pointing straight across the stage lies. The measurements are in `frontend/docs/stage-vis-engineering.md`
+ * §"Gobos on surfaces".
  *
  * Texel 3 is where the beam lands ([`landing.ts`](./landing.ts)): the face its axis hit
  * ([`beamReach.ts`](./beamReach.ts)) and, for a beam split across an edge, the face the rest of it
@@ -84,7 +101,7 @@ export interface LightRow {
   hit: LandingFace | null
   /** The second face a beam split across an edge lands on; null for one face, or none. */
   edgeHit: LandingFace | null
-  /** The head's right axis — the beam frame's `u`. */
+  /** The head's right axis — the beam frame's `u`, written as `(cos, sin)` in the axis's basis ([frameInBasis]). */
   rx: number
   ry: number
   rz: number
@@ -96,6 +113,8 @@ export interface LightRow {
   /** The blades, [packBlades]' two floats; 0, 0 for none. */
   bladesA: number
   bladesB: number
+  /** The gobo layers, `goboLayers.ts`'s `packGobos`; 0 for open. Read only where the aspect is ≤ 0. */
+  gobos: number
 }
 
 /**
@@ -142,11 +161,86 @@ export const UNPACK_EDGE_IRIS_GLSL = /* glsl */ `
   }
 `
 
+/**
+ * The basis the frame is written in, built from the beam's axis alone: Duff et al.'s branchless
+ * orthonormal basis ("Building an Orthonormal Basis, Revisited", JCGT 2017), the same arithmetic as
+ * [BEAM_FRAME_GLSL]'s `beamBasis`. Its seam is the axis crossing z = 0, where the sign flips; a beam
+ * pointing straight across the stage sits on it, so [frameInBasis] reads the axis as the GPU does —
+ * rounded to float32, `>= 0` for the sign — and both sides pick the same basis.
+ */
+function beamBasis(nx: number, ny: number, nz: number, out: Float64Array): void {
+  const s = nz >= 0 ? 1 : -1
+  const a = -1 / (s + nz)
+  const b = nx * ny * a
+  out[0] = 1 + s * nx * nx * a
+  out[1] = s * b
+  out[2] = -s * nx
+  out[3] = b
+  out[4] = s + ny * ny * a
+  out[5] = -ny
+}
+
+const BASIS = new Float64Array(6)
+
+/**
+ * The frame's `u` — the head's right axis, as far as it lies at right angles to the beam — as a unit
+ * `(cos, sin)` in [beamBasis], written into [out] (texel 4's `.xy`). A right axis along the beam
+ * (degenerate; never written by a director) gives `(1, 0)`.
+ */
+export function frameInBasis(
+  dx: number, dy: number, dz: number,
+  rx: number, ry: number, rz: number,
+  out: { [i: number]: number }, o = 0,
+): void {
+  beamBasis(Math.fround(dx), Math.fround(dy), Math.fround(dz), BASIS)
+  const x = rx * BASIS[0] + ry * BASIS[1] + rz * BASIS[2]
+  const y = rx * BASIS[3] + ry * BASIS[4] + rz * BASIS[5]
+  const len = Math.hypot(x, y)
+  out[o] = len > 0 ? x / len : 1
+  out[o + 1] = len > 0 ? y / len : 0
+}
+
+/**
+ * The frame back from its `(cos, sin)` — the twin of [BEAM_FRAME_GLSL]'s `beamFrame`, for the test:
+ * `u` and `v = axis × u`, as `[ux, uy, uz, vx, vy, vz]`.
+ */
+export function frameFromBasis(dx: number, dy: number, dz: number, c: number, s: number): number[] {
+  beamBasis(Math.fround(dx), Math.fround(dy), Math.fround(dz), BASIS)
+  const ux = c * BASIS[0] + s * BASIS[3]
+  const uy = c * BASIS[1] + s * BASIS[4]
+  const uz = c * BASIS[2] + s * BASIS[5]
+  return [ux, uy, uz, dy * uz - dz * uy, dz * ux - dx * uz, dx * uy - dy * ux]
+}
+
+/**
+ * The GLSL that turns texel 4's `(cos, sin)` back into the frame: `beamFrame(axis, cs, bx, by)`,
+ * `bx` the frame's `u` and `by = axis × bx`, as [frameFromBasis]. No `cos` or `sin`: the pair is
+ * stored, not an angle.
+ */
+export const BEAM_FRAME_GLSL = /* glsl */ `
+  void beamBasis(vec3 n, out vec3 b1, out vec3 b2) {
+    float s = n.z >= 0.0 ? 1.0 : -1.0;
+    float a = -1.0 / (s + n.z);
+    float b = n.x * n.y * a;
+    b1 = vec3(1.0 + s * n.x * n.x * a, s * b, -s * n.x);
+    b2 = vec3(b, s + n.y * n.y * a, -n.y);
+  }
+
+  void beamFrame(vec3 axis, vec2 cs, out vec3 bx, out vec3 by) {
+    vec3 b1;
+    vec3 b2;
+    beamBasis(axis, b1, b2);
+    bx = cs.x * b1 + cs.y * b2;
+    by = cross(axis, bx);
+  }
+`
+
 /** A fresh row, for a caller's scratch. */
 export function makeLightRow(): LightRow {
   return {
     ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1, dof: 0,
     hit: null, edgeHit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0, bladesA: 0, bladesB: 0,
+    gobos: 0,
   }
 }
 
@@ -185,9 +279,8 @@ export class LightTable {
     s[o + 10] = row.b
     s[o + 11] = packEdgeIris(row.edge, row.iris)
     packLanding(row.hit, row.edgeHit, s, o + 12)
-    s[o + 16] = row.rx
-    s[o + 17] = row.ry
-    s[o + 18] = row.rz
+    frameInBasis(row.dx, row.dy, row.dz, row.rx, row.ry, row.rz, s, o + 16)
+    s[o + 18] = row.gobos
     s[o + 19] = row.tanHalf
     s[o + 20] = row.near
     s[o + 21] = row.bladesA

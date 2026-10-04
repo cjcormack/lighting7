@@ -122,6 +122,36 @@ export function mediaFilters(
   return loadableSettings(properties).filter((s) => s.name !== colourSourceName && takesGel(s))
 }
 
+/**
+ * Every colour filter a unit's beam passes through besides its colour source, as both dispatches
+ * apply them (`filterColour`): its **other colour wheels**, in channel order, then its media filters
+ * ([mediaFilters]).
+ *
+ * A second colour wheel (fixture-optics plan session 4 — the Robe ColorSpot 575's, whose deep and
+ * corrective dichroics sit in series with the first wheel's) is a filter exactly as a media frame's
+ * gel is: its current slot's colour multiplies the beam's, subtractively, and a slot with none —
+ * open white, a scroll band — passes it unchanged. So it joins this path rather than standing
+ * beside it: one multiply, one per-filter subscription on each dispatch, one parity test. Only
+ * where the colour source is itself a **wheel** (a COLOUR setting): beside an RGB colour property a
+ * COLOUR setting is a preset or a macro on the same emitters (the Hex's, the Orbit's), not glass in
+ * the beam, and multiplying by it would be wrong.
+ */
+export function colourFilters(
+  properties: PropertyDescriptor[] | undefined,
+  colourSource: { type: 'colour' | 'setting'; property: { name: string } } | undefined,
+): SettingPropertyDescriptor[] {
+  const media = mediaFilters(properties, colourSource?.property.name)
+  if (colourSource?.type !== 'setting') return media
+  const wheels = (properties ?? [])
+    .filter(
+      (p): p is SettingPropertyDescriptor =>
+        p.type === 'setting' && p.category === 'colour' && p.name !== colourSource.property.name,
+    )
+    .sort((a, b) => a.channel.universe - b.channel.universe || a.channel.channelNo - b.channel.channelNo)
+  if (wheels.length === 0) return media
+  return [...wheels, ...media.filter((m) => !wheels.includes(m))]
+}
+
 /** `#rrggbb` (or `#rgb`) → `[r, g, b]` 0–255, or null for anything else. */
 function parseHex(hex: string): [number, number, number] | null {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim())

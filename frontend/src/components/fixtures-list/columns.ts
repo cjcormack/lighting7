@@ -232,6 +232,8 @@ export function resolveCell(properties: PropertyDescriptor[], col: ColumnKey): C
       }
     }
     case 'gobo': {
+      // The first wheel in DMX channel order (`findGoboProperties`, fixture-optics session 4) — the
+      // Robe ColorSpot 575's static wheel, where reflection order used to give its rotating one.
       const wheel = findGoboProperties(properties)[0]
       if (!wheel) return null
       return wheel.type === 'slider'

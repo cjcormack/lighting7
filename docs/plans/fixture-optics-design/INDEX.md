@@ -84,7 +84,7 @@ focal plane sweeps 2–4 m in mid-air.
 
 Being on the wall is never sharper than being 4 m from it. The gobo blur, the cue anyone actually
 focuses by, never shows: the Revolution's wheels aren't read, and no gobo lands on a surface
-(`surfaceShader.ts:34`).
+(`surfaceShader.ts:34`). (Session 4 lands gobos on every surface, blurred by session 1's focus term.)
 
 ### Frames, scroller and wheels do nothing
 
@@ -101,7 +101,8 @@ The Stage view finds every beam channel by category (`store/fixtures.ts:431–56
   else a patch gel on an `acceptsGel` type. An option without a preview draws the beam black
   (`FixtureModel.tsx:1655`). The scroller's `GelFrame` options carry none.
 - **Gobos** take one layer and one angle per beam, drawn in the air only. A second wheel shows only
-  while the first is open.
+  while the first is open. (Session 4 draws two layers, multiplied, in the air and on every surface,
+  and the Robe's second colour wheel as a filter.)
 
 ## What the manual says that the definition gets wrong
 

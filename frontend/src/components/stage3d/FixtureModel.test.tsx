@@ -468,10 +468,12 @@ describe('the size a body is drawn at', () => {
 })
 
 /**
- * The beam's cross-section frame, as the surface shader builds it (`scene/surfaceShader.ts`): `u`
+ * The beam's cross-section frame, as the surface shader resolves it (`scene/surfaceShader.ts`): `u`
  * the head's right axis turned by the frame's turn, `v = axis × u`, normalised so the field edge is
- * at 1 — and an oval's (or a segment's) `v` divided by `|aspect|`. The GLSL is the authority; this is
- * its arithmetic, so the tests below read the rig the way the pool does.
+ * at 1 — and an oval's (or a segment's) `v` divided by `|aspect|`. The shader gets `u` from the light
+ * table's `(cos, sin)` in a basis built from the axis (`lightTable.ts`'s `frameInBasis`), which is the
+ * same direction; this computes it straight from the right axis. The GLSL is the authority, so the
+ * tests below read the rig the way the pool does.
  */
 function beamUv(
   point: Vector3,

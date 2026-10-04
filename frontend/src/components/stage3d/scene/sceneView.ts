@@ -12,6 +12,10 @@ import { DEFAULT_LIGHT_BUDGET, LIGHT_BUDGETS } from './lightTable'
  *   another window sets them.
  * - **The light budget is per browser**, in `localStorage`: it is what this machine's GPU can
  *   afford (§10 of the plan), not what one window is looking at.
+ * - **So is where gobos land** (fixture-optics plan session 4, §10): every gobo light samples the
+ *   gobo atlas on every surface it reaches by default; *Selected heads* limits that to the
+ *   selection, and every other head keeps its plain pool (its gobo still shows in the air). It is
+ *   the fallback the plan names if a machine's budget runs short, so it is the machine's too.
  *
  * A seating element follows **Seating** whatever its layer; every other element follows its layer.
  * **Haze** is how far the air shows the beams: not at all, only upstage of the proscenium (the stage
@@ -40,6 +44,22 @@ export const DEFAULT_SCENE_LAYERS: SceneLayers = { venue: true, set: true, seati
 
 export const SCENE_LAYERS_KEY = 'stage.sceneLayers'
 export const LIGHT_BUDGET_KEY = 'stage.lightBudget'
+export const GOBO_SURFACES_KEY = 'stage.goboSurfaces'
+
+/** Which heads' gobos land on surfaces: every gobo light's, or only the selected heads'. */
+export const GOBO_SURFACES = ['all', 'selected'] as const
+export type GoboSurfaces = (typeof GOBO_SURFACES)[number]
+/** Every gobo light: SwiftShader gave no reason to narrow it (stage-vis doc §"Gobos on surfaces"). */
+export const DEFAULT_GOBO_SURFACES: GoboSurfaces = 'all'
+
+export function isGoboSurfaces(value: unknown): value is GoboSurfaces {
+  return typeof value === 'string' && (GOBO_SURFACES as readonly string[]).includes(value)
+}
+
+/** Whether a head's gobos land on surfaces under [mode]: always under `all`, else only if selected. */
+export function goboLandsOnSurfaces(mode: GoboSurfaces, selected: boolean): boolean {
+  return mode === 'all' || selected
+}
 
 /**
  * Stored layers, field by field over the defaults: a value an older or later build wrote must not
@@ -90,14 +110,29 @@ export function setLightBudget(budget: number): void {
   if (isLightBudget(budget)) budgetStore.set(budget)
 }
 
+const goboSurfacesStore = createSyncStore<GoboSurfaces>({
+  key: GOBO_SURFACES_KEY,
+  fallback: DEFAULT_GOBO_SURFACES,
+  parse: (parsed) => (isGoboSurfaces(parsed) ? parsed : DEFAULT_GOBO_SURFACES),
+})
+
+export function useGoboSurfaces(): GoboSurfaces {
+  return useSyncExternalStore(goboSurfacesStore.subscribe, goboSurfacesStore.getSnapshot, goboSurfacesStore.getServerSnapshot)
+}
+
+export function setGoboSurfaces(mode: GoboSurfaces): void {
+  if (isGoboSurfaces(mode)) goboSurfacesStore.set(mode)
+}
+
 /** Whether [element] is drawn under [layers]: a seating by **Seating**, anything else by its layer. */
 export function elementInLayers(element: Pick<StageElementDto, 'kind' | 'layer'>, layers: SceneLayers): boolean {
   if (element.kind === 'SEATING') return layers.seating
   return element.layer === 'SET' ? layers.set : layers.venue
 }
 
-/** Test seam: both stores back to their defaults, with no listeners. */
+/** Test seam: every store back to its default, with no listeners. */
 export function resetSceneViewStores(): void {
   layersStore.reset()
   budgetStore.reset()
+  goboSurfacesStore.reset()
 }

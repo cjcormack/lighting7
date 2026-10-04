@@ -75,6 +75,8 @@ export default function StageRenderJob({
 }) {
   const { projectId, width, height } = request
   const dispatch = useDispatch<typeof store.dispatch>()
+  // This machine's light budget, as on screen. Not its *Gobos on surfaces* switch: that guards an
+  // interactive frame rate, a capture draws one frame, and a capture has no selection to narrow to.
   const lightBudget = useLightBudget()
 
   // The same cache entries `Stage3D` reads, fetched now; it mounts only once they are in.

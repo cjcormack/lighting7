@@ -25,8 +25,21 @@ import {
   isStageLabelMode,
   type StageLabelMode,
 } from './stageLabels'
-import { isHazeExtent, type HazeExtent, type SceneLayer, type SceneLayers } from './scene/sceneView'
+import {
+  GOBO_SURFACES,
+  isGoboSurfaces,
+  isHazeExtent,
+  type GoboSurfaces,
+  type HazeExtent,
+  type SceneLayer,
+  type SceneLayers,
+} from './scene/sceneView'
 import { LIGHT_BUDGETS } from './scene/lightTable'
+
+const GOBO_SURFACES_LABELS: Record<GoboSurfaces, string> = {
+  all: 'Every gobo light',
+  selected: 'Selected heads only',
+}
 
 /** The scene's per-window layers, in the order `Stage.dc.html`'s View menu lists them under Show. */
 const SCENE_LAYER_ITEMS: ReadonlyArray<{ layer: SceneLayer; label: string; hint: string }> = [
@@ -69,6 +82,9 @@ interface StageViewMenuProps {
   /** How many lights the surfaces take, per browser; absent where there are no lit surfaces. */
   lightBudget?: number
   setLightBudget?: (budget: number) => void
+  /** Whose gobos land on surfaces, per browser (fixture-optics plan session 4); absent with the budget. */
+  goboSurfaces?: GoboSurfaces
+  setGoboSurfaces?: (mode: GoboSurfaces) => void
 }
 
 export function StageViewMenu({
@@ -84,6 +100,8 @@ export function StageViewMenu({
   setHaze,
   lightBudget,
   setLightBudget,
+  goboSurfaces,
+  setGoboSurfaces,
 }: StageViewMenuProps) {
   return (
     <DropdownMenu>
@@ -210,6 +228,34 @@ export function StageViewMenu({
               {LIGHT_BUDGETS.map((budget) => (
                 <DropdownMenuRadioItem key={budget} value={String(budget)}>
                   {budget} lights
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+        {goboSurfaces != null && setGoboSurfaces != null && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>
+              <span className="flex flex-col gap-0.5">
+                <span>Gobos on surfaces</span>
+                {/* The fallback the light budget falls back to: a gobo on every surface costs an
+                    atlas read per lit pixel and light. The rest keep their plain pool, and every
+                    gobo still shows in the air. This machine's, like the budget. */}
+                <span className="text-xs font-normal text-muted-foreground">
+                  Whose gobos land on the walls and deck, on this machine
+                </span>
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={goboSurfaces}
+              onValueChange={(v) => {
+                if (isGoboSurfaces(v)) setGoboSurfaces(v)
+              }}
+            >
+              {GOBO_SURFACES.map((mode) => (
+                <DropdownMenuRadioItem key={mode} value={mode}>
+                  {GOBO_SURFACES_LABELS[mode]}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

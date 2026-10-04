@@ -4,10 +4,14 @@ import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
+import { packGobos } from '../goboLayers'
 import {
+  BEAM_FRAME_GLSL,
   DOF_STEPS,
   EDGE_IRIS_STEPS,
   FOCUS_CM_BASE,
+  frameFromBasis,
+  frameInBasis,
   LIGHT_TEXELS,
   LightTable,
   makeLightRow,
@@ -19,7 +23,14 @@ import {
 import { LAND_NONE, LAND_UP } from './landing'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
-import { DEFAULT_SCENE_LAYERS, elementInLayers, parseSceneLayers } from './sceneView'
+import {
+  DEFAULT_GOBO_SURFACES,
+  DEFAULT_SCENE_LAYERS,
+  elementInLayers,
+  goboLandsOnSurfaces,
+  isGoboSurfaces,
+  parseSceneLayers,
+} from './sceneView'
 
 function element(fields: Partial<StageElementDto>): StageElementDto {
   return {
@@ -112,7 +123,7 @@ describe('the light table', () => {
     expect(table.staged[15]).toBe(2)
   })
 
-  it("carries the beam's frame and aperture for the surfaces' mask: right axis, tan, near, blades, aspect", () => {
+  it("carries the beam's frame, its gobos and its aperture: frame angle, gobo layers, tan, near, blades, aspect", () => {
     const table = new LightTable(1)
     const [bladesA, bladesB] = packBlades([
       { depth: 0.25, angleDeg: 0 },
@@ -120,10 +131,57 @@ describe('the light table', () => {
       { depth: 0.5, angleDeg: -12 },
       { depth: 1, angleDeg: 30 },
     ])
-    table.set(0, { ...makeLightRow(), r: 1, rx: 0, ry: 0, rz: 1, tanHalf: 0.17, near: 0.5, iris: 0.4, aspect: -0.25, bladesA, bladesB })
-    // Texel 4 is the frame; texel 5 the aperture — near, the (top, bottom) blades, aspect (an oval
-    // is negative), the (left, right) blades — every packed blade word held exactly by a float32.
-    expect(Array.from(table.staged.subarray(16, 24))).toEqual([0, 0, 1, Math.fround(0.17), 0.5, bladesA, -0.25, bladesB])
+    const gobos = packGobos(5, 12, 1, 1.25)
+    table.set(0, { ...makeLightRow(), r: 1, rx: 0, ry: 0, rz: 1, tanHalf: 0.17, near: 0.5, iris: 0.4, aspect: -0.25, bladesA, bladesB, gobos })
+    // Texel 4 is the frame — (cos, sin) in the axis's basis — and the gobo layers, every packed word
+    // held exactly by a float32; texel 5 the aperture — near, the (top, bottom) blades, aspect (an
+    // oval is negative), the (left, right) blades.
+    const row = Array.from(table.staged.subarray(16, 24))
+    expect(row.slice(2)).toEqual([gobos, Math.fround(0.17), 0.5, bladesA, -0.25, bladesB])
+    expect(Math.fround(gobos)).toBe(gobos)
+    // The frame comes back as the head's right axis, from the float32s the shader reads.
+    const [ux, uy, uz] = frameFromBasis(0, -1, 0, row[0], row[1])
+    expect([ux, uy, uz].map((v) => Number(v.toFixed(5)) + 0)).toEqual([0, 0, 1])
+  })
+
+  it("turns any right axis into a direction in the beam's basis and back, whichever side of the basis's seam", () => {
+    // The seam of the basis is the axis crossing z = 0: a beam straight down, one level across the
+    // stage (z exactly 0 and −0), one a hair either side, one almost straight back.
+    const axes: Array<[number, number, number]> = [
+      [0, -1, 0], [1, 0, 0], [0, 0, -1], [0.6, -0.8, 0], [0.6, -0.8, -0], [0.6, -0.8, 1e-9], [0.6, -0.8, -1e-9],
+      [0.3, -0.5, 0.81], [-0.2, 0.1, -0.97], [0, 0, 1], [1e-30, -1, -1e-30],
+    ]
+    const rights: Array<[number, number, number]> = [[1, 0, 0], [0, 0, 1], [0.3, 0.9, -0.2], [0, 1, 0]]
+    for (const [ax, ay, az] of axes) {
+      const n = Math.hypot(ax, ay, az)
+      const d = [Math.fround(ax / n), Math.fround(ay / n), Math.fround(az / n)] as const
+      for (const r of rights) {
+        // The right axis at right angles to the beam, normalised: what the old texel 4 meant.
+        const along = r[0] * d[0] + r[1] * d[1] + r[2] * d[2]
+        const p = [r[0] - along * d[0], r[1] - along * d[1], r[2] - along * d[2]]
+        const len = Math.hypot(p[0], p[1], p[2])
+        if (len < 1e-3) continue
+        const cs = new Float32Array(2)
+        frameInBasis(d[0], d[1], d[2], r[0], r[1], r[2], cs)
+        const [ux, uy, uz, vx, vy, vz] = frameFromBasis(d[0], d[1], d[2], cs[0], cs[1])
+        expect(ux).toBeCloseTo(p[0] / len, 5)
+        expect(uy).toBeCloseTo(p[1] / len, 5)
+        expect(uz).toBeCloseTo(p[2] / len, 5)
+        // And v is axis × u, as the shader's cross makes it: at right angles to both.
+        expect(vx * ux + vy * uy + vz * uz).toBeCloseTo(0, 5)
+        expect(vx * d[0] + vy * d[1] + vz * d[2]).toBeCloseTo(0, 5)
+      }
+    }
+  })
+
+  it('writes the frame GLSL from the same basis as the twin', () => {
+    expect(BEAM_FRAME_GLSL).toContain('float s = n.z >= 0.0 ? 1.0 : -1.0;')
+    expect(BEAM_FRAME_GLSL).toContain('b1 = vec3(1.0 + s * n.x * n.x * a, s * b, -s * n.x);')
+    expect(BEAM_FRAME_GLSL).toContain('b2 = vec3(b, s + n.y * n.y * a, -n.y);')
+    expect(BEAM_FRAME_GLSL).toContain('bx = cs.x * b1 + cs.y * b2;')
+    expect(BEAM_FRAME_GLSL).toContain('by = cross(axis, bx);')
+    // A stored pair, not an angle: no trig per light.
+    expect(BEAM_FRAME_GLSL).not.toMatch(/\b(cos|sin)\(/)
   })
 
   it('packs the edge and the iris into texel 2, and the shader unpacks them exactly', () => {
@@ -302,6 +360,22 @@ describe('how far the haze reaches', () => {
     expect(flipped.nx).toBeCloseTo(clip.nx, 12)
     expect(flipped.ny).toBeCloseTo(clip.ny, 12)
     expect(flipped.d).toBeCloseTo(clip.d, 12)
+  })
+})
+
+describe('where gobos land (fixture-optics plan session 4)', () => {
+  it('lands every gobo light by default, and only the selected heads under the fallback', () => {
+    expect(DEFAULT_GOBO_SURFACES).toBe('all')
+    expect(goboLandsOnSurfaces('all', false)).toBe(true)
+    expect(goboLandsOnSurfaces('all', true)).toBe(true)
+    expect(goboLandsOnSurfaces('selected', true)).toBe(true)
+    expect(goboLandsOnSurfaces('selected', false)).toBe(false)
+  })
+
+  it('reads back only a mode this build offers', () => {
+    expect(isGoboSurfaces('selected')).toBe(true)
+    expect(isGoboSurfaces('none')).toBe(false)
+    expect(isGoboSurfaces(true)).toBe(false)
   })
 })
 

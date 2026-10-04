@@ -6,6 +6,7 @@ import type {
 } from '../../store/fixtures'
 import { dmxToDegrees } from '../../lib/axisDegrees'
 import { MAX_PRISM_LOBES } from './emitterLayout'
+import { packGobos } from './goboLayers'
 import { GOBO_SLOT_COUNT, goboLayerFor } from './goboPatterns'
 
 /**
@@ -275,6 +276,66 @@ export function resolveGoboRotation(
   const rpmMax = rotProp.type === 'slider' ? rotProp.rpmMax : undefined
   const topRevPerSec = rpmMax != null && Number.isFinite(rpmMax) ? rpmMax / 60 : MAX_SPIN_REV_PER_SEC
   out.spinRevPerSec = (mode === 'ROTATE_REV' ? -1 : 1) * t * topRevPerSec
+  return out
+}
+
+/**
+ * A beam's gobo layers this frame, as the director packs them for the haze and the light table
+ * (`goboLayers.ts`), and the turned wheel's angle carried to the next frame.
+ */
+export interface GoboLayers {
+  /**
+   * Both layers packed (`packGobos`): layer A, the first wheel in channel order
+   * (`findGoboProperties`), layer B the second (open on a type with one wheel), and the turned one's
+   * angle. 0 while both are open.
+   */
+  packed: number
+  /** The turned wheel's angle, radians, wrapped to a turn. */
+  angle: number
+  /** True while a shown pattern spins: the picture moves with time, so the frame asks for the next. */
+  spinning: boolean
+}
+
+export function makeGoboLayers(): GoboLayers {
+  return { packed: 0, angle: 0, spinning: false }
+}
+
+/**
+ * Step a beam's two gobo layers (fixture-optics plan session 4): wheel A's and wheel B's slots
+ * ([resolveGoboSlot]), and which of them the rotation channel turns (`goboRotationWheel`, −1 for
+ * none). Only the turned wheel moves: it **indexes** to `rotation.indexRad` or **spins** at
+ * `rotation.spinRevPerSec` for `deltaS` (clamped to 0.1 s, since a backgrounded tab or an idle
+ * `demand` canvas hands back seconds), wrapped so the angle never loses precision; it goes back to 0
+ * while it shows no pattern. The other wheel — the Robe's static one — holds still in the frame,
+ * which the gate rotation already turns. `spinning` is true only while the turned wheel shows a
+ * pattern and spins, the one case a gobo moves the picture with no channel moving.
+ *
+ * `rotation` is [resolveGoboRotation]'s answer for this frame; [angle] is last frame's. Writes into
+ * `out` and returns it, so the frame loop allocates nothing.
+ */
+export function stepGoboLayers(
+  slotA: number,
+  slotB: number,
+  turned: number,
+  rotation: GoboRotation,
+  angle: number,
+  deltaS: number,
+  out: GoboLayers,
+): GoboLayers {
+  const turnedSlot = turned === 0 ? slotA : turned === 1 ? slotB : 0
+  let next = 0
+  out.spinning = false
+  if (turnedSlot > 0) {
+    next = angle
+    if (rotation.indexRad != null) {
+      next = rotation.indexRad
+    } else if (rotation.spinRevPerSec !== 0) {
+      out.spinning = true
+      next = (angle + rotation.spinRevPerSec * TAU * Math.min(Math.max(0, deltaS), 0.1)) % TAU
+    }
+  }
+  out.angle = next
+  out.packed = packGobos(slotA, slotB, turned, next)
   return out
 }
 

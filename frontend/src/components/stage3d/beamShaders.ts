@@ -1,6 +1,7 @@
 import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three'
 import type { DataArrayTexture } from 'three'
 import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
+import { GOBO_LAYERS_GLSL } from './goboLayers'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
 import { LANDING_GLSL } from './scene/landing'
 import {
@@ -66,8 +67,9 @@ const RAY_OBB_T_GLSL = /* glsl */ `
 
 // The beam's own cross-section frame: project a ray direction onto a basis
 // carried with the head (aBeamRight), normalised by tan(halfAngle) so the rim
-// lands at |g| = 1 regardless of zoom. Shared verbatim by every material that
-// samples the gobo, so the frames cannot drift.
+// lands at |g| = 1 regardless of zoom. The gobo is turned and sampled in this
+// frame by goboLayers.ts's goboSample, which the surfaces share, so the frames
+// cannot drift.
 //
 // Normalise by tan(halfAngle), not sin: dividing the perpendicular part of
 // rayDir by its axial part already gives tan(offAxisAngle), which reaches
@@ -82,14 +84,6 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
     float sinHalf = sqrt(max(0.0, 1.0 - cosHalfAngle * cosHalfAngle));
     float tanHalf = max(1e-4, sinHalf / max(1e-4, cosHalfAngle));
     return vec2(dot(rayDir, bx), dot(rayDir, by)) / (axial * tanHalf);
-  }
-
-  vec2 goboUvCs(vec2 g, float ca, float sa) {
-    return vec2(ca * g.x - sa * g.y, sa * g.x + ca * g.y) * 0.5 + 0.5;
-  }
-
-  vec2 goboUv(vec2 g, float angle) {
-    return goboUvCs(g, cos(angle), sin(angle));
   }
 `
 
@@ -114,10 +108,11 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamRight;
   // Packed to stay inside WebGL's guaranteed sixteen vertex attributes: three's prefix declares
   // position, normal and uv, the instance matrix takes four, and these eight take the rest —
-  // fifteen. The colour carries the opacity in .a; the shape carries near, iris, aspect and the
-  // depth of field (fixture-optics session 1); the gate carries the half-angle, the shadow mask and
-  // the two packed blade words (stage-view plan session 7). A program past sixteen does
-  // not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
+  // fifteen. The colour carries the opacity in .a; the fx carry the edge, the packed gobo layers
+  // (goboLayers.ts, fixture-optics session 4), a spare slot and the focal distance; the shape carries near,
+  // iris, aspect and the depth of field (fixture-optics session 1); the gate carries the half-angle,
+  // the shadow mask and the two packed blade words (stage-view plan session 7). A program past
+  // sixteen does not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
   attribute vec4 aColor;
   attribute vec4 aBeamFx;
   attribute vec4 aBeamShape;
@@ -138,15 +133,18 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   varying vec4 vBeamShape;
   varying vec4 vBeamLand;
   varying vec4 vBeamLandEdge;
-  // Flat: the blades are packed integers (beamMask.ts's packBlades), which interpolation — even of
-  // three equal corners — could nudge off by an ulp and unpack as the wrong blade.
+  // Flat: the blades and the gobo layers are packed integers (beamMask.ts's packBlades,
+  // goboLayers.ts's packGobos), which interpolation — even of three equal corners — could nudge off
+  // by an ulp and unpack as the wrong blade or pattern.
   flat varying vec2 vBeamBlades;
+  flat varying float vBeamGobos;
 
   ${LANDING_GLSL}
 
   void main() {
     vBeamShape = aBeamShape;
     vBeamBlades = aBeamGate.zw;
+    vBeamGobos = aBeamFx.y;
     // The drawn length is the instance's y scale, from the apex: far enough for the whole cone to
     // cross the planes it landed on (the director's coneLandingDepth), or BEAM_LENGTH past its
     // aperture in open air.
@@ -201,11 +199,13 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   varying vec4 vBeamLand;
   varying vec4 vBeamLandEdge;
   flat varying vec2 vBeamBlades;
+  flat varying float vBeamGobos;
 
   ${RAY_OBB_T_GLSL}
   ${CROSS_SECTION_GLSL}
   ${BEAM_MASK_GLSL}
   ${BEAM_HARDNESS_GLSL}
+  ${GOBO_LAYERS_GLSL}
 
   // Clamp the chord [t0, t1] to the half-space value(t) = base + t*rate >= 0.
   void clampHalfSpace(float base, float rate, inout float t0, inout float t1) {
@@ -350,10 +350,13 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // The cross-section frame (bx, by, tanHalf, above) is constant per fragment — hoisted out of
     // the march (WebKit's compiler is not trusted to do it). Same construction as the surface
     // shader's, so the in-air shape and the pool are the same image at every distance.
-    // The gobo rotation is per-fragment constant too — cos/sin hoisted with
-    // the frame; goboUvCs keeps the rotate itself shared.
-    float goboCs = cos(vBeamFx.z);
-    float goboSn = sin(vBeamFx.z);
+    // The gobo layers are per-fragment constant too — decoded once (each layer's cos, sin and atlas
+    // layer) with the frame; goboSample keeps the rotate itself shared with the surfaces. A
+    // segment carries none.
+    vec4 goboA;
+    vec4 goboB;
+    goboRots(aspect <= 0.0 ? vBeamGobos : 0.0, goboA, goboB);
+    bool hasGobo = goboA.w > 0.5 || goboB.w > 0.5;
 
     int lightMask = int(vShadowMask + 0.5);
     float focusDist = vBeamFx.w;
@@ -378,10 +381,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       float radial = beamMask(mg, aspect, iris, 1.0 - effEdge, vBeamBlades);
 
       float gobo = 1.0;
-      if (vBeamFx.y >= 0.5 && aspect <= 0.0) {
-        vec2 guv = goboUvCs(g, goboCs, goboSn);
-        float lod = clamp(uVolLodBase + log2(1.0 + uGoboBlurTexels * blur), 0.0, uLodMax);
-        gobo = textureLod(uGobo, vec3(guv, vBeamFx.y), lod).r;
+      if (hasGobo) {
+        float lod = min(uLodMax, uVolLodBase + goboLod(blur, 0.0, uGoboBlurTexels, uLodMax));
+        gobo = goboPair(g, goboA, goboB, lod);
       }
 
       // Light-ray shadow: only regions the CPU cull flagged can block.

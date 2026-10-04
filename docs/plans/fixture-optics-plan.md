@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0, 1, 2 and 3 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: IN PROGRESS — sessions 0, 1, 2, 3 and 4 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -217,16 +217,21 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   content, else the stock. `TemplateResolver.nearestColourSlot` snaps against the fitted colours.
 - **UX:** the *Media* box (§4), the Focus tab's media list, and MCP's `media` field.
 
-### Session 4 — gobos on surfaces, and stacked wheels (frontend)
+### ~~Session 4 — gobos on surfaces, and stacked wheels (frontend)~~ — done, `6a8782c` ([PR #51](https://github.com/cjcormack/lighting7/pull/51))
 
-- **Surfaces (D10):** `scene/surfaceShader.ts` samples the gobo layer and angle in light space,
-  using `aBeamShape.w` for the second layer. Gobos are drawn on every lit surface a gobo light
-  reaches, blurred by session 1's term.
+- **Surfaces (D10):** `scene/surfaceShader.ts` samples the gobo layers in light space, in the frame
+  `beamMask` cuts in, through the haze's own sampler (`goboLayers.ts`). Gobos are drawn on every lit
+  surface a gobo light reaches, blurred by session 1's term. (As built: `aBeamShape.w` had gone to
+  the depth of field in session 1, so both layers pack into one float — the haze's `aBeamFx.y`, the
+  light table's texel 4 `.z` — and texel 4's frame became `(cos, sin)` in a basis built from the
+  axis; still six texels.)
 - **Stacked wheels:** a second gobo layer multiplied over the first (the Robe's static and rotating
   wheels), and the Robe's second colour wheel multiplied subtractively over the first.
 - **Budget:** measured in Safari on the operator's Mac and an iPad before merging; if it runs
   short, the surface sample is limited to the selected heads and the rest keep today's pool.
-  Recorded against `FU-MANUAL-STAGE-LIGHT-BUDGET`.
+  Recorded against `FU-MANUAL-STAGE-LIGHT-BUDGET`. (As built: the limit is the View menu's *Gobos on
+  surfaces*, defaulting to every gobo light on SwiftShader's numbers; Safari and the iPad are step 5
+  of that item.)
 
 ### Session 5 — the library optics pass (backend + frontend)
 
