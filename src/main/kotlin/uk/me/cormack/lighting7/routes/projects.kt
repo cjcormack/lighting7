@@ -354,6 +354,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectBuskRig(state)
         routeApiRestProgrammerSpread(state)
         routeApiRestProgrammerAim(state)
+        routeApiRestProgrammerFocus(state)
         routeApiRestBuskPress(state)
         routeApiRestProjectPatches(state)
         routeApiRestProjectRiggings(state)

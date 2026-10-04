@@ -1,0 +1,198 @@
+{
+ "_": "Pinned by FixtureFocusTest (Kotlin: show/FixtureFocus.kt's FocusRange, the focus route's and Locate's solve) and beamOptics.test.ts (the Stage view's resolveDeclaredFocusDistance). DMX is linear in 1/distance between a FOCUS slider's declared ends; exactLevel is the inverse at distanceM, level the DMX byte it rounds to, middleLevel Locate's park at the range's middle distance. outside lists distances no level reaches. heads pins where a moving head's lens sits, which the desk measures focus from: the head pivots pivotM up the body's axis from the placement point (bodyGeometry.ts moverSize) and the lens sits lensM along the beam from the pivot (archetype.ts's mover cell), for a unit heightM tall (show/FixtureFocus.kt MoverLens).",
+ "cases": [
+  {
+   "name": "Source Four Revolution: 2–40 m, DMX 0 near",
+   "focusNearM": 2.0,
+   "focusFarM": 40.0,
+   "inverted": false,
+   "min": 0,
+   "max": 255,
+   "points": [
+    {
+     "distanceM": 2.0,
+     "exactLevel": 0.0,
+     "level": 0
+    },
+    {
+     "distanceM": 3.0,
+     "exactLevel": 89.473684,
+     "level": 89
+    },
+    {
+     "distanceM": 3.8,
+     "exactLevel": 127.146814,
+     "level": 127
+    },
+    {
+     "distanceM": 5.0,
+     "exactLevel": 161.052632,
+     "level": 161
+    },
+    {
+     "distanceM": 10.0,
+     "exactLevel": 214.736842,
+     "level": 215
+    },
+    {
+     "distanceM": 15.0,
+     "exactLevel": 232.631579,
+     "level": 233
+    },
+    {
+     "distanceM": 20.0,
+     "exactLevel": 241.578947,
+     "level": 242
+    },
+    {
+     "distanceM": 21.0,
+     "exactLevel": 242.857143,
+     "level": 243
+    },
+    {
+     "distanceM": 24.0,
+     "exactLevel": 246.052632,
+     "level": 246
+    },
+    {
+     "distanceM": 27.0,
+     "exactLevel": 248.538012,
+     "level": 249
+    },
+    {
+     "distanceM": 40.0,
+     "exactLevel": 255.0,
+     "level": 255
+    }
+   ],
+   "outside": [
+    1.5,
+    41.0
+   ],
+   "middleM": 21.0,
+   "middleLevel": 243
+  },
+  {
+   "name": "MAC 250: 2–40 m inverted, DMX 0 far",
+   "focusNearM": 2.0,
+   "focusFarM": 40.0,
+   "inverted": true,
+   "min": 0,
+   "max": 255,
+   "points": [
+    {
+     "distanceM": 2.0,
+     "exactLevel": 255.0,
+     "level": 255
+    },
+    {
+     "distanceM": 3.0,
+     "exactLevel": 165.526316,
+     "level": 166
+    },
+    {
+     "distanceM": 5.0,
+     "exactLevel": 93.947368,
+     "level": 94
+    },
+    {
+     "distanceM": 10.0,
+     "exactLevel": 40.263158,
+     "level": 40
+    },
+    {
+     "distanceM": 21.0,
+     "exactLevel": 12.142857,
+     "level": 12
+    },
+    {
+     "distanceM": 24.0,
+     "exactLevel": 8.947368,
+     "level": 9
+    },
+    {
+     "distanceM": 40.0,
+     "exactLevel": 0.0,
+     "level": 0
+    }
+   ],
+   "outside": [
+    1.0,
+    60.0
+   ],
+   "middleM": 21.0,
+   "middleLevel": 12
+  },
+  {
+   "name": "A fenced slider: 1–20 m over DMX 10–240",
+   "focusNearM": 1.0,
+   "focusFarM": 20.0,
+   "inverted": false,
+   "min": 10,
+   "max": 240,
+   "points": [
+    {
+     "distanceM": 1.0,
+     "exactLevel": 10.0,
+     "level": 10
+    },
+    {
+     "distanceM": 2.0,
+     "exactLevel": 131.052632,
+     "level": 131
+    },
+    {
+     "distanceM": 4.0,
+     "exactLevel": 191.578947,
+     "level": 192
+    },
+    {
+     "distanceM": 10.5,
+     "exactLevel": 229.047619,
+     "level": 229
+    },
+    {
+     "distanceM": 20.0,
+     "exactLevel": 240.0,
+     "level": 240
+    }
+   ],
+   "outside": [
+    0.5,
+    25.0
+   ],
+   "middleM": 10.5,
+   "middleLevel": 229
+  }
+ ],
+ "heads": [
+  {
+   "name": "Source Four Revolution",
+   "head": "profile",
+   "heightM": 0.856,
+   "pivotM": 0.5136,
+   "lensM": 0.22256
+  },
+  {
+   "name": "MAC 250",
+   "head": "spot",
+   "heightM": 0.45,
+   "pivotM": 0.27,
+   "lensM": 0.117
+  },
+  {
+   "name": "a wash",
+   "head": "wash",
+   "heightM": 0.45,
+   "pivotM": 0.27,
+   "lensM": 0.0765
+  },
+  {
+   "name": "a bar of heads",
+   "head": "bar",
+   "heightM": 0.3,
+   "pivotM": 0.18,
+   "lensM": 0.03
+  }
+ ]
+}

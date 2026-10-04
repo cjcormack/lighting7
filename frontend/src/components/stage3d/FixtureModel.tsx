@@ -61,7 +61,7 @@ import {
   PLACEHOLDER_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_INTENSITY,
 } from '../fixtures/fixtureAppearance'
-import { dmxToSignedDegrees, worldPositionFor } from '../../lib/stageCoords'
+import { dmxToSignedDegrees, fromThree, worldPositionFor } from '../../lib/stageCoords'
 import {
   combineFinePair,
   computeBeamGeom,
@@ -70,6 +70,7 @@ import {
   makeBeamGeom,
   makeGoboRotation,
   resolveDeclaredFocusDistance,
+  resolveEdgeHardness,
   resolveFocusDistance,
   resolveFocusParam,
   resolveGoboRotation,
@@ -78,7 +79,6 @@ import {
   resolveMacroIndex,
   resolvePrismFacets,
   resolvePrismSpin,
-  resolveSoftness,
   resolveZoomDeg,
   type BeamGeom,
   type ByteDescriptor,
@@ -98,6 +98,7 @@ import { MAX_THROW_M } from './emitterLayout'
 import type { BeamHit } from './scene/beamReach'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
+import { forgetLanding, recordLanding } from './landedPoints'
 import { bodySpecOf } from './emitterNeeds'
 import { packBlades } from './beamMask'
 import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
@@ -409,6 +410,9 @@ interface FixtureModelProps {
    *  parent can bind TransformControls to its group. Lets picker-based and
    *  click-based selection share the same gizmo wiring. */
   onEditFocus?: (group: Group) => void
+  /** Report where this fixture's beam lands (`landedPoints.ts`) — the selected fixture on an
+   *  on-screen canvas, for the Focus tab's *Focus here*. */
+  reportLanding?: boolean
 }
 
 /**
@@ -439,6 +443,7 @@ export function FixtureModel({
   editMode,
   onClick,
   onEditFocus,
+  reportLanding = false,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
@@ -656,6 +661,7 @@ export function FixtureModel({
 
   useBeamDirector({
     spec,
+    reportKey: reportLanding ? patch.key : null,
     panProp,
     tiltProp,
     panFineProp,
@@ -849,6 +855,8 @@ const HANGER_MATRIX = new Matrix4()
 
 interface BeamDirectorOpts {
   spec: BodySpec
+  /** The patch key to report the beam's landing under (`landedPoints.ts`), or null for none. */
+  reportKey: string | null
   panProp: SliderPropertyDescriptor | undefined
   tiltProp: SliderPropertyDescriptor | undefined
   panFineProp: SliderPropertyDescriptor | undefined
@@ -919,6 +927,7 @@ const SCRATCH_BEAM: BeamWrite = {
   goboAngle: 0,
   focusDist: -1,
   near: 0,
+  dof: 0,
   iris: 1,
   aspect: 0,
   bladesA: 0,
@@ -928,7 +937,28 @@ const SCRATCH_BEAM: BeamWrite = {
   edgeLand: null,
 }
 const SCRATCH_LIGHT: LightRow = makeLightRow()
+const SCRATCH_REPORT_ORIGIN = new Vector3()
+const SCRATCH_REPORT_DIR = new Vector3()
+const SCRATCH_REPORT_POINT = new Vector3()
 const SCRATCH_GOBO_ROTATION = makeGoboRotation()
+
+/**
+ * Record where the beam's own **axis** lands, from its first aperture — what *Focus here* focuses
+ * on (`landedPoints.ts`). Cast apart from the lobes, since a prism splays every lobe off the axis,
+ * and whether or not the head is lit. [head]'s world matrix must be this frame's.
+ */
+function reportAxisLanding(
+  reporter: object,
+  patchKey: string,
+  spec: BodySpec,
+  emitters: Pick<EmittersHandle, 'reach'>,
+  head: Group,
+): void {
+  const first = spec.cells[0]
+  const axis = SCRATCH_REPORT_DIR.set(0, spec.emitAxis, 0).transformDirection(head.matrixWorld)
+  const hit = first ? landBeam(emitters, apertureWorld(first, head, SCRATCH_REPORT_ORIGIN), axis).hit : null
+  recordLanding(reporter, patchKey, hit ? fromThree(SCRATCH_REPORT_POINT.set(hit.px, hit.py, hit.pz)) : null)
+}
 
 /** A cell's aperture in world space: its centre on the head's face. */
 function apertureWorld(cell: Cell, head: Group, out: Vector3): Vector3 {
@@ -942,6 +972,7 @@ function apertureWorld(cell: Cell, head: Group, out: Vector3): Vector3 {
 // during drag and React state lags.
 function useBeamDirector({
   spec,
+  reportKey,
   panProp,
   tiltProp,
   panFineProp,
@@ -1094,6 +1125,16 @@ function useBeamDirector({
     invalidate()
     return subscribeToChannels(beamChannels, invalidate, source)
   }, [beamChannels, source, invalidate])
+  // This director's identity in `landedPoints.ts`: another canvas may report the same fixture.
+  const [reporter] = useState(() => ({}))
+  // Asked to report (the fixture was just selected): draw a frame, so the landing is this frame's;
+  // and forget it once deselected or gone, so a later read never answers with a point from before
+  // the head was re-aimed.
+  useEffect(() => {
+    if (!reportKey) return
+    invalidate()
+    return () => forgetLanding(reporter, reportKey)
+  }, [reportKey, reporter, invalidate])
 
   useFrame((state, delta) => {
     const elapsed = state.clock.elapsedTime
@@ -1141,6 +1182,7 @@ function useBeamDirector({
 
     if (!emitters) {
       // A movement macro still swings a beamless head.
+      if (reportKey) recordLanding(reporter, reportKey, null)
       if (animating) invalidate()
       return
     }
@@ -1161,6 +1203,12 @@ function useBeamDirector({
     }
     if (!lit) {
       emitters.hideSlot(slot)
+      // Dark, but still pointing somewhere: a head is focused before it is brought up as often as after.
+      const group = groupRef.current
+      if (reportKey && group && head) {
+        group.updateMatrixWorld()
+        reportAxisLanding(reporter, reportKey, spec, emitters, head)
+      }
       if (animating) invalidate()
       return
     }
@@ -1211,8 +1259,10 @@ function useBeamDirector({
     // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
     const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
     const declaredFocusDist = resolveDeclaredFocusDistance(focusProp, focusParam)
-    const softness = resolveSoftness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost))
-    const edge = 1 - softness
+    // With a focus channel the family's cap lifts, and the blur softens the edge off the plane
+    // ([resolveEdgeHardness]); the blur's scale is the type's depth of field, else its family's.
+    const edge = resolveEdgeHardness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost), focusParam != null)
+    const dof = spec.depthOfField
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
     // tighter of the two wins.
     const iris = Math.min(spec.iris, resolveIris(irisProp, readChannel(channelSource, beamKeys.iris)))
@@ -1299,6 +1349,8 @@ function useBeamDirector({
     } else {
       prismAngleRef.current = 0
     }
+
+    if (reportKey) reportAxisLanding(reporter, reportKey, spec, emitters, head)
 
     // Never more lobes than the slot was given: a fixture's prism and cells are known when the
     // layout is built (`emitterNeedsForSpec`), so this only bites on a frame where the two disagree,
@@ -1395,6 +1447,7 @@ function useBeamDirector({
       beam.dir.copy(lobeDir)
       beam.opacity = opacity
       beam.near = near
+      beam.dof = dof
       beam.aspect = aspect
       // A segment's frustum reaches past the field circle at its corners, so its cull cone is the one
       // through them — or a region lying in a corner would never be shadow-tested.
@@ -1409,7 +1462,7 @@ function useBeamDirector({
       if (!multi) {
         // A single cell: each lobe lands as its own light.
         const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1])
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1])
         emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
       }
     }
@@ -1454,7 +1507,7 @@ function useBeamDirector({
           ? edgeLanding(emitters, SCRATCH_APEX, dir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect > 0 ? aspect : 1), aspect > 0, near, landed.hit)
           : null
         const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, near, iris, aspect, landed.hit, edgeHit, 0, 0)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }
     } else if (lobes < litLobesRef.current) {
@@ -1479,6 +1532,7 @@ function writeLightRow(
   tanHalf: number,
   edge: number,
   focusDist: number,
+  dof: number,
   near: number,
   iris: number,
   aspect: number,
@@ -1499,6 +1553,7 @@ function writeLightRow(
   row.b = color.b * level
   row.edge = edge
   row.focusDist = focusDist
+  row.dof = dof
   row.hit = hit
   row.edgeHit = edgeHit
   row.rx = right.x

@@ -573,6 +573,7 @@ export function Stage3D({
         editMode={interactable}
         onClick={interactable ? () => handleFixtureClick(patch) : undefined}
         onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
+        reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
       />
     )
   })

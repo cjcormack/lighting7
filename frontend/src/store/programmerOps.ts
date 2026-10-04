@@ -410,6 +410,34 @@ export interface AimResponse {
   skipped?: SpreadSkip[]
 }
 
+/**
+ * `POST /projects/{id}/programmer/focus` — *Focus here* (fixture-optics plan D11), a mirror of
+ * lighting7's `FocusRequest` (`routes/programmerFocus.kt`): focus heads on a point on the stage. The
+ * desk measures each head's distance to it from where it hangs and solves its focus channel's
+ * declared range for that distance, writing the level into the programmer as a Local entry.
+ * `write: false` answers without writing.
+ */
+export interface FocusRequest {
+  projectId: number
+  targets: CueTarget[]
+  point: { x: number; y: number; z: number }
+  fadeMs?: number
+  write?: boolean
+}
+
+/** One head's focus: its focus slider's DMX literal and the distance it was solved for, metres. */
+export interface FocusWrite {
+  target: CueTarget
+  value: string
+  distanceM: number
+}
+
+/** What the desk focused and what it could not, by name. Lists are omitted when empty. */
+export interface FocusResponse {
+  written?: FocusWrite[]
+  skipped?: SpreadSkip[]
+}
+
 export const programmerOpsApi = restApi.injectEndpoints({
   endpoints: (build) => ({
     recordProgrammer: build.mutation<RecordResponse, RecordRequest>({
@@ -532,6 +560,19 @@ export const programmerOpsApi = restApi.injectEndpoints({
         body,
       }),
     }),
+
+    /**
+     * `POST /projects/{id}/programmer/focus` — *Focus here*, resolved on the desk, as aim is: the
+     * writes ride `programmer.entryChanged`, and `FOCUS_INVALID` / `FOCUS_NEEDS_SELECTION` toast
+     * under the endpoint's own id.
+     */
+    focusHere: build.mutation<FocusResponse, FocusRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/programmer/focus`,
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 })
@@ -543,4 +584,5 @@ export const {
   useUpdateProgrammerMutation,
   useSpreadMutation,
   useAimMutation,
+  useFocusHereMutation,
 } = programmerOpsApi

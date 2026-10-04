@@ -11,7 +11,7 @@ interface StageFixtureControlPanelProps {
   patchKey: string
   /** The project the fixture is patched in — what an aim is addressed to. */
   projectId: number
-  /** Whether that project is the live one; aiming writes the programmer, so only then. */
+  /** Whether that project is the live one; aiming and *Focus here* write the programmer, so only then. */
   canAim: boolean
   onClose: () => void
 }
@@ -59,6 +59,7 @@ export function StageFixtureControlPanel({ patchKey, projectId, canAim, onClose 
                     fixture={fixture}
                     fixtureType={fixtureType}
                     lanterns={lanterns}
+                    canFocus={canAim}
                   />
                 ) : undefined
               }

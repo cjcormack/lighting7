@@ -145,23 +145,31 @@ export function bladeLine(index: number, depth: number, angleDeg: number): { px:
 }
 
 /**
- * How far out of focus a beam is `d` metres from its aperture: the **blur circle** there, in field
- * radii, for a lens focused `focusDist` metres out whose apex sits `near` behind it; 0 without a
- * focus channel (`focusDist` < 0). The lens (radius a) images the gate at `focusDist`, so the light
- * bound for one image point is 2a·|1 − d/focus| wide at `d`, where the field's radius is
- * a·(near + d)/near. That is linear in |1/d − 1/focus|, as a real lens's blur is: a long throw keeps
- * its depth of focus, and a wide lens (a long `near`) has less of it.
+ * How far out of focus a beam is `d` metres from its aperture: the **blur**, in field radii, for a
+ * lens focused `focusDist` metres out, as the **relative** focus error `|f − d| / f` times the type's
+ * **depth of field** `dof` (fixture-optics plan D9) — the type's declared `depthOfField`, else its
+ * family's (`DEPTH_OF_FIELD` in `bodies/archetype.ts`); 0 without a focus channel (`focusDist` < 0).
  *
- * A beam's edge **hardness** is then the family's own (1 − softness, frost already folded in), capped
- * by that blur where the fixture has a focus channel (`focusDist` ≥ 0) — so a frosted beam stays soft
- * even at its focus, and an unfrosted one sharpens only there. Shared by the surface shader and the
- * haze.
+ * It used to be the blur circle of a lens of radius `a`, `2a·|1 − d/f|` over the field's radius
+ * `a·(near + d)/near` — which scales with a lens radius nothing declares (the Revolution's was
+ * guessed from its kind's default size), and over a long throw stays under the edge's hard limit
+ * across the whole far end of the range, so a 24 m wall drew the same edge from DMX ~140 to 255. A
+ * relative error is the same at every throw, and the constant is what was tuned by eye against that
+ * wall (`profileHarness.ts`'s focus scene): a 24 m throw visibly soft 3 m either side, sharp on it.
+ *
+ * A beam's edge **hardness** is then what the optics allow (`resolveEdgeHardness` in
+ * `beamOptics.ts`: with a focus channel only frost caps it — the family's softness lifts, since the
+ * blur now models what it stood in for — and without one the family's, frost folded in), capped by
+ * that blur where the fixture has a focus channel (`focusDist` ≥ 0). So on the focal plane an
+ * unfrosted edge is as hard as the mask draws one, a frosted beam stays soft even there, and off
+ * the plane the edge softens with the blur, fully soft at `softBlur`. Shared by the surface shader
+ * and the haze.
  */
 export const BEAM_HARDNESS_GLSL = /* glsl */ `
-  float focusBlur(float d, float focusDist, float near) {
+  float focusBlur(float d, float focusDist, float dof) {
     if (focusDist < 0.0) return 0.0;
     float f = max(focusDist, 1e-3);
-    return 2.0 * near * abs(f - d) / (f * max(near + max(d, 0.0), 1e-4));
+    return max(dof, 0.0) * abs(f - max(d, 0.0)) / f;
   }
 
   float beamHardness(float baseHard, float focusDist, float blur, float softBlur) {
@@ -171,10 +179,10 @@ export const BEAM_HARDNESS_GLSL = /* glsl */ `
 `
 
 /** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `focusBlur`, for its test. */
-export function focusBlur(d: number, focusDist: number, near: number): number {
+export function focusBlur(d: number, focusDist: number, dof: number): number {
   if (focusDist < 0) return 0
   const f = Math.max(focusDist, 1e-3)
-  return (2 * near * Math.abs(f - d)) / (f * Math.max(near + Math.max(d, 0), 1e-4))
+  return (Math.max(dof, 0) * Math.abs(f - Math.max(d, 0))) / f
 }
 
 /** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `beamHardness`, for its test. */

@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
+import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -15,6 +16,8 @@ import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
+import uk.me.cormack.lighting7.show.focusRange
+import uk.me.cormack.lighting7.show.middleDmx
 import java.awt.Color
 
 /**
@@ -23,7 +26,8 @@ import java.awt.Color
  *
  * Per category: pan/tilt to the middle of their range (fine channels to 0 — the 16-bit
  * midpoint is coarse-mid + fine-0), dimmer full, shutter open, colour white, gobo open,
- * prism out, iris/frost open, zoom/focus mid. "Colour white" adapts to the engine: RGB
+ * prism out, iris/frost open, zoom mid, and focus at the middle *distance* of a declared range
+ * (mid-DMX where none is declared). "Colour white" adapts to the engine: RGB
  * mixers get full RGB *and* full white (the fan-out in [PropertyChannelWriter.resolveColour]
  * also zeroes amber/uv); colour wheels pick their open/white slot — unless an RGB engine
  * coexists on the same target, in which case the wheel is *disengaged* (its off slot) so the
@@ -91,6 +95,7 @@ object LocateValueResolver {
                 CueAssignmentResolver.PropertyValue.Position(pan, tilt)
         }
 
+        val declared = declaredProperties(target)
         for (property in properties) {
             if (onlyCategories != null && property.category !in onlyCategories) continue
             // WithPosition pan/tilt are covered by the synthetic "position" write above.
@@ -99,7 +104,7 @@ object LocateValueResolver {
             ) {
                 continue
             }
-            val value = locateValueFor(property.category, property.value, hasRgbEngine) ?: continue
+            val value = locateValueFor(property.category, property.value, hasRgbEngine, declared[property.name]) ?: continue
             candidates += property to value
         }
 
@@ -108,10 +113,20 @@ object LocateValueResolver {
         }
     }
 
+    /**
+     * The annotations [target]'s properties were declared with, by name — a focus's range lives
+     * there. The class catalogue's own index, cached per class, for a fixture and a cell alike.
+     */
+    private fun declaredProperties(target: GroupableFixture): Map<String, Fixture.Property> = when (target) {
+        is Fixture, is FixtureElement<*> -> FixturePropertyCatalogue.of(target::class).byName
+        else -> emptyMap()
+    }
+
     private fun locateValueFor(
         category: PropertyCategory,
         backing: Any,
         hasRgbEngine: Boolean,
+        declared: Fixture.Property?,
     ): CueAssignmentResolver.PropertyValue? =
         when (category) {
             PropertyCategory.DIMMER ->
@@ -159,8 +174,15 @@ object LocateValueResolver {
             PropertyCategory.IRIS, PropertyCategory.FROST ->
                 (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.min) }
 
-            PropertyCategory.ZOOM, PropertyCategory.FOCUS ->
+            PropertyCategory.ZOOM ->
                 (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(midValue(it)) }
+
+            // A declared range is linear in 1 / distance, so mid-DMX is near its near end (3.8 m on a
+            // Revolution's 2–40 m): park at the range's middle distance instead. Undeclared, mid-DMX.
+            PropertyCategory.FOCUS -> (backing as? DmxSlider)?.let { slider ->
+                val range = declared?.focusRange(slider)
+                CueAssignmentResolver.PropertyValue.Slider(range?.middleDmx()?.toUByte() ?: midValue(slider))
+            }
 
             // Standalone white/amber/UV engines with no RGB property to fan out from — the
             // whole light output of white/amber blinders and UV cannons. With an RGB engine

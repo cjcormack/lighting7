@@ -115,6 +115,12 @@ export interface BodySpec {
   fieldDeg: number
   /** Edge softness from the family: profiles and spots hard (low), everything else soft. */
   softness: number
+  /**
+   * How fast the edge goes soft away from the focal plane, for a fixture with a focus channel: the
+   * blur in field radii per unit of relative focus error (`beamMask.ts`'s `focusBlur`). The type's
+   * declared `depthOfField`, else the family's ([DEPTH_OF_FIELD]).
+   */
+  depthOfField: number
   accessories: {
     /** Shutter handles on the gate — drawn, and the frame the blades cut in. */
     shutters: boolean
@@ -166,6 +172,44 @@ export const SOFTNESS: Readonly<Record<Archetype | `mover:${MoverHead}`, number>
   effect: 0.6,
   cannon: 0.6,
   tape: 0.9,
+}
+
+/**
+ * Depth of field by family (fixture-optics plan D9): the blur, in field radii, per unit of relative
+ * focus error `|f − d| / f`, for a type that declares none. Only a fixture with a FOCUS channel is
+ * drawn by it — every type in the library that has one is a profile or a spot — so the rest carry a
+ * middling value that nothing reads today.
+ *
+ * Estimate (D15): judged, not measured — no datasheet gives a depth of field. The profile family's
+ * 3 was tuned by eye in Chromium (software GL) on a Source Four Revolution (`mover:profile`, the
+ * 2–40 m range) throwing 24 m at a back wall — the scene `profileHarness.ts`'s
+ * `?profileHarness=focus` builds — with focus at DMX 243, 245, 246, 247 and 249 (21.1, 23.0, 24.0,
+ * 25.1 and 27.6 m): sharp on the wall (blur 0), a little soft one DMX step either side (blur about
+ * 0.13, an edge roll-off of 0.1 field radii) and clearly soft 3 m either side (blur about 0.4). At 2
+ * a step either side was hard to tell from the wall, so the sharpest step was hard to find; at 4 a
+ * single step already looked as soft as 3 m should, and 3 m off lost the edge altogether. Checked on
+ * the rig by `FU-MANUAL-S4REV-OPTICS` step 8 and the plan's §9 desk check.
+ */
+export const DEPTH_OF_FIELD: Readonly<Record<Archetype | `mover:${MoverHead}`, number>> = {
+  // Estimate: tuned against the Revolution at 24 m (above). A profile's long, narrow lens train.
+  profile: 3,
+  boxProfile: 3,
+  'mover:profile': 3,
+  // Estimate: a spot's smaller aperture holds a little more depth of focus than a profile's.
+  'mover:spot': 2.5,
+  mover: 2.5,
+  // Estimate: no focus channel in the library; middling values that nothing reads today.
+  'mover:wash': 2,
+  'mover:bar': 2,
+  fresnel: 2,
+  par: 2,
+  flood: 2,
+  downlight: 2,
+  batten: 2,
+  blinder: 2,
+  effect: 2,
+  cannon: 2,
+  tape: 2,
 }
 
 /** Field angle by family, for a fixture whose patch and channels say nothing. */
@@ -227,6 +271,8 @@ export interface BodyInput {
   lantern?: Lantern | null
   /** The type's declared body; null or absent leaves it to the kind. */
   body?: FixtureBodyInfo | null
+  /** The type's declared depth of field (`@FixtureType.depthOfField`); null or absent is the family's. */
+  depthOfField?: number | null
   /** The lantern's focus — the patch's own, or a placement's. */
   focus?: LanternFocus | null
 }
@@ -275,6 +321,7 @@ export function bodyInputFor(
     heightM: fixtureType?.heightM ?? null,
     lantern,
     body: fixtureType?.body ?? null,
+    depthOfField: fixtureType?.depthOfField ?? null,
     focus: patch,
   }
 }
@@ -437,7 +484,9 @@ export function bodySpecFor(input: BodyInput): BodySpec {
       break
     case 'mover': {
       emitAxis = 1
-      // A mover's size is W across the yoke and H from its base to the top of its head.
+      // A mover's size is W across the yoke and H from its base to the top of its head. The lens's
+      // place on the head's face (`front`) is also the desk's `MoverLens`, which measures a focus
+      // from it — `focusInverse.fixture.json`'s `heads` pins both sides.
       const headDia = W * (head === 'wash' ? 0.78 : 0.6)
       const headLen = H * (head === 'wash' ? 0.34 : head === 'bar' ? 0.2 : 0.52)
       const front = headLen / 2
@@ -520,6 +569,10 @@ export function bodySpecFor(input: BodyInput): BodySpec {
     emits,
     fieldDeg: lantern ? lanternFieldDeg(lantern, focus?.zoomDeg) : FIELD_DEG[family],
     softness,
+    depthOfField:
+      input.depthOfField != null && Number.isFinite(input.depthOfField) && input.depthOfField > 0
+        ? input.depthOfField
+        : DEPTH_OF_FIELD[family],
     accessories,
     lantern,
     ovalRatio,

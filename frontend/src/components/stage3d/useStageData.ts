@@ -22,7 +22,7 @@ interface StageData {
 }
 
 // Single source of truth for Stage 3D's input data. When the profiling
-// harness is active (?profileHarness=1) it swaps in a synthetic scene and
+// harness is active (?profileHarness=1, or =focus) it swaps in a synthetic scene and
 // augments the fixture-lookup maps so the harness patches resolve to a
 // beam-emitting fixture type. Otherwise it returns the live RTK Query data.
 export function useStageData(
@@ -48,7 +48,7 @@ export function useStageData(
       return { patches, regions, riggings, fixtureByKey, typeByKey, lanterns }
     }
     const mergedFixtureByKey = new Map(fixtureByKey)
-    for (const p of harness.patches) mergedFixtureByKey.set(p.key, harness.syntheticFixture)
+    for (const p of harness.patches) mergedFixtureByKey.set(p.key, harness.fixtureFor?.get(p.key) ?? harness.syntheticFixture)
     const mergedTypeByKey = new Map(typeByKey)
     mergedTypeByKey.set(harness.syntheticType.typeKey, harness.syntheticType)
     return {

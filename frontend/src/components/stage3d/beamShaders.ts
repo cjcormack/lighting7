@@ -114,8 +114,9 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamRight;
   // Packed to stay inside WebGL's guaranteed sixteen vertex attributes: three's prefix declares
   // position, normal and uv, the instance matrix takes four, and these eight take the rest —
-  // fifteen. The colour carries the opacity in .a; the gate carries the half-angle, the shadow
-  // mask and the two packed blade words (stage-view plan session 7). A program past sixteen does
+  // fifteen. The colour carries the opacity in .a; the shape carries near, iris, aspect and the
+  // depth of field (fixture-optics session 1); the gate carries the half-angle, the shadow mask and
+  // the two packed blade words (stage-view plan session 7). A program past sixteen does
   // not link on ANGLE, and every beam in the air goes dark (StageEmitters.test.ts pins it).
   attribute vec4 aColor;
   attribute vec4 aBeamFx;
@@ -239,6 +240,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     float near = vBeamShape.x;
     float iris = vBeamShape.y;
     float aspect = vBeamShape.z;
+    float dof = vBeamShape.w;
     float cos2 = vCosHalfAngle * vCosHalfAngle;
     float vd = dot(rayDir, d);
     vec3 co = camPos - O;
@@ -368,7 +370,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       float cosAngle = dot(lightDir, d);
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
       // Focus is a distance from the aperture, not from the apex behind it.
-      float blur = focusBlur(relLen - near, focusDist, near);
+      float blur = focusBlur(relLen - near, focusDist, dof);
       float effEdge = beamHardness(vBeamFx.x, focusDist, blur, uFocusSoftBlur);
       // A segment's rectangle or an oval's narrow axis: the field edge at 1 on v too. An oval is
       // marched through the round cone of its wide field, and the mask cuts it to the oval.

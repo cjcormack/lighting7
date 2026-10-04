@@ -349,6 +349,14 @@ panel, or its own docked panel for a multi-selection in view mode, and only on t
 The desk solves pan and tilt (lighting7 `docs/fixtures-engineering.md` §"Aiming a head at a
 point"); this side never does, the `templateIntent.ts` rule, and draws the answer's skips by name.
 
+**Focus here** (fixture-optics plan session 1) is its sibling on the Focus tab (`StageFocusPanel`):
+for a DMX head whose focus declares a range, on the live project, it sends where the beam lands in
+the view (`stage3d/landedPoints.ts`, recorded by the beam director for the selected fixture on an
+on-screen canvas only) to `POST /programmer/focus`, and the desk solves the focus channel for that
+distance. The blur that makes the result visible is a relative focus error times a per-type depth of
+field (`beamMask.ts`'s `focusBlur`; the GLSL and its twin change together), packed into the light
+table's texel 0 beside the focal distance. See `docs/stage-vis-engineering.md` §"Focus".
+
 ### Looks, templates and layers
 
 **Two library entities, and a Layer applies either.** A **Look** composes cues: any families, its

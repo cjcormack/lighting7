@@ -125,6 +125,8 @@ export interface BeamWrite {
   focusDist: number
   /** Apex → aperture. */
   near: number
+  /** Depth of field: the blur per unit of relative focus error (`beamMask.ts`'s `focusBlur`). */
+  dof: number
   /** Open fraction of the field. */
   iris: number
   /** 0 a round aperture; > 0 a segment's depth over its width; < 0 an oval's narrow over wide. */
@@ -640,7 +642,7 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeRight.setXYZ(i, w.right.x, w.right.y, w.right.z)
       b.volumeColor.setXYZW(i, w.color.r, w.color.g, w.color.b, w.opacity)
       b.volumeFx.setXYZW(i, w.edge, w.goboSlot, w.goboAngle, w.focusDist)
-      b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, 0)
+      b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, w.dof)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
       packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0)
       b.volumeLand.setXYZW(i, SCRATCH_LAND[0], SCRATCH_LAND[1], SCRATCH_LAND[2], SCRATCH_LAND[3])

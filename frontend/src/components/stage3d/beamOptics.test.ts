@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { MAX_PRISM_LOBES } from './emitterLayout'
+// The desk's own test vector, read straight from the backend's tree — the one FixtureFocusTest
+// pins the desk's inverse (*Focus here*, aim_fixtures' focus, Locate) against.
+import focusInverse from '../../../../src/test/resources/stage/focusInverse.fixture.json'
 import {
   FOCUS_ALWAYS_SHARP,
   FOCUS_NEAR_FRAC,
@@ -346,6 +349,39 @@ describe('resolveFocusDistance', () => {
     expect(resolveFocusDistance(-0.5, LEN)).toBe(resolveFocusDistance(0, LEN))
     expect(resolveFocusDistance(1.5, LEN)).toBe(resolveFocusDistance(1, LEN))
   })
+})
+
+describe("the desk's focus inverse, against the shared vector", () => {
+  // `src/test/resources/stage/focusInverse.fixture.json`: for each declared range, the DMX level the
+  // desk solves a distance to (`show/FixtureFocus.kt`). The view must draw that level sharp at that
+  // distance, or *Focus here* lands a focus the Stage view shows soft. Change the rule, the vector
+  // and both pins in one commit.
+  for (const c of focusInverse.cases) {
+    const prop = slider({ focusNearM: c.focusNearM, focusFarM: c.focusFarM, inverted: c.inverted, min: c.min, max: c.max })
+    const at = (level: number) => resolveDeclaredFocusDistance(prop, resolveFocusParam(prop, level))!
+
+    it(`draws each solved level at its distance — ${c.name}`, () => {
+      for (const p of c.points) {
+        // The exact level is the inverse's answer: the forward direction takes it back to the distance.
+        expect(at(p.exactLevel)).toBeCloseTo(p.distanceM, 6)
+        // The byte the desk writes rounds it, and lands within half a DMX step's distance of it.
+        const lower = at(Math.max(c.min, p.level - 0.5))
+        const upper = at(Math.min(c.max, p.level + 0.5))
+        expect(p.distanceM).toBeGreaterThanOrEqual(Math.min(lower, upper) - 1e-9)
+        expect(p.distanceM).toBeLessThanOrEqual(Math.max(lower, upper) + 1e-9)
+      }
+    })
+
+    it(`puts the range's ends at the slider's ends, and Locate's middle at its middle distance — ${c.name}`, () => {
+      expect(at(c.inverted ? c.max : c.min)).toBeCloseTo(c.focusNearM, 9)
+      expect(at(c.inverted ? c.min : c.max)).toBeCloseTo(c.focusFarM, 9)
+      for (const d of c.outside) expect(d < c.focusNearM || d > c.focusFarM).toBe(true)
+      const lower = at(Math.max(c.min, c.middleLevel - 0.5))
+      const upper = at(Math.min(c.max, c.middleLevel + 0.5))
+      expect(c.middleM).toBeGreaterThanOrEqual(Math.min(lower, upper))
+      expect(c.middleM).toBeLessThanOrEqual(Math.max(lower, upper))
+    })
+  }
 })
 
 describe('resolveDeclaredFocusDistance', () => {

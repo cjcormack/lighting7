@@ -254,7 +254,10 @@ internal val aimFixturesTool = AnthropicToolDef(
             "edge at deck level, +x audience-right, +y upstage, +z up. A performer standing in a region is its " +
             "centerX / centerY with z its centerZ plus head height (about 1.7). A head that cannot be aimed is skipped " +
             "with the reason — a fixed lantern, an unplaced fixture, a type with no pan/tilt degree range, a point " +
-            "outside its travel. dryRun reports what would land without writing it.",
+            "outside its travel. focus: true also focuses each aimed head on the point, for a type whose focus " +
+            "declares a range (the same solve as the Stage view's Focus here); a head it cannot focus, or that " +
+            "was not aimed, is listed under focusSkipped with the reason. dryRun reports what would land without " +
+            "writing it.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -281,6 +284,17 @@ internal val aimFixturesTool = AnthropicToolDef(
             put("dryRun", buildJsonObject {
                 put("type", "boolean")
                 put("description", "Work out and report each head's pan and tilt without writing anything.")
+            })
+            put("focus", buildJsonObject {
+                put("type", "boolean")
+                put(
+                    "description",
+                    "Also focus each aimed head on the point: its focus channel set for the distance from its " +
+                        "lens, written into the programmer beside the aim (dryRun reports it instead); a head aim " +
+                        "skipped is not focused. " +
+                        "saveAsTemplate still saves the position only — a template is one family, and focus " +
+                        "is beam — so keep a focus with record_cue.",
+                )
             })
             put("saveAsTemplate", buildJsonObject {
                 put("type", "string")

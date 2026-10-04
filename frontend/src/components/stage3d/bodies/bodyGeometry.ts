@@ -215,7 +215,11 @@ function staticYokeSize(spec: BodySpec): { armX: number; armLen: number } {
   return { armX: D / 2 + 0.03, armLen: D / 2 + 0.09 }
 }
 
-/** A mover's proportions: base height, pivot height and the yoke's half-width. */
+/**
+ * A mover's proportions: base height, pivot height and the yoke's half-width. The pivot height is
+ * also the desk's (lighting7 `show/FixtureFocus.kt`'s `MoverLens`, which measures a focus from the
+ * lens): `src/test/resources/stage/focusInverse.fixture.json`'s `heads` pins both.
+ */
 function moverSize(spec: BodySpec): { baseH: number; pivotY: number; armX: number } {
   const headDia = spec.widthM * (spec.head === 'wash' ? 0.78 : 0.6)
   return { baseH: Math.max(0.04, spec.heightM * 0.14), pivotY: spec.heightM * 0.6, armX: headDia / 2 + 0.035 }

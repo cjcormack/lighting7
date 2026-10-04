@@ -37,4 +37,11 @@ annotation class FixtureType(
      *  them from its looks (D14). Every other type refuses the fields at the write boundary. See
      *  `docs/fixtures-engineering.md` §"Lanterns and focus". */
     val acceptsLantern: Boolean = false,
+    /** How fast the beam goes soft away from its focal plane (fixture-optics plan D9): the Stage
+     *  view's blur, in field radii, per unit of relative focus error `|f − d| / f`. Larger is
+     *  softer — a wide lens holds less depth of focus than a narrow one. `-1.0` means "unset" and
+     *  the view uses its family's constant (`DEPTH_OF_FIELD` in `stage3d/bodies/archetype.ts`).
+     *  Only a type with a FOCUS channel is ever drawn by it. See `docs/fixtures-engineering.md`
+     *  §"@FixtureType". */
+    val depthOfField: Double = -1.0,
 )

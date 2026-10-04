@@ -5,7 +5,11 @@ import { describe, expect, it } from 'vitest'
 import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../../store/fixtures'
 import { chan, colourProp, element, sliderProp } from '../../../test/fixtureFactories'
 import { bodySpecOf } from '../emitterNeeds'
-import { apexDistanceM, archetypeFor, bodyInputFor, lightRuns, MAX_CELLS, SOFTNESS, type BodyInput } from './archetype'
+import { apexDistanceM, archetypeFor, bodyInputFor, DEPTH_OF_FIELD, lightRuns, MAX_CELLS, SOFTNESS, type BodyInput } from './archetype'
+import { beamHardness, focusBlur, MASK_EDGE_SOFT } from '../beamMask'
+import { resolveEdgeHardness } from '../beamOptics'
+import { bodyFrames } from './bodyGeometry'
+import focusInverse from '../../../../../src/test/resources/stage/focusInverse.fixture.json'
 import { indexLanterns, type Lantern } from '../../../lib/lanterns'
 // The desk's own library resource, read straight from the backend's tree — so the lanterns this
 // test hangs are the ones the desk ships, and a datasheet fix there is a fix here.
@@ -383,4 +387,57 @@ describe("a type's declared body decides before its words", () => {
     )
     expect(s.cells[0].halfWidthM).toBeCloseTo(0.05, 9)
   })
+})
+
+describe('depth of field (fixture-optics plan D9)', () => {
+  const revolution = type({
+    typeKey: 'etc-source4-revolution-base-frame',
+    kind: 'PROFILE',
+    acceptsBeamAngle: true,
+    body: { archetype: 'mover', head: 'profile', lensDiameterM: 0.15 },
+  })
+
+  it("is the family's where the type declares none, and the type's where it does", () => {
+    const f = fixture({ properties: [TILT] })
+    const family = bodySpecOf({ kindOverride: null, lengthM: null }, f, revolution)
+    expect(family.depthOfField).toBe(DEPTH_OF_FIELD['mover:profile'])
+    const declared = bodySpecOf({ kindOverride: null, lengthM: null }, f, { ...revolution, depthOfField: 4.5 })
+    expect(declared.depthOfField).toBe(4.5)
+    // Nothing but a positive number counts as declared.
+    expect(bodySpecOf({ kindOverride: null, lengthM: null }, f, { ...revolution, depthOfField: 0 }).depthOfField).toBe(
+      DEPTH_OF_FIELD['mover:profile'],
+    )
+  })
+
+  it('makes a Revolution on a 24 m wall sharp there, a little soft a DMX step off, and visibly soft 3 m either side', () => {
+    // The plan's session-1 check, in numbers, for an unfrosted mover:profile: the hardness the
+    // shaders draw with focus on the wall, one DMX step either side (about 1 m at 24 m on 2–40 m:
+    // DMX 245 is 23.0 m, 247 is 25.1 m) and 3 m either side.
+    const dof = DEPTH_OF_FIELD['mover:profile']
+    const lifted = resolveEdgeHardness(SOFTNESS['mover:profile'], undefined, 0, true)
+    const hard = (focusM: number) => beamHardness(lifted, focusM, focusBlur(24, focusM, dof), MASK_EDGE_SOFT)
+    expect(hard(24)).toBe(1)
+    for (const step of [23.0, 25.1]) {
+      expect(hard(step)).toBeLessThan(0.95)
+      expect(hard(step)).toBeGreaterThan(0.75)
+    }
+    for (const off of [21, 27]) expect(hard(off)).toBeLessThan(0.4)
+    // The cap the family used to hold it at, whatever the focus.
+    expect(1 - SOFTNESS['mover:profile']).toBeCloseTo(0.88, 9)
+  })
+})
+
+describe("where a mover's lens sits — the desk's shared vector", () => {
+  // `src/test/resources/stage/focusInverse.fixture.json`'s `heads`: lighting7's `MoverLens` measures
+  // a focus from this lens (show/FixtureFocus.kt), so the view and the desk agree on the distance.
+  for (const h of focusInverse.heads) {
+    it(`pivots and has its lens where the desk measures from — ${h.name}`, () => {
+      const t = type({ kind: 'MOVING_HEAD', heightM: h.heightM, body: { archetype: 'mover', head: h.head } })
+      const spec = bodySpecOf({ kindOverride: null, lengthM: null }, fixture({ properties: [TILT] }), t)
+      expect(spec.head).toBe(h.head)
+      expect(bodyFrames(spec, 'hang').pivotY).toBeCloseTo(h.pivotM, 9)
+      // Every cell of the head sits on its face, the lens's distance along the beam from the pivot.
+      for (const cell of spec.cells) expect(cell.y * spec.emitAxis).toBeCloseTo(h.lensM, 9)
+    })
+  }
 })

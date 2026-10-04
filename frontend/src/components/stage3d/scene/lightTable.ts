@@ -17,7 +17,7 @@
  *
  * | texel | rgb | a |
  * |---|---|---|
- * | 0 | the apex | focal distance from the aperture (m; < 0 is always sharp) |
+ * | 0 | the apex | focal distance from the aperture and depth of field, packed ([packFocus]; < 0 is always sharp) |
  * | 1 | axis (unit) | cos of the bounding half-angle — the field, or a segment's corner |
  * | 2 | colour × level | edge hardness and iris, packed ([packEdgeIris]) |
  * | 3 | where the beam lands, two planes packed (`landing.ts`'s `packLanding`) | |
@@ -33,6 +33,11 @@
  * rotation and a PAR's lamp rotation turn the right axis in texel 4 before it is written, and an
  * oval is a negative aspect. A seventh texel would have cost every surface fragment a fetch per
  * light, which the plan says to measure first — and the packing costs nothing measurable.
+ *
+ * **And still six** (fixture-optics plan session 1, D9): the blur is now the relative focus error
+ * times the type's **depth of field**, a number per light the table had no slot for, so it rides
+ * texel 0's alpha beside the focal distance — the distance to the centimetre in the low 15 bits, the
+ * depth of field in twentieths above them ([packFocus]). 24 bits, every integer a float32 holds.
  *
  * Texel 3 is where the beam lands ([`landing.ts`](./landing.ts)): the face its axis hit
  * ([`beamReach.ts`](./beamReach.ts)) and, for a beam split across an edge, the face the rest of it
@@ -74,6 +79,8 @@ export interface LightRow {
   b: number
   edge: number
   focusDist: number
+  /** The depth of field the blur is scaled by (`beamMask.ts`'s `focusBlur`). */
+  dof: number
   hit: LandingFace | null
   /** The second face a beam split across an edge lands on; null for one face, or none. */
   edgeHit: LandingFace | null
@@ -90,6 +97,32 @@ export interface LightRow {
   bladesA: number
   bladesB: number
 }
+
+/**
+ * Texel 0's alpha: the focal distance in **centimetres** in the low [FOCUS_CM_BASE] (15 bits, to
+ * 327.67 m — past any throw the view draws) and the depth of field in **twentieths** above it (9 bits,
+ * to 25.55 — past any constant a family or a type declares). Negative is "always sharp", no focus.
+ */
+export const FOCUS_CM_BASE = 32768
+export const DOF_STEPS = 20
+const DOF_MAX_CODE = 511
+
+/** A focal distance and a depth of field as texel 0's one float — exact in a float32 (24 bits). */
+export function packFocus(focusDist: number, dof: number): number {
+  if (!(focusDist >= 0)) return -1
+  const cm = Math.round(Math.min(FOCUS_CM_BASE - 1, focusDist * 100))
+  const dq = Math.round(Math.min(DOF_MAX_CODE, Math.max(0, Number.isFinite(dof) ? dof * DOF_STEPS : 0)))
+  return cm + FOCUS_CM_BASE * dq
+}
+
+/** The GLSL that unpacks [packFocus]: `vec2(focusDist, dof)`, a negative distance for none. */
+export const UNPACK_FOCUS_GLSL = /* glsl */ `
+  vec2 unpackFocus(float packed) {
+    if (packed < 0.0) return vec2(-1.0, 0.0);
+    float dq = floor(packed / ${FOCUS_CM_BASE}.0);
+    return vec2((packed - dq * ${FOCUS_CM_BASE}.0) / 100.0, dq / ${DOF_STEPS}.0);
+  }
+`
 
 /** Quantisation of the edge and iris in texel 2's alpha: 1023 steps each, the iris above. */
 export const EDGE_IRIS_STEPS = 1023
@@ -112,7 +145,7 @@ export const UNPACK_EDGE_IRIS_GLSL = /* glsl */ `
 /** A fresh row, for a caller's scratch. */
 export function makeLightRow(): LightRow {
   return {
-    ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1,
+    ax: 0, ay: 0, az: 0, dx: 0, dy: -1, dz: 0, cosBound: 1, r: 0, g: 0, b: 0, edge: 0, focusDist: -1, dof: 0,
     hit: null, edgeHit: null, rx: 1, ry: 0, rz: 0, tanHalf: 0, near: 0, iris: 1, aspect: 0, bladesA: 0, bladesB: 0,
   }
 }
@@ -142,7 +175,7 @@ export class LightTable {
     s[o] = row.ax
     s[o + 1] = row.ay
     s[o + 2] = row.az
-    s[o + 3] = row.focusDist
+    s[o + 3] = packFocus(row.focusDist, row.dof)
     s[o + 4] = row.dx
     s[o + 5] = row.dy
     s[o + 6] = row.dz

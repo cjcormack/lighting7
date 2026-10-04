@@ -4,7 +4,18 @@ import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
-import { EDGE_IRIS_STEPS, LIGHT_TEXELS, LightTable, makeLightRow, packEdgeIris, UNPACK_EDGE_IRIS_GLSL } from './lightTable'
+import {
+  DOF_STEPS,
+  EDGE_IRIS_STEPS,
+  FOCUS_CM_BASE,
+  LIGHT_TEXELS,
+  LightTable,
+  makeLightRow,
+  packEdgeIris,
+  packFocus,
+  UNPACK_EDGE_IRIS_GLSL,
+  UNPACK_FOCUS_GLSL,
+} from './lightTable'
 import { LAND_NONE, LAND_UP } from './landing'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
@@ -126,6 +137,29 @@ describe('the light table', () => {
     expect((packed - iq * 1024) / EDGE_IRIS_STEPS).toBeCloseTo(0.8, 3)
     expect(iq / EDGE_IRIS_STEPS).toBeCloseTo(0.4, 3)
     expect(UNPACK_EDGE_IRIS_GLSL).toContain(`${EDGE_IRIS_STEPS}.0`)
+  })
+
+  it('packs the focal distance and the depth of field into texel 0, and the shader unpacks them', () => {
+    const table = new LightTable(1)
+    table.set(0, { ...makeLightRow(), r: 1, focusDist: 24.07, dof: 3 })
+    const packed = table.staged[3]
+    expect(packed).toBe(packFocus(24.07, 3))
+    expect(Math.fround(packed)).toBe(packed)
+    // The GLSL's arithmetic: the depth of field above a power of two, the distance to the centimetre.
+    const dq = Math.floor(packed / FOCUS_CM_BASE)
+    expect(dq / DOF_STEPS).toBe(3)
+    expect((packed - dq * FOCUS_CM_BASE) / 100).toBeCloseTo(24.07, 6)
+    expect(UNPACK_FOCUS_GLSL).toContain(`${FOCUS_CM_BASE}.0`)
+    expect(UNPACK_FOCUS_GLSL).toContain(`${DOF_STEPS}.0`)
+  })
+
+  it('keeps "always sharp" negative, and the largest packing exact in a float32', () => {
+    expect(packFocus(-1, 3)).toBe(-1)
+    expect(packFocus(Number.NaN, 3)).toBe(-1)
+    const top = packFocus(1000, 1000)
+    expect(top).toBe(2 ** 24 - 1)
+    expect(Math.fround(top)).toBe(top)
+    expect(packFocus(6, Number.NaN)).toBe(600)
   })
 
   it('treats a dark light as off', () => {
