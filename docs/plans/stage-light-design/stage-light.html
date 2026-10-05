@@ -1,0 +1,948 @@
+<title>Stage Pools and Focus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: the house style of docs/plans/fixture-optics-design — a sticky contents rail beside one reading column; prose at ~72ch, tables and drawings at full column width. */
+  :root {
+    --bg: oklch(0.985 0.004 75);
+    --surface: oklch(0.955 0.008 75);
+    --fg: oklch(0.22 0.012 60);
+    --muted: oklch(0.47 0.015 60);
+    --rule: oklch(0.87 0.012 70);
+    --accent: oklch(0.62 0.15 62);
+    --accent-ink: oklch(0.48 0.13 55);
+    --cool: oklch(0.55 0.11 245);
+    --bad: oklch(0.55 0.17 28);
+    --good: oklch(0.55 0.12 150);
+    --est: oklch(0.58 0.12 85);
+    --zone: oklch(0.62 0.15 62 / 0.14);
+    --bad-zone: oklch(0.55 0.17 28 / 0.12);
+    --cool-zone: oklch(0.55 0.11 245 / 0.12);
+    /* The stage itself: always dark, as the Stage view is. */
+    --stage-bg: oklch(0.141 0.005 285.8);
+    --stage-rule: oklch(0.32 0.006 286);
+    --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    --font-body: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+      --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+      --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+      --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+      --bad-zone: oklch(0.72 0.16 28 / 0.14); --cool-zone: oklch(0.72 0.11 245 / 0.14); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: oklch(0.17 0.008 60); --surface: oklch(0.215 0.01 60); --fg: oklch(0.94 0.008 75);
+    --muted: oklch(0.7 0.015 70); --rule: oklch(0.32 0.012 60); --accent: oklch(0.78 0.14 70);
+    --accent-ink: oklch(0.82 0.13 72); --cool: oklch(0.72 0.11 245); --bad: oklch(0.72 0.16 28);
+    --good: oklch(0.75 0.13 150); --est: oklch(0.8 0.12 88); --zone: oklch(0.78 0.14 70 / 0.16);
+    --bad-zone: oklch(0.72 0.16 28 / 0.14); --cool-zone: oklch(0.72 0.11 245 / 0.14); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .shell { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 96px; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; }
+  nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; display: flex; flex-direction: column; gap: 2px; font-size: 0.82rem; max-height: calc(100vh - 48px); overflow-y: auto; }
+  nav.toc a { color: var(--muted); text-decoration: none; padding: 3px 0 3px 10px; border-left: 2px solid var(--rule); }
+  nav.toc a:hover { color: var(--fg); border-left-color: var(--accent); }
+  nav.toc .grp { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 14px 0 4px; }
+  nav.toc .grp:first-child { margin-top: 0; }
+  main { display: flex; flex-direction: column; gap: 72px; min-width: 0; }
+  @media (max-width: 960px) { .shell { grid-template-columns: minmax(0, 1fr); } nav.toc { display: none; } }
+
+  .prose { max-width: 72ch; }
+  h1, h2, h3, h4 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 1.75rem; font-weight: 600; }
+  h3 { font-size: 1.2rem; font-weight: 600; }
+  h4 { font-size: 1rem; font-weight: 600; }
+  p { margin: 0; }
+  a { color: var(--accent-ink); }
+  a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  .eyebrow { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  section { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 24px; }
+  .sub { display: flex; flex-direction: column; gap: 14px; scroll-margin-top: 24px; }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 66ch; }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.85rem; }
+  ul.plain, ol.plain { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+  ul.plain li::marker, ol.plain li::marker { color: var(--accent); }
+  b { font-weight: 600; }
+
+  header { display: flex; flex-direction: column; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 28px; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .fact { display: flex; flex-direction: column; gap: 2px; }
+  .fact .v { font-family: var(--font-display); font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fact .k { font-size: 0.8rem; color: var(--muted); }
+  .pill { display: inline-block; font-family: var(--font-mono); font-size: 0.7rem; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; letter-spacing: 0.04em; white-space: nowrap; }
+  .pill.s { color: var(--good); }
+  .pill.m { color: var(--est); }
+  .pill.l { color: var(--bad); }
+  .pill.rec { color: var(--accent-ink); }
+
+  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; max-width: 72ch; display: flex; flex-direction: column; gap: 8px; }
+  .callout.cool { border-left-color: var(--cool); }
+  .callout.bad { border-left-color: var(--bad); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-items: start; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+  figure { margin: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  figcaption { font-size: 0.85rem; color: var(--muted); max-width: 72ch; }
+  svg.fig { width: 100%; height: auto; display: block; }
+  svg.fig text { font-family: var(--font-mono); font-size: 11px; fill: var(--muted); }
+  svg.fig .lab { fill: var(--fg); font-size: 12px; }
+  svg.fig .t-acc { fill: var(--accent-ink); }
+  svg.fig .t-cool { fill: var(--cool); }
+  svg.fig .t-bad { fill: var(--bad); }
+  svg.fig .axis { stroke: var(--rule); stroke-width: 1; fill: none; }
+  svg.fig .grid { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 2 4; fill: none; }
+  .cloth-lit { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linecap: round; }
+  .cloth-dark { fill: none; stroke: var(--muted); stroke-width: 1.5; opacity: 0.6; }
+
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.87rem; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--rule); padding: 8px 12px 6px 0; vertical-align: bottom; }
+  td { border-bottom: 1px solid var(--rule); padding: 8px 12px 8px 0; vertical-align: top; }
+  td.k { white-space: nowrap; font-family: var(--font-mono); font-size: 0.8rem; }
+  td.n { white-space: nowrap; }
+  tr.rec td { background: var(--zone); }
+  tr.rec td:first-child { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+  .yes { color: var(--good); font-weight: 500; }
+  .no { color: var(--bad); }
+  .part { color: var(--est); }
+
+  /* The focus explorer */
+  .explorer { display: flex; flex-direction: column; gap: 16px; border: 1px solid var(--rule); border-radius: 10px; padding: 18px; background: var(--surface); }
+  .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; font-size: 0.88rem; }
+  .ctl label { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+  .ctl input[type="range"] { flex: 1 1 220px; accent-color: var(--accent); min-width: 0; }
+  .ctl output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; min-width: 9ch; }
+  .pools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .pool { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .pool canvas { width: 100%; max-width: 100%; aspect-ratio: 1 / 1; height: auto; border-radius: 6px; background: var(--stage-bg); display: block; }
+  .pool span { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+  @media (max-width: 560px) { .pools { grid-template-columns: minmax(0, 1fr); max-width: 260px; } }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.8rem; color: var(--muted); }
+  .key i { display: inline-block; width: 18px; height: 0; border-top: 2.5px solid; vertical-align: middle; margin-right: 6px; }
+  .key i.dash { border-top-style: dashed; }
+  .ctl .chk { display: inline-flex; align-items: center; gap: 6px; color: var(--fg); font-family: var(--font-body); font-size: 0.88rem; }
+  .ctl .chk input { accent-color: var(--accent); }
+  .beams { display: flex; flex-direction: column; gap: 14px; }
+  .beamrow { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .rowlab { font-size: 0.82rem; color: var(--muted); }
+  .t-bad { color: var(--bad); } .t-cool { color: var(--cool); } .t-acc { color: var(--accent-ink); }
+  .beampair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(70px, 150px); gap: 10px; align-items: center; }
+  .beampair canvas { width: 100%; max-width: 100%; height: auto; display: block; border-radius: 6px; background: var(--stage-bg); }
+  #beamRead { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Contents">
+    <span class="grp">Overview</span>
+    <a href="#glance">At a glance</a>
+    <span class="grp">1 · Consistency</span>
+    <a href="#s1-should">How it should behave</a>
+    <a href="#s1-does">What the view does</a>
+    <a href="#s1-options">Options</a>
+    <span class="grp">2 · Reflection</span>
+    <a href="#s2-should">How cloth looks</a>
+    <a href="#s2-does">What the view does</a>
+    <a href="#s2-options">Options</a>
+    <span class="grp">3 · Focus</span>
+    <a href="#s3-should">How focus behaves</a>
+    <a href="#s3-does">What the view does</a>
+    <a href="#s3-explorer">Edge explorer</a>
+    <a href="#s3-beam">The beam in haze</a>
+    <a href="#s3-options">Options</a>
+    <span class="grp">Plan</span>
+    <a href="#order">Proposed order</a>
+    <a href="#code">Code map</a>
+  </nav>
+
+  <main>
+    <header>
+      <span class="eyebrow">Stage view · survey before fixing · 5 October 2026</span>
+      <h1>Pools, cloth and focus</h1>
+      <p class="lede">The Robe 575 on ADV1, aimed at the black backcloth, draws thin stripes at pan 40 and a pool split by a straight seam at pan 45. This report sets out how a beam on a real stage behaves in each of the three areas you raised, what the Stage view does instead and why, and the options for closing the gap.</p>
+      <div class="facts">
+        <div class="fact"><span class="v">20 %</span><span class="k">of each pleat the landing test lets light reach</span></div>
+        <div class="fact"><span class="v">8</span><span class="k">rim rays that decide whether a pool gets a second plane</span></div>
+        <div class="fact"><span class="v">18×</span><span class="k">how much more a #111 cloth reflects under light than its finish says</span></div>
+        <div class="fact"><span class="v">−28 %</span><span class="k">pool radius lost at full defocus, where a real pool grows</span></div>
+      </div>
+      <p class="small muted">Read from the code on <code>main</code> at <code>e3782cd3</code>. I have not reproduced the two screenshots against the show's scene. The diagnosis follows from the geometry and the shader, and §1 lists two quick ways to confirm it.</p>
+    </header>
+
+    <section id="glance">
+      <span class="eyebrow">Overview</span>
+      <h2>At a glance</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>You saw</th><th>What is happening</th><th>Recommended</th><th>Effort</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>1 · Pan 40 and pan 45 look unrelated</b></td>
+              <td>Occlusion is approximated by up to two <b>landing planes</b>. On a drape the plane sits 2.5 cm in front of the cloth's crests and lets light only 3 cm behind it, so only the crests are lit. At pan 45 one of eight rim rays finds a second plane, and everything on one side of it lights up whole.</td>
+              <td>Now: make the drape's collider and skin match the drawn cloth. Then: replace the planes with analytic box occlusion.</td>
+              <td class="n"><span class="pill s">S</span> then <span class="pill m">M–L</span></td>
+            </tr>
+            <tr>
+              <td><b>2 · The black cloth does not look like cloth</b></td>
+              <td>The pan 40 stripes are mostly symptom 1. Underneath it: Lambert only, and a 10 % reflectance floor that makes black serge, or a red masking drape, reflect like 35 % grey paint. The pleats are shallow, regular and never shadow each other. No sheen, no gloss, no bounce.</td>
+              <td>Real reflectances with an exposure curve, analytic pleat shadowing, then a sheen and gloss term per finish.</td>
+              <td class="n"><span class="pill m">M</span></td>
+            </tr>
+            <tr>
+              <td><b>3 · Focus looks weird</b></td>
+              <td>Defocus pulls the edge <i>inward</i>, so a soft pool shrinks; the softening stops growing at 0.55 field radii; nothing may spill outside the field cone; focus is measured along the slant to each point, not along the axis; gobos blur through a box-filtered mip chain.</td>
+              <td>Centre the penumbra on the edge and widen the cone by the blur; measure focus along the axis; filter the gobo mips properly.</td>
+              <td class="n"><span class="pill s">S</span>–<span class="pill m">M</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── 1 ───────────────────────────── -->
+    <section id="s1">
+      <span class="eyebrow">1 · Consistency</span>
+      <h2>The same beam, five degrees apart</h2>
+
+      <div class="sub" id="s1-should">
+        <h3>How it should behave</h3>
+        <ul class="plain">
+          <li>A pool is a continuous function of where the head points. Pan it 5° and the pool slides 5° across the cloth; how the cloth takes the light does not change.</li>
+          <li>Whether a point is lit depends only on what lies between it and the lamp. It has nothing to do with where the beam's centre happens to land.</li>
+          <li>On pleated cloth, every fold face turned towards the lamp is lit along its whole width. Faces turned away fall dark, and with raking light a crest throws a shadow into the trough beside it. The banding grows stronger as the light gets more oblique, and it stays continuous as the light moves.</li>
+        </ul>
+      </div>
+
+      <div class="sub" id="s1-does">
+        <h3>What the Stage view does</h3>
+        <p class="prose">There are no shadows. Instead each light carries up to two <b>landing planes</b> (<code>scene/landing.ts</code>): the plane of the face its axis hit (<code>beamReach</code>), and, for a beam split across a convex edge, a second face found by <code>edgeLanding</code>. The surface shader skips a fragment that lies more than <code>REACH_EPS</code> (3 cm) behind <b>both</b> planes. That works for a flat wall or a deck. It fails wherever the drawn surface lies further behind its collider's face than 3 cm.</p>
+
+        <h4>Why pan 40 is stripes</h4>
+        <p class="prose">The drape's collider is a box 10 cm deep (<code>partBox</code>, <code>pleat</code>: half-depth 0.05 m). The drawn cloth is a sine ripple only 5 cm peak to peak (<code>PLEAT_DEPTH_M</code>), centred in that box. So the landing plane, the box's front face, sits 2.5 cm in front of the nearest crest. With a 3 cm skin, the only cloth that passes is the 0.5 cm cap of each crest. That is 20.5 % of every 14 cm pleat, and the facing term thins it further. The rest of the pool is culled as if it were behind the cloth.</p>
+        <figure>
+          <svg class="fig" viewBox="0 0 680 270" role="img" aria-label="Cross-section through the drape, drawn to scale: the collider box, the landing plane at its front face, the 3 centimetre lit band, and the pleated cloth, lit only where its crests enter the band.">
+            <defs>
+              <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-width="1" />
+              </pattern>
+              <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--accent)" /></marker>
+            </defs>
+            <g style="color: var(--rule)"><rect x="40" y="80" width="600" height="140" fill="url(#hatch)" opacity="0.7" /></g>
+            <rect x="40" y="80" width="600" height="42" fill="var(--zone)" />
+            <line x1="40" y1="80" x2="640" y2="80" stroke="var(--accent)" stroke-width="1.5" />
+            <line x1="40" y1="122" x2="640" y2="122" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4 4" />
+            <line x1="40" y1="220" x2="640" y2="220" stroke="var(--rule)" stroke-width="1" />
+            <path class="cloth-dark" d="M40.0 150.0 L41.0 148.9 L42.0 147.8 L43.0 146.7 L44.0 145.6 L45.0 144.5 L46.0 143.4 L47.0 142.4 L48.0 141.3 L49.0 140.2 L50.0 139.2 L51.0 138.1 L52.0 137.1 L53.0 136.1 L54.0 135.1 L55.0 134.1 L56.0 133.1 L57.0 132.2 L58.0 131.2 L59.0 130.3 L60.0 129.4 L61.0 128.5 L62.0 127.7 L63.0 126.9 L64.0 126.0 L65.0 125.3 L66.0 124.5 L67.0 123.7 L68.0 123.0 L69.0 122.3"/>
+<path class="cloth-lit" d="M69.0 122.3 L70.0 121.7 L71.0 121.1 L72.0 120.4 L73.0 119.9 L74.0 119.3 L75.0 118.8 L76.0 118.3 L77.0 117.9 L78.0 117.5 L79.0 117.1 L80.0 116.7 L81.0 116.4 L82.0 116.1 L83.0 115.8 L84.0 115.6 L85.0 115.4 L86.0 115.3 L87.0 115.2 L88.0 115.1 L89.0 115.0 L90.0 115.0 L91.0 115.0 L92.0 115.1 L93.0 115.2 L94.0 115.3 L95.0 115.4 L96.0 115.6 L97.0 115.8 L98.0 116.1 L99.0 116.4 L100.0 116.7 L101.0 117.1 L102.0 117.5 L103.0 117.9 L104.0 118.3 L105.0 118.8 L106.0 119.3 L107.0 119.9 L108.0 120.4 L109.0 121.1 L110.0 121.7"/>
+<path class="cloth-dark" d="M110.0 121.7 L111.0 122.3 L112.0 123.0 L113.0 123.7 L114.0 124.5 L115.0 125.3 L116.0 126.0 L117.0 126.9 L118.0 127.7 L119.0 128.5 L120.0 129.4 L121.0 130.3 L122.0 131.2 L123.0 132.2 L124.0 133.1 L125.0 134.1 L126.0 135.1 L127.0 136.1 L128.0 137.1 L129.0 138.1 L130.0 139.2 L131.0 140.2 L132.0 141.3 L133.0 142.4 L134.0 143.4 L135.0 144.5 L136.0 145.6 L137.0 146.7 L138.0 147.8 L139.0 148.9 L140.0 150.0 L141.0 151.1 L142.0 152.2 L143.0 153.3 L144.0 154.4 L145.0 155.5 L146.0 156.6 L147.0 157.6 L148.0 158.7 L149.0 159.8 L150.0 160.8 L151.0 161.9 L152.0 162.9 L153.0 163.9 L154.0 164.9 L155.0 165.9 L156.0 166.9 L157.0 167.8 L158.0 168.8 L159.0 169.7 L160.0 170.6 L161.0 171.5 L162.0 172.3 L163.0 173.1 L164.0 174.0 L165.0 174.7 L166.0 175.5 L167.0 176.3 L168.0 177.0 L169.0 177.7 L170.0 178.3 L171.0 178.9 L172.0 179.6 L173.0 180.1 L174.0 180.7 L175.0 181.2 L176.0 181.7 L177.0 182.1 L178.0 182.5 L179.0 182.9 L180.0 183.3 L181.0 183.6 L182.0 183.9 L183.0 184.2 L184.0 184.4 L185.0 184.6 L186.0 184.7 L187.0 184.8 L188.0 184.9 L189.0 185.0 L190.0 185.0 L191.0 185.0 L192.0 184.9 L193.0 184.8 L194.0 184.7 L195.0 184.6 L196.0 184.4 L197.0 184.2 L198.0 183.9 L199.0 183.6 L200.0 183.3 L201.0 182.9 L202.0 182.5 L203.0 182.1 L204.0 181.7 L205.0 181.2 L206.0 180.7 L207.0 180.1 L208.0 179.6 L209.0 178.9 L210.0 178.3 L211.0 177.7 L212.0 177.0 L213.0 176.3 L214.0 175.5 L215.0 174.7 L216.0 174.0 L217.0 173.1 L218.0 172.3 L219.0 171.5 L220.0 170.6 L221.0 169.7 L222.0 168.8 L223.0 167.8 L224.0 166.9 L225.0 165.9 L226.0 164.9 L227.0 163.9 L228.0 162.9 L229.0 161.9 L230.0 160.8 L231.0 159.8 L232.0 158.7 L233.0 157.6 L234.0 156.6 L235.0 155.5 L236.0 154.4 L237.0 153.3 L238.0 152.2 L239.0 151.1 L240.0 150.0 L241.0 148.9 L242.0 147.8 L243.0 146.7 L244.0 145.6 L245.0 144.5 L246.0 143.4 L247.0 142.4 L248.0 141.3 L249.0 140.2 L250.0 139.2 L251.0 138.1 L252.0 137.1 L253.0 136.1 L254.0 135.1 L255.0 134.1 L256.0 133.1 L257.0 132.2 L258.0 131.2 L259.0 130.3 L260.0 129.4 L261.0 128.5 L262.0 127.7 L263.0 126.9 L264.0 126.0 L265.0 125.3 L266.0 124.5 L267.0 123.7 L268.0 123.0 L269.0 122.3"/>
+<path class="cloth-lit" d="M269.0 122.3 L270.0 121.7 L271.0 121.1 L272.0 120.4 L273.0 119.9 L274.0 119.3 L275.0 118.8 L276.0 118.3 L277.0 117.9 L278.0 117.5 L279.0 117.1 L280.0 116.7 L281.0 116.4 L282.0 116.1 L283.0 115.8 L284.0 115.6 L285.0 115.4 L286.0 115.3 L287.0 115.2 L288.0 115.1 L289.0 115.0 L290.0 115.0 L291.0 115.0 L292.0 115.1 L293.0 115.2 L294.0 115.3 L295.0 115.4 L296.0 115.6 L297.0 115.8 L298.0 116.1 L299.0 116.4 L300.0 116.7 L301.0 117.1 L302.0 117.5 L303.0 117.9 L304.0 118.3 L305.0 118.8 L306.0 119.3 L307.0 119.9 L308.0 120.4 L309.0 121.1 L310.0 121.7"/>
+<path class="cloth-dark" d="M310.0 121.7 L311.0 122.3 L312.0 123.0 L313.0 123.7 L314.0 124.5 L315.0 125.3 L316.0 126.0 L317.0 126.9 L318.0 127.7 L319.0 128.5 L320.0 129.4 L321.0 130.3 L322.0 131.2 L323.0 132.2 L324.0 133.1 L325.0 134.1 L326.0 135.1 L327.0 136.1 L328.0 137.1 L329.0 138.1 L330.0 139.2 L331.0 140.2 L332.0 141.3 L333.0 142.4 L334.0 143.4 L335.0 144.5 L336.0 145.6 L337.0 146.7 L338.0 147.8 L339.0 148.9 L340.0 150.0 L341.0 151.1 L342.0 152.2 L343.0 153.3 L344.0 154.4 L345.0 155.5 L346.0 156.6 L347.0 157.6 L348.0 158.7 L349.0 159.8 L350.0 160.8 L351.0 161.9 L352.0 162.9 L353.0 163.9 L354.0 164.9 L355.0 165.9 L356.0 166.9 L357.0 167.8 L358.0 168.8 L359.0 169.7 L360.0 170.6 L361.0 171.5 L362.0 172.3 L363.0 173.1 L364.0 174.0 L365.0 174.7 L366.0 175.5 L367.0 176.3 L368.0 177.0 L369.0 177.7 L370.0 178.3 L371.0 178.9 L372.0 179.6 L373.0 180.1 L374.0 180.7 L375.0 181.2 L376.0 181.7 L377.0 182.1 L378.0 182.5 L379.0 182.9 L380.0 183.3 L381.0 183.6 L382.0 183.9 L383.0 184.2 L384.0 184.4 L385.0 184.6 L386.0 184.7 L387.0 184.8 L388.0 184.9 L389.0 185.0 L390.0 185.0 L391.0 185.0 L392.0 184.9 L393.0 184.8 L394.0 184.7 L395.0 184.6 L396.0 184.4 L397.0 184.2 L398.0 183.9 L399.0 183.6 L400.0 183.3 L401.0 182.9 L402.0 182.5 L403.0 182.1 L404.0 181.7 L405.0 181.2 L406.0 180.7 L407.0 180.1 L408.0 179.6 L409.0 178.9 L410.0 178.3 L411.0 177.7 L412.0 177.0 L413.0 176.3 L414.0 175.5 L415.0 174.7 L416.0 174.0 L417.0 173.1 L418.0 172.3 L419.0 171.5 L420.0 170.6 L421.0 169.7 L422.0 168.8 L423.0 167.8 L424.0 166.9 L425.0 165.9 L426.0 164.9 L427.0 163.9 L428.0 162.9 L429.0 161.9 L430.0 160.8 L431.0 159.8 L432.0 158.7 L433.0 157.6 L434.0 156.6 L435.0 155.5 L436.0 154.4 L437.0 153.3 L438.0 152.2 L439.0 151.1 L440.0 150.0 L441.0 148.9 L442.0 147.8 L443.0 146.7 L444.0 145.6 L445.0 144.5 L446.0 143.4 L447.0 142.4 L448.0 141.3 L449.0 140.2 L450.0 139.2 L451.0 138.1 L452.0 137.1 L453.0 136.1 L454.0 135.1 L455.0 134.1 L456.0 133.1 L457.0 132.2 L458.0 131.2 L459.0 130.3 L460.0 129.4 L461.0 128.5 L462.0 127.7 L463.0 126.9 L464.0 126.0 L465.0 125.3 L466.0 124.5 L467.0 123.7 L468.0 123.0 L469.0 122.3"/>
+<path class="cloth-lit" d="M469.0 122.3 L470.0 121.7 L471.0 121.1 L472.0 120.4 L473.0 119.9 L474.0 119.3 L475.0 118.8 L476.0 118.3 L477.0 117.9 L478.0 117.5 L479.0 117.1 L480.0 116.7 L481.0 116.4 L482.0 116.1 L483.0 115.8 L484.0 115.6 L485.0 115.4 L486.0 115.3 L487.0 115.2 L488.0 115.1 L489.0 115.0 L490.0 115.0 L491.0 115.0 L492.0 115.1 L493.0 115.2 L494.0 115.3 L495.0 115.4 L496.0 115.6 L497.0 115.8 L498.0 116.1 L499.0 116.4 L500.0 116.7 L501.0 117.1 L502.0 117.5 L503.0 117.9 L504.0 118.3 L505.0 118.8 L506.0 119.3 L507.0 119.9 L508.0 120.4 L509.0 121.1 L510.0 121.7"/>
+<path class="cloth-dark" d="M510.0 121.7 L511.0 122.3 L512.0 123.0 L513.0 123.7 L514.0 124.5 L515.0 125.3 L516.0 126.0 L517.0 126.9 L518.0 127.7 L519.0 128.5 L520.0 129.4 L521.0 130.3 L522.0 131.2 L523.0 132.2 L524.0 133.1 L525.0 134.1 L526.0 135.1 L527.0 136.1 L528.0 137.1 L529.0 138.1 L530.0 139.2 L531.0 140.2 L532.0 141.3 L533.0 142.4 L534.0 143.4 L535.0 144.5 L536.0 145.6 L537.0 146.7 L538.0 147.8 L539.0 148.9 L540.0 150.0 L541.0 151.1 L542.0 152.2 L543.0 153.3 L544.0 154.4 L545.0 155.5 L546.0 156.6 L547.0 157.6 L548.0 158.7 L549.0 159.8 L550.0 160.8 L551.0 161.9 L552.0 162.9 L553.0 163.9 L554.0 164.9 L555.0 165.9 L556.0 166.9 L557.0 167.8 L558.0 168.8 L559.0 169.7 L560.0 170.6 L561.0 171.5 L562.0 172.3 L563.0 173.1 L564.0 174.0 L565.0 174.7 L566.0 175.5 L567.0 176.3 L568.0 177.0 L569.0 177.7 L570.0 178.3 L571.0 178.9 L572.0 179.6 L573.0 180.1 L574.0 180.7 L575.0 181.2 L576.0 181.7 L577.0 182.1 L578.0 182.5 L579.0 182.9 L580.0 183.3 L581.0 183.6 L582.0 183.9 L583.0 184.2 L584.0 184.4 L585.0 184.6 L586.0 184.7 L587.0 184.8 L588.0 184.9 L589.0 185.0 L590.0 185.0 L591.0 185.0 L592.0 184.9 L593.0 184.8 L594.0 184.7 L595.0 184.6 L596.0 184.4 L597.0 184.2 L598.0 183.9 L599.0 183.6 L600.0 183.3 L601.0 182.9 L602.0 182.5 L603.0 182.1 L604.0 181.7 L605.0 181.2 L606.0 180.7 L607.0 180.1 L608.0 179.6 L609.0 178.9 L610.0 178.3 L611.0 177.7 L612.0 177.0 L613.0 176.3 L614.0 175.5 L615.0 174.7 L616.0 174.0 L617.0 173.1 L618.0 172.3 L619.0 171.5 L620.0 170.6 L621.0 169.7 L622.0 168.8 L623.0 167.8 L624.0 166.9 L625.0 165.9 L626.0 164.9 L627.0 163.9 L628.0 162.9 L629.0 161.9 L630.0 160.8 L631.0 159.8 L632.0 158.7 L633.0 157.6 L634.0 156.6 L635.0 155.5 L636.0 154.4 L637.0 153.3 L638.0 152.2 L639.0 151.1 L640.0 150.0"/>
+            <g stroke="var(--accent)" stroke-width="1.5">
+              <line x1="120" y1="18" x2="120" y2="72" marker-end="url(#arr)" />
+              <line x1="320" y1="18" x2="320" y2="72" marker-end="url(#arr)" />
+              <line x1="520" y1="18" x2="520" y2="72" marker-end="url(#arr)" />
+            </g>
+            <text x="130" y="32" class="t-acc">light from downstage</text>
+            <text x="44" y="74" class="lab">landing plane: the collider's front face</text>
+            <text x="44" y="136" class="t-acc">lit band: 3 cm behind it (REACH_EPS)</text>
+            <text x="44" y="238">collider back face: the box is 10 cm deep</text>
+            <text x="44" y="256">pleat 5 cm peak to peak, 7 a metre · drawn to scale, 1 cm = 14 px</text>
+            <text x="470" y="256" class="t-acc">thick = lit · thin = culled</text>
+          </svg>
+          <figcaption>A plan slice through the cloth at true scale. Only the crests reach into the lit band. The facing term then shades each crest's flanks, which is why the stripes in the pan 40 screenshot are thinner than a fifth of a pleat.</figcaption>
+        </figure>
+
+        <h4>Why pan 45 has a seam</h4>
+        <p class="prose">A straight vertical seam through the pool has to come from a plane with a level normal. The second landing plane is the only thing that can draw one. <code>edgeLanding</code> casts eight rays round the field's rim. When one lands behind the first face's plane, and the first face lies behind the face that ray hit, that face becomes the second plane. Fragments are culled only when they lie behind <b>both</b> planes. So on the side of the seam that is in front of the second plane, every fragment is lit and the cloth shows whole, the uniform half of your screenshot. On the other side the crest-only stripes return. The candidate faces near a backcloth are the end of the cloth's box, the inner edge of a pair of tabs, or a leg. Whether any of the eight rays clips one of them changes between two pan values with nothing in between, so the seam switches on rather than sliding in.</p>
+        <figure>
+          <svg class="fig" viewBox="0 0 680 260" role="img" aria-label="Schematic plan view: a beam from the fixture lands on the cloth; one rim ray finds the end face of a cloth box; that face's plane splits the pool into a side lit whole and a side lit only at the crests.">
+            <rect x="40" y="56" width="250" height="16" fill="var(--surface)" stroke="var(--rule)" />
+            <rect x="300" y="56" width="340" height="16" fill="var(--surface)" stroke="var(--rule)" />
+            <path d="M40 64 q 6 -6 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 10 0" fill="none" stroke="var(--muted)" stroke-width="1.2" />
+            <path d="M300 64 q 6 -6 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 12 0 t 16 0" fill="none" stroke="var(--muted)" stroke-width="1.2" />
+            <polygon points="590,220 150,72 470,72" fill="var(--zone)" />
+            <line x1="590" y1="220" x2="320" y2="72" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="6 4" />
+            <line x1="590" y1="220" x2="290" y2="66" stroke="var(--cool)" stroke-width="1.5" />
+            <circle cx="290" cy="66" r="4" fill="var(--cool)" />
+            <line x1="290" y1="20" x2="290" y2="150" stroke="var(--cool)" stroke-width="1.5" stroke-dasharray="3 3" />
+            <rect x="150" y="72" width="140" height="8" fill="var(--accent)" opacity="0.85" />
+            <g fill="var(--accent)">
+              <rect x="294" y="72" width="3" height="8" /><rect x="306" y="72" width="3" height="8" /><rect x="318" y="72" width="3" height="8" /><rect x="330" y="72" width="3" height="8" /><rect x="342" y="72" width="3" height="8" /><rect x="354" y="72" width="3" height="8" /><rect x="366" y="72" width="3" height="8" /><rect x="378" y="72" width="3" height="8" /><rect x="390" y="72" width="3" height="8" /><rect x="402" y="72" width="3" height="8" /><rect x="414" y="72" width="3" height="8" /><rect x="426" y="72" width="3" height="8" /><rect x="438" y="72" width="3" height="8" /><rect x="450" y="72" width="3" height="8" /><rect x="462" y="72" width="3" height="8" />
+            </g>
+            <rect x="578" y="214" width="24" height="18" rx="3" fill="var(--muted)" />
+            <text x="566" y="250" class="lab">ADV1</text>
+            <text x="44" y="44">cloth colliders (boxes), pleats drawn inside</text>
+            <text x="298" y="16" class="t-cool">second plane: an end face one rim ray hit</text>
+            <text x="150" y="100" class="t-acc">in front of plane 2:</text>
+            <text x="150" y="114" class="t-acc">lit whole</text>
+            <text x="320" y="100" class="t-acc">behind both planes:</text>
+            <text x="320" y="114" class="t-acc">crests only</text>
+            <text x="330" y="136">axis (dashed) lands here</text>
+            <text x="44" y="236">schematic · plan view · upstage at top</text>
+          </svg>
+          <figcaption>Schematic only. Which face the rim finds depends on the scene; any face with a level normal produces the same straight seam.</figcaption>
+        </figure>
+
+        <h4>The same failure elsewhere</h4>
+        <ul class="plain">
+          <li><b>Columns and lamps.</b> An <code>OBJECT</code> cylinder's collider is a box as wide as its diameter. A beam landing on a column lights a 3 cm sliver at the tangent line, and the rest of its lit side falls dark.</li>
+          <li><b>The haze reads the same planes</b> (<code>aBeamLand</code>), so the beam in the air can jump at the same pan values as the pool.</li>
+          <li><b>The drape's own depth is ignored.</b> <code>buildDrape</code> documents <code>depthM</code> as the cloth's fullness, but the mesh uses a fixed 5 cm and the collider a fixed 10 cm.</li>
+        </ul>
+
+        <div class="callout cool">
+          <b>Two ways to confirm before fixing</b>
+          <ol class="plain">
+            <li>Set the <code>pleat</code> collider's half-depth to 0.025 and <code>REACH_EPS_M</code> to 0.06. If the pan 40 stripes become a whole pool, the stripes are the collider and skin mismatch.</li>
+            <li>Log <code>edgeHit</code> from the director for that head at pan 40 and 45. Expect null at 40 and a level-normal face at 45.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="sub" id="s1-options">
+        <h3>Options</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Option</th><th>What changes</th><th>Stripes</th><th>Seam</th><th>Real shadows</th><th>Cost and risk</th><th>Effort</th></tr></thead>
+            <tbody>
+              <tr class="rec">
+                <td><b>A · Match the collider to the cloth</b></td>
+                <td>The drape's collider front face sits on the crests, its depth and the mesh's both follow <code>depthM</code>, and the skin is per collider: at least the pleat depth for cloth, 3 cm for walls.</td>
+                <td class="yes">fixed</td><td class="part">on the cloth</td><td class="no">no</td>
+                <td>Nearly free: the skin shifts the packed plane, so no texel changes. It also clears this seam, which was only the line between culled and lit cloth; a second plane can still cut a surface behind the first. Cylinders have no good skin: one as deep as the radius lets light through things just behind them.</td>
+                <td><span class="pill s">S</span></td>
+              </tr>
+              <tr>
+                <td><b>B · The hit part never culls itself</b></td>
+                <td>A light records which part its axis hit; that part's receivers ignore the landing plane and rely on the facing term.</td>
+                <td class="yes">fixed</td><td class="no">no</td><td class="no">no</td>
+                <td>Fixes every shape, columns included. Needs a part id per light, which means a seventh texel or another repack, and an id uniform per receiver.</td>
+                <td><span class="pill m">M</span></td>
+              </tr>
+              <tr class="rec">
+                <td><b>C · Analytic box occlusion</b></td>
+                <td>Drop the planes. Per fragment and light, test the segment from the fragment to the lamp against the colliders inside that light's cone, skipping any box the fragment sits inside. The CPU culls each light's list, as <code>regionShadowMask</code> already does for the haze against regions.</td>
+                <td class="yes">fixed</td><td class="yes">fixed</td><td class="part">boxes only</td>
+                <td>Continuous in pan by construction. Flats, legs and platforms cast hard shadows on walls and floors. Retires <code>edgeLanding</code> and <code>landing.ts</code> for surfaces. Cost is pixels × lights × colliders in cone; needs a collider texture and a per-light index list. The haze can keep the planes at first.</td>
+                <td><span class="pill m">M</span>–<span class="pill l">L</span></td>
+              </tr>
+              <tr>
+                <td><b>D · Shadow maps</b> (<code>FU-STAGE-QUALITY-TIER</code>)</td>
+                <td>A depth render per shadowed light, sampled in the surface shader.</td>
+                <td class="yes">fixed</td><td class="yes">fixed</td><td class="yes">any mesh</td>
+                <td>Chairs, bodies and soft-edged shadows. Affordable for a handful of lights, so shadowed and unshadowed heads would look different, which is a new inconsistency. Memory pressure on Safari.</td>
+                <td><span class="pill l">L</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose"><b>Recommendation.</b> Do A now: it is the visible bug, and it also fixes most of what looks wrong in symptom 2. Then do C, which makes occlusion a property of the geometry and removes the class of pan-dependent jumps. Keep D as the opt-in tier for seeing a chair's shadow. Add a harness scene that sweeps pan across a drape in 0.5° steps and asserts the lit area changes smoothly; <code>profileHarness.ts</code> is the precedent.</p>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── 2 ───────────────────────────── -->
+    <section id="s2">
+      <span class="eyebrow">2 · Reflection</span>
+      <h2>What black cloth does under a spot</h2>
+
+      <div class="sub" id="s2-should">
+        <h3>How it should look</h3>
+        <p class="prose">A surface's brightness under a beam is its illuminance times its reflectance, over π. Theatre finishes span two orders of magnitude, and that range is most of what makes a stage read. Under the same beam a white cyc is roughly twenty times brighter than black serge. An eye adapted to a dark house still reads the serge pool clearly. It reads dim, it keeps the beam's colour, and it shows the cloth's texture.</p>
+        <figure>
+          <svg class="fig" id="refl" viewBox="0 0 680 340" role="img" aria-label="Reflectance of common stage finishes on a log scale, from about 1 percent for black velour to about 70 percent for a white cyc, with the Stage view's 10 percent floor marked."></svg>
+          <figcaption>Typical diffuse reflectances, log scale. The ranges are representative published figures, not measurements of your venue. The red rows are what the Stage view stores for a <code>#111111</code> finish and what it reflects once lit.</figcaption>
+        </figure>
+        <ul class="plain">
+          <li><b>Folds.</b> Front light barely shows a drape's folds. Raking light, which a 40° pan across a backcloth is, makes strong rhythmic bands: the face towards the lamp lit, the far face dark, and a crest's shadow falling into the next trough. Stage drapes are hung at 50–100 % fullness, so the folds are deep, and never perfectly regular.</li>
+          <li><b>Pile.</b> Velour and serge have a soft sheen when the light or the view grazes the surface, from the fibres standing up. There is no mirror highlight.</li>
+          <li><b>A hard edge on folds zig-zags</b>, because the cloth's surface steps back and forth in depth as the edge crosses it.</li>
+          <li><b>Floors are glossy.</b> A black dance floor or a painted deck has a satin specular: from the house you see a smeared reflection of the lamp and of bright pools in the floor. On a real stage it is the strongest single cue that a floor is a floor.</li>
+          <li><b>Light bounces.</b> A bright pool on a pale floor faintly lights the legs and the people near it.</li>
+        </ul>
+      </div>
+
+      <div class="sub" id="s2-does">
+        <h3>What the Stage view does</h3>
+        <p class="prose">Per fragment the surface shader sums every light as <code>colour × mask × (n·L) × spread / falloff</code> and rolls the total off once:</p>
+        <p class="prose"><code>lit = 1 − exp(−(albedo·(ambient + fill) + max(albedo, 0.1)·light) · 1.1)</code></p>
+        <ul class="plain">
+          <li><b>The 10 % floor flattens every dark finish to one grey.</b> <code>#111111</code> is 0.0056 linear; under light it reflects 0.10, an 18× gain, which is the reflectance of 35 % sRGB grey paint (<code>#595959</code>). The floor is per channel, so it also strips colour. The default drape red <code>#3b1219</code> is (0.044, 0.006, 0.010) linear; floored it is (0.10, 0.10, 0.10), so a white pool on a red masking drape lands neutral grey.</li>
+          <li><b>Lambert only.</b> The facing term <code>n·L</code> is the whole BRDF: no sheen on cloth, no gloss on floors, the same response for velour, paint and timber.</li>
+          <li><b>Pleats never shadow each other.</b> A fold face turned slightly towards the light is lit even where a crest stands between it and the lamp. The ripple is 5 cm deep over a 14 cm pitch, about 1.25× fullness, and a perfect sine with no variation.</li>
+          <li><b>No bounce, no texture.</b> A pool is a clean vector disc on whatever it lands on, apart from the panels, tiles and boards patterns.</li>
+          <li><b>Hue shifts at high levels.</b> The roll-off is per channel, so a bright saturated orange runs towards yellow. This is minor at the levels a backcloth sees.</li>
+        </ul>
+        <p class="prose">The floor was added so that black serge would show a spot at all. That was a fair problem. The trouble is that it fixes visibility by changing the material rather than the exposure, so materials stop reading differently from one another.</p>
+      </div>
+
+      <div class="sub" id="s2-options">
+        <h3>Options</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Option</th><th>What changes</th><th>What it buys</th><th>Cost and risk</th><th>Effort</th></tr></thead>
+            <tbody>
+              <tr class="rec">
+                <td><b>R1 · Real reflectance, exposure and a curve</b></td>
+                <td>Drop the floor, or reduce it to a luminance-only 1–2 %. Raise the overall gain so black serge reads. Apply the roll-off to luminance and keep chroma, or use a filmic curve such as AgX.</td>
+                <td>Black reads as dim black, red as red, white glows. Overlapping pools still add.</td>
+                <td>Changes the whole look, so <code>POOL_SCALE</code>, the haze gain and the fills need retuning. Offer <i>Realistic</i> and <i>Readable</i> exposure in the View menu if dark venues become hard to plot in.</td>
+                <td><span class="pill s">S</span>–<span class="pill m">M</span></td>
+              </tr>
+              <tr class="rec">
+                <td><b>R2 · Pleats that behave like cloth</b></td>
+                <td>Drive the ripple from <code>depthM</code> at 1.5–2× fullness, vary the pitch with noise, and add a fold shadow. The pleat is a known sine in its own frame, so the shader can test whether the crest between a point and the lamp blocks it, exactly and cheaply. Darken the troughs for the ambient term.</td>
+                <td>Raking light bands the cloth the way a real backcloth does. Pairs with option A in §1.</td>
+                <td>The collider must follow the new depth (option A). One more branch per cloth fragment and light.</td>
+                <td><span class="pill s">S</span>–<span class="pill m">M</span></td>
+              </tr>
+              <tr>
+                <td><b>R3 · A lobe per finish</b></td>
+                <td>Oren–Nayar diffuse for rough matte surfaces, which falls off flatter than Lambert. The Charlie sheen lobe (Estevez &amp; Kulla 2017; glTF <code>KHR_materials_sheen</code>, Filament's cloth model) for velour and serge. GGX specular with a roughness per finish for floors and paint.</td>
+                <td>Floors pick up the lamp's reflection; cloth gets its grazing sheen.</td>
+                <td>Needs the view vector, which <code>cameraPosition</code> provides. Default the parameters by kind and role on the frontend, so no schema or sync change. A few more ALU per light per fragment.</td>
+                <td><span class="pill m">M</span></td>
+              </tr>
+              <tr>
+                <td><b>R4 · One-bounce fill</b></td>
+                <td>Each landed light spawns a virtual point light at its landing point, coloured by the light × the hit finish, summed for the brightest few.</td>
+                <td>Pools on a pale floor lift what is round them.</td>
+                <td>Doubles the loop for those lights. Optional.</td>
+                <td><span class="pill m">M</span></td>
+              </tr>
+              <tr>
+                <td><b>R5 · Micro-detail</b></td>
+                <td>A weave or noise term in the cloth's albedo and normal.</td>
+                <td>A pool on serge stops being a flat gradient.</td>
+                <td>Cheap. Needs care to avoid shimmer at a distance.</td>
+                <td><span class="pill s">S</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose small muted">Bloom is out of scope. The renderer deliberately has no post-processing because the composer's targets cost hundreds of MB on Safari (<code>stage-vis-engineering.md</code> §"No post-processing"), and nothing here needs it.</p>
+        <p class="prose"><b>Recommendation.</b> Fix §1 first, because it is most of what looks wrong at pan 40. Then R1 and R2 together, since both retune how cloth reads, then R3 for floors and cloth. R4 and R5 are optional polish.</p>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── 3 ───────────────────────────── -->
+    <section id="s3">
+      <span class="eyebrow">3 · Focus</span>
+      <h2>What focus does to a pool</h2>
+
+      <div class="sub" id="s3-should">
+        <h3>How focus behaves</h3>
+        <ul class="plain">
+          <li><b>A profile or a spot mover images its gate.</b> The field stop, iris, shutters and gobo all sit in or near one plane, and the lens forms an image of it at the focal distance. That image plane is close to flat and square to the beam's axis, so a wall square to the beam is sharp right across the field, not only at the centre.</li>
+          <li><b>Off that plane each point blurs into a disc.</b> The disc grows with the error in dioptres, |1/d − 1/f|. Light is conserved: the blur spreads the edge both ways, so the half-brightness point stays on the geometric edge. A soft pool is the same size with a feathered rim. Far out of focus it becomes a larger, dimmer blob.</li>
+          <li><b>Gobos and the field edge share the gate</b>, so they go soft together and by the same amount.</li>
+          <li><b>A surface at an angle can only be sharp along one band.</b> On a raked backcloth one side of the pool is sharp and the other soft. That much of your pan 45 screenshot is right.</li>
+          <li><b>Profiles often fringe.</b> Either side of sharp focus the edge picks up a faint blue or amber halo from chromatic aberration, which is how many people find focus at the barrel.</li>
+          <li><b>Not every "focus" is imaging.</b> On a Fresnel or a PC, focus is spot to flood: beam angle and peak, never sharpness. A PAR has none; a wash mover's is its zoom.</li>
+        </ul>
+      </div>
+
+      <div class="sub" id="s3-does">
+        <h3>What the Stage view does</h3>
+        <p class="prose">The focal-distance side is in good shape: a declared range maps DMX linearly in 1/distance, and <i>Focus here</i> solves it on the desk. The problems are in how a blur is drawn.</p>
+        <ul class="plain">
+          <li><b>Defocus pulls the edge inward.</b> <code>beamMask</code> rolls the edge off from <code>1 − w</code> to <code>1</code>. Widening <code>w</code> moves the half-brightness point in: to 0.96 of the radius at blur 0.1, 0.87 at 0.25 and 0.725 at 0.55. The soft-centre term then dims the rim by up to another 35 %. A defocused pool shrinks and looks lopsided where a real one keeps its size.</li>
+          <li><b>Nothing may spill outside the field.</b> The surface shader skips a fragment outside the cone (<code>c &lt; axis.w</code>), and the haze's hull is the cone, so an outward penumbra could not be drawn even if the mask produced one.</li>
+          <li><b>The blur stops at 0.55 field radii.</b> Hardness reaches zero at <code>FOCUS_SOFT_BLUR</code> and nothing changes after that. A lantern focused at 20 m throwing onto a surface 3 m away looks only a little softer than one 2 m off.</li>
+          <li><b>Focus is measured along the slant.</b> The surface shader uses <code>dist − aperture.x</code>, the distance from the apex to the fragment, and the haze uses <code>relLen − near</code>, also a slant. <i>Focus here</i> measures along the axis. Focused exactly on a wall square to the beam, the edge, which is the one place sharpness shows, is still out by a factor of 1/cos of the half-angle.</li>
+          <li><b>Gobos blur through the mip chain.</b> The level is <code>log2(1 + blur × 64)</code> on 128 px tiles with box-filtered mips. From level 3 the pattern comes from 16 px or smaller tiles, magnified bilinearly, so it smears into blocks and diamonds rather than a round blur, and trilinear blending between levels pulses as focus moves.</li>
+          <li><b>The blur is exaggerated, on purpose.</b> A real profile's lens is 10–15 cm across, and over a 24 m throw that gives a depth of field of metres. A thin lens focused at 21 m blurs a 24 m wall by about 0.002 field radii, less than a pixel. The view's <code>dof</code> was tuned so that a focus move reads, which is a fair choice for a desk. Its shape away from focus also differs from a lens's: in front of focus it is capped at <code>dof</code> field radii where a lens's grows without limit, and behind focus it grows linearly where a lens's levels off.</li>
+        </ul>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Beam, focused on a wall square to it</th><th>Half-angle</th><th>dof</th><th>Edge blur at the rim</th><th>Edge width vs in focus</th></tr></thead>
+            <tbody>
+              <tr><td>Robe ColorSpot 575, 15° zoom</td><td class="n">7.5°</td><td class="n">2.5</td><td class="n">0.022 radii</td><td class="n">1.1×</td></tr>
+              <tr><td>Robe ColorSpot 575, 22° zoom</td><td class="n">11°</td><td class="n">2.5</td><td class="n">0.047 radii</td><td class="n">1.4×</td></tr>
+              <tr><td>Profile, 26°</td><td class="n">13°</td><td class="n">3</td><td class="n">0.079 radii</td><td class="n">2.0×</td></tr>
+              <tr><td>Profile, 36°</td><td class="n">18°</td><td class="n">3</td><td class="n">0.154 radii</td><td class="n">4.3×</td></tr>
+              <tr><td>Profile, 50°</td><td class="n">25°</td><td class="n">3</td><td class="n">0.310 radii</td><td class="n">11.3×</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose small muted">The slant error, <code>dof · (1/cos θ − 1)</code>, pushed through <code>beamHardness</code> and the mask's edge width. For the Robe it is small; for a wide profile focused perfectly it is the difference between a hard edge and a soft one.</p>
+      </div>
+
+      <div class="sub" id="s3-explorer">
+        <h3>Edge explorer</h3>
+        <div class="explorer">
+          <div class="ctl">
+            <label for="blur">Focus blur, field radii</label>
+            <input type="range" id="blur" min="0" max="1.2" step="0.01" value="0.3">
+            <output id="blurOut" for="blur">0.30</output>
+          </div>
+          <figure>
+            <svg class="fig" id="profile" viewBox="0 0 680 280" role="img" aria-label="Brightness across the pool from its centre outwards, for the current model, a lens, and the proposed symmetric edge."></svg>
+            <div class="key">
+              <span><i style="border-color: var(--bad)"></i>Stage view today</span>
+              <span><i style="border-color: var(--cool)"></i>A lens: the field disc blurred by a disc</span>
+              <span><i class="dash" style="border-color: var(--accent)"></i>Proposed: penumbra centred on the edge</span>
+            </div>
+          </figure>
+          <div class="pools">
+            <div class="pool"><canvas id="poolNow" width="220" height="220" aria-label="The pool as drawn today"></canvas><span>Today</span></div>
+            <div class="pool"><canvas id="poolLens" width="220" height="220" aria-label="The pool as a lens draws it"></canvas><span>A lens</span></div>
+            <div class="pool"><canvas id="poolNew" width="220" height="220" aria-label="The pool with the proposed edge"></canvas><span>Proposed</span></div>
+          </div>
+          <p class="small muted">The dotted ring is the field's geometric edge. The lens curve is the exact overlap of the field disc with a blur disc of that radius, which conserves the beam's light.</p>
+        </div>
+      </div>
+
+      <div class="sub" id="s3-beam">
+        <h3>The beam in haze</h3>
+        <p class="prose">The three ways of drawing a blur, on a Robe ColorSpot 575 at its 15° zoom (depth of field 2.5) throwing 12 m at a wall, seen from the side. The focus channel moves the focal plane, the dashed line, from 2 m to infinity. It runs linearly in 1/distance, as the desk maps it, so most of its travel is spent close to the lamp. The haze and the pool on the wall come from the same cross-section, as they do in the view.</p>
+        <div class="explorer">
+          <div class="ctl">
+            <label for="focusCh">Focus channel, near → far</label>
+            <input type="range" id="focusCh" min="0" max="100" step="0.5" value="70">
+            <output id="focusOut" for="focusCh">6.0 m</output>
+            <label class="chk"><input type="checkbox" id="goboOn" checked> Gobo</label>
+          </div>
+          <div class="beams">
+            <div class="beamrow">
+              <span class="rowlab"><b class="t-bad">Today</b> · edge pulled in, cut at the cone, focus on the slant</span>
+              <div class="beampair">
+                <canvas id="beamNow" width="560" height="200" aria-label="Side view of the beam in haze as drawn today"></canvas>
+                <canvas id="wallNow" width="150" height="150" aria-label="The pool on the wall as drawn today"></canvas>
+              </div>
+            </div>
+            <div class="beamrow">
+              <span class="rowlab"><b class="t-cool">A lens</b> · the field and the gobo blurred together</span>
+              <div class="beampair">
+                <canvas id="beamLens" width="560" height="200" aria-label="Side view of the beam in haze as a lens draws it"></canvas>
+                <canvas id="wallLens" width="150" height="150" aria-label="The pool on the wall as a lens draws it"></canvas>
+              </div>
+            </div>
+            <div class="beamrow">
+              <span class="rowlab"><b class="t-acc">Proposed, F1 + F2</b> · penumbra centred on the edge, focus on the axis</span>
+              <div class="beampair">
+                <canvas id="beamNew" width="560" height="200" aria-label="Side view of the beam in haze with the proposed edge"></canvas>
+                <canvas id="wallNew" width="150" height="150" aria-label="The pool on the wall with the proposed edge"></canvas>
+              </div>
+            </div>
+          </div>
+          <p class="small" id="beamRead"></p>
+        </div>
+        <ul class="plain">
+          <li><b>Today the beam bulges at the focal plane.</b> Away from focus the edge is pulled in to 0.725 of the cone, so the beam looks up to 28 % thinner either side of focus and fattest at it, a waist in reverse. A real beam widens steadily along its throw; focus only changes how crisp its edge and its gobo are.</li>
+          <li><b>Today's silhouette is always the cone.</b> Nothing outside the field is drawn, so a defocused beam never spills, and the pool on the wall shrinks rather than softens.</li>
+          <li><b>In the other two rows the gobo's shafts</b> converge to sharp lines at the focal plane and blur either side, and the beam's outline feathers outward. The proposed row approximates the lens row closely at a fraction of its cost.</li>
+        </ul>
+        <p class="prose small muted">All three rows share the same simplified haze, falloff and blur amount, so the only differences are how a blur is drawn and where it is measured from. The gobo is blurred smoothly in every row: today's mip-chain blocks (F4) are not shown. Blur is clamped at 1.2 field radii in this drawing.</p>
+      </div>
+
+      <div class="sub" id="s3-options">
+        <h3>Options</h3>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Option</th><th>What changes</th><th>What it buys</th><th>Cost and risk</th><th>Effort</th></tr></thead>
+            <tbody>
+              <tr class="rec">
+                <td><b>F1 · Centre the penumbra on the edge</b></td>
+                <td>Roll focus blur off from <code>1 − b</code> to <code>1 + b</code> (with the hard edge's minimum), widen the cone bound in the light row and the haze hull by the blur, and keep the soft-centre term for frost and family softness only.</td>
+                <td>A soft pool keeps its size and shape. An oblique pool feathers on its far side instead of caving in. Pool and haze stay in step through the shared <code>beamMask</code>.</td>
+                <td>The light's <code>cosBound</code> becomes the field plus its worst blur, computed on the CPU from the focal and landing distances. The 24 m Revolution check needs repeating.</td>
+                <td><span class="pill s">S</span>–<span class="pill m">M</span></td>
+              </tr>
+              <tr class="rec">
+                <td><b>F2 · Measure focus along the axis</b></td>
+                <td><code>axial − aperture.x</code> in the surface shader and <code>relLen · cosAngle − near</code> in the haze.</td>
+                <td>Focused on a wall, the whole edge is sharp. Agrees with what <i>Focus here</i> solves.</td>
+                <td>One line in each shader. Slightly changes the tuned look on wide fields.</td>
+                <td><span class="pill s">S</span></td>
+              </tr>
+              <tr>
+                <td><b>F3 · Blur in dioptres</b></td>
+                <td><code>b = K · |1/d − 1/f|</code>, with <code>K</code> per family in metres standing for aperture over field, clamped at a maximum.</td>
+                <td>The right shape on both sides of focus. With the 1/d DMX mapping, one DMX step off focus is the same blur anywhere on the fader.</td>
+                <td>A real lens's depth of field shrinks up close. A fixed <code>K</code> exaggerated enough to read at 24 m (72) blurs a 3.5 m surface by 2.6 field radii when the head is focused at 4 m. Keeping today's look means scaling <code>K</code> with <code>f</code>, which gives back today's model near focus. This trades one compromise for another.</td>
+                <td><span class="pill m">M</span></td>
+              </tr>
+              <tr>
+                <td><b>F4 · Filter the gobo blur properly</b></td>
+                <td>Build the atlas mips with a Gaussian or Kaiser filter at load rather than a box. Optionally take 6–8 disc taps at a lower level for a round blur.</td>
+                <td>No blocks or pulsing; a defocused gobo looks optical.</td>
+                <td>The mip rebuild is a one-off with no runtime cost. The taps cost per lit gobo fragment.</td>
+                <td><span class="pill s">S</span> / <span class="pill m">M</span></td>
+              </tr>
+              <tr>
+                <td><b>F5 · Chromatic fringe</b></td>
+                <td>Tint the penumbra slightly blue or amber by the sign of <code>f − d</code>, for imaging families only.</td>
+                <td>Focusing reads like it does at the barrel.</td>
+                <td>A flourish. Easy to overdo.</td>
+                <td><span class="pill s">S</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose"><b>Recommendation.</b> F1 and F2 together: they are what looks weird, and both live in code the pool and the haze share. F4 is cheap and worth doing at the same time. I would keep today's relative-error blur amount and leave F3 alone: the amount is a readability choice, and how a blur is drawn is where the view goes wrong. F5 is optional.</p>
+      </div>
+    </section>
+
+    <!-- ───────────────────────────── Plan ───────────────────────────── -->
+    <section id="order">
+      <span class="eyebrow">Plan</span>
+      <h2>Proposed order</h2>
+      <ol class="plain">
+        <li><b>The visible bugs.</b> Option A (drape collider, skin and <code>depthM</code>), F2 and F1. Small, and they remove the worst of all three symptoms. Add the pan-sweep harness and a test pinning the soft edge's half-brightness point at the field radius.</li>
+        <li><b>Materials.</b> R1 and R2 together, then retune the pool, haze and fill balance once.</li>
+        <li><b>Occlusion.</b> Option C, retiring the landing planes and <code>edgeLanding</code> for surfaces; the haze follows when it can afford it.</li>
+        <li><b>Polish.</b> R3 and F4.</li>
+        <li><b>Later or never.</b> D (shadow maps), R4 (bounce), R5, F5, and F3 (blur in dioptres).</li>
+      </ol>
+      <p class="prose small muted">The design record's constants are judged by eye (D15), and steps 2 and 4 move them. Each needs the same kind of tuning scene the focus work used: a drape under raking light, a floor seen from the house, a wide profile focused on a wall.</p>
+    </section>
+
+    <section id="code">
+      <span class="eyebrow">Plan</span>
+      <h2>Code map</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>File</th><th>What it holds</th><th>Touched by</th></tr></thead>
+          <tbody>
+            <tr><td class="k">scene/surfaceShader.ts</td><td>The receiver: cone test, landing test, focus blur, reflectance floor, roll-off</td><td>A, C, R1–R3, F1, F2</td></tr>
+            <tr><td class="k">scene/landing.ts</td><td>The two packed landing planes and <code>behindLanding</code></td><td>C</td></tr>
+            <tr><td class="k">scene/beamReach.ts</td><td>Colliders; <code>partBox</code>'s 10 cm pleat box and the cylinder's square box</td><td>A, B, C</td></tr>
+            <tr><td class="k">scene/StageSceneElements.tsx</td><td>The pleat mesh, <code>PLEATS_PER_M</code> and <code>PLEAT_DEPTH_M</code></td><td>A, R2</td></tr>
+            <tr><td class="k">scene/builders/drape.ts</td><td>Drape parts; <code>depthM</code> documented but unused</td><td>A, R2</td></tr>
+            <tr><td class="k">FixtureModel.tsx</td><td><code>landBeam</code>, <code>edgeLanding</code>'s eight rim rays, the light row</td><td>C, F1</td></tr>
+            <tr><td class="k">beamMask.ts</td><td>The shared cross-section, edge roll-off, <code>focusBlur</code>, <code>beamHardness</code></td><td>F1</td></tr>
+            <tr><td class="k">beamShaders.ts</td><td>The haze march: the same mask, slant focus, gobo LOD</td><td>F1, F2, F4</td></tr>
+            <tr><td class="k">goboAtlas.ts, goboLayers.ts</td><td>The 128 px atlas, its mips and <code>goboLod</code></td><td>F4</td></tr>
+            <tr><td class="k">washConfig.ts, bodies/archetype.ts</td><td><code>FOCUS_SOFT_BLUR</code>, <code>DEPTH_OF_FIELD</code></td><td>F1</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted">Paths are under <code>frontend/src/components/stage3d/</code>.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const text = (parent, x, y, s, cls, anchor) => {
+    const t = el('text', { x, y, class: cls || '', 'text-anchor': anchor || 'start' }, parent);
+    t.textContent = s;
+    return t;
+  };
+
+  // ── Reflectance chart (log scale) ──
+  const refl = document.getElementById('refl');
+  const rows = [
+    { name: '#111 finish, as stored', v: 0.0056, bad: true },
+    { name: 'Black velour', lo: 0.01, hi: 0.02, v: 0.015 },
+    { name: 'Black wool serge', lo: 0.02, hi: 0.05, v: 0.035 },
+    { name: 'Matte black paint', lo: 0.03, hi: 0.06, v: 0.045 },
+    { name: 'Black dance floor, diffuse', lo: 0.04, hi: 0.08, v: 0.06 },
+    { name: '#111 finish, lit in view', v: 0.10, bad: true },
+    { name: 'Grey card', v: 0.18 },
+    { name: 'Timber deck', lo: 0.2, hi: 0.4, v: 0.3 },
+    { name: 'White cyc or muslin', lo: 0.6, hi: 0.8, v: 0.7 },
+  ];
+  const L0 = Math.log10(0.003), L1 = 0;
+  const X0 = 230, X1 = 650, top = 24, rowH = 30;
+  const xs = (v) => X0 + ((Math.log10(v) - L0) / (L1 - L0)) * (X1 - X0);
+  const axisY = top + rows.length * rowH + 4;
+  [0.003, 0.01, 0.03, 0.1, 0.3, 1].forEach((t) => {
+    el('line', { x1: xs(t), y1: top - 6, x2: xs(t), y2: axisY, class: 'grid' }, refl);
+    text(refl, xs(t), axisY + 16, +(t * 100).toPrecision(2) + ' %', '', 'middle');
+  });
+  el('line', { x1: X0, y1: axisY, x2: X1, y2: axisY, class: 'axis' }, refl);
+  el('line', { x1: xs(0.1), y1: top - 10, x2: xs(0.1), y2: axisY, stroke: 'var(--bad)', 'stroke-width': 1.5, 'stroke-dasharray': '5 3' }, refl);
+  text(refl, xs(0.1) + 6, top - 10, 'the view’s 10 % floor', 't-bad');
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2;
+    text(refl, X0 - 10, y + 4, r.name, r.bad ? 't-bad' : 'lab', 'end');
+    el('rect', { x: X0, y: y - 7, width: Math.max(1, xs(r.v) - X0), height: 14, rx: 2, fill: r.bad ? 'var(--bad-zone)' : 'var(--zone)', stroke: r.bad ? 'var(--bad)' : 'var(--accent)', 'stroke-width': 1 }, refl);
+    if (r.lo != null) {
+      el('line', { x1: xs(r.lo), y1: y, x2: xs(r.hi), y2: y, stroke: 'var(--fg)', 'stroke-width': 1.5 }, refl);
+      el('line', { x1: xs(r.lo), y1: y - 5, x2: xs(r.lo), y2: y + 5, stroke: 'var(--fg)', 'stroke-width': 1.5 }, refl);
+      el('line', { x1: xs(r.hi), y1: y - 5, x2: xs(r.hi), y2: y + 5, stroke: 'var(--fg)', 'stroke-width': 1.5 }, refl);
+    }
+  });
+  text(refl, X0, axisY + 34, 'diffuse reflectance, log scale', '');
+
+  // ── Edge models ──
+  const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const EDGE_HARD = 0.03, EDGE_SOFT = 0.55, SOFT_CENTRE = 0.35, SOFT_BLUR = 0.55;
+  function today(r, b) {
+    if (r > 1) return 0; // outside the cone: skipped
+    const s = ss(0, SOFT_BLUR, b);
+    const w = EDGE_HARD + (EDGE_SOFT - EDGE_HARD) * s;
+    return (1 - ss(1 - w, 1, r)) * (1 - SOFT_CENTRE * s * Math.min(r * r, 1));
+  }
+  function overlap(d, R, r) {
+    if (d >= R + r) return 0;
+    if (d <= Math.abs(R - r)) return Math.PI * Math.min(R, r) ** 2;
+    const a = r * r * Math.acos((d * d + r * r - R * R) / (2 * d * r));
+    const c = R * R * Math.acos((d * d + R * R - r * r) / (2 * d * R));
+    const k = 0.5 * Math.sqrt((-d + r + R) * (d + r - R) * (d - r + R) * (d + r + R));
+    return a + c - k;
+  }
+  function lens(r, b) {
+    if (b < 1e-3) return r <= 1 ? 1 : 0;
+    return overlap(Math.max(r, 1e-6), 1, b) / (Math.PI * b * b);
+  }
+  function proposed(r, b) {
+    const h = Math.max(EDGE_HARD / 2, b);
+    return 1 - ss(1 - h, 1 + h, r);
+  }
+
+  const prof = document.getElementById('profile');
+  const PX0 = 50, PX1 = 660, PY0 = 236, PY1 = 20, RMAX = 2.2;
+  const px = (r) => PX0 + (r / RMAX) * (PX1 - PX0);
+  const py = (v) => PY0 - v * (PY0 - PY1) / 1.1;
+  const grid = el('g', {}, prof);
+  [0, 0.5, 1, 1.5, 2].forEach((t) => { el('line', { x1: px(t), y1: PY1, x2: px(t), y2: PY0, class: 'grid' }, grid); text(grid, px(t), PY0 + 16, t.toFixed(1), '', 'middle'); });
+  [0, 0.5, 1].forEach((t) => { el('line', { x1: PX0, y1: py(t), x2: PX1, y2: py(t), class: 'grid' }, grid); text(grid, PX0 - 8, py(t) + 4, t.toFixed(1), '', 'end'); });
+  el('line', { x1: PX0, y1: PY0, x2: PX1, y2: PY0, class: 'axis' }, grid);
+  el('line', { x1: px(1), y1: PY1 - 4, x2: px(1), y2: PY0, stroke: 'var(--fg)', 'stroke-width': 1, 'stroke-dasharray': '2 3' }, grid);
+  text(grid, px(1) + 4, PY1 + 8, 'field edge', 'lab');
+  text(grid, (PX0 + PX1) / 2, PY0 + 34, 'distance from the pool’s centre, field radii', '', 'middle');
+  const pNow = el('path', { fill: 'none', stroke: 'var(--bad)', 'stroke-width': 2.5 }, prof);
+  const pLens = el('path', { fill: 'none', stroke: 'var(--cool)', 'stroke-width': 2.5 }, prof);
+  const pNew = el('path', { fill: 'none', stroke: 'var(--accent)', 'stroke-width': 2.5, 'stroke-dasharray': '7 5' }, prof);
+  const halfNow = el('circle', { r: 4, fill: 'var(--bad)' }, prof);
+  const halfLens = el('circle', { r: 4, fill: 'var(--cool)' }, prof);
+
+  function pathFor(fn, b) {
+    let d = '';
+    for (let i = 0; i <= 440; i++) {
+      const r = (i / 440) * RMAX;
+      d += (i ? 'L' : 'M') + px(r).toFixed(1) + ' ' + py(fn(r, b)).toFixed(1);
+    }
+    return d;
+  }
+  function halfPoint(fn, b) {
+    const peak = fn(0, b) || 1;
+    for (let r = 0; r < RMAX; r += 0.002) if (fn(r, b) < 0.5 * peak) return r;
+    return RMAX;
+  }
+
+  function drawPool(id, fn, b) {
+    const c = document.getElementById(id);
+    const ctx = c.getContext('2d');
+    const n = c.width, img = ctx.createImageData(n, n);
+    const scale = 2.4 / n; // canvas spans ±1.2 field radii
+    // A warm white pool on the stage's dark ground, through the same 1 − exp roll-off the view uses.
+    const base = [0.06, 0.06, 0.08];
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const r = Math.hypot(x - n / 2, y - n / 2) * scale;
+      const m = fn(r, b);
+      const i = (y * n + x) * 4;
+      const k = [1.0, 0.92, 0.8].map((c0, j) => {
+        const lin = 1 - Math.exp(-(base[j] * 0.1 + c0 * m * 2.2));
+        return Math.round(255 * (lin <= 0.0031308 ? lin * 12.92 : 1.055 * Math.pow(lin, 1 / 2.4) - 0.055));
+      });
+      img.data[i] = k[0] + 12; img.data[i + 1] = k[1] + 12; img.data[i + 2] = k[2] + 16; img.data[i + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    ctx.setLineDash([2, 4]);
+    ctx.strokeStyle = 'rgba(160, 170, 200, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(n / 2, n / 2, 1 / scale, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const input = document.getElementById('blur');
+  const out = document.getElementById('blurOut');
+  function render() {
+    const b = parseFloat(input.value);
+    out.value = b.toFixed(2);
+    pNow.setAttribute('d', pathFor(today, b));
+    pLens.setAttribute('d', pathFor(lens, b));
+    pNew.setAttribute('d', pathFor(proposed, b));
+    const hn = halfPoint(today, b), hl = halfPoint(lens, b);
+    halfNow.setAttribute('cx', px(hn)); halfNow.setAttribute('cy', py(0.5 * today(0, b)));
+    halfLens.setAttribute('cx', px(hl)); halfLens.setAttribute('cy', py(0.5 * lens(0, b)));
+    drawPool('poolNow', today, b);
+    drawPool('poolLens', lens, b);
+    drawPool('poolNew', proposed, b);
+  }
+  input.addEventListener('input', render);
+  render();
+
+  // ── The beam in haze: a Robe 575 at 15°, 12 m to a wall, seen from the side ──
+  const FIELD_DEG = 15, DOF = 2.5, THROW = 12, R0 = 0.08, NEAR = 2, FAR = 40;
+  const TAN = Math.tan((FIELD_DEG / 2) * Math.PI / 180);
+  const radiusAt = (d) => R0 + d * TAN;
+  // Cross-sections live on a grid in field radii, pre-blurred at a ladder of blur levels.
+  const N = 121, E = 2.4, CELL = (2 * E) / (N - 1);
+  const LV = 40, BMAX = 1.2;
+  const LEVELS = Array.from({ length: LV }, (_, i) => BMAX * (i / (LV - 1)) ** 2);
+  const levelOf = (b) => Math.round(Math.sqrt(Math.min(Math.max(b, 0), BMAX) / BMAX) * (LV - 1));
+  const BAR_P = 0.4;
+  function bars(u) {
+    const f = (((u / BAR_P + 0.25) % 1) + 1) % 1;
+    const dc = Math.min(Math.abs(f - 0.25), 1 - Math.abs(f - 0.25));
+    return Math.max(0, Math.min(1, 0.5 + ((0.25 - dc) * BAR_P) / CELL));
+  }
+  const disc = (u, v) => Math.max(0, Math.min(1, 0.5 + (1 - Math.hypot(u, v)) / CELL));
+  function makeGrid(fn) {
+    const g = new Float32Array(N * N);
+    for (let iy = 0; iy < N; iy++) for (let ix = 0; ix < N; ix++) g[iy * N + ix] = fn(-E + ix * CELL, -E + iy * CELL);
+    return g;
+  }
+  function boxPass(a, out, h, horiz) {
+    const w = 2 * h + 1;
+    for (let line = 0; line < N; line++) {
+      const at = (k) => { const kk = k < 0 ? 0 : k >= N ? N - 1 : k; return horiz ? a[line * N + kk] : a[kk * N + line]; };
+      let sum = 0;
+      for (let k = -h; k <= h; k++) sum += at(k);
+      for (let k = 0; k < N; k++) {
+        out[horiz ? line * N + k : k * N + line] = sum / w;
+        sum += at(k + h + 1) - at(k - h);
+      }
+    }
+  }
+  // A disc of radius b blurs with sigma ≈ b / 2; three box passes approximate the Gaussian.
+  function blurred(base, b) {
+    const sigma = b / 2 / CELL;
+    const a = Float32Array.from(base);
+    if (sigma < 0.4) return a;
+    const h = Math.max(1, Math.round((Math.sqrt(4 * sigma * sigma + 1) - 1) / 2));
+    const t = new Float32Array(N * N);
+    for (let p = 0; p < 3; p++) { boxPass(a, t, h, true); boxPass(t, a, h, false); }
+    return a;
+  }
+  const ladders = {};
+  function ladder(key, fn) {
+    if (!ladders[key]) { const base = makeGrid(fn); ladders[key] = LEVELS.map((b) => blurred(base, b)); }
+    return ladders[key];
+  }
+  function sample(g, u, v) {
+    const gx = (u + E) / CELL, gy = (v + E) / CELL;
+    if (gx < 0 || gy < 0 || gx >= N - 1 || gy >= N - 1) return 0;
+    const x = gx | 0, y = gy | 0, fx = gx - x, fy = gy - y, i = y * N + x;
+    return (g[i] * (1 - fx) + g[i + 1] * fx) * (1 - fy) + (g[i + N] * (1 - fx) + g[i + N + 1] * fx) * fy;
+  }
+
+  // The three models, as a cross-section value at (u, v) field radii, d metres from the lens.
+  function makeModels(gobo) {
+    const goboL = gobo ? ladder('gobo', (u) => bars(u)) : null;
+    const lensL = ladder(gobo ? 'lensGobo' : 'lens', (u, v) => disc(u, v) * (gobo ? bars(u) : 1));
+    return {
+      now(u, v, d, f) {
+        const r = Math.hypot(u, v);
+        if (r > 1) return 0;
+        const b = (DOF * Math.abs(f - Math.hypot(d, r * radiusAt(d)))) / f;
+        const e = today(r, b);
+        return e > 0 && goboL ? e * sample(goboL[levelOf(b)], u, v) : e;
+      },
+      lens(u, v, d, f) {
+        return sample(lensL[levelOf((DOF * Math.abs(f - d)) / f)], u, v);
+      },
+      proposed(u, v, d, f) {
+        const b = Math.min(BMAX, (DOF * Math.abs(f - d)) / f);
+        const e = proposed(Math.hypot(u, v), b);
+        return e > 0 && goboL ? e * sample(goboL[levelOf(b)], u, v) : e;
+      },
+    };
+  }
+
+  const toSrgb = (l) => Math.round(255 * (l <= 0.0031308 ? l * 12.92 : 1.055 * Math.pow(l, 1 / 2.4) - 0.055));
+  const WARM = [1.0, 0.93, 0.82], GROUND = [0.008, 0.008, 0.011];
+  function put(data, i, m) {
+    for (let j = 0; j < 3; j++) data[i + j] = toSrgb(GROUND[j] + (1 - GROUND[j]) * WARM[j] * m);
+    data[i + 3] = 255;
+  }
+
+  const ZMAX = 2.3, STEPS = 14;
+  function drawBeam(id, model, f) {
+    const c = document.getElementById(id), ctx = c.getContext('2d');
+    const W = c.width, H = c.height, cy = H / 2, x0 = 10, k = (W - 2 * x0) / THROW;
+    const img = ctx.createImageData(W, H), data = img.data;
+    for (let i = 0; i < data.length; i += 4) put(data, i, 0);
+    for (let x = x0 + 1; x <= W - x0; x++) {
+      const d = (x - x0) / k, R = radiusAt(d);
+      for (let y = 0; y <= cy; y++) {
+        const u = (cy - y) / k / R;
+        let lum = 0;
+        if (u < ZMAX) {
+          const wmax = Math.sqrt(ZMAX * ZMAX - u * u);
+          let sum = 0;
+          for (let j = 0; j < STEPS; j++) sum += model(u, ((j + 0.5) / STEPS) * wmax, d, f);
+          lum = 1 - Math.exp(-0.9 * (2 * sum * (wmax / STEPS)) / R);
+        }
+        put(data, (y * W + x) * 4, lum);
+        put(data, ((H - 1 - y) * W + x) * 4, lum);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    ctx.fillStyle = 'rgba(150, 160, 190, 0.9)';
+    ctx.fillRect(0, cy - 7, x0, 14);
+    ctx.strokeStyle = 'rgba(150, 160, 190, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W - x0 + 1, 0); ctx.lineTo(W - x0 + 1, H); ctx.stroke();
+    if (f <= THROW) {
+      const fx = x0 + f * k;
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = 'rgba(230, 170, 90, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(fx, 0); ctx.lineTo(fx, H); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  function drawWall(id, model, f) {
+    const c = document.getElementById(id), ctx = c.getContext('2d');
+    const n = c.width, img = ctx.createImageData(n, n), span = 3.4 / n;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const m = model((x - n / 2) * span, (y - n / 2) * span, THROW, f);
+      put(img.data, (y * n + x) * 4, 1 - Math.exp(-2 * m));
+    }
+    ctx.putImageData(img, 0, 0);
+    ctx.setLineDash([2, 4]);
+    ctx.strokeStyle = 'rgba(160, 170, 200, 0.75)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(n / 2, n / 2, 1 / span, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  const focusIn = document.getElementById('focusCh');
+  const focusOut = document.getElementById('focusOut');
+  const goboIn = document.getElementById('goboOn');
+  const beamRead = document.getElementById('beamRead');
+  const focalDistance = (p) => 1 / (1 / NEAR - (p / 100) * (1 / NEAR - 1 / FAR));
+  let queued = false;
+  function renderBeams() {
+    queued = false;
+    const f = focalDistance(parseFloat(focusIn.value));
+    const models = makeModels(goboIn.checked);
+    focusOut.value = (f >= 39.5 ? 'infinity' : f.toFixed(1) + ' m');
+    const bWall = (DOF * Math.abs(f - THROW)) / f;
+    beamRead.textContent = 'Focus at ' + f.toFixed(1) + ' m · at the wall the blur is ' + bWall.toFixed(2) + ' field radii' +
+      (bWall >= SOFT_BLUR ? ', past where today’s edge stops softening' : '');
+    drawBeam('beamNow', models.now, f); drawWall('wallNow', models.now, f);
+    drawBeam('beamLens', models.lens, f); drawWall('wallLens', models.lens, f);
+    drawBeam('beamNew', models.proposed, f); drawWall('wallNew', models.proposed, f);
+  }
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(renderBeams); } };
+  focusIn.addEventListener('input', queue);
+  goboIn.addEventListener('change', queue);
+  renderBeams();
+})();
+</script>
