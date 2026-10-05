@@ -1,6 +1,5 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { REACH_EPS_M } from './landing'
-import { pleatShape } from './pleat'
 import { elementBaseZ, type ElementBuild, type PartGeometry } from './sceneParts'
 
 /**
@@ -195,7 +194,7 @@ export interface PartBox {
 
 /**
  * A part's box in its element's lighting frame — for a quad, the thin slab behind its face; for a
- * pleat, just deep enough to hold the cloth's folds ([pleatShape]).
+ * pleat, just deep enough to hold the cloth's folds (its `pleat`, `pleat.ts`'s [pleatShape]).
  */
 export function partBox(geometry: PartGeometry): PartBox {
   const b = shapeBox(geometry)
@@ -218,7 +217,7 @@ function shapeBox(geometry: PartGeometry): Omit<PartBox, 'capSkin'> {
     case 'disc':
       return { ox: 0, oy: 0, oz: 0, hx: geometry.r, hy: geometry.d / 2, hz: geometry.r, skin: e }
     case 'pleat': {
-      const a = pleatShape().amplitudeM
+      const a = geometry.pleat.amplitudeM
       return { ox: 0, oy: 0, oz: 0, hx: geometry.w / 2, hy: a, hz: geometry.h / 2, skin: 2 * a + e }
     }
     case 'quad':

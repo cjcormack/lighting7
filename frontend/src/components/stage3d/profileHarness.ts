@@ -12,6 +12,13 @@
 // `?profileHarness=drape` swaps in the **drape scene** (stage-light plan session
 // 1): one spot over a black backcloth, a pair of tabs and a column, for sweeping
 // pan by hand. See [DRAPE_HARNESS_CHANNELS].
+//
+// `?profileHarness=rake`, `=floor` and `=cyc` are the **material scenes**
+// (stage-light plan session 2), where the exposure and the folds are judged: a
+// drape lit square on, at 45° and raking; three floor finishes seen from the
+// house; and a white cyc, black serge and a red drape side by side under one
+// light each. Their lanterns are fixed and at full, so nothing need be written.
+// See [buildMaterialHarness].
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
@@ -21,14 +28,20 @@ import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/f
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
 
-/** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`) or the drape scene (`=drape`). */
-export type HarnessMode = 'load' | 'focus' | 'drape'
+/** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`), the drape scene (`=drape`) or a material scene. */
+export type HarnessMode = 'load' | 'focus' | 'drape' | MaterialHarness
+
+/** The material scenes (stage-light plan session 2). */
+export type MaterialHarness = 'rake' | 'floor' | 'cyc'
+const MATERIAL_HARNESSES: readonly string[] = ['rake', 'floor', 'cyc'] satisfies MaterialHarness[]
 
 export function harnessMode(): HarnessMode | null {
   if (typeof window === 'undefined') return null
   try {
     const flag = new URLSearchParams(window.location.search).get('profileHarness')
-    return flag === '1' ? 'load' : flag === 'focus' || flag === 'drape' ? flag : null
+    if (flag === '1') return 'load'
+    if (flag === 'focus' || flag === 'drape') return flag
+    return flag != null && MATERIAL_HARNESSES.includes(flag) ? (flag as MaterialHarness) : null
   } catch {
     return null
   }
@@ -123,6 +136,7 @@ export function buildHarness(
 ): HarnessData {
   if (mode === 'focus') return buildFocusHarness(stageD)
   if (mode === 'drape') return buildDrapeHarness()
+  if (mode === 'rake' || mode === 'floor' || mode === 'cyc') return buildMaterialHarness(mode)
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
@@ -590,4 +604,158 @@ function drapeElement(
     hidden: false,
     sortOrder: id,
   }
+}
+
+// — the material scenes ——————————————————————————————————————————————————
+
+const MATERIAL_TYPE_KEY = '__profileHarness_material_type__'
+
+/** One of a material scene's lanterns: a profile at [from], focused on [at], lighting metres. */
+interface MaterialSpot {
+  key: string
+  from: { x: number; y: number; z: number }
+  at: { x: number; y: number; z: number }
+  beamDeg: number
+}
+
+/**
+ * A static lantern's base pose to point it from [from] at [at]: yaw 0 aims at the house and turns
+ * anticlockwise from above, and +pitch aims down (`staticHeadQuaternion` in `FixtureModel.tsx`).
+ */
+export function aimStatic(from: MaterialSpot['from'], at: MaterialSpot['at']): { baseYawDeg: number; basePitchDeg: number } {
+  const dx = at.x - from.x
+  const dy = at.y - from.y
+  const dz = at.z - from.z
+  const deg = (r: number) => (r * 180) / Math.PI
+  return { baseYawDeg: deg(Math.atan2(dx, -dy)), basePitchDeg: deg(Math.atan2(-dz, Math.hypot(dx, dy))) }
+}
+
+/** Serge, the default drape's red and a cyc's white, as `buildDrape` and a hall's soft goods draw them. */
+const BLACK_SERGE = '#101012'
+const DRAPE_RED = '#3b1219'
+const CYC_WHITE = '#e8e6df'
+
+/** Where a material scene's lanterns hang and what they light. */
+export function materialScene(mode: MaterialHarness): { spots: MaterialSpot[]; elements: StageElementDto[] } {
+  switch (mode) {
+    case 'rake': {
+      // One black serge cloth 12 m across, 4 m upstage, lit 2 m up at three angles off its normal,
+      // each lantern 6 m from its pool: square on, 45° and 75° from stage right.
+      const pool = (x: number, offDeg: number, key: string): MaterialSpot => {
+        const a = (offDeg * Math.PI) / 180
+        return { key, from: { x: x - 6 * Math.sin(a), y: 4 - 6 * Math.cos(a), z: 2 }, at: { x, y: 4, z: 2 }, beamDeg: 10 }
+      }
+      return {
+        spots: [pool(-4, 0, 'rake-front'), pool(0, 45, 'rake-45'), pool(4, 75, 'rake-75')],
+        elements: [materialDrape(1, 'Serge', 0, 4, 12, 4, BLACK_SERGE, 0.12, { operation: 'DEAD', role: 'BACKCLOTH' })],
+      }
+    }
+    case 'floor': {
+      // Three decks 2.4 m square and 2 cm high across the stage — a black dance floor, the default
+      // grey deck and timber boards — each under a spot from a front-of-house bar, 45° up.
+      const decks = [
+        { x: -3, colour: '#141414', pattern: null, name: 'Dance floor' },
+        { x: 0, colour: '#4a443d', pattern: null, name: 'Deck' },
+        { x: 3, colour: '#8a6a48', pattern: 'BOARDS', name: 'Timber' },
+      ]
+      return {
+        spots: decks.map((d, i) => ({ key: `floor-${i}`, from: { x: d.x, y: -2, z: 5 }, at: { x: d.x, y: 3, z: 0.02 }, beamDeg: 20 })),
+        elements: decks.map((d, i) => ({
+          ...materialDrape(i + 1, d.name, d.x, 3, 2.4, 0.02, d.colour, 2.4, {}),
+          kind: 'PLATFORM',
+          positionZ: 0.02,
+          finishPattern: d.pattern,
+        })),
+      }
+    }
+    case 'cyc': {
+      // A white cyc, black serge and the default drape red, each 3 m wide and 5 m upstage, each under
+      // its own spot from a front-of-house bar: the same light on all three.
+      const cloths = [
+        { x: -3.2, colour: CYC_WHITE, role: 'CYC', depth: 0.05, name: 'Cyc' },
+        { x: 0, colour: BLACK_SERGE, role: 'LEG', depth: 0.1, name: 'Serge' },
+        { x: 3.2, colour: DRAPE_RED, role: 'LEG', depth: 0.1, name: 'Red drape' },
+      ]
+      return {
+        spots: cloths.map((c, i) => ({ key: `cyc-${i}`, from: { x: c.x, y: -3, z: 5 }, at: { x: c.x, y: 5, z: 2 }, beamDeg: 15 })),
+        elements: cloths.map((c, i) => materialDrape(i + 1, c.name, c.x, 5, 3, 4, c.colour, c.depth, { operation: 'DEAD', role: c.role })),
+      }
+    }
+  }
+}
+
+/**
+ * A material scene (`?profileHarness=rake`, `=floor`, `=cyc`; stage-light plan session 2): the
+ * finishes a hall is made of under fixed profiles at full, in white, so the exposure, the colour of
+ * a pool and a fold's shadow are judged against one another with nothing written to the desk.
+ */
+function buildMaterialHarness(mode: MaterialHarness): HarnessData {
+  const { spots, elements } = materialScene(mode)
+  const syntheticType: FixtureTypeInfo = {
+    typeKey: MATERIAL_TYPE_KEY,
+    manufacturer: 'Harness',
+    model: 'Material profile',
+    modeName: 'Fixed',
+    channelCount: 1,
+    isRegistered: true,
+    capabilities: [],
+    properties: [],
+    elementGroupProperties: null,
+    acceptsBeamAngle: true,
+    acceptsGel: false,
+    kind: 'PROFILE',
+    body: { archetype: 'profile' },
+  }
+  const syntheticFixture: Fixture = {
+    key: MATERIAL_TYPE_KEY + '__fx',
+    name: 'Material profile',
+    typeKey: MATERIAL_TYPE_KEY,
+    universe: 1,
+    firstChannel: 1,
+    channelCount: 1,
+    channels: [],
+    properties: [],
+    capabilities: [],
+    groups: [],
+    compatibleLookIds: [],
+  }
+  const patches: FixturePatch[] = spots.map((spot, i) => ({
+    id: i + 1,
+    key: spot.key,
+    displayName: spot.key,
+    fixtureTypeKey: MATERIAL_TYPE_KEY,
+    startChannel: 1,
+    channelCount: 1,
+    manufacturer: 'Harness',
+    model: 'Material profile',
+    modeName: 'Fixed',
+    universe: 1,
+    subnet: 0,
+    sortOrder: i + 1,
+    groups: [],
+    stageX: spot.from.x,
+    stageY: spot.from.y,
+    stageZ: spot.from.z,
+    ...aimStatic(spot.from, spot.at),
+    riggingUuid: null,
+    beamAngleDeg: spot.beamDeg,
+    gelCode: null,
+    kindOverride: null,
+    stageHidden: false,
+  }))
+  return { patches, regions: [], riggings: [], syntheticFixture, syntheticType, elements }
+}
+
+function materialDrape(
+  id: number,
+  name: string,
+  x: number,
+  y: number,
+  widthM: number,
+  heightM: number,
+  finishColour: string,
+  depthM: number,
+  params: Record<string, unknown>,
+): StageElementDto {
+  return { ...drapeElement(id, name, x, y, widthM, heightM, params), uuid: `harness-material-${id}`, finishColour, depthM }
 }

@@ -21,7 +21,7 @@ import {
   UNPACK_FOCUS_GLSL,
 } from './lightTable'
 import { LAND_NONE, LAND_UP, packLanding, REACH_EPS_M } from './landing'
-import { PLEAT_DEPTH_M } from './pleat'
+import { CYC_DEPTH_MAX_M, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } from './pleat'
 import type { Facing, PartGeometry } from './sceneParts'
 import { partGeometry } from './StageSceneElements'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
@@ -94,12 +94,18 @@ describe('the axial reach (stage-view plan session 3)', () => {
 
 describe('a collider holds what it draws (stage-light plan D1)', () => {
   const FACINGS: Facing[] = ['up', 'down', 'upstage', 'downstage', 'left', 'right']
+  // Cloth at every depth the drape's `depthM` draws, the cyc's stretched ripple, and past both ends.
+  const cloth = (depthM: number, role = 'BACKCLOTH'): PartGeometry => ({
+    shape: 'pleat', w: 2.3, h: 4, pleat: pleatShape(element({ kind: 'DRAPE', uuid: `cloth-${depthM}-${role}`, depthM, params: { role } })),
+  })
   const SHAPES: PartGeometry[] = [
     { shape: 'box', w: 1.2, d: 0.6, h: 0.9 },
     { shape: 'cylinder', rTop: 0.2, rBottom: 0.2, h: 3 },
     { shape: 'cylinder', rTop: 0.14, rBottom: 0.25, h: 0.5 },
     { shape: 'disc', r: 0.5, d: 0.05 },
-    { shape: 'pleat', w: 2.3, h: 4 },
+    ...[0.005, 0.05, 0.1, 0.2, 1].map((d) => cloth(d)),
+    cloth(0.1, 'CYC'),
+    { ...(cloth(0.1) as Extract<PartGeometry, { shape: 'pleat' }>), anchor: 'left' },
     ...FACINGS.map((facing): PartGeometry => ({ shape: 'quad', w: 2, h: 1.5, facing })),
   ]
   // The lighting-frame axes a beam lands on to light the part: every face of a solid, the broad
@@ -109,7 +115,8 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
   const QUAD_AXIS: Record<Facing, number> = { left: 0, right: 0, upstage: 1, downstage: 1, up: 2, down: 2 }
 
   for (const shape of SHAPES) {
-    it(`holds a ${shape.shape}${shape.shape === 'quad' ? ` facing ${shape.facing}` : ''} within its skin`, () => {
+    const label = shape.shape === 'quad' ? ` facing ${shape.facing}` : shape.shape === 'pleat' ? ` ${(2 * shape.pleat.amplitudeM).toFixed(3)} m deep` : ''
+    it(`holds a ${shape.shape}${label} within its skin`, () => {
       const g = partGeometry(shape)
       const box = partBox(shape)
       const centre = [box.ox, box.oy, box.oz]
@@ -143,12 +150,18 @@ describe('a collider holds what it draws (stage-light plan D1)', () => {
   }
 
   it("takes a cloth's skin from its folds, a column's sides from its radius and a shade's top from its height", () => {
-    expect(partBox({ shape: 'pleat', w: 2, h: 3 })).toMatchObject({ hy: PLEAT_DEPTH_M / 2, skin: PLEAT_DEPTH_M + REACH_EPS_M })
+    const pleat = pleatShape(element({ kind: 'DRAPE', depthM: 0.12 }))
+    expect(partBox({ shape: 'pleat', w: 2, h: 3, pleat })).toMatchObject({ hy: 0.06, skin: 0.12 + REACH_EPS_M })
     expect(partBox({ shape: 'cylinder', rTop: 0.3, rBottom: 0.3, h: 2 })).toMatchObject({ skin: 0.3, capSkin: REACH_EPS_M })
     expect(partBox({ shape: 'cylinder', rTop: 0.1, rBottom: 0.3, h: 0.5 })).toMatchObject({ skin: 0.3, capSkin: 0.5 })
     expect(partBox({ shape: 'box', w: 1, d: 1, h: 1 })).toMatchObject({ skin: REACH_EPS_M, capSkin: REACH_EPS_M })
-    const [cloth] = elementColliders(element({ kind: 'DRAPE', widthM: 4, heightM: 3 }), buildElement(element({ kind: 'DRAPE', widthM: 4, heightM: 3 })))
-    expect(cloth.skin).toBe(PLEAT_DEPTH_M + REACH_EPS_M)
+    const drape = (depthM: number, role = 'BACKCLOTH') => element({ kind: 'DRAPE', widthM: 4, heightM: 3, depthM, params: { role } })
+    const skinOf = (e: StageElementDto) => elementColliders(e, buildElement(e))[0].skin
+    // The drape's depth is its folds', within what a drape can hang at; a cyc is stretched.
+    expect(skinOf(drape(0.15))).toBeCloseTo(0.15 + REACH_EPS_M, 12)
+    expect(skinOf(drape(0.001))).toBeCloseTo(PLEAT_DEPTH_MIN_M + REACH_EPS_M, 12)
+    expect(skinOf(drape(4))).toBeCloseTo(PLEAT_DEPTH_MAX_M + REACH_EPS_M, 12)
+    expect(skinOf(drape(0.15, 'CYC'))).toBeCloseTo(CYC_DEPTH_MAX_M + REACH_EPS_M, 12)
   })
 })
 
@@ -172,8 +185,8 @@ describe('where a beam lands (stage-light plan D1)', () => {
     const out = [0, 0, 0, 0]
     packLanding(face(REACH_EPS_M), null, out, 0)
     expect(out).toEqual([LAND_UP, 0.5, LAND_NONE, 1])
-    packLanding(face(PLEAT_DEPTH_M + REACH_EPS_M), { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: 0.2 }, out, 0)
-    expect(out[1]).toBeCloseTo(0.5 - PLEAT_DEPTH_M, 9)
+    packLanding(face(0.05 + REACH_EPS_M), { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: 0.2 }, out, 0)
+    expect(out[1]).toBeCloseTo(0.5 - 0.05, 9)
     expect(out[3]).toBeCloseTo(2 - (0.2 - REACH_EPS_M), 9)
   })
 

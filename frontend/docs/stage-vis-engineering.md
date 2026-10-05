@@ -658,8 +658,8 @@ without a room — the back wall and the catch floor:
   Everywhere and the Positions plan draw it whole.
 - **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
   face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
-  one fold, which the mesh and the box both read: 5 cm crest to trough), and its skin is that depth
-  plus `REACH_EPS`; a cylinder's side faces take its radius, since a box round a column has its
+  one fold, which the mesh, the box and the fold shadow all read: the element's `depthM` crest to
+  trough, 2–30 cm — a cyc's no more than 2 cm), and its skin is that depth plus `REACH_EPS`; a cylinder's side faces take its radius, since a box round a column has its
   tangent at the front face, and its flat top and bottom `REACH_EPS` (a lamp shade's top and bottom
   its height, which its sloped side faces); every other face's is `REACH_EPS`. A collider carries the
   two (`skin` for its level faces, `capSkin` for its top and bottom), the hit takes the one for the
@@ -670,7 +670,7 @@ without a room — the back wall and the catch floor:
   untouched: the beam's length, `coneLandingDepth` and *Focus here* read it. Before, a drape's box was
   10 cm deep round 5 cm pleats, the plane sat 2.5 cm in front of the crests, and only each crest's cap
   was lit — the thin stripes a backcloth drew. A column still lights a little of what is within its
-  radius behind it, and a pleat never shadows the next, until the stage-light plan's sessions 2 and 3.
+  radius behind it until the stage-light plan's session 3.
   `?profileHarness=drape` (`profileHarness.ts`'s drape scene) is the scene to sweep a pool across a
   backcloth, a tab's edge and a column in.
 - **A beam split across an edge lands on both faces** (`scene/landing.ts`, `edgeLanding` in
@@ -722,12 +722,40 @@ without a room — the back wall and the catch floor:
   a pinspot), so a 15° Revolution on the balcony still lands on the back cloth 24 m away; a wider
   beam lands as the prototype drew it. The aperture also sets the distance the **focus** is measured
   from (§"Fixture bodies").
-- **The colour is the prototype's**: the finish × (the room's ambient 0.012 + the material's own
-  `fill` + every light), rolled off once by `1 − exp(−·)` and encoded, so overlapping pools add and a
-  rig at full does not clip to white. The light reflects off no less than `uReflectFloor` of itself,
-  so a pool still reads on the near-black finishes a hall is painted in — black serge shows a spot —
-  while the ambient keeps the finish's own darkness. A light row carries colour × level ×
-  `POOL_SCALE` (40, the prototype's typical lamp power).
+- **A finish reflects its own albedo, and exposure makes the darks read** (stage-light plan D6): the
+  finish × (the room's ambient + the material's own `fill` + every light), times the exposure
+  `SURFACE_LIGHT_GAIN` (4.4), rolled off once by `1 − exp(−·)` **on the luminance** and encoded
+  (`rollOff`, with its TypeScript twin). Overlapping pools add, a rig at full does not clip, and the
+  colour keeps its chroma: a white pool on the default red drape is red, and a colour too bright to
+  keep runs to white rather than to another hue (the per-channel curve ran orange to yellow). There
+  is no reflectance floor: the 10 % one made `#101012` serge reflect 18× its finish, like 35 % grey
+  paint, and per channel it turned a red drape's pool grey. The exposure is four times the
+  prototype's 1.1 so black serge shows a spot, dark but plainly lit; the ambient (0.003) and the
+  housings' fills (`bodies/palette.ts`) are a quarter of what they were, so what no beam reaches —
+  the house, the rig — reads as before, and `litByFill` draws the billboard housing on the same
+  curve. A catch surface reflects as a 25 % finish, which is what it drew at before. A light row
+  carries colour × level × `POOL_SCALE` (40, the prototype's typical lamp power) and the haze its own
+  `VOL_GAIN`; neither moved, measured on the Commemoration Hall's balcony view against session 1: the
+  haze, the housings, the seats and the walls read the same, a floor pool a little darker (101 → 88
+  of 255) and the black backcloth's pool half as bright (129 → 64). `?profileHarness=cyc` (a white cyc, black serge and the
+  default red drape under one light each), `=floor` (three floor finishes from the house) and
+  `=rake` (a drape lit square on, at 45° and at 75°) are where these constants are judged.
+- **Pleats shadow each other** (stage-light plan D2, D7). A drape's fold is a sine whose depth is its
+  `depthM` and whose fullness that depth sets, 1.5× at 5 cm to 2× at 20 cm — the 50–100 % a stage
+  drape hangs at — with a phase that wanders ±30 % by a noise seeded from the element's uuid (and the
+  half, for a pair of tabs), so no two pleats are alike while every crest stays at the fold's depth.
+  A drawn half measures its folds from its outer edge (`anchor`, `pleatShift`), which stays put while
+  it gathers, so its folds stay with the cloth; the shift is a uniform, so a draw rebuilds no
+  material.
+  The mesh is drawn at ten segments a pleat with the fold's own normals, and its material gets the
+  fold as uniforms (`uPleat`, `uPleatWarp`) and its frame from the mesh's `modelMatrix`, declared in
+  the fragment stage. The shader takes the normal from the fold, and asks `foldLight` whether a
+  crest stands between the point and the lamp: in the fold's section the ray climbs at a slope, the
+  cloth beats it by most at the first crest's shoulder — where the cloth's slope equals the ray's —
+  so one closed form answers it, with a 4 mm soft edge and no shadow map. A lamp nearer the cloth's
+  normal than its steepest flank casts no fold shadow; raking light bands it. A trough sees less of
+  the room's ambient by how steep its walls are. `pleat.ts` holds the twin, pinned against a march
+  along the ray.
 - **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers samples the
   gobo atlas in its own frame, blurred by the same focus term as its edge — §"Gobos on surfaces"
   under §"Fixture bodies".
