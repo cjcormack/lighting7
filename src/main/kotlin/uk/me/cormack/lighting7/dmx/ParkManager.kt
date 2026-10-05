@@ -136,7 +136,8 @@ class ParkManager(
 
     /**
      * Drop a park outright — no hand-off to the layers below, unlike [unpark]. For a park that may
-     * not stand at all (a firing level on a one-shot trigger's channel, `Show.dropRefusedParks`),
+     * not stand at all (a firing level on a one-shot trigger's channel, or a level that would hold a
+     * fixture command, `Show.dropRefusedParks`),
      * where handing its value down would only carry it somewhere else.
      */
     fun forget(universe: Int, channel: Int) {

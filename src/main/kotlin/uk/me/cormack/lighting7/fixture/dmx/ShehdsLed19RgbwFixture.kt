@@ -62,16 +62,6 @@ sealed class ShehdsLed19RgbwFixture(
     }
 
     /**
-     * Reset channel — manual just labels it "Reset" with no value bands.
-     * Modelled (like the Varytec Easymove ch 11) as a discrete two-state
-     * setting so accidental FX writes can't trigger a head reset.
-     */
-    enum class Reset(override val level: UByte) : DmxFixtureSettingValue {
-        NO_FUNCTION(0u),
-        RESET(255u),
-    }
-
-    /**
      * One of three RGBW zones in 24ch mode (CH9–12, CH13–16, CH17–20).
      *
      * Each zone is four channels (R, G, B, W) and exposes both
@@ -130,7 +120,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 22: Program speed.
      * - Ch 23: Control mode (slave/auto/sound) — plain slider, manual lists
      *         four broad bands but no clean named states beyond "self-propelled".
-     * - Ch 24: Reset.
+     * - Ch 24: Reset — the [reset] command, not a property (fixture optics plan session 7).
      */
     @FixtureType("shehds-led19-rgbw-24ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
     class Mode24Ch(
@@ -218,10 +208,16 @@ sealed class ShehdsLed19RgbwFixture(
         )
         val controlMode: Slider = DmxSlider(transaction, universe, firstChannel + 22)
 
-        @FixtureProperty("Reset", category = PropertyCategory.SETTING)
-        val reset = DmxFixtureSetting(
-            transaction, universe, firstChannel + 23, Reset.entries.toTypedArray(),
+        // The manual labels the channel only "Reset", with no value bands; 255 is the level the desk
+        // has always sent for it (a two-option setting until fixture optics session 7).
+        // Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
+            holdMs = 5_000,
         )
+        val reset = DmxCommand(universe, firstChannel + 23, 255u)
     }
 
     /**
@@ -248,7 +244,7 @@ sealed class ShehdsLed19RgbwFixture(
      * - Ch 14: Program speed.
      * - Ch 15: Control mode (10–99 activates programs, 100–179 self-propelled,
      *         180–255 voice).
-     * - Ch 16: Reset.
+     * - Ch 16: Reset — the [reset] command, not a property (fixture optics plan session 7).
      */
     @FixtureType("shehds-led19-rgbw-16ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
     class Mode16Ch(
@@ -335,10 +331,16 @@ sealed class ShehdsLed19RgbwFixture(
         )
         val controlMode: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Reset", category = PropertyCategory.SETTING)
-        val reset = DmxFixtureSetting(
-            transaction, universe, firstChannel + 15, Reset.entries.toTypedArray(),
+        // The manual labels the channel only "Reset", with no value bands; 255 is the level the desk
+        // has always sent for it (a two-option setting until fixture optics session 7).
+        // Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
+            holdMs = 5_000,
         )
+        val reset = DmxCommand(universe, firstChannel + 15, 255u)
     }
 
     companion object {

@@ -421,6 +421,36 @@ data class TriggerPropertyDescriptor(
     override val compactDisplay: String? = null
 }
 
+/**
+ * A **fixture command** (fixture optics plan session 7, D13) — a reset, a lamp strike, a lamp off. Not
+ * a control: nothing sets it. It runs from the fixture panel's *Commands* menu behind a confirm
+ * (`POST …/patches/{id}/commands/{name}`), and the desk holds [channel] at its level for [holdMs]
+ * before giving it back. Listed so a client can draw the menu and the DMX sheet can name the channel;
+ * a client that draws controls from the property list must skip it.
+ */
+@Serializable
+@kotlinx.serialization.SerialName("command")
+data class CommandPropertyDescriptor(
+    override val name: String,
+    /** The menu item ("Reset scroller"). */
+    override val displayName: String,
+    /** What it does, for the confirm. */
+    val description: String,
+    val holdMs: Long,
+    val confirm: Boolean,
+    val channel: ChannelRef,
+    /** No property covers [channel]: the desk holds it idle between commands. */
+    val dedicated: Boolean,
+    /** Channels the desk sets for the hold because the manual wants them so, with why. */
+    val alongside: List<CommandHoldDto> = emptyList(),
+) : PropertyDescriptor {
+    override val category: String = "command"
+    override val compactDisplay: String? = null
+}
+
+@Serializable
+data class CommandHoldDto(val channel: ChannelRef, val level: Int, val why: String)
+
 @Serializable
 data class SettingOption(
     val name: String,

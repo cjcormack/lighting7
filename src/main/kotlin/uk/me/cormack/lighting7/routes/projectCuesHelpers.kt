@@ -2,6 +2,7 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.CommandIndex
 
 import uk.me.cormack.lighting7.models.CueTargetDto
 
@@ -526,11 +527,15 @@ internal fun createCueChildren(
     // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
     // problem at once, before anything is written, so the caller's transaction rolls back whole.
     // The index is queries; build it only when some name could be refused at all.
-    if (propertyAssignments.any { TriggerIndex.mayRefuse(it.propertyName) } || adHocEffects.any { TriggerIndex.mayRefuse(it.propertyName) }) {
-        TriggerIndex.of(cue.project).check(
-            propertyAssignments.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]") } +
-                adHocEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") },
-        )
+    // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
+    val mayTrigger = propertyAssignments.any { TriggerIndex.mayRefuse(it.propertyName) } || adHocEffects.any { TriggerIndex.mayRefuse(it.propertyName) }
+    // A row is also refused for a level inside a command's band on a property that shares its channel.
+    val mayCommand = propertyAssignments.any { CommandIndex.mayRefuseRow(it.propertyName) } || adHocEffects.any { CommandIndex.mayRefuse(it.propertyName) }
+    if (mayTrigger || mayCommand) {
+        val refs = propertyAssignments.mapIndexed { i, a -> TriggerIndex.RowRef(a.targetType, a.targetKey, a.propertyName, "propertyAssignments[$i]", a.value) } +
+            adHocEffects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "adHocEffects[$i]") }
+        if (mayTrigger) TriggerIndex.of(cue.project).check(refs)
+        if (mayCommand) CommandIndex.of(cue.project).check(refs)
     }
     for (layer in layers) {
         // A layer naming a record that no longer exists is dropped rather than failing the write —

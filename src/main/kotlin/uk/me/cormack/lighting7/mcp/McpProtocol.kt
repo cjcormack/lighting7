@@ -17,6 +17,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.ai.AiTools
+import uk.me.cormack.lighting7.ai.FIXTURE_COMMANDS_REMOTE_REFUSAL
+import uk.me.cormack.lighting7.ai.RUN_FIXTURE_COMMAND
 import uk.me.cormack.lighting7.ai.AnthropicToolDef
 import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
@@ -166,6 +168,12 @@ class McpProtocol(private val state: State) {
                 log.warn("describe_rig failed", e)
                 toolResult("Could not describe the rig: ${e.message ?: e::class.simpleName}", isError = true)
             }
+        }
+
+        // MCP is always remote: a fixture command is held to Remote access's "allow fixture commands"
+        // (fixture optics plan session 7), as the REST route's `requireCommandsAccess` holds a remote call.
+        if (name == RUN_FIXTURE_COMMAND && !state.remoteAccess.allowRemoteCommands) {
+            return toolResult(FIXTURE_COMMANDS_REMOTE_REFUSAL, isError = true)
         }
 
         val outcome = if (setupTools.handles(name)) setupTools.executeTool(name, arguments)

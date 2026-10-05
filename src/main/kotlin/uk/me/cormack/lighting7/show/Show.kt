@@ -16,6 +16,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
+import uk.me.cormack.lighting7.state.CommandOutput
 import uk.me.cormack.lighting7.state.TriggerOutput
 import uk.me.cormack.lighting7.state.optionalBoolean
 import uk.me.cormack.lighting7.state.optionalString
@@ -141,12 +142,26 @@ class Show(
     val triggerOutput = TriggerOutput(fixtures).also { fixtures.registerListener(it) }
 
     /**
-     * What the controllers consult at transmit time in place of the bare [parkManager]: park on top,
-     * the trigger output under it. Every `DbFixtureLoader.loadFixtures` call passes this. A park at a
-     * firing level on a trigger or arm channel is passed over here whatever stored it
-     * ([TriggerOutput.admitsPark]); [start] also drops the stored ones.
+     * Every fixture command's channel on the rig, and the holds in flight (fixture optics plan
+     * session 7) — see [CommandOutput]. Beside the trigger output, under park; its band guard is a
+     * transmit modifier, attached in [start].
      */
-    val outputSource: ParkSource = LayeredParkSource(parkManager, triggerOutput, admitTop = triggerOutput::admitsPark)
+    val commandOutput = CommandOutput(fixtures, parkManager, isBlind = { programmerStore.blind }).also { fixtures.registerListener(it) }
+
+    /**
+     * What the controllers consult at transmit time in place of the bare [parkManager]: park on top,
+     * the command and trigger outputs under it (they never hold the same channel). Every
+     * `DbFixtureLoader.loadFixtures` call passes this. A park at a firing level on a trigger or arm
+     * channel, or one that would hold a fixture command, is passed over here whatever stored it
+     * ([TriggerOutput.admitsPark], [CommandOutput.admitsPark]); [start] also drops the stored ones.
+     */
+    val outputSource: ParkSource = LayeredParkSource(
+        parkManager,
+        LayeredParkSource(commandOutput, triggerOutput),
+        admitTop = { universe, channel, value ->
+            triggerOutput.admitsPark(universe, channel, value) && commandOutput.admitsPark(universe, channel, value)
+        },
+    )
 
     val fxEngine = FxEngine(
         fixtures = fixtures,
@@ -213,7 +228,9 @@ class Show(
      */
     internal fun dropRefusedParks() {
         for (park in parkManager.getAllParked()) {
-            val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value) ?: continue
+            val why = triggerOutput.parkRefusal(park.universe, park.channel, park.value)
+                ?: commandOutput.parkRefusal(park.universe, park.channel, park.value)
+                ?: continue
             org.slf4j.LoggerFactory.getLogger("Show").warn("Dropped a stored park: {}", why)
             parkManager.forget(park.universe, park.channel)
         }
@@ -233,6 +250,8 @@ class Show(
         // Attach the global scaler to every controller so Blackout / Grand Master toggles
         // from a control surface propagate at transmit time.
         globalScalerState.attach()
+        // After the scalers, so the command band guard has the last word on a shared channel.
+        commandOutput.attach()
 
         // Write live tempo changes back to their rows, so the stored bpm is "wherever the
         // tempo was last set" and the next boot/import starts there. Trailing-debounced:
@@ -289,6 +308,8 @@ class Show(
 
     fun close() {
         globalScalerState.detach()
+        // A hold in flight ends with the show: its caller hears it was interrupted.
+        commandOutput.close()
         // Detach the sync hook first so nothing new lands mid-teardown, then flush what's
         // pending — a tempo tapped in the last debounce window must not be lost to a
         // project switch, and the hook (unlike a flow collector) guarantees every change

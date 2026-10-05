@@ -386,6 +386,20 @@ instanced mesh pooled per canvas, unlit, invalidating each frame only while a fl
 `docs/stage-vis-engineering.md` §"Confetti". The MIDI `fireTrigger` target is mirrored in
 `lib/surfaceDrop.ts` and the binding picker; the remote-access tab carries *Allow arming and firing*.
 
+**Fixture commands — resets and lamp control** (fixture-optics session 7; lighting7
+`docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
+`CommandPropertyDescriptor` (`type: 'command'`, `commandsOf` in `store/fixtures.ts`) at the very end of
+a fixture's properties, skipped by every control-drawing switch and by `useTargetProperties`' `expand`
+(which now drops triggers too — a picker offering either offered only a 400). `FixtureContent` draws
+**`FixtureCommandsMenu`** (`components/fixtures/`) above the controls: a *Commands* dropdown, each item
+its hold, each behind an `AlertDialog` naming the unit and the command with its description, its hold
+and what it sets for the hold (`alongside`). Confirmed, it is one REST call
+(`useRunFixtureCommandMutation`, `store/commands.ts`) that **answers when the hold ends**, and the
+button counts the hold down from the descriptor's `holdMs` meanwhile — only in this window, since there
+is no socket frame. Refusals (`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`,
+`REMOTE_COMMANDS_DISABLED`) toast by the desk's words; a cut-short hold warns. The remote-access tab
+carries *Allow fixture commands over remote access* (`allowCommands`), which MCP is held to as well.
+
 **Positions** (`components/positions/`) replaced `StageOverviewPanel` and `StageMarker`: one row per
 rigging, upstage first, the stage edge marked, derived on every render and never stored
 (`FU-BUSK-RIG-PLOT`). A chip **sets the desk selection** (`setDeskSelection`, ⇧/⌘ toggles), a group

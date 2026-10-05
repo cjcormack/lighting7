@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.plugins
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.CommandIndex
 
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -701,6 +702,8 @@ object ProgrammerHandler {
      */
     private fun triggerRefusal(state: State, target: TargetRef, propertyName: String): String? =
         TriggerIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, propertyName, "programmer")
+            // Nor a fixture command (fixture optics plan session 7).
+            ?: CommandIndex.refusalLive(state.show.fixtures, target.discriminator, target.key, propertyName, "programmer")
 
     /** Parse [value] against the property's category, then delegate to [setTyped]. */
     fun set(

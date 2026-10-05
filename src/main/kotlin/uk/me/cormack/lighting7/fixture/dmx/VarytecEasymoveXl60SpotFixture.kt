@@ -92,18 +92,6 @@ sealed class VarytecEasymoveXl60SpotFixture(
     }
 
     /**
-     * Channel 11 — reset.
-     *
-     * The manual labels the channel only "Reset" with no value bands. To keep
-     * accidental FX writes from triggering a head reset, this is modelled as
-     * a setting with two discrete states rather than an open slider.
-     */
-    enum class Reset(override val level: UByte) : DmxFixtureSettingValue {
-        NO_FUNCTION(0u),
-        RESET(255u),
-    }
-
-    /**
      * 11-channel mode — the only personality the fixture exposes.
      *
      * - Ch 1: Pan (coarse, 630°).
@@ -116,7 +104,7 @@ sealed class VarytecEasymoveXl60SpotFixture(
      * - Ch 8: Pan/tilt speed (0 fastest → 255 slowest).
      * - Ch 9: Pan (fine).
      * - Ch 10: Tilt (fine).
-     * - Ch 11: Reset.
+     * - Ch 11: Reset — the [Mode11Ch.reset] command, not a property (fixture optics plan session 7).
      */
     @FixtureType("varytec-easymove-xl-60-spot-11ch", manufacturer = "Varytec", model = "Easymove XL 60 Spot", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
     class Mode11Ch(
@@ -193,10 +181,16 @@ sealed class VarytecEasymoveXl60SpotFixture(
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
-        @FixtureProperty("Reset", category = PropertyCategory.SETTING)
-        val reset = DmxFixtureSetting(
-            transaction, universe, firstChannel + 10, Reset.entries.toTypedArray(),
+        // Ch 11. The manual labels the channel only "Reset", with no value bands; 255 is the level the
+        // desk has always sent for it (it was a two-option setting until fixture optics session 7).
+        // Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
+            holdMs = 5_000,
         )
+        val reset = DmxCommand(universe, firstChannel + 10, 255u)
 
         companion object {
             const val STROBE_MIN: UByte = 1u

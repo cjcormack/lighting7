@@ -252,6 +252,15 @@ sub-channel lifts to the whole `rgbColour` property (freezing the sibling compon
 axes and channels with no backing property stay channel-shaped in the programmer's sideband. All
 three are released by Clear.
 
+Two kinds of channel take no write at all, dropped with a log line since the frame has no reply: a
+one-shot trigger's channel or its arm (`TriggerOutput.ownerOf`, stage-view session 9), and a fixture
+command's **dedicated** channel (`CommandOutput.ownerOf`, fixture optics session 7) — the Revolution's
+reset channel, the Robe's control channel — which the desk holds idle between commands. A command's
+*shared* channel (the MAC 250's shutter) takes the write like any property channel, and the output's
+band guard sends a level in a command's band as idle. Fixture commands add **no** frame: they run over
+REST (`POST …/patches/{id}/commands/{command}`), so the socket gains no operation and
+`FU-AUTH-WS-PER-MESSAGE` stays unfired.
+
 Which property a channel belongs to is `CascadePublisher.resolveChannelCoveringKey` — the one
 channel→property lookup, read from `PropertyChannelWriter.channelKeyIndex`: one walk of the register
 per `Fixtures.structureVersion`, shared with the `channelMappingState` frame's per-address

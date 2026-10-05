@@ -41,6 +41,8 @@ fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescri
             is SettingPropertyDescriptor -> aggregateSettingProperty(templateProp, dmxFixtures)
             // A trigger fires per fixture, from its own panel: a group has no trigger control.
             is TriggerPropertyDescriptor -> null
+            // A command runs per fixture, from its own panel and behind its own confirm.
+            is CommandPropertyDescriptor -> null
         }
         if (aggregated != null) result.add(aggregated)
     }

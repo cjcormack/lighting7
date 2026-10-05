@@ -157,6 +157,16 @@ internal fun handleUpdateChannel(state: State, message: UpdateChannelInMessage) 
         )
         return
     }
+    // A fixture command's dedicated channel (fixture optics plan session 7): the desk owns it too, and a
+    // raw level there would be a reset typed into the DMX sheet. A shared one is composition's, and its
+    // band guard catches a command level at the output.
+    show.commandOutput.ownerOf(universe, channel)?.let { owner ->
+        logger.warn(
+            "updateChannel: refused {}/{} — it is '{}'s command channel ({}); a command runs from the fixture's Commands menu",
+            universe, channel, owner.fixtureName, owner.commands.joinToString { it.name },
+        )
+        return
+    }
 
     val key = engine.cascade.resolveChannelCoveringKey(universe, channel)
     if (key == null) {

@@ -494,6 +494,9 @@ export function PropertyVisualizer({ property, fixtureKey, isEditing = false, di
     // A one-shot trigger is not a control: it fires from the cannon's panel (`CannonPanel`).
     case 'trigger':
       return null
+    // Nor is a fixture command: it runs from the panel's Commands menu (`FixtureCommandsMenu`).
+    case 'command':
+      return null
   }
 }
 

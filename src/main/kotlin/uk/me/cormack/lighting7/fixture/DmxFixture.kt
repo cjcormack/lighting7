@@ -51,6 +51,13 @@ abstract class DmxFixture(
             channelDescriptions[trigger.armChannelNo] = "${trigger.spec.armDescription} (arm)"
         }
 
+        // Fixture commands (fixture optics plan session 7) on a channel no property covers: named here,
+        // since nothing else names it. A shared channel keeps its property's name.
+        for ((channel, commands) in FixtureCommands.of(this).filter { it.dedicated }.groupBy { it.channelNo }) {
+            channelDescriptions[channel] =
+                if (commands.size == 1) "${commands.single().spec.label} (command)" else "${commands.size} commands"
+        }
+
         // Add element properties for multi-element fixtures
         if (this is MultiElementFixture<*>) {
             for (element in elements) {
@@ -176,6 +183,23 @@ abstract class DmxFixture(
             )
         }
 
+        // Fixture commands, after the triggers and for the same reason: a client that draws controls
+        // from this list draws none for them (a command runs from the panel's Commands menu).
+        for (command in FixtureCommands.of(this)) {
+            descriptors.add(
+                CommandPropertyDescriptor(
+                    name = command.name,
+                    displayName = command.spec.label,
+                    description = command.spec.description,
+                    holdMs = command.spec.holdMs,
+                    confirm = command.spec.confirm,
+                    channel = ChannelRef(command.universe, command.channelNo),
+                    dedicated = command.dedicated,
+                    alongside = command.alongside.map { CommandHoldDto(ChannelRef(command.universe, it.channelNo), it.level.toInt(), it.why) },
+                )
+            )
+        }
+
         return descriptors
     }
 
@@ -267,8 +291,9 @@ abstract class DmxFixture(
                         MemberSettingChannel(fixtureKey = elementDescriptors[idx].key, channel = p.channel)
                     }
                 )
-                // A head never carries a trigger (they are fixture-level), and a trigger has no "all heads" control.
+                // A head never carries a trigger or a command (they are fixture-level), and neither has an "all heads" control.
                 is TriggerPropertyDescriptor -> null
+                is CommandPropertyDescriptor -> null
             }
         }
     }

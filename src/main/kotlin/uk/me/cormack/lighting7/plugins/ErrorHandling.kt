@@ -12,9 +12,11 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.auth.AuthenticationException
 import uk.me.cormack.lighting7.auth.AuthorizationException
 import uk.me.cormack.lighting7.auth.PasswordPolicyException
+import uk.me.cormack.lighting7.mcp.RemoteCommandsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteEffectsDisabledException
 import uk.me.cormack.lighting7.mcp.RemoteScriptsDisabledException
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.routes.ErrorResponse
 
 private val logger = LoggerFactory.getLogger("error-handling")
@@ -107,10 +109,21 @@ fun Application.configureErrorHandling() {
             logger.warn("Refused a trigger row on {}: {}", call.request.local.uri, cause.message)
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A one-shot trigger cannot be stored", TriggerNotStorableException.CODE))
         }
+        // A stored row, an effect or a programmer value naming a fixture command (fixture optics plan
+        // session 7, D13) — the trigger refusal's twin.
+        exception<CommandNotStorableException> { call, cause ->
+            logger.warn("Refused a command row on {}: {}", call.request.local.uri, cause.message)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "A fixture command cannot be stored", CommandNotStorableException.CODE))
+        }
         // An arm, fire or reload through the tunnel while "allow arming and firing" is off.
         exception<RemoteEffectsDisabledException> { call, cause ->
             logger.warn("Refused remote effects request on {}", call.request.local.uri)
             call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Arming and firing are turned off for remote access", "REMOTE_EFFECTS_DISABLED"))
+        }
+        // A fixture command through the tunnel while "allow fixture commands" is off (fixture optics session 7).
+        exception<RemoteCommandsDisabledException> { call, cause ->
+            logger.warn("Refused remote command request on {}", call.request.local.uri)
+            call.respond(HttpStatusCode.Forbidden, ErrorResponse(cause.message ?: "Fixture commands are turned off for remote access", "REMOTE_COMMANDS_DISABLED"))
         }
         exception<PasswordPolicyException> { call, cause ->
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "Password rejected"))

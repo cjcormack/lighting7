@@ -129,7 +129,7 @@ class StrobeBandsTest {
         assertEquals(StrobeBandInfo(0, 19, "CLOSED"), bands.first())
         assertEquals(StrobeBandInfo(50, 72, "STROBE", hzMin = 1.0, hzMax = 10.0, inverted = true), bands[2])
         assertTrue(bands.any { it.kind == "RANDOM" && it.from == 128 }, "a raw write past the clamp is described too")
-        assertTrue(bands.none { 208 in it.from..it.to || 228 in it.from..it.to }, "reset and the lamp stay undeclared")
+        assertTrue(bands.none { 208 in it.from..it.to || 228 in it.from..it.to }, "reset and the lamp stay undeclared: they are fixture commands, and the view draws their bands open")
 
         val dimmer = mac.generatePropertyDescriptors().filterIsInstance<SliderPropertyDescriptor>().single { it.name == "dimmer" }
         assertNull(dimmer.strobeBands, "only a STROBE slider carries bands")

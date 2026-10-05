@@ -208,6 +208,23 @@ stop, runtime only); in Blind it is rehearsed (drawn, never sent). Loaded/spent 
 (`effect_tube_state`). See `docs/fixtures-engineering.md` §"@FixtureTrigger" and
 `docs/cues-engineering.md` §"Cue events".
 
+**Fixture commands** (fixture optics plan session 7) follow the trigger's shape: resets and lamp
+control are a `DmxCommand` declared with `@FixtureCommand(label, description, holdMs, confirm)` — the
+Revolution's five resets, the Robe's lamp on, lamp off and seven resets, the MAC 250's reset and lamp, and the reset
+the Varytec, Shehds, Fusion, Orbit and Slender carried as a setting option until then. No Look,
+template, cue row, effect, programmer value or binding can hold one: every write boundary refuses one
+**by name** (`COMMAND_NOT_STORABLE`, `fixture/CommandGuard.kt`'s `CommandIndex`, beside each
+`TriggerIndex` call), and on a channel a command **shares** with a property (the MAC 250's shutter) the
+output's band guard sends a value in a command's band as idle, whatever wrote it. `state/CommandOutput.kt`
+holds a command's level — and the preconditions it declares (`alongside`: the MAC 250's CTC, prism and
+open gobo, the Robe's closed shutter) — for `holdMs`, above composition and under park through
+`Show.outputSource`, then gives the channels back; a **dedicated** command channel (no property covers
+it) is held idle between commands and a raw write on it dropped. One command per unit (`COMMAND_BUSY`),
+refused in Blind (`COMMAND_BLIND`) or on a parked channel (`COMMAND_PARKED`); a blackout does not cut a
+hold short, a project switch does. Stored rows holding one were stripped once at startup
+(`state/CommandRowStrip.kt`, delete once run) and are on every sync import. See
+`docs/fixtures-engineering.md` §"@FixtureCommand".
+
 ### Property System
 Properties provide a unified interface for fixture and group control:
 
@@ -435,6 +452,9 @@ group.applyColourFx(fxEngine, effect("RainbowCycle"), distribution = Distributio
 - `POST /api/rest/projects/{id}/patches/{pid}/fire` `{trigger, rehearse?}` - Fire one tube now: 409 `TRIGGER_NOT_ARMED` unarmed, 409 `TRIGGER_SPENT` on a spent tube (nothing sent), 400 `TRIGGER_UNKNOWN`. `rehearse` — or a blind programmer — draws it on every window and sends nothing, needing no arm and spending nothing
 - `POST /api/rest/projects/{id}/patches/{pid}/reload` `{trigger?}` - Mark one tube, or every tube, loaded
 - `PUT /api/rest/projects/{id}/cues/{cid}/events` - A cue's **whole** event list (`{events: [{patchId, trigger, offsetMs}]}`), every problem at once, answered as stored (`CueDetails.events`). Events fire on GO into the cue only — never tracked, never on GO TO a later cue or GO BACK, never previewed — and only while armed; unarmed they are skipped and announced, never queued. The AI's `apply_cue` fires them through the same hook (`EffectsService.onCueGo`). Sync `formatVersion` 21
+
+### Fixture Command Endpoints
+- `POST /api/rest/projects/{id}/patches/{pid}/commands/{command}` - Run one fixture command (a reset, a lamp strike, a lamp off): the desk holds its level for its declared time and answers when the hold ends (`{completed}` false when cut short). 400 `COMMAND_UNKNOWN`, 409 `COMMAND_BUSY` / `COMMAND_BLIND` / `COMMAND_PARKED`; on the public listener 403 `REMOTE_COMMANDS_DISABLED` unless an admin allows it (`requireCommandsAccess`, Install settings → Remote access). Current project only; both roles locally. No WS frame — the hold is the request. MCP's `run_fixture_command` is the same call, held to the same setting
 
 ### Stage Scene Endpoints
 - `GET/POST /api/rest/projects/{id}/stage-elements` + `GET/PUT/DELETE .../{eid}` - The scene document (stage-view plan session 2): named venue and set elements — `ROOM | PROSCENIUM | FLAT | DRAPE | PLATFORM | SEATING | OBJECT`, layer `VENUE | SET`, a pose (Z is the base, except a platform's, which is its top surface, as a region's `centerZ` is), a size, a finish and `params`, a sealed `ElementParams` per kind (`models/stageScene.kt`) checked at the write boundary with every problem at once. A `PUT` is partial and the merged element is checked whole. Deleting or reshaping a seating that seat views sit in is 409 `STAGE_ELEMENT_IN_USE`, `?force=true` leaves them dangling. Stored data only, so ungated by the current project, like stage regions. See `docs/fixtures-engineering.md` §"The scene document"
@@ -696,7 +716,8 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
   own listener, never a remote one, so Claude can check the model it built). **The port split is the security boundary**: everything on that listener is
   remote, decided by port and never by a forwarded header, and `installRemoteHardening` applies
   there — no remote bootstrap, a sign-in lockout, `Secure` cookies, an Origin check, no QR flows,
-  scripts refused unless an admin allows them. Anything mounted on it is reachable from the
+  scripts refused unless an admin allows them, and arming, firing and fixture commands likewise
+  (`requireEffectsAccess`, `requireCommandsAccess` — MCP's `run_fixture_command` included). Anything mounted on it is reachable from the
   internet, and a script-capable route must call `requireScriptAccess`. See
   [docs/mcp-engineering.md](docs/mcp-engineering.md)
 

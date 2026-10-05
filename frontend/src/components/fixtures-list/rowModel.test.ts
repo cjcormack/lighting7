@@ -22,6 +22,7 @@ import {
 } from './rowModel'
 import { resolveCell } from './columns'
 import type { ColumnKey } from './columns'
+import type { CommandPropertyDescriptor } from '../../store/fixtures'
 import { cellKey, cellsByColumn } from '../sheet/cellSelectionModel'
 import {
   chan,
@@ -689,6 +690,15 @@ describe('targetFamilies', () => {
     expect(targetFamilies([spot, bar])).toEqual(['INTENSITY', 'COLOUR', 'BEAM'])
     expect(targetFamilies([bar])).toEqual(['COLOUR'])
     expect(targetFamilies([])).toEqual([])
+  })
+
+  it('counts no family for a trigger or a command, which no template can hold', () => {
+    const reset: CommandPropertyDescriptor = {
+      type: 'command', name: 'reset', displayName: 'Reset', category: 'command', description: 'Resets.',
+      holdMs: 3000, confirm: true, channel: chan(12), dedicated: true,
+    }
+    const rev = makeFixture('rev', [sliderProp('dimmer', 'dimmer', chan(1)), reset])
+    expect(targetFamilies([rev])).toEqual(['INTENSITY'])
   })
 })
 

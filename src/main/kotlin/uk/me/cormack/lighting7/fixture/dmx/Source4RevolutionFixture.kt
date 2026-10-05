@@ -28,10 +28,10 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
  * wheel (ch 16–19) stay live (plan P3). The wheels ship empty — their slots hold the user's M-size
  * gobos or dichroics — so the front wheel's slots name no pattern.
  *
- * Two channels are not exposed as `@FixtureProperty`. **Reset (ch 12)** is a command, not a value
- * (hold a band for three seconds, then snap to 0 — p15), and a reset recorded into a Look would fire
- * on playback; it stays at 0 unless a script writes the raw channel, and becomes a fixture command
- * in the fixture optics plan's session 7. **Ch 20–23** are reserved with the shutter module fitted.
+ * Two channels are not exposed as `@FixtureProperty`. **Reset (ch 12)** is five fixture commands
+ * (fixture optics plan session 7), not a value: hold a band for three seconds, then snap to 0 (p15).
+ * No property covers it, so the desk owns it and holds it at 0 between commands; a reset recorded
+ * into a Look would fire on every playback. **Ch 20–23** are reserved with the shutter module fitted.
  */
 sealed class Source4RevolutionFixture(
     universe: Universe,
@@ -148,7 +148,8 @@ sealed class Source4RevolutionFixture(
      * - Ch 7: Focus.
      * - Ch 8: Zoom, 35° → 15°.
      * - Ch 9: Focus timing. Ch 10: Colour timing. Ch 11: Beam timing (1 s per DMX step, p16).
-     * - Ch 12: Reset (NOT exposed — see the class doc).
+     * - Ch 12: Reset — the [reset], [resetScroller], [resetPanTilt], [resetFrontModule] and
+     *   [resetRearModule] commands, not a property (see the class doc).
      * - Ch 13: Gel scroller, the standard 12-colour string.
      * - Ch 14: Fan speed (0 full → 255 off; the thermal sensors override it, p16).
      * - Ch 15: Iris (open → closed).
@@ -236,7 +237,47 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Beam fade time", category = PropertyCategory.SPEED)
         val beamTime: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        // Ch 12 (Reset) intentionally not exposed — see the class doc.
+        // Ch 12 — the reset channel (p15): "set the channel to one of the levels shown below for three
+        // seconds, then set the channel to 0% without timing or fading". Each command holds the middle
+        // of its band for the manual's three seconds and half a second more; the desk then drops the
+        // channel straight to 0.
+
+        @FixtureCommand(
+            label = "Reset fixture",
+            description = "Recalibrates everything — pan, tilt, scroller, lenses and both modules — then " +
+                "returns to the desk's values. The head and the beam move while it runs.",
+            holdMs = RESET_HOLD_MS,
+        )
+        val reset = DmxCommand(universe, firstChannel + 11, 187u, bandMin = 185u, bandMax = 190u)
+
+        @FixtureCommand(
+            label = "Reset scroller",
+            description = "Recalibrates the gel scroller and the lenses (zoom and focus). The colour and the " +
+                "beam change while it runs.",
+            holdMs = RESET_HOLD_MS,
+        )
+        val resetScroller = DmxCommand(universe, firstChannel + 11, 149u, bandMin = 147u, bandMax = 152u)
+
+        @FixtureCommand(
+            label = "Reset pan/tilt",
+            description = "Recalibrates pan and tilt. The head swings through its travel while it runs.",
+            holdMs = RESET_HOLD_MS,
+        )
+        val resetPanTilt = DmxCommand(universe, firstChannel + 11, 127u, bandMin = 126u, bandMax = 129u)
+
+        @FixtureCommand(
+            label = "Reset front module",
+            description = "Recalibrates the front-bay module (the iris or a wheel).",
+            holdMs = RESET_HOLD_MS,
+        )
+        val resetFrontModule = DmxCommand(universe, firstChannel + 11, 99u, bandMin = 97u, bandMax = 102u)
+
+        @FixtureCommand(
+            label = "Reset rear module",
+            description = "Recalibrates the rear-bay module — the framing shutters. The blades move while it runs.",
+            holdMs = RESET_HOLD_MS,
+        )
+        val resetRearModule = DmxCommand(universe, firstChannel + 11, 74u, bandMin = 72u, bandMax = 77u)
 
         @FixtureProperty("Gel scroller", category = PropertyCategory.COLOUR, media = MediaSlot.GEL)
         val gelScroller = DmxFixtureSetting(
@@ -312,5 +353,14 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Frame 4 rotation", category = PropertyCategory.SHUTTER_ROTATION,
             blade = Blade.RIGHT, degMin = -45.0, degMax = 45.0)
         val frame4Rot: Slider = DmxSlider(transaction, universe, firstChannel + 30)
+
+        companion object {
+            /**
+             * The manual's "for three seconds" (p15), plus half a second so a frame dropped or late on
+             * the network cannot leave the band on the wire for less than three (the Robe's `HOLD_MS`
+             * reasons the same way).
+             */
+            const val RESET_HOLD_MS: Long = 3_500
+        }
     }
 }

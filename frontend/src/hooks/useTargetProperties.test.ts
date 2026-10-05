@@ -32,6 +32,17 @@ const fixtures = [
   },
   // An RGB-only head: its colour brings no emitters with it.
   { key: 'par-1', name: 'PAR 1', properties: [colour()] },
+  // A head with a fixture command and a cannon with a trigger: both are listed with the properties
+  // and neither is one, so no picker offers them (fixture optics session 7).
+  {
+    key: 'rev-1',
+    name: 'Rev 1',
+    properties: [
+      { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 20 }, min: 0, max: 255 },
+      { type: 'command', name: 'reset', displayName: 'Reset fixture', category: 'command', description: '', holdMs: 3000, confirm: true, channel: { universe: 0, channelNo: 31 }, dedicated: true },
+      { type: 'trigger', name: 'output1', displayName: 'Tube A', category: 'trigger', label: 'A', channel: { universe: 0, channelNo: 32 }, armChannel: { universe: 0, channelNo: 33 }, armName: 'master' },
+    ],
+  },
   // Infrastructure, with a property no lighting head has: a target that names it still resolves
   // it, but the rig-wide vocabulary never offers its `fan`.
   {
@@ -80,6 +91,11 @@ describe('useTargetProperties', () => {
   it('offers no emitter an RGB-only head does not have', () => {
     const { result } = renderHook(() => useTargetProperties({ type: 'fixture', key: 'par-1' }))
     expect(result.current.properties.map((p) => p.name)).toEqual(['rgbColour'])
+  })
+
+  it('offers neither a fixture command nor a one-shot trigger', () => {
+    const { result } = renderHook(() => useTargetProperties({ type: 'fixture', key: 'rev-1' }))
+    expect(result.current.properties.map((p) => p.name)).toEqual(['dimmer'])
   })
 
   it('offers a group the emitter any member has', () => {

@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.ai
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
 import uk.me.cormack.lighting7.fixture.media.fittedMedia
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 
 import org.jetbrains.exposed.v1.core.SortOrder
@@ -35,6 +36,18 @@ class RigBriefing(private val state: State) {
         return if (triggers.isEmpty()) "" else ", one-shot triggers=" + triggers.joinToString(",") { "${it.name} (${it.spec.label})" }
     }
 
+    /**
+     * `, commands=reset (Reset, 5.0 s),lampOn (Lamp on, 5.0 s)` for a fixture with fixture commands
+     * (fixture optics plan session 7) — what `run_fixture_command` names.
+     */
+    private fun commandLabel(fixture: uk.me.cormack.lighting7.fixture.Fixture): String {
+        val commands = FixtureCommands.of(fixture)
+        return if (commands.isEmpty()) "" else ", commands=" + commands.joinToString(",") { c ->
+            val pre = c.alongside.takeIf { it.isNotEmpty() }?.joinToString("; ", prefix = "; sets ") { it.why }.orEmpty()
+            "${c.name} (${c.spec.label}, ${c.spec.holdMs / 1000.0} s$pre)"
+        }
+    }
+
     /** Fixtures, groups, the effect library, what is running and parked, speed masters and the show's records. */
     fun describeRig(): String {
         val sb = StringBuilder()
@@ -62,6 +75,7 @@ class RigBriefing(private val state: State) {
                     (media[fixture.key]?.let { ", $it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     triggerLabel(fixture) +
+                    commandLabel(fixture) +
                     ")")
         }
         sb.appendLine()
@@ -271,6 +285,17 @@ class RigBriefing(private val state: State) {
                 sb.appendLine(
                     "One-shot triggers (not properties — a script cannot set them; they fire as cue events while the desk is armed): " +
                         triggers.joinToString(", ") { "`${it.name}` (${it.spec.label})" },
+                )
+            }
+            val commands = FixtureCommands.of(sample)
+            if (commands.isNotEmpty()) {
+                sb.appendLine(
+                    "Fixture commands (not properties — no look, cue or programmer value can hold one; run one with " +
+                        "run_fixture_command only when the operator asks for it): " +
+                        commands.joinToString(", ") { c ->
+                            val pre = c.alongside.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "; sets ") { it.why }.orEmpty()
+                            "`${c.name}` (${c.spec.label}, held ${c.spec.holdMs / 1000.0} s$pre)"
+                        },
                 )
             }
             sb.appendLine()

@@ -58,7 +58,9 @@ suspend fun handlePark(scope: SocketScope, message: ParkInMessage) {
             // A park at a firing level on a one-shot trigger or its arm would be a held fire (stage-view
             // plan session 9). No reply channel on this frame: refused with a log, and the park list
             // the client already holds stays as it was.
-            scope.state.show.triggerOutput.parkRefusal(message.universe, message.channel, message.value)?.let {
+            // Likewise a park that would hold a fixture command (fixture optics plan session 7).
+            (scope.state.show.triggerOutput.parkRefusal(message.universe, message.channel, message.value)
+                ?: scope.state.show.commandOutput.parkRefusal(message.universe, message.channel, message.value))?.let {
                 parkLogger.warn("parkChannel refused: {}", it)
                 return
             }

@@ -47,7 +47,13 @@ class AiService(
      *
      * @return The AI response including the conversation ID for continuation.
      */
-    suspend fun chat(conversationId: Int?, userMessage: String, allowScripts: Boolean = true): AiChatResponse {
+    suspend fun chat(
+        conversationId: Int?,
+        userMessage: String,
+        allowScripts: Boolean = true,
+        /** False withholds `run_fixture_command` for a remote caller while "allow fixture commands" is off. */
+        allowCommands: Boolean = true,
+    ): AiChatResponse {
         val now = nowUtc()
 
         // Load or create conversation. Chat is a live-runtime surface — it drives whatever
@@ -155,6 +161,12 @@ class AiService(
                         success = false,
                         description = "Scripts are turned off for remote access",
                         result = "run_lighting_script is not available: this desk is being used remotely and scripts are turned off for remote access.",
+                    )
+                } else if (!allowCommands && toolUse.name == RUN_FIXTURE_COMMAND) {
+                    ToolExecutionResult(
+                        success = false,
+                        description = "Fixture commands are turned off for remote access",
+                        result = FIXTURE_COMMANDS_REMOTE_REFUSAL,
                     )
                 } else {
                     tools.executeTool(toolUse.name, toolUse.input)

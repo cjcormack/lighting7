@@ -84,6 +84,8 @@ class TriggerIndex private constructor(
         val targetKey: String?,
         val propertyName: String?,
         val where: String,
+        /** A stored row's level, for [CommandIndex.levelRefusal]; null for an effect or a template row. */
+        val value: String? = null,
     )
 
     companion object {

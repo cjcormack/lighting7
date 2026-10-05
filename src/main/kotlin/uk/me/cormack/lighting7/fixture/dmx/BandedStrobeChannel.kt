@@ -17,8 +17,9 @@ import kotlin.math.roundToInt
  * composition must not reach (the MAC 250's reset and lamp, the Robe ColorSpot
  * 575's pulses and random strobe), pass [max] equal to `strobeMax` so neither
  * raw `value` writes nor [strobe] calls can wander into them. Bands above the
- * clamp are then only reachable via raw transaction writes (the MAC 250's lamp
- * and reset from its explicit safety methods).
+ * clamp are then only reachable via raw transaction writes — and the MAC 250's
+ * lamp and reset bands only as fixture commands, which the desk holds and whose
+ * bands the output refuses to anything else (`state/CommandOutput.kt`).
  *
  * Some fixtures interpret an input intensity of 0 as "no strobe, just keep
  * the LED open" rather than the slowest strobe step. Set

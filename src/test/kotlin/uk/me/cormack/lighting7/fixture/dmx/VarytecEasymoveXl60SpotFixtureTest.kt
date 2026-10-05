@@ -24,7 +24,6 @@ class VarytecEasymoveXl60SpotFixtureTest {
         fixture.panTiltSpeed.value = 140u
         fixture.panFine.value = 150u
         fixture.tiltFine.value = 160u
-        fixture.reset.setting = VarytecEasymoveXl60SpotFixture.Reset.RESET
 
         transaction.apply()
 
@@ -37,7 +36,8 @@ class VarytecEasymoveXl60SpotFixtureTest {
         assertEquals(140u.toUByte(), controller.getValue(8))
         assertEquals(150u.toUByte(), controller.getValue(9))
         assertEquals(160u.toUByte(), controller.getValue(10))
-        assertEquals(255u.toUByte(), controller.getValue(11))
+        // Ch 11 is the reset command's (fixture optics plan session 7): nothing writes it through the fixture.
+        assertEquals(0u.toUByte(), controller.getValue(11))
     }
 
     @Test

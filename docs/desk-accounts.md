@@ -57,6 +57,15 @@ consent to a cue's events, wherever the GO comes from** (a decision made in sess
 GO from a remote session or Claude into a cue with events fires them while the desk is armed, as a
 GO at the desk would; what a remote caller cannot do is arm, fire a tube outright or reload one.
 
+**Fixture commands follow the cannons exactly** (fixture optics plan session 7, D13): **both roles
+may run a reset, a lamp strike or a lamp off on the desk's own listener** — `POST
+/projects/{id}/patches/{id}/commands/{command}` sits in no `adminOnly {}` subtree and calls no
+`requireAdmin()`, because whoever is at the desk is who re-homes a head that lost its position
+mid-show. The fixture panel asks first, naming the unit and the command. On the public listener the
+route — and MCP's `run_fixture_command`, and the chat's for a remote caller — is refused (403
+`REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`) unless an admin has turned on *Allow fixture
+commands over remote access*, off by default. REST, so the socket gains no operation.
+
 WebSocket messages are **not** role-scoped in v1: any authenticated user can send any
 socket message. Deliberate, not an oversight — see `FU-AUTH-WS-PER-MESSAGE` in
 `docs/plans/followups.md`. The socket shares the `/api` routing node with the HTTP API, so the

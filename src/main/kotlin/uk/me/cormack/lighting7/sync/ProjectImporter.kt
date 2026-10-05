@@ -60,6 +60,7 @@ import uk.me.cormack.lighting7.models.deleteSceneryForElements
 import uk.me.cormack.lighting7.models.deleteCueEventsForPatches
 import uk.me.cormack.lighting7.models.DaoCueEvent
 import uk.me.cormack.lighting7.models.stripTriggerRows
+import uk.me.cormack.lighting7.models.stripCommandRows
 import uk.me.cormack.lighting7.models.MAX_CUE_EVENT_OFFSET
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
@@ -442,6 +443,10 @@ class ProjectImporter(private val state: State) {
         // still hold a row naming a one-shot trigger, and none may come back (stage-view session 9).
         val stripped = stripTriggerRows(project)
         if (stripped > 0) logger.warn("Import: stripped {} row(s) naming a one-shot trigger", stripped)
+        // Likewise a fixture command (fixture optics plan session 7): a reset stored as a setting option
+        // before the commands existed.
+        val strippedCommands = stripCommandRows(project)
+        if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
     }
 
     private fun importScripts(dir: Path, project: DaoProject): Map<UUID, DaoScript> {

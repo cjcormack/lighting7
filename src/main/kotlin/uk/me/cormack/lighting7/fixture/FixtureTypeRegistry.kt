@@ -202,6 +202,14 @@ object FixtureTypeRegistry {
     /** The concrete class registered for [typeKey], or null for an unknown key. */
     fun classForTypeKey(typeKey: String): KClass<out Fixture>? = typeKeyToClass[typeKey]
 
+    /**
+     * A throwaway instance of the type [typeKey] at channel 1 on a dummy universe, for reading what
+     * its members declare relative to one another (fixture optics plan session 7: which property
+     * shares a channel with a command). Null for an unknown key or a type that cannot be built so.
+     */
+    internal fun introspectionInstanceForTypeKey(typeKey: String): DmxFixture? =
+        typeKeyToClass[typeKey]?.let { instantiateForIntrospection(it) }
+
     /** Dummy universe used for introspection — no real DMX connection needed. */
     private val dummyUniverse = Universe(0, 0)
 

@@ -261,6 +261,28 @@ function RemoteAccessForm({ settings }: { settings: TunnelSettings }) {
         </label>
       </section>
 
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium">Fixture commands</h3>
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.allowCommands === true}
+            disabled={saving}
+            onChange={(e) => void run({ allowCommands: e.target.checked })}
+          />
+          <span>
+            Allow fixture commands over remote access
+            <span className="block text-xs text-muted-foreground">
+              A reset swings a head through its travel and a lamp off leaves a discharge head dark for
+              minutes, in a room a remote caller cannot see. Off, anyone signed in from outside — and
+              Claude over MCP, which is always remote — cannot run a reset or a lamp command; at the desk
+              itself every signed-in role can, behind the fixture panel&apos;s confirm.
+            </span>
+          </span>
+        </label>
+      </section>
+
       {saveError != null && (
         <Alert variant="destructive">
           <TriangleAlert className="h-4 w-4" />

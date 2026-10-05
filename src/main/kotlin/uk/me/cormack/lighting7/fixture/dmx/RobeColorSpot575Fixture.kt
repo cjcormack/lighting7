@@ -25,9 +25,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * Discharge-lamp safety: lamp on/off and the seven reset bands all live on
  * **channel 6 (Control)** — not the shutter channel as on the MAC 250.
  * Channel 6 is therefore not exposed as a `@FixtureProperty` so FX can't
- * target it; lamp/reset are explicit methods on [Mode2Ch] that write the
- * channel directly via the transaction. The strobe channel (ch 18) is
- * separately clamped to its safe band.
+ * target it; lamp and resets are fixture commands on [Mode2Ch] (fixture
+ * optics plan session 7), held by the desk, which owns the channel. The
+ * strobe channel (ch 18) is separately clamped to its safe band.
  */
 sealed class RobeColorSpot575Fixture(
     universe: Universe,
@@ -271,10 +271,10 @@ sealed class RobeColorSpot575Fixture(
      * - Ch 1/2: Pan (16-bit hi/lo).
      * - Ch 3/4: Tilt (16-bit hi/lo).
      * - Ch 5: Pan/Tilt speed (or time, depending on fixture menu).
-     * - Ch 6: Control / power / special functions (NOT exposed — see class
-     *         doc; lamp/reset reachable only via [lampOn] / [lampOff] /
-     *         [reset] / [resetPanTilt] / [resetColour] / [resetGobo] /
-     *         [resetDimmer] / [resetFocusZoomFrost] / [resetIrisPrism]).
+     * - Ch 6: Control / power / special functions (NOT a property — see class
+     *         doc; lamp and resets are the [lampOn] / [lampOff] / [reset] /
+     *         [resetPanTilt] / [resetColour] / [resetGobo] / [resetDimmer] /
+     *         [resetFocusZoomFrost] / [resetIrisPrism] commands).
      * - Ch 7: Colour wheel 1.
      * - Ch 8: Colour wheel 2.
      * - Ch 9: Static gobo wheel.
@@ -441,68 +441,47 @@ sealed class RobeColorSpot575Fixture(
 
         private val controlChannel = firstChannel + 5
 
-        private val nonNullTransaction get() = checkNotNull(transaction) {
-            "Attempted to use fixture outside of a transaction"
-        }
-
         /**
-         * Strike the discharge lamp. Writes [LAMP_ON_LEVEL] (130) to ch 6.
+         * Channel 6 — power and special functions — as commands (fixture optics plan session 7). No
+         * property covers it, so the desk holds it at 0 ("Reserved", which does nothing) between them.
          *
-         * The fixture requires the value to be held for ≥3s and the shutter
-         * (ch 18) to be closed for ≥3s before it acts. Don't strike multiple
-         * fixtures simultaneously on the same circuit; stagger the calls.
-         * Not FX-targetable by design.
+         * The DMX chart: "To activate following functions, stop in DMX value for at least 3 s" over
+         * 130–255. Its other condition — "shutter must be closed at least 3 s (Shutter, Strobe … must be
+         * at range 0–31)" — heads the 50–129 switch functions, which the desk does not expose. Every
+         * command closes the shutter for its hold anyway: a closed shutter costs nothing while the head
+         * re-homes or the lamp strikes, and a command the fixture ignores costs a trip up the ladder.
          */
-        fun lampOn() {
-            nonNullTransaction.setValue(universe, controlChannel, LAMP_ON_LEVEL)
-        }
+        private fun control(level: UByte, bandMin: UByte, bandMax: UByte) = DmxCommand(
+            universe, controlChannel, level, bandMin, bandMax,
+            alongside = listOf(DmxChannelHold(firstChannel + 17, SHUTTER_CLOSED, "Shutter closed")),
+        )
 
-        /**
-         * Extinguish the discharge lamp. Writes [LAMP_OFF_LEVEL] (230) to
-         * ch 6. The lamp needs to cool for several minutes before it can be
-         * re-struck. Not FX-targetable by design.
-         */
-        fun lampOff() {
-            nonNullTransaction.setValue(universe, controlChannel, LAMP_OFF_LEVEL)
-        }
+        @FixtureCommand(label = "Lamp on", description = "Strikes the discharge lamp, and resets every effect but pan and tilt. A strike draws many times the running current for an instant: strike several heads one at a time.", holdMs = HOLD_MS)
+        val lampOn = control(LAMP_ON_LEVEL, 130u, 139u)
 
-        /**
-         * Total reset (re-home all motors). Writes [TOTAL_RESET_LEVEL] (200)
-         * to ch 6. Not FX-targetable by design.
-         */
-        fun reset() {
-            nonNullTransaction.setValue(universe, controlChannel, TOTAL_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset pan/tilt", description = "Re-homes pan and tilt. The head swings through its travel while it runs.", holdMs = HOLD_MS)
+        val resetPanTilt = control(PAN_TILT_RESET_LEVEL, 140u, 149u)
 
-        /** Re-home pan/tilt only. Writes 140 to ch 6. */
-        fun resetPanTilt() {
-            nonNullTransaction.setValue(universe, controlChannel, PAN_TILT_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset colour wheels", description = "Re-homes both colour wheels.", holdMs = HOLD_MS)
+        val resetColour = control(COLOUR_RESET_LEVEL, 150u, 159u)
 
-        /** Re-home both colour wheels. Writes 150 to ch 6. */
-        fun resetColour() {
-            nonNullTransaction.setValue(universe, controlChannel, COLOUR_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset gobo wheels", description = "Re-homes both gobo wheels.", holdMs = HOLD_MS)
+        val resetGobo = control(GOBO_RESET_LEVEL, 160u, 169u)
 
-        /** Re-home both gobo wheels. Writes 160 to ch 6. */
-        fun resetGobo() {
-            nonNullTransaction.setValue(universe, controlChannel, GOBO_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset dimmer/strobe", description = "Re-homes the mechanical dimmer and the strobe shutter.", holdMs = HOLD_MS)
+        val resetDimmer = control(DIMMER_RESET_LEVEL, 170u, 179u)
 
-        /** Reset the dimmer/strobe motor. Writes 170 to ch 6. */
-        fun resetDimmer() {
-            nonNullTransaction.setValue(universe, controlChannel, DIMMER_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset focus/zoom/frost", description = "Re-homes the focus, zoom and frost motors.", holdMs = HOLD_MS)
+        val resetFocusZoomFrost = control(FOCUS_ZOOM_FROST_RESET_LEVEL, 180u, 189u)
 
-        /** Reset focus, zoom, frost motors. Writes 180 to ch 6. */
-        fun resetFocusZoomFrost() {
-            nonNullTransaction.setValue(universe, controlChannel, FOCUS_ZOOM_FROST_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Reset iris/prism", description = "Re-homes the iris and the prism.", holdMs = HOLD_MS)
+        val resetIrisPrism = control(IRIS_PRISM_RESET_LEVEL, 190u, 199u)
 
-        /** Reset iris and prism motors. Writes 190 to ch 6. */
-        fun resetIrisPrism() {
-            nonNullTransaction.setValue(universe, controlChannel, IRIS_PRISM_RESET_LEVEL)
-        }
+        @FixtureCommand(label = "Total reset", description = "Re-homes every motor, pan and tilt included. The head swings through its travel and the beam moves while it runs.", holdMs = HOLD_MS)
+        val reset = control(TOTAL_RESET_LEVEL, 200u, 209u)
+
+        @FixtureCommand(label = "Lamp off", description = "Douses the discharge lamp. It is a cold-restrike lamp: it must cool before it can be struck again, so this head is dark until then.", holdMs = HOLD_MS)
+        val lampOff = control(LAMP_OFF_LEVEL, 230u, 239u)
 
         companion object {
             /** Default open value (mid of 032–063 Open band; matches MagicQ locate). */
@@ -517,6 +496,15 @@ sealed class RobeColorSpot575Fixture(
              * wander into the pulse or random-strobe bands above.
              */
             const val STROBE_BAND_MAX: UByte = 95u
+
+            /**
+             * How long a command holds channel 6: the chart's "at least 3 s", plus a second so a frame
+             * dropped on the network cannot leave it short.
+             */
+            const val HOLD_MS: Long = 4_000
+
+            /** Channel 18 inside its 0–31 "shutter closed" band. */
+            const val SHUTTER_CLOSED: UByte = 0u
 
             const val LAMP_ON_LEVEL: UByte = 130u
             const val PAN_TILT_RESET_LEVEL: UByte = 140u

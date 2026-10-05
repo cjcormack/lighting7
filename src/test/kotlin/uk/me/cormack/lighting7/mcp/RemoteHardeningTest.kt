@@ -215,6 +215,42 @@ class RemoteHardeningTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `fixture commands are refused remotely until an admin allows them`() {
+        seedUser(state, "alice")
+        var patchId = 0
+        testApplication {
+            mountTestApp(state)
+            val http = jsonClient()
+            val cookie = http.loginCookieHeader("alice")
+            val created = http.post("/api/rest/projects/$projectId/patches") {
+                header(HttpHeaders.Cookie, cookie)
+                contentType(ContentType.Application.Json)
+                setBody("""{"universe":0,"fixtureTypeKey":"etc-source4-revolution-base-frame","key":"rev","name":"Rev","startChannel":1}""")
+            }
+            assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+            patchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["id"]!!.jsonPrimitive.content.toInt()
+        }
+        testApplication {
+            mountPublic()
+            val http = jsonClient()
+            val cookie = http.loginCookieHeader("alice")
+            val path = "/api/rest/projects/$projectId/patches/$patchId/commands/resetPanTilt"
+            val refused = http.post(path) { header(HttpHeaders.Cookie, cookie) }
+            assertEquals(HttpStatusCode.Forbidden, refused.status, refused.bodyAsText())
+            assertEquals("REMOTE_COMMANDS_DISABLED", refused.code())
+            assertNull(state.show.commandOutput.runningOn("rev"))
+
+            state.remoteAccess.update(allowCommands = true, hasAnyUser = true)
+            try {
+                val ran = http.post(path) { header(HttpHeaders.Cookie, cookie) }
+                assertEquals(HttpStatusCode.OK, ran.status, ran.bodyAsText())
+            } finally {
+                state.remoteAccess.update(allowCommands = false, hasAnyUser = true)
+            }
+        }
+    }
+
+    @Test
     fun `the tunnel settings keep the authtoken write-only and are admin only`() {
         seedUser(state, "admin")
         seedUser(state, "op", role = UserRole.OPERATOR)

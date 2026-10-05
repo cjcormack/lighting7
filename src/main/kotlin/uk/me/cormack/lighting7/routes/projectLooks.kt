@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.CommandIndex
 
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -892,11 +893,15 @@ private fun createLookChildren(
     // No row and no effect may name a one-shot trigger (stage-view plan session 9, D15). Thrown, so
     // the write's transaction rolls back whole and the route answers 400 with every problem at once.
     // The index is queries; build it only when some name could be refused at all.
-    if (rows.any { TriggerIndex.mayRefuse(it.propertyName) } || effects.any { TriggerIndex.mayRefuse(it.propertyName) }) {
-        TriggerIndex.of(look.project).check(
-            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]") } +
-                effects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "effects[$i]") },
-        )
+    // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
+    val mayTrigger = rows.any { TriggerIndex.mayRefuse(it.propertyName) } || effects.any { TriggerIndex.mayRefuse(it.propertyName) }
+    // A row is also refused for a level inside a command's band on a property that shares its channel.
+    val mayCommand = rows.any { CommandIndex.mayRefuseRow(it.propertyName) } || effects.any { CommandIndex.mayRefuse(it.propertyName) }
+    if (mayTrigger || mayCommand) {
+        val refs = rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]", r.value) } +
+            effects.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "effects[$i]") }
+        if (mayTrigger) TriggerIndex.of(look.project).check(refs)
+        if (mayCommand) CommandIndex.of(look.project).check(refs)
     }
     for (row in rows) {
         DaoLookRow.new {
