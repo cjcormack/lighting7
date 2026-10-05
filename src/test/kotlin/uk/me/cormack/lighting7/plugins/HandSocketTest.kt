@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.awaitEachOf
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.collectUntilOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
@@ -213,7 +214,9 @@ class HandSocketTest : RouteIntegrationTest() {
         val client = createWsClient()
 
         client.webSocket("/api") {
-            awaitOfType<HandStateOutMessage>()
+            // Both unasked connect frames first, so the bank state that fences the stale drop
+            // below can only be the reply to its request, never the queued connect push.
+            awaitEachOf(HandStateOutMessage::class, SurfaceBankStateOutMessage::class)
             sendSerialized<InMessage>(HandPickUpInMessage("TEMPLATE", templateId))
             val template = awaitOfType<HandStateOutMessage> { it.item != null }.item!!
 
@@ -223,14 +226,24 @@ class HandSocketTest : RouteIntegrationTest() {
             val look = awaitOfType<HandStateOutMessage> { it.item?.kind == BuskPadKind.LOOK }.item!!
             sendSerialized<InMessage>(HandDropInMessage(uuid = template.uuid))
 
-            // Nothing happened, so no frame: the next one is the drop that does match.
-            sendSerialized<InMessage>(HandDropInMessage(uuid = look.uuid))
-            val frames = collectUntilOfType<HandStateOutMessage>()
+            // A request with a guaranteed reply fences the socket after the stale drop: frames are
+            // handled in order, so the drop has been handled before the bank state arrives.
+            // Nothing happened, so no `hand.state` may arrive first, and the desk must still hold
+            // the Look — the check that cannot miss, since a frame from the `StateFlow`'s collector
+            // can land after the fence. Without the fence, the matching drop below would produce
+            // the same single cleared frame whether or not the stale one had already cleared it.
+            sendSerialized<InMessage>(SurfaceBankStateInMessage)
+            val fenced = collectUntilOfType<SurfaceBankStateOutMessage>()
             assertTrue(
-                frames.filterIsInstance<HandStateOutMessage>().none { it.item?.kind == BuskPadKind.TEMPLATE },
-                "the stale drop cleared the other window's item: $frames",
+                fenced.none { it is HandStateOutMessage },
+                "the stale drop changed the hand: $fenced",
             )
-            assertNull(frames.filterIsInstance<HandStateOutMessage>().last().item)
+            assertEquals(look.uuid, state.handState.held.value?.uuid, "the stale drop cleared the other window's item")
+
+            // The drop that does match lets go.
+            sendSerialized<InMessage>(HandDropInMessage(uuid = look.uuid))
+            assertNull(awaitOfType<HandStateOutMessage>().item)
+            assertNull(state.handState.held.value)
         }
     }
 

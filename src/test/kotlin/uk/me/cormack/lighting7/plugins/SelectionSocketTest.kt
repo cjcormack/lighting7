@@ -8,6 +8,7 @@ import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.awaitEachOf
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.collectUntilOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
@@ -61,16 +62,27 @@ class SelectionSocketTest : RouteIntegrationTest() {
         val client = createWsClient()
 
         client.webSocket("/api") {
-            awaitOfType<SelectionStateOutMessage>()
+            // Both halves of the connect burst first: `surfaceBank.state` is pushed unasked too,
+            // in no fixed order, and a fence that stopped on that queued frame would be read
+            // before the repeat set had been handled — passing whatever the set sent.
+            awaitEachOf(SelectionStateOutMessage::class, SurfaceBankStateOutMessage::class)
+            val before = state.deskSelection.state.value
             sendSerialized<InMessage>(SelectionSetInMessage(listOf(hex1)))
-            // A request with a guaranteed reply fences the socket: everything the repeat set
-            // could have sent arrives before the bank state does.
+            // A request with a guaranteed reply fences the socket: frames are handled in order,
+            // so the repeat set has been handled, and anything its handler sent itself has
+            // arrived, before the bank state does. With the connect frame drained, this bank state
+            // can only be that reply.
             sendSerialized<InMessage>(SurfaceBankStateInMessage)
             val frames = collectUntilOfType<SurfaceBankStateOutMessage>()
             assertTrue(
                 frames.none { it is SelectionStateOutMessage },
                 "a no-op set must not re-broadcast the selection, got $frames",
             )
+            // The frames alone cannot see a re-emit through the `StateFlow`: its collector is
+            // another coroutine, so its frame can land after the fence. The flow sends nothing for
+            // a value equal to the last, so an unchanged selection is the same claim made on the
+            // desk, and the fence has already proved the set was handled.
+            assertEquals(before, state.deskSelection.state.value, "a no-op set must not publish a new selection")
         }
     }
 
