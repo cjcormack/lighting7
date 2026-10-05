@@ -1,6 +1,6 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: IN PROGRESS — sessions 0, 1, 2, 3, 4, 5, 6 and 7 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: DONE — sessions 0–8 done.** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
 > is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
 > readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
@@ -269,7 +269,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
   tool.
 - **Docs:** `docs/fixtures-engineering.md` §"@FixtureCommand".
 
-### Session 8 — travel time (backend + frontend)
+### ~~Session 8 — travel time (backend + frontend)~~ — done, `ec58d85` ([PR #55](https://github.com/cjcormack/lighting7/pull/55))
 
 - **Vocabulary (D14)** on the movers, with base speeds from their manuals where stated.
 - **The Revolution's timing channels:** 1 s per DMX step (manual), stretching position, beam and
