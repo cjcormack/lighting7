@@ -89,7 +89,7 @@ Each session is one PR. It ends with `npm run check` green (and `./gradlew test`
 outside `frontend/` changed), the engineering-doc paragraphs written, and its done-marker here: a
 one-line row with the merge SHA.
 
-### Session 1 — the visible bugs (frontend)
+### ~~Session 1 — the visible bugs (frontend)~~ — done, `4eea82ed`
 
 - **Confirm the diagnosis first** with the record's two checks: raise the pleat collider's skin
   and the pan 40 stripes become a whole pool; log `edgeHit` for the head at pan 40 and 45.
