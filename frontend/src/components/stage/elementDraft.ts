@@ -125,3 +125,19 @@ function sorted(value: unknown): unknown {
   return value
 }
 
+
+/**
+ * Where a new aisle goes in a row of [seatsPerRow]: the middle, else the free gap nearest it, or
+ * null when every gap between two seats already has one (an aisle after the last seat is refused).
+ */
+export function nextAisleSeat(seatsPerRow: number | null, aisles: readonly Params[]): number | null {
+  const seats = seatsPerRow ?? 0
+  const taken = new Set(aisles.map((a) => a.afterSeat))
+  const middle = Math.floor(seats / 2)
+  for (let d = 0; d < seats; d++) {
+    for (const after of [middle - d, middle + d]) {
+      if (after >= 1 && after < seats && !taken.has(after)) return after
+    }
+  }
+  return null
+}

@@ -147,6 +147,62 @@ class StageSceneTest {
         assertNull(stalls.seat(pose, "6F"), "not a seat id")
     }
 
+    /**
+     * A flat-floor hall of banquet chairs, six a side of a centre aisle. The aisle moves seats 7–12
+     * over and renumbers nothing; the row, aisle included, stays centred on the origin.
+     * `lib/stageSeats.test.ts` pins the same seats.
+     */
+    @Test
+    fun `an aisle opens a gap in every row without renumbering a seat`() {
+        val stalls = SeatingParams(
+            rows = 17, seatsPerRow = 12, rowPitchM = 0.85, seatPitchM = 0.5,
+            aisles = listOf(SeatingAisle(afterSeat = 6, widthM = 1.1)), chair = ChairStyle.BANQUET,
+        )
+        val pose = ElementPose(0.0, -2.65, -0.95, 0.0)
+        assertEquals(-3.3, stalls.seat(pose, "A1")!!.base.x, 1e-9)
+        assertEquals(-0.8, stalls.seat(pose, "A6")!!.base.x, 1e-9)
+        assertEquals(0.8, stalls.seat(pose, "A7")!!.base.x, 1e-9)
+        assertEquals(3.3, stalls.seat(pose, "Q12")!!.base.x, 1e-9)
+        assertEquals(-2.65 - 16 * 0.85, stalls.seat(pose, "Q12")!!.base.y, 1e-9)
+    }
+
+    @Test
+    fun `a seating's chair, frame and aisles parse, sort and encode canonically`() {
+        val (params, problems) = parse(
+            StageElementKind.SEATING,
+            """{"rows":17,"seatsPerRow":12,"rowPitchM":0.85,"seatPitchM":0.5,"chair":"banquet","frameColour":"#C9A44C",
+               "aisles":[{"afterSeat":9,"widthM":0.6},{"afterSeat":3,"widthM":0.6}]}""",
+        )
+        assertEquals(emptyList(), problems)
+        val seating = assertIs<SeatingParams>(params)
+        assertEquals(ChairStyle.BANQUET, seating.chair)
+        assertEquals(listOf(3, 9), seating.aisles.map { it.afterSeat })
+        val text = encodeElementParams(StageElementKind.SEATING, seating)
+        assertEquals(
+            """{"aisles":[{"afterSeat":3,"widthM":0.6},{"afterSeat":9,"widthM":0.6}],"chair":"BANQUET","frameColour":"#c9a44c",""" +
+                """"rowPitchM":0.85,"rows":17,"seatPitchM":0.5,"seatsPerRow":12}""",
+            text,
+        )
+        assertEquals(seating, readElementParams(StageElementKind.SEATING, text))
+        // The default chair and no aisles are omitted, so a seating written before them reads the same.
+        assertEquals(
+            """{"rowPitchM":0.85,"rows":2,"seatPitchM":0.5,"seatsPerRow":4}""",
+            encodeElementParams(StageElementKind.SEATING, SeatingParams(2, 4, 0.85, 0.5)),
+        )
+
+        val bad = parse(
+            StageElementKind.SEATING,
+            """{"rows":2,"seatsPerRow":12,"rowPitchM":0.85,"seatPitchM":0.5,"chair":"pew","frameColour":"gold",
+               "aisles":[{"afterSeat":12,"widthM":1},{"afterSeat":6,"widthM":1},{"afterSeat":6,"widthM":1},{"afterSeat":4,"widthM":0.05,"side":"x"}]}""",
+        ).second
+        assertTrue(bad.any { "chair must be one of THEATRE, BANQUET" in it }, bad.toString())
+        assertTrue(bad.any { "frameColour must be a colour" in it }, bad.toString())
+        assertTrue(bad.any { "aisles[0].afterSeat (12) must be before the row's last seat (12)" in it }, bad.toString())
+        assertTrue(bad.any { "two aisles after the same seat" in it }, bad.toString())
+        assertTrue(bad.any { "aisles[3].widthM must be between" in it }, bad.toString())
+        assertTrue(bad.any { "aisles[3]: unknown field 'side'" in it }, bad.toString())
+    }
+
     @Test
     fun `a turned seating turns its seats about its origin, and a rake lifts each row`() {
         val raked = SeatingParams(rows = 3, seatsPerRow = 1, rowPitchM = 1.0, seatPitchM = 0.5, rakeM = 0.2)

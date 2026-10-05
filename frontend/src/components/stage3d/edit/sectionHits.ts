@@ -63,7 +63,7 @@ export function elementOutline(element: StageElementDto, projection: StageProjec
   if (element.kind === 'SEATING') {
     const params = seatingParams(element)
     if (params == null) return null
-    // The block's four corner seats hold every seat: rows and seats are evenly pitched.
+    // The block's four corner seats hold every seat: an aisle only ever falls between two seats.
     const last = String.fromCharCode(params.firstRow.charCodeAt(0) + params.rows - 1)
     const corners = [`${params.firstRow}1`, `${params.firstRow}${params.seatsPerRow}`, `${last}1`, `${last}${params.seatsPerRow}`]
       .map((id) => seatBase(element, params, id))

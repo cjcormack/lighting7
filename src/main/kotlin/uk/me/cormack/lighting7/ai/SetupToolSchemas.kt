@@ -347,7 +347,7 @@ private val sceneElementSchema = objectSchema(required = listOf("name")) {
                 "FLAT: {openings: [{kind: DOOR|WINDOW|FRENCH_WINDOW|ARCH, fromM (from the stage-right end), widthM, heightM, sillM}]}. " +
                 "DRAPE: {role: LEG|BORDER|TABS|CYC|BACKCLOTH, operation: DEAD|DRAW|FLY}. " +
                 "PLATFORM: {railHeightM and railEdge together, region: a stage region's name when the platform is that region's deck}. " +
-                "SEATING: {rows (≤26), seatsPerRow, rowPitchM, seatPitchM, firstRow ('A'), rakeM (rise per row)} — rows run away from the stage (−y), seat 1 at the stage-right end. " +
+                "SEATING: {rows (≤26), seatsPerRow, rowPitchM, seatPitchM, firstRow ('A'), rakeM (rise per row), aisles: [{afterSeat, widthM}] (a gap in every row, seats keep their numbers), chair: THEATRE|BANQUET, frameColour} — rows run away from the stage (−y), seat 1 at the stage-right end, the row centred on x. THEATRE (the default) is a fixed auditorium seat; BANQUET a stacking banquet chair (padded seat, round-topped back, metal frame — gold unless frameColour says otherwise; finish colour is the upholstery), about 0.45 m wide, so a seatPitchM of 0.5 sets them nearly touching. " +
                 "OBJECT: {shape: BOX|CYLINDER|SHADE|DISC, flies}. " +
                 "Any kind: states: {visible}, a DRAW drape's {open: 0–1}, a flown piece's {trimM}.",
         )

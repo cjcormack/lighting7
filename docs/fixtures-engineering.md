@@ -1668,7 +1668,7 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 | `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. |
 | `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
-| `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row). |
+| `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`. |
 | `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`. |
 
 Every kind may carry `states`, the base values session 8's scenery tracks from: `visible` on any,
@@ -1676,7 +1676,19 @@ Every kind may carry `states`, the base values session 8's scenery tracks from: 
 
 **Seats** are derived, never stored: row `firstRow` is nearest the stage at the origin, each later row
 a `rowPitchM` further from the stage (local −Y) and `rakeM` higher, seat 1 at the stage-right end,
-the block turned by the element's yaw. A seated eye is 1.15 m above the seat, 5 cm towards its back.
+the block turned by the element's yaw. An aisle puts `widthM` more between seat `afterSeat` and the
+next in every row and renumbers nothing, so a seat view's `F6` is the same chair with or without
+one; the row, aisles included, is centred on the origin. A seated eye is 1.15 m above the seat, 5 cm
+towards its back.
+
+**Chairs** are drawn, not modelled: `chair` picks the shape (`scene/chairs.ts`). `THEATRE` is a
+fixed seat on a post, sized to the pitch; `BANQUET` is a stacking banquet chair at its real size —
+0.44 m across, its cushion 0.48 m up, a round-topped back to about 0.93 m — drawn narrower only
+where the pitch is tighter than that. The element's finish is the upholstery and `frameColour` the
+frame's colour; absent, a banquet chair's frame is gold and a theatre seat's post the finish's
+colour. A frame is always plain, and glows when the element does. Neither changes a
+seat's place. The keys need no `formatVersion`: `params` travel verbatim through every importer and
+exporter, so an older desk keeps them, though it draws its own seat with no aisle.
 `SeatingParams.seat` in Kotlin and `lib/stageSeats.ts` in the frontend are the same maths, and
 `StageSceneTest` and `stageSeats.test.ts` pin the same seats.
 

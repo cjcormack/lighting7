@@ -47,6 +47,13 @@ enum class ObjectShape { BOX, CYLINDER, SHADE, DISC }
 
 enum class StageViewpointKind { ORBIT, EYE, SEAT }
 
+/**
+ * What a seating's seats are drawn as. THEATRE is a fixed auditorium seat on a post, sized to the
+ * pitch; BANQUET is a stacking banquet chair at its real size — a padded seat and a round-topped
+ * back on a metal frame.
+ */
+enum class ChairStyle { THEATRE, BANQUET }
+
 /** A surface's finish where an element has more than one surface (a room's floor and ceiling). */
 @Serializable
 data class SurfaceFinish(val colour: String? = null, val pattern: SurfacePattern? = null)
@@ -125,10 +132,16 @@ data class PlatformParams(
     override val states: ElementStates? = null,
 ) : ElementParams
 
+/** A gap in every row of a seating: [widthM] more between seat [afterSeat] and the next. */
+@Serializable
+data class SeatingAisle(val afterSeat: Int, val widthM: Double)
+
 /**
  * Rows of seats, row [firstRow] nearest the stage at the element's origin, each further row a
  * [rowPitchM] further from the stage (local −Y) and [rakeM] higher. Seat 1 is at the stage-right
- * end of its row. The seat list ([seatPoints]) is what a SEAT viewpoint names.
+ * end of its row, and the row — its [aisles] included — is centred on the origin. An aisle moves
+ * the seats past it without renumbering them, so a seat id names the same chair either way.
+ * [frameColour] is the chair's frame; absent, the [chair] style's own.
  */
 @Serializable
 data class SeatingParams(
@@ -138,6 +151,9 @@ data class SeatingParams(
     val seatPitchM: Double,
     val firstRow: String = "A",
     val rakeM: Double = 0.0,
+    val aisles: List<SeatingAisle> = emptyList(),
+    val chair: ChairStyle = ChairStyle.THEATRE,
+    val frameColour: String? = null,
     override val states: ElementStates? = null,
 ) : ElementParams
 
@@ -411,13 +427,27 @@ fun parseElementParams(
             val seatPitch = r.number("seatPitchM", 0.3, 5.0, required = true)
             val first = r.string("firstRow")?.trim()?.uppercase() ?: "A"
             val rake = r.number("rakeM", -1.0, 1.0) ?: 0.0
+            val chair = r.enum<ChairStyle>("chair") ?: ChairStyle.THEATRE
+            val frameColour = normaliseFinishColour(r.string("frameColour"), "$where.frameColour", problems)
             if (first.length != 1 || first[0] !in 'A'..'Z') {
                 problems += "$where.firstRow must be one letter, A–Z"
             } else if (rows != null && first[0] + (rows - 1) > 'Z') {
                 problems += "$where: $rows rows from row $first run past row Z"
             }
+            val aisles = r.array("aisles")?.mapIndexedNotNull { i, e ->
+                val o = e as? JsonObject ?: run { problems += "$where.aisles[$i] must be an object"; return@mapIndexedNotNull null }
+                val inner = ParamReader(o, "$where.aisles[$i]", problems)
+                val after = inner.int("afterSeat", 1, 199, required = true)
+                val w = inner.number("widthM", 0.1, 10.0, required = true)
+                inner.rejectUnknown()
+                if (after != null && perRow != null && after >= perRow) {
+                    problems += "$where.aisles[$i].afterSeat ($after) must be before the row's last seat ($perRow)"
+                }
+                if (after != null && w != null) SeatingAisle(after, w) else null
+            }.orEmpty().sortedBy { it.afterSeat }
+            if (aisles.size != aisles.distinctBy { it.afterSeat }.size) problems += "$where.aisles has two aisles after the same seat"
             if (rows != null && perRow != null && rowPitch != null && seatPitch != null) {
-                SeatingParams(rows, perRow, rowPitch, seatPitch, first, rake)
+                SeatingParams(rows, perRow, rowPitch, seatPitch, first, rake, aisles, chair, frameColour)
             } else {
                 null
             }
@@ -561,7 +591,7 @@ fun parseSeatId(id: String): Pair<Char, Int>? {
 fun SeatingParams.seat(pose: ElementPose, row: Char, number: Int): SeatPoint? {
     val r = row - firstRow.first()
     if (r !in 0 until rows || number !in 1..seatsPerRow) return null
-    val lx = (number - 1 - (seatsPerRow - 1) / 2.0) * seatPitchM
+    val lx = seatOffsetM(number)
     val ly = -r * rowPitchM
     val yaw = Math.toRadians(pose.yawDeg)
     val base = StagePoint(
@@ -570,6 +600,13 @@ fun SeatingParams.seat(pose: ElementPose, row: Char, number: Int): SeatPoint? {
         pose.z + r * rakeM,
     )
     return SeatPoint("$row$number", row, number, base)
+}
+
+/** Seat [number]'s offset along its row (local X) from the row's centre, its aisles counted. */
+fun SeatingParams.seatOffsetM(number: Int): Double {
+    val span = (seatsPerRow - 1) * seatPitchM + aisles.sumOf { it.widthM }
+    val before = aisles.filter { it.afterSeat < number }.sumOf { it.widthM }
+    return (number - 1) * seatPitchM + before - span / 2
 }
 
 fun SeatingParams.seat(pose: ElementPose, id: String): SeatPoint? =

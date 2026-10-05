@@ -23,6 +23,8 @@ import uk.me.cormack.lighting7.models.DrapeRole
 import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.PlatformParams
 import uk.me.cormack.lighting7.models.SeatingParams
+import uk.me.cormack.lighting7.models.SeatingAisle
+import uk.me.cormack.lighting7.models.ChairStyle
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
 import uk.me.cormack.lighting7.models.StageSide
@@ -175,7 +177,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         finishColour = "#6a2733"; finishPattern = SurfacePattern.PLAIN.name; emissive = true
         params = encodeElementParams(
             StageElementKind.SEATING,
-            SeatingParams(rows = 8, seatsPerRow = 10, rowPitchM = 0.95, seatPitchM = 0.52, firstRow = "B", rakeM = 0.1),
+            SeatingParams(
+                rows = 8, seatsPerRow = 10, rowPitchM = 0.95, seatPitchM = 0.52, firstRow = "B", rakeM = 0.1,
+                aisles = listOf(SeatingAisle(afterSeat = 5, widthM = 1.1)), chair = ChairStyle.BANQUET, frameColour = "#c9a44c",
+            ),
         )
         hidden = true
         sortOrder = 2

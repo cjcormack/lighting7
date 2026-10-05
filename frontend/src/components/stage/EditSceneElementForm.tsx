@@ -25,7 +25,18 @@ import { formatError } from '@/lib/formatError'
 import { parseNullableNumber } from '@/lib/utils'
 import { elementKindLabel } from '../stage3d/edit/sceneryKinds'
 import { elementProblems, fileProblems, type ElementProblem } from './elementProblems'
-import { draftOf, elementUpdate, emptyNumbers, statesOf, withKindParam, withParam, withState, type Draft, type Params } from './elementDraft'
+import {
+  draftOf,
+  elementUpdate,
+  emptyNumbers,
+  nextAisleSeat,
+  statesOf,
+  withKindParam,
+  withParam,
+  withState,
+  type Draft,
+  type Params,
+} from './elementDraft'
 
 /**
  * A scene element's form (stage-view plan session 5, `Edit.dc.html` §3): the body the docked
@@ -61,6 +72,7 @@ const DRAPE_ROLES = ['LEG', 'BORDER', 'TABS', 'CYC', 'BACKCLOTH'] as const
 const DRAPE_OPERATIONS = ['DEAD', 'DRAW', 'FLY'] as const
 const OPENING_KINDS = ['DOOR', 'WINDOW', 'FRENCH_WINDOW', 'ARCH'] as const
 const OBJECT_SHAPES = ['BOX', 'CYLINDER', 'SHADE', 'DISC'] as const
+const CHAIR_STYLES = ['THEATRE', 'BANQUET'] as const
 
 /** `STAGE_LEFT` → `Stage left`. */
 function words(value: string): string {
@@ -136,15 +148,18 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
         case 'PLATFORM':
           p(['railHeightM', 'railEdge', 'regionUuid'])
           break
-        case 'SEATING':
-          p(['rows', 'seatsPerRow', 'rowPitchM', 'seatPitchM', 'firstRow', 'rakeM'])
+        case 'SEATING': {
+          p(['rows', 'seatsPerRow', 'rowPitchM', 'seatPitchM', 'firstRow', 'rakeM', 'chair', 'frameColour', 'aisles'])
+          const aisles = Array.isArray(params.aisles) ? params.aisles : []
+          aisles.forEach((_, i) => p([`aisles[${i}]`, `aisles[${i}].afterSeat`, `aisles[${i}].widthM`]))
           break
+        }
         case 'OBJECT':
           p(['shape', 'flies'])
           break
       }
       return new Set(paths)
-    }, [kind, params.openings, drawn, flies])
+    }, [kind, params.openings, params.aisles, drawn, flies])
     const filed = fileProblems(problems, shown)
     const isBusy = isUpdating || isDeleting
     const isValid = draft.name.trim().length > 0
@@ -215,6 +230,13 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
     )
 
     const openings = (Array.isArray(params.openings) ? params.openings : []) as Params[]
+    const aisles = (Array.isArray(params.aisles) ? params.aisles : []) as Params[]
+    const nextAisle = nextAisleSeat(num(params.seatsPerRow), aisles)
+    const setAisle = (i: number, key: string, value: unknown) =>
+      setParam(
+        'aisles',
+        aisles.map((a, j) => (j === i ? withParam(a, key, value) : a)),
+      )
     const setOpening = (i: number, key: string, value: unknown) =>
       setParam(
         'openings',
@@ -436,6 +458,57 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
                   />
                 </Field>
                 {paramNumber('rakeM', 'Rake per row')}
+                <Field id="element-chair" label="Chair" errors={filed.at('params.chair')}>
+                  <NativeSelect
+                    id="element-chair"
+                    value={str(params.chair).toUpperCase() || 'THEATRE'}
+                    onChange={(v) => setParam('chair', v === 'THEATRE' ? null : v)}
+                    options={CHAIR_STYLES}
+                  />
+                </Field>
+                <Field id="element-frameColour" label="Frame colour" errors={filed.at('params.frameColour')}>
+                  <ColourInput
+                    id="element-frameColour"
+                    value={str(params.frameColour)}
+                    placeholder="Chair's own"
+                    onChange={(v) => setParam('frameColour', v || null)}
+                  />
+                </Field>
+                <div className="col-span-2 space-y-2">
+                  <FieldErrors errors={filed.at('params.aisles')} />
+                  {aisles.map((a, i) => (
+                    <div key={i} className="space-y-1" data-aisle={i}>
+                      <div className="flex items-end gap-1.5">
+                        <div className="grid flex-1 grid-cols-2 gap-1.5">
+                          {numberField(`element-aisle-${i}-afterSeat`, 'Aisle after seat', num(a.afterSeat), (v) => setAisle(i, 'afterSeat', v), `params.aisles[${i}].afterSeat`)}
+                          {numberField(`element-aisle-${i}-widthM`, 'Aisle width', num(a.widthM), (v) => setAisle(i, 'widthM', v), `params.aisles[${i}].widthM`)}
+                        </div>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="mb-0.5 size-7 shrink-0"
+                          aria-label={`Remove aisle ${i + 1}`}
+                          onClick={() => setParam('aisles', aisles.length > 1 ? aisles.filter((_, j) => j !== i) : null)}
+                        >
+                          <X className="size-3.5" />
+                        </Button>
+                      </div>
+                      <FieldErrors errors={filed.at(`params.aisles[${i}]`)} />
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={nextAisle == null}
+                    title={nextAisle == null ? 'Every gap between two seats has an aisle' : undefined}
+                    onClick={() => nextAisle != null && setParam('aisles', [...aisles, { afterSeat: nextAisle, widthM: 1 }])}
+                  >
+                    <Plus className="mr-1 size-3.5" />
+                    Aisle
+                  </Button>
+                </div>
               </div>
             )}
             {kind === 'OBJECT' && (
@@ -640,7 +713,17 @@ function NativeSelect({
 }
 
 /** A `#rrggbb` text field with a swatch that opens the browser's picker. */
-function ColourInput({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+function ColourInput({
+  id,
+  value,
+  onChange,
+  placeholder = "Kind's own",
+}: {
+  id: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
   const valid = /^#[0-9a-fA-F]{6}$/.test(value)
   return (
     <div className="flex items-center gap-1.5">
@@ -651,7 +734,7 @@ function ColourInput({ id, value, onChange }: { id: string; value: string; onCha
         value={valid ? value.toLowerCase() : '#808080'}
         onChange={(e) => onChange(e.target.value)}
       />
-      <Input id={id} value={value} placeholder="Kind's own" onChange={(e) => onChange(e.target.value)} />
+      <Input id={id} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
   )
 }

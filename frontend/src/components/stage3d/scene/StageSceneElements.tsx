@@ -12,9 +12,10 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { toThree } from '../../../lib/stageCoords'
+import { seatingParams } from '../../../lib/stageSeats'
+import { BANQUET_FRAME_COLOUR, chairGeometry } from './chairs'
 import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
 import { elementBaseZ, elementFinish, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
@@ -150,19 +151,6 @@ function ScenePartMesh({ part }: { part: ScenePart }) {
 
 // — seats ————————————————————————————————————————————————————————————————————————
 
-/** A seat's shape in its own three.js frame, facing the stage (−z, lighting +y), scaled to the pitch. */
-function seatGeometry(seatPitchM: number): BufferGeometry {
-  const w = Math.min(0.5, Math.max(0.3, seatPitchM * 0.9))
-  const parts = [
-    new BoxGeometry(w, 0.08, 0.45).translate(0, 0.44, 0),
-    new BoxGeometry(w, 0.52, 0.06).translate(0, 0.72, 0.21),
-    new BoxGeometry(0.12, 0.4, 0.12).translate(0, 0.2, 0),
-  ].map((g) => g.toNonIndexed())
-  const merged = mergeGeometries(parts) ?? new BoxGeometry(w, 0.9, 0.45)
-  for (const g of parts) g.dispose()
-  return merged
-}
-
 const WHITE = new Color(1, 1, 1)
 /** The seat under the pointer while picking: lit up, so the operator can see which one a click takes. */
 const HOVER_TINT = new Color(2.2, 2.2, 1.4)
@@ -175,9 +163,12 @@ const UP = new Vector3(0, 1, 0)
 const INSTANCED_RAYCAST = InstancedMesh.prototype.raycast
 
 /**
- * A seating block's seats, instanced: one draw call however many rows. Each instance is a seat of
- * `lib/stageSeats.ts`'s list at its base, turned with the block; the instance index is the seat's
- * place in that list, which is what a pick reads back.
+ * A seating block's seats, instanced: one draw call per chair part however many rows. Each instance
+ * is a seat of `lib/stageSeats.ts`'s list at its base, turned with the block; the instance index is
+ * the seat's place in that list, which is what a pick reads back. The pads are the element's finish;
+ * the frame is plain, glows with the element, and is the seating's `frameColour` — absent, a banquet
+ * chair's gold, or a theatre seat's own finish colour. Only the pads take the pointer: one mesh per
+ * pick, so crossing from a chair's cushion to its frame is not an out and an over.
  */
 function SeatingMesh({
   element,
@@ -188,49 +179,61 @@ function SeatingMesh({
   build: ElementBuild
   picking: SeatPicking | null
 }) {
-  const seatPitch = typeof element.params.seatPitchM === 'number' ? element.params.seatPitchM : 0.5
-  const geometry = useMemo(() => seatGeometry(seatPitch), [seatPitch])
-  useEffect(() => () => geometry.dispose(), [geometry])
-  const material = useSurfaceMaterial(elementFinish(element))
+  const params = seatingParams(element)
+  const seatPitch = params?.seatPitchM ?? 0.5
+  const chair = params?.chair ?? 'THEATRE'
+  const geometry = useMemo(() => chairGeometry(chair, seatPitch), [chair, seatPitch])
+  useEffect(
+    () => () => {
+      geometry.pads.dispose()
+      geometry.frame.dispose()
+    },
+    [geometry],
+  )
+  const finish = elementFinish(element)
+  const frameColour = params?.frameColour ?? (chair === 'BANQUET' ? BANQUET_FRAME_COLOUR : finish.colour)
+  const padMaterial = useSurfaceMaterial(finish)
+  const frameMaterial = useSurfaceMaterial({ colour: frameColour, pattern: 'PLAIN', emissive: finish.emissive })
   const count = build.seats.length
-  const [mesh, setMesh] = useState<InstancedMesh | null>(null)
+  const [pads, setPads] = useState<InstancedMesh | null>(null)
+  const [frame, setFrame] = useState<InstancedMesh | null>(null)
   const invalidate = useThree((s) => s.invalidate)
   const hovered = useRef(-1)
 
   useLayoutEffect(() => {
-    if (mesh == null) return
+    if (pads == null || frame == null) return
     SCRATCH_QUAT.setFromAxisAngle(UP, MathUtils.degToRad(element.yawDeg))
     build.seats.forEach((seat, i) => {
       toThree(seat.base.x, seat.base.y, seat.base.z, SCRATCH_POS)
       SCRATCH_MATRIX.compose(SCRATCH_POS, SCRATCH_QUAT, UNIT_SCALE)
-      mesh.setMatrixAt(i, SCRATCH_MATRIX)
-      mesh.setColorAt(i, WHITE)
+      pads.setMatrixAt(i, SCRATCH_MATRIX)
+      frame.setMatrixAt(i, SCRATCH_MATRIX)
     })
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    mesh.computeBoundingSphere()
+    for (const mesh of [pads, frame]) {
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.computeBoundingSphere()
+    }
     hovered.current = -1
+    tintSeats([pads, frame], build.seats.map((_, i) => i), WHITE)
     invalidate()
-  }, [mesh, build, element.yawDeg, invalidate])
+  }, [pads, frame, build, element.yawDeg, invalidate])
 
   const setHover = (index: number) => {
-    if (mesh == null || index === hovered.current) return
-    if (hovered.current >= 0 && hovered.current < count) mesh.setColorAt(hovered.current, WHITE)
-    if (index >= 0) mesh.setColorAt(index, HOVER_TINT)
+    if (index === hovered.current) return
+    if (hovered.current >= 0 && hovered.current < count) tintSeats([pads, frame], [hovered.current], WHITE)
+    if (index >= 0) tintSeats([pads, frame], [index], HOVER_TINT)
     hovered.current = index
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     invalidate()
     picking?.onHover?.(index >= 0 ? { elementUuid: element.uuid, seatId: build.seats[index].id } : null)
   }
   // Picking switched off with a seat lit: put it back.
   useEffect(() => {
-    if (picking == null && mesh != null && hovered.current >= 0) {
-      if (hovered.current < count) mesh.setColorAt(hovered.current, WHITE)
+    if (picking == null && hovered.current >= 0) {
+      if (hovered.current < count) tintSeats([pads, frame], [hovered.current], WHITE)
       hovered.current = -1
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
       invalidate()
     }
-  }, [picking, mesh, count, invalidate])
+  }, [picking, pads, frame, count, invalidate])
 
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation()
@@ -244,16 +247,34 @@ function SeatingMesh({
   }
 
   return (
-    <instancedMesh
-      // A new count is a new mesh: an InstancedMesh's buffers are sized once.
-      key={count}
-      ref={setMesh}
-      args={[geometry, material, count]}
-      frustumCulled={false}
-      raycast={picking ? INSTANCED_RAYCAST : NO_RAYCAST}
-      onPointerMove={picking ? onMove : undefined}
-      onPointerOut={picking ? onOut : undefined}
-      onClick={picking ? onClick : undefined}
-    />
+    <>
+      {/* A new count is a new mesh: an InstancedMesh's buffers are sized once. */}
+      <instancedMesh
+        key={`pads:${count}`}
+        ref={setPads}
+        args={[geometry.pads, padMaterial, count]}
+        frustumCulled={false}
+        raycast={picking ? INSTANCED_RAYCAST : NO_RAYCAST}
+        onPointerMove={picking ? onMove : undefined}
+        onPointerOut={picking ? onOut : undefined}
+        onClick={picking ? onClick : undefined}
+      />
+      <instancedMesh
+        key={`frame:${count}`}
+        ref={setFrame}
+        args={[geometry.frame, frameMaterial, count]}
+        frustumCulled={false}
+        raycast={NO_RAYCAST}
+      />
+    </>
   )
+}
+
+/** Tint [indices] of every mesh in [meshes] that has mounted. */
+function tintSeats(meshes: readonly (InstancedMesh | null)[], indices: readonly number[], colour: Color) {
+  for (const mesh of meshes) {
+    if (mesh == null) continue
+    for (const i of indices) mesh.setColorAt(i, colour)
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  }
 }
