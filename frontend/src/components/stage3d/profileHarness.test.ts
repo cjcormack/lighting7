@@ -2,7 +2,8 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { buildHarness, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive } from "./profileHarness"
+import { buildHarness, DRAPE_HARNESS_CHANNELS, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive } from "./profileHarness"
+import { buildElement } from "./scene/builders"
 import { resolveDeclaredFocusDistance, resolveFocusParam } from "./beamOptics"
 import type { SliderPropertyDescriptor } from "../../store/fixtures"
 import focusInverse from "../../../../src/test/resources/stage/focusInverse.fixture.json"
@@ -66,6 +67,32 @@ describe("the focus scene", () => {
   })
 })
 
+describe("the drape scene", () => {
+  const data = buildHarness(10, 8, 6, "drape")
+
+  it("hangs one spot as ADV1's Robe hangs, over a black backcloth, a pair of tabs and a column", () => {
+    expect(data.patches).toHaveLength(1)
+    const [spot] = data.patches
+    expect(data.riggings).toEqual([expect.objectContaining({ uuid: spot.riggingUuid, positionY: -1.45, positionZ: 3.15 })])
+    expect(spot).toMatchObject({ stageX: 2, stageZ: -0.5, baseYawDeg: 180, basePitchDeg: 180 })
+    const shapes = (data.elements ?? []).map((e) => buildElement(e).parts.map((p) => p.geometry.shape))
+    expect(shapes).toEqual([["pleat"], ["pleat", "pleat"], ["cylinder"]])
+    expect(data.elements?.[0]).toMatchObject({ finishColour: "#101012", params: { role: "BACKCLOTH" } })
+  })
+
+  it("puts pan, tilt and focus on channels of their own, at the Robe's travel", () => {
+    const channels = data.syntheticFixture.properties.map((p) => (p as SliderPropertyDescriptor).channel.channelNo)
+    expect(channels).toEqual([DRAPE_HARNESS_CHANNELS.pan, DRAPE_HARNESS_CHANNELS.tilt, DRAPE_HARNESS_CHANNELS.focus])
+    expect(data.syntheticFixture.properties[0]).toMatchObject({ axis: "PAN", degMax: 530 })
+    expect(data.syntheticFixture.properties[1]).toMatchObject({ axis: "TILT", degMax: 280 })
+  })
+
+  it("leaves the project's scene alone in every other mode", () => {
+    expect(buildHarness(10, 8, 6, "load").elements).toBeUndefined()
+    expect(buildHarness(10, 8, 6, "focus").elements).toBeUndefined()
+  })
+})
+
 describe("isHarnessActive", () => {
   const originalSearch = window.location.search
 
@@ -93,6 +120,11 @@ describe("isHarnessActive", () => {
     expect(harnessMode()).toBe("focus")
     setSearch("?profileHarness=1")
     expect(harnessMode()).toBe("load")
+  })
+
+  it("returns the drape scene for ?profileHarness=drape", () => {
+    setSearch("?profileHarness=drape")
+    expect(harnessMode()).toBe("drape")
   })
 
   it("returns false when the flag is absent", () => {

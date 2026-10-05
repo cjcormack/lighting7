@@ -133,11 +133,12 @@ import {
 } from './StageEmitters'
 import { MAX_THROW_M } from './emitterLayout'
 import type { BeamHit } from './scene/beamReach'
+import { REACH_EPS_M } from './scene/landing'
 import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
 import { forgetLanding, recordLanding } from './landedPoints'
 import { bodySpecOf } from './emitterNeeds'
-import { packBlades } from './beamMask'
+import { FOCUS_SPREAD_MAX, packBlades } from './beamMask'
 import { MAX_GOBO_LAYERS } from './goboLayers'
 import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
 import {
@@ -221,10 +222,16 @@ const HIT_PROXY_MATERIAL = new MeshBasicMaterial({ visible: false })
  * The axial reach of a beam: cast, then turned into the light table's hit. Scratch objects, since
  * the directors call this per lobe per frame.
  */
-const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_RIM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_EDGE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
+const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+const SCRATCH_RIM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+const SCRATCH_EDGE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+/** Where the rim past [SCRATCH_EDGE_HIT]'s edge landed: what the beam's length must reach. */
+const SCRATCH_EDGE_BEYOND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+/** The nearest landing [edgeLanding]'s rim made past [first]'s box, on something else. */
+const SCRATCH_PASSED: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+/** The director's copy of [SCRATCH_EDGE_BEYOND], which the next [edgeLanding] overwrites. */
+const SCRATCH_BEAM_BEYOND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
 const SCRATCH_RIM_DIR = new Vector3()
 const SCRATCH_RIM_ORIGIN = new Vector3()
 
@@ -261,6 +268,8 @@ export function landBeam(
   SCRATCH_SURFACE_HIT.nx = SCRATCH_BEAM_HIT.nx
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
+  SCRATCH_SURFACE_HIT.skin = SCRATCH_BEAM_HIT.skin
+  SCRATCH_SURFACE_HIT.collider = SCRATCH_BEAM_HIT.collider
   return { hit: SCRATCH_SURFACE_HIT, length: t }
 }
 
@@ -279,8 +288,8 @@ export function coneLandingDepth(apex: Vector3, dir: Vector3, tanHalf: number, h
   return closing > 1e-6 ? Math.min(cap, height / closing) : cap
 }
 
-/** Where [castRim] landed: the point and the face's normal towards the light. */
-const SCRATCH_RIM_LAND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
+/** Where [castRim] landed: the point, the face's normal towards the light and its skin. */
+const SCRATCH_RIM_LAND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
 
 /**
  * Cast the ray [s] of the way from the axis to rim point [k], from the aperture, into
@@ -313,12 +322,83 @@ function castRim(
   SCRATCH_RIM_LAND.nx = SCRATCH_RIM_HIT.nx
   SCRATCH_RIM_LAND.ny = SCRATCH_RIM_HIT.ny
   SCRATCH_RIM_LAND.nz = SCRATCH_RIM_HIT.nz
+  SCRATCH_RIM_LAND.skin = SCRATCH_RIM_HIT.skin
+  SCRATCH_RIM_LAND.collider = SCRATCH_RIM_HIT.collider
   return true
 }
 
 /** How far [p] sits in front of [face]'s plane; negative behind it. */
 function heightAbove(face: SurfaceHit, p: SurfaceHit): number {
   return face.nx * (p.px - face.px) + face.ny * (p.py - face.py) + face.nz * (p.pz - face.pz)
+}
+
+/** The plane [edgeShadowPlane] found. */
+const SCRATCH_EDGE_PLANE: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+
+/**
+ * The plane through [apex] and the vertical edge of [first]'s collider that the ray [castRim] last
+ * cast passed, into [out], facing away from the collider; false where the ray passed a level edge
+ * (a riser's top, a border's bottom) or [first] is a top or bottom face, whose edges are all level. It is the edge's shadow line, and level, since a
+ * collider turns about y only: behind it and behind [first] is what the box shadows, wherever the
+ * rest of the beam lands.
+ */
+function edgeShadowPlane(apex: Vector3, first: SurfaceHit, out: SurfaceHit): boolean {
+  const b = first.collider
+  if (b == null || Math.abs(first.ny) > 0.5) return false
+  const o = SCRATCH_RIM_ORIGIN
+  const d = SCRATCH_RIM_DIR
+  const nd = first.nx * d.x + first.nz * d.z
+  if (Math.abs(nd) < 1e-9) return false
+  // Where the ray crossed the face's plane, outside the face, in the box's frame (turned by −yaw).
+  const t = (first.nx * (first.px - o.x) + first.nz * (first.pz - o.z)) / nd
+  const qx = o.x + d.x * t - b.cx
+  const qy = o.y + d.y * t - b.cy
+  const qz = o.z + d.z * t - b.cz
+  const lqx = b.cos * qx - b.sin * qz
+  const lqz = b.sin * qx + b.cos * qz
+  const lnx = b.cos * first.nx - b.sin * first.nz
+  const lnz = b.sin * first.nx + b.cos * first.nz
+  // The face lies across one level axis; its vertical edges are at the ends of the other.
+  const acrossX = Math.abs(lnx) > Math.abs(lnz)
+  const along = acrossX ? lqz : lqx
+  const half = acrossX ? b.hz : b.hx
+  if (Math.abs(along) <= half || Math.abs(along) - half <= Math.abs(qy) - b.hy) return false
+  const ex = acrossX ? Math.sign(lnx) * b.hx : Math.sign(along) * b.hx
+  const ez = acrossX ? Math.sign(along) * b.hz : Math.sign(lnz) * b.hz
+  const wx = b.cx + b.cos * ex + b.sin * ez
+  const wz = b.cz - b.sin * ex + b.cos * ez
+  let nx = apex.z - wz
+  let nz = wx - apex.x
+  const len = Math.hypot(nx, nz)
+  if (len < 1e-9) return false
+  nx /= len
+  nz /= len
+  if (nx * (b.cx - wx) + nz * (b.cz - wz) > 0) {
+    nx = -nx
+    nz = -nz
+  }
+  out.px = wx
+  out.py = apex.y
+  out.pz = wz
+  out.nx = nx
+  out.ny = 0
+  out.nz = nz
+  out.skin = REACH_EPS_M
+  out.collider = null
+  return true
+}
+
+/**
+ * Where [x, y, z] sits across the beam from [apex] along [dir], level, as a tangent: left negative,
+ * right positive, so two points compare whatever their distance down the beam.
+ */
+function lateral(apex: Vector3, dir: Vector3, x: number, y: number, z: number): number {
+  const rx = x - apex.x
+  const ry = y - apex.y
+  const rz = z - apex.z
+  const depth = Math.max(1e-6, rx * dir.x + ry * dir.y + rz * dir.z)
+  const h = Math.hypot(dir.x, dir.z)
+  return h < 1e-9 ? 0 : (rx * -dir.z + rz * dir.x) / h / depth
 }
 
 /**
@@ -329,8 +409,21 @@ function heightAbove(face: SurfaceHit, p: SurfaceHit): number {
  * [first] lies behind in turn: that pair bounds the solid between them. A rim that lands on
  * something beyond instead (the stalls floor past the lip of the stage) is followed back to the edge,
  * and the face just past it is tried. Of several, the landing nearest [first]'s plane wins, since
- * that is the face the edge belongs to rather than a rostrum further upstage. A flat in front of a
- * wall finds none, and still stops the whole beam: one more plane cannot draw its shadow.
+ * that is the face the edge belongs to rather than a rostrum further upstage.
+ *
+ * Where the rim passed a **vertical** edge of [first]'s own box — a flat's or a tab's end, a leg's
+ * onstage side — the second plane is the one through that edge and the lamp ([edgeShadowPlane]),
+ * whatever the rim lands on beyond: the wall behind a flat, which is parallel to it and could never
+ * be the second plane, included. It is the edge's shadow line, found from the box rather than from
+ * whichever rim ray happened to clip the edge's few centimetres of end face, so a pool sliding off a
+ * flat onto the wall behind it keeps its second plane at every pan. [beyond], when given, takes
+ * where that rim landed: what the beam's length must reach.
+ *
+ * A box the rim passes on **both** sides, as the lamp sees it — a column or a leg narrower than
+ * the beam — has two shadow lines, and the pair of planes can draw only one: the other would leave
+ * the whole pool past the far side dark. So the beam passes it: [first] is moved to the nearest
+ * place the rim landed beyond the box, on something else, and no second plane is answered. The box is still lit, standing in front of that
+ * plane, and its shadow waits for box occlusion (`stage-light-plan.md` session 3).
  */
 export function edgeLanding(
   emitters: Pick<EmittersHandle, 'reach'>,
@@ -343,11 +436,42 @@ export function edgeLanding(
   rect: boolean,
   near: number,
   first: SurfaceHit,
+  beyond?: SurfaceHit,
 ): SurfaceHit | null {
   let nearest = Infinity
   let found = false
+  // Which sides of [first]'s box, as the lamp sees it, the rim passes it on: 1 left, 2 right. Over
+  // or under it is neither.
+  const box = first.collider
+  let sides = 0
+  let passedNearest = Infinity
+  let leftmost = Infinity
+  let rightmost = -Infinity
+  if (box != null) {
+    for (let corner = 0; corner < 4; corner++) {
+      const lx = (corner & 1 ? 1 : -1) * box.hx
+      const lz = (corner & 2 ? 1 : -1) * box.hz
+      const side = lateral(apex, dir, box.cx + box.cos * lx + box.sin * lz, box.cy, box.cz - box.sin * lx + box.cos * lz)
+      leftmost = Math.min(leftmost, side)
+      rightmost = Math.max(rightmost, side)
+    }
+  }
+  const boxDepth = box == null ? 0 : (box.cx - apex.x) * dir.x + (box.cy - apex.y) * dir.y + (box.cz - apex.z) * dir.z
   for (let k = 0; k < RIM_X.length; k++) {
     if (!castRim(emitters, apex, dir, bx, by, tanX, tanY, rect, near, k, 1)) continue
+    const land = SCRATCH_RIM_LAND
+    if (box != null && land.collider !== box) {
+      const depth = (land.px - apex.x) * dir.x + (land.py - apex.y) * dir.y + (land.pz - apex.z) * dir.z
+      if (depth > boxDepth) {
+        const side = lateral(apex, dir, land.px, land.py, land.pz)
+        if (side < leftmost) sides |= 1
+        else if (side > rightmost) sides |= 2
+        if (depth < passedNearest) {
+          passedNearest = depth
+          Object.assign(SCRATCH_PASSED, land)
+        }
+      }
+    }
     if (heightAbove(first, SCRATCH_RIM_LAND) >= -EDGE_EPS_M) continue
     if (heightAbove(SCRATCH_RIM_LAND, first) >= -EDGE_EPS_M) {
       let lo = 0
@@ -362,15 +486,25 @@ export function edgeLanding(
       }
       if (!castRim(emitters, apex, dir, bx, by, tanX, tanY, rect, near, k, hi)) continue
       if (heightAbove(first, SCRATCH_RIM_LAND) >= -EDGE_EPS_M) continue
-      if (heightAbove(SCRATCH_RIM_LAND, first) >= -EDGE_EPS_M) continue
     }
+    let face: SurfaceHit
+    if (edgeShadowPlane(apex, first, SCRATCH_EDGE_PLANE)) face = SCRATCH_EDGE_PLANE
+    else if (heightAbove(SCRATCH_RIM_LAND, first) >= -EDGE_EPS_M) continue
+    else face = SCRATCH_RIM_LAND
     const depth = -heightAbove(first, SCRATCH_RIM_LAND)
     if (depth >= nearest) continue
     nearest = depth
     found = true
-    Object.assign(SCRATCH_EDGE_HIT, SCRATCH_RIM_LAND)
+    Object.assign(SCRATCH_EDGE_BEYOND, SCRATCH_RIM_LAND)
+    Object.assign(SCRATCH_EDGE_HIT, face)
   }
-  return found ? SCRATCH_EDGE_HIT : null
+  if (sides === 3) {
+    Object.assign(first, SCRATCH_PASSED)
+    return null
+  }
+  if (!found) return null
+  if (beyond) Object.assign(beyond, SCRATCH_EDGE_BEYOND)
+  return SCRATCH_EDGE_HIT
 }
 
 /**
@@ -1590,6 +1724,9 @@ function useBeamDirector({
     // ([resolveEdgeHardness]); the blur's scale is the type's depth of field, else its family's.
     const edge = resolveEdgeHardness(spec.softness, frostProp, levels.frost, focusParam != null)
     const dof = spec.depthOfField
+    // The blur feathers the edge past the field (`beamMask.ts`), so a focus channel's light reaches
+    // that much wider: its cone bound, its haze hull and its region cull.
+    const spread = focusParam != null ? 1 + FOCUS_SPREAD_MAX : 1
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
     // tighter of the two wins.
     const iris = Math.min(spec.iris, resolveIris(irisProp, levels.iris))
@@ -1738,21 +1875,22 @@ function useBeamDirector({
       // planes and is cut behind them, and the light table carries the same planes for the surfaces.
       const landed = landBeam(emitters, SCRATCH_APERTURE, lobeDir)
       const edgeHit = landed.hit
-        ? edgeLanding(emitters, SCRATCH_APEX, lobeDir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect !== 0 ? Math.abs(aspect) : 1), aspect > 0, near, landed.hit)
+        ? edgeLanding(emitters, SCRATCH_APEX, lobeDir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect !== 0 ? Math.abs(aspect) : 1), aspect > 0, near, landed.hit, SCRATCH_BEAM_BEYOND)
         : null
-      // A segment's frustum reaches past the field circle at its corners.
-      const tanEdge = aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf
+      // A segment's frustum reaches past the field circle at its corners, and a focus channel's past
+      // the field.
+      const tanEdge = (aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf) * spread
       const length = landed.hit
         ? Math.max(
             coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, landed.hit, near + MAX_THROW_M),
-            edgeHit ? coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, edgeHit, near + MAX_THROW_M) : 0,
+            edgeHit ? coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, SCRATCH_BEAM_BEYOND, near + MAX_THROW_M) : 0,
           )
         : near + landed.length
       const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
       beam.focusDist = focusDist
       beam.land = landed.hit
       beam.edgeLand = edgeHit
-      const far = length * tanHalf
+      const far = length * tanHalf * spread
       composeBeamHull(
         SCRATCH_APEX,
         lobeDir,
@@ -1771,9 +1909,10 @@ function useBeamDirector({
       beam.dof = dof
       beam.aspect = aspect
       // A segment's frustum reaches past the field circle at its corners, so its cull cone is the one
-      // through them — or a region lying in a corner would never be shadow-tested.
-      if (aspect > 0) {
-        const cull = Math.atan(tanHalf * Math.hypot(1, aspect)) + REGION_CULL_SLACK_RAD
+      // through them — or a region lying in a corner would never be shadow-tested; and a focus
+      // channel's past the field.
+      if (aspect > 0 || spread > 1) {
+        const cull = Math.atan(tanEdge) + REGION_CULL_SLACK_RAD
         beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, Math.cos(cull), Math.sin(cull), regionGeometry)
       } else {
         beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry)
@@ -1783,7 +1922,7 @@ function useBeamDirector({
       if (!multi) {
         // A single cell: each lobe lands as its own light.
         const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1], surfaceGobos)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, spread, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1], surfaceGobos)
         emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
       }
     }
@@ -1833,7 +1972,7 @@ function useBeamDirector({
           ? edgeLanding(emitters, SCRATCH_APEX, dir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect > 0 ? aspect : 1), aspect > 0, near, landed.hit)
           : null
         const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0, 0)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, spread, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }
     } else if (lobes < litLobesRef.current) {
@@ -1846,7 +1985,10 @@ function useBeamDirector({
   })
 }
 
-/** Fill a light row. [cosHalf] is the field's; a segment's bound is the cone through its corners. */
+/**
+ * Fill a light row. [cosHalf] is the field's; a segment's bound is the cone through its corners, and
+ * a focus channel's reaches [spread] times as wide, past the field by the most its blur feathers.
+ */
 function writeLightRow(
   row: LightRow,
   apex: Vector3,
@@ -1856,6 +1998,7 @@ function writeLightRow(
   level: number,
   cosHalf: number,
   tanHalf: number,
+  spread: number,
   edge: number,
   focusDist: number,
   dof: number,
@@ -1874,7 +2017,8 @@ function writeLightRow(
   row.dx = dir.x
   row.dy = dir.y
   row.dz = dir.z
-  row.cosBound = aspect > 0 ? Math.cos(Math.atan(tanHalf * Math.hypot(1, aspect))) : cosHalf
+  row.cosBound =
+    aspect > 0 || spread > 1 ? Math.cos(Math.atan(tanHalf * spread * (aspect > 0 ? Math.hypot(1, aspect) : 1))) : cosHalf
   row.r = color.r * level
   row.g = color.g * level
   row.b = color.b * level

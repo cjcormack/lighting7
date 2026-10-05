@@ -250,14 +250,15 @@ export function Stage3D({
   const stageW = project?.stageWidthM ?? 10
   const stageD = project?.stageDepthM ?? 8
   const stageH = project?.stageHeightM ?? 6
-  const { patches, regions, riggings, fixtureByKey, typeByKey, lanterns: lanternLibrary, gels } = useStageData(
+  const { patches, regions, riggings, fixtureByKey, typeByKey, lanterns: lanternLibrary, gels, harnessElements } = useStageData(
     projectId,
     stageW,
     stageD,
     stageH,
   )
 
-  const { data: storedElements } = useStageElementListQuery(projectId, { skip: !showScene })
+  const { data: projectElements } = useStageElementListQuery(projectId, { skip: !showScene || harnessElements != null })
+  const storedElements = harnessElements ?? projectElements
   // The scenery the cues, stacks and Looks have moved (stage-view plan session 8), laid over the
   // elements before they are built — so the builders draw the tabs where they are, and the beam
   // reach below stops at closed ones. The vis source chose it (live, or the Next GO preview); a

@@ -1,12 +1,11 @@
 import { AdditiveBlending, DoubleSide, ShaderMaterial, Vector2, Vector3, Vector4 } from 'three'
 import type { DataArrayTexture } from 'three'
-import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from './beamMask'
+import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL, FOCUS_SPREAD_MAX } from './beamMask'
 import { GOBO_LAYERS_GLSL } from './goboLayers'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
 import { LANDING_GLSL } from './scene/landing'
 import {
   FOCUS_LOD_MAX,
-  FOCUS_SOFT_BLUR,
   GOBO_BLUR_TEXELS,
   HAZE_LEVEL,
   VOLUMETRIC_STEPS,
@@ -189,7 +188,6 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   uniform float uVolLodBase;
   uniform float uGoboBlurTexels;
   uniform float uLodMax;
-  uniform float uFocusSoftBlur;
   ${REGION_UNIFORMS_GLSL}
 
   varying vec3 vWorldPos;
@@ -211,7 +209,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   ${RAY_OBB_T_GLSL}
   ${CROSS_SECTION_GLSL}
   ${BEAM_MASK_GLSL}
-  ${BEAM_HARDNESS_GLSL}
+  ${BEAM_FOCUS_GLSL}
   ${GOBO_LAYERS_GLSL}
 
   // Clamp the chord [t0, t1] to the half-space value(t) = base + t*rate >= 0.
@@ -248,12 +246,18 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     float iris = vBeamShape.y;
     float aspect = vBeamShape.z;
     float dof = vBeamShape.w;
-    float cos2 = vCosHalfAngle * vCosHalfAngle;
+    float focusDist = vBeamFx.w;
+    float cosField = vCosHalfAngle;
     float vd = dot(rayDir, d);
     vec3 co = camPos - O;
     float cod = dot(co, d);
-    float sinHalf = sqrt(max(0.0, 1.0 - cos2));
-    float tanHalf = max(1e-4, sinHalf / max(1e-4, vCosHalfAngle));
+    float sinHalf = sqrt(max(0.0, 1.0 - cosField * cosField));
+    float tanHalf = max(1e-4, sinHalf / max(1e-4, cosField));
+    // The cone the march runs through: the field, or past it by the most a focus blur spreads the
+    // edge (beamMask.ts's FOCUS_SPREAD_MAX) for a head with a focus channel. The mask still cuts in
+    // the field's own frame (tanHalf).
+    float tanBound = focusDist >= 0.0 ? tanHalf * ${(1 + FOCUS_SPREAD_MAX).toFixed(4)} : tanHalf;
+    float cos2 = 1.0 / (1.0 + tanBound * tanBound);
     vec3 bx = normalize(vBeamRight - d * dot(vBeamRight, d));
     vec3 by = cross(d, bx);
 
@@ -261,9 +265,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // the view ray starts outside the beam — so the stalls, a pros wall or a flat in front of a beam
     // hide it, as they hid the retired shell — and its back face when the ray starts inside it (the
     // camera standing in a beam, or a section's plane cutting one), whose front faces are behind it.
-    float ty0 = tanHalf * aspect;
+    float ty0 = tanBound * aspect;
     bool rayStartsInside = cod >= near && cod <= vBeamLen && (aspect > 0.0
-      ? abs(dot(co, bx)) <= cod * tanHalf && abs(dot(co, by)) <= cod * ty0
+      ? abs(dot(co, bx)) <= cod * tanBound && abs(dot(co, by)) <= cod * ty0
       : cod * cod >= cos2 * dot(co, co));
     if (gl_FrontFacing == rayStartsInside) discard;
 
@@ -274,8 +278,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       // (±bx − d·tan) and (±by − d·tan·aspect) — each a half-space linear in t.
       tEnter = 0.0;
       tExit = 1e6;
-      vec3 n1 = bx - d * tanHalf;
-      vec3 n2 = -bx - d * tanHalf;
+      vec3 n1 = bx - d * tanBound;
+      vec3 n2 = -bx - d * tanBound;
       vec3 n3 = by - d * ty0;
       vec3 n4 = -by - d * ty0;
       clampHalfSpace(-dot(co, n1), -dot(rayDir, n1), tEnter, tExit);
@@ -366,7 +370,6 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     bool hasGobo = goboA.w > 0.5 || goboB.w > 0.5;
 
     int lightMask = int(vShadowMask + 0.5);
-    float focusDist = vBeamFx.w;
     float sum = 0.0;
     for (int i = 0; i < MAX_VOL_STEPS; i++) {
       if (i >= uVolSteps) break;
@@ -379,13 +382,12 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
 
       float cosAngle = dot(lightDir, d);
       vec2 g = vec2(dot(lightDir, bx), dot(lightDir, by)) / (max(1e-4, cosAngle) * tanHalf);
-      // Focus is a distance from the aperture, not from the apex behind it.
-      float blur = focusBlur(relLen - near, focusDist, dof);
-      float effEdge = beamHardness(vBeamFx.x, focusDist, blur, uFocusSoftBlur);
+      // Focus is a distance along the axis from the aperture, not from the apex behind it.
+      float blur = beamFocusBlur(rel, d, near, focusDist, dof);
       // A segment's rectangle or an oval's narrow axis: the field edge at 1 on v too. An oval is
       // marched through the round cone of its wide field, and the mask cuts it to the oval.
       vec2 mg = aspect != 0.0 ? vec2(g.x, g.y / abs(aspect)) : g;
-      float radial = beamMask(mg, aspect, iris, 1.0 - effEdge, vBeamBlades);
+      float radial = beamMask(mg, aspect, iris, 1.0 - vBeamFx.x, blur, vBeamBlades);
 
       float gobo = 1.0;
       if (hasGobo) {
@@ -437,7 +439,6 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
       uVolLodBase: { value: VOL_LOD_BASE },
       uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
       uLodMax: { value: FOCUS_LOD_MAX },
-      uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
       ...makeRegionUniforms(),
     },
     vertexShader: VOLUME_VERTEX_SHADER,

@@ -564,13 +564,13 @@ export function resolveSoftness(
 }
 
 /**
- * The edge hardness the shaders are handed (`beamMask.ts`'s `beamHardness`, which caps it further
- * by the focus blur): 1 minus the softness. Without a focus channel that is the family's softness
- * with frost folded in, as it always was. **With one, the family's cap lifts** (fixture-optics plan
- * D9): the family's softness stood in for an unmodelled defocus, which the blur now draws, so only
- * frost caps the edge — on the focal plane an unfrosted beam is as hard as the mask draws one (the
- * mover:profile family's 0.88 cap no longer holds it soft), a frosted one stays soft even there, and
- * off the plane the blur softens it.
+ * The edge hardness the shaders are handed (`beamMask.ts`'s `beamMask` takes the focus blur beside
+ * it, and spreads the edge both ways by that): 1 minus the softness. Without a focus channel that is
+ * the family's softness with frost folded in, as it always was. **With one, the family's cap lifts**
+ * (fixture-optics plan D9): the family's softness stood in for an unmodelled defocus, which the blur
+ * now draws, so only frost caps the edge — on the focal plane an unfrosted beam is as hard as the
+ * mask draws one (the mover:profile family's 0.88 cap no longer holds it soft), a frosted one stays
+ * soft even there, and off the plane the blur spreads it.
  */
 export function resolveEdgeHardness(
   familySoftness: number,

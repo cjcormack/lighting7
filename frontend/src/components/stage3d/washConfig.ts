@@ -1,4 +1,3 @@
-import { MASK_EDGE_SOFT } from './beamMask'
 import { GOBO_TILE_PX } from './goboAtlas'
 
 // Stage-3D atmosphere tuning. These are code-level knobs, not UI settings — tweak the values here.
@@ -17,10 +16,11 @@ export const HAZE_LEVEL = 0.5
 // — focal model ————————————————————————————————————————————————————
 // Focus maps the fixture's focus channel to a focal *distance* from the
 // aperture (resolveDeclaredFocusDistance / resolveFocusDistance in beamOptics);
-// rim softness and the in-air gobo's blur both grow with the blur a point sees,
-// the relative focus error |f − d| / f times the type's depth of field
-// (focusBlur in beamMask, fixture-optics plan D9). Only the edge was tuned to it
-// (DEPTH_OF_FIELD in bodies/archetype.ts); the gobo constants below were not.
+// the edge's penumbra and the in-air gobo's blur both grow with the blur a point
+// sees, the relative focus error |f − d| / f along the axis times the type's
+// depth of field (focusBlur in beamMask, fixture-optics plan D9). Only the edge
+// was tuned to it (DEPTH_OF_FIELD in bodies/archetype.ts, and beamMask's
+// FOCUS_SPREAD_MAX); the gobo constants below were not.
 
 /** A gobo tile's texels across the field's radius. A blur `b` field radii wide
  *  spans `b ×` this many texels and each mip level averages twice as many, so the
@@ -31,10 +31,6 @@ export const GOBO_BLUR_TEXELS = GOBO_TILE_PX / 2
 
 /** LOD ceiling for defocus blur (128px atlas has 8 mip levels; 6 is mush). */
 export const FOCUS_LOD_MAX = 6
-
-/** The blur, in field radii, at which the edge is fully soft: a fully soft
- *  beam's own roll-off, so the edge rolls off over the width of the blur. */
-export const FOCUS_SOFT_BLUR = MASK_EDGE_SOFT
 
 // — volumetric beam ————————————————————————————————————————————————
 // Every beam in the air is a raymarched volume since stage-view plan session 6 (the silhouette

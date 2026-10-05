@@ -646,8 +646,9 @@ without a room — the back wall and the catch floor:
   **colliders** — oriented boxes in three.js space turned about y, the regions' OBB maths: a wall a
   2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m), and the first hit's
   plane is where the beam lands (with a second face's for a beam split across an edge, below). The
-  surface shader lights nothing behind it (`REACH_EPS` 3 cm), so a pool on the floor lands whole
-  however oblique the beam, while the floor under a deck the beam landed on stays dark. The **cone**
+  surface shader lights nothing more than `REACH_EPS` (3 cm) behind it, so a pool on the floor lands
+  whole however oblique the beam, while the floor under a deck the beam landed on stays dark. The
+  **cone**
   is cut at the same plane, however far away it is, so a follow spot on the Commemoration Hall's
   balcony reaches the stage 20 m away; the hull runs on past the axial hit to where the cone's far
   rim meets the plane (`coneLandingDepth`, capped at `MAX_THROW_M`), so a grazing beam is in the air
@@ -655,6 +656,23 @@ without a room — the back wall and the catch floor:
   keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
   window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
   Everywhere and the Positions plan draw it whole.
+- **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
+  face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
+  one fold, which the mesh and the box both read: 5 cm crest to trough), and its skin is that depth
+  plus `REACH_EPS`; a cylinder's side faces take its radius, since a box round a column has its
+  tangent at the front face, and its flat top and bottom `REACH_EPS` (a lamp shade's top and bottom
+  its height, which its sloped side faces); every other face's is `REACH_EPS`. A collider carries the
+  two (`skin` for its level faces, `capSkin` for its top and bottom), the hit takes the one for the
+  face it struck — a beam on a round rostrum's top leaves the deck round it dark — and carries it on
+  (`BeamHit`, the director's `SurfaceHit`, both planes of `edgeLanding`), and
+  `packLanding` moves each plane back by its face's skin beyond `REACH_EPS` — so a pool on a drape
+  lights its troughs with its crests and a column is lit across its face. The landed **point** is
+  untouched: the beam's length, `coneLandingDepth` and *Focus here* read it. Before, a drape's box was
+  10 cm deep round 5 cm pleats, the plane sat 2.5 cm in front of the crests, and only each crest's cap
+  was lit — the thin stripes a backcloth drew. A column still lights a little of what is within its
+  radius behind it, and a pleat never shadows the next, until the stage-light plan's sessions 2 and 3.
+  `?profileHarness=drape` (`profileHarness.ts`'s drape scene) is the scene to sweep a pool across a
+  backcloth, a tab's edge and a column in.
 - **A beam split across an edge lands on both faces** (`scene/landing.ts`, `edgeLanding` in
   `FixtureModel.tsx`). One plane cannot stand for a convex edge: a follow spot aimed at the front of
   the stage has its axis on the riser, and cutting at the riser's plane took the half that clears
@@ -664,9 +682,18 @@ without a room — the back wall and the catch floor:
   instead, such as the stalls floor past the lip, is bisected back to the edge and the face just past
   it tried. Of several, the landing nearest the first face's plane wins: the deck, not a rostrum
   further upstage. Nothing is lit or hazed **behind both** planes, which is the inside of the stage,
-  and the hull is drawn until the cone has crossed both. A rim landing beyond a parallel face (the
-  wall behind a flat) is not an edge the wedge can draw, so the flat still stops the whole beam: its
-  shadow is the shadow maps' job. Both planes ride the light's fourth texel and the `aBeamLand`
+  and the hull is drawn until the cone has crossed both. Where the rim passes a **vertical** edge of
+  the box the axis hit — a flat's or a tab's end, a leg's side — the second plane is the one
+  through that edge and the lamp (`edgeShadowPlane`): the edge's shadow line, found from the box
+  rather than from whichever rim ray happens to clip its end face, so a pool sliding off a tab onto
+  the backcloth behind it keeps its second plane at every pan. (It was the end face itself, found by
+  luck: 5 cm of target, so the drape harness's pool lost and regained its far side between DMX 46
+  and 46.5.) The hull then reaches where the rim past the edge landed. A box the rim passes on
+  **both** sides, as the lamp sees it — a column narrower than the beam — has two shadow lines and
+  room for one, so the beam passes it: the landing moves to the nearest surface the rim reached
+  beyond it, the box stays lit in front of that plane, and its shadow waits for the stage-light
+  plan's session 3. A level edge (the top of a flat, the bottom of a border) keeps the face past it,
+  which must bound the solid as the deck does. Both planes ride the light's fourth texel and the `aBeamLand`
   attribute, one `vec4` as the single plane did: a collider turns about y, so a face's normal is up,
   down or level and one float codes it (`landNormalCode`). In the march, behind both is an interval
   of the view ray: at an end of the chord it trims the chord, and inside it (an edge seen side-on)
@@ -683,9 +710,11 @@ without a room — the back wall and the catch floor:
   less than `BEAM_LENGTH`, so full focus is sharp wherever it lands.
 - **Defocus is the relative focus error, scaled by the type's depth of field** (`focusBlur` in
   `beamMask.ts`, shared by the surfaces and the haze; fixture-optics plan D9): `dof · |f − d| / f`
-  field radii at `d` from the aperture, and an unfrosted edge on the focal plane is as hard as the
-  mask draws one. It replaced a lens-radius blur circle that made a 24 m wall look the same from DMX
-  ~140 to 255. See §"Focus" under §"Fixture bodies" for the model, the constants and *Focus here*.
+  field radii at `d` from the aperture **along the axis** (`beamFocusBlur`), and an unfrosted edge on
+  the focal plane is as hard as the mask draws one. The blur spreads the edge **both ways**, so a soft
+  pool keeps its size, and a focus head's light reaches past its field to let it. It replaced a
+  lens-radius blur circle that made a 24 m wall look the same from DMX ~140 to 255. See §"Focus" under
+  §"Fixture bodies" for the model, the constants and *Focus here*.
 - **A pool falls off from the aperture**, as the haze above it thins along the throw
   (`washConfig.ts`): as the square of the distance out to `FALLOFF_KNEE_M` (6 m, the prototype's
   throws) and linearly past it — how an eye adapted to the stage sees a long throw, not how a meter
@@ -1385,7 +1414,7 @@ group`).
 ### One beam mask, and every beam marched
 
 `beamMask.ts` is the cross-section both the surfaces and the haze shape a beam by — the field circle
-or a segment's rectangle, the iris, the softness — in the head's frame, with the field edge at 1;
+or a segment's rectangle, the iris, the softness, the focus blur — in the head's frame, with the field edge at 1;
 the shutter blades are arguments in the same frame (§"The lantern's focus: the cut, the gate and
 the oval"). The GLSL and a TypeScript twin are written from
 one set of constants and the twin is pinned by `beamMask.test.ts`.
@@ -1429,7 +1458,12 @@ could not be seen to: every focal distance past about 4 m drew the same edge on 
   about a metre at 24 m. A slider with no range racks over the throw instead.
 - **The blur is a relative error times a depth of field** (`focusBlur` in `beamMask.ts`, the GLSL
   and its twin together): `dof · |f − d| / f` field radii at `d` from the aperture. The same relative
-  error is the same blur at 4 m and at 24 m. `dof` is the type's `depthOfField`
+  error is the same blur at 4 m and at 24 m.
+- **`d` is measured along the beam's axis** (stage-light plan D3; `beamFocusBlur`, which the surfaces
+  and the haze both call): a lens's focal plane is a plane square to its axis, and *Focus here*
+  solves for the axial distance to where the beam lands. On the slant, a profile focused exactly on a
+  square wall still blurred at its rim by `dof · (1/cos θ − 1)`: 0.31 field radii on a 50° profile,
+  whose edge was then eleven times its focused width. `beamMask.test.ts` pins the rim sharp. `dof` is the type's `depthOfField`
   (`@FixtureType(depthOfField =)`, `FixtureTypeInfo.depthOfField`, `BodySpec.depthOfField`), else its
   family's (`DEPTH_OF_FIELD` in `bodies/archetype.ts`: 3 for a profile, 2.5 for a spot). It used to
   be a lens's blur circle, `2a·|1 − d/f|` over the field radius `a·(near + d)/near`, which scaled
@@ -1437,10 +1471,23 @@ could not be seen to: every focal distance past about 4 m drew the same edge on 
   limit across the whole far end of the range.
 - **The cap lifts at the focal plane** (`resolveEdgeHardness` in `beamOptics.ts`). Without a focus
   channel the edge is the family's softness with frost folded in, as before. With one, the family's
-  softness — which stood in for a defocus nobody modelled — is dropped, and only frost caps the edge;
-  `beamHardness` then caps it by the blur. So on the plane an unfrosted beam is as hard as the mask
-  draws (`mover:profile` was held at 0.88), a frosted one stays soft even there, and off the plane the
-  blur softens it, fully soft at `FOCUS_SOFT_BLUR`.
+  softness — which stood in for a defocus nobody modelled — is dropped, and only frost caps the edge.
+  So on the plane an unfrosted beam is as hard as the mask draws (`mover:profile` was held at 0.88),
+  and a frosted one stays soft even there.
+- **The blur spreads an edge both ways** (stage-light plan D4). `beamMask` takes it as its own
+  argument beside the softness: a penumbra as wide as the blur, **centred** on the field edge, the
+  iris and the blades — all three sit in the gate the lens images — so the half-brightness point stays
+  on the edge at every blur and a defocused pool keeps its size and feathers outward. `soft` keeps the
+  inward roll-off for frost and the family's softness, which is what they are. Until this the blur was
+  folded into the softness (`beamHardness`, gone), which rolled the edge off inward only: a soft pool
+  shrank by up to 28 %, and in haze a beam looked fattest at its focal plane. Each half of the
+  penumbra is capped at `FOCUS_SPREAD_MAX` (0.3 field radii, an estimate for the focus scene to judge),
+  and a head with a focus channel reaches that much past its field: its light's cone bound
+  (`writeLightRow`'s `cosBound`, texel 1), its haze hull and the march's cone (`composeBeamHull`, the
+  volume shader's `tanBound`), and its region cull (`regionShadowMask`). A head without one keeps its
+  field's bounds exactly. In numbers — the edge's width from 90 % to 10 %, in field radii — against
+  the old inward roll-off, a Revolution on a 24 m wall: the same 0.018 focused on it, about 0.10 one
+  DMX step off where it was 0.06, and 0.22–0.28 at ±3 m as before.
 - **The depth of field rides texel 0** of the light table, packed with the focal distance
   (`packFocus` in `scene/lightTable.ts`: centimetres in the low 15 bits, twentieths of `dof` above, 24
   bits exact in a float32; `unpackFocus` in the surface shader), since all six texels were full. The
@@ -1491,7 +1538,7 @@ wall and the deck.
   the frame. A segment (a rectangular aperture) carries none, as in the air.
 - **Blurred by the edge's own blur.** The mip level is `goboLod(blur, footprint)`: the relative
   focus error times the type's depth of field (`focusBlur`, §"Focus") — the number the pool's edge
-  softens by — or the pixel's footprint on the surface in field radii, whichever is wider, both at
+  spreads by — or the pixel's footprint on the surface in field radii, whichever is wider, both at
   `GOBO_BLUR_TEXELS` (64) texels to a field radius. The haze reads the same level from the same blur,
   so a gobo sharp in the air at a distance is sharp on a wall at that distance. The footprint is
   `fwidth(vWorldPos)`, taken before the light loop: derivatives after its `continue`s are undefined.

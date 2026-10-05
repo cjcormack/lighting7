@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { packBlades } from '../beamMask'
 import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
-import { beamReach, boxCollider, elementColliders, type BeamHit } from './beamReach'
+import { beamReach, boxCollider, elementColliders, partBox, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
 import { packGobos } from '../goboLayers'
 import {
@@ -20,7 +20,10 @@ import {
   UNPACK_EDGE_IRIS_GLSL,
   UNPACK_FOCUS_GLSL,
 } from './lightTable'
-import { LAND_NONE, LAND_UP } from './landing'
+import { LAND_NONE, LAND_UP, packLanding, REACH_EPS_M } from './landing'
+import { PLEAT_DEPTH_M } from './pleat'
+import type { Facing, PartGeometry } from './sceneParts'
+import { partGeometry } from './StageSceneElements'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
 import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
 import {
@@ -41,7 +44,7 @@ function element(fields: Partial<StageElementDto>): StageElementDto {
   }
 }
 
-const hit = (): BeamHit => ({ t: 0, nx: 0, ny: 0, nz: 0 })
+const hit = (): BeamHit => ({ t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null })
 
 describe('the axial reach (stage-view plan session 3)', () => {
   const floor = boxCollider(0, -0.01, 0, 10, 0.01, 10)
@@ -89,6 +92,98 @@ describe('the axial reach (stage-view plan session 3)', () => {
   })
 })
 
+describe('a collider holds what it draws (stage-light plan D1)', () => {
+  const FACINGS: Facing[] = ['up', 'down', 'upstage', 'downstage', 'left', 'right']
+  const SHAPES: PartGeometry[] = [
+    { shape: 'box', w: 1.2, d: 0.6, h: 0.9 },
+    { shape: 'cylinder', rTop: 0.2, rBottom: 0.2, h: 3 },
+    { shape: 'cylinder', rTop: 0.14, rBottom: 0.25, h: 0.5 },
+    { shape: 'disc', r: 0.5, d: 0.05 },
+    { shape: 'pleat', w: 2.3, h: 4 },
+    ...FACINGS.map((facing): PartGeometry => ({ shape: 'quad', w: 2, h: 1.5, facing })),
+  ]
+  // The lighting-frame axes a beam lands on to light the part: every face of a solid, the broad
+  // faces of a thin one. A beam landing on a cloth's or a disc's edge grazes along it, and the part
+  // shadows itself past its first fold — session 3's boxes, not the skin, are what draw that.
+  const LIT_AXES: Record<PartGeometry['shape'], number[]> = { box: [0, 1, 2], cylinder: [0, 1, 2], disc: [1], pleat: [1], quad: [] }
+  const QUAD_AXIS: Record<Facing, number> = { left: 0, right: 0, upstage: 1, downstage: 1, up: 2, down: 2 }
+
+  for (const shape of SHAPES) {
+    it(`holds a ${shape.shape}${shape.shape === 'quad' ? ` facing ${shape.facing}` : ''} within its skin`, () => {
+      const g = partGeometry(shape)
+      const box = partBox(shape)
+      const centre = [box.ox, box.oy, box.oz]
+      const half = [box.hx, box.hy, box.hz]
+      const pos = g.attributes.position
+      const nor = g.attributes.normal
+      const axes = shape.shape === 'quad' ? [QUAD_AXIS[shape.facing]] : LIT_AXES[shape.shape]
+      let deepest = 0
+      let deepestCap = 0
+      for (let i = 0; i < pos.count; i++) {
+        // three.js (x, y, z) is the lighting frame's (x, −y, z) turned: lighting = (x, −z, y).
+        const p = [pos.getX(i), -pos.getZ(i), pos.getY(i)]
+        const n = [nor.getX(i), -nor.getZ(i), nor.getY(i)]
+        // The positions are float32.
+        for (let k = 0; k < 3; k++) expect(Math.abs(p[k] - centre[k])).toBeLessThanOrEqual(half[k] + 1e-6)
+        for (const k of axes) {
+          for (const side of [1, -1]) {
+            // A cloth is drawn from both sides, so either side of it faces either face.
+            const faces = shape.shape === 'pleat' || side * n[k] > 1e-6
+            if (!faces) continue
+            const depth = side * (centre[k] + side * half[k] - p[k])
+            if (k === 2) deepestCap = Math.max(deepestCap, depth)
+            else deepest = Math.max(deepest, depth)
+          }
+        }
+      }
+      expect(deepest).toBeLessThanOrEqual(box.skin + 1e-6)
+      expect(deepestCap).toBeLessThanOrEqual(box.capSkin + 1e-6)
+      g.dispose()
+    })
+  }
+
+  it("takes a cloth's skin from its folds, a column's sides from its radius and a shade's top from its height", () => {
+    expect(partBox({ shape: 'pleat', w: 2, h: 3 })).toMatchObject({ hy: PLEAT_DEPTH_M / 2, skin: PLEAT_DEPTH_M + REACH_EPS_M })
+    expect(partBox({ shape: 'cylinder', rTop: 0.3, rBottom: 0.3, h: 2 })).toMatchObject({ skin: 0.3, capSkin: REACH_EPS_M })
+    expect(partBox({ shape: 'cylinder', rTop: 0.1, rBottom: 0.3, h: 0.5 })).toMatchObject({ skin: 0.3, capSkin: 0.5 })
+    expect(partBox({ shape: 'box', w: 1, d: 1, h: 1 })).toMatchObject({ skin: REACH_EPS_M, capSkin: REACH_EPS_M })
+    const [cloth] = elementColliders(element({ kind: 'DRAPE', widthM: 4, heightM: 3 }), buildElement(element({ kind: 'DRAPE', widthM: 4, heightM: 3 })))
+    expect(cloth.skin).toBe(PLEAT_DEPTH_M + REACH_EPS_M)
+  })
+})
+
+describe('where a beam lands (stage-light plan D1)', () => {
+  it("hands on the skin of the face it hit: a drum's side its radius, its flat top no more than a face's", () => {
+    // A round rostrum 2 m across and 0.3 m tall, standing on the deck.
+    const drum = element({ kind: 'OBJECT', widthM: 2, depthM: 2, heightM: 0.3, params: { shape: 'CYLINDER' } })
+    const colliders = elementColliders(drum, buildElement(drum))
+    const out = hit()
+    expect(beamReach(0, 5, 0, 0, -1, 0, colliders, 40, out)).toBe(true)
+    expect(out.ny).toBe(1)
+    expect(out.skin).toBe(REACH_EPS_M)
+    expect(beamReach(0, 0.15, 5, 0, 0, -1, colliders, 40, out)).toBe(true)
+    expect(out.nz).toBe(1)
+    expect(out.skin).toBe(1)
+  })
+
+  const face = (skin: number) => ({ px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0, skin })
+
+  it('moves a plane back by its face\'s skin beyond REACH_EPS, and an ordinary face not at all', () => {
+    const out = [0, 0, 0, 0]
+    packLanding(face(REACH_EPS_M), null, out, 0)
+    expect(out).toEqual([LAND_UP, 0.5, LAND_NONE, 1])
+    packLanding(face(PLEAT_DEPTH_M + REACH_EPS_M), { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: 0.2 }, out, 0)
+    expect(out[1]).toBeCloseTo(0.5 - PLEAT_DEPTH_M, 9)
+    expect(out[3]).toBeCloseTo(2 - (0.2 - REACH_EPS_M), 9)
+  })
+
+  it('never moves a plane forward, whatever skin it is handed', () => {
+    const out = [0, 0, 0, 0]
+    packLanding(face(0), null, out, 0)
+    expect(out[1]).toBe(0.5)
+  })
+})
+
 describe('the light table', () => {
   it('packs every lit slot while they fit, and the brightest under the budget, in slot order', () => {
     const table = new LightTable(4)
@@ -115,9 +210,9 @@ describe('the light table', () => {
     const lit = { ...makeLightRow(), ay: 4, cosBound: 0.9, r: 1, g: 1, b: 1 }
     table.set(0, lit)
     expect(Array.from(table.staged.subarray(12, 16))).toEqual([LAND_NONE, -1, LAND_NONE, -1])
-    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 } })
+    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M } })
     expect(Array.from(table.staged.subarray(12, 16))).toEqual([LAND_UP, 0.5, LAND_NONE, 1])
-    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0 }, edgeHit: { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1 } })
+    table.set(0, { ...lit, hit: { px: 0, py: 0.5, pz: 0, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M }, edgeHit: { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: REACH_EPS_M } })
     expect(Array.from(table.staged.subarray(12, 14))).toEqual([LAND_UP, 0.5])
     expect(table.staged[14]).toBeCloseTo(Math.PI / 2, 6)
     expect(table.staged[15]).toBe(2)

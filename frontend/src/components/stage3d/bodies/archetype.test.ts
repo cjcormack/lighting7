@@ -17,7 +17,7 @@ import {
   SOFTNESS,
   type BodyInput,
 } from './archetype'
-import { beamHardness, focusBlur, MASK_EDGE_SOFT } from '../beamMask'
+import { beamMask, focusBlur } from '../beamMask'
 import { resolveEdgeHardness } from '../beamOptics'
 import { bodyFrames } from './bodyGeometry'
 import focusInverse from '../../../../../src/test/resources/stage/focusInverse.fixture.json'
@@ -400,6 +400,21 @@ describe("a type's declared body decides before its words", () => {
   })
 })
 
+/** How wide the mask's edge is along a radius, from 90 % down to 10 %, by bisection. */
+function edgeWidth(soft: number, blur: number): number {
+  const at = (level: number) => {
+    let lo = 0
+    let hi = 2
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2
+      if (beamMask(mid, 0, 0, 1, soft, blur) > level) lo = mid
+      else hi = mid
+    }
+    return lo
+  }
+  return at(0.1) - at(0.9)
+}
+
 describe('depth of field (fixture-optics plan D9)', () => {
   const revolution = type({
     typeKey: 'etc-source4-revolution-base-frame',
@@ -421,18 +436,19 @@ describe('depth of field (fixture-optics plan D9)', () => {
   })
 
   it('makes a Revolution on a 24 m wall sharp there, a little soft a DMX step off, and visibly soft 3 m either side', () => {
-    // The plan's session-1 check, in numbers, for an unfrosted mover:profile: the hardness the
-    // shaders draw with focus on the wall, one DMX step either side (about 1 m at 24 m on 2–40 m:
-    // DMX 245 is 23.0 m, 247 is 25.1 m) and 3 m either side.
+    // The plan's session-1 check, in numbers, for an unfrosted mover:profile: how wide the edge the
+    // mask draws is (10 % to 90 %, in field radii) with focus on the wall, one DMX step either side
+    // (about 1 m at 24 m on 2–40 m: DMX 245 is 23.0 m, 247 is 25.1 m) and 3 m either side. Since the
+    // stage-light plan's D4 the blur spreads the edge both ways rather than rolling it off inward.
     const dof = DEPTH_OF_FIELD['mover:profile']
     const lifted = resolveEdgeHardness(SOFTNESS['mover:profile'], undefined, 0, true)
-    const hard = (focusM: number) => beamHardness(lifted, focusM, focusBlur(24, focusM, dof), MASK_EDGE_SOFT)
-    expect(hard(24)).toBe(1)
+    const width = (focusM: number) => edgeWidth(1 - lifted, focusBlur(24, focusM, dof))
+    expect(width(24)).toBeLessThan(0.02)
     for (const step of [23.0, 25.1]) {
-      expect(hard(step)).toBeLessThan(0.95)
-      expect(hard(step)).toBeGreaterThan(0.75)
+      expect(width(step)).toBeGreaterThan(0.06)
+      expect(width(step)).toBeLessThan(0.12)
     }
-    for (const off of [21, 27]) expect(hard(off)).toBeLessThan(0.4)
+    for (const off of [21, 27]) expect(width(off)).toBeGreaterThan(0.2)
     // The cap the family used to hold it at, whatever the focus.
     expect(1 - SOFTNESS['mover:profile']).toBeCloseTo(0.88, 9)
   })

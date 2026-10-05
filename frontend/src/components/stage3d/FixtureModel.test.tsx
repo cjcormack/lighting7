@@ -309,6 +309,18 @@ describe('a beam split across an edge', () => {
     expect(behind(hit, inside) && behind(edge!, inside)).toBe(true)
   })
 
+  it("carries the hit collider's skin to both faces, and lands on the face itself", () => {
+    const skinned = [boxCollider(0, -0.475, -3.5, 5, 0.475, 3.5, 0, 0.08), stage[1]]
+    const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, skinned, maxT, out)
+    const dir = new Vector3(0, -0.4, 0).sub(balcony).normalize()
+    const hit = { ...landBeam({ reach }, balcony, dir).hit! }
+    expect(hit.skin).toBe(0.08)
+    // The skin moves the plane the shaders cut at (`landing.ts`), never the landed point.
+    expect(hit.pz).toBeCloseTo(0, 9)
+    const { bx, by } = frame(dir)
+    expect(edgeLanding({ reach }, balcony, dir, bx, by, tanHalf, tanHalf, false, 0, hit)!.skin).toBe(0.08)
+  })
+
   it('lands one aimed just over the edge on the riser too, from the other side', () => {
     const { hit, edge } = land(new Vector3(0, 0, -0.3))
     expect(hit.ny).toBe(1)
@@ -348,17 +360,105 @@ describe('a beam split across an edge', () => {
     expect(edgeLanding({ reach }, above, dir, bx, by, 0.4, 0.4, false, 0, hit)).toBeNull()
   })
 
-  it('leaves a flat stopping the beam when its rim lands on the wall behind', () => {
-    // The flat's plane and the wall's are parallel: one more plane cannot draw the flat's shadow,
-    // so the flat keeps stopping all of it rather than none.
+  describe("a flat in front of a wall: the flat's edge draws its shadow", () => {
+    // A flat 2 m wide (x ±1) with its face at z −1.99, the wall behind it at z −7.
     const set = [boxCollider(0, 1.5, -2, 1, 1.5, 0.01), boxCollider(0, 3, -7.01, 6, 3, 0.01)]
     const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, set, maxT, out)
     const front = new Vector3(0, 1.5, 10)
-    const dir = new Vector3(0.8, 1.5, -2).sub(front).normalize()
-    const hit = { ...landBeam({ reach }, front, dir).hit! }
-    expect(hit.nz).toBe(1)
-    const { bx, by } = frame(dir)
-    expect(edgeLanding({ reach }, front, dir, bx, by, 0.1, 0.1, false, 0, hit)).toBeNull()
+    const aimAt = (x: number) => {
+      const dir = new Vector3(x, 1.5, -2).sub(front).normalize()
+      const hit = { ...landBeam({ reach }, front, dir).hit! }
+      const { bx, by } = frame(dir)
+      const beyond = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
+      const edge = edgeLanding({ reach }, front, dir, bx, by, 0.1, 0.1, false, 0, hit, beyond)
+      return { hit, edge: edge && { ...edge }, beyond }
+    }
+    const height = (f: { px: number; py: number; pz: number; nx: number; ny: number; nz: number }, p: Vector3) =>
+      f.nx * (p.x - f.px) + f.ny * (p.y - f.py) + f.nz * (p.z - f.pz)
+
+    it('is the plane through the lamp and the edge the rim passed, the flat behind it', () => {
+      const { hit, edge, beyond } = aimAt(0.8)
+      expect(hit.nz).toBe(1)
+      expect(edge).not.toBeNull()
+      expect(edge!.ny).toBe(0)
+      expect(height(edge!, front)).toBeCloseTo(0, 9)
+      expect(height(edge!, new Vector3(1, 0, -1.99))).toBeCloseTo(0, 9)
+      expect(height(edge!, new Vector3(0, 1.5, -2))).toBeLessThan(0)
+      // Where the rim landed past it is the wall: the beam's length reaches that.
+      expect(beyond.pz).toBeCloseTo(-7, 6)
+    })
+
+    it('lights the wall beside the flat and leaves its shadow dark, along the true shadow line', () => {
+      const { hit, edge } = aimAt(0.8)
+      // The ray from the lamp grazing the edge reaches the wall at the shadow line.
+      const graze = new Vector3(1, 1.5, -1.99).sub(front)
+      const line = front.clone().addScaledVector(graze, (-7 - front.z) / graze.z)
+      const lit = line.clone().add(new Vector3(0.05, 0, 0))
+      const shadow = line.clone().add(new Vector3(-0.05, 0, 0))
+      const behindBoth = (p: Vector3) => height(hit, p) < -0.03 && height(edge!, p) < -0.03
+      expect(behindBoth(lit)).toBe(false)
+      expect(behindBoth(shadow)).toBe(true)
+    })
+
+    it('keeps the same plane at every aim while the pool overhangs the edge', () => {
+      for (let i = 0; i <= 40; i++) {
+        const { edge } = aimAt(0.2 + (0.75 * i) / 40)
+        expect(edge).not.toBeNull()
+        expect(height(edge!, front)).toBeCloseTo(0, 9)
+        expect(height(edge!, new Vector3(1, 0, -1.99))).toBeCloseTo(0, 9)
+      }
+    })
+
+    it('finds the edge of a turned flat', () => {
+      const yaw = Math.PI / 6
+      const turned = [boxCollider(0, 1.5, -2, 1, 1.5, 0.01, yaw), set[1]]
+      const reachTurned = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) =>
+        beamReach(o.x, o.y, o.z, d.x, d.y, d.z, turned, maxT, out)
+      const dir = new Vector3(0.7, 1.5, -2.3).sub(front).normalize()
+      const hit = { ...landBeam({ reach: reachTurned }, front, dir).hit! }
+      const { bx, by } = frame(dir)
+      const edge = edgeLanding({ reach: reachTurned }, front, dir, bx, by, 0.1, 0.1, false, 0, hit)
+      expect(edge).not.toBeNull()
+      // The box's +x, +z corner turned by +yaw: (cos·1 + sin·0.01, −sin·1 + cos·0.01) about its centre.
+      const corner = new Vector3(Math.cos(yaw) + Math.sin(yaw) * 0.01, 0, -2 - Math.sin(yaw) + Math.cos(yaw) * 0.01)
+      expect(height(edge!, corner)).toBeCloseTo(0, 9)
+      expect(height(edge!, front)).toBeCloseTo(0, 9)
+    })
+
+    it('lets a beam wider than the box pass it on both sides, landing beyond with no plane', () => {
+      // A column 0.4 m across in a beam 2.4 m across at it: two shadow lines, and room for one.
+      const column = [boxCollider(0, 1.5, -2, 0.2, 1.5, 0.2), set[1]]
+      const reachColumn = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) =>
+        beamReach(o.x, o.y, o.z, d.x, d.y, d.z, column, maxT, out)
+      const dir = new Vector3(0, 1.5, -2).sub(front).normalize()
+      const hit = { ...landBeam({ reach: reachColumn }, front, dir).hit! }
+      expect(hit.pz).toBeCloseTo(-1.8, 6)
+      const { bx, by } = frame(dir)
+      expect(edgeLanding({ reach: reachColumn }, front, dir, bx, by, 0.1, 0.1, false, 0, hit)).toBeNull()
+      // The beam lands on the wall: the column stands in front of that plane and stays lit.
+      expect(hit.nz).toBe(1)
+      expect(hit.pz).toBeCloseTo(-7, 6)
+    })
+
+    it('does not pass a border the beam spills over and under: over and under is neither side', () => {
+      // A border 6 m wide and 0.6 m tall in a beam 2.4 m across at it, aimed at its middle.
+      const border = [boxCollider(0, 3, -2, 3, 0.3, 0.01), set[1]]
+      const reachBorder = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) =>
+        beamReach(o.x, o.y, o.z, d.x, d.y, d.z, border, maxT, out)
+      const above = new Vector3(0, 3, 10)
+      const dir = new Vector3(0, 3, -2).sub(above).normalize()
+      const hit = { ...landBeam({ reach: reachBorder }, above, dir).hit! }
+      const { bx, by } = frame(dir)
+      expect(edgeLanding({ reach: reachBorder }, above, dir, bx, by, 0.1, 0.1, false, 0, hit)).toBeNull()
+      expect(hit.pz).toBeCloseTo(-1.99, 6)
+    })
+
+    it('keeps a level edge to the face past it: a beam over the top of the flat finds no shadow line', () => {
+      const dir = new Vector3(0, 2.95, -2).sub(front).normalize()
+      const hit = { ...landBeam({ reach }, front, dir).hit! }
+      const { bx, by } = frame(dir)
+      expect(edgeLanding({ reach }, front, dir, bx, by, 0.05, 0.05, false, 0, hit)).toBeNull()
+    })
   })
 })
 
@@ -589,7 +689,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
     ])
     const lit = (x: number, z: number) => {
       const [u, v] = beamUv(new Vector3(x, 0, z), apex, dir, right, 19)
-      return beamMask(u, v, 0, 1, 0.04, a, b)
+      return beamMask(u, v, 0, 1, 0.04, 0, a, b)
     }
     // For several lines across the pool, find where the light ends along the floor's depth: with the
     // blade in, that edge is where the pool stops before its field circle would.
@@ -623,7 +723,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
       let z = centre.z
       const on = (zz: number) => {
         const [u, v] = beamUv(new Vector3(x, 0, zz), apex, dir, right, 19)
-        return beamMask(u, v, 0, 1, 0.04, a0, b0)
+        return beamMask(u, v, 0, 1, 0.04, 0, a0, b0)
       }
       while (on(z) > 0.5 && z > -20) z -= 0.02
       return z
@@ -686,7 +786,7 @@ describe("a DMX head's framing shutters, in the head's own frame", () => {
     const reach = 10
     const point = apex.clone().addScaledVector(head.dir, reach).addScaledVector(offset, reach * Math.tan((19 * Math.PI) / 360) * 0.6)
     const [u, v] = beamUv(point, apex, head.dir, head.right, 19)
-    return beamMask(u, v, 0, 1, 0.04, packed[0], packed[1])
+    return beamMask(u, v, 0, 1, 0.04, 0, packed[0], packed[1])
   }
   const sides = (head: { dir: Vector3 }) => {
     const up = new Vector3(0, 1, 0)

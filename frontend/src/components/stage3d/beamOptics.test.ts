@@ -802,8 +802,8 @@ describe('framing shutters from DMX', () => {
     // The top blade at depth 0.5 packs to exactly half way, so its edge is the field's centre: just
     // above it is dark, just below it lit, and the bottom of the field untouched.
     expect(unpackBlade(packBlade(0.5, 0))?.depth).toBe(0.5)
-    expect(beamMask(0, 0.01, 0, 1, 0, a, b)).toBe(0)
-    expect(beamMask(0, -0.02, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
-    expect(beamMask(0, -0.9, 0, 1, 0, a, b)).toBeGreaterThan(0.99)
+    expect(beamMask(0, 0.01, 0, 1, 0, 0, a, b)).toBe(0)
+    expect(beamMask(0, -0.02, 0, 1, 0, 0, a, b)).toBeGreaterThan(0.99)
+    expect(beamMask(0, -0.9, 0, 1, 0, 0, a, b)).toBeGreaterThan(0.99)
   })
 })

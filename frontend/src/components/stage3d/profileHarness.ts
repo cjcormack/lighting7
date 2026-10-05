@@ -8,22 +8,27 @@
 // `?profileHarness=focus` swaps in the **focus scene** instead (fixture-optics
 // plan session 1): the scene the depth-of-field constants (`DEPTH_OF_FIELD` in
 // `bodies/archetype.ts`) were tuned in. See [FOCUS_HARNESS_HEADS].
+//
+// `?profileHarness=drape` swaps in the **drape scene** (stage-light plan session
+// 1): one spot over a black backcloth, a pair of tabs and a column, for sweeping
+// pan by hand. See [DRAPE_HARNESS_CHANNELS].
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
+import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../store/fixtures'
 
 const HARNESS_TYPE_KEY = '__profileHarness_type__'
 
-/** Which synthetic scene: the load profile (`=1`) or the focus scene (`=focus`). */
-export type HarnessMode = 'load' | 'focus'
+/** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`) or the drape scene (`=drape`). */
+export type HarnessMode = 'load' | 'focus' | 'drape'
 
 export function harnessMode(): HarnessMode | null {
   if (typeof window === 'undefined') return null
   try {
     const flag = new URLSearchParams(window.location.search).get('profileHarness')
-    return flag === '1' ? 'load' : flag === 'focus' ? 'focus' : null
+    return flag === '1' ? 'load' : flag === 'focus' || flag === 'drape' ? flag : null
   } catch {
     return null
   }
@@ -42,6 +47,8 @@ export interface HarnessData {
   /** A fixture of its own for a patch that needs one (the focus scene's heads each have their own
    *  focus channel); every other patch is [syntheticFixture]. */
   fixtureFor?: ReadonlyMap<string, Fixture>
+  /** The scene the harness draws in place of the project's, where it has one (the drape scene). */
+  elements?: StageElementDto[]
 }
 
 // Stage is W (X right) × D (Y upstage) × H (Z up) in metres.
@@ -115,6 +122,7 @@ export function buildHarness(
   mode: HarnessMode = harnessMode() ?? 'load',
 ): HarnessData {
   if (mode === 'focus') return buildFocusHarness(stageD)
+  if (mode === 'drape') return buildDrapeHarness()
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
@@ -428,5 +436,158 @@ function buildFocusHarness(stageD: number): HarnessData {
     syntheticFixture: fixtureFor.get(FOCUS_HARNESS_HEADS[1].key)!,
     syntheticType,
     fixtureFor,
+  }
+}
+
+// — the drape scene ——————————————————————————————————————————————————————
+
+const DRAPE_TYPE_KEY = '__profileHarness_drape_type__'
+const DRAPE_PATCH_KEY = 'drape-spot'
+
+/**
+ * The drape scene's channels on universe 1: a Robe ColorSpot 575's pan and tilt travel (530° and
+ * 280°) and a focus over the Revolution's 2–40 m, so the bytes the Commemoration Hall's ADV1 head
+ * was reported at land where they did there — pan 40 on the backcloth, 45 on the stage-left tab's
+ * onstage edge, both at tilt 204.
+ */
+export const DRAPE_HARNESS_CHANNELS = { pan: 31, tilt: 32, focus: 33 } as const
+
+/**
+ * The drape scene (`?profileHarness=drape`, stage-light plan session 1): one spot hung as the
+ * Commemoration Hall's ADV1 Robe is — on a bar 1.45 m downstage of the setting line at 3.15 m,
+ * 2 m stage left — over a black backcloth 6.4 m upstage, a pair of tabs part drawn at 3 m and a
+ * column between. Write the pan channel by hand to sweep the pool across the cloth, the tab's edge
+ * and the column; the spot carries no dimmer, so it is always at full.
+ */
+function buildDrapeHarness(): HarnessData {
+  const ch = (channelNo: number) => ({ universe: 1, channelNo })
+  const properties: PropertyDescriptor[] = [
+    {
+      type: 'slider', name: 'pan', displayName: 'Pan', category: 'pan', axis: 'PAN',
+      channel: ch(DRAPE_HARNESS_CHANNELS.pan), min: 0, max: 255, degMin: 0, degMax: 530,
+    },
+    {
+      type: 'slider', name: 'tilt', displayName: 'Tilt', category: 'tilt', axis: 'TILT',
+      channel: ch(DRAPE_HARNESS_CHANNELS.tilt), min: 0, max: 255, degMin: 0, degMax: 280,
+    },
+    {
+      type: 'slider', name: 'focus', displayName: 'Focus', category: 'focus',
+      channel: ch(DRAPE_HARNESS_CHANNELS.focus), min: 0, max: 255, focusNearM: 2, focusFarM: 40,
+    },
+  ]
+  const syntheticType: FixtureTypeInfo = {
+    typeKey: DRAPE_TYPE_KEY,
+    manufacturer: 'Harness',
+    model: 'Drape spot',
+    modeName: 'Drape',
+    channelCount: 3,
+    isRegistered: true,
+    capabilities: [],
+    properties,
+    elementGroupProperties: null,
+    acceptsBeamAngle: true,
+    acceptsGel: false,
+    kind: 'MOVING_HEAD',
+    body: { archetype: 'mover', head: 'spot' },
+  }
+  const syntheticFixture: Fixture = {
+    key: DRAPE_PATCH_KEY,
+    name: 'Drape spot',
+    typeKey: DRAPE_TYPE_KEY,
+    universe: 1,
+    firstChannel: DRAPE_HARNESS_CHANNELS.pan,
+    channelCount: 3,
+    channels: [],
+    properties,
+    capabilities: [],
+    groups: [],
+    compatibleLookIds: [],
+  }
+  const bar: RiggingDto = {
+    id: 1,
+    uuid: 'harness-drape-bar',
+    name: 'ADV1',
+    kind: 'BAR',
+    positionX: 0,
+    positionY: -1.45,
+    positionZ: 3.15,
+    yawDeg: 0,
+    pitchDeg: 0,
+    rollDeg: 0,
+    lengthM: 6,
+    sortOrder: 1,
+  }
+  const spot: FixturePatch = {
+    id: 1,
+    key: DRAPE_PATCH_KEY,
+    displayName: 'Drape spot',
+    fixtureTypeKey: DRAPE_TYPE_KEY,
+    startChannel: DRAPE_HARNESS_CHANNELS.pan,
+    channelCount: 3,
+    manufacturer: 'Harness',
+    model: 'Drape spot',
+    modeName: 'Drape',
+    universe: 1,
+    subnet: 0,
+    sortOrder: 1,
+    groups: [],
+    stageX: 2,
+    stageY: 0,
+    stageZ: -0.5,
+    baseYawDeg: 180,
+    basePitchDeg: 180,
+    riggingUuid: bar.uuid,
+    beamAngleDeg: 15,
+    gelCode: null,
+    kindOverride: null,
+    stageHidden: false,
+  }
+  return {
+    patches: [spot],
+    regions: [],
+    riggings: [bar],
+    syntheticFixture,
+    syntheticType,
+    elements: [
+      drapeElement(1, 'Back cloth', 0, 6.4, 8, 3.7, { operation: 'DEAD', role: 'BACKCLOTH' }),
+      drapeElement(2, 'Tabs', 0, 3, 7.5, 4.2, { operation: 'DRAW', role: 'TABS', states: { open: 0.75 } }),
+      {
+        ...drapeElement(3, 'Column', 0.8, 4.5, 0.4, 3.5, { shape: 'CYLINDER' }),
+        kind: 'OBJECT',
+        depthM: 0.4,
+        finishColour: '#8a8378',
+      },
+    ],
+  }
+}
+
+function drapeElement(
+  id: number,
+  name: string,
+  x: number,
+  y: number,
+  widthM: number,
+  heightM: number,
+  params: Record<string, unknown>,
+): StageElementDto {
+  return {
+    id,
+    uuid: `harness-drape-${id}`,
+    name,
+    kind: 'DRAPE',
+    layer: 'SET',
+    positionX: x,
+    positionY: y,
+    positionZ: 0,
+    yawDeg: 0,
+    widthM,
+    depthM: 0.1,
+    heightM,
+    finishColour: '#101012',
+    finishPattern: null,
+    emissive: false,
+    params,
+    hidden: false,
+    sortOrder: id,
   }
 }
