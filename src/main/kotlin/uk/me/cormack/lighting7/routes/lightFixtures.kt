@@ -215,6 +215,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 acceptsLantern = info.acceptsLantern,
                 depthOfField = info.depthOfField,
                 fieldDeg = info.fieldDeg,
+                travel = info.travel,
             )
         })
     }
@@ -332,6 +333,16 @@ data class SliderPropertyDescriptor(
      * what each range of the channel does to the light. Null on every other slider.
      */
     val strobeBands: List<StrobeBandInfo>? = null,
+    /**
+     * On one of the fixture's own timing channels (`@FixtureProperty.timing`, fixture optics plan
+     * D14), the families it stretches — `POSITION`, `BEAM`, `COLOUR` or `ALL`. Null on every other
+     * slider. Drawn by the Stage view, never output.
+     */
+    val timing: String? = null,
+    /** A timing channel's move duration per DMX step, in seconds; 0 is the type's own travel. */
+    val timingSecondsPerStep: Double? = null,
+    /** The DMX from which a timing channel means "as fast as the fixture can", as 0 does; null for none. */
+    val timingFastFrom: Int? = null,
 ) : PropertyDescriptor
 
 /**
@@ -527,4 +538,7 @@ data class FixtureTypeDetails(
     val depthOfField: Double? = null,
     /** A fixed lens's full beam angle (`@FixtureType.fieldDeg`); null when the type declares none. */
     val fieldDeg: Double? = null,
+    /** How fast the type's mechanics move (`@FixtureType.travel`, fixture optics plan D14) — drawn
+     *  by the Stage view, never output; null when it declares none. */
+    val travel: TravelInfo? = null,
 )

@@ -112,7 +112,11 @@ sealed class ImgStageLineWash42LedFixture(
      * - Ch 13: Built-in programs.
      */
     // A fixed 10° lens (manual p17, "Abstrahlwinkel 10°").
-    @FixtureType("imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH), fieldDeg = 10.0)
+    @FixtureType(
+        "imgstageline-wash-42led-13ch", manufacturer = "IMG Stageline", model = "Wash-42LED", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH), fieldDeg = 10.0,
+        // Estimate: the manual states no movement speed. Pan and tilt are a small LED wash's typical; its colour is RGBW, so it does not travel.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 120.0),
+    )
     class Mode13Ch(
         universe: Universe,
         key: String,

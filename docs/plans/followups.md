@@ -122,6 +122,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-MEDIA-CONTROL-SWATCHES`](#fu-media-control-swatches) | Trigger | Frontend | an operator sets a scroller frame from a stock swatch that is not what the unit holds |
 | [`FU-STAGE-PROGRAM-MACROS`](#fu-stage-program-macros) | Trigger | Stage | an operator needs to see a head's built-in LED or movement program in the Stage view |
 | [`FU-STAGE-SETTING-SHUTTER`](#fu-stage-setting-shutter) | Trigger | Stage | a Scantastic blacked out on its shutter draws lit at a desk check |
+| [`FU-STAGE-VECTOR-SPEED`](#fu-stage-vector-speed) | Trigger | Stage | `FU-MANUAL-S8-TRAVEL` times a mover's speed channel, or a slowed head drawn arriving early misleads at a desk check |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2324,6 +2325,26 @@ blackout), and becomes the programmer's strobe column ahead of the strobe slider
 first). **Trigger**: a Scantastic blacked out on its shutter draws lit at a desk check. **Then**:
 recategorise it as STROBE with `composition = LTP`, BLACKOUT `CLOSED` and FULL_ON `OPEN`, and decide the
 mask, scaler and column questions above in the same change.
+
+### `FU-STAGE-VECTOR-SPEED`
+
+**Movers' speed channels are not drawn** · Trigger · fixture optics plan session 8, 2026-10-05
+
+Session 8 eases the Stage view at each type's speed and stretches it by a fixture's own **timing
+channels** (`docs/fixtures-engineering.md` §"Travel and timing channels"), but models only the
+Revolution's, whose manual states a duration per step. Every other mover's pan/tilt or effects
+*speed* channel stays a plain SPEED slider: the MAC 250's two (tracking, a vector band "fast → slow"
+3–245 with no numbers, blackout-while-moving), the Robe's (a speed "from max. to min." in the menu's
+Speed mode, or "0.1 s to 25.5 s" in its Time mode — a menu fact the desk cannot see), and the
+Varytec's, Fusion's, Orbit's, Shehds', IMG's and Slender bar's "fast → slow". The view draws those
+heads at the type's travel — its fastest — whatever the channel holds: early, never late.
+**Trigger**: `FU-MANUAL-S8-TRAVEL` steps 4–5 time a speed channel at several values, or a head slowed
+on its speed channel and drawn arriving early misleads at a desk check. **Then**: give
+`@FixtureProperty.timing` the *curve* form the plan's §3.1 named and session 8 did not build — a
+rate factor (or a duration) per DMX value, piecewise from the measured points, with the tracking and
+blackout bands as "the type's speed" — and annotate the measured channels with it; a Robe's Time mode
+needs its menu mode declared per patch first (machine-local, like an address), since the desk cannot
+read it.
 
 ## Completed
 

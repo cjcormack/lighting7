@@ -45,6 +45,12 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val activeMax: Int? = null,
         /** A STROBE slider's bands ([FixtureProperty.strobe]), in DMX order; empty on every other property. */
         val strobeBands: List<StrobeBandSpec> = emptyList(),
+        /** The families this timing channel stretches ([FixtureProperty.timing]); null when it is not one. */
+        val timing: TimingRole? = null,
+        /** A timing channel's seconds per DMX step ([FixtureProperty.timingSecondsPerStep]). */
+        val timingSecondsPerStep: Double? = null,
+        /** The DMX from which a timing channel means "fastest" ([FixtureProperty.timingFastFrom]). */
+        val timingFastFrom: Int? = null,
         /**
          * Backed by a [DmxFixtureSetting] — a slot channel, whatever its category. A COLOUR
          * property that is a colour wheel or a gel scroller is one: its stored and programmer
@@ -60,7 +66,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
              * [FixturePropertyCatalogue], which is the one place that scans a class — fixture
              * or element — for annotated members. NaN sentinels for the optional Double-valued
              * annotation fields, the empty-string sentinel for [fineOf], [Blade.NONE] for
-             * [blade], [MediaSlot.NONE] for [media] and `-1` for [activeMin] / [activeMax], are
+             * [blade], [MediaSlot.NONE] for [media], [TimingRole.NONE] for [timing] and `-1` for
+             * [activeMin] / [activeMax] / [timingFastFrom], are
              * converted to null here in one place.
              */
             fun fromAnnotation(
@@ -89,6 +96,9 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.activeMin.takeUnless { it < 0 },
                 ann.activeMax.takeUnless { it < 0 },
                 ann.strobe.map { it.toSpec() },
+                ann.timing.takeUnless { it == TimingRole.NONE },
+                ann.timingSecondsPerStep.takeUnless { it.isNaN() },
+                ann.timingFastFrom.takeUnless { it < 0 },
                 (classProperty.returnType.classifier as? KClass<*>)?.isSubclassOf(DmxFixtureSetting::class) == true,
             )
         }

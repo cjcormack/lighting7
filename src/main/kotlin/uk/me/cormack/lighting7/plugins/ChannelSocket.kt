@@ -68,6 +68,15 @@ data class ChannelState(
 @SerialName("channelState")
 data class ChannelStateOutMessage(
     val channels: List<ChannelState>,
+    /**
+     * True on a whole-buffer frame — the connect snapshot and the reply to a `channelState`
+     * request ([buildChannelStateMessage]) — and false (absent: the WS Json omits defaults) on a
+     * change delta. The order of the two on a fresh socket is not guaranteed (the delta listener is
+     * registered before the snapshot job runs, `BroadcastSocket.kt`), so a client that must tell a
+     * replacement from a move — the Stage view's travel easing, which lands rather than travels
+     * across a snapshot — reads this flag rather than counting frames.
+     */
+    val snapshot: Boolean = false,
 ) : ChannelOutMessage()
 
 @Serializable
@@ -301,7 +310,7 @@ internal fun buildChannelStateMessage(state: State): ChannelStateOutMessage {
             )
         }
     }
-    return ChannelStateOutMessage(currentValues)
+    return ChannelStateOutMessage(currentValues, snapshot = true)
 }
 
 internal fun buildUniverseList(state: State): List<Int> =

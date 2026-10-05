@@ -26,6 +26,14 @@ export interface ChannelSource {
   /** Value for a `"universe:channelNo"` key; 0 when this source doesn't hold the channel. */
   getByKey(key: string): number
   subscribeToChannel(key: string, fn: (value: number) => void): Subscription
+  /**
+   * A counter that moves when this source's values are **replaced wholesale** rather than moved — a
+   * connection's snapshot of the wire, a new Next GO preview, a programmer map rebuilt over a new
+   * patch. The Stage view's travel easing (`lib/travel.ts`) lands every axis across one, because a
+   * replacement is a new picture, not a move the rig made. Absent reads as 0: a source that never
+   * replaces.
+   */
+  epoch?(): number
 }
 
 /**
@@ -38,6 +46,7 @@ export const outputChannelSource: ChannelSource = {
   get: (universe, channelNo) => lightingApi.channels.get(universe, channelNo),
   getByKey: (key) => lightingApi.channels.getAll().get(key) ?? 0,
   subscribeToChannel: (key, fn) => lightingApi.channels.subscribeToChannel(key, fn),
+  epoch: () => lightingApi.channels.snapshotEpoch(),
 }
 
 /** A [ChannelSource] backed by a map this module owns, rather than by the wire. */
@@ -131,6 +140,8 @@ export function createProgrammerChannelSource(
   let values = new Map<string, number>()
   let lastEntries: ProgrammerChannelState['entries'] | null = null
   let lastChannels: ProgrammerChannelState['channels'] | null = null
+  // A forced rebuild recomputes the map over new descriptors: a replacement, not a move.
+  let epoch = 0
 
   /**
    * `force` is what tells a subscription notification apart from a [DerivedChannelSource.refresh].
@@ -164,7 +175,11 @@ export function createProgrammerChannelSource(
     getByKey: (key) => values.get(key) ?? 0,
     holds: (key) => values.has(key),
     subscribeToChannel: fanOut.subscribe,
-    refresh: () => rebuild(true),
+    refresh: () => {
+      epoch++
+      rebuild(true)
+    },
+    epoch: () => epoch,
     dispose: () => upstream.unsubscribe(),
   }
 }
@@ -197,13 +212,17 @@ export interface PushChannelSource extends ChannelSource {
 export function createPushChannelSource(): PushChannelSource {
   const fanOut = createFanOut()
   let values = new Map<string, number>()
+  // Every preview replaces the last one whole: a new look, not a move.
+  let epoch = 0
 
   return {
     get: (universe, channelNo) => values.get(`${universe}:${channelNo}`) ?? 0,
     getByKey: (key) => values.get(key) ?? 0,
     holds: (key) => values.has(key),
     subscribeToChannel: fanOut.subscribe,
+    epoch: () => epoch,
     setChannels(channels) {
+      epoch++
       const next = new Map<string, number>()
       for (const c of channels) next.set(`${c.universe}:${c.channel}`, c.value)
       const before = values
@@ -222,7 +241,7 @@ export function createPushChannelSource(): PushChannelSource {
  */
 export function createOverlayChannelSource(
   base: ChannelSource,
-  overlay: Pick<DerivedChannelSource, 'getByKey' | 'holds' | 'subscribeToChannel'>,
+  overlay: Pick<DerivedChannelSource, 'getByKey' | 'holds' | 'subscribeToChannel' | 'epoch'>,
 ): ChannelSource {
   const valueFor = (key: string, fallback: () => number) =>
     overlay.holds(key) ? overlay.getByKey(key) : fallback()
@@ -231,6 +250,8 @@ export function createOverlayChannelSource(
     get: (universe, channelNo) =>
       valueFor(`${universe}:${channelNo}`, () => base.get(universe, channelNo)),
     getByKey: (key) => valueFor(key, () => base.getByKey(key)),
+    // Either side replaced is the picture replaced.
+    epoch: () => (base.epoch?.() ?? 0) + (overlay.epoch?.() ?? 0),
     // Both upstreams matter: the overlay changing reveals or hides a value, and the base changing
     // shows through wherever the overlay is silent.
     subscribeToChannel: (key, fn) => {

@@ -122,7 +122,11 @@ sealed class ShehdsLed19RgbwFixture(
      *         four broad bands but no clean named states beyond "self-propelled".
      * - Ch 24: Reset — the [reset] command, not a property (fixture optics plan session 7).
      */
-    @FixtureType("shehds-led19-rgbw-24ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
+    @FixtureType(
+        "shehds-led19-rgbw-24ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH),
+        // Estimate: the manual states no speed. A wash's typical pan and tilt and the zoom across its range in 0.8 s; its colour is RGBW, so it does not travel.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 800),
+    )
     class Mode24Ch(
         universe: Universe,
         key: String,
@@ -246,7 +250,11 @@ sealed class ShehdsLed19RgbwFixture(
      *         180–255 voice).
      * - Ch 16: Reset — the [reset] command, not a property (fixture optics plan session 7).
      */
-    @FixtureType("shehds-led19-rgbw-16ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
+    @FixtureType(
+        "shehds-led19-rgbw-16ch", manufacturer = "Shehds", model = "LED 19x15W RGBW Zoom", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH),
+        // Estimate: the manual states no speed. A wash's typical pan and tilt and the zoom across its range in 0.8 s; its colour is RGBW, so it does not travel.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 800),
+    )
     class Mode16Ch(
         universe: Universe,
         key: String,

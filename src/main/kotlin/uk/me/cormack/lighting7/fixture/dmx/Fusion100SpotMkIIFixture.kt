@@ -177,7 +177,11 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 4: Pan/Tilt Macros / Sound active
      * - Ch 5: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
+    @FixtureType(
+        "fusion-100-spot-mkii-5ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG,
+        // Estimate: the manual states no speed. A small spot's typical pan and tilt; the focus and gobo wheel across their range in 0.5 s, the colour wheel in 0.6 s.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 500, colourMs = 600),
+    )
     class Mode5Ch(
         universe: Universe,
         key: String,
@@ -238,7 +242,11 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 7: Focus
      * - Ch 8: Prism (open/3-facet)
      */
-    @FixtureType("fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
+    @FixtureType(
+        "fusion-100-spot-mkii-8ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG,
+        // Estimate: the manual states no speed. A small spot's typical pan and tilt; the focus and gobo wheel across their range in 0.5 s, the colour wheel in 0.6 s.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 500, colourMs = 600),
+    )
     class Mode8Ch(
         universe: Universe,
         key: String,
@@ -308,7 +316,11 @@ sealed class Fusion100SpotMkIIFixture(
      * - Ch 14: Pan/Tilt Macros / Sound active
      * - Ch 15: Motor mode / Reset
      */
-    @FixtureType("fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG)
+    @FixtureType(
+        "fusion-100-spot-mkii-15ch", manufacturer = "Equinox", model = "Fusion 100 Spot MKII", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT), fieldDeg = FIELD_DEG,
+        // Estimate: the manual states no speed. A small spot's typical pan and tilt; the focus and gobo wheel across their range in 0.5 s, the colour wheel in 0.6 s.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 500, colourMs = 600),
+    )
     class Mode15Ch(
         universe: Universe,
         key: String,

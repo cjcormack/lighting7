@@ -35,4 +35,18 @@ class FixtureTypeOpticsRouteTest : RouteIntegrationTest() {
         assertEquals(1, iris.activeMin)
         assertEquals(179, iris.activeMax)
     }
+
+    @Test
+    fun `session 8's travel and timing channels are on the wire`() = testApplication {
+        mountTestApp(state)
+        val types = jsonClient().get("/api/rest/fixture-types").body<List<FixtureTypeDetails>>().associateBy { it.typeKey }
+
+        val rev = types.getValue("etc-source4-revolution-base-frame")
+        assertEquals(90.0, rev.travel?.panDegPerS)
+        assertEquals(2500, rev.travel?.colourMs)
+        val timing = rev.properties.filterIsInstance<SliderPropertyDescriptor>().filter { it.timing != null }.associateBy { it.name }
+        assertEquals(mapOf("focusTime" to "POSITION", "colTime" to "COLOUR", "beamTime" to "BEAM"), timing.mapValues { it.value.timing })
+        assertEquals(255, timing.getValue("focusTime").timingFastFrom)
+        assertNull(types.getValue("hex").travel)
+    }
 }

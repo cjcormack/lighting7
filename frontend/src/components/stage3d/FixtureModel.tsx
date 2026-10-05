@@ -64,6 +64,30 @@ import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
 import {
+  colourTimed,
+  findTimingChannels,
+  isTravelling,
+  makeTravelAxis,
+  resetTravelAxis,
+  sourceEpoch,
+  stepTravel,
+  timedSeconds,
+  travelRates,
+  NO_TIMING,
+  type TimingChannels,
+  type TravelAxis,
+  type TravelRates,
+} from '../../lib/travel'
+import {
+  beginTravelFrame,
+  makeBeamTravel,
+  travelBeam,
+  travelPan,
+  travelTilt,
+  type BeamTravel,
+  type TimingKeys,
+} from './beamTravel'
+import {
   DEFAULT_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_COLOUR,
   PLACEHOLDER_FIXTURE_INTENSITY,
@@ -71,6 +95,7 @@ import {
 import { dmxToSignedDegrees, fromThree, worldPositionFor } from '../../lib/stageCoords'
 import {
   combineFinePair,
+  resolveGoboRotationMode,
   computeBeamGeom,
   evalLedMacro,
   evalMovementMacro,
@@ -440,6 +465,12 @@ interface FixtureModelProps {
    *  4): every gobo light's by default, the selected heads' only under the View menu's *Gobos on
    *  surfaces → Selected heads* (`scene/sceneView.ts`). Off, the pool is drawn without them. */
   goboOnSurfaces?: boolean
+  /**
+   * Whether this canvas draws **travel time** (fixture-optics plan D14): pan, tilt, the beam and the
+   * colour eased toward the DMX value at the type's speed (`lib/travel.ts`). Every live canvas does;
+   * a `render_view` capture does not — a one-shot render has no history, so it lands on the DMX.
+   */
+  travel?: boolean
 }
 
 /**
@@ -473,6 +504,7 @@ export function FixtureModel({
   onEditFocus,
   reportLanding = false,
   goboOnSurfaces = true,
+  travel = true,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
   useCursor(!!editMode && hovered)
@@ -595,6 +627,17 @@ export function FixtureModel({
   const filterProps = useMemo(
     () => colourFilters(unitProps, colourSource),
     [unitProps, colourSource],
+  )
+
+  // Travel time (fixture-optics plan D14): the type's speeds and the unit's own timing channels.
+  // Null when nothing travels — a type that declares no speed and has no timing channel, or a canvas
+  // that does not ease (a capture) — so the director and the colour syncs read the DMX straight.
+  const travelRatesForUnit = useMemo(() => travelRates(fixtureType?.travel), [fixtureType?.travel])
+  const timingChannels = useMemo(() => findTimingChannels(unitProps), [unitProps])
+  const eases = travel && (fixtureType?.travel != null || timingChannels !== NO_TIMING)
+  const colourTravel = useMemo<ColourTravel | undefined>(
+    () => (eases ? { rate: travelRatesForUnit.colour, timing: timingChannels.colour } : undefined),
+    [eases, travelRatesForUnit, timingChannels],
   )
 
   const fixturePos = useMemo(() => {
@@ -744,6 +787,8 @@ export function FixtureModel({
     ledMacroProp,
     moveMacroProp,
     shutterProps,
+    travelRates: eases ? travelRatesForUnit : null,
+    timingChannels,
     groupRef,
     yokeRef,
     headRef,
@@ -813,6 +858,7 @@ export function FixtureModel({
           lensRef={lensRef}
           colorStateRef={colorStateRef}
           ticker={colourTicker}
+          travel={colourTravel}
         />
       )}
     </group>
@@ -956,6 +1002,10 @@ interface BeamDirectorOpts {
   moveMacroProp: ByteDescriptor | undefined
   /** The framing shutters a DMX head drives from its channels; replaces a lantern's blades. */
   shutterProps: ShutterProperties | undefined
+  /** The type's speeds as rates, or null where nothing travels and every channel is drawn as sent. */
+  travelRates: TravelRates | null
+  /** The unit's own timing channels, which stretch a move planned while they hold a value. */
+  timingChannels: TimingChannels
   groupRef: React.RefObject<Group | null>
   yokeRef: React.RefObject<Group | null>
   headRef: React.RefObject<Group | null>
@@ -1061,6 +1111,66 @@ function readShutterLevels(source: ChannelSource, keys: ShutterKeys, scratch: Bl
   return scratch
 }
 
+/** The beam channels' levels a frame draws from — eased, or the DMX where nothing travels. */
+export interface BeamLevels {
+  focus: number
+  zoom: number
+  iris: number
+  frost: number
+  gobo: number
+  gobo2: number
+  /** The rotation channel with its fine byte folded in (`combineFinePair`): eased only while its
+   *  wheel indexes, where it is an angle — a speed or a band change is drawn as sent. */
+  goboRot: number
+}
+
+export function makeBeamLevels(): BeamLevels {
+  return { focus: 0, zoom: 0, iris: 0, frost: 0, gobo: 0, gobo2: 0, goboRot: 0 }
+}
+
+/** One beam channel as drawn: stepped toward the DMX where it travels, the DMX where it does not. */
+function beamLevel(bt: BeamTravel | null, axis: TravelAxis | undefined, key: string | null, raw: number): number {
+  return bt && axis && key ? travelBeam(bt, axis, raw) : raw
+}
+
+/** Every beam channel the director reads, into [out], allocation-free. Exported for the test. */
+export function readBeamLevels(
+  source: ChannelSource,
+  keys: {
+    focus: string | null
+    zoom: string | null
+    iris: string | null
+    frost: string | null
+    gobo: string | null
+    gobo2: string | null
+    goboRot: string | null
+    goboRotFine: string | null
+  },
+  hasRotFine: boolean,
+  indexing: boolean,
+  bt: BeamTravel | null,
+  out: BeamLevels,
+): BeamLevels {
+  out.focus = beamLevel(bt, bt?.focus, keys.focus, readChannel(source, keys.focus))
+  out.zoom = beamLevel(bt, bt?.zoom, keys.zoom, readChannel(source, keys.zoom))
+  out.iris = beamLevel(bt, bt?.iris, keys.iris, readChannel(source, keys.iris))
+  out.frost = beamLevel(bt, bt?.frost, keys.frost, readChannel(source, keys.frost))
+  out.gobo = beamLevel(bt, bt?.gobo, keys.gobo, readChannel(source, keys.gobo))
+  out.gobo2 = beamLevel(bt, bt?.gobo2, keys.gobo2, readChannel(source, keys.gobo2))
+  const rot = combineFinePair(readChannel(source, keys.goboRot), hasRotFine ? readChannel(source, keys.goboRotFine) : null)
+  // An indexed gobo turns to its new angle; a spin speed — or a change of the function channel's
+  // band — is drawn as sent, since easing a speed through its stop band would draw a stop the wheel
+  // never made (the operator's call, 2026-10-05). Leaving index forgets the axis, so entering it
+  // again lands on the angle rather than travelling from a speed's value.
+  if (bt && indexing) {
+    out.goboRot = beamLevel(bt, bt.goboRot, keys.goboRot, rot)
+  } else {
+    if (bt) resetTravelAxis(bt.goboRot)
+    out.goboRot = rot
+  }
+  return out
+}
+
 /**
  * The packed blades a beam draws this frame: a DMX head's, from its channels' levels in [scratch],
  * where it has framing shutters — else [lanternPacked], the lantern's packed once per spec. One or
@@ -1161,6 +1271,8 @@ function useBeamDirector({
   ledMacroProp,
   moveMacroProp,
   shutterProps,
+  travelRates,
+  timingChannels,
   groupRef,
   yokeRef,
   headRef,
@@ -1249,6 +1361,17 @@ function useBeamDirector({
   const lanternBlades = useMemo(() => packBlades(lanternBladesFor(spec, shutterProps)), [spec, shutterProps])
   const shutterKeys = useMemo(() => (shutterProps ? shutterChannelKeys(shutterProps) : null), [shutterProps])
   const [bladeScratch] = useState(makeBladeScratch)
+  // Travel time (`beamTravel.ts`): a displayed value per channel, stepped toward the DMX each frame;
+  // and this frame's beam levels, as drawn — the eased ones, or the DMX where nothing travels.
+  const [beamTravel] = useState(makeBeamTravel)
+  const [levels] = useState(makeBeamLevels)
+  const timingKeys = useMemo<TimingKeys>(
+    () => ({
+      position: timingChannels.position ? channelKey(timingChannels.position.channel) : null,
+      beam: timingChannels.beam ? channelKey(timingChannels.beam.channel) : null,
+    }),
+    [timingChannels],
+  )
   // The frame's turn about the beam — the gate's, and a PAR lamp's — in radians.
   const frameTurnRad = MathUtils.degToRad(spec.cells.length === 1 ? spec.frameTurnDeg : 0)
 
@@ -1328,6 +1451,9 @@ function useBeamDirector({
     const channelSource = sourceRef.current
     const yoke = yokeRef.current
     const head = headRef.current
+    // Travel (fixture-optics plan D14): null where nothing travels, and every level below is the DMX.
+    const bt = travelRates ? beamTravel : null
+    if (bt && travelRates) beginTravelFrame(bt, channelSource, beamKeys, elapsed, travelRates, timingChannels, timingKeys)
 
     // A macro, a spinning gobo or a turning prism moves with time rather than
     // with DMX, so while one runs this frame asks for the next — the one case
@@ -1344,6 +1470,12 @@ function useBeamDirector({
       // group, so folding them in again would apply them twice.
       let panDeg = panProp ? dmxToSignedDegrees(panCombined, panProp) ?? 0 : 0
       let tiltDeg = tiltProp ? dmxToSignedDegrees(tiltCombined, tiltProp) ?? 0 : 0
+      // The head swings to the DMX at its own speed rather than snapping: in degrees, so a 540°
+      // pan and a 270° tilt each move at the type's rate (or over the timing channel's time).
+      if (bt) {
+        panDeg = travelPan(bt, panDeg)
+        tiltDeg = travelTilt(bt, tiltDeg)
+      }
 
       // A movement macro is an offset on top of the live pan/tilt, so both the
       // head model and the beam pick it up — they read from the same two values.
@@ -1363,6 +1495,24 @@ function useBeamDirector({
         head.rotation.set(MathUtils.degToRad(tiltDeg), 0, 0)
       }
     }
+
+    // The beam channels as drawn this frame. Stepped here — before the dark and beamless returns
+    // below — so a move made in the dark has landed by the time the beam comes up, as on the rig.
+    const indexing =
+      goboRotModeProp != null &&
+      resolveGoboRotationMode(goboRotModeProp, readChannel(channelSource, beamKeys.goboRotMode)) === 'INDEX'
+    readBeamLevels(channelSource, beamKeys, goboRotFineProp != null, indexing, bt, levels)
+    if (shutterKeys) {
+      readShutterLevels(channelSource, shutterKeys, bladeScratch)
+      if (bt) {
+        for (let i = 0; i < 4; i++) {
+          if (shutterKeys.depth[i]) bladeScratch.depthLevels[i] = travelBeam(bt, bt.depth[i], bladeScratch.depthLevels[i])
+          if (shutterKeys.rotation[i]) bladeScratch.rotationLevels[i] = travelBeam(bt, bt.rotation[i], bladeScratch.rotationLevels[i])
+        }
+      }
+    }
+    // A move in flight asks for the next frame, like a macro; a settled head asks for none.
+    if (bt?.moving) animating = true
 
     if (!emitters) {
       // A movement macro still swings a beamless head.
@@ -1428,7 +1578,7 @@ function useBeamDirector({
 
     // Zoom overrides the static field angle (`resolveBeamDeg`): a ZOOM slider's degMin/degMax, or a
     // stepped zoom's band's zoomDeg; a zoom that declares no angle answers null and the base stands.
-    const zoomDeg = resolveZoomDeg(zoomProp, readChannel(channelSource, beamKeys.zoom))
+    const zoomDeg = resolveZoomDeg(zoomProp, levels.zoom)
     const beamDeg = zoomDeg ?? baseBeamDeg
     const geom = geomRef.current
     if (beamDeg !== geom.beamDeg) {
@@ -1440,32 +1590,29 @@ function useBeamDirector({
     // range, else per lobe over its own throw ([focusRangeM]). The shaders soften the edge by how
     // far a surface or a sample sits from it. Without a focus channel the edge is the family's
     // softness (`bodies/archetype.ts`), moved towards soft by a frost channel.
-    const focusParam = resolveFocusParam(focusProp, readChannel(channelSource, beamKeys.focus))
+    const focusParam = resolveFocusParam(focusProp, levels.focus)
     const declaredFocusDist = resolveDeclaredFocusDistance(focusProp, focusParam)
     // With a focus channel the family's cap lifts, and the blur softens the edge off the plane
     // ([resolveEdgeHardness]); the blur's scale is the type's depth of field, else its family's.
-    const edge = resolveEdgeHardness(spec.softness, frostProp, readChannel(channelSource, beamKeys.frost), focusParam != null)
+    const edge = resolveEdgeHardness(spec.softness, frostProp, levels.frost, focusParam != null)
     const dof = spec.depthOfField
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
     // tighter of the two wins.
-    const iris = Math.min(spec.iris, resolveIris(irisProp, readChannel(channelSource, beamKeys.iris)))
+    const iris = Math.min(spec.iris, resolveIris(irisProp, levels.iris))
 
     // Up to two gobo wheels in series (the Robe: static, then rotating), each a layer the beam is
     // multiplied by, in the air and on every surface (fixture-optics plan session 4). Only the wheel
     // the rotation channel turns moves; a wheel with a function channel indexes to an angle or spins
     // at a speed, every other spins as its rotation channel's bands say. A body of several cells
     // carries none.
-    const slotA = multi ? 0 : resolveGoboSlot(goboProp, readChannel(channelSource, beamKeys.gobo))
-    const slotB = multi ? 0 : resolveGoboSlot(goboProp2, readChannel(channelSource, beamKeys.gobo2))
+    const slotA = multi ? 0 : resolveGoboSlot(goboProp, levels.gobo)
+    const slotB = multi ? 0 : resolveGoboSlot(goboProp2, levels.gobo2)
     const turnedSlot = goboTurned === 0 ? slotA : goboTurned === 1 ? slotB : 0
     const rotation =
       turnedSlot > 0
         ? resolveGoboRotation(
             goboRotProp,
-            combineFinePair(
-              readChannel(channelSource, beamKeys.goboRot),
-              goboRotFineProp ? readChannel(channelSource, beamKeys.goboRotFine) : null,
-            ),
+            levels.goboRot,
             goboRotModeProp,
             readChannel(channelSource, beamKeys.goboRotMode),
             SCRATCH_GOBO_ROTATION,
@@ -1533,12 +1680,7 @@ function useBeamDirector({
     const blades = multi
       ? NO_BLADES
       : shutterProps && shutterKeys
-        ? beamBlades(
-            lanternBlades,
-            shutterProps,
-            readShutterLevels(channelSource, shutterKeys, bladeScratch),
-            spec.archetype === 'mover',
-          )
+        ? beamBlades(lanternBlades, shutterProps, bladeScratch, spec.archetype === 'mover')
         : lanternBlades
 
     const beam = SCRATCH_BEAM
@@ -1786,6 +1928,75 @@ interface ColourSyncBaseProps {
    * re-applies at its time each frame. Absent, time stands at 0 and nothing animates.
    */
   ticker?: ColourTicker
+  /**
+   * Travel time for the colour family (fixture-optics plan D14): a wheel, a scroller or a filter is
+   * drawn passing through the slots between, stepped toward its DMX at the type's speed or over the
+   * unit's colour timing channel (`lib/travel.ts`), and the arm registers with [ticker] while one is in
+   * flight. Absent, every colour channel is drawn as sent. Needs a driven ticker: on a still one a move
+   * would never leave its first frame.
+   */
+  travel?: ColourTravel
+}
+
+/** A colour arm's travel: the colour family's rate (DMX steps a second) and the unit's colour timing channel. */
+export interface ColourTravel {
+  rate: number
+  timing?: SliderPropertyDescriptor
+}
+
+/** One colour arm's displayed levels, one axis per channel it eases. */
+interface ColourTravelState {
+  axes: Map<string, TravelAxis>
+  source: ChannelSource | null
+  epoch: number
+  channels: readonly ChannelRef[] | null
+  /** Whether a channel read on this apply is drawn short of its target. */
+  moving: boolean
+}
+
+function makeColourTravelState(): ColourTravelState {
+  return { axes: new Map(), source: null, epoch: 0, channels: null, moving: false }
+}
+
+/** A setting channel's level as one apply draws it. */
+type LevelOf = (p: SettingPropertyDescriptor) => number
+
+/**
+ * Begin one apply of a colour arm and answer its level reader: the DMX where nothing travels, else
+ * each channel stepped toward its DMX ([stepTravel]). [nowS] is the frame's time when the ticker
+ * runs the apply, null from a channel callback — which plans a move without starting its clock. The
+ * axes land, never travel, after a source switch, a replacement of the source's values or a change
+ * of channels (a repatch), exactly as the beam director's do (`beamTravel.ts`).
+ */
+function beginColourApply(
+  st: ColourTravelState,
+  travel: ColourTravel | undefined,
+  source: ChannelSource,
+  channels: readonly ChannelRef[],
+  nowS: number | null,
+): LevelOf {
+  st.moving = false
+  if (!travel) return (p) => getChannelValue(p.channel, source)
+  const epoch = sourceEpoch(source)
+  if (st.source !== source || st.epoch !== epoch || st.channels !== channels) {
+    st.axes.clear()
+    st.source = source
+    st.epoch = epoch
+    st.channels = channels
+  }
+  const timedS = timedSeconds(travel.timing, travel.timing ? getChannelValue(travel.timing.channel, source) : 0)
+  return (p) => {
+    const raw = getChannelValue(p.channel, source)
+    const key = channelKey(p.channel)
+    let axis = st.axes.get(key)
+    if (!axis) {
+      axis = makeTravelAxis()
+      st.axes.set(key, axis)
+    }
+    const level = stepTravel(axis, raw, nowS, travel.rate, colourTimed(p.category) ? timedS : null)
+    if (isTravelling(axis)) st.moving = true
+    return level
+  }
 }
 
 /** Exported for the unit test — the arms are the interesting part and the enclosing
@@ -1852,20 +2063,27 @@ function strobesAnimate(strobes: readonly StrobeProperty[], source: ChannelSourc
 function filteredHex(
   hex: string,
   filters: readonly SettingPropertyDescriptor[],
-  source: ChannelSource,
+  levels: readonly number[],
   timeS: number,
 ): string {
   if (filters.length === 0) return hex
   return filterColour(
     hex,
-    filters.map((f) => settingColourAt(f.options, getChannelValue(f.channel, source), timeS)),
+    filters.map((f, i) => settingColourAt(f.options, levels[i], timeS)),
   )
 }
 
 /** Whether any filter sits on an animated band, so the arm must re-apply every frame. */
-function filtersAnimate(filters: readonly SettingPropertyDescriptor[], source: ChannelSource): boolean {
-  for (const f of filters) if (isAnimatedAt(f.options, getChannelValue(f.channel, source))) return true
+function filtersAnimate(filters: readonly SettingPropertyDescriptor[], levels: readonly number[]): boolean {
+  for (let i = 0; i < filters.length; i++) if (isAnimatedAt(filters[i].options, levels[i])) return true
   return false
+}
+
+const NO_LEVELS: readonly number[] = []
+
+/** Each filter's level as this apply draws it. */
+function filterLevels(filters: readonly SettingPropertyDescriptor[], levelOf: LevelOf): readonly number[] {
+  return filters.length === 0 ? NO_LEVELS : filters.map(levelOf)
 }
 
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
@@ -1910,15 +2128,17 @@ function liveDimmerFactor(
 // dropped from inside `apply` because the answer is a channel fact, known only there.
 function useLiveColour(
   channels: ChannelRef[],
-  apply: () => boolean,
+  apply: (inFrame: boolean) => boolean,
   source: ChannelSource,
   ticker: ColourTicker = STILL_COLOUR_TICKER,
 ) {
   const unregisterRef = useRef<(() => void) | null>(null)
-  const run = () => {
-    const animated = apply()
+  // `inFrame`: run by the ticker inside a frame, so `ticker.now()` is this frame's time — the only
+  // time a colour channel's travel may start a move's clock (`lib/travel.ts`).
+  const run = (inFrame = false) => {
+    const animated = apply(inFrame)
     if (animated && !unregisterRef.current) {
-      unregisterRef.current = ticker.onFrame(() => applyRef.current())
+      unregisterRef.current = ticker.onFrame(() => applyRef.current(true))
     } else if (!animated && unregisterRef.current) {
       unregisterRef.current()
       unregisterRef.current = null
@@ -1972,9 +2192,11 @@ function ColourBeamSync({
   filters = NO_FILTERS,
   strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
+  travel,
   ...refs
 }: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
   const source = useChannelSource()
+  const [travelState] = useState(makeColourTravelState)
   const channels = useMemo(() => {
     const cs: ChannelRef[] = [
       colourProp.redChannel,
@@ -1992,7 +2214,10 @@ function ColourBeamSync({
 
   useLiveColour(
     channels,
-    () => {
+    (inFrame) => {
+      // An RGB mix is electronic and never travels; only the filters' glass does.
+      const levelOf = beginColourApply(travelState, travel, source, channels, inFrame ? ticker.now() : null)
+      const levels = filterLevels(filters, levelOf)
       const r = getChannelValue(colourProp.redChannel, source)
       const g = getChannelValue(colourProp.greenChannel, source)
       const b = getChannelValue(colourProp.blueChannel, source)
@@ -2010,11 +2235,11 @@ function ColourBeamSync({
       const intensity =
         liveDimmerFactor(dimmerProp, source) * colourFactor(r, g, b, w, a, uv) * liveStrobeFactor(strobes, source, timeS)
       applyColour(
-        filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, source, timeS),
+        filteredHex(computeNormalizedHueCss(r, g, b, w, a, uv), filters, levels, timeS),
         intensity,
         refs,
       )
-      return filtersAnimate(filters, source) || strobesAnimate(strobes, source)
+      return filtersAnimate(filters, levels) || strobesAnimate(strobes, source) || travelState.moving
     },
     source,
     ticker,
@@ -2028,9 +2253,11 @@ function SettingColourBeamSync({
   filters = NO_FILTERS,
   strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
+  travel,
   ...refs
 }: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
   const source = useChannelSource()
+  const [travelState] = useState(makeColourTravelState)
   const channels = useMemo(() => {
     const cs: ChannelRef[] = [settingProp.channel]
     if (dimmerProp) cs.push(dimmerProp.channel)
@@ -2041,8 +2268,12 @@ function SettingColourBeamSync({
 
   useLiveColour(
     channels,
-    () => {
-      const level = getChannelValue(settingProp.channel, source)
+    (inFrame) => {
+      // The wheel or the scroller as drawn: travelling, it passes through the slots between — the
+      // unit's own, since `settingProp` is the fitted one (`lib/fittedMedia.ts`).
+      const levelOf = beginColourApply(travelState, travel, source, channels, inFrame ? ticker.now() : null)
+      const level = levelOf(settingProp)
+      const levels = filterLevels(filters, levelOf)
       const timeS = ticker.now()
       // The band's colour — its preview, or for a scroll or random band its wheel's own colours at
       // this time — else open white, never black for want of data; a blackout band is dark
@@ -2050,8 +2281,13 @@ function SettingColourBeamSync({
       const colour = settingColourAt(settingProp.options, level, timeS)
       const intensity =
         liveDimmerFactor(dimmerProp, source) * sourceBandLevel(colour) * liveStrobeFactor(strobes, source, timeS)
-      applyColour(filteredHex(sourceBandColour(colour), filters, source, timeS), intensity, refs)
-      return isAnimatedAt(settingProp.options, level) || filtersAnimate(filters, source) || strobesAnimate(strobes, source)
+      applyColour(filteredHex(sourceBandColour(colour), filters, levels, timeS), intensity, refs)
+      return (
+        isAnimatedAt(settingProp.options, level) ||
+        filtersAnimate(filters, levels) ||
+        strobesAnimate(strobes, source) ||
+        travelState.moving
+      )
     },
     source,
     ticker,
@@ -2065,12 +2301,14 @@ function FixedColourBeamSync({
   filters = NO_FILTERS,
   strobes = NO_STROBES,
   ticker = STILL_COLOUR_TICKER,
+  travel,
   ...refs
 }: ColourSyncBaseProps & { hex: string }) {
   // No colour channels (gel / dimmer-only), so colourFactor is implicitly 1 —
   // intensity is the dimmer alone. A gel/setting fixture with no dimmer beams
   // full by design (no brightness signal to gate on).
   const source = useChannelSource()
+  const [travelState] = useState(makeColourTravelState)
   const channels = useMemo(
     () => [
       ...(dimmerProp ? [dimmerProp.channel] : []),
@@ -2081,14 +2319,16 @@ function FixedColourBeamSync({
   )
   useLiveColour(
     channels,
-    () => {
+    (inFrame) => {
+      const levelOf = beginColourApply(travelState, travel, source, channels, inFrame ? ticker.now() : null)
+      const levels = filterLevels(filters, levelOf)
       const timeS = ticker.now()
       applyColour(
-        filteredHex(hex, filters, source, timeS),
+        filteredHex(hex, filters, levels, timeS),
         liveDimmerFactor(dimmerProp, source) * liveStrobeFactor(strobes, source, timeS),
         refs,
       )
-      return filtersAnimate(filters, source) || strobesAnimate(strobes, source)
+      return filtersAnimate(filters, levels) || strobesAnimate(strobes, source) || travelState.moving
     },
     source,
     ticker,

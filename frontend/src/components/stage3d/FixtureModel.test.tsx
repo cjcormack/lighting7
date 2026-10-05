@@ -17,8 +17,12 @@ import {
   pixelsPerMetre,
   resolveCellColour,
   staticHeadQuaternion,
+  makeBeamLevels,
+  readBeamLevels,
 } from './FixtureModel'
 import { BEAM_LENGTH } from './emitterLayout'
+import { beginTravelFrame, makeBeamTravel } from './beamTravel'
+import { NO_TIMING, travelRates } from '../../lib/travel'
 import { resolveDeclaredFocusDistance, resolveFocusDistance } from './beamOptics'
 import { beamReach, boxCollider, type BeamHit } from './scene/beamReach'
 import { apexDistanceM, DEPTH_OF_FIELD } from './bodies/archetype'
@@ -799,3 +803,40 @@ describe("a DMX head's framing shutters, in the head's own frame", () => {
     )
   })
 })
+
+describe('the beam levels a frame draws from (travel time, fixture-optics D14)', () => {
+  const KEYS = {
+    focus: null, zoom: null, iris: null, frost: null, gobo: null, gobo2: null,
+    goboRot: '0:18', goboRotFine: null,
+  }
+  // One source for every frame: a new one would read as a vis-source switch, which lands.
+  let rotLevel = 0
+  const src = {
+    get: () => 0,
+    getByKey: (key: string) => (key === '0:18' ? rotLevel : 0),
+    subscribeToChannel: () => ({ unsubscribe: () => {} }),
+  }
+  const RATES = travelRates({ beamMs: 1000 })
+
+  it('turns an indexed gobo to its angle, and draws a spin speed as sent', () => {
+    const bt = makeBeamTravel()
+    const levels = makeBeamLevels()
+    const frame = (rot: number, t: number, indexing: boolean) => {
+      rotLevel = rot
+      beginTravelFrame(bt, src, KEYS, t, RATES, NO_TIMING, { position: null, beam: null })
+      return readBeamLevels(src, KEYS, false, indexing, bt, levels).goboRot
+    }
+    expect(frame(0, 0, true)).toBe(0)
+    expect(frame(255, 1, true)).toBe(0) // the index move is planned this frame
+    expect(frame(255, 1.5, true)).toBeCloseTo(127.5) // and turns over the beam time
+    expect(bt.moving).toBe(true)
+    // In a rotate band the channel is a speed: forward-fast to reverse-fast is drawn at once, not
+    // ramped through the stop band.
+    expect(frame(10, 2, false)).toBe(10)
+    expect(frame(250, 2.1, false)).toBe(250)
+    expect(bt.moving).toBe(false)
+    // Back to index: lands on the angle rather than travelling from the speed's value.
+    expect(frame(40, 3, true)).toBe(40)
+  })
+})
+

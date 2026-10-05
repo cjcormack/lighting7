@@ -71,7 +71,11 @@ sealed class Gear4MusicOrbit70Fixture(
      * - Ch 12: Static LED colour select (raw slider — manual gives no value bands).
      * - Ch 13: Built-in programs / reset.
      */
-    @FixtureType("gear4music-orbit-70-13ch", manufacturer = "Gear4music", model = "Orbit-70", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH))
+    @FixtureType(
+        "gear4music-orbit-70-13ch", manufacturer = "Gear4music", model = "Orbit-70", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.WASH),
+        // Estimate: the manual states no speed. A small LED wash's typical pan and tilt; its colour is RGBW, so it does not travel.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0),
+    )
     class Mode13Ch(
         universe: Universe,
         key: String,
