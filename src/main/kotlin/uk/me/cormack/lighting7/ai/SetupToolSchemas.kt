@@ -186,13 +186,13 @@ private val alsoAtSchema = objectSchema {
 }
 
 
-internal val listProjectsTool = AnthropicToolDef(
+internal val listProjectsTool = ToolDef(
     name = "list_projects",
     description = "List the desk's projects (id, name, description, which one is current). A project is one show: its patch, stage, looks, cues and prompt book. Every other tool acts on the current project.",
     inputSchema = objectSchema {},
 )
 
-internal val createProjectTool = AnthropicToolDef(
+internal val createProjectTool = ToolDef(
     name = "create_project",
     description = "Create a new, empty project (a show). It is not current until switched to, and every other tool acts on the current project — so to build it, create it and then switch_project (or pass switchTo). Stage dimensions can also be set later with set_stage.",
     inputSchema = objectSchema(required = listOf("name")) {
@@ -205,7 +205,7 @@ internal val createProjectTool = AnthropicToolDef(
     },
 )
 
-internal val switchProjectTool = AnthropicToolDef(
+internal val switchProjectTool = ToolDef(
     name = "switch_project",
     description = "Make another project the current one. This stops the running show: every effect and cue stops and all DMX output goes to zero before the new project's patch loads. Only do it when the operator has said the desk is not in use for a show, or asked for the switch. Call describe_rig afterwards.",
     inputSchema = objectSchema(required = listOf("projectId")) {
@@ -213,7 +213,7 @@ internal val switchProjectTool = AnthropicToolDef(
     },
 )
 
-internal val listFixtureTypesTool = AnthropicToolDef(
+internal val listFixtureTypesTool = ToolDef(
     name = "list_fixture_types",
     description = "List the fixture types this desk can patch — each a manufacturer, model and DMX mode with its channel count. Match every fixture in a patch list to a typeKey from here by manufacturer, model and mode/channel count; a mode is a separate typeKey. Conventional (dimmer-driven) lanterns — profiles, fresnels, PARs, cyc floods, practicals — all patch as 'generic-dimmer', one channel each. A fixture with no match cannot be patched: tell the operator which ones, since adding a fixture type is a code change. A type marked acceptsLength (a lightstrip) has no fixed size: give each such fixture its installed lengthM when patching or placing it; defaultLengthM is only what is drawn until then. A type marked acceptsLantern (generic-dimmer) is hung with a lantern from the desk's library: give each its lanternType when the plot names one. A type listed with `loadable` has settings whose slots hold fitted media — a gel scroller's string, a module wheel's gobos or dichroics, a media frame's gel — each listed with its slots and their stock content: give a unit its `media` when the plot names what is loaded.",
     inputSchema = objectSchema {
@@ -221,7 +221,7 @@ internal val listFixtureTypesTool = AnthropicToolDef(
     },
 )
 
-internal val getPatchTool = AnthropicToolDef(
+internal val getPatchTool = ToolDef(
     name = "get_patch",
     description = "The current project's patch and stage as stored: stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
         "Each placed fixture and `alsoAt` lantern also carries `world`: where it actually is on stage, in world coordinates — x/y/z are offsets along the rigging when `rigging` is set, and `world` composes them with the rigging's position and rotation. It is absent for one with no x or y, which the Stage view does not draw. " +
@@ -245,7 +245,7 @@ private val patchRowSchema = objectSchema(required = listOf("name", "fixtureType
     placementProps()
 }
 
-internal val patchFixturesTool = AnthropicToolDef(
+internal val patchFixturesTool = ToolDef(
     name = "patch_fixtures",
     description = "Patch fixtures into the current project in one go — the tool for turning a patch list (a PDF or CSV exported from another console, or a paperwork plot) into the desk's patch. " +
         "The whole list is checked first — known types, addresses inside 1–512, no two fixtures overlapping on a universe, unique keys and head numbers, riggings that exist — and nothing is written if any row fails; the answer lists every problem, so fix them and send the list again. " +
@@ -256,7 +256,7 @@ internal val patchFixturesTool = AnthropicToolDef(
     },
 )
 
-internal val deleteGroupsTool = AnthropicToolDef(
+internal val deleteGroupsTool = ToolDef(
     name = "delete_groups",
     description = "Delete fixture groups from the current project by name — groups left over from an old patch, or ones patch_fixtures created under a wrong name. " +
         "The fixtures stay patched; they only leave the group. A group that still has members is refused unless force is set, so a typo cannot take apart a group that looks and cues address — check get_patch's `groups` first. " +
@@ -294,7 +294,7 @@ private val riggingSchema = objectSchema(required = listOf("name")) {
     prop("lengthM", "number", "Length along its own x axis, 0.01–100 m.")
 }
 
-internal val setStageTool = AnthropicToolDef(
+internal val setStageTool = ToolDef(
     name = "set_stage",
     description = "Set up the Stage view of the current project from a ground plan, section, lighting plot or photo: the stage's bounding box, the playable regions (main stage, thrust, rostra, pit) and the riggings fixtures hang from (FOH bar, LX bars, trusses, booms, floor positions). " +
         "Regions and riggings are upserted by name — fields you send overwrite, fields you omit keep their value — so it is safe to call repeatedly while refining. Everything is validated before anything is written. " +
@@ -367,7 +367,7 @@ private val sceneViewpointSchema = objectSchema(required = listOf("name")) {
 
 internal const val PROSCENIUM_HALL_TEMPLATE = "proscenium-hall"
 
-internal val setSceneTool = AnthropicToolDef(
+internal val setSceneTool = ToolDef(
     name = "set_scene",
     description = "Model the venue and the set for the Stage view — the room, the proscenium, masking, platforms, seating, furniture — from photos, a ground plan or a video frame, and save viewpoints (a seat, the desk's position, an actor's eye line). " +
         "Elements and viewpoints are upserted by name, and everything is validated before anything is written. " +
@@ -403,7 +403,7 @@ internal val setSceneTool = AnthropicToolDef(
     },
 )
 
-internal val getSceneTool = AnthropicToolDef(
+internal val getSceneTool = ToolDef(
     name = "get_scene",
     description = "Read the current project's scene document: every venue and set element (in set_scene's shape, so a row can be corrected and sent back) and every saved viewpoint, a seat view with the eye it resolves to. " + COORDINATES,
     inputSchema = objectSchema {},
@@ -428,7 +428,7 @@ internal val RENDER_SOURCES = listOf("output", "outputProgrammer", "programmer",
  * The viewpoint is `set_scene`'s vocabulary — a built-in camera, a saved view by name (or uuid), or
  * a seat `{seating, seat}` — so a view saved there, or a seat read off `get_scene`, renders as named.
  */
-internal val renderViewTool = AnthropicToolDef(
+internal val renderViewTool = ToolDef(
     name = "render_view",
     description = "See the Stage view: render a viewpoint of the current project's stage — the venue and set set_scene built, the rig, and the light the fixtures are putting out now — and answer it as a PNG image. " +
         "Use it to check a model against the operator's photo or video frame and correct it with set_scene. " +
@@ -461,7 +461,7 @@ private val placementSchema = objectSchema(required = listOf("key")) {
     placementProps()
 }
 
-internal val placeFixturesTool = AnthropicToolDef(
+internal val placeFixturesTool = ToolDef(
     name = "place_fixtures",
     description = "Position patched fixtures in the Stage view: which rigging each hangs on, where along it, its orientation, beam angle and gel — and for a generic dimmer its lantern and how it is focused (shutters, gate, iris, focus, zoom). Only the fields you send change; send rigging as null to take a fixture off its rigging. " +
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " + COORDINATES,
@@ -470,7 +470,7 @@ internal val placeFixturesTool = AnthropicToolDef(
     },
 )
 
-internal val getPromptBookTool = AnthropicToolDef(
+internal val getPromptBookTool = ToolDef(
     name = "get_prompt_book",
     description = "The current project's prompt book: the script PDF's page count and cover pages, every cue anchored on it (with its stack and number) and every note. If there is no prompt book yet, the answer says how the operator imports the PDF — the desk must hold the file itself, and a tool cannot upload it.",
     inputSchema = objectSchema {},
@@ -504,7 +504,7 @@ private val showCueSchema = objectSchema(required = listOf("name")) {
     })
 }
 
-internal val buildCueStackTool = AnthropicToolDef(
+internal val buildCueStackTool = ToolDef(
     name = "build_cue_stack",
     description = "Create a cue stack for a show — or append to one — with its cues in running order, from a prompt book and the designer's lighting notes. Each cue carries its number, name, notes, fade and follow times, optional look layers, and optionally the place in the prompt book it is called on. " +
         "Cues can be created before their looks exist: put the intended state in notes, then program them later (record_cue with UPDATE_EXISTING, or create_cue-style layers). " +
@@ -538,7 +538,7 @@ private val anchorSchema = objectSchema(required = listOf("cueId", "at")) {
     })
 }
 
-internal val markUpPromptBookTool = AnthropicToolDef(
+internal val markUpPromptBookTool = ToolDef(
     name = "mark_up_prompt_book",
     description = "Mark up the current project's prompt book: anchor existing cues to the line they are called on (moving any existing anchor), add notes for the operator, and set how many cover pages precede the script's page 1. " +
         "Notes are added, never replaced — check get_prompt_book first so a note is not written twice. Everything is validated before anything is written.",
@@ -549,7 +549,7 @@ internal val markUpPromptBookTool = AnthropicToolDef(
     },
 )
 
-internal val setupToolDefs: List<AnthropicToolDef> = listOf(
+internal val setupToolDefs: List<ToolDef> = listOf(
     listProjectsTool,
     createProjectTool,
     switchProjectTool,

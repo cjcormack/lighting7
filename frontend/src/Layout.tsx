@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react"
 import { Outlet, useLocation } from "react-router"
-import { ChevronLeft, Menu, Sparkles, Loader2 } from "lucide-react"
+import { ChevronLeft, Menu, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -21,7 +21,6 @@ import { FixtureOverviewPanel } from "./components/FixtureOverviewPanel"
 import { PositionsPanel } from "./components/positions/PositionsPanel"
 import { FixtureDetailModal } from "./components/groups/FixtureDetailModal"
 import { OverviewToggle, useOverviewPanels } from "./components/overviewPanels"
-import { AiChatToggle } from "./components/ai/AiChatToggle"
 import { CueSlotOverviewPanel } from "./components/CueSlotOverviewPanel"
 import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
@@ -42,18 +41,6 @@ import { StageRenderHost } from "./components/stageRender/StageRenderHost"
 const DRAWER_WIDTH = 240
 const DRAWER_COLLAPSED_WIDTH = 64
 
-
-/**
- * The AI chat panel behind a lazy boundary — react-markdown and its remark/micromark stack are
- * ~120 kB, and the panel is the only thing in the app that renders Markdown. It sits in Layout
- * rather than on a route, so the split is a mount latch rather than a route boundary: nothing is
- * fetched until the operator first opens Lux, and the panel then stays mounted for the rest of
- * the session because the conversation lives in its own component state and closing must not
- * discard it.
- */
-const AiChatPanel = lazy(() =>
-  import("./components/ai/AiChatPanel").then((m) => ({ default: m.AiChatPanel })),
-)
 
 /**
  * The controls the Screens sheet draws for a view's `picker` options, by option key (stage-view
@@ -84,14 +71,6 @@ export default function Layout() {
   const { open, toggle: toggleDrawer } = useSidebarOpen()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
-  const [isAiChatVisible, setIsAiChatVisible] = useState(false)
-  // Latched by the first open and never cleared — see the `AiChatPanel` note above. Go through
-  // `setAiChatVisible` rather than `setIsAiChatVisible` so every opener trips the latch.
-  const [hasOpenedAiChat, setHasOpenedAiChat] = useState(false)
-  const setAiChatVisible = useCallback((visible: boolean) => {
-    if (visible) setHasOpenedAiChat(true)
-    setIsAiChatVisible(visible)
-  }, [])
   const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { panels, byId } = useOverviewPanels()
@@ -104,7 +83,7 @@ export default function Layout() {
   // visibility is untouched so they come back on exit. On every other route the app is drawn
   // whatever the fact says: the fixtures list is navigated *from* the sidebar, and a window that
   // leaves a live view for it gets the app back and finds immersive waiting when it returns.
-  // Banners, `HandChip`, the AI panel and `DeskDndProvider` are untouched. The `ShowHeader` is
+  // Banners, `HandChip` and `DeskDndProvider` are untouched. The `ShowHeader` is
   // the row that stays and carries the way back (D11); below `md` it also draws the mobile
   // drawer's button (D10), through the opener provided below — the drawer itself is still here.
   const immersive = useImmersive() && isLiveViewPath(location.pathname)
@@ -263,7 +242,6 @@ export default function Layout() {
                 {panels.map((panel) => (
                   <OverviewToggle key={panel.id} panel={panel} />
                 ))}
-                <AiChatToggle isVisible={isAiChatVisible} onToggle={() => setAiChatVisible(!isAiChatVisible)} />
                 {/* The theme control is inside this menu, not beside it — see `ThemeMenuItem`.
                     This row is `shrink-0` around an `overflow-x-auto` that therefore cannot
                     engage, so anything added here pushes the header wider than the screen rather
@@ -338,23 +316,6 @@ export default function Layout() {
           />
         </div>
 
-        {/* AI Chat Panel. Mounted from the first open onwards and never unmounted, so the
-            conversation survives closing the sheet; the fallback is `null` because the panel is
-            an overlay and has no layout of its own to reserve. */}
-        {hasOpenedAiChat && (
-          <FeatureErrorBoundary
-            feature="Lux"
-            className="fixed bottom-4 right-4 z-50 max-w-sm m-0"
-          >
-            <Suspense fallback={null}>
-              <AiChatPanel
-                isOpen={isAiChatVisible}
-                onClose={() => setAiChatVisible(false)}
-              />
-            </Suspense>
-          </FeatureErrorBoundary>
-        )}
-
         {/* The Screens sheet, mounted once: opened from the user menu and from ⌘K through
             `screensSheetState`, neither of which is an ancestor of the other. */}
         <ScreensSheet controls={SCREENS_CONTROLS} />
@@ -374,7 +335,7 @@ export default function Layout() {
             // declare its own copy, which is how the Stage entry drifted onto a second icon. None
             // of them while immersive: the panels are not mounted then, and a row reading "On"
             // for a panel that is not on screen, whose press draws nothing, is a control
-            // reporting a state it is not in. Lux stays — the AI panel is outside the gate.
+            // reporting a state it is not in.
             ...(immersive
               ? []
               : panels.map((panel) => ({
@@ -383,7 +344,6 @@ export default function Layout() {
                   isVisible: panel.isVisible,
                   onToggle: panel.toggle,
                 }))),
-            { label: "Lux (AI Chat)", icon: Sparkles, isVisible: isAiChatVisible, onToggle: () => setAiChatVisible(!isAiChatVisible) },
           ]}
         />
 

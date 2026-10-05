@@ -56,23 +56,20 @@ must **not** do is hide under the resource they merely resemble: `/fixture-types
 
 Every endpoint sits on one of two sides, and which one is not a matter of taste:
 
-**Live-runtime surfaces are global.** `/fx`, `/groups`, `/programmer`, `/locate`, `/ai/chat` and
+**Live-runtime surfaces are global.** `/fx`, `/groups`, `/programmer`, `/locate` and
 the direct channel-control surface — these address *the show that is currently running*, not a row
 in the database. There is no other show to address, so they carry no `{projectId}`, and there is
 no id for them to 409 about. Adding one would be a lie: the parameter would have exactly one legal
 value.
 
 Being global does not mean ignoring the project. Where a global surface reaches a per-project
-table it must still filter by the *running show's* project — `/fx/definitions/{definitionId}` and
-`/ai/chat`'s conversation lookup both do, because a bare `findById` would otherwise let one
-project's id reach another's row. `POST /ai/chat` is also the one live-runtime endpoint that can
-answer 409: its tool loop spans several round trips to the model, and it refuses rather than
-finish against a project that changed underneath it.
+table it must still filter by the *running show's* project — `/fx/definitions/{definitionId}`
+does, because a bare `findById` would otherwise let one project's id reach another's row.
 
 **Persisted project data is project-scoped**, under `/projects/{projectId}/…`, where `{projectId}`
 is a numeric id or the literal `current`. Everything an operator authors and the desk stores lives
 here: cues, cue stacks, looks, templates, scripts, patches, riggings, stage regions, scene elements and viewpoints, universe
-configs, surface bindings, speed masters, prompt books, AI conversation history.
+configs, surface bindings, speed masters, prompt books.
 
 Inside that second side, mutations split again, on **whether the write is also a live-show
 mutation**:
@@ -84,7 +81,7 @@ mutation**:
 * **Ungated** when the write is DB-only and the running show is re-synced afterwards *if it
   happens to be looking at that project* — patches, riggings, patch groups, stage regions, stage
   elements and viewpoints (which the running show does not load at all),
-  universe configs, surface bindings, speed masters, cloud sync, AI conversation history. These
+  universe configs, surface bindings, speed masters, cloud sync. These
   read `withProject` and then branch on `state.isCurrentProject(project)` to reload fixtures or
   retune the clock. Patching a rig you are not currently running is a real workflow and this is
   what keeps it working.
@@ -95,10 +92,9 @@ looks, templates and scripts resolves its *source* with `withProject` (or `resol
 to…*, and the write only inserts rows into the target — nothing is applied to the running show, so
 there is nothing to half-perform. The target is any project, current or not.
 
-Note that "persisted project data" here is a *routing* claim, not a sync one: AI conversation
-history is scoped to a project and stored, but `SyncCoverageTest` classifies it `Excluded` and it
-never leaves the desk. Which URL a table hangs off and whether it is portable are separate
-questions — see `docs/sync-engineering.md` for the second.
+Note that "persisted project data" here is a *routing* claim, not a sync one: which URL a table
+hangs off and whether it is portable are separate questions — see `docs/sync-engineering.md` for
+the second.
 
 Reads are never gated: `GET` on project data accepts any project id, current or not.
 

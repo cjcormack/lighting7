@@ -231,8 +231,7 @@ function RemoteAccessForm({ settings }: { settings: TunnelSettings }) {
             Allow scripts over remote access
             <span className="block text-xs text-muted-foreground">
               A script runs as the desk, with this computer’s files and network. Off, anyone signed in
-              from outside can edit and busk but cannot save, compile or run a script, and the AI chat
-              cannot write one.
+              from outside can edit and busk but cannot save, compile or run a script.
             </span>
           </span>
         </label>

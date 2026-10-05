@@ -38,7 +38,6 @@ vi.mock('./components/overviewPanels', () => {
     OverviewToggle: () => null,
   }
 })
-vi.mock('./components/ai/AiChatToggle', () => ({ AiChatToggle: () => null }))
 vi.mock('./components/dnd/DeskDndProvider', () => ({ DeskDndProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 // The palette's toggles are recorded so the View group can be asserted without rendering cmdk.
 vi.mock('./components/CommandPalette', () => ({
@@ -131,14 +130,14 @@ describe('the app around a live view', () => {
     }
   })
 
-  it('withholds the four panel toggles from the palette while immersive, keeping Lux', async () => {
+  it('withholds the four panel toggles from the palette while immersive', async () => {
     const { unmount } = draw('/projects/1/busk')
     await screen.findByTestId('page')
-    expect(screen.getByTestId('palette-toggles')).toHaveTextContent('stage|fixtures|speedMasters|cueSlots|Lux (AI Chat)')
+    expect(screen.getByTestId('palette-toggles')).toHaveTextContent(/^stage\|fixtures\|speedMasters\|cueSlots$/)
     act(() => setImmersive(true))
     // A row reading "On" for a panel that is not mounted would be a control reporting a state
-    // it is not in; the AI panel is outside the gate and stays offered.
-    expect(screen.getByTestId('palette-toggles')).toHaveTextContent(/^Lux \(AI Chat\)$/)
+    // it is not in.
+    expect(screen.getByTestId('palette-toggles')).toBeEmptyDOMElement()
     unmount()
   })
 

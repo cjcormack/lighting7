@@ -81,7 +81,7 @@ private val lookEffectSchema = buildJsonObject {
     })
 }
 
-internal val createLookTool = AnthropicToolDef(
+internal val createLookTool = ToolDef(
     name = "create_look",
     description = "Create a new look (a named, reusable bundle of beat-synced effects and static values) and optionally apply it immediately to targets. Returns the look ID.",
     inputSchema = buildJsonObject {
@@ -108,7 +108,7 @@ internal val createLookTool = AnthropicToolDef(
     }
 )
 
-internal val applyLookTool = AnthropicToolDef(
+internal val applyLookTool = ToolDef(
     name = "apply_look",
     description = "Apply an existing look to targets. If already active on all targets, it will be removed (toggle).",
     inputSchema = buildJsonObject {
@@ -128,26 +128,7 @@ internal val applyLookTool = AnthropicToolDef(
     }
 )
 
-internal val runLightingScriptTool = AnthropicToolDef(
-    name = "run_lighting_script",
-    description = "Run a Kotlin lighting script for direct fixture control. Scripts have access to: fixture<T>(key), group<T>(name), fxEngine, masterClock, coroutines. Use for setting fixture state, colours, positions, etc.",
-    inputSchema = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("script", buildJsonObject {
-                put("type", "string")
-                put("description", "Kotlin script body. Context: fixtures, fxEngine. Implicit imports for fixture types, Color, coroutines.")
-            })
-            put("description", buildJsonObject {
-                put("type", "string")
-                put("description", "Describe what this script does")
-            })
-        })
-        put("required", buildJsonArray { add("script"); add("description") })
-    }
-)
-
-internal val setBpmTool = AnthropicToolDef(
+internal val setBpmTool = ToolDef(
     name = "set_bpm",
     description = "Set a speed master's BPM. Omitting speedMasterUuid retunes master 1 — the global tempo every unassigned effect follows.",
     inputSchema = buildJsonObject {
@@ -163,7 +144,7 @@ internal val setBpmTool = AnthropicToolDef(
     }
 )
 
-internal val createSpeedMasterTool = AnthropicToolDef(
+internal val createSpeedMasterTool = ToolDef(
     name = "create_speed_master",
     description = "Add a speed master — an independent tempo clock effects can follow instead of the global one. Use it when part of the rig should run at its own speed. Returns the new master's uuid, which effects and cue layers reference.",
     inputSchema = buildJsonObject {
@@ -182,7 +163,7 @@ internal val createSpeedMasterTool = AnthropicToolDef(
     }
 )
 
-internal val clearEffectsTool = AnthropicToolDef(
+internal val clearEffectsTool = ToolDef(
     name = "clear_effects",
     description = "Clear active effects. Omit targets to clear ALL effects globally.",
     inputSchema = buildJsonObject {
@@ -211,7 +192,7 @@ private fun parkAddressProperties(extra: JsonObjectBuilder.() -> Unit = {}) = bu
     extra()
 }
 
-internal val parkChannelTool = AnthropicToolDef(
+internal val parkChannelTool = ToolDef(
     name = "park_channel",
     description = "Park a DMX channel: lock its output at a fixed value above everything else — cues, looks, effects, " +
             "the programmer and manual channel writes all stop reaching it until it is unparked. For holding a light " +
@@ -230,7 +211,7 @@ internal val parkChannelTool = AnthropicToolDef(
     }
 )
 
-internal val unparkChannelTool = AnthropicToolDef(
+internal val unparkChannelTool = ToolDef(
     name = "unpark_channel",
     description = "Unpark a parked DMX channel, handing it back to the show. The output does not jump: the parked " +
             "value is handed down as the channel's value underneath, where the next cue, effect or programmer " +
@@ -242,7 +223,7 @@ internal val unparkChannelTool = AnthropicToolDef(
     }
 )
 
-internal val aimFixturesTool = AnthropicToolDef(
+internal val aimFixturesTool = ToolDef(
     name = "aim_fixtures",
     description = "Point moving heads at a spot on the stage: give a point in stage coordinates and the desk works out " +
             "each head's pan and tilt from where it hangs (get_patch's `world` position), how its body is mounted " +
@@ -312,7 +293,7 @@ internal val aimFixturesTool = AnthropicToolDef(
     }
 )
 
-internal val getCurrentStateTool = AnthropicToolDef(
+internal val getCurrentStateTool = ToolDef(
     name = "get_current_state",
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
@@ -451,7 +432,7 @@ internal val cueEventItemSchema = buildJsonObject {
     put("required", buildJsonArray { add("fixture"); add("trigger") })
 }
 
-internal val createCueTool = AnthropicToolDef(
+internal val createCueTool = ToolDef(
     name = "create_cue",
     description = "Create a named cue as an ordered stack of look layers plus its own local values and ad-hoc effects. Cues allow recalling a complete state with a single action. Use apply_cue to activate it later.",
     inputSchema = buildJsonObject {
@@ -483,7 +464,7 @@ internal val createCueTool = AnthropicToolDef(
     }
 )
 
-internal val applyCueTool = AnthropicToolDef(
+internal val applyCueTool = ToolDef(
     name = "apply_cue",
     description = "Apply a saved cue by ID. By default, adds the cue's effects alongside other running cues. Set replaceAll=true to stop all other running cues first. If this cue is already running, its effects are refreshed.",
     inputSchema = buildJsonObject {
@@ -499,7 +480,7 @@ internal val applyCueTool = AnthropicToolDef(
     }
 )
 
-internal val stopCueTool = AnthropicToolDef(
+internal val stopCueTool = ToolDef(
     name = "stop_cue",
     description = "Stop a running cue by ID, removing all its effects. Other running cues are unaffected.",
     inputSchema = buildJsonObject {
@@ -511,7 +492,7 @@ internal val stopCueTool = AnthropicToolDef(
     }
 )
 
-internal val createCueStackTool = AnthropicToolDef(
+internal val createCueStackTool = ToolDef(
     name = "create_cue_stack",
     description = "Create a cue stack — an ordered container of cues for sequential playback. Stacks support looping, auto-advance, and crossfade transitions between cues. After creating, use add_cue_to_stack to add cues, then activate_cue_stack to start playback.",
     inputSchema = buildJsonObject {
@@ -527,7 +508,7 @@ internal val createCueStackTool = AnthropicToolDef(
     }
 )
 
-internal val activateCueStackTool = AnthropicToolDef(
+internal val activateCueStackTool = ToolDef(
     name = "activate_cue_stack",
     description = "Activate a cue stack, starting playback from the first cue (or a specific cue). The cue's effects are started. If the cue has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
     inputSchema = buildJsonObject {
@@ -540,7 +521,7 @@ internal val activateCueStackTool = AnthropicToolDef(
     }
 )
 
-internal val deactivateCueStackTool = AnthropicToolDef(
+internal val deactivateCueStackTool = ToolDef(
     name = "deactivate_cue_stack",
     description = "Deactivate a cue stack, stopping all its effects and cancelling auto-advance.",
     inputSchema = buildJsonObject {
@@ -552,7 +533,7 @@ internal val deactivateCueStackTool = AnthropicToolDef(
     }
 )
 
-internal val advanceCueStackTool = AnthropicToolDef(
+internal val advanceCueStackTool = ToolDef(
     name = "advance_cue_stack",
     description = "Advance an active cue stack forward or backward to the next/previous cue. If at the end and looping is enabled, wraps around. If not looping, deactivates the stack.",
     inputSchema = buildJsonObject {
@@ -569,7 +550,7 @@ internal val advanceCueStackTool = AnthropicToolDef(
     }
 )
 
-internal val addCueToStackTool = AnthropicToolDef(
+internal val addCueToStackTool = ToolDef(
     name = "add_cue_to_stack",
     description = "Add an existing cue to a cue stack. The cue is moved into the stack (a cue can only belong to one stack). If sortOrder is omitted, the cue is appended to the end.",
     inputSchema = buildJsonObject {
@@ -583,7 +564,7 @@ internal val addCueToStackTool = AnthropicToolDef(
     }
 )
 
-internal val setStandbyTool = AnthropicToolDef(
+internal val setStandbyTool = ToolDef(
     name = "set_standby",
     description = "Put a cue on deck: arm the cue the stack's next GO will fire, or omit cueId to disarm and " +
             "leave the positional next on deck. Arming changes no lights — it only decides what GO fires next, " +
@@ -602,7 +583,7 @@ internal val setStandbyTool = AnthropicToolDef(
     }
 )
 
-internal val goCueStackTool = AnthropicToolDef(
+internal val goCueStackTool = ToolDef(
     name = "go_cue_stack",
     description = "Press GO on a cue stack — fire whatever is on deck. On a stopped stack that starts it, at the " +
             "armed standby if one is set and at its first cue otherwise; on a running stack it fires the armed " +
@@ -628,7 +609,7 @@ private val maskSchema = buildJsonObject {
     put("description", "Attribute families to act on. Omit (or name all four) for no mask.")
 }
 
-internal val recordCueTool = AnthropicToolDef(
+internal val recordCueTool = ToolDef(
     name = "record_cue",
     description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue. " +
             "CREATE makes a new cue in a stack; MERGE adds the recorded values to an existing cue; " +
@@ -671,7 +652,7 @@ internal val recordCueTool = AnthropicToolDef(
     }
 )
 
-internal val includeIntoProgrammerTool = AnthropicToolDef(
+internal val includeIntoProgrammerTool = ToolDef(
     name = "include_into_programmer",
     description = "Load a cue or a look back into the programmer as an edit buffer — the desk's Include. " +
             "Name exactly one of cueId or lookId. The included thing becomes the update target, so the " +
@@ -691,7 +672,7 @@ internal val includeIntoProgrammerTool = AnthropicToolDef(
     }
 )
 
-internal val updateFromProgrammerTool = AnthropicToolDef(
+internal val updateFromProgrammerTool = ToolDef(
     name = "update_from_programmer",
     description = "Write the programmer back into what it came from — the desk's Update. With no targets it " +
             "writes only what changed since the last include_into_programmer, into that same cue or look. " +
@@ -743,7 +724,7 @@ private val templateEffectSchema = buildJsonObject {
     put("required", buildJsonArray { add("effectType"); add("category"); add("beatDivision"); add("blendMode") })
 }
 
-internal val createTemplateTool = AnthropicToolDef(
+internal val createTemplateTool = ToolDef(
     name = "create_template",
     description = "Create a template — a named, referenceable value (a colour, a position, an intensity) " +
             "or a named effect, that effects and cue layers point at instead of restating it. This is what " +
@@ -838,7 +819,7 @@ internal const val SCENERY_TRACKS_NOTE =
 internal const val CUE_EVENTS_NOTE =
     "Cue events: one-shot triggers (a confetti cannon's tubes) fired a set time after GO into this cue. They fire on GO into this cue only — never tracked, never on GO TO a later cue, never previewed — and only while the desk is armed: unarmed, the GO goes and the events are skipped and announced, never queued. Each tube fires once per cue. Arming and firing are the operator's, at the desk; you only author the events."
 
-internal val setCueEventsTool = AnthropicToolDef(
+internal val setCueEventsTool = ToolDef(
     name = "set_cue_events",
     description = "Set one cue's events — the one-shot triggers (confetti cannon tubes) it fires after GO. $CUE_EVENTS_NOTE Replaces the whole list: send [] to clear it. Every event is checked before anything is written.",
     inputSchema = buildJsonObject {
@@ -855,7 +836,7 @@ internal val setCueEventsTool = AnthropicToolDef(
     },
 )
 
-internal val setSceneryTool = AnthropicToolDef(
+internal val setSceneryTool = ToolDef(
     name = "set_scenery",
     description = "Set the scenery of one cue, cue stack or Look — the scene elements it moves (tabs open or close, a flown piece flies, a piece appears). " +
         "A cue's changes move on GO into it, each on its own clock; a stack's are its set, held while the stack is live, under its cues; a Look's show while it is live (layered in a live cue, or pressed), above every cue. " +
@@ -877,11 +858,10 @@ internal val setSceneryTool = AnthropicToolDef(
 )
 
 /**
- * Run one fixture command (fixture optics plan session 7, D13). Offered to the in-app chat; held to
- * Remote access's "allow fixture commands" for a remote caller and for MCP (`McpProtocol`), which is
- * always remote.
+ * Run one fixture command (fixture optics plan session 7, D13). Held to Remote access's "allow
+ * fixture commands" by MCP (`McpProtocol`), which is always remote.
  */
-internal val runFixtureCommandTool = AnthropicToolDef(
+internal val runFixtureCommandTool = ToolDef(
     name = RUN_FIXTURE_COMMAND,
     description = "Run one fixture command — a reset, a lamp strike or a lamp off — on one fixture. The desk holds the command's level for its declared time (a few seconds) and answers when it ends. " +
         "describe_rig lists each fixture's commands by name. A command is never a stored value: no look, cue, template or programmer value can hold one, and this is the only way to run one besides the fixture panel. " +

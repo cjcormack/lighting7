@@ -21,7 +21,6 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import uk.me.cormack.lighting7.ai.AiService
 import uk.me.cormack.lighting7.auth.AuthService
 import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
 import uk.me.cormack.lighting7.fx.CueTriggerManager
@@ -449,16 +448,6 @@ class State(val config: ApplicationConfig) {
 
     fun attachMdns(closeable: Closeable) {
         mdnsRegistration = closeable
-    }
-
-    /**
-     * AI service for Claude-powered lighting control.
-     * Null if no ANTHROPIC_API_KEY is configured (feature is optional).
-     */
-    val aiService: AiService? by lazy {
-        val apiKey = config.propertyOrNull("anthropic.apiKey")?.getString()
-        if (apiKey.isNullOrBlank()) null
-        else AiService(this, config)
     }
 
     /**

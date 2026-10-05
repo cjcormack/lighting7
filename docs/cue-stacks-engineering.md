@@ -522,9 +522,9 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 - `src/store/cues.ts` — `useActiveCueStackIds()` hook derives active stack IDs from FxState
 - `src/store/restApi.ts` — `CueStackList` added to tag types
 
-## Lux AI Integration
+## MCP tools
 
-Seven tools:
+Seven tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
 - `create_cue_stack` — Create with name, loop
 - `activate_cue_stack` — Activate (optionally at specific cue). With no cue named it routes to
   `activateAtFirstCue`, so it honours an armed standby exactly as the REST route and the surface do
@@ -540,4 +540,4 @@ Seven tools:
 
 The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info, and `cue_run` alongside it for the run state of every stack that has one — the armed-or-positional `nextCueId`, `nextIsArmed`, and the live fade. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.
 
-The system prompt describes cue stack concepts and workflow.
+The MCP `instructions` (`RigBriefing.keyConcepts`) describe cue stack concepts and workflow.

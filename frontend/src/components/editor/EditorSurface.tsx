@@ -607,7 +607,7 @@ function SheetSurface({
         aria-describedby={undefined}
         // The house shape for a sheet that is a panel rather than a form: `p-0 gap-0` with the
         // padding pushed into the header and body, a ruled header, and square corners. Copied from
-        // `AiChatPanel` and `MobileCueListSheet` rather than invented, because a cell editor
+        // `MobileCueListSheet` rather than invented, because a cell editor
         // arriving in its own dialect is exactly what makes an app feel assembled from parts.
         className="p-0 gap-0"
         style={style}

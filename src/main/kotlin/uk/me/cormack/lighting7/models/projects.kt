@@ -60,7 +60,6 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     val fixturePatches by DaoFixturePatch referrersOn DaoFixturePatches.project
     val fixtureGroups by DaoFixtureGroup referrersOn DaoFixtureGroups.project
     val parkedChannels by DaoParkedChannel referrersOn DaoParkedChannels.project
-    val aiConversations by DaoAiConversation referrersOn DaoAiConversations.project
     val fxDefinitions by DaoFxDefinition referrersOn DaoFxDefinitions.project
     val controlSurfaceBindings by DaoControlSurfaceBinding referrersOn DaoControlSurfaceBindings.project
     /** The project's single prompt book, or null if none has been imported yet. */

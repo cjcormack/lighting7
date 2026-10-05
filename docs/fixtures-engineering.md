@@ -1203,7 +1203,7 @@ Where the rule lives:
 | `DmxFixtureDetails.infrastructure` (`GET /fixtures`) | What the frontend filters on. The list still **carries** the fixture, so a key a cue or group holds still resolves. |
 | `BuskRigOrder` / `DeskSelection` | The empty rig's *steps* leave it out (`operatorFixtures`), mirrored by the client's `effectiveRig`, so *All* / *Next* / *Invert* never reach a power dimmer. A group that contains one still steps as the group; a tile placed before the flag was set stays. `positions()` still ranks it: ordering a head a caller already named (a spread) is not offering one. |
 | `POST /templates/resolve` | Empty `targets` ("the whole patch", the template editor's *Resolves to* panel) is `operatorFixtures`; a target that names one still resolves it. |
-| `RigBriefing` (`describe_rig`, the AI prompt), `get_current_state` | The briefing lists it under its own *Infrastructure* heading (and sets its keys apart in the script API); `get_current_state`'s fixture list marks it `infrastructure: true`. |
+| `RigBriefing` (`describe_rig`), `get_current_state` | The briefing lists it under its own *Infrastructure* heading; `get_current_state`'s fixture list marks it `infrastructure: true`. |
 | MCP `patch_fixtures` / `get_patch` | Take and report `infrastructure`; a row that omits it leaves an existing fixture's flag alone. |
 | Sync | `FixturePatchJson.infrastructure`, an optional field with a false default — no `formatVersion` bump. |
 
@@ -1717,8 +1717,8 @@ field (`frontend/src/components/stage/elementProblems.ts`).
 ### Aiming a head at a point
 
 `POST /api/rest/projects/{projectId}/programmer/aim` `{targets, x, y, z, fadeMs?}` points moving
-heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` tool (chat and MCP,
-with a `dryRun`) is the same call. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
+heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` MCP tool (with
+a `dryRun`) is the same call. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
 `routes/programmerAim.kt` reads the placements, converts to DMX and writes the programmer as owner
 `WEB`, like a spread — so Record captures an aim, Blind previews it and Clear releases it. The
 Stage view's docked fixture panel (and its multi-select aim panel, in view mode) is the UI.

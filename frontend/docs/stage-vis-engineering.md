@@ -1190,7 +1190,7 @@ names, or at the top — none is dropped. A reshaped seating that seat views sit
 asks about (*Save anyway* forces). *Moves with* is read-only and empty until session 8. The three
 element endpoints are in `SILENT_ENDPOINTS`, so the route's placement and drag toast their own
 failures. The design record's two builders (*Proscenium hall from measurements…*, *Ask Claude*) are
-not built: the template is `set_scene`'s over MCP, which the in-app chat does not carry.
+not built: the template is `set_scene`'s over MCP.
 
 ## Fixture bodies
 

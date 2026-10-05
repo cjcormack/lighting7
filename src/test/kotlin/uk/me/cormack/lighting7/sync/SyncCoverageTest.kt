@@ -5,7 +5,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
-import uk.me.cormack.lighting7.models.DaoAiConversations
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueEvents
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
@@ -202,7 +201,6 @@ class SyncCoverageTest {
         DaoEffectTubeStates to Disposition.MachineLocal("which confetti tubes on this rig are spent: the physical cannon, not the show"),
 
         DaoProjectScalerStates to Disposition.Excluded("live blackout / grand-master state"),
-        DaoAiConversations to Disposition.Excluded("AI chat scratch history, not show content"),
     )
 
     private lateinit var state: State

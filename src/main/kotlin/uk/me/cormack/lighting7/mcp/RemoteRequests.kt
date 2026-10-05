@@ -43,8 +43,7 @@ fun ApplicationCall.scriptsAllowed(state: State): Boolean =
 /**
  * Refuse a script-authoring or script-running request that came through the tunnel while
  * Remote access's "allow scripts" is off. A script runs as the desk process, so a stolen remote
- * session — or a remote admin's AI chat reading content it did not write — would otherwise be
- * code execution on the show machine.
+ * session would otherwise be code execution on the show machine.
  */
 fun ApplicationCall.requireScriptAccess(state: State) {
     if (!scriptsAllowed(state)) throw RemoteScriptsDisabledException()

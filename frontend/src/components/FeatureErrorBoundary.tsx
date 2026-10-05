@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 
 interface FeatureErrorBoundaryProps {
-  /** Named in the message, in operator words: "the Stage view", "Lux", "the script editor". */
+  /** Named in the message, in operator words: "the Stage view", "the script editor". */
   feature: string
   /** Positioning for the fallback card. Overlays need to place theirs; page content doesn't. */
   className?: string
