@@ -49,6 +49,7 @@ class WindowsSocketTest : RouteIntegrationTest() {
             val screen2 = createWsClient()
 
             screen1.webSocket("/api") {
+                val s1 = this
                 // Unasked, and empty: this socket has announced nothing and nobody else has either.
                 assertTrue(awaitOfType<WindowsStateOutMessage>().windows.isEmpty())
 
@@ -66,9 +67,16 @@ class WindowsSocketTest : RouteIntegrationTest() {
                     sendSerialized<InMessage>(announce(windowId = "tab-2", name = "Screen 2", view = "/busk"))
                     val both = awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }
                     assertEquals(listOf("Screen 1", "Screen 2"), both.windows.map { w -> w.name })
+
+                    // The first learns of the arrival while the second is still here. Not only an
+                    // assertion: if screen 2 left before screen 1's collector ran, the registry
+                    // would go [S1] → [S1, S2] → [S1] under it, and a StateFlow conflates that to
+                    // nothing — the departure below would never arrive (see `awaitOfType`).
+                    val arrived = s1.awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }
+                    assertEquals(listOf("Screen 1", "Screen 2"), arrived.windows.map { w -> w.name })
                 }
 
-                // …and the first learns of both the arrival and the departure.
+                // …and of the departure.
                 val gone = awaitOfType<WindowsStateOutMessage> { it.windows.size == 1 }
                 assertEquals(listOf("Screen 1"), gone.windows.map { w -> w.name })
             }
@@ -171,6 +179,7 @@ class WindowsSocketTest : RouteIntegrationTest() {
             val screen2 = createWsClient()
 
             screen1.webSocket("/api") {
+                val s1 = this
                 awaitOfType<WindowsStateOutMessage>()
                 sendSerialized<InMessage>(announce(name = "Screen 1"))
                 awaitOfType<WindowsStateOutMessage> { it.windows.isNotEmpty() }
@@ -180,6 +189,10 @@ class WindowsSocketTest : RouteIntegrationTest() {
                     awaitOfType<WindowsStateOutMessage>()
                     sendSerialized<InMessage>(announce(windowId = "tab-2", name = "Screen 2", view = "/busk"))
                     gone = awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }.windows.last().id
+                    // Screen 1 sees the two-row frame before screen 2 leaves, or its collector can
+                    // see [S1] → [S1, S2] → [S1] as no change and the wait below never returns —
+                    // which is how this test once timed out on CI (see `awaitOfType`).
+                    s1.awaitOfType<WindowsStateOutMessage> { it.windows.size == 2 }
                 }
                 // Screen 2's socket closed and took its row with it.
                 awaitOfType<WindowsStateOutMessage> { it.windows.size == 1 }

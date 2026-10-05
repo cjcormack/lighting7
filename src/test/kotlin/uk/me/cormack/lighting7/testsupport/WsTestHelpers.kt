@@ -37,6 +37,14 @@ fun ApplicationTestBuilder.createWsClient(): HttpClient = createClient {
  * [where] narrows further, for a family that fans several subjects onto one message type — the
  * per-master `speedMasters.beat` stream, say, where a bare type match hands back whichever
  * master beat first and invites a comparison between two unrelated counters.
+ *
+ * A family backed by a `StateFlow` (`windows.state`, `selection.state`, `hand.state`,
+ * `effects.armed`, …) delivers the **current** value, not every value. Each socket's collector is
+ * conflated, so it can miss an intermediate value, and it skips a value equal to the last one it
+ * collected (and so sent). If the state goes A → B → A before that socket's collector runs, the
+ * socket is sent nothing, and a wait on it for the second A times out. So before waiting on a
+ * socket for a value it has already received, wait on that socket for B while B still holds.
+ * `WindowsSocketTest`'s departure waits, which once timed out on a slow CI runner, are the example.
  */
 suspend inline fun <reified T : OutMessage> DefaultClientWebSocketSession.awaitOfType(
     maxFrames: Int = 100,
