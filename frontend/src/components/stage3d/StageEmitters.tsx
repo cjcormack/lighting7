@@ -187,8 +187,8 @@ export interface EmittersHandle {
 }
 
 /**
- * Where a beam's axis landed, in three.js space: the point, the face's normal towards the light and
- * the hit collider's skin (`scene/beamReach.ts`).
+ * Where a beam's axis landed, in three.js space: the point, the face's normal towards the light,
+ * the face's skin and the collider hit (`scene/beamReach.ts`); null for a plane that is no face.
  */
 export interface SurfaceHit {
   px: number
@@ -198,6 +198,7 @@ export interface SurfaceHit {
   ny: number
   nz: number
   skin: number
+  collider: Collider | null
 }
 
 // — dirty groups ————————————————————————————————————————————————————

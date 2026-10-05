@@ -56,6 +56,8 @@ export interface BeamHit {
   nz: number
   /** The hit face's skin: the collider's [Collider.capSkin] for its top or bottom, else its [Collider.skin]. */
   skin: number
+  /** The collider hit, whose edges `edgeLanding` draws a shadow from. */
+  collider: Collider | null
 }
 
 /** How thick a quad's slab is: enough for the slab test to be stable, far thinner than anything built. */
@@ -146,6 +148,7 @@ export function beamReach(
     best = tNear
     found = true
     out.skin = axis === 1 ? b.capSkin : b.skin
+    out.collider = b
     // The face's normal, back out of the box's frame by +yaw.
     if (axis === 1) {
       out.nx = 0

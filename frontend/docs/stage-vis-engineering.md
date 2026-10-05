@@ -682,9 +682,18 @@ without a room — the back wall and the catch floor:
   instead, such as the stalls floor past the lip, is bisected back to the edge and the face just past
   it tried. Of several, the landing nearest the first face's plane wins: the deck, not a rostrum
   further upstage. Nothing is lit or hazed **behind both** planes, which is the inside of the stage,
-  and the hull is drawn until the cone has crossed both. A rim landing beyond a parallel face (the
-  wall behind a flat) is not an edge the wedge can draw, so the flat still stops the whole beam: its
-  shadow is the shadow maps' job. Both planes ride the light's fourth texel and the `aBeamLand`
+  and the hull is drawn until the cone has crossed both. Where the rim passes a **vertical** edge of
+  the box the axis hit — a flat's or a tab's end, a leg's side — the second plane is the one
+  through that edge and the lamp (`edgeShadowPlane`): the edge's shadow line, found from the box
+  rather than from whichever rim ray happens to clip its end face, so a pool sliding off a tab onto
+  the backcloth behind it keeps its second plane at every pan. (It was the end face itself, found by
+  luck: 5 cm of target, so the drape harness's pool lost and regained its far side between DMX 46
+  and 46.5.) The hull then reaches where the rim past the edge landed. A box the rim passes on
+  **both** sides, as the lamp sees it — a column narrower than the beam — has two shadow lines and
+  room for one, so the beam passes it: the landing moves to the nearest surface the rim reached
+  beyond it, the box stays lit in front of that plane, and its shadow waits for the stage-light
+  plan's session 3. A level edge (the top of a flat, the bottom of a border) keeps the face past it,
+  which must bound the solid as the deck does. Both planes ride the light's fourth texel and the `aBeamLand`
   attribute, one `vec4` as the single plane did: a collider turns about y, so a face's normal is up,
   down or level and one float codes it (`landNormalCode`). In the march, behind both is an interval
   of the view ray: at an end of the chord it trims the chord, and inside it (an edge seen side-on)

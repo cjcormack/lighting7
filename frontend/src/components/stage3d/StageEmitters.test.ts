@@ -122,8 +122,8 @@ function beamWrite(): BeamWrite {
     bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
     bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
-    land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M },
-    edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1, skin: REACH_EPS_M },
+    land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M, collider: null },
+    edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1, skin: REACH_EPS_M, collider: null },
   }
 }
 
@@ -312,7 +312,7 @@ describe('the light table rows', () => {
     const b = build(layout)
     const floor = [{ cx: 0, cy: -0.01, cz: 0, hx: 10, hy: 0.01, hz: 10, cos: 1, sin: 0, skin: 0.1, capSkin: 0.4 }]
     const h = makeHandle(b, () => floor)
-    const hit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
+    const hit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null }
     expect(h.reach(ORIGIN, DIR, 40, hit)).toBe(true)
     expect(hit.t).toBeCloseTo(4, 9)
     expect(hit.ny).toBe(1)

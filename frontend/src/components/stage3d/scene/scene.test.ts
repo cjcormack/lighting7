@@ -44,7 +44,7 @@ function element(fields: Partial<StageElementDto>): StageElementDto {
   }
 }
 
-const hit = (): BeamHit => ({ t: 0, nx: 0, ny: 0, nz: 0, skin: 0 })
+const hit = (): BeamHit => ({ t: 0, nx: 0, ny: 0, nz: 0, skin: 0, collider: null })
 
 describe('the axial reach (stage-view plan session 3)', () => {
   const floor = boxCollider(0, -0.01, 0, 10, 0.01, 10)
