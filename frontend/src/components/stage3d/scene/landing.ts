@@ -12,7 +12,16 @@
  * Pure and three.js-free, so the packing is pinned by a node test.
  */
 
-/** A landed face, in three.js space: a point on it and its normal towards the light. */
+/**
+ * How far behind a landing plane a fragment may sit and still be lit, and the skin of a collider
+ * whose face is its drawn surface (`beamReach.ts`).
+ */
+export const REACH_EPS_M = 0.03
+
+/**
+ * A landed face, in three.js space: a point on it, its normal towards the light, and the hit
+ * collider's [skin] — how far behind the face its drawn surface can lie.
+ */
 export interface LandingFace {
   px: number
   py: number
@@ -20,6 +29,7 @@ export interface LandingFace {
   nx: number
   ny: number
   nz: number
+  skin: number
 }
 
 /** The codes for a normal straight up, straight down, and none; anything in ±π is a level heading. */
@@ -35,9 +45,11 @@ export function landNormalCode(nx: number, ny: number, nz: number): number {
 }
 
 /**
- * Pack [first] and [second] into [out] at [o]: `(code, offset)` for each, the offset being `n · p`.
- * No first face (open air) is a plane nothing is behind; no second one a plane everything is behind,
- * so the first alone decides.
+ * Pack [first] and [second] into [out] at [o]: `(code, offset)` for each, the offset being `n · p`
+ * moved back by the face's skin beyond [REACH_EPS_M], so the plane the shaders cut at lies that far
+ * behind the face and a pleat's troughs are lit with its crests. The landed point itself is not
+ * moved. No first face (open air) is a plane nothing is behind; no second one a plane everything is
+ * behind, so the first alone decides.
  */
 export function packLanding(
   first: LandingFace | null,
@@ -53,14 +65,18 @@ export function packLanding(
     return
   }
   out[o] = landNormalCode(first.nx, first.ny, first.nz)
-  out[o + 1] = first.nx * first.px + first.ny * first.py + first.nz * first.pz
+  out[o + 1] = planeOffset(first)
   if (second == null) {
     out[o + 2] = LAND_NONE
     out[o + 3] = 1
   } else {
     out[o + 2] = landNormalCode(second.nx, second.ny, second.nz)
-    out[o + 3] = second.nx * second.px + second.ny * second.py + second.nz * second.pz
+    out[o + 3] = planeOffset(second)
   }
+}
+
+function planeOffset(face: LandingFace): number {
+  return face.nx * face.px + face.ny * face.py + face.nz * face.pz - Math.max(0, face.skin - REACH_EPS_M)
 }
 
 /**

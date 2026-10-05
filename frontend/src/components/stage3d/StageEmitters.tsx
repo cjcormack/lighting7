@@ -186,7 +186,10 @@ export interface EmittersHandle {
   hideSlot(slot: number): void
 }
 
-/** Where a beam's axis landed, in three.js space: the point and the face's normal towards the light. */
+/**
+ * Where a beam's axis landed, in three.js space: the point, the face's normal towards the light and
+ * the hit collider's skin (`scene/beamReach.ts`).
+ */
 export interface SurfaceHit {
   px: number
   py: number
@@ -194,6 +197,7 @@ export interface SurfaceHit {
   nx: number
   ny: number
   nz: number
+  skin: number
 }
 
 // — dirty groups ————————————————————————————————————————————————————

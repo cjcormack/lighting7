@@ -137,7 +137,7 @@ import { makeLightRow, type LightRow } from './scene/lightTable'
 import { useStageInvalidate } from './stageInvalidate'
 import { forgetLanding, recordLanding } from './landedPoints'
 import { bodySpecOf } from './emitterNeeds'
-import { packBlades } from './beamMask'
+import { FOCUS_SPREAD_MAX, packBlades } from './beamMask'
 import { MAX_GOBO_LAYERS } from './goboLayers'
 import { EMPTY_LANTERNS, type LanternIndex } from '../../lib/lanterns'
 import {
@@ -221,10 +221,10 @@ const HIT_PROXY_MATERIAL = new MeshBasicMaterial({ visible: false })
  * The axial reach of a beam: cast, then turned into the light table's hit. Scratch objects, since
  * the directors call this per lobe per frame.
  */
-const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_RIM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
-const SCRATCH_EDGE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
+const SCRATCH_BEAM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
+const SCRATCH_SURFACE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
+const SCRATCH_RIM_HIT: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
+const SCRATCH_EDGE_HIT: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
 const SCRATCH_RIM_DIR = new Vector3()
 const SCRATCH_RIM_ORIGIN = new Vector3()
 
@@ -261,6 +261,7 @@ export function landBeam(
   SCRATCH_SURFACE_HIT.nx = SCRATCH_BEAM_HIT.nx
   SCRATCH_SURFACE_HIT.ny = SCRATCH_BEAM_HIT.ny
   SCRATCH_SURFACE_HIT.nz = SCRATCH_BEAM_HIT.nz
+  SCRATCH_SURFACE_HIT.skin = SCRATCH_BEAM_HIT.skin
   return { hit: SCRATCH_SURFACE_HIT, length: t }
 }
 
@@ -279,8 +280,8 @@ export function coneLandingDepth(apex: Vector3, dir: Vector3, tanHalf: number, h
   return closing > 1e-6 ? Math.min(cap, height / closing) : cap
 }
 
-/** Where [castRim] landed: the point and the face's normal towards the light. */
-const SCRATCH_RIM_LAND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0 }
+/** Where [castRim] landed: the point, the face's normal towards the light and its skin. */
+const SCRATCH_RIM_LAND: SurfaceHit = { px: 0, py: 0, pz: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
 
 /**
  * Cast the ray [s] of the way from the axis to rim point [k], from the aperture, into
@@ -313,6 +314,7 @@ function castRim(
   SCRATCH_RIM_LAND.nx = SCRATCH_RIM_HIT.nx
   SCRATCH_RIM_LAND.ny = SCRATCH_RIM_HIT.ny
   SCRATCH_RIM_LAND.nz = SCRATCH_RIM_HIT.nz
+  SCRATCH_RIM_LAND.skin = SCRATCH_RIM_HIT.skin
   return true
 }
 
@@ -1590,6 +1592,9 @@ function useBeamDirector({
     // ([resolveEdgeHardness]); the blur's scale is the type's depth of field, else its family's.
     const edge = resolveEdgeHardness(spec.softness, frostProp, levels.frost, focusParam != null)
     const dof = spec.depthOfField
+    // The blur feathers the edge past the field (`beamMask.ts`), so a focus channel's light reaches
+    // that much wider: its cone bound, its haze hull and its region cull.
+    const spread = focusParam != null ? 1 + FOCUS_SPREAD_MAX : 1
     // A DMX iris closes the beam, and so does a conventional's own iris (its focus data); the
     // tighter of the two wins.
     const iris = Math.min(spec.iris, resolveIris(irisProp, levels.iris))
@@ -1740,8 +1745,9 @@ function useBeamDirector({
       const edgeHit = landed.hit
         ? edgeLanding(emitters, SCRATCH_APEX, lobeDir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect !== 0 ? Math.abs(aspect) : 1), aspect > 0, near, landed.hit)
         : null
-      // A segment's frustum reaches past the field circle at its corners.
-      const tanEdge = aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf
+      // A segment's frustum reaches past the field circle at its corners, and a focus channel's past
+      // the field.
+      const tanEdge = (aspect > 0 ? tanHalf * Math.hypot(1, aspect) : tanHalf) * spread
       const length = landed.hit
         ? Math.max(
             coneLandingDepth(SCRATCH_APEX, lobeDir, tanEdge, landed.hit, near + MAX_THROW_M),
@@ -1752,7 +1758,7 @@ function useBeamDirector({
       beam.focusDist = focusDist
       beam.land = landed.hit
       beam.edgeLand = edgeHit
-      const far = length * tanHalf
+      const far = length * tanHalf * spread
       composeBeamHull(
         SCRATCH_APEX,
         lobeDir,
@@ -1771,9 +1777,10 @@ function useBeamDirector({
       beam.dof = dof
       beam.aspect = aspect
       // A segment's frustum reaches past the field circle at its corners, so its cull cone is the one
-      // through them — or a region lying in a corner would never be shadow-tested.
-      if (aspect > 0) {
-        const cull = Math.atan(tanHalf * Math.hypot(1, aspect)) + REGION_CULL_SLACK_RAD
+      // through them — or a region lying in a corner would never be shadow-tested; and a focus
+      // channel's past the field.
+      if (aspect > 0 || spread > 1) {
+        const cull = Math.atan(tanEdge) + REGION_CULL_SLACK_RAD
         beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, Math.cos(cull), Math.sin(cull), regionGeometry)
       } else {
         beam.shadowMask = regionShadowMask(SCRATCH_APEX, lobeDir, length, geom.cosCull, geom.sinCull, regionGeometry)
@@ -1783,7 +1790,7 @@ function useBeamDirector({
       if (!multi) {
         // A single cell: each lobe lands as its own light.
         const pool = prismFacets > 0 ? (poolOpacity / prismFacets) * PRISM_OVERLAP_GAIN : poolOpacity
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1], surfaceGobos)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, lobeDir, SCRATCH_RIGHT, beamColor, pool, geom.cosHalfBeam, tanHalf, spread, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, blades[0], blades[1], surfaceGobos)
         emitters.writeLight(slot, lobe, SCRATCH_LIGHT)
       }
     }
@@ -1833,7 +1840,7 @@ function useBeamDirector({
           ? edgeLanding(emitters, SCRATCH_APEX, dir, SCRATCH_BX, SCRATCH_BY, tanHalf, tanHalf * (aspect > 0 ? aspect : 1), aspect > 0, near, landed.hit)
           : null
         const focusDist = declaredFocusDist ?? resolveFocusDistance(focusParam, focusRangeM(landed.length))
-        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0, 0)
+        writeLightRow(SCRATCH_LIGHT, SCRATCH_APEX, dir, SCRATCH_RIGHT, SCRATCH_RUN_COLOR, level, geom.cosHalfBeam, tanHalf, spread, edge, focusDist, dof, near, iris, aspect, landed.hit, edgeHit, 0, 0, 0)
         emitters.writeLight(slot, r, SCRATCH_LIGHT)
       }
     } else if (lobes < litLobesRef.current) {
@@ -1846,7 +1853,10 @@ function useBeamDirector({
   })
 }
 
-/** Fill a light row. [cosHalf] is the field's; a segment's bound is the cone through its corners. */
+/**
+ * Fill a light row. [cosHalf] is the field's; a segment's bound is the cone through its corners, and
+ * a focus channel's reaches [spread] times as wide, past the field by the most its blur feathers.
+ */
 function writeLightRow(
   row: LightRow,
   apex: Vector3,
@@ -1856,6 +1866,7 @@ function writeLightRow(
   level: number,
   cosHalf: number,
   tanHalf: number,
+  spread: number,
   edge: number,
   focusDist: number,
   dof: number,
@@ -1874,7 +1885,8 @@ function writeLightRow(
   row.dx = dir.x
   row.dy = dir.y
   row.dz = dir.z
-  row.cosBound = aspect > 0 ? Math.cos(Math.atan(tanHalf * Math.hypot(1, aspect))) : cosHalf
+  row.cosBound =
+    aspect > 0 || spread > 1 ? Math.cos(Math.atan(tanHalf * spread * (aspect > 0 ? Math.hypot(1, aspect) : 1))) : cosHalf
   row.r = color.r * level
   row.g = color.g * level
   row.b = color.b * level

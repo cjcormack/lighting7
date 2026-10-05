@@ -10,11 +10,11 @@ import {
   RGBAFormat,
   ShaderMaterial,
 } from 'three'
-import { BEAM_HARDNESS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
+import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { getGoboTexture } from '../goboAtlas'
 import { GOBO_LAYERS_GLSL } from '../goboLayers'
-import { FOCUS_LOD_MAX, FOCUS_SOFT_BLUR, GOBO_BLUR_TEXELS } from '../washConfig'
-import { LANDING_GLSL } from './landing'
+import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from '../washConfig'
+import { LANDING_GLSL, REACH_EPS_M } from './landing'
 import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
@@ -31,8 +31,8 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * the first surface on its axis, and of the second face a beam split across an edge lands on, which
  * stand in for occlusion) — then the beam's cross-section, `beamMask`
  * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
- * iris, and an edge softened by the family and by how far the surface sits from the focal plane,
- * which is measured from the aperture. A pool **falls off with distance from the aperture** — as
+ * iris, and an edge softened by the family and spread by how far the surface sits from the focal
+ * plane, which is measured along the axis from the aperture. A pool **falls off with distance from the aperture** — as
  * the square of it out to [FALLOFF_KNEE_M], the prototype's throws, and linearly past it, as an eye
  * adapted to the stage sees a long throw rather than as a meter reads it — and is as bright as its
  * beam is narrow: the light is spread over the footprint, radius `da · tan(half
@@ -70,9 +70,6 @@ export function litByFill(albedo: Color, fill: number, facing = 0.5): Color {
   return new Color(1 - Math.exp(-albedo.r * k), 1 - Math.exp(-albedo.g * k), 1 - Math.exp(-albedo.b * k))
 }
 
-/** How far behind a landing plane a fragment may sit and still be lit: the hit surface's own skin. */
-const REACH_EPS_M = 0.03
-
 /** The half field below which a pool brightens with how narrow its beam is: a 20° field. */
 const SPREAD_REF_HALF_DEG = 10
 /** A pinspot's ceiling on that normalisation, so a 2° beam is a hot spot rather than a white hole. */
@@ -88,7 +85,6 @@ export interface SurfaceUniforms {
   uLightGain: { value: number }
   uReflectFloor: { value: number }
   uCatchLevel: { value: number }
-  uFocusSoftBlur: { value: number }
   uGobo: { value: DataArrayTexture }
   uGoboBlurTexels: { value: number }
   uLodMax: { value: number }
@@ -114,7 +110,6 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
     uLightGain: { value: SURFACE_LIGHT_GAIN },
     uReflectFloor: { value: 0.1 },
     uCatchLevel: { value: 0.36 },
-    uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
     uGobo: { value: getGoboTexture() },
     uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
     uLodMax: { value: FOCUS_LOD_MAX },
@@ -156,7 +151,6 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform float uLightGain;
   uniform float uReflectFloor;
   uniform float uCatchLevel;
-  uniform float uFocusSoftBlur;
   uniform sampler2DArray uGobo;
   uniform float uGoboBlurTexels;
   uniform float uLodMax;
@@ -175,7 +169,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   #endif
 
   ${BEAM_MASK_GLSL}
-  ${BEAM_HARDNESS_GLSL}
+  ${BEAM_FOCUS_GLSL}
   ${UNPACK_EDGE_IRIS_GLSL}
   ${UNPACK_FOCUS_GLSL}
   ${LANDING_GLSL}
@@ -257,12 +251,11 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       // A segment's rectangle, or an oval's narrow axis: the field edge at 1 on v too.
       if (aperture.z != 0.0) uv.y /= abs(aperture.z);
       vec2 edgeIris = unpackEdgeIris(colour.w);
-      // Focus is a distance from the aperture — the lens — not from the apex behind it; the blur is
-      // the relative error from it times the type's depth of field, both in apex.w.
+      // Focus is a distance along the axis from the aperture — the lens — not from the apex behind
+      // it; the blur is the relative error from it times the type's depth of field, both in apex.w.
       vec2 focus = unpackFocus(apex.w);
-      float blur = focusBlur(dist - aperture.x, focus.x, focus.y);
-      float hard = beamHardness(edgeIris.x, focus.x, blur, uFocusSoftBlur);
-      float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - hard, aperture.yw);
+      float blur = beamFocusBlur(v, axis.xyz, aperture.x, focus.x, focus.y);
+      float m = beamMask(uv, aperture.z, edgeIris.y, 1.0 - edgeIris.x, blur, aperture.yw);
       if (m <= 0.0) continue;
       // The gobos, in the haze's frame (g, before an oval's division), as the haze reads them: a
       // segment carries none. Blurred by the same blur the edge is softened by.

@@ -15,7 +15,12 @@
  *   at 1 on both axes, and the oval's wide axis is `u`);
  * - `iris` is the open fraction of the field, 1 fully open;
  * - `soft` is the edge, 0 a profile's hard gate edge to 1 a flood's feathered one, and a soft beam
- *   is a little brighter at its middle, as a wash is.
+ *   is a little brighter at its middle, as a wash is. It rolls the edge off *inwards*, as frost and a
+ *   family's own softness do;
+ * - `blur` is how far out of focus the point is ([focusBlur], in field radii): a penumbra that wide,
+ *   **centred** on the field edge, the iris and the blades — they all sit in the gate, which the lens
+ *   images — so a defocused pool keeps its size and feathers outward. The half on each side is
+ *   capped at [FOCUS_SPREAD_MAX], which is how far past the field a light's bounds reach.
  *
  * - `blades` is the four shutters (or barn doors), **packed** two to a float ([packBlades]) so a light
  *   carries them in the light table's six texels without a seventh. Each blade is a straight edge in
@@ -47,6 +52,13 @@ export const MASK_SOFT_CENTRE = 0.35
 const IRIS_EDGE = 0.6
 /** A blade's edge is in the gate, as the iris is, so it rolls off as the iris's does. */
 const BLADE_EDGE = 0.6
+/**
+ * The most a focus blur spreads an edge on either side, in field radii: how far past the field a
+ * defocused pool feathers, and so how far past it the cone bound, the haze hull and the region cull
+ * of a head with a focus channel reach (`FixtureModel.tsx`, `beamShaders.ts`).
+ */
+// Estimate: judged by eye in `?profileHarness=focus`, not measured.
+export const FOCUS_SPREAD_MAX = 0.3
 
 /**
  * A blade's code, 12 bits: its depth in [BLADE_DEPTH_STEPS] steps above its angle's six bits
@@ -84,7 +96,8 @@ const f = (v: number) => v.toFixed(4)
 export const BEAM_MASK_GLSL = /* glsl */ `
   // One blade: cuts past a straight edge whose middle sits 1 − 2·depth along the blade's normal n,
   // turned by its angle about that middle. A code of depth 0 is a blade that is out.
-  float bladeCut(vec2 uv, float code, vec2 n, float w) {
+  // h is the focus blur's half-penumbra, spread on both sides of the edge.
+  float bladeCut(vec2 uv, float code, vec2 n, float w, float h) {
     float dq = floor(code / ${CODE}.0);
     if (dq < 0.5) return 1.0;
     float a = radians((code - dq * ${CODE}.0 - ${BLADE_ANGLE_OFFSET}.0) * ${f(BLADE_ANGLE_STEP_DEG)});
@@ -92,27 +105,28 @@ export const BEAM_MASK_GLSL = /* glsl */ `
     float c = cos(a);
     float s = sin(a);
     vec2 nr = vec2(c * n.x - s * n.y, s * n.x + c * n.y);
-    return 1.0 - smoothstep(-w, 0.005, dot(uv - p0, nr));
+    return 1.0 - smoothstep(-w - h, 0.005 + h, dot(uv - p0, nr));
   }
 
   // The four blades, packed two to a float: (top, bottom) and (left, right).
-  float beamBlades(vec2 uv, vec2 packed, float w) {
+  float beamBlades(vec2 uv, vec2 packed, float w, float h) {
     if (packed.x < 0.5 && packed.y < 0.5) return 1.0;
     float top = floor(packed.x / ${PAIR}.0);
     float left = floor(packed.y / ${PAIR}.0);
-    return bladeCut(uv, top, vec2(0.0, 1.0), w)
-      * bladeCut(uv, packed.x - top * ${PAIR}.0, vec2(0.0, -1.0), w)
-      * bladeCut(uv, left, vec2(1.0, 0.0), w)
-      * bladeCut(uv, packed.y - left * ${PAIR}.0, vec2(-1.0, 0.0), w);
+    return bladeCut(uv, top, vec2(0.0, 1.0), w, h)
+      * bladeCut(uv, packed.x - top * ${PAIR}.0, vec2(0.0, -1.0), w, h)
+      * bladeCut(uv, left, vec2(1.0, 0.0), w, h)
+      * bladeCut(uv, packed.y - left * ${PAIR}.0, vec2(-1.0, 0.0), w, h);
   }
 
-  float beamMask(vec2 uv, float aspect, float iris, float soft, vec2 blades) {
+  float beamMask(vec2 uv, float aspect, float iris, float soft, float blur, vec2 blades) {
     float s = clamp(soft, 0.0, 1.0);
     float r = aspect > 0.0 ? max(abs(uv.x), abs(uv.y)) : length(uv);
     float w = mix(${f(MASK_EDGE_HARD)}, ${f(MASK_EDGE_SOFT)}, s);
-    float m = 1.0 - smoothstep(1.0 - w, 1.0, r);
-    if (iris < 0.999) m *= 1.0 - smoothstep(iris - w * ${f(IRIS_EDGE)}, iris + 0.005, r);
-    m *= beamBlades(uv, blades, w * ${f(BLADE_EDGE)});
+    float h = min(max(blur, 0.0) * 0.5, ${f(FOCUS_SPREAD_MAX)});
+    float m = 1.0 - smoothstep(1.0 - w - h, 1.0 + h, r);
+    if (iris < 0.999) m *= 1.0 - smoothstep(iris - w * ${f(IRIS_EDGE)} - h, iris + 0.005 + h, r);
+    m *= beamBlades(uv, blades, w * ${f(BLADE_EDGE)}, h);
     m *= 1.0 - ${f(MASK_SOFT_CENTRE)} * s * min(r * r, 1.0);
     return max(m, 0.0);
   }
@@ -176,10 +190,13 @@ export function bladeLine(index: number, depth: number, angleDeg: number): { px:
 }
 
 /**
- * How far out of focus a beam is `d` metres from its aperture: the **blur**, in field radii, for a
- * lens focused `focusDist` metres out, as the **relative** focus error `|f − d| / f` times the type's
- * **depth of field** `dof` (fixture-optics plan D9) — the type's declared `depthOfField`, else its
- * family's (`DEPTH_OF_FIELD` in `bodies/archetype.ts`); 0 without a focus channel (`focusDist` < 0).
+ * How far out of focus a beam is `d` metres from its aperture **along its axis**: the **blur**, in
+ * field radii, for a lens focused `focusDist` metres out, as the **relative** focus error
+ * `|f − d| / f` times the type's **depth of field** `dof` (fixture-optics plan D9) — the type's
+ * declared `depthOfField`, else its family's (`DEPTH_OF_FIELD` in `bodies/archetype.ts`); 0 without a
+ * focus channel (`focusDist` < 0). The distance is axial, as a lens's focal plane is a plane square
+ * to the axis and *Focus here* solves for the axial distance to where the beam lands: a profile
+ * focused on a square wall is sharp to its rim ([beamFocusBlur]).
  *
  * It used to be the blur circle of a lens of radius `a`, `2a·|1 − d/f|` over the field's radius
  * `a·(near + d)/near` — which scales with a lens radius nothing declares (the Revolution's was
@@ -188,38 +205,43 @@ export function bladeLine(index: number, depth: number, angleDeg: number): { px:
  * relative error is the same at every throw, and the constant is what was tuned by eye against that
  * wall (`profileHarness.ts`'s focus scene): a 24 m throw visibly soft 3 m either side, sharp on it.
  *
- * A beam's edge **hardness** is then what the optics allow (`resolveEdgeHardness` in
- * `beamOptics.ts`: with a focus channel only frost caps it — the family's softness lifts, since the
- * blur now models what it stood in for — and without one the family's, frost folded in), capped by
- * that blur where the fixture has a focus channel (`focusDist` ≥ 0). So on the focal plane an
- * unfrosted edge is as hard as the mask draws one, a frosted beam stays soft even there, and off
- * the plane the edge softens with the blur, fully soft at `softBlur`. Shared by the surface shader
- * and the haze.
+ * The blur goes to [BEAM_MASK_GLSL]'s `beamMask` as its own argument, beside the edge's hardness,
+ * which is what the optics allow and nothing more (`resolveEdgeHardness` in `beamOptics.ts`: with a
+ * focus channel only frost caps it — the family's softness lifts, since the blur models what it
+ * stood in for — and without one the family's, frost folded in). So on the focal plane an unfrosted
+ * edge is as hard as the mask draws one, a frosted beam stays soft even there, and off the plane the
+ * edge spreads both ways. Shared by the surface shader and the haze.
  */
-export const BEAM_HARDNESS_GLSL = /* glsl */ `
+export const BEAM_FOCUS_GLSL = /* glsl */ `
   float focusBlur(float d, float focusDist, float dof) {
     if (focusDist < 0.0) return 0.0;
     float f = max(focusDist, 1e-3);
     return max(dof, 0.0) * abs(f - max(d, 0.0)) / f;
   }
 
-  float beamHardness(float baseHard, float focusDist, float blur, float softBlur) {
-    if (focusDist < 0.0) return baseHard;
-    return min(baseHard, 1.0 - smoothstep(0.0, softBlur, blur));
+  // The blur at a point [rel] from the apex, measured along the beam's unit [axis] from its
+  // aperture, [near] past the apex.
+  float beamFocusBlur(vec3 rel, vec3 axis, float near, float focusDist, float dof) {
+    return focusBlur(dot(rel, axis) - near, focusDist, dof);
   }
 `
 
-/** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `focusBlur`, for its test. */
+/** The TypeScript twin of [BEAM_FOCUS_GLSL]'s `focusBlur`, for its test. */
 export function focusBlur(d: number, focusDist: number, dof: number): number {
   if (focusDist < 0) return 0
   const f = Math.max(focusDist, 1e-3)
   return (Math.max(dof, 0) * Math.abs(f - Math.max(d, 0))) / f
 }
 
-/** The TypeScript twin of [BEAM_HARDNESS_GLSL]'s `beamHardness`, for its test. */
-export function beamHardness(baseHard: number, focusDist: number, blur: number, softBlur: number): number {
-  if (focusDist < 0) return baseHard
-  return Math.min(baseHard, 1 - smoothstep(0, softBlur, blur))
+/** The TypeScript twin of [BEAM_FOCUS_GLSL]'s `beamFocusBlur`, for its test. */
+export function beamFocusBlur(
+  rel: readonly [number, number, number],
+  axis: readonly [number, number, number],
+  near: number,
+  focusDist: number,
+  dof: number,
+): number {
+  return focusBlur(rel[0] * axis[0] + rel[1] * axis[1] + rel[2] * axis[2] - near, focusDist, dof)
 }
 
 function smoothstep(e0: number, e1: number, x: number): number {
@@ -227,7 +249,7 @@ function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-function bladeCut(u: number, v: number, code: number, nx: number, ny: number, w: number): number {
+function bladeCut(u: number, v: number, code: number, nx: number, ny: number, w: number, h: number): number {
   const blade = unpackBlade(code)
   if (!blade) return 1
   const a = (blade.angleDeg * Math.PI) / 180
@@ -236,37 +258,42 @@ function bladeCut(u: number, v: number, code: number, nx: number, ny: number, w:
   const s = Math.sin(a)
   const rx = c * nx - s * ny
   const ry = s * nx + c * ny
-  return 1 - smoothstep(-w, 0.005, (u - nx * k) * rx + (v - ny * k) * ry)
+  return 1 - smoothstep(-w - h, 0.005 + h, (u - nx * k) * rx + (v - ny * k) * ry)
 }
 
-function beamBlades(u: number, v: number, a: number, b: number, w: number): number {
+function beamBlades(u: number, v: number, a: number, b: number, w: number, h: number): number {
   if (a < 0.5 && b < 0.5) return 1
   const top = Math.floor(a / PAIR)
   const left = Math.floor(b / PAIR)
   return (
-    bladeCut(u, v, top, 0, 1, w) *
-    bladeCut(u, v, a - top * PAIR, 0, -1, w) *
-    bladeCut(u, v, left, 1, 0, w) *
-    bladeCut(u, v, b - left * PAIR, -1, 0, w)
+    bladeCut(u, v, top, 0, 1, w, h) *
+    bladeCut(u, v, a - top * PAIR, 0, -1, w, h) *
+    bladeCut(u, v, left, 1, 0, w, h) *
+    bladeCut(u, v, b - left * PAIR, -1, 0, w, h)
   )
 }
 
-/** The TypeScript twin of [BEAM_MASK_GLSL], for its test. [bladesA]/[bladesB] are [packBlades]'. */
+/**
+ * The TypeScript twin of [BEAM_MASK_GLSL], for its test. [blur] is [focusBlur]'s; [bladesA] /
+ * [bladesB] are [packBlades]'.
+ */
 export function beamMask(
   u: number,
   v: number,
   aspect: number,
   iris: number,
   soft: number,
+  blur = 0,
   bladesA = 0,
   bladesB = 0,
 ): number {
   const s = Math.max(0, Math.min(1, soft))
   const r = aspect > 0 ? Math.max(Math.abs(u), Math.abs(v)) : Math.hypot(u, v)
   const w = MASK_EDGE_HARD + (MASK_EDGE_SOFT - MASK_EDGE_HARD) * s
-  let m = 1 - smoothstep(1 - w, 1, r)
-  if (iris < 0.999) m *= 1 - smoothstep(iris - w * IRIS_EDGE, iris + 0.005, r)
-  m *= beamBlades(u, v, bladesA, bladesB, w * BLADE_EDGE)
+  const h = Math.min(Math.max(blur, 0) * 0.5, FOCUS_SPREAD_MAX)
+  let m = 1 - smoothstep(1 - w - h, 1 + h, r)
+  if (iris < 0.999) m *= 1 - smoothstep(iris - w * IRIS_EDGE - h, iris + 0.005 + h, r)
+  m *= beamBlades(u, v, bladesA, bladesB, w * BLADE_EDGE, h)
   m *= 1 - MASK_SOFT_CENTRE * s * Math.min(r * r, 1)
   return Math.max(m, 0)
 }

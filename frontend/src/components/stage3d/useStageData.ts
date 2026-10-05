@@ -5,6 +5,7 @@ import { useStageRegionListQuery } from '../../store/stageRegions'
 import { useFixtureLookup } from '../../hooks/useFixtureLookup'
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
+import type { StageElementDto } from '../../api/stageElementApi'
 import type { StageRegionDto } from '../../api/stageRegionApi'
 import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
 import { buildHarness, isHarnessActive } from './profileHarness'
@@ -24,6 +25,8 @@ interface StageData {
   /** The gel library, which a unit's fitted gels and a `gelCode` are drawn from. Read here and
    *  passed down, never in the scene: a capture canvas bridges only the channel source. */
   gels: GelIndex
+  /** The harness's own scene, which replaces the project's stage elements; undefined otherwise. */
+  harnessElements?: StageElementDto[]
 }
 
 // Single source of truth for Stage 3D's input data. When the profiling
@@ -65,6 +68,7 @@ export function useStageData(
       typeByKey: mergedTypeByKey,
       lanterns,
       gels,
+      harnessElements: harness.elements,
     }
   }, [harness, patches, regions, riggings, fixtureByKey, typeByKey, lanterns, gels])
 }

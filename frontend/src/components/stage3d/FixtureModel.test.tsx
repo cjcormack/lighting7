@@ -309,6 +309,18 @@ describe('a beam split across an edge', () => {
     expect(behind(hit, inside) && behind(edge!, inside)).toBe(true)
   })
 
+  it("carries the hit collider's skin to both faces, and lands on the face itself", () => {
+    const skinned = [boxCollider(0, -0.475, -3.5, 5, 0.475, 3.5, 0, 0.08), stage[1]]
+    const reach = (o: Vector3, d: Vector3, maxT: number, out: BeamHit) => beamReach(o.x, o.y, o.z, d.x, d.y, d.z, skinned, maxT, out)
+    const dir = new Vector3(0, -0.4, 0).sub(balcony).normalize()
+    const hit = { ...landBeam({ reach }, balcony, dir).hit! }
+    expect(hit.skin).toBe(0.08)
+    // The skin moves the plane the shaders cut at (`landing.ts`), never the landed point.
+    expect(hit.pz).toBeCloseTo(0, 9)
+    const { bx, by } = frame(dir)
+    expect(edgeLanding({ reach }, balcony, dir, bx, by, tanHalf, tanHalf, false, 0, hit)!.skin).toBe(0.08)
+  })
+
   it('lands one aimed just over the edge on the riser too, from the other side', () => {
     const { hit, edge } = land(new Vector3(0, 0, -0.3))
     expect(hit.ny).toBe(1)
@@ -589,7 +601,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
     ])
     const lit = (x: number, z: number) => {
       const [u, v] = beamUv(new Vector3(x, 0, z), apex, dir, right, 19)
-      return beamMask(u, v, 0, 1, 0.04, a, b)
+      return beamMask(u, v, 0, 1, 0.04, 0, a, b)
     }
     // For several lines across the pool, find where the light ends along the floor's depth: with the
     // blade in, that edge is where the pool stops before its field circle would.
@@ -623,7 +635,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
       let z = centre.z
       const on = (zz: number) => {
         const [u, v] = beamUv(new Vector3(x, 0, zz), apex, dir, right, 19)
-        return beamMask(u, v, 0, 1, 0.04, a0, b0)
+        return beamMask(u, v, 0, 1, 0.04, 0, a0, b0)
       }
       while (on(z) > 0.5 && z > -20) z -= 0.02
       return z
@@ -686,7 +698,7 @@ describe("a DMX head's framing shutters, in the head's own frame", () => {
     const reach = 10
     const point = apex.clone().addScaledVector(head.dir, reach).addScaledVector(offset, reach * Math.tan((19 * Math.PI) / 360) * 0.6)
     const [u, v] = beamUv(point, apex, head.dir, head.right, 19)
-    return beamMask(u, v, 0, 1, 0.04, packed[0], packed[1])
+    return beamMask(u, v, 0, 1, 0.04, 0, packed[0], packed[1])
   }
   const sides = (head: { dir: Vector3 }) => {
     const up = new Vector3(0, 1, 0)

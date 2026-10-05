@@ -28,7 +28,7 @@ import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
 import { packGobos } from './goboLayers'
 import { makeLightRow, type LightRow } from './scene/lightTable'
-import { LAND_NONE, LAND_UP } from './scene/landing'
+import { LAND_NONE, LAND_UP, REACH_EPS_M } from './scene/landing'
 import { MAX_PRISM_LOBES, buildEmitterLayout, type EmitterLayout } from './emitterLayout'
 
 // Two slots with a prism each, so every writer below has room to write.
@@ -122,8 +122,8 @@ function beamWrite(): BeamWrite {
     bladesA: packBlade(0.2, 5) * 4096 + packBlade(0.1, 0),
     bladesB: packBlade(0.3, -4) * 4096,
     shadowMask: 0b11,
-    land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0 },
-    edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1 },
+    land: { px: 1.5, py: 0.25, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M },
+    edgeLand: { px: 1.5, py: 0, pz: -2.5, nx: 0, ny: 0, nz: 1, skin: REACH_EPS_M },
   }
 }
 
@@ -303,19 +303,20 @@ describe('the light table rows', () => {
 
   it('writes a surface hit as the plane the surfaces stop lighting behind', () => {
     const b = build(layout)
-    makeHandle(b).writeLight(0, 0, lightRow(1, { px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0 }))
+    makeHandle(b).writeLight(0, 0, lightRow(1, { px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M }))
     const row = b.lights.staged.subarray(0, 24)
     expect(Array.from(row.subarray(12, 16))).toEqual([LAND_UP, 0, LAND_NONE, 1])
   })
 
   it('answers the axial reach from the colliders it is handed', () => {
     const b = build(layout)
-    const floor = [{ cx: 0, cy: -0.01, cz: 0, hx: 10, hy: 0.01, hz: 10, cos: 1, sin: 0 }]
+    const floor = [{ cx: 0, cy: -0.01, cz: 0, hx: 10, hy: 0.01, hz: 10, cos: 1, sin: 0, skin: 0.1, capSkin: 0.4 }]
     const h = makeHandle(b, () => floor)
-    const hit = { t: 0, nx: 0, ny: 0, nz: 0 }
+    const hit = { t: 0, nx: 0, ny: 0, nz: 0, skin: 0 }
     expect(h.reach(ORIGIN, DIR, 40, hit)).toBe(true)
     expect(hit.t).toBeCloseTo(4, 9)
     expect(hit.ny).toBe(1)
+    expect(hit.skin).toBe(0.4)
     expect(makeHandle(b).reach(ORIGIN, DIR, 40, hit)).toBe(false)
   })
 })

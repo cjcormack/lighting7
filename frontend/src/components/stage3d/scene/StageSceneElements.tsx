@@ -18,6 +18,7 @@ import { seatingParams } from '../../../lib/stageSeats'
 import { BANQUET_FRAME_COLOUR, chairGeometry } from './chairs'
 import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
+import { pleatOffset, pleatShape } from './pleat'
 import { elementBaseZ, elementFinish, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
 
 /** One element's build, beside the element it was built from — what the scene draws and casts beams at. */
@@ -72,10 +73,6 @@ export const StageSceneElements = memo(function StageSceneElements({
   )
 })
 
-/** Pleats a metre: a cloth's fullness drawn as a ripple across its width. */
-const PLEATS_PER_M = 7
-const PLEAT_DEPTH_M = 0.05
-
 /**
  * A part's geometry in its element's three.js frame (x across, y up, z towards the house), centred
  * on the origin: the part's `at` places it.
@@ -92,12 +89,11 @@ export function partGeometry(geometry: PartGeometry): BufferGeometry {
       return g
     }
     case 'pleat': {
-      const segments = Math.max(8, Math.round(geometry.w * PLEATS_PER_M * 4))
+      const pleat = pleatShape()
+      const segments = Math.max(8, Math.round((geometry.w / pleat.pitchM) * 4))
       const g = new PlaneGeometry(geometry.w, geometry.h, segments, 1)
       const pos = g.attributes.position
-      for (let i = 0; i < pos.count; i++) {
-        pos.setZ(i, Math.sin(pos.getX(i) * PLEATS_PER_M * Math.PI * 2) * (PLEAT_DEPTH_M / 2))
-      }
+      for (let i = 0; i < pos.count; i++) pos.setZ(i, pleatOffset(pos.getX(i), pleat))
       g.computeVertexNormals()
       return g
     }
