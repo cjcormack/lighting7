@@ -147,7 +147,12 @@ sealed class Source4RevolutionFixture(
      * - Ch 6: Internal media frame, out / in.
      * - Ch 7: Focus.
      * - Ch 8: Zoom, 35° → 15°.
-     * - Ch 9: Focus timing. Ch 10: Colour timing. Ch 11: Beam timing (1 s per DMX step, p16).
+     * - Ch 9: Focus timing — ETC's "focus" is where the light points: it times pan and tilt (the
+     *   timing column, p14 [10]), not the lens, which is Beam. Ch 10: Colour timing — the gel scroller.
+     *   Ch 11: Beam timing — focus, zoom, iris, the front wheel and the shutters. Each holds the
+     *   *duration* of the next move, one second per DMX step (p16 [12]), whatever its distance; 0 is no
+     *   timing, and Focus Timing at 255 is "more responsive manual control" (p16 [12]). The media frame
+     *   (ch 6) has no timing channel. Drawn by the Stage view only (fixture optics plan D14).
      * - Ch 12: Reset — the [reset], [resetScroller], [resetPanTilt], [resetFrontModule] and
      *   [resetRearModule] commands, not a property (see the class doc).
      * - Ch 13: Gel scroller, the standard 12-colour string.
@@ -175,6 +180,10 @@ sealed class Source4RevolutionFixture(
         // Estimate: ETC gives no lens size. The front lens is taken as about half the 317 mm head's
         // width.
         body = FixtureBody(BodyArchetype.MOVER, MoverHead.PROFILE, lensDiameterM = 0.15),
+        // Estimate: ETC states no speed for pan, tilt, the lenses or the scroller. The head is taken to
+        // pan and tilt at 90°/s (6 s end to end, a quiet theatre unit), the beam to cross its range in
+        // 1.5 s and the 14-frame string in 2.5 s. Its timing channels (ch 9–11) stretch them.
+        travel = Travel(panDegPerS = 90.0, tiltDegPerS = 90.0, beamMs = 1500, colourMs = 2500),
     )
     class BaseFrame31Ch(
         universe: Universe,
@@ -228,13 +237,20 @@ sealed class Source4RevolutionFixture(
         @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM, degMin = 35.0, degMax = 15.0)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
-        @FixtureProperty("Focus fade time", category = PropertyCategory.SPEED)
+        // The timing channels (p14–16 [10–12]): "Each step of DMX equals one second of time … The maximum timing
+        // value is 4 minutes 15 seconds", the duration of the move sent with it. 0 runs the move at the
+        // fixture's own speed (`travel` above). Focus Timing at 100 % is "more responsive manual
+        // control" rather than 255 s, so from 255 it is the fixture's own speed again.
+        @FixtureProperty("Focus timing (pan/tilt)", category = PropertyCategory.SPEED,
+            timing = TimingRole.POSITION, timingSecondsPerStep = 1.0, timingFastFrom = 255)
         val focusTime: Slider = DmxSlider(transaction, universe, firstChannel + 8)
 
-        @FixtureProperty("Colour fade time", category = PropertyCategory.SPEED)
+        @FixtureProperty("Colour timing (scroller)", category = PropertyCategory.SPEED,
+            timing = TimingRole.COLOUR, timingSecondsPerStep = 1.0)
         val colTime: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
-        @FixtureProperty("Beam fade time", category = PropertyCategory.SPEED)
+        @FixtureProperty("Beam timing", category = PropertyCategory.SPEED,
+            timing = TimingRole.BEAM, timingSecondsPerStep = 1.0)
         val beamTime: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
         // Ch 12 — the reset channel (p15): "set the channel to one of the levels shown below for three

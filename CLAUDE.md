@@ -225,6 +225,15 @@ hold short, a project switch does. Stored rows holding one were stripped once at
 (`state/CommandRowStrip.kt`, delete once run) and are on every sync import. See
 `docs/fixtures-engineering.md` §"@FixtureCommand".
 
+**Travel time** (fixture optics plan session 8, D14) is drawn, never output: `@FixtureType(travel =
+Travel(panDegPerS, tiltDegPerS, beamMs, colourMs))` is how fast a type's mechanics move, and a SPEED
+slider declared `@FixtureProperty(timing = TimingRole.POSITION | BEAM | COLOUR | ALL,
+timingSecondsPerStep, timingFastFrom)` is one of the fixture's own timing channels — the Revolution's
+Focus (pan/tilt), Colour and Beam Timing, a move's **duration** at 1 s a step, 0 its own speed. Only the
+Stage view reads them (`frontend/src/lib/travel.ts`); the desk sends every value as composed. Most
+speeds are estimates (`FU-MANUAL-S8-TRAVEL`); movers' vector speed channels are deliberately not
+modelled. See `docs/fixtures-engineering.md` §"Travel and timing channels".
+
 ### Property System
 Properties provide a unified interface for fixture and group control:
 

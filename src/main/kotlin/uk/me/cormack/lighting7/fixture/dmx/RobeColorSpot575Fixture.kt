@@ -295,6 +295,10 @@ sealed class RobeColorSpot575Fixture(
         model = "ColorSpot 575 AT",
         kind = FixtureKind.MOVING_HEAD,
         body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT),
+        // The user manual's technical specifications: "Max. Pan speed 157.27°/sec., Max. Tilt speed
+        // 108.95°/sec." Estimate: the beam (focus, zoom, iris, frost and the gobo wheels) is taken to
+        // cross its range in 0.6 s and the colour wheels in 0.8 s — the manual states neither.
+        travel = Travel(panDegPerS = 157.27, tiltDegPerS = 108.95, beamMs = 600, colourMs = 800),
     )
     class Mode2Ch(
         universe: Universe,
@@ -330,6 +334,11 @@ sealed class RobeColorSpot575Fixture(
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
+        // Not a timing channel (fixture optics plan D14). 0 is tracking at full speed; 1–255 is a speed
+        // "from max. to min." in the menu's Speed mode — no number given — or a time "from 0.1 s to
+        // 25.5 s" in its Time mode, a menu setting the desk cannot see. Neither can be drawn without a
+        // guess, so the view moves the head at the type's travel (its fastest) whatever this holds:
+        // early, never late. FU-MANUAL-S8-TRAVEL measures it.
         @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 

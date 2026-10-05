@@ -152,7 +152,25 @@ export type FixtureTypeInfo = {
    *  100's 10°. The beam angle is the zoom channel's, else the patch's, else this, else the family's
    *  (`resolveBeamDeg` in stage3d/bodies/archetype.ts). Null or absent declares none. */
   fieldDeg?: number | null
+  /** How fast the type's mechanics move (`@FixtureType.travel`, fixture-optics plan D14) — drawn by
+   *  the Stage view, which eases toward the DMX value at these rates; never output. Null or absent
+   *  declares none, and the view snaps as it always did. */
+  travel?: FixtureTravel | null
 }
+
+/**
+ * A type's base speeds on the wire (backend `TravelInfo`). Each family is optional; one left null
+ * snaps. `beamMs` / `colourMs` are the time a beam or colour channel takes across its whole DMX range.
+ */
+export interface FixtureTravel {
+  panDegPerS?: number | null
+  tiltDegPerS?: number | null
+  beamMs?: number | null
+  colourMs?: number | null
+}
+
+/** Which families one of a fixture's own timing channels stretches (backend `TimingRole`). */
+export type TimingRole = 'POSITION' | 'BEAM' | 'COLOUR' | 'ALL'
 
 /** A declared body on the wire (backend `FixtureBodyInfo`). */
 export interface FixtureBodyInfo {
@@ -261,6 +279,16 @@ export type SliderPropertyDescriptor = {
   /** A `strobe` slider's bands, in DMX order (`@FixtureProperty.strobe`, fixture-optics plan D12):
    *  what each range of the channel does to the light. Decoded by `lib/strobeBands.ts`. */
   strobeBands?: StrobeBand[]
+  /** One of the fixture's own **timing channels** (`@FixtureProperty.timing`, fixture-optics plan
+   *  D14) — the families it stretches. Null or absent on every other slider. Read by
+   *  `lib/travel.ts`; the desk sends the channel as composed. */
+  timing?: TimingRole | null
+  /** A timing channel's move duration per DMX step, in seconds (the Revolution's 1 s). 0 is no
+   *  timing: the move runs at the type's `travel`. */
+  timingSecondsPerStep?: number | null
+  /** The DMX from which a timing channel means "as fast as the fixture can", as 0 does — the
+   *  Revolution's Focus Timing at 255. Null or absent for none. */
+  timingFastFrom?: number | null
 }
 
 /** What a band of a strobe channel does to the light (backend `StrobeKind`). */

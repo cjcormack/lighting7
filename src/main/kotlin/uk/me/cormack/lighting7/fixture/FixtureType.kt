@@ -50,4 +50,8 @@ annotation class FixtureType(
      *  it. `-1.0` means "unset", as for [depthOfField]. See `docs/fixtures-engineering.md`
      *  §"Beam vocabulary". */
     val fieldDeg: Double = -1.0,
+    /** How fast the type's mechanics move — pan, tilt, the beam and the colour ([Travel], fixture
+     *  optics plan D14). Drawn by the Stage view, never output. Absent, every family snaps in the
+     *  view. See `docs/fixtures-engineering.md` §"Travel and timing channels". */
+    val travel: Travel = Travel(),
 )

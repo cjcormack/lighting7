@@ -585,6 +585,7 @@ export function Stage3D({
         onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
         reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
+        travel={capture == null}
       />
     )
   })
@@ -609,6 +610,7 @@ export function Stage3D({
         editMode={interactable}
         onClick={interactable ? () => handleFixtureClick(source) : undefined}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
+        travel={capture == null}
       />
     )
   })

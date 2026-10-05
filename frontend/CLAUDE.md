@@ -353,6 +353,24 @@ a random band up to 2 Hz, a pulse swells up to 3 Hz, and anything faster is a sh
 — and only while — a strobe flashes, and `colourDispatchParity.test.tsx` holds 2D = 3D. See the
 stage-vis doc's §"Strobe and closed shutters".
 
+**Heads, wheels and scrollers travel; the view eases toward the DMX** (fixture-optics session 8, D14;
+lighting7 `docs/fixtures-engineering.md` §"Travel and timing channels"). A type declares how fast its
+pan, tilt, beam and colour move (`FixtureTypeInfo.travel`) and a fixture's own timing channels stretch
+it (`SliderPropertyDescriptor.timing`: the Revolution's Focus, Colour and Beam Timing, a **duration**
+of one second a step, 0 its own speed). One pure module, `lib/travel.ts` (time passed in), keeps a
+displayed value per channel and moves it toward the DMX: the beam director through
+`stage3d/beamTravel.ts` (pan/tilt in degrees, every beam channel in DMX, stepped before the dark
+returns so a move in the dark has landed), the colour syncs through one axis per channel, so a
+scroller in flight reads the unit's **fitted** string at the drawn position and passes through every
+frame between. **Drawn, never output** — `travel.test.ts` fails the drawing files on any channel
+writer. It **lands, never travels**, on first paint, a vis-source switch, a wholesale replacement of
+the source's values (`ChannelSource.epoch`: the wire's snapshot on each connect, a Next GO preview, a
+programmer rebuild), a repatch and in a `render_view` capture (`travel={capture == null}`). Only the 3D
+view eases: the 2D leaves and Positions chips are readouts of what the desk sends, so
+`colourDispatchParity` is unchanged. A move in flight asks for frames (the director's `animating`, the
+colour arms' ticker registration) and a settled rig asks for none. See the stage-vis doc's §"Travel
+time".
+
 **Scenery moves with the show** (session 8): the desk resolves which state each scene element is in
 — a cue's changes tracked from the top of its stack, its stack's set, live Looks above both — and
 streams `scenery.state` (`api/sceneryApi.ts`, `store/scenery.ts`'s form-3 `liveScenery`). The Stage

@@ -602,7 +602,7 @@ listener has already queued a `transition = true` frame for.
 
 | Message | Payload | When |
 |---|---|---|
-| `channelState` | `channels: [{universe, id, currentLevel}]` | Connect snapshot (whole buffer, parked values overlaid), then per-change deltas |
+| `channelState` | `channels: [{universe, id, currentLevel}]`, `snapshot?: true` | Connect snapshot (whole buffer, parked values overlaid), then per-change deltas. A whole-buffer frame — the snapshot, or the reply to a `channelState` request — carries `snapshot: true`; a delta omits it. A client must not infer the snapshot from arrival order: the delta listener is registered before the snapshot job runs |
 | `universesState` | `universes: [Int]` | Connect snapshot; on `controllersChanged` |
 | `channelMappingState` | `mappings: {universe: {channel: {fixtureKey, fixtureName, description, properties: [{targetKey, propertyName}]}}}` — `properties` is every key whose channels include the address (`PropertyChannelWriter.propertyKeysByChannel`), always sent (`[]` when nothing covers it); a desk older than the field omits it, and the DMX sheet then reads every address as baseline | Connect snapshot; after `fixturesChanged`. Built once per `Fixtures.structureVersion` and shared across sockets |
 

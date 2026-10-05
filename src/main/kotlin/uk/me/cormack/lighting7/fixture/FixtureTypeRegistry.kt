@@ -88,6 +88,9 @@ object FixtureTypeRegistry {
         /** The declared fixed-lens field ([FixtureType.fieldDeg]); null when none is declared. Never
          *  the `-1.0` sentinel. */
         val fieldDeg: Double? = null,
+        /** The declared travel ([FixtureType.travel]); null when the type declares none, and every
+         *  family snaps in the view. */
+        val travel: TravelInfo? = null,
     )
 
     /**
@@ -322,6 +325,7 @@ object FixtureTypeRegistry {
                 acceptsLantern = annotation.acceptsLantern,
                 depthOfField = annotation.depthOfField.takeIf { it > 0.0 },
                 fieldDeg = annotation.fieldDeg.takeIf { it > 0.0 },
+                travel = annotation.travel.resolve(),
             )
         )
     }

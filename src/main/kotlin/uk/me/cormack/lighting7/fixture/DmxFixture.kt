@@ -424,6 +424,9 @@ abstract class DmxFixture(
                 inverted = it.inverted.takeIf { inv -> inv },
             )
         },
+        timing = prop.timing?.serialized(),
+        timingSecondsPerStep = prop.timingSecondsPerStep,
+        timingFastFrom = prop.timingFastFrom,
     )
 
     private fun String.formatPropertyName(): String {

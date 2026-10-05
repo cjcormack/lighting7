@@ -388,6 +388,84 @@ band, and none closed — a closed one holds the product at 0) beside the colour
 arm registers while it flashes and lets go when the shutter closes or opens. A slow strobe keeps the
 canvas drawing through its dark part of the cycle; a closed or open one costs nothing.
 
+### Travel time
+
+A head does not snap to a new pan, and a scroller does not jump a frame: they travel (fixture-optics
+plan D14; lighting7 `docs/fixtures-engineering.md` §"Travel and timing channels"). Until session 8
+the view drew every value the moment it arrived. Now it keeps a **displayed value per channel** and
+moves it toward the DMX value at the type's speed (`FixtureTypeInfo.travel`), or over the fixture's
+own timing channel's duration (`SliderPropertyDescriptor.timing`). **Drawn, never output**: nothing on
+this path writes a channel, a programmer value or a gesture, and `travel.test.ts` reads the three
+files that draw it and fails on any writer.
+
+**One pure module, time passed in** — `lib/travel.ts`, the `colourBands.ts` / `strobeBands.ts` rule:
+
+- **A move is planned when the target changes**, from where the axis is drawn *now*. Its duration is
+  the timing channel's (`v × timingSecondsPerStep`, however far it goes — the Revolution's "duration
+  of a movement"), else `distance / rate` at the type's speed, else nothing: a family the type
+  declares no speed for snaps, as everything did before. 0 on a timing channel, and anything from its
+  `timingFastFrom` (the Revolution's Focus Timing at 255, "more responsive manual control"), is the
+  type's speed.
+- **A stream keeps a timed move's arrival.** A change within `STREAM_GAP_S` (0.5 s) of the last is the
+  same stream — a desk fade. While the stream's timed move is in flight a new target lands when the
+  first plan would have; once that has passed the stream follows at the type's speed; a change after
+  a pause is a new move with the whole duration. A fresh duration per change would draw a fade under a
+  timing channel crawling in asymptotically (Chris's call, 2026-10-05).
+- **Progress is linear.** A head accelerates, but a DMX fade streams a new target every frame and
+  each re-plans from where the last left off; any ease-in would make a fade crawl, and a linear plan
+  re-planned every frame is exactly a rate limiter.
+- **Plans are made in frames only.** A channel callback can see a change between frames, and on the
+  `demand` frameloop the scene clock may not have ticked for minutes: outside a frame (`stepTravel`'s
+  `nowS = null`) a change is only noted — `isTravelling` answers true, so the caller asks for a frame
+  — and the next frame plans it at its own time, or the idle gap would count as time travelled and the
+  first frame would land the move.
+
+**What eases.** Pan and tilt in degrees (after the DMX → degrees decode, before a movement macro's
+offset); every beam channel the director reads, in DMX — focus, zoom (a stepped zoom passes through its
+steps), iris, frost, both gobo wheels (a wheel passes through the slots between), the rotation channel
+with its fine byte **while its wheel indexes** (an angle turns; a spin speed or a change of band is
+drawn as sent — easing a speed through its stop band would draw a stop the wheel never made), and
+the framing shutters' depth and turn; and the colour family — a colour wheel, the scroller and every
+colour filter. The dimmer, the strobe, the prism and the macros never travel, and an RGB mix is
+electronic: only its filters' glass does. Each family stretches only under its own
+timing channel, and the colour timing channel only COLOUR-category channels — the Revolution's media
+frame is a `setting` its manual leaves off Colour Timing, so it travels at the colour speed untimed
+(`colourTimed`).
+
+**What it eases from — it lands, never travels, whenever the picture was replaced rather than moved:**
+
+| Event | Drawn as |
+|---|---|
+| **First paint** — a fixture's first frame on a canvas | The DMX value. An axis that has never drawn is landed (`TravelAxis.ready`). |
+| **A vis-source switch** (Output → Next GO, a window's own source) | The new source's values, landed. Every axis remembers the source it was drawn from. |
+| **The source's values replaced wholesale** | Landed. `ChannelSource.epoch` counts replacements: the wire's whole-buffer snapshot on each (re)connect and a resync's reply (`channelsApi.snapshotEpoch`, counting the frames the desk marks `snapshot: true` — never the first after an open, since a delta can reach a fresh socket first — so a canvas that mounted before the first snapshot does not swing every head in from 0), each Next GO preview (`setChannels`), a programmer map rebuilt over new descriptors (`refresh`); an overlay sums its two sides. |
+| **A project switch or a repatch** | Landed: a new patch is a new `FixtureModel` (keyed by patch id), and new channel keys reset the director's and the colour arms' axes. |
+| **A `render_view` capture** | The DMX, always. `Stage3D` passes `travel={capture == null}`: a one-shot render has no history. |
+| **A move made in the dark** | Landed by the time the beam comes up: the director steps the beam axes before its dark and beamless returns, as it already did pan and tilt. |
+
+**Where it lives — the 3D view only.** The beam director keeps a `BeamTravel` (`stage3d/beamTravel.ts`,
+a plain object a test drives without a canvas) and steps it at the top of each frame, before any
+read; the colour syncs keep one axis per channel (`beginColourApply` in `FixtureModel.tsx`) and read
+the setting and filter levels through it, so a scroller in flight reads **the unit's fitted string**
+at the drawn position — `settingProp` is the fitted one (§"Fitted media") — and the beam passes
+through each frame's gel rather than cross-fading the two ends. **The 2D leaves and the Positions
+chips do not ease**: they are the desk's readouts of what it is sending — the chips double as
+selection controls, the busk tiles' bars as levels, the colour editor's *Pick* answers the set colour
+— and a readout that lags would lie about the desk. So `colourDispatchParity.test.tsx` still holds
+2D = 3D exactly as before: it mounts `ColourSync` with no `travel` (as a capture does), and travel is
+held to its own tests (`travelColour.test.tsx`: the plan's check — Colour Timing at 5 scrolls frame 1
+to frame 9 over 5 s, through every frame between, in order — and the untimed media frame, a source
+switch and a replacement landing). Mid-flight the 3D colour is the same decode at the drawn level,
+never a second dispatch. The Positions panel's Plan tab is a `Stage3D`, and eases.
+
+**Frames.** The director treats a move in flight like a macro: `bt.moving` sets `animating`, which
+asks for the next frame, and a settled head asks for none. A colour arm's `apply` answers whether a
+channel is drawn short of its target beside the band and strobe answers, so it registers with
+`colourTicker.ts` while — and only while — a move is in flight; `useLiveColour` now tells `apply`
+whether the ticker ran it (`inFrame`), the only case in which a colour move's clock may start.
+`travelColour.test.tsx` holds that a landed scroller unregisters and that later frames invalidate
+nothing; `beamTravel.test.ts` that a settled head reports nothing moving.
+
 ## Paired lanterns (extra placements)
 
 A paired dimmer is one patch drawn more than once: one circuit, an SL and an SR lantern on the same
@@ -482,7 +560,8 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
   (a scroll or random wheel band) asks through `colourTicker.ts` while it is live (§"Animated colour
   bands"), and so does a **flashing strobe** (§"Strobe and closed shutters"). That is the one case
   where the
-  canvas keeps rendering with no channel moving. Their `delta` is clamped to 0.1 s, which also covers
+  canvas keeps rendering with no channel moving. A **move in flight** (§"Travel time") asks the same
+  way, through the director's `animating` and the colour arms' ticker registration, until it lands. Their `delta` is clamped to 0.1 s, which also covers
   the long gap after an idle spell.
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
   unmounts, a body's `hide` and `setActive` — and the region uniforms (below). A body's parts are
@@ -968,6 +1047,8 @@ bridges the one the scene reads from outside it — the vis source. A scene comp
 reading another outside context must be bridged there too, or a render silently draws its default.
 
 **Read-only in every sense.** No DMX and no programmer write — the view in view mode writes neither.
+**No travel** (§"Travel time"): `Stage3D` hands every `FixtureModel` `travel={false}` under a capture,
+so a head mid-swing on the desk's own screens is drawn where the DMX says it is going.
 None of this window's facts move: `StageCameraRig`'s `oneShot` lands the render's viewpoint
 **unconditionally** and records nothing — no pose in `sessionStorage`, no landed marker (it was
 `persist` that marked, and a render's rig is never persisted); the layers and the source are the

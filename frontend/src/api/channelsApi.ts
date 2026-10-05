@@ -9,6 +9,14 @@ export interface ChannelsApi {
     update(universe: number, channelNo: number, value: number): boolean
     subscribe(fn: (updates: Map<string, number>) => void): Subscription
     subscribeToChannel(key: string, fn: (value: number) => void): Subscription
+    /**
+     * How many whole-buffer `channelState` frames have landed — the snapshot the desk pushes on each
+     * connection, and the reply to a resync request — each one marked `snapshot: true` by the desk. A
+     * replacement, not a move: the Stage view's travel easing lands across one
+     * ([ChannelSource.epoch]). Counted by the flag, never by arrival order, which the desk does not
+     * guarantee (a delta can reach a fresh socket before its snapshot).
+     */
+    snapshotEpoch(): number
 }
 
 type ChannelStateInMessage = {
@@ -18,6 +26,8 @@ type ChannelStateInMessage = {
         id: number,
         currentLevel: number,
     }[],
+    /** True on a whole-buffer frame; absent on a delta (the desk's WS Json omits defaults). */
+    snapshot?: boolean,
 }
 
 /**
@@ -67,6 +77,7 @@ function debounceMapUpdates(
 
 export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     const currentValues = new Map<string, number>()
+    let snapshots = 0
 
     let nextChannelSubscriptionId = 1
     const channelUpdatesSubscriptions = new Map<number, (updates: Map<string, number>) => void>()
@@ -97,6 +108,8 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
             return
         }
 
+        if (message.snapshot === true) snapshots++
+
         // Batch all channels from this message together
         const updates = new Map<string, number>()
         message.channels.forEach((update) => {
@@ -117,6 +130,9 @@ export function createChannelsApi(conn: InternalApiConnection): ChannelsApi {
     return {
         getAll() {
             return currentValues
+        },
+        snapshotEpoch() {
+            return snapshots
         },
         get(universe: number, channelNo: number): number {
             return currentValues.get(`${universe}:${channelNo}`) || 0

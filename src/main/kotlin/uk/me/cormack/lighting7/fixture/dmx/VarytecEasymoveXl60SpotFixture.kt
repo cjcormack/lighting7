@@ -106,7 +106,11 @@ sealed class VarytecEasymoveXl60SpotFixture(
      * - Ch 10: Tilt (fine).
      * - Ch 11: Reset — the [Mode11Ch.reset] command, not a property (fixture optics plan session 7).
      */
-    @FixtureType("varytec-easymove-xl-60-spot-11ch", manufacturer = "Varytec", model = "Easymove XL 60 Spot", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
+    @FixtureType(
+        "varytec-easymove-xl-60-spot-11ch", manufacturer = "Varytec", model = "Easymove XL 60 Spot", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT),
+        // Estimate: the manual states no speed. A small spot's typical pan and tilt, a gobo wheel across its range in 0.5 s and the colour wheel in 0.6 s.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 500, colourMs = 600),
+    )
     class Mode11Ch(
         universe: Universe,
         key: String,

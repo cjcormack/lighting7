@@ -271,6 +271,18 @@ enum class CompactDisplayRole {
  *               default — on every other property; every STROBE slider declares its bands, which
  *               `StrobeBandsTest` enforces. A setting-backed STROBE property declares the same per
  *               option instead (`DmxFixtureStrobeSettingValue`).
+ * @param timing On a slider, marks it as one of the fixture's own **timing channels** and names the
+ *               families it stretches ([TimingRole], fixture optics plan D14) — the Revolution's
+ *               Focus, Colour and Beam Timing. [TimingRole.NONE] — the default — on every other
+ *               property. Drawn by the Stage view only: the desk sends the channel as composed.
+ * @param timingSecondsPerStep On a timing channel, the **duration** of a move per DMX step: a move
+ *               made while the channel holds `v` takes `v × timingSecondsPerStep` seconds, however far
+ *               it goes (the Revolution's 1 s per step, manual p16 [12]). 0 is "no timing" — the move
+ *               runs at the type's own [Travel] rate. [Double.NaN] — the default — means unset;
+ *               every timing channel declares it, which `TravelVocabularyTest` enforces.
+ * @param timingFastFrom On a timing channel, the DMX from which the channel means "as fast as the
+ *               fixture can" rather than a duration, as 0 does — the Revolution's Focus Timing at
+ *               100 % ("more responsive manual control", p16 [12]). `-1` — the default — means none.
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -295,6 +307,9 @@ annotation class FixtureProperty(
     val activeMin: Int = -1,
     val activeMax: Int = -1,
     val strobe: Array<StrobeBand> = [],
+    val timing: TimingRole = TimingRole.NONE,
+    val timingSecondsPerStep: Double = Double.NaN,
+    val timingFastFrom: Int = -1,
 )
 
 /** Resolved composition rule: annotation override takes precedence, else the category default. */

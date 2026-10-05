@@ -21,6 +21,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-S5-LIBRARY-OPTICS`](#fu-manual-s5-library-optics) | the library optics pass's estimates match the units — the Varytec's and the Wash-42's colours, the Whex's first program, the Robe's three zoom steps and its iris and frost holding past 179, and an animated colour band reading as the wheel does | Fixture optics plan S5, 2026-10-04 |
 | [`FU-MANUAL-S6-STROBE`](#fu-manual-s6-strobe) | the strobe bands' estimated rates and readings match the units — a MAC 250 dark at strobe 0 as in the view, each type's strobe rate at the ends of its band, the bands no manual to hand names, and the view's shimmer reading as a fast strobe does | Fixture optics plan S6, 2026-10-04 |
 | [`FU-MANUAL-S7-COMMANDS`](#fu-manual-s7-commands) | every fixture command does what its manual says, on the estimated holds — each reset re-homes, the lamps strike and douse, the MAC 250's preconditions let a reset through a menu that disables DMX reset, and the public listener refuses one | Fixture optics plan S7, 2026-10-04 |
+| [`FU-MANUAL-S8-TRAVEL`](#fu-manual-s8-travel) | the Stage view's travel matches the units — each mover's estimated pan, tilt, beam and colour speed, the Revolution's timing channels stretching what the manual says they do, and the speed channels the view leaves unmodelled timed so a curve can be built | Fixture optics plan S8, 2026-10-05 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -364,6 +365,56 @@ Where a hold is wrong, change it and its comment and drop the `Estimate:` marker
 proves unneeded, it can stay — it costs nothing — but say so in the comment.
 
 45 minutes.
+
+---
+
+## `FU-MANUAL-S8-TRAVEL`
+
+**What it proves**: *the Stage view moves each head, wheel and scroller about as fast as the unit
+does*, and the Revolution's timing channels stretch the families the manual says.
+
+**Why it is here**: the fixture optics plan's session 8 eases the Stage view toward the DMX at each
+type's speed (`@FixtureType.travel`, `docs/fixtures-engineering.md` §"Travel and timing channels").
+Only the Robe's pan and tilt speeds are stated (157.27°/s and 108.95°/s); every other number is marked
+`// Estimate:` at its source (D15) — the Revolution's 90°/s, 1.5 s beam and 2.5 s string; the MAC 250's
+180°/150°/s, 0.5 s beam and 0.7 s colour; the Varytec's and Fusion's 180°/150°/s, 0.5 s and 0.6 s; the
+Orbit's, Shehds' and IMG's pan and tilt (the Shehds' 0.8 s zoom); the Scantastic's 360°/s, 0.3 s and
+0.4 s. And the movers' own **speed channels** are left unmodelled because no
+manual gives their curve: the view draws those heads at full speed whatever the channel holds. The
+plan's §9 desk check — *a Revolution with Colour Timing at 5 scrolls from frame 1 to 9 over 5 s,
+through the frames between* — is step 2.
+
+**Test**, on the rig in project 15, the Stage view open on a second screen at Output, a stopwatch (or
+a phone's slow-motion video) on the unit:
+
+1. **Revolution, untimed** (ch 9–11 at 0): pan from 0 to full and back, tilt likewise; move zoom,
+   focus and iris end to end; scroll the string leader to trailer. Time each on the unit and in the
+   view. Set `travel` to the unit's times — pan and tilt as degrees over seconds, the beam and the
+   string as the end-to-end time in ms — and drop the `Estimate:` marker.
+2. **Revolution, timed**: Colour Timing (ch 10) at 5, scroller from frame 1 (DMX 27) to frame 9 (174):
+   the unit and the view each take 5 s and pass through frames 2–8. Then Focus Timing (ch 9) at 5 with
+   a short and a long pan — both take 5 s on the unit (a duration, not a rate), as in the view. Beam
+   Timing (ch 11) at 5 on a zoom move likewise. Then Focus Timing at 255: the head moves at its own
+   speed (the manual's "console response option"), not over 255 s. If ETC's "focus" proves to time the
+   lens rather than pan/tilt, swap ch 9's `TimingRole` and say so. Last, the case ETC warns against: Focus
+   Timing at 5 and a 3 s **desk fade** on pan — note what the unit does. The view lands 5 s after the
+   fade began and then follows at the head's speed (`STREAM_GAP_S`); if the unit does something else,
+   record it here before changing the rule.
+3. **Revolution, media frame**: with Colour Timing at 5, move the media frame in — the manual leaves it
+   off every timing channel, so it should move at its own speed, as the view draws it.
+4. **MAC 250** (speed channels ch 12 and 13 at 0, tracking): time a full pan, a full tilt, focus end to
+   end, the colour wheel and the gobo wheel slot 1 → last. Then ch 12 at 3, 64, 128, 192 and 245 — time
+   a full pan at each, which is the curve `FU-STAGE-VECTOR-SPEED` would model.
+5. **Robe ColorSpot 575**: check the stated 157°/s and 109°/s against a full pan and tilt; time the
+   colour wheels, the gobo wheels, the zoom's steps and the iris. Note which P.t.Mo. the menu is in, and
+   time a full pan at ch 5 = 1, 64, 128, 255 in that mode.
+6. **The small heads** (Varytec, Fusion, Orbit, Shehds, IMG, Scantastic): a full pan and
+   tilt each, the wheels where they have them, the Shehds' zoom. Set each `travel` from them.
+
+Where a speed is measured, change it and its comment and drop the `Estimate:` marker. Where a speed
+channel's curve is measured, record the numbers in `FU-STAGE-VECTOR-SPEED`.
+
+60 minutes.
 
 ---
 

@@ -169,7 +169,11 @@ sealed class MartinMac250Fixture(
      * - Ch 12: Pan/tilt speed.
      * - Ch 13: Effect speed.
      */
-    @FixtureType("martin-mac-250-mode-4", manufacturer = "Martin", model = "MAC 250", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT))
+    @FixtureType(
+        "martin-mac-250-mode-4", manufacturer = "Martin", model = "MAC 250", kind = FixtureKind.MOVING_HEAD, body = FixtureBody(BodyArchetype.MOVER, MoverHead.SPOT),
+        // Estimate: the manual gives the 540°/257° travel but no speed. Pan and tilt are its class's typical; focus and the gobo wheel cross their range in 0.5 s, the colour wheel in 0.7 s.
+        travel = Travel(panDegPerS = 180.0, tiltDegPerS = 150.0, beamMs = 500, colourMs = 700),
+    )
     class Mode4Ch(
         universe: Universe,
         key: String,
@@ -294,6 +298,11 @@ sealed class MartinMac250Fixture(
         @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
+        // Neither speed channel is a timing channel (fixture optics plan D14): the manual's vector bands
+        // run "fast → slow" (3–245) with no time or rate, beside tracking and blackout-while-moving
+        // bands. Drawing the vector band would be a guessed curve, so the view moves the head and the
+        // effects at the type's travel (its fastest) whatever these hold: early, never late.
+        // FU-MANUAL-S8-TRAVEL measures them.
         @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 

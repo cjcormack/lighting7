@@ -63,6 +63,14 @@ class SocketMessageWireFormatTest {
         assertEquals(out, assertIs<ChannelStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 
+    @Test
+    fun `channel domain — a whole-buffer frame says so, a delta says nothing`() {
+        val snapshot = json.encodeToString<OutMessage>(ChannelStateOutMessage(listOf(ChannelState(0, 1, 128u)), snapshot = true))
+        assertTrue(snapshot.contains("\"snapshot\":true"), snapshot)
+        val delta = json.encodeToString<OutMessage>(ChannelStateOutMessage(listOf(ChannelState(0, 1, 128u))))
+        assertTrue(!delta.contains("snapshot"), "a delta's default is omitted: $delta")
+    }
+
     // ─── Park domain ────────────────────────────────────────────────────────
 
     @Test

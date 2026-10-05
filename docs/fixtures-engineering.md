@@ -258,6 +258,7 @@ annotation class FixtureType(
     val acceptsLantern: Boolean = false,     // hung with a lantern from the library
     val depthOfField: Double = -1.0,         // how fast focus goes soft; -1.0 = the family's
     val fieldDeg: Double = -1.0,             // a fixed lens's beam angle; -1.0 = none declared
+    val travel: Travel = Travel(),           // how fast its mechanics move; drawn, never output
 )
 ```
 
@@ -294,6 +295,11 @@ the family's default** (`resolveBeamDeg` in `frontend/src/components/stage3d/bod
 A type with a ZOOM channel never declares it — `LibraryOpticsTest` refuses both on one type — and a
 conventional's field is its lantern's (§"Lanterns and focus").
 
+`travel` (fixture-optics plan D14) is how fast the type's mechanics move — pan and tilt in degrees a
+second, the beam and the colour as the time a channel takes across its whole DMX range. The Stage view
+eases what it draws toward the DMX at those rates; the desk outputs nothing differently. See
+§"Travel and timing channels".
+
 ### @FixtureProperty
 
 ```kotlin
@@ -316,6 +322,9 @@ annotation class FixtureProperty(
     val activeMin: Int = -1,
     val activeMax: Int = -1,
     val strobe: Array<StrobeBand> = [],
+    val timing: TimingRole = TimingRole.NONE,
+    val timingSecondsPerStep: Double = Double.NaN,
+    val timingFastFrom: Int = -1,
 )
 ```
 
@@ -499,6 +508,7 @@ bar's), which the view draws dark and a template never snaps to.
 | `activeMin` / `activeMax` | any | The proportional band; the view holds its ends outside it. |
 | `fineOf` | a low byte | The coarse property it refines, read as one 16-bit value. |
 | `strobeBands` | STROBE | What each band of the channel does to the light (below). |
+| `timing` / `timingSecondsPerStep` / `timingFastFrom` | SPEED | One of the fixture's own timing channels: which families it stretches, its seconds per DMX step, and the DMX from which it means "fastest" (§"Travel and timing channels"). |
 
 **A strobe channel's bands** (fixture-optics plan D12). A STROBE channel mixes bands that do
 different things to the light — the MAC 250's runs closed, open, strobe, pulses, random strobes, a
@@ -552,9 +562,96 @@ reading as a shimmer (WCAG 2.3.1's three-flash limit; `frontend/docs/stage-vis-e
 the `Hertz` arm is `FU-TMPL-STROBE-HZ`.
 
 **On the type** — `@FixtureType`: `body` (archetype, mover head, lens diameter), `depthOfField`
-(D9), `fieldDeg` (a fixed lens, D3), `acceptsBeamAngle` and `acceptsLantern`. The beam angle the
-view draws is the zoom channel's, else the patch's `beamAngleDeg`, else `fieldDeg`, else the
-family's.
+(D9), `fieldDeg` (a fixed lens, D3), `travel` (D14, below), `acceptsBeamAngle` and `acceptsLantern`.
+The beam angle the view draws is the zoom channel's, else the patch's `beamAngleDeg`, else
+`fieldDeg`, else the family's.
+
+### Travel and timing channels
+
+A head does not snap to a new pan and a scroller does not jump a frame: they travel. Until the
+fixture-optics plan's session 8 the Stage view snapped to every value, so a cue that swung a head
+across the stage drew the head already there, and a scroller drew no frame between two gels. **Travel
+is drawn, never output** (D14): the view eases what it draws toward the DMX value, and the desk sends
+every value exactly as composed — the desk must never second-guess what the fixture does with its own
+timing. Nothing on the backend reads either annotation below; `TravelVocabularyTest`'s last case holds
+a timing channel and the move it times to one unramped write each.
+
+**The base speeds** are the type's, `@FixtureType(travel = Travel(…))` (`fixture/FixtureTravel.kt`):
+
+```kotlin
+travel = Travel(panDegPerS = 157.27, tiltDegPerS = 108.95, beamMs = 600, colourMs = 800),
+```
+
+- `panDegPerS` / `tiltDegPerS` — the head's top speed. A move of `d` degrees takes `d / rate`.
+- `beamMs` — the time a **beam** channel takes across its whole DMX range: focus, zoom, iris, frost,
+  a gobo wheel and its index (an indexed angle; a spin speed is drawn as sent), the framing shutters. Part of the range takes that part of
+  the time, so a wheel passes through the slots between.
+- `colourMs` — the same for the **colour** family: a colour wheel, a scroller, and the colour filters
+  (a second wheel, a media frame's wing). A scroller passes through the frames between two gels.
+- Every family is optional (`-1`, the sentinel) and one left unset snaps, as everything did before:
+  an LED head's colour is electronic and declares no `colourMs`. On the wire it is
+  `FixtureTypeDetails.travel` (`{panDegPerS?, tiltDegPerS?, beamMs?, colourMs?}`), null when the type
+  declares none. The dimmer, the strobe, the prism and the macros never travel.
+
+`TravelVocabularyTest` holds every type whose pan and tilt the view draws in degrees to declaring both
+speeds. The library's nine mover models declare them — the Slender bar's pan and tilt are on its
+heads, which the view does not draw per head (`FU-STAGE-INDEPENDENT-HEADS`), so it declares none; **only the Robe ColorSpot 575's are stated** — its
+technical specifications give "Max. Pan speed 157.27°/sec., Max. Tilt speed 108.95°/sec." Every other
+number is an estimate (D15), marked `// Estimate:` at its fixture and listed in
+`FU-MANUAL-S8-TRAVEL`: a small spot or wash at 180°/150° a second, a scanner's mirror at 360°, the
+Revolution — a quiet theatre unit — at 90°, its beam across its range in 1.5 s and its 14-frame string
+in 2.5 s.
+
+**Timing channels** are the fixture's own, and they stretch the base speeds (D14). A SPEED slider
+declares one with `@FixtureProperty(timing = …, timingSecondsPerStep = …)`:
+
+- `timing` (`TimingRole`) names the families it stretches: `POSITION` (pan and tilt), `BEAM`,
+  `COLOUR` or `ALL`. `TimingRole.NONE`, the default, reflects as null.
+- `timingSecondsPerStep` — a non-zero value `v` gives the **duration** of a move planned while the
+  channel holds it: `v × timingSecondsPerStep` seconds, **however far the move goes**. Not a rate: the
+  Source Four Revolution's manual says the timing channels "communicate the desired duration of a
+  movement at the same time you communicate the destination" (p16 [12]), one second per DMX step to 4 min
+  15 s. A 10° move and a 400° move at Focus Timing 5 both take 5 s.
+- **0 is no timing**: the move runs at the type's `travel` — the manual's advice is to "restore this
+  channel to 0%" for ordinary playback, and the fixture then moves at its own speed.
+- `timingFastFrom` — the DMX from which the channel means "as fast as it can" rather than a duration.
+  The Revolution's Focus Timing at 100 % is "more responsive manual control" (p16 [12]), not 255 s, so it
+  declares `timingFastFrom = 255`; its Colour and Beam Timing at 255 are 4 min 15 s.
+- A timing value applies to a move **planned while it holds** — changing it alone moves nothing, and a
+  move already in flight keeps its time, as on the fixture.
+- **A streamed target keeps the arrival time** (Chris's call, 2026-10-05). A desk fade under a timing
+  channel sends a new target every frame, which ETC warns gives "unexpected luminaire behavior"
+  (p16 [12]); read literally — a fresh full duration per change — the view would draw the head
+  crawling in for ever. So a change within half a second of the last is the same stream: while its
+  timed move is in flight the new target lands when the first plan would have, after that the stream
+  follows at the type's speed, and a change after a pause is a new move with the whole duration
+  (`STREAM_GAP_S` in `frontend/src/lib/travel.ts`). `FU-MANUAL-S8-TRAVEL` step 2 checks it.
+
+`TravelVocabularyTest` holds every timing channel to being a SPEED slider with a positive
+`timingSecondsPerStep` and a `timingFastFrom` inside its range. On the wire they are
+`SliderPropertyDescriptor.timing` / `timingSecondsPerStep` / `timingFastFrom`, null elsewhere.
+
+**The Revolution** is the one fixture with timing channels: ch 9 Focus Timing, ch 10 Color Timing and
+ch 11 Beam Timing. The manual's channel table has a *Timing Channel* column (p14 [10]), and it settles what
+the class doc's "Focus timing" times: **ETC's "focus" is where the light points** — the column puts F
+on pan, pan fine, tilt and tilt fine, and B on the lens's focus and zoom. So ch 9 is `POSITION`, ch 10
+`COLOUR` (the column's C is on the gel scroller alone) and ch 11 `BEAM` (focus, zoom, iris, the front
+wheel, the shutters). The **media frame** (ch 6) has no letter in the column: it travels at the type's
+colour speed but no timing channel stretches it, which the view honours by stretching only
+COLOUR-category channels with a colour timing channel (`colourTimed` in `frontend/src/lib/travel.ts`).
+
+**Speed channels that are not timing channels.** Most movers carry a pan/tilt *speed* channel, and
+none of them is modelled. The MAC 250's two run tracking, a vector band "fast → slow" (3–245) and
+blackout-while-moving, with no time or rate for the vector band; the Robe's is tracking at 0 and, in
+the menu's Speed mode, a speed "from max. to min." with no number — or, in its Time mode, a time "from
+0.1 s to 25.5 s", but the mode is a menu setting the desk cannot see. The Varytec, Fusion, Orbit,
+Shehds, IMG and Slender channels say only "fast → slow". Drawing any of them would be a guessed curve,
+so they stay plain SPEED sliders and the view moves those heads at the type's travel — its fastest —
+whatever the channel holds: early, never late. `FU-MANUAL-S8-TRAVEL` times them on the rig, which is
+what a curve would be built from.
+
+The client half — the displayed value per channel, what eases from what, and when the view lands
+instead — is `frontend/docs/stage-vis-engineering.md` §"Travel time".
 
 ### @FixtureTrigger — one-shot triggers
 

@@ -341,3 +341,35 @@ describe('createPushChannelSource', () => {
     expect(listener).toHaveBeenLastCalledWith(100)
   })
 })
+
+// The Stage view's travel easing lands every axis across a replacement (`lib/travel.ts`), so each
+// derived source says when its values were replaced wholesale rather than moved.
+describe('a source’s replacement counter (epoch)', () => {
+  it('moves on every pushed preview, and not on a read', () => {
+    const push = createPushChannelSource()
+    expect(push.epoch?.()).toBe(0)
+    push.setChannels([{ universe: 0, channel: 1, value: 10 }])
+    push.setChannels([{ universe: 0, channel: 1, value: 20 }])
+    push.getByKey('0:1')
+    expect(push.epoch?.()).toBe(2)
+  })
+
+  it('moves on a programmer refresh over new descriptors, never on an ordinary edit', () => {
+    const fake = fakeProgrammer()
+    const source = createProgrammerChannelSource(fake.programmer, () => descriptorsByTarget([]))
+    fake.set({ channels: [] })
+    expect(source.epoch?.()).toBe(0)
+    source.refresh()
+    expect(source.epoch?.()).toBe(1)
+    source.dispose()
+  })
+
+  it('sums both sides of an overlay: either replaced is the picture replaced', () => {
+    const push = createPushChannelSource()
+    const base = { ...fixedSource({}), epoch: () => 5 }
+    const overlay = createOverlayChannelSource(base, push)
+    expect(overlay.epoch?.()).toBe(5)
+    push.setChannels([])
+    expect(overlay.epoch?.()).toBe(6)
+  })
+})
