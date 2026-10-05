@@ -79,7 +79,7 @@ describe('the axial reach (stage-view plan session 3)', () => {
 
   it("places an element's colliders by its pose — a room's floor at its base, lit from above", () => {
     const hall = element({ kind: 'ROOM', positionY: -9.2, positionZ: -0.95, widthM: 8.6, depthM: 18.4, heightM: 5.55 })
-    const colliders = elementColliders(hall, buildElement(hall, { drawnRegionUuids: new Set() }))
+    const colliders = elementColliders(hall, buildElement(hall))
     expect(colliders).toHaveLength(6)
     const out = hit()
     // From 3 m over the stalls, straight down: the hall floor, 3.95 m below and a hair more.
@@ -289,7 +289,7 @@ describe('what the view draws and casts at', () => {
     expect(elementInLayers(flat, { ...DEFAULT_SCENE_LAYERS, set: false })).toBe(false)
     expect(elementInLayers(stalls, { ...DEFAULT_SCENE_LAYERS, venue: false })).toBe(true)
     expect(elementInLayers(stalls, { ...DEFAULT_SCENE_LAYERS, seating: false })).toBe(false)
-    const noSet = sceneBuilds([hall, flat, stalls], { ...DEFAULT_SCENE_LAYERS, set: false }, { drawnRegionUuids: new Set() })
+    const noSet = sceneBuilds([hall, flat, stalls], { ...DEFAULT_SCENE_LAYERS, set: false })
     expect(noSet.map((b) => b.element.uuid)).toEqual(['hall', 'stalls'])
   })
 
@@ -297,7 +297,7 @@ describe('what the view draws and casts at', () => {
     const empty = sceneColliders({ stage, regions: [], builds: [], catchSizeM: 20 })
     // The stage floor, its back wall and the catch floor.
     expect(empty).toHaveLength(3)
-    const builds = sceneBuilds([hall, house, flat], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() })
+    const builds = sceneBuilds([hall, house, flat], DEFAULT_SCENE_LAYERS)
     expect(drawsRoom(builds)).toBe(true)
     const withRoom = sceneColliders({ stage, regions: [], builds, catchSizeM: 20 })
     // The stage floor, the hall's six faces, the house's four, and the flat.
@@ -306,20 +306,20 @@ describe('what the view draws and casts at', () => {
 
   it('clips the beams in the air to the lowest room floor, the furthest upstage wall and the side walls', () => {
     expect(beamClipFor(stage, [])).toEqual({ floorZ: 0, wallY: 11, minX: -NO_SIDE_X, maxX: NO_SIDE_X })
-    const builds = sceneBuilds([hall, house], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() })
+    const builds = sceneBuilds([hall, house], DEFAULT_SCENE_LAYERS)
     const clip = beamClipFor(stage, builds)
     expect(clip.floorZ).toBe(-0.95)
     expect(clip.wallY).toBeCloseTo(5.675 + 10.65 / 2, 9)
     expect([clip.minX, clip.maxX]).toEqual([-4.3, 4.3])
     // A wider wing, off centre, widens only its own side.
     const wing = element({ uuid: 'wing', kind: 'ROOM', positionX: 5, positionY: 4, widthM: 4, depthM: 4, heightM: 4 })
-    const widened = beamClipFor(stage, sceneBuilds([hall, wing], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() }))
+    const widened = beamClipFor(stage, sceneBuilds([hall, wing], DEFAULT_SCENE_LAYERS))
     expect([widened.minX, widened.maxX]).toEqual([-4.3, 7])
   })
 
   it('bounds the drawn venue for how deep a section sees', () => {
     expect(sceneElementBounds([])).toBeNull()
-    const bounds = sceneElementBounds(sceneBuilds([hall], DEFAULT_SCENE_LAYERS, { drawnRegionUuids: new Set() }))!
+    const bounds = sceneElementBounds(sceneBuilds([hall], DEFAULT_SCENE_LAYERS))!
     expect(bounds.min.z).toBeLessThanOrEqual(-0.95)
     expect(bounds.min.y).toBeLessThanOrEqual(-18.4)
     expect(bounds.max.z).toBeGreaterThanOrEqual(4.6)

@@ -56,7 +56,6 @@ import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import {
   computeNormalizedHue,
   computeNormalizedHueCss,
-  perceptualBrightness,
 } from '../../lib/colourMath'
 import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
 import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedMedia'
@@ -196,12 +195,13 @@ const SCRATCH_LOBE_DIR = new Vector3()
 // — masks the boundary even on a wide spot at the edge of its reach.
 const REGION_CULL_SLACK_RAD = MathUtils.degToRad(3)
 
-// ~1% intensity, below one DMX step at the pool's 0.55x opacity scale.
-const LIGHT_OFF_OPACITY = 0.005
+// Beam strength in the air and on the surfaces, per unit of linear intensity: the prototype's
+// colour × level in the haze, and colour × level × its typical lamp power on a surface.
+const CONE_SCALE = 1
+const POOL_SCALE = 40
 
-// Beam opacity in the air and on the surfaces, per unit of linear intensity.
-const CONE_SCALE = 0.32
-const POOL_SCALE = 0.55
+// Below about one DMX step of intensity a beam is off — compared against pool values, so in their scale.
+const LIGHT_OFF_OPACITY = 0.009 * POOL_SCALE
 
 /**
  * The hull a beam's march is drawn inside is a closed cone scaled round the beam: this much wider
@@ -507,7 +507,8 @@ export function FixtureModel({
   travel = true,
 }: FixtureModelProps) {
   const [hovered, setHovered] = useState(false)
-  useCursor(!!editMode && hovered)
+  useCursor(!!onClick && hovered)
+  // Selected, or hovered while editing: in view mode a hover only changes the cursor.
   const active = selected || (!!editMode && hovered)
   const emitters = useEmitters()
   const bodies = useBodies()
@@ -715,7 +716,7 @@ export function FixtureModel({
   // that uploads the write.
   const invalidate = useStageInvalidate()
 
-  // Paint a cell's lens on the instanced parts: dark glass at 0, the hue at its perceptual level.
+  // Paint a cell's lens on the instanced parts: dark glass at 0, the hue at full (`lensColour`).
   const lensRef = useRef<LensPainter | null>(null)
   lensRef.current = bodies
     ? (cell, hue, level) => bodies.setLens(slot, cell, lensColour(LENS_TMP, hue, level))
@@ -813,8 +814,8 @@ export function FixtureModel({
       ref={groupRef}
       position={fixturePos}
       onClick={onClick ? (e) => { e.stopPropagation(); onClick(e.eventObject as Group) } : undefined}
-      onPointerOver={editMode ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
-      onPointerOut={editMode ? () => setHovered(false) : undefined}
+      onPointerOver={onClick ? (e) => { e.stopPropagation(); setHovered(true) } : undefined}
+      onPointerOut={onClick ? () => setHovered(false) : undefined}
     >
       <group ref={mountRef} rotation={mountRotation} position={[0, mountLift, 0]}>
         <group ref={yokeRef} rotation={yokeRotation}>
@@ -824,13 +825,6 @@ export function FixtureModel({
         </group>
         {hit.frame === 'mount' && hitProxy}
       </group>
-
-      {active && (
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.1, 0.012, 12, 32]} />
-          <meshBasicMaterial color="#ffffff" />
-        </mesh>
-      )}
 
       <StageLabel position={FIXTURE_LABEL_OFFSET} kind="fixture" emphasised={active}>
         {patch.displayName}
@@ -865,7 +859,7 @@ export function FixtureModel({
   )
 }
 
-/** Paints a cell's lens: its full-brightness hue and its perceptual 0..1 level. */
+/** Paints a cell's lens: its full-brightness hue and its linear 0..1 level. */
 export type LensPainter = (cell: number, hue: Color, level: number) => void
 
 interface ColorState {
@@ -1802,18 +1796,23 @@ function useBeamDirector({
         let red = 0
         let green = 0
         let blue = 0
+        // Off on the same test as the run's beams: no cell in it at a level the beam cull keeps.
+        let lit = false
         for (let c = from; c < to; c++) {
           const pool = cells.pool[c]
+          if (pool >= LIGHT_OFF_OPACITY) lit = true
           red += cells.colors[c * 3] * pool
           green += cells.colors[c * 3 + 1] * pool
           blue += cells.colors[c * 3 + 2] * pool
         }
         const n = to - from
-        red /= n
-        green /= n
-        blue /= n
+        // A fixture's light is shared across its cells, as its beam is: a run carries its cells'
+        // share of the whole, so three cells lit land what one would.
+        red /= cells.count
+        green /= cells.count
+        blue /= cells.count
         const level = Math.max(red, green, blue)
-        if (level < LIGHT_OFF_OPACITY) {
+        if (!lit || level <= 0) {
           emitters.clearLight(slot, r)
           continue
         }
@@ -2088,12 +2087,10 @@ function filterLevels(filters: readonly SettingPropertyDescriptor[], levelOf: Le
 
 function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
   COLOR_TMP.set(hex)
-  // The lens is the lamp face (the colour indicator) and is never culled, so it
-  // gets the perceptual curve — a linear level crushes a dim-but-lit lamp to
-  // near-invisible. `hex` is already a full-brightness hue. At level 0 it is dark
-  // glass: a lamp at dimmer zero shows nothing, and nothing for bloom to catch.
-  refs.lensRef.current?.(0, COLOR_TMP, perceptualBrightness(intensity))
-  // Beam cone/pool opacities stay LINEAR: they double as the LIGHT_OFF_OPACITY
+  // The lens is the lamp face (the colour indicator) and is never culled; `lensColour` puts the
+  // level on its own curve. `hex` is already a full-brightness hue. At level 0 it is dark glass.
+  refs.lensRef.current?.(0, COLOR_TMP, intensity)
+  // Beam cone/pool strengths stay LINEAR: they double as the LIGHT_OFF_OPACITY
   // cull signal downstream, so curving them would resurrect near-off fixtures
   // into ghost beams.
   const state = refs.colorStateRef.current
@@ -2501,12 +2498,13 @@ export function CellColourSync({
         const setting = sources[i].setting
         if (setting && isAnimatedAt(setting.options, getChannelValue(setting.channel, source))) animated = true
         const level = resolveCellColour(sources[i], fallback, source, CELL_COLOR, timeS) * master
-        lensRef.current?.(i, CELL_COLOR, perceptualBrightness(level))
+        lensRef.current?.(i, CELL_COLOR, level)
         if (state && i < state.count) {
           state.colors[i * 3] = CELL_COLOR.r
           state.colors[i * 3 + 1] = CELL_COLOR.g
           state.colors[i * 3 + 2] = CELL_COLOR.b
-          state.cone[i] = CONE_SCALE * level
+          // One beam per cell, each 1/√count of the fixture's, as the prototype weighs them.
+          state.cone[i] = (CONE_SCALE * level) / Math.sqrt(state.count)
           state.pool[i] = POOL_SCALE * level
         }
       }

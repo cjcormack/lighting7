@@ -15,15 +15,14 @@ function element(fields: Partial<StageElementDto>): StageElementDto {
   }
 }
 
-const NONE = { drawnRegionUuids: new Set<string>() }
 const keys = (parts: readonly ScenePart[]) => parts.map((p) => p.key).sort()
 const part = (parts: readonly ScenePart[], key: string) => parts.find((p) => p.key === key)!
 
 describe('the element builders (stage-view plan session 3)', () => {
   it('builds nothing for a hidden element, or one its visible state switches off', () => {
-    expect(buildElement(element({ hidden: true }), NONE).parts).toEqual([])
-    expect(buildElement(element({ params: { states: { visible: false } } }), NONE).parts).toEqual([])
-    expect(buildElement(element({ kind: 'MESH' as never }), NONE).parts).toEqual([])
+    expect(buildElement(element({ hidden: true })).parts).toEqual([])
+    expect(buildElement(element({ params: { states: { visible: false } } })).parts).toEqual([])
+    expect(buildElement(element({ kind: 'MESH' as never })).parts).toEqual([])
   })
 
   it('builds a room as inward-facing quads, leaving out the sides it omits, a hair outside its box', () => {
@@ -31,7 +30,7 @@ describe('the element builders (stage-view plan session 3)', () => {
       kind: 'ROOM', widthM: 8.6, depthM: 18.4, heightM: 5.55, finishColour: '#4a4540',
       params: { omit: ['upstage'], floor: { colour: '#2b2724', pattern: 'BOARDS' } },
     })
-    const { parts } = buildElement(hall, NONE)
+    const { parts } = buildElement(hall)
     expect(keys(parts)).toEqual(['ceiling', 'downstage', 'floor', 'stage_left', 'stage_right'])
     // Each faces into the room.
     expect(part(parts, 'floor').geometry).toMatchObject({ shape: 'quad', facing: 'up' })
@@ -51,7 +50,7 @@ describe('the element builders (stage-view plan session 3)', () => {
       kind: 'PROSCENIUM', positionY: 0.35, positionZ: -0.95, widthM: 8.6, depthM: 0.3, heightM: 5.55,
       params: { openingWidthM: 5.1, openingHeightM: 2.9, openingSillM: 0.95, surroundM: 0.18 },
     })
-    const { parts } = buildElement(pros, NONE)
+    const { parts } = buildElement(pros)
     const solid = parts.filter((p) => p.collides)
     // Two piers, the sill under the opening and the head over it.
     expect(solid).toHaveLength(4)
@@ -72,7 +71,7 @@ describe('the element builders (stage-view plan session 3)', () => {
       kind: 'FLAT', widthM: 4.6, depthM: 0.1, heightM: 2.8,
       params: { openings: [{ kind: 'DOOR', fromM: 2.55, widthM: 1.2, heightM: 2.35 }] },
     })
-    const { parts } = buildElement(flat, NONE)
+    const { parts } = buildElement(flat)
     // A door has no sill: pier, head, pier.
     expect(keys(parts)).toEqual(['head-0', 'pier-0', 'pier-end'])
     expect(part(parts, 'pier-0').geometry).toMatchObject({ w: 2.55 })
@@ -89,25 +88,25 @@ describe('the element builders (stage-view plan session 3)', () => {
         kind: 'DRAPE', widthM: 5.7, heightM: 3.1, depthM: 0.2,
         params: { role: 'TABS', operation: 'DRAW', ...(open == null ? {} : { states: { open } }) },
       })
-    const closed = buildElement(tabs(), NONE).parts
+    const closed = buildElement(tabs()).parts
     expect(keys(closed)).toEqual(['cloth-sl', 'cloth-sr'])
     expect(part(closed, 'cloth-sr').geometry).toMatchObject({ shape: 'pleat', w: 2.85 })
-    const open = buildElement(tabs(1), NONE).parts
+    const open = buildElement(tabs(1)).parts
     expect((part(open, 'cloth-sr').geometry as { w: number }).w).toBeCloseTo(2.85 * DRAWN_GATHER, 9)
     // Each half hangs from its own side: its outer edge stays at the drape's edge.
     const sr = part(open, 'cloth-sr')
     expect(sr.at.x - (sr.geometry as { w: number }).w / 2).toBeCloseTo(-2.85, 9)
     expect(drawnHalfWidth(5.7, 0.5)).toBeCloseTo(2.85 * (1 - (1 - DRAWN_GATHER) * 0.5), 9)
     // A dead drape is one cloth, open state or not.
-    expect(keys(buildElement(element({ kind: 'DRAPE', params: { role: 'LEG' } }), NONE).parts)).toEqual(['cloth'])
+    expect(keys(buildElement(element({ kind: 'DRAPE', params: { role: 'LEG' } })).parts)).toEqual(['cloth'])
   })
 
-  it("hangs a platform's deck below its top, rails the edge it names, and leaves the deck to a region it is linked to", () => {
+  it("hangs a platform's deck below its top, rails the edge it names, and draws its deck when linked to a region", () => {
     const balcony = element({
       kind: 'PLATFORM', positionZ: 1.9, widthM: 8.6, depthM: 2.2, heightM: 0.3,
       params: { railHeightM: 1, railEdge: 'UPSTAGE' },
     })
-    const { parts } = buildElement(balcony, NONE)
+    const { parts } = buildElement(balcony)
     const deck = part(parts, 'deck')
     expect(deck.at.z - (deck.geometry as { h: number }).h / 2).toBeCloseTo(-0.3, 9)
     expect(deck.at.z + (deck.geometry as { h: number }).h / 2).toBeCloseTo(0, 9)
@@ -116,8 +115,7 @@ describe('the element builders (stage-view plan session 3)', () => {
     expect(rail.at.y).toBeGreaterThan(0)
     expect(rail.at.z).toBeCloseTo(0.5, 9)
     const linked = element({ kind: 'PLATFORM', heightM: 0.95, params: { regionUuid: 'r1' } })
-    expect(keys(buildElement(linked, { drawnRegionUuids: new Set(['r1']) }).parts)).toEqual([])
-    expect(keys(buildElement(linked, NONE).parts)).toEqual(['deck'])
+    expect(keys(buildElement(linked).parts)).toEqual(['deck'])
   })
 
   it("lists exactly lib/stageSeats.ts's seats for a seating block, and no parts", () => {
@@ -125,7 +123,7 @@ describe('the element builders (stage-view plan session 3)', () => {
       kind: 'SEATING', positionY: -2.4, positionZ: -0.95, widthM: 0, depthM: 0, heightM: 0,
       params: { rows: 12, seatsPerRow: 12, rowPitchM: 0.95, seatPitchM: 0.52, firstRow: 'A' },
     })
-    const { parts, seats } = buildElement(stalls, NONE)
+    const { parts, seats } = buildElement(stalls)
     expect(parts).toEqual([])
     expect(seats).toHaveLength(144)
     const params = seatingParams(stalls)!
@@ -133,13 +131,13 @@ describe('the element builders (stage-view plan session 3)', () => {
   })
 
   it('shapes an object by its shape, and stands a flown one at its trim', () => {
-    expect(buildElement(element({ params: { shape: 'CYLINDER' } }), NONE).parts[0].geometry).toMatchObject({ shape: 'cylinder' })
-    expect(buildElement(element({ params: { shape: 'SHADE' } }), NONE).parts[0].geometry).toMatchObject({ shape: 'cylinder', rTop: 0.28 })
+    expect(buildElement(element({ params: { shape: 'CYLINDER' } })).parts[0].geometry).toMatchObject({ shape: 'cylinder' })
+    expect(buildElement(element({ params: { shape: 'SHADE' } })).parts[0].geometry).toMatchObject({ shape: 'cylinder', rTop: 0.28 })
     const moon = element({ widthM: 0.9, depthM: 0.05, heightM: 0.9, positionZ: 0, params: { shape: 'DISC', flies: true, states: { trimM: 2.3 } } })
-    expect(buildElement(moon, NONE).parts[0]).toMatchObject({ geometry: { shape: 'disc', r: 0.45 }, at: { z: 0.45 } })
+    expect(buildElement(moon).parts[0]).toMatchObject({ geometry: { shape: 'disc', r: 0.45 }, at: { z: 0.45 } })
     expect(elementBaseZ(moon)).toBe(2.3)
     // An exit sign glows at its colour.
-    expect(buildElement(element({ emissive: true, finishColour: '#1bd760' }), NONE).parts[0].finish).toEqual({
+    expect(buildElement(element({ emissive: true, finishColour: '#1bd760' })).parts[0].finish).toEqual({
       colour: '#1bd760', pattern: 'PLAIN', emissive: true,
     })
   })

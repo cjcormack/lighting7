@@ -28,9 +28,8 @@ export type StageRenderOutcome = { png: Blob } | { reason: string }
 const RENDER_VIEW_FLAGS: StageViewFlags = { ...DEFAULT_VIEW_FLAGS, labels: 'none' }
 
 /**
- * Frames drawn before the one read. The first lays out the emitters and packs the light table; the
- * bloom composer is rebuilt after the camera swap's frame and needs another (`Bloom`'s note);
- * the rest are margin.
+ * Frames drawn before the one read. The first lays out the emitters and packs the light table, the
+ * second draws through the camera the viewpoint swapped in; the rest are margin.
  */
 const SETTLE_FRAMES = 4
 

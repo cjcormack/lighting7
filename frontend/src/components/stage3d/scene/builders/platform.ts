@@ -4,7 +4,6 @@ import {
   elementFinish,
   paramEnum,
   paramNumber,
-  type BuildContext,
   type ElementBuild,
   type PartFinish,
   type ScenePart,
@@ -19,21 +18,17 @@ const RAIL: PartFinish = { colour: '#24211f', pattern: 'PLAIN', emissive: false 
  * [heightM] below the frame's origin, as a region's box hangs below its `centerZ`. With `railHeightM`
  * and `railEdge` it carries a rail standing on that edge of the top.
  *
- * A platform linked to a region the view is drawing (`regionUuid`, D5) is that region's deck: the
- * region draws the deck and takes the pointer, and the platform adds only its rail. A link to a
- * region that is gone, or not drawn, reads as none.
+ * A platform linked to a region (`regionUuid`, D5) draws its own deck in its own finish all the
+ * same: the region it stands for is drawn only as an outline while editing (`StageRegionMeshes`).
  */
-export function buildPlatform(element: StageElementDto, context: BuildContext): ElementBuild {
+export function buildPlatform(element: StageElementDto): ElementBuild {
   const w = element.widthM
   const d = element.depthM
   const h = element.heightM
   if (!(w > 0 && d > 0 && h > 0)) return { parts: [], seats: [] }
   const parts: ScenePart[] = []
-  const region = typeof element.params.regionUuid === 'string' ? element.params.regionUuid : null
-  if (region == null || !context.drawnRegionUuids.has(region)) {
-    const deck = boxPart('deck', 0, 0, -h, w, d, h, elementFinish(element))
-    if (deck != null) parts.push(deck)
-  }
+  const deck = boxPart('deck', 0, 0, -h, w, d, h, elementFinish(element))
+  if (deck != null) parts.push(deck)
   const railH = paramNumber(element, 'railHeightM', 0)
   const edge = paramEnum(element, 'railEdge')
   if (railH > 0 && edge != null) {

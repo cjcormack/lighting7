@@ -86,11 +86,19 @@ export function labelPriority(kind: StageLabelKind, emphasised: boolean): number
 const BASE_CLASS =
   'pointer-events-none absolute left-0 top-0 whitespace-nowrap rounded border px-1.5 py-px shadow-sm will-change-transform'
 const KIND_CLASS: Record<StageLabelKind, string> = {
-  position:
-    'border-amber-500/40 bg-background/85 font-mono text-[10px] font-semibold tracking-wider text-amber-600 dark:text-amber-400',
-  fixture: 'border-border/60 bg-background/85 text-[11px] font-medium text-foreground',
+  position: 'font-mono text-[10px] font-semibold tracking-wider',
+  fixture: 'text-[11px] font-medium',
 }
-const EMPHASISED_CLASS = 'border-primary bg-primary/15'
+/** The frame and ink at rest. */
+const RESTING_CLASS: Record<StageLabelKind, string> = {
+  position: 'border-amber-500/40 bg-background/85 text-amber-600 dark:text-amber-400',
+  fixture: 'border-border/60 bg-background/85 text-foreground',
+}
+/** Selected or hovered: the prototype's blue chip, on the dark canvas whatever the theme. */
+const EMPHASISED_CLASS: Record<StageLabelKind, string> = {
+  position: 'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-amber-400',
+  fixture: 'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-white',
+}
 
 export interface StageLabelEntry {
   readonly el: HTMLDivElement
@@ -258,7 +266,7 @@ export class StageLabelStore {
 }
 
 function applyClass(e: StageLabelEntry): void {
-  e.el.className = `${BASE_CLASS} ${KIND_CLASS[e.kind]}${e.emphasised ? ` ${EMPHASISED_CLASS}` : ''}`
+  e.el.className = `${BASE_CLASS} ${KIND_CLASS[e.kind]} ${(e.emphasised ? EMPHASISED_CLASS : RESTING_CLASS)[e.kind]}`
 }
 
 function setShown(e: StageLabelEntry, shown: boolean): void {

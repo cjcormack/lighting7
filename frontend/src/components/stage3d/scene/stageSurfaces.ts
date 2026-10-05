@@ -5,7 +5,7 @@ import { boxCollider, elementColliders, type Collider } from './beamReach'
 import { buildElement } from './builders'
 import { NO_SIDE_X } from '../beamShaders'
 import { elementInLayers, type HazeExtent, type SceneLayers } from './sceneView'
-import type { BuildContext, ElementBuild } from './sceneParts'
+import type { ElementBuild } from './sceneParts'
 import type { SceneBuild } from './StageSceneElements'
 
 /**
@@ -25,8 +25,8 @@ import type { SceneBuild } from './StageSceneElements'
 /** How thick the stage floor's and back wall's slabs are, below and behind their faces. */
 const SLAB_M = 0.02
 
-/** Builds already made, by the element object they were made from and the context they were made in. */
-export type SceneBuildCache = WeakMap<StageElementDto, { context: BuildContext; build: ElementBuild }>
+/** Builds already made, by the element object they were made from. */
+export type SceneBuildCache = WeakMap<StageElementDto, ElementBuild>
 
 /**
  * The elements a view draws: in its layers, and built. With a [cache], an element the list still
@@ -37,15 +37,14 @@ export type SceneBuildCache = WeakMap<StageElementDto, { context: BuildContext; 
 export function sceneBuilds(
   elements: readonly StageElementDto[],
   layers: SceneLayers,
-  context: BuildContext,
   cache?: SceneBuildCache,
 ): SceneBuild[] {
   const out: SceneBuild[] = []
   for (const element of elements) {
     if (!elementInLayers(element, layers)) continue
     const cached = cache?.get(element)
-    const build: ElementBuild = cached != null && cached.context === context ? cached.build : buildElement(element, context)
-    if (cached?.build !== build) cache?.set(element, { context, build })
+    const build: ElementBuild = cached ?? buildElement(element)
+    if (cached !== build) cache?.set(element, build)
     if (build.parts.length === 0 && build.seats.length === 0) continue
     out.push({ element, build })
   }

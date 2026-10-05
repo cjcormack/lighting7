@@ -452,7 +452,20 @@ export function SectionEditLayer({
     const hit = e.button === 0 && !placing ? hitAt(scene, at, mPerPx) : null
     if (hit) {
       const ref = refFor(hit)
-      press(origin, { onClick: () => onSelectionChange(ref, intent), buildDrag: dragFor(hit) })
+      const buildDrag = dragFor(hit)
+      press(origin, {
+        onClick: () => onSelectionChange(ref, intent),
+        buildDrag,
+        // An unselected object is not a handle: a drag that starts on it pans, so a stage-wide
+        // region never stands between the operator and the view.
+        onDragInstead: buildDrag
+          ? undefined
+          : (ev) => {
+              controls()?.panBy(ev.clientX - origin.clientX, ev.clientY - origin.clientY)
+              panRef.current = { pointerId: ev.pointerId, startX: origin.clientX, startY: origin.clientY, lastX: ev.clientX, lastY: ev.clientY, panned: true }
+              capture(el, ev.pointerId)
+            },
+      })
       return
     }
 

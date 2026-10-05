@@ -1,6 +1,7 @@
-// Resize + rotate overlay for the selected region. The body-drag move
-// affordance lives on the region mesh itself (see StageRegionMeshes).
+// Move, resize and rotate handles for the selected region. They are the only way to move one in
+// 3D: a drag that starts on the region itself turns the camera (see StageRegionMeshes).
 import { useMemo, useState } from 'react'
+import { useCursor } from '@react-three/drei'
 import { type ThreeEvent, useThree } from '@react-three/fiber'
 import { MathUtils, Plane, Vector3 } from 'three'
 import type { StageRegionDto } from '../../api/stageRegionApi'
@@ -41,10 +42,14 @@ const ROTATION_OFFSET_M = 0.4
 const ROTATION_TORUS_RADIUS = 0.22
 const ROTATION_TORUS_TUBE = 0.055
 const MIN_HEIGHT_M = 0.05
+/** The move handle: a flat puck on the deck's centre, just proud of it. */
+const MOVE_RADIUS_M = 0.28
+const MOVE_THICKNESS_M = 0.05
 
 type HeightTier = 'top' | 'floor'
 
 type DraggingId =
+  | { kind: 'move' }
   | { kind: 'corner'; idx: number }
   | { kind: 'height'; tier: HeightTier; idx: number }
   | { kind: 'rotation'; idx: number }
@@ -54,6 +59,8 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
   const startDrag = useHandleDrag()
   const { camera } = useThree()
   const [dragging, setDragging] = useState<DraggingId>(null)
+  const [moveHovered, setMoveHovered] = useState(false)
+  useCursor(moveHovered || dragging?.kind === 'move', 'move')
 
   const cx = region.centerX ?? 0
   const cy = region.centerY ?? 0
@@ -91,6 +98,34 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
         .map(([rx, ry]) => toThree(cx + rx, cy + ry, cz)),
     [w, d, yawRad, cx, cy, cz],
   )
+
+  const r3fCentre = useMemo(() => toThree(cx, cy, cz + MOVE_THICKNESS_M / 2), [cx, cy, cz])
+
+  const onMoveDown = (e: ThreeEvent<PointerEvent>) => {
+    setDragging({ kind: 'move' })
+    onDragStart?.()
+    const locked = { centerZ: cz, yawDeg }
+    const plane = new Plane(PLANE_NORMAL_UP, -r3fCentre.y)
+    const updateFromHit = (p: Vector3, settled: boolean) => {
+      const { x, y } = fromThree(p)
+      const centerX = snapActiveRef?.current ? snap(x, SNAP_DISTANCE_M) : x
+      const centerY = snapActiveRef?.current ? snap(y, SNAP_DISTANCE_M) : y
+      onChange({ centerX, centerY, ...locked }, settled)
+    }
+    startDrag(
+      {
+        plane,
+        handleWorld: r3fCentre,
+        onDrag: (p) => updateFromHit(p, false),
+        onSettle: (lastPoint) => {
+          setDragging(null)
+          onDragEnd?.()
+          if (lastPoint) updateFromHit(lastPoint, true)
+        },
+      },
+      e,
+    )
+  }
 
   const onCornerDown = (idx: number, e: ThreeEvent<PointerEvent>) => {
     setDragging({ kind: 'corner', idx })
@@ -238,8 +273,23 @@ export function RegionEditHandles({ region, onChange, snapActiveRef, onDragStart
     dragging?.kind === 'height' && dragging.tier === tier && dragging.idx === i
   const rotationActive = (i: number) => dragging?.kind === 'rotation' && dragging.idx === i
 
+  const moveActive = dragging?.kind === 'move'
+
   return (
     <>
+      <mesh
+        position={r3fCentre}
+        onPointerDown={onMoveDown}
+        onPointerOver={(e) => { e.stopPropagation(); setMoveHovered(true) }}
+        onPointerOut={() => setMoveHovered(false)}
+      >
+        <cylinderGeometry args={[MOVE_RADIUS_M, MOVE_RADIUS_M, MOVE_THICKNESS_M, 32]} />
+        <meshStandardMaterial
+          color={moveActive ? '#ffe082' : '#c8d3e2'}
+          emissive={moveActive ? '#ffae42' : '#3a4a5a'}
+          emissiveIntensity={moveActive ? 0.6 : 0.3}
+        />
+      </mesh>
       {r3fCorners.map((pos, i) => (
         <mesh key={`c-${i}`} position={pos} onPointerDown={(e) => onCornerDown(i, e)}>
           <sphereGeometry args={[CORNER_SIZE, 16, 12]} />

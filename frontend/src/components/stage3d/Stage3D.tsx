@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { RotateCcw } from 'lucide-react'
-import { Edges, Text, TransformControls } from '@react-three/drei'
+import { TransformControls } from '@react-three/drei'
 import { Euler, MathUtils, NoToneMapping, Object3D, Plane, Raycaster, Vector2, Vector3 } from 'three'
 import { useProjectQuery } from '../../store/projects'
-import { Bloom } from './Bloom'
+import { StageRender } from './StageRender'
 import { CaptureCanvas, type StageCapture } from './CaptureCanvas'
 import { StageRegionMeshes } from './StageRegionMeshes'
 import { RiggingMeshes } from './RiggingMeshes'
@@ -16,7 +16,6 @@ import type { SnapGrid } from './edit/useSnapGrid'
 import { SectionEditLayer } from './edit/SectionEditLayer'
 import { createSectionViewStore } from './edit/sectionView'
 import { selectionKey, type SelectIntent, type SelectionRef } from './useStageSelection'
-import { notifyTransformDragStart } from './useBodyDrag'
 import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
@@ -61,10 +60,6 @@ import { useStageScenery } from '../../hooks/stageScenery'
 import { sceneryElements, type SceneryOverlayCache } from '../../lib/scenery'
 import { useSceneryClock } from './scene/useSceneryClock'
 import type { LightingPoint } from '../../lib/stageProjection'
-// drei's `Text` fetches its default font from jsdelivr at runtime, which an offline desk cannot
-// reach. This is the Liberation Sans that react-pdf's pinned pdf.js ships; importing it as an
-// asset URL bundles it with the app (the precedent is ScriptViewer's pdf.js worker).
-import stageTextFont from 'pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf?url'
 import { Button } from '../ui/button'
 import type { RiggingDto } from '../../api/riggingApi'
 import type { FixturePatch } from '../../api/patchApi'
@@ -303,22 +298,21 @@ export function Stage3D({
     [safeRegions],
   )
 
-  // The scene document, built per kind (`scene/builders/`) for the layers this window draws. A
-  // platform linked to a region the view draws is that region's deck (D5), so the regions drawn are
-  // part of the build.
-  const drawnRegionUuids = useMemo(
-    () => new Set(view.regions ? safeRegions.map((r) => r.uuid) : []),
-    [view.regions, safeRegions],
-  )
-  const buildContext = useMemo(() => ({ drawnRegionUuids }), [drawnRegionUuids])
+  // The scene document, built per kind (`scene/builders/`) for the layers this window draws.
   const [buildCache] = useState<SceneBuildCache>(() => new WeakMap())
   const builds = useMemo(
-    () =>
-      showScene && sceneElements != null
-        ? sceneBuilds(sceneElements, layers, buildContext, buildCache)
-        : [],
-    [showScene, sceneElements, layers, buildContext, buildCache],
+    () => (showScene && sceneElements != null ? sceneBuilds(sceneElements, layers, buildCache) : []),
+    [showScene, sceneElements, layers, buildCache],
   )
+  // A drawn platform linked to a region (D5) is that region's deck, so the region draws no surface.
+  const linkedRegionUuids = useMemo(() => {
+    const linked = new Set<string>()
+    for (const { element } of builds) {
+      const uuid = element.kind === 'PLATFORM' ? element.params.regionUuid : null
+      if (typeof uuid === 'string') linked.add(uuid)
+    }
+    return linked
+  }, [builds])
   const roomDrawn = useMemo(() => drawsRoom(builds), [builds])
   // What the section edit layer can press: the elements drawn, in draw order.
   const drawnElements = useMemo(
@@ -326,7 +320,7 @@ export function Stage3D({
     [builds],
   )
   // Every surface a beam stops at — the axial reach (`scene/beamReach.ts`). Regions stop a beam
-  // only while they are drawn; the beam shaders' own region shadows still test all of them.
+  // only while the Regions layer is on; the beam shaders' own region shadows still test all of them.
   const colliders = useMemo(
     () =>
       sceneColliders({
@@ -414,14 +408,23 @@ export function Stage3D({
     if (orbitRef.current) orbitRef.current.enabled = true
   }, [])
 
+  // A press on the fixture gizmo or an edit handle also lands on whatever body is behind it (R3F
+  // clicks every object the press hit). Set when such a press starts, cleared at the start of each.
+  const handlePressRef = useRef(false)
+  const onHandlePress = useCallback(() => {
+    handlePressRef.current = true
+    disableOrbit()
+  }, [disableOrbit])
   const handleRegionClick = useCallback(
     (region: StageRegionDto) => {
+      if (handlePressRef.current) return
       onSelectionChange({ kind: 'region', uuid: region.uuid })
     },
     [onSelectionChange],
   )
   const handleRiggingClick = useCallback(
     (rig: RiggingDto) => {
+      if (handlePressRef.current) return
       onSelectionChange({ kind: 'rigging', uuid: rig.uuid })
     },
     [onSelectionChange],
@@ -580,7 +583,7 @@ export function Stage3D({
         regionGeometry={regionGeometry}
         slot={slot}
         selected={isSelected({ kind: 'patch', patchKey: patch.key })}
-        editMode={interactable}
+        editMode={canEdit}
         onClick={interactable ? () => handleFixtureClick(patch) : undefined}
         onEditFocus={editMode && !sectionEditing ? handleFixtureEditFocus : undefined}
         reportLanding={capture == null && isSelected({ kind: 'patch', patchKey: patch.key })}
@@ -607,7 +610,7 @@ export function Stage3D({
         regionGeometry={regionGeometry}
         slot={visiblePatches.length + i}
         selected={isSelected({ kind: 'patch', patchKey: patch.key })}
-        editMode={interactable}
+        editMode={canEdit}
         onClick={interactable ? () => handleFixtureClick(source) : undefined}
         goboOnSurfaces={goboLandsOnSurfaces(goboSurfaces, isSelected({ kind: 'patch', patchKey: patch.key }))}
         travel={capture == null}
@@ -642,8 +645,6 @@ export function Stage3D({
       <StageFloor width={stageW} depth={stageD} />
       {!roomDrawn && <CatchFloor size={gridSize} />}
       {!roomDrawn && <StageBackWall width={stageW} depth={stageD} height={stageH} />}
-      <StageBoxOutline width={stageW} depth={stageD} height={stageH} />
-      <OriginMarkers depth={stageD} />
       {placing && onPlacementClick && !sectionEditing && (
         <PlacementClickCatcher targetZ={placementZ ?? 0} onClick={onPlacementClick} />
       )}
@@ -651,24 +652,17 @@ export function Stage3D({
         <StageRegionMeshes
           regions={safeRegions}
           selectedUuids={selectedRegionUuids}
-          editMode={interactable}
-          onClick={interactable ? handleRegionClick : undefined}
-          onMove={canEdit && onRegionPositionChange ? onRegionPositionChange : undefined}
-          snapActiveRef={snapActiveRef}
-          onDragStart={disableOrbit}
-          onDragEnd={enableOrbit}
+          linkedUuids={linkedRegionUuids}
+          editMode={canEdit}
+          onClick={canEdit ? handleRegionClick : undefined}
         />
       )}
       {view.riggings && (
         <RiggingMeshes
           riggings={safeRiggings}
           selectedUuids={selectedRiggingUuids}
-          editMode={interactable}
+          editMode={canEdit}
           onClick={interactable ? handleRiggingClick : undefined}
-          onMove={canEdit && onRiggingPositionChange ? onRiggingPositionChange : undefined}
-          snapActiveRef={snapActiveRef}
-          onDragStart={disableOrbit}
-          onDragEnd={enableOrbit}
         />
       )}
       {view.fixtures && (
@@ -695,7 +689,7 @@ export function Stage3D({
           region={selectedRegion}
           snapActiveRef={snapActiveRef}
           onChange={(next, settled) => onRegionPositionChange(selectedRegion, next, settled)}
-          onDragStart={disableOrbit}
+          onDragStart={onHandlePress}
           onDragEnd={enableOrbit}
         />
       )}
@@ -704,7 +698,7 @@ export function Stage3D({
           rig={selectedRigging}
           snapActiveRef={snapActiveRef}
           onChange={(next, settled) => onRiggingPositionChange(selectedRigging, next, settled)}
-          onDragStart={disableOrbit}
+          onDragStart={onHandlePress}
           onDragEnd={enableOrbit}
         />
       )}
@@ -742,9 +736,10 @@ export function Stage3D({
         snapActive={snapActive}
         snapStepM={snap.step}
         gizmoMode={gizmoMode}
+        handlePressRef={handlePressRef}
         onPatchPlacementChange={onPatchPlacementChange}
       />
-      <Bloom />
+      <StageRender />
       </SurfaceLightingProvider>
       </StageLabelContext.Provider>
       </StageInvalidateProvider>
@@ -757,6 +752,7 @@ export function Stage3D({
       className={`relative h-full w-full ${placing || seatPicking ? 'cursor-crosshair' : ''}`}
       data-section-editing={sectionEditing || undefined}
       data-haze-tier={hazeQuality.tier}
+      onPointerDownCapture={() => { handlePressRef.current = false }}
       onPointerDown={(e) => { pointerDownRef.current = { x: e.clientX, y: e.clientY } }}
     >
       {/* `dpr` capped at 1.5: at 2 a Retina full-window canvas and every target behind it hold
@@ -776,6 +772,9 @@ export function Stage3D({
           frameloop="demand"
           gl={{ toneMapping: NoToneMapping, antialias: true }}
           style={{ background: STAGE_BACKGROUND }}
+          // Opaque: the beams blend additively at full alpha, which over a transparent clear would
+          // darken the CSS background behind a faint edge rather than add to it.
+          onCreated={({ gl }) => gl.setClearColor(STAGE_BACKGROUND, 1)}
           onPointerMissed={handlePointerMissed}
         >
           {scene}
@@ -900,6 +899,8 @@ interface ControlsProps {
   snapActive: boolean
   snapStepM: number
   gizmoMode: GizmoMode
+  /** Set when a press starts a gizmo drag: the body behind the gizmo must not take that press's click. */
+  handlePressRef: React.RefObject<boolean>
   onPatchPlacementChange?: (patch: FixturePatch, next: PatchPlacementUpdate, settled: boolean) => void
 }
 
@@ -915,6 +916,7 @@ function Controls({
   snapActive,
   snapStepM,
   gizmoMode,
+  handlePressRef,
   onPatchPlacementChange,
 }: ControlsProps) {
   const tcRef = useRef<React.ComponentRef<typeof TransformControls>>(null!)
@@ -1045,11 +1047,10 @@ function Controls({
     const onDrag = (e: { value: boolean }) => {
       if (orbitRef.current) orbitRef.current.enabled = !e.value
       draggingRef.current = e.value
-      // TC's gizmo meshes have no R3F handlers, so R3F passes the pointerdown
-      // through to whichever body sits behind. Notify any pending body-drag
-      // discriminators so they bail before they can promote or fire onClick.
+      // TC's gizmo meshes have no R3F handlers, so R3F passes the press through
+      // to whichever body sits behind; that body's click must not select it.
       if (e.value) {
-        notifyTransformDragStart()
+        handlePressRef.current = true
         // Snapshot the patch's pitch at drag start; the alt-az proxy carries
         // only yaw, so the extracted Euler X is the *delta* from this anchor.
         dragStartPitchRef.current = selectedPatch?.basePitchDeg ?? 0
@@ -1058,7 +1059,7 @@ function Controls({
     }
     tc.addEventListener('dragging-changed', onDrag)
     return () => tc.removeEventListener('dragging-changed', onDrag)
-  }, [patchTarget, flush, orbitRef, selectedPatch?.basePitchDeg])
+  }, [patchTarget, flush, orbitRef, handlePressRef, selectedPatch?.basePitchDeg])
 
   return (
     <>
@@ -1085,27 +1086,6 @@ function Controls({
 
 const SCRATCH_VEC1 = new Vector3()
 const SCRATCH_EULER = new Euler()
-
-// Wireframe box marking the stage boundary. Stage occupies lighting
-// (X∈[-w/2,w/2], Y∈[0,d], Z∈[0,h]) → R3F (x∈[-w/2,w/2], y∈[0,h], z∈[-d,0]);
-// box centre is therefore (0, h/2, -d/2).
-function StageBoxOutline({
-  width,
-  depth,
-  height,
-}: {
-  width: number
-  depth: number
-  height: number
-}) {
-  return (
-    <mesh position={[0, height / 2, -depth / 2]} raycast={NO_RAYCAST}>
-      <boxGeometry args={[width, height, depth]} />
-      <meshBasicMaterial visible={false} />
-      <Edges color="#7a8a9e" />
-    </mesh>
-  )
-}
 
 // Captures any canvas click while placement mode is active. Raycasts from the
 // camera against the y=targetY plane so a click anywhere on screen projects
@@ -1196,50 +1176,10 @@ function StageBackWall({ width, depth, height }: { width: number; depth: number;
   )
 }
 
-// Lighting → R3F: X right (R3F +X) red, Y upstage (R3F −Z) green, Z up (R3F +Y) blue.
-function OriginMarkers({ depth }: { depth: number }) {
-  const len = 0.6
-  return (
-    <group>
-      <arrowHelper args={[AXIS_X, ORIGIN, len, 0xd45757, 0.12, 0.08]} />
-      <arrowHelper args={[AXIS_UPSTAGE, ORIGIN, len, 0x6cc36c, 0.12, 0.08]} />
-      <arrowHelper args={[AXIS_UP, ORIGIN, len, 0x6ba8e8, 0.12, 0.08]} />
-      <Text
-        font={stageTextFont}
-        position={[0, 0.002, 0.3]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.35}
-        color="#a3b6c9"
-        anchorX="center"
-        anchorY="middle"
-        raycast={NO_RAYCAST}
-      >
-        FOH
-      </Text>
-      <Text
-        font={stageTextFont}
-        position={[0, 0.002, -depth - 0.3]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={0.28}
-        color="#6a7d92"
-        anchorX="center"
-        anchorY="middle"
-        raycast={NO_RAYCAST}
-      >
-        upstage
-      </Text>
-    </group>
-  )
-}
-
-const ORIGIN = new Vector3(0, 0, 0)
-const AXIS_X = new Vector3(1, 0, 0)
-const AXIS_UPSTAGE = new Vector3(0, 0, -1)
-const AXIS_UP = new Vector3(0, 1, 0)
 
 /**
  * Feeds the haze governor (`scene/hazeGovernor.ts`) from the frame loop: after the frame has
- * rendered (priority 2, past the composer's 1), the gap since the previous frame counts only when
+ * rendered (priority 2, past `STAGE_RENDER_PRIORITY`), the gap since the previous frame counts only when
  * that frame asked for this one from inside the loop — R3F's `internal.frames` is 2 when a
  * `useFrame` invalidated — so an idle canvas, or one redrawn by a fader, never reads as slow.
  */

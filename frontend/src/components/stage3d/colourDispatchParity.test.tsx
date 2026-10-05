@@ -52,7 +52,7 @@ vi.mock('@/hooks/useGelIndex', async () => {
  */
 
 // Cone opacity is the linear intensity times this fixed scale — see applyColour in FixtureModel.
-const CONE_SCALE = 0.32
+const CONE_SCALE = 1
 
 interface Resolved {
   colour: string

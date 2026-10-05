@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ScreenPoint } from '../../../lib/stageProjection'
-import { DRAG_PX_THRESHOLD } from '../useBodyDrag'
+import { DRAG_PX_THRESHOLD } from '../dragThreshold'
 
 export interface SectionDragOptions {
   /**
@@ -107,6 +107,8 @@ export interface SectionPressOptions {
    * to decline the drag — a bar that turns out to be edge-on in this section.
    */
   buildDrag?: () => SectionDragOptions | undefined
+  /** A press that becomes a drag with no `buildDrag` to answer it: handed the move that promoted it. */
+  onDragInstead?: (ev: PointerEvent) => void
 }
 
 /**
@@ -143,7 +145,11 @@ export function useSectionPress(toSection: ToSection) {
         if (travel < DRAG_PX_THRESHOLD) return
         promoted = true
         cleanup()
-        const dragOpts = opts.buildDrag?.()
+        if (!opts.buildDrag) {
+          opts.onDragInstead?.(ev)
+          return
+        }
+        const dragOpts = opts.buildDrag()
         if (!dragOpts) return
         // Seeded from the ORIGINAL press, so the grab offset is measured from where the operator
         // took hold of the shape, not from wherever the pointer had got to by the threshold.

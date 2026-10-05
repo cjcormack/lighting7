@@ -53,7 +53,7 @@ import { isPublicPath } from "./lib/publicPath";
 
 // Route-level lazy boundaries for two of the four heavy islands.
 //
-// `routes/Stage` pulls @react-three/fiber, drei and postprocessing (~290 kB);
+// `routes/Stage` pulls @react-three/fiber and drei (~290 kB);
 // `routes/PromptBookPage` pulls react-pdf and pdfjs (~415 kB). Neither is on the path to the
 // login screen, so importing them statically made every cold boot — and every post-update
 // restart — parse both before anything painted. The redirects live in the same modules and so

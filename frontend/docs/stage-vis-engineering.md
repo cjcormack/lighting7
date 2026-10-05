@@ -211,8 +211,8 @@ multi-element pixel bar (plus a placeholder for a patch with no fixture).
 because each medium curves them differently:
 
 - the DOM marker folds `perceptualBrightness` into a box-shadow and an opacity;
-- the 3D scene splits them — perceptual on the lens, **linear** on the cone and pool, because those
-  opacities double as the `LIGHT_OFF_OPACITY` beam cull.
+- the 3D scene splits them — `level^0.6` on the lens (`lensColour`), **linear** on the cone and
+  pool, because those strengths double as the `LIGHT_OFF_OPACITY` beam cull.
 
 This is why `useColourAppearance` is not the shared piece: it returns only a pre-baked CSS string and
 drops the level. It stays as it is for the swatch callers that only want the string.
@@ -530,13 +530,18 @@ added to it. The findings are in the design record (`stage-view-design/INDEX.md`
 today"); what follows is what the code does now and why, since each piece is easy to undo by
 "tidying".
 
-### Memory: no MSAA in the composer, DPR at 1.5
+### No post-processing, DPR at 1.5
 
-`Bloom.tsx` passes `multisampling={0}`. `@react-three/postprocessing` defaults to 8× MSAA on
-half-float targets, and at a Retina full-window size that colour target alone ran to hundreds of MB —
-the likeliest cause of Safari's "reloaded because it was using significant memory". Beams and pools
-are soft additive shapes MSAA does nothing for. The canvas keeps `antialias`, but once the composer
-draws the scene it no longer reaches the bodies' edges; that is accepted.
+The scene is drawn straight to the canvas by `StageRender` (priority `STAGE_RENDER_PRIORITY`, after
+the bodies' and emitters' flushes — R3F stops drawing on its own once any frame subscriber has a
+positive priority). There is no composer and no bloom, as in the prototype
+(`../docs/plans/stage-view-design/prototype.html`): every fragment encodes itself for the canvas
+(`linearToOutputTexel`), so the additive beams and the overlapping pools blend in display space and
+two beams crossing visibly sum. The canvas clears **opaque** to `STAGE_BACKGROUND`: a beam adds at
+full alpha, and over a transparent clear its faint edge would darken the CSS background behind it.
+The canvas's own `antialias` reaches the bodies' edges again, and the composer's half-float targets —
+which ran to hundreds of MB at a Retina full-window size with their default 8× MSAA, the likeliest
+cause of Safari's "reloaded because it was using significant memory" — are gone with it.
 
 The canvas's `dpr` is `[1, 1.5]`: at 2 every target behind the canvas holds four times the pixels of
 1×. `StageEmitters` drops the volumetric march by a third above 1×, since 1.5 is still 2.25× the
@@ -566,7 +571,7 @@ R3F already invalidates on an applied prop change, and drei's `OrbitControls` an
 - **Imperative buffer writes from effects** — `hideSlot` when a fixture loses its beam or
   unmounts, a body's `hide` and `setActive` — and the region uniforms (below). A body's parts are
   written from its own frame loop (§"Fixture bodies"), so they need no request of their own. The light table is packed in the emitters'
-  flush, which runs inside a frame (`EMITTER_FLUSH_PRIORITY`, before the composer), so it needs no
+  flush, which runs inside a frame (`EMITTER_FLUSH_PRIORITY`, before `StageRender`), so it needs no
   request of its own; a budget change does ask.
 - **The label layer** hands the store the canvas's `invalidate`.
 
@@ -681,13 +686,19 @@ without a room — the back wall and the catch floor:
   field radii at `d` from the aperture, and an unfrosted edge on the focal plane is as hard as the
   mask draws one. It replaced a lens-radius blur circle that made a 24 m wall look the same from DMX
   ~140 to 255. See §"Focus" under §"Fixture bodies" for the model, the constants and *Focus here*.
-- **No falloff with distance**, for `washConfig.ts`'s reason: a pool that dimmed with throw would
-  disagree with the uniform cone above it. The design record's item 8 asks for the aperture to set
-  a distance fall-off; the desk keeps its uniform pool, and the aperture sets the distance the
-  **focus** is measured from instead (§"Fixture bodies"). The lit colour is the finish × (fill + an exponential
-  roll-off of the light) plus a little of the light itself (`uSheen`), so a pool still reads as the
-  beam's colour on the near-black finishes a hall is painted in, and a rig at full does not clip to
-  white.
+- **A pool falls off from the aperture**, as the haze above it thins along the throw
+  (`washConfig.ts`): as the square of the distance out to `FALLOFF_KNEE_M` (6 m, the prototype's
+  throws) and linearly past it — how an eye adapted to the stage sees a long throw, not how a meter
+  reads it. A beam narrower than 20° lands brighter by the area it does not spread over (capped for
+  a pinspot), so a 15° Revolution on the balcony still lands on the back cloth 24 m away; a wider
+  beam lands as the prototype drew it. The aperture also sets the distance the **focus** is measured
+  from (§"Fixture bodies").
+- **The colour is the prototype's**: the finish × (the room's ambient 0.012 + the material's own
+  `fill` + every light), rolled off once by `1 − exp(−·)` and encoded, so overlapping pools add and a
+  rig at full does not clip to white. The light reflects off no less than `uReflectFloor` of itself,
+  so a pool still reads on the near-black finishes a hall is painted in — black serge shows a spot —
+  while the ambient keeps the finish's own darkness. A light row carries colour × level ×
+  `POOL_SCALE` (40, the prototype's typical lamp power).
 - **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers samples the
   gobo atlas in its own frame, blurred by the same focus term as its edge — §"Gobos on surfaces"
   under §"Fixture bodies".
@@ -760,8 +771,12 @@ its full hue and bloomed. `lensColour` (`bodies/palette.ts`, `paintLens` until s
 lens dark glass at level 0 and the hue at level 1, never brighter than its level — every cell of
 every body goes through it. Since session 6 a lens is a flat disc or segment on the barrel's face,
 one instance per cell, and housings, yokes and hangers are matt near-black **lit by the surface
-shader** like any surface, so a beam crossing a lantern lights it; the active highlight tints them
-to a slate. The torus ring still marks the selection.
+shader** like any surface, with a fill of their own (`HOUSING_FILL`) so the rig reads against a dark
+room. A lens mixes from dark glass to its hue in display space on `level^0.6`, and nothing glows: there
+is no bloom. **Selection is the housing alone**, as the prototype has it: a selected fixture's
+housing turns the desk's blue (`HOUSING_ACTIVE_COLOR`, its brighter fill folded into the instance
+tint) and its label the same blue chip; there is no ring, no outline and no change to any beam, which
+always shows true output. Hover lights a body only while editing; in view mode it changes the cursor.
 
 ### The label layer
 
@@ -772,8 +787,9 @@ canvas. `StageLabel` now renders an empty anchor group and registers it with a `
 — hovered or selected first, then positions (rigging and regions), then fixtures — and hide whatever
 collides, with a couple of pixels' gap. Three rules:
 
-- **The mode is the store's, not the call sites'.** *Positions* (the default) shows the rigging and
-  the regions and a fixture only while hovered or selected; *All fixtures* every fixture that fits;
+- **The mode is the store's, not the call sites'.** *Positions* (the default) shows the rigging,
+  the regions while editing (a region draws no label outside Edit), and a fixture only while hovered
+  or selected; *All fixtures* every fixture that fits;
   *None* nothing at all — not even the selection, unlike the prototype. So `FixtureModel`,
   `RiggingMeshes` and `StageRegionMeshes` mount their label unconditionally and say only its `kind`
   and whether it is `emphasised`.
@@ -782,13 +798,23 @@ collides, with a couple of pixels' gap. Three rules:
 - **The flag was a boolean.** `StageViewFlags.labels` is a `StageLabelMode` now, and a desk's stored
   `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`).
 
-### The 3D text font
+### A quiet stage: no chrome, regions and bars as the real things
 
-drei's `Text` loads its default font from jsdelivr, which an offline desk cannot reach. The two floor
-labels (*FOH*, *upstage*) are given the Liberation Sans TTF that react-pdf's pinned pdf.js ships,
-imported as an asset URL so Vite bundles it — the same transitive reach `ScriptViewer` makes for
-pdf.js's worker. If react-pdf ever drops pdf.js, the import fails the build rather than falling back
-to the network.
+The stage box's wireframe, the XYZ arrows and the *FOH* / *upstage* floor text are gone; the grid
+stays as Edit's measure. **Regions** are data — the playing surface, an aim target and a beam
+receiver (D5) — so outside Edit a region is only a plain lit deck, drawn only where no platform links
+to it; a linked platform draws its own deck and finish. In Edit a region gains a faint outline and its
+name and takes a click. **Rigging is drawn by kind** (`riggingShape.ts`): a bar, pipe or boom is a
+48 mm tube in `#50565e`, a truss four such chords, and a ledge, floor stand or other mount nothing
+outside Edit (a faint guide inside it, so it can still be picked); a thin tube is picked through an
+invisible box round it.
+
+**Neither moves by dragging it** on the orbit or eye camera: a drag that starts on a region or a bar
+always turns the camera, and a click selects it. They move by their handles — the region's centre
+puck (`RegionEditHandles`) and the bar's middle cube (`RiggingEndpointHandles`), beside the corner,
+height, turn and end handles. On a section a *selected* object still drags by its body, and a drag
+that starts on an unselected one pans (`useSectionPress`'s `onDragInstead`), so a stage-wide region
+never stands between the operator and the view.
 
 ## Cameras and viewpoints
 
@@ -827,11 +853,6 @@ Four rules:
   `<PerspectiveCamera makeDefault>`. drei's orthographic camera allocates a render target for a
   feature this never uses, and R3F sizes a default camera only on the *next* resize, so
   `useDefaultCamera` fits the frustum itself when it swaps one in.
-- **A camera swap must ask for a frame after the composer has rebuilt.** `@react-three/postprocessing`
-  rebuilds the composer (new passes, new targets) whenever the default camera changes, in an effect
-  *after* the swap's own frame — which the old composer drew through the old camera. On a `demand`
-  frameloop nothing asked again, so the view sat on the previous camera's picture while the labels
-  had already moved. `Bloom` hands the composer a ref callback that invalidates on each new instance.
 
 The volumetric beam shader built each pixel's ray from `cameraPosition`, which fans out like a
 perspective camera's. Under an orthographic camera the rays are parallel: the shader reads
@@ -881,7 +902,7 @@ neither is still ignored. `components/stage3d/savedViewpoints.ts` is the pure ha
   remount (a route change, *Restore*, a reload) keeps wherever the operator has looked since, and
   picking the view again — even the one already current — lands it afresh. Two saved orbit views in
   a row move the mounted rig rather than remount it. Every landing moves the camera imperatively and
-  invalidates; the bloom composer's rebuild on a *camera swap* is `Bloom`'s as before.
+  invalidates.
 - **Moving into Eye from a saved eye or seat view keeps the pose** — you are already standing there;
   from a saved orbit view, or any camera but the eye, it forgets it and seeds from the orbit camera,
   as session 1 did. Which camera a uuid draws through is noted from the rows
@@ -934,7 +955,7 @@ element's origin — its base, a platform's top, a flown piece's trim — and tu
 - **Drape**: one pleated cloth, or for a `DRAW` operation two halves gathered to their sides by the
   `open` state (closed when unstated), each hanging from its own edge. A cyc defaults pale.
 - **Platform**: the deck hangs **below** its Z, which is its top; a rail on the edge it names. A
-  platform linked to a drawn region leaves the deck to the region.
+  platform linked to a region draws its own deck all the same; the region draws no surface under it.
 - **Seating**: no parts, only seats — `seatList` in `lib/stageSeats.ts`, the same seat maths the
   backend's `SeatingParams.seat` is mirrored from, so the seats drawn are exactly the seats a `SEAT`
   view can name. One `InstancedMesh` for the block; it raycasts only while a seat pick is armed.
@@ -1060,10 +1081,10 @@ views, scene elements, patches, regions, riggings, fixtures and types — with `
 `set_scene` a moment before is in the picture and an entry that errored earlier cannot fail this
 render before its own fetch has run. Then it resolves the viewpoint once (a refetch mid-render moves
 the cache `Stage3D` draws from, never the camera, and never unmounts the canvas), mounts `Stage3D`,
-and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it, so
-the stage text's font counts — and for the source to settle. Then four frames a task apart (the
-emitters lay out and pack the light table; the bloom composer rebuilds after its camera swap and
-needs the next), and `toBlob`. It gives up three seconds before the desk would, naming what never
+and waits for the capture canvas to report the scene mounted — a `Suspense` boundary around it — and
+for the source to settle. Then four frames a task apart (the
+emitters lay out and pack the light table; the next draws through the camera the viewpoint swapped
+in), and `toBlob`. It gives up three seconds before the desk would, naming what never
 arrived, so Claude hears *waiting for the scene to mount* rather than a bare timeout.
 
 **Disposal.** The host unmounts the job on its outcome, before the upload goes; R3F's `unmount`
@@ -1172,7 +1193,7 @@ list.
 | View flags hide regions, rigging, fixtures (and their presses) | the scene, and `SectionScene` | ✓ | ✓ |
 
 Not carried over, on purpose: the plot's own fixture shapes, colours and label declutter (the scene
-and the label layer draw those), and its stage-envelope rectangle (the scene's box outline is it).
+and the label layer draw those), and its stage-envelope rectangle (the stage's floor and walls are it).
 Session 5 also made **a click on nothing clear the selection in view mode** too, on every camera
 (`handlePointerMissed`), which the record listed as noticed on the way.
 
@@ -1275,7 +1296,7 @@ only when its signature changes, as the emitters are — a drag, a pan or a tilt
   on its material so it still raycasts — so the click, the hover and the gizmo keep their plumbing.
   The instanced meshes take no pointer (`NO_RAYCAST`), and the section edit layer's hit radii never
   touched meshes.
-- **Housings are lit by the surface shader**, tinted per instance (the selection's slate), so a
+- **Housings are lit by the surface shader**, tinted per instance (the selection's blue), so a
   beam that crosses a lantern lights it. That surfaced a bug from session 3: three defines
   `USE_INSTANCING_COLOR` in the vertex stage only (the fragment stage gets `USE_COLOR`), so the
   receiver never tinted any instance — the seat pick's hover tint included. It now tests both.
@@ -1373,11 +1394,13 @@ one set of constants and the twin is pinned by `beamMask.test.ts`.
 used to be could not show a soft edge, an iris or a shutter cut, so it went, with `makeConeMaterial`
 and the shell's buffers. Three things keep the march honest:
 
-- **The beam's opacity is the ceiling.** The alpha is `opacity × (1 − exp(−gain × density × chord))`,
-  so side-on a beam sits at the opacity the shell drew it at, and a long chord — the camera looking
-  down a barrel — never adds up past it. A full look on the Commemoration Hall is as bright as it was
-  on `main`.
-- **The air thins as a beam spreads** (`VOL_SPREAD`): the same light over a wider cross-section.
+- **The air is the prototype's.** Each sample's density is `(1 − VOL_AXIAL_FADE · t) /
+  (VOL_SPREAD_NEAR + VOL_SPREAD · r)` — densest by the lamp, thinning along the throw `t` and as the
+  beam's radius `r` grows — and the integral, times the beam's colour × level and the haze, is rolled
+  off by `1 − exp(−VOL_GAIN · ·)` and encoded, added at full alpha. The chord is measured as the
+  prototype measured it, in the cone's frame scaled by its end radius: metres side-on, shortened by
+  `tan(half field)` down the axis, so a beam seen end-on stays bounded. No beam has a ceiling of its
+  own any more (`CONE_SCALE` is 1); two crossing add.
 - **The hull is depth-tested again**, face by face: its front face while the view ray starts outside
   the beam, so the stalls, a pros wall or a flat in front of a beam hide it as they hid the shell,
   and its back face while the ray starts inside (the camera in a beam, or a section's plane cutting

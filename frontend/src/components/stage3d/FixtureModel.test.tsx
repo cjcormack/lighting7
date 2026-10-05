@@ -47,8 +47,8 @@ import { createColourTicker } from './colourTicker'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 // Cone and pool opacity are the linear intensity times these fixed scales — see applyColour.
-const CONE_SCALE = 0.32
-const POOL_SCALE = 0.55
+const CONE_SCALE = 1
+const POOL_SCALE = 40
 
 interface Rendered {
   colour: string
