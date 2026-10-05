@@ -1225,12 +1225,6 @@ class State(val config: ApplicationConfig) {
             """.trimIndent())
 
             ensureInstallRow()
-            // One-off (stage-view plan session 9): stored rows naming a one-shot trigger go. Delete
-            // this line and `TriggerRowStrip.kt` once it has run on the one install.
-            stripStoredTriggerRows()
-            // One-off (fixture optics plan session 7): stored rows holding a fixture command go. Delete
-            // this line and `CommandRowStrip.kt` once it has run on the one install.
-            stripStoredCommandRows()
         }
 
         return database

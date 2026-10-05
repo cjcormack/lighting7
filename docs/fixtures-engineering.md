@@ -695,7 +695,7 @@ armed by its shared `master`, which is no property either.
   of its own, by any trigger's name — answer 400 `TRIGGER_NOT_STORABLE` naming every refused row.
   Record and Update capture from the programmer, which can hold none, and a busk pad presses a record
   that can hold none. The sync importer strips such a row from an older archive, and a one-off pass at
-  startup stripped the rows stored before this (`state/TriggerRowStrip.kt`, to be deleted once run).
+  startup stripped the rows stored before this.
 
 On the wire a trigger is a `TriggerPropertyDescriptor` (`type: "trigger"`, its channel, its arm
 channel and its label) at the end of a fixture's `properties` — so the cannon's panel can name its
@@ -784,9 +784,8 @@ The library's commands:
   no row is accepted only to vanish on the next import or clone. A Record whose programmer holds such
   a level is refused the same way, naming the row; the programmer itself may hold one, transiently,
   because the band guard sends it as idle.
-- **Stored rows** were stripped once at startup (`state/CommandRowStrip.kt`, to be deleted once run,
-  beside its trigger twin) and are stripped on every sync import (`models/commandRows.kt`'s
-  `stripCommandRows`): by name (the Varytec's and the Shehds' old `reset = 255`), and by level — a
+- **Stored rows** were stripped once at startup and are stripped on every sync import
+  (`models/commandRows.kt`'s `stripCommandRows`): by name (the Varytec's and the Shehds' old `reset = 255`), and by level — a
   Look or cue row on a property sharing a command's channel holding a level in its band (the Fusion's
   motor mode at 251, the Orbit's program at 200, the Slender's special function at 200, a MAC 250
   strobe row at 208–255), a group row judged by every member's type. Template rows hold intents and

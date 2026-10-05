@@ -184,7 +184,7 @@ which made three things visible:
 **What it proves**: *the Source Four Revolution's definition describes the units in the hall*, so a
 cue's frames, zoom, wheel and scroller draw on the Stage view as they land on the rig.
 
-**Why it is here**: [`fixture-optics-plan.md`](fixture-optics-plan.md) builds on ETC's manual
+**Why it is here**: [`fixture-optics-plan.md`](completed/fixture-optics-plan.md) builds on ETC's manual
 (7160M1200 Rev E) and the ChamSys capture. Neither states the values below, so each is an estimate
 marked `// Estimate:` at its source (the plan's D15). The plan can be built before this runs; its
 answers correct the annotations afterwards.
