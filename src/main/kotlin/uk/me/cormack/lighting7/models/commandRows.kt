@@ -23,9 +23,8 @@ import uk.me.cormack.lighting7.fixture.FixtureCommands
  * ([uk.me.cormack.lighting7.state.CommandOutput]) catches whatever those produce, as it does every
  * other writer. Parks are channel-level and judged when the show starts (`Show.dropRefusedParks`).
  *
- * Returns how many rows went. Must run inside a transaction. Two callers: the one-off startup pass
- * ([uk.me.cormack.lighting7.state.stripStoredCommandRows], to be deleted once it has run on the one
- * install), and every sync import, so an archive written before this session cannot bring one back.
+ * Returns how many rows went. Must run inside a transaction. Every sync import runs it, so an
+ * archive written before this session cannot bring one back.
  */
 fun stripCommandRows(project: DaoProject): Int {
     val index = CommandIndex.of(project)

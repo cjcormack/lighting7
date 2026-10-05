@@ -2186,7 +2186,7 @@ The surface shader lands every light as a pool through one loop over the light t
 stops at the first surface on the axis — crude occlusion, no shadow maps. The design record's
 §"Lighting the room" sketched a quality tier: shadow maps for up to four selected heads, and gobos
 projected by sampling the existing gobo atlas in light space — the gobo half landed on every surface
-without a tier in [`fixture-optics-plan.md`](fixture-optics-plan.md) session 4 (D10,
+without a tier in [`fixture-optics-plan.md`](completed/fixture-optics-plan.md) session 4 (D10,
 `frontend/docs/stage-vis-engineering.md` §"Gobos on surfaces"). **Trigger**: an operator needs to see a
 shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light table — a
 shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a starting point.

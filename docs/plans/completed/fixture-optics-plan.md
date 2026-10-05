@@ -1,9 +1,10 @@
 # Fixture optics — every beam channel the Stage view can see
 
-> **Document status: DONE — sessions 0–8 done.** Approved by Chris, 2026-10-02. The survey behind it
+> **Document status: DONE — sessions 0–8 shipped 2026-10-02 to 2026-10-05, the last as `ec58d85`
+> ([PR #55](https://github.com/cjcormack/lighting7/pull/55)).** Approved by Chris, 2026-10-02. The survey behind it
 > (what the manual says, what each fixture type declares, what the Stage view reads, with the numbers)
-> is in [`fixture-optics-design/INDEX.md`](fixture-optics-design/INDEX.md). The same plan for human
-> readers is [`fixture-optics-design/fixture-optics.html`](fixture-optics-design/fixture-optics.html), with a live
+> is in [`fixture-optics-design/INDEX.md`](../fixture-optics-design/INDEX.md). The same plan for human
+> readers is [`fixture-optics-design/fixture-optics.html`](../fixture-optics-design/fixture-optics.html), with a live
 > copy at <https://claude.ai/artifact/3iPfQt9esafgbnonifFGxk> (the checked-in file is the authority).
 >
 > This document is the engineering half. Where it and the record disagree, this plan wins.
@@ -281,8 +282,8 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 ## 6. Migration
 
 - **No DB migration.** `media` is additive.
-- **Session 7's strip of stored RESET options** is a one-off pass at startup, logged, deleted once it
-  has run on the one install.
+- **Session 7's strip of stored RESET options** was a one-off pass at startup, logged. It ran on the
+  one install on 2026-10-05, removing nothing, and was deleted with this plan's move to `completed/`.
 - **`formatVersion` 22** (P2), with its `docs/sync-engineering.md` entry.
 - **Project 15's fitted media** is Chris's to set (P4).
 
@@ -299,7 +300,7 @@ engineering-doc paragraphs written, and its done-marker here: a one-line row wit
 
 ## 8. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-S4REV-PERSONALITIES` — the 14, 15 and 23-channel modes (session 0).
 - `FU-GOBO-CUSTOM-IMAGES` — a venue's own gobo artwork for fitted slots (session 3).
@@ -351,7 +352,7 @@ Beyond the unit suites, at the desk, in project 15:
 ## 11. Open questions
 
 All of these are about the hall's units, not the code, and are steps of `FU-MANUAL-S4REV-OPTICS` in
-[`manual-validation.md`](manual-validation.md):
+[`manual-validation.md`](../manual-validation.md):
 
 1. Which module is in each Revolution's front bay, and what is loaded in it?
 2. Is the scroller string ETC's stock 12 colours?

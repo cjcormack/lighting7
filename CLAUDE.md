@@ -222,7 +222,7 @@ open gobo, the Robe's closed shutter) — for `holdMs`, above composition and un
 it) is held idle between commands and a raw write on it dropped. One command per unit (`COMMAND_BUSY`),
 refused in Blind (`COMMAND_BLIND`) or on a parked channel (`COMMAND_PARKED`); a blackout does not cut a
 hold short, a project switch does. Stored rows holding one were stripped once at startup
-(`state/CommandRowStrip.kt`, delete once run) and are on every sync import. See
+and are on every sync import. See
 `docs/fixtures-engineering.md` §"@FixtureCommand".
 
 **Travel time** (fixture optics plan session 8, D14) is drawn, never output: `@FixtureType(travel =

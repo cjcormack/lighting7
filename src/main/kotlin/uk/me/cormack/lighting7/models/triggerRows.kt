@@ -16,9 +16,7 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
  * template row, a deferred effect) naming any trigger's name at all. Returns how many rows went.
  * Must run inside a transaction.
  *
- * Two callers: the one-off startup pass ([uk.me.cormack.lighting7.state.stripStoredTriggerRows],
- * to be deleted once it has run on the one install), and every sync import, so an archive written
- * before v21 cannot bring a raised trigger back.
+ * Every sync import runs it, so an archive written before v21 cannot bring a raised trigger back.
  */
 fun stripTriggerRows(project: DaoProject): Int {
     val index = TriggerIndex.of(project)

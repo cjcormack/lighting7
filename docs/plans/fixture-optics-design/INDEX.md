@@ -8,7 +8,7 @@ project 15 (*The Commemoration Hall*):
 3. The frames, gel scroller and forward and rear beam wheels have no effect.
 
 He asked for the problem to be widened into a survey of every fixture type. This record holds that
-survey and the evidence behind it. The plan is [`../fixture-optics-plan.md`](../fixture-optics-plan.md);
+survey and the evidence behind it. The plan is [`../completed/fixture-optics-plan.md`](../completed/fixture-optics-plan.md);
 the HTML version for human readers is [`fixture-optics.html`](fixture-optics.html).
 
 **Status: approved, 2026-10-02.**
