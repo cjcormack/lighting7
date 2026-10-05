@@ -140,6 +140,58 @@ describe('EditSceneElementForm (stage-view plan session 5)', () => {
     expect(update.mock.calls[1]![0]).toMatchObject({ force: true, params: { rows: 4 } })
   })
 
+  it('a seating picks its chair and frame, and adds an aisle whose problems sit beside it', async () => {
+    update.mockReturnValueOnce({ unwrap: () => Promise.resolve(element()) })
+    update.mockReturnValueOnce(refuse(400, "params.aisles[0].afterSeat (12) must be before the row's last seat (12)"))
+    const stalls = element({
+      kind: 'SEATING',
+      name: 'Stalls',
+      widthM: 0,
+      depthM: 0,
+      heightM: 0,
+      params: { rows: 10, seatsPerRow: 12, rowPitchM: 0.9, seatPitchM: 0.5 },
+    })
+    render(<EditSceneElementForm element={stalls} projectId={3} onClose={() => {}} />)
+    expect((screen.getByLabelText('Chair') as HTMLSelectElement).value).toBe('THEATRE')
+    fireEvent.change(screen.getByLabelText('Chair'), { target: { value: 'BANQUET' } })
+    type('Frame colour', '#c9a44c')
+    fireEvent.click(screen.getByRole('button', { name: 'Aisle' }))
+    expect((screen.getByLabelText('Aisle after seat') as HTMLInputElement).value).toBe('6')
+    type('Aisle width', '1.1')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
+    expect(update.mock.calls[0]![0].params).toEqual({
+      rows: 10,
+      seatsPerRow: 12,
+      rowPitchM: 0.9,
+      seatPitchM: 0.5,
+      chair: 'BANQUET',
+      frameColour: '#c9a44c',
+      aisles: [{ afterSeat: 6, widthM: 1.1 }],
+    })
+
+    type('Aisle after seat', '12')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    const problem = await screen.findByText("(12) must be before the row's last seat (12)")
+    expect(problem.closest('[data-aisle="0"]')).not.toBeNull()
+  })
+
+  it('adds each aisle at a free gap nearest the middle, and none where a row has no gap', () => {
+    const seating = (seatsPerRow: number) =>
+      element({ kind: 'SEATING', name: 'Stalls', widthM: 0, depthM: 0, heightM: 0, params: { rows: 2, seatsPerRow, rowPitchM: 0.9, seatPitchM: 0.5 } })
+    render(<EditSceneElementForm element={seating(12)} projectId={3} onClose={() => {}} />)
+    const add = screen.getByRole('button', { name: 'Aisle' })
+    fireEvent.click(add)
+    fireEvent.click(add)
+    fireEvent.click(add)
+    const seats = screen.getAllByLabelText('Aisle after seat').map((el) => (el as HTMLInputElement).value)
+    expect(seats).toEqual(['6', '5', '7'])
+    cleanup()
+
+    render(<EditSceneElementForm element={seating(1)} projectId={3} onClose={() => {}} />)
+    expect((screen.getByRole('button', { name: 'Aisle' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('lists what moves it, read-only — nothing until cues, stacks and Looks can', () => {
     render(<EditSceneElementForm element={element()} projectId={3} onClose={() => {}} />)
     expect(screen.getByText('Moves with')).toBeTruthy()

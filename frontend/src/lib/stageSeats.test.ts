@@ -37,9 +37,31 @@ describe('the seats of a seating element', () => {
     expect(c1.z).toBeCloseTo(0.4, 9)
   })
 
+  // The backend's StageSceneTest pins the same seats: six banquet chairs a side of a centre aisle.
+  it('opens an aisle in every row without renumbering a seat, the row still centred', () => {
+    const hall = {
+      ...stalls,
+      positionY: -2.65,
+      params: { rows: 17, seatsPerRow: 12, rowPitchM: 0.85, seatPitchM: 0.5, chair: 'BANQUET', aisles: [{ afterSeat: 6, widthM: 1.1 }] },
+    }
+    const params = seatingParams(hall)!
+    expect(params.chair).toBe('BANQUET')
+    expect(seatBase(hall, params, 'A1')!.x).toBeCloseTo(-3.3, 9)
+    expect(seatBase(hall, params, 'A6')!.x).toBeCloseTo(-0.8, 9)
+    expect(seatBase(hall, params, 'A7')!.x).toBeCloseTo(0.8, 9)
+    const q12 = seatBase(hall, params, 'Q12')!
+    expect(q12.x).toBeCloseTo(3.3, 9)
+    expect(q12.y).toBeCloseTo(-2.65 - 16 * 0.85, 9)
+    expect(seatList(hall, params)).toHaveLength(204)
+  })
+
   it('narrows what it reads rather than casting', () => {
     expect(seatingParams({ kind: 'OBJECT', params: stalls.params })).toBeNull()
     expect(seatingParams({ kind: 'SEATING', params: { rows: 'twelve' } })).toBeNull()
+    const odd = seatingParams({ kind: 'SEATING', params: { ...stalls.params, chair: 'pew', frameColour: 'gold', aisles: [{ afterSeat: 'six' }, null] } })!
+    expect(odd.chair).toBe('THEATRE')
+    expect(odd.frameColour).toBeNull()
+    expect(odd.aisles).toEqual([])
     expect(parseSeatId('6F')).toBeNull()
     expect(parseSeatId(' b12 ')).toEqual({ row: 'B', number: 12 })
   })

@@ -4,7 +4,9 @@
  * `StageSceneTest` pin the same seat, so the two cannot drift apart unnoticed.
  *
  * Row [firstRow] is nearest the stage, at the element's origin; each further row is a row pitch
- * further from the stage (local −Y) and a rake higher. Seat 1 is at the stage-right end (local −X).
+ * further from the stage (local −Y) and a rake higher. Seat 1 is at the stage-right end (local −X),
+ * and the row — its aisles included — is centred on the origin. An aisle moves the seats past it
+ * without renumbering them.
  * The element's yaw turns the whole block anticlockwise about its origin, seen from above — the
  * desk's yaw everywhere (`docs/fixtures-engineering.md`).
  *
@@ -13,6 +15,15 @@
 
 import type { StageElementDto } from '../api/stageElementApi'
 
+/** What a seating's seats are drawn as: the backend's `ChairStyle`. */
+export type ChairStyle = 'THEATRE' | 'BANQUET'
+
+/** A gap in every row: [widthM] more between seat [afterSeat] and the next. */
+export interface SeatingAisle {
+  afterSeat: number
+  widthM: number
+}
+
 export interface SeatingParams {
   rows: number
   seatsPerRow: number
@@ -20,6 +31,10 @@ export interface SeatingParams {
   seatPitchM: number
   firstRow: string
   rakeM: number
+  aisles: SeatingAisle[]
+  chair: ChairStyle
+  /** The chair's frame as `#rrggbb`; null for the style's own. */
+  frameColour: string | null
 }
 
 export interface LightingPoint3 {
@@ -51,6 +66,11 @@ export function seatingParams(element: Pick<StageElementDto, 'kind' | 'params'>)
   const p = element.params
   if (!finite(p.rows) || !finite(p.seatsPerRow) || !finite(p.rowPitchM) || !finite(p.seatPitchM)) return null
   const firstRow = typeof p.firstRow === 'string' && /^[A-Z]$/.test(p.firstRow) ? p.firstRow : 'A'
+  const aisles = (Array.isArray(p.aisles) ? p.aisles : [])
+    .filter((a): a is SeatingAisle => a != null && typeof a === 'object' && finite(a.afterSeat) && finite(a.widthM))
+    .map((a) => ({ afterSeat: a.afterSeat, widthM: a.widthM }))
+  const chair = typeof p.chair === 'string' && p.chair.toUpperCase() === 'BANQUET' ? 'BANQUET' : 'THEATRE'
+  const frameColour = typeof p.frameColour === 'string' && /^#[0-9a-fA-F]{6}$/.test(p.frameColour) ? p.frameColour : null
   return {
     rows: p.rows,
     seatsPerRow: p.seatsPerRow,
@@ -58,7 +78,21 @@ export function seatingParams(element: Pick<StageElementDto, 'kind' | 'params'>)
     seatPitchM: p.seatPitchM,
     firstRow,
     rakeM: finite(p.rakeM) ? p.rakeM : 0,
+    aisles,
+    chair,
+    frameColour,
   }
+}
+
+/** Seat [number]'s offset along its row (local X) from the row's centre, its aisles counted. */
+export function seatOffsetM(params: Pick<SeatingParams, 'seatsPerRow' | 'seatPitchM' | 'aisles'>, number: number): number {
+  let span = (params.seatsPerRow - 1) * params.seatPitchM
+  let before = 0
+  for (const aisle of params.aisles) {
+    span += aisle.widthM
+    if (aisle.afterSeat < number) before += aisle.widthM
+  }
+  return (number - 1) * params.seatPitchM + before - span / 2
 }
 
 type Pose = Pick<StageElementDto, 'positionX' | 'positionY' | 'positionZ' | 'yawDeg'>
@@ -76,7 +110,7 @@ export function seatBase(pose: Pose, params: SeatingParams, id: string): Lightin
   if (parsed == null) return null
   const r = parsed.row.charCodeAt(0) - params.firstRow.charCodeAt(0)
   if (r < 0 || r >= params.rows || parsed.number < 1 || parsed.number > params.seatsPerRow) return null
-  const lx = (parsed.number - 1 - (params.seatsPerRow - 1) / 2) * params.seatPitchM
+  const lx = seatOffsetM(params, parsed.number)
   const ly = -r * params.rowPitchM
   const yaw = (pose.yawDeg * Math.PI) / 180
   return {

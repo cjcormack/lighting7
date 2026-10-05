@@ -265,7 +265,9 @@ internal class SceneSetupTools(private val state: State) {
                         if (shown.isNotEmpty()) put("params", shown)
                         seating[e.uuid]?.let { s ->
                             val last = s.params.firstRow.first() + (s.params.rows - 1)
-                            put("seats", "${s.params.rows * s.params.seatsPerRow} (rows ${s.params.firstRow}–$last, seats 1–${s.params.seatsPerRow}; seat 1 at the stage-right end)")
+                            val aisles = s.params.aisles.takeIf { it.isNotEmpty() }
+                                ?.joinToString(prefix = "; aisles after seat ") { it.afterSeat.toString() }.orEmpty()
+                            put("seats", "${s.params.rows * s.params.seatsPerRow} (rows ${s.params.firstRow}–$last, seats 1–${s.params.seatsPerRow}; seat 1 at the stage-right end$aisles)")
                         }
                         if (e.hidden) put("hidden", true)
                     })
