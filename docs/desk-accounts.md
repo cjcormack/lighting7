@@ -62,7 +62,7 @@ may run a reset, a lamp strike or a lamp off on the desk's own listener** — `P
 /projects/{id}/patches/{id}/commands/{command}` sits in no `adminOnly {}` subtree and calls no
 `requireAdmin()`, because whoever is at the desk is who re-homes a head that lost its position
 mid-show. The fixture panel asks first, naming the unit and the command. On the public listener the
-route — and MCP's `run_fixture_command`, and the chat's for a remote caller — is refused (403
+route — and MCP's `run_fixture_command` — is refused (403
 `REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`) unless an admin has turned on *Allow fixture
 commands over remote access*, off by default. REST, so the socket gains no operation.
 

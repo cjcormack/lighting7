@@ -67,10 +67,6 @@ import java.util.UUID
  * the show's cue stacks and prompt-book markup from material the model has read — a patch export,
  * a plot, a photo, a script and a designer's notes.
  *
- * MCP only, not the in-app chat. The chat's conversation belongs to the current project, and
- * `switch_project` would move the show out from under it; the rest would work there, but the
- * source material these are for (PDFs and photos) arrives through an MCP client.
- *
  * Every tool **validates the whole request before writing anything**, and answers every problem
  * at once rather than the first: these calls carry tens or hundreds of rows transcribed from a
  * document, and a model that learns about row 40's typo only after rows 1–39 are written has to
@@ -84,7 +80,7 @@ class SetupTools(
     /** The desk's public base URL, for pointing the operator at a page; null when unknown. */
     private val deskUrl: () -> String? = { null },
 ) {
-    val toolDefs: List<AnthropicToolDef> = setupToolDefs
+    val toolDefs: List<ToolDef> = setupToolDefs
     private val scene = SceneSetupTools(state)
     private val render = RenderViewTool(state)
 

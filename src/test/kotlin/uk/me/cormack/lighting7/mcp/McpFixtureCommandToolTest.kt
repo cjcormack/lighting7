@@ -82,8 +82,5 @@ class McpFixtureCommandToolTest : RouteIntegrationTest() {
         patchVarytec()
         val rig = RigBriefing(state).describeRig()
         assertTrue("commands=reset (Reset, 5.0 s)" in rig, rig)
-        // The chat's fixture-type section (offered with the script tool) names them per type too.
-        val types = RigBriefing(state).fixtureTypeApi()
-        assertTrue("Fixture commands" in types && "`reset` (Reset, held 5.0 s)" in types, types)
     }
 }

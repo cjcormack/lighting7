@@ -25,8 +25,7 @@ import kotlin.math.roundToInt
  * signed-in desk window ([StageRenderService]) — Claude's way of seeing the model `set_scene`
  * built, to compare it with the operator's photo and correct it.
  *
- * MCP only, beside `set_scene` / `get_scene`, and not in the in-app chat (which is being retired,
- * so nothing new joins it). Read-only in every sense: the window draws on a canvas of its own and
+ * Beside `set_scene` / `get_scene`. Read-only in every sense: the window draws on a canvas of its own and
  * writes nothing — no DMX, no programmer, not even its own view. It answers in the **current**
  * project only, the one the desk's windows are drawing.
  *

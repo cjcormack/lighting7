@@ -20,7 +20,7 @@ val ALL_TABLES: List<Table> = listOf(
     DaoCueStacks, DaoCues,
     DaoCueLayers,
     DaoCueAdHocEffects, DaoCuePropertyAssignments, DaoCueTriggers,
-    DaoAiConversations, DaoCueSlots,
+    DaoCueSlots,
     DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,
     DaoStageElements, DaoStageViewpoints,

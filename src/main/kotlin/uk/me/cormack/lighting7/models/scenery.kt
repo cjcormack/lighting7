@@ -243,7 +243,7 @@ fun parseSceneryList(
 private val SCENERY_ITEM_KEYS = setOf("elementUuid", "state", "transitionMs", "uuid", "sortOrder")
 
 /**
- * A scenery list in the chat and MCP tools' shape — `[{element, visible?, open?, trimM?,
+ * A scenery list in the MCP tools' shape — `[{element, visible?, open?, trimM?,
  * transitionSeconds?}]`, the element by **name** (or uuid) and the states beside it — checked
  * exactly as [parseSceneryList] checks the REST shape, every problem at once.
  */

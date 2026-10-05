@@ -37,8 +37,10 @@ The repo split is:
   into `machine_overrides` was removed on 2026-08-24 along with the rest
   of the migrations — see
   [`InstallBootstrap.kt`](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt).
-* **Transient runtime state** (never synced): grand master / blackout state,
-  AI conversation history.
+* **Transient runtime state** (never synced): grand master / blackout state.
+  (AI conversation history was here until the in-app chat was removed; its
+  `ai_conversations` table is no longer declared, and an existing database
+  keeps the table as an orphan nothing reads.)
 
 Parked DMX channels are portable: operators use park to pin "house lights at
 50%" or to protect a hot-powered fixture plugged into a dimmer, both of which

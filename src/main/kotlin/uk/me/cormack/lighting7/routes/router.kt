@@ -64,7 +64,6 @@ fun Application.configureRouting(state: State) {
                     routeApiRestGroups(state)
                     routeApiRestLocate(state)
                     routeApiRestProgrammer(state)
-                    routeApiRestAiChat(state)
                     routeApiRestControlSurfaceTypes(state)
                     routeApiRestPerf(state)
                     routeApiRestInstall(state)

@@ -13,7 +13,7 @@ import { useSidebarOpen } from './useSidebarOpen'
  * would just forget on the next navigation, or forget on the wrong half of the app.
  *
  * The hook rather than `Layout` itself. `Layout` mounts the whole desk — four overview panels, the
- * DnD provider, the command palette, the AI panel's lazy boundary — so a render test of it would
+ * DnD provider, the command palette, the Screens sheet — so a render test of it would
  * exercise forty unrelated things to assert one boolean.
  */
 function draw(path: string) {

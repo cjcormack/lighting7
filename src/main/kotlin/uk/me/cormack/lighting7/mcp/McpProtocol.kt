@@ -19,9 +19,9 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.ai.FIXTURE_COMMANDS_REMOTE_REFUSAL
 import uk.me.cormack.lighting7.ai.RUN_FIXTURE_COMMAND
-import uk.me.cormack.lighting7.ai.AnthropicToolDef
 import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
+import uk.me.cormack.lighting7.ai.ToolDef
 import uk.me.cormack.lighting7.ai.ToolImage
 import uk.me.cormack.lighting7.ai.readOnlySetupToolNames
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
@@ -32,14 +32,13 @@ import uk.me.cormack.lighting7.update.BuildInfo
  * The MCP server itself: JSON-RPC 2.0 in, JSON-RPC 2.0 out, no transport. `McpServerModule`
  * carries it over streamable HTTP; tests call [handle] directly.
  *
- * The tools are the in-app chat's ([AiTools.mcpTools] — every one but `run_lighting_script`),
- * the show-setup tools only this surface has ([SetupTools]), and `describe_rig`, which answers
- * with what the chat puts in its system prompt each turn.
- * The chat gets that context for free; an MCP client gets nothing it does not ask for, so the
- * `instructions` sent at initialize tell the model to call it first.
+ * The tools are the show-running tools ([AiTools.toolDefs] — there is no script tool), the
+ * show-setup tools ([SetupTools]), and `describe_rig`, which answers with the live rig in prose
+ * ([RigBriefing]). An MCP client gets nothing it does not ask for, so the `instructions` sent at
+ * initialize tell the model to call it first.
  *
  * Stateless: no `Mcp-Session-Id`, no server-initiated messages, no SSE stream. Every tool call
- * reads and writes the desk's *current* project, exactly as the chat does.
+ * reads and writes the desk's *current* project.
  */
 class McpProtocol(private val state: State) {
     private val log = LoggerFactory.getLogger(McpProtocol::class.java)
@@ -47,7 +46,7 @@ class McpProtocol(private val state: State) {
     private val setupTools = SetupTools(state, tools, deskUrl = { runCatching { state.remoteAccess.publicUrl() }.getOrNull() })
     private val briefing = RigBriefing(state)
 
-    private val describeRigTool = AnthropicToolDef(
+    private val describeRigTool = ToolDef(
         name = DESCRIBE_RIG,
         description = "Describe the rig and the show as they are now: every fixture and group, the effect " +
             "library, running effects, parked channels, speed masters (with the uuids other tools take), looks, colour " +
@@ -61,9 +60,9 @@ class McpProtocol(private val state: State) {
 
     /**
      * Tool list in the order a client shows it: the orientation tool first, then the show-running
-     * tools the chat shares, then the show-setup tools only this surface has ([SetupTools]).
+     * tools ([AiTools]), then the show-setup tools ([SetupTools]).
      */
-    val toolDefs: List<AnthropicToolDef> = listOf(describeRigTool) + tools.mcpTools + setupTools.toolDefs
+    val toolDefs: List<ToolDef> = listOf(describeRigTool) + tools.toolDefs + setupTools.toolDefs
 
     /**
      * Handle one JSON-RPC message. Returns the response, or null for a notification (and for a
@@ -140,7 +139,7 @@ class McpProtocol(private val state: State) {
         appendLine()
         appendLine(SETUP_GUIDE)
         appendLine()
-        append(briefing.keyConcepts(scriptTool = false))
+        append(briefing.keyConcepts())
     }
 
     private suspend fun callTool(params: JsonObject, user: AuthenticatedUser): JsonObject {
@@ -202,7 +201,7 @@ class McpProtocol(private val state: State) {
         put("isError", isError)
     }
 
-    private fun AnthropicToolDef.toMcp() = buildJsonObject {
+    private fun ToolDef.toMcp() = buildJsonObject {
         put("name", name)
         put("description", description)
         put("inputSchema", inputSchema)

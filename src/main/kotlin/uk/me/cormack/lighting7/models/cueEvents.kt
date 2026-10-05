@@ -120,7 +120,7 @@ fun parseCueEventList(
 }
 
 /**
- * An event list in the chat and MCP tools' shape — `[{fixture, trigger, offsetSeconds?}]`, the
+ * An event list in the MCP tools' shape — `[{fixture, trigger, offsetSeconds?}]`, the
  * fixture by **key** or display name — checked exactly as [parseCueEventList] checks the REST shape.
  */
 fun parseToolCueEventList(

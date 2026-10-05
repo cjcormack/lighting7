@@ -4193,7 +4193,7 @@ and while it holds skips the `<aside>` sidebar (**hidden, not collapsed**), the 
 four overview panels and the sidebar's `marginLeft`; the panels' stored visibility is untouched, so
 they return on exit. On every other route the app is drawn whatever the fact says — the fixtures
 list is navigated *from* the sidebar — and a window that leaves a live view for it gets the app back
-and finds immersive waiting when it returns. Banners, `HandChip`, the AI panel and `DeskDndProvider`
+and finds immersive waiting when it returns. Banners, `HandChip` and `DeskDndProvider`
 are untouched. Full screen and immersive **compose** (D8): neither flips the other, and a windowed
 browser can be immersive while a full-screen one shows the app.
 

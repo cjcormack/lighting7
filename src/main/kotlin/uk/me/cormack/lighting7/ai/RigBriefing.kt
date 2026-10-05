@@ -22,10 +22,9 @@ import uk.me.cormack.lighting7.show.beamDirection
 import uk.me.cormack.lighting7.state.State
 
 /**
- * The live rig, described in prose for a model: what the in-app chat puts in its system prompt
- * every turn, and what the MCP server answers `describe_rig` with and sends as its `instructions`.
+ * The live rig, described in prose for a model: what the MCP server answers `describe_rig` with,
+ * and the composition model it sends as its `instructions`.
  *
- * One builder for both surfaces so the two cannot drift into describing the desk differently.
  * Every section reads the *current* project, so the text is only true for the moment it is built.
  */
 class RigBriefing(private val state: State) {
@@ -100,8 +99,8 @@ class RigBriefing(private val state: State) {
         sb.appendLine()
 
         // The stage, in a paragraph (stage-view plan session 2): enough for a model to know where
-        // the riggings are and that a scene exists, without the whole document every turn —
-        // get_scene is the detail, and this goes into the chat's prompt on every turn too.
+        // the riggings are and that a scene exists, without the whole document —
+        // get_scene is the detail.
         stageSummary()?.let {
             sb.appendLine("## Stage")
             sb.append(it)
@@ -249,66 +248,8 @@ class RigBriefing(private val state: State) {
         return sb.toString()
     }
 
-    /**
-     * The per-type property listing a Kotlin script needs. The chat's alone: the MCP surface has no
-     * script tool, so this would only teach a model an API it cannot call.
-     */
-    fun fixtureTypeApi(): String {
-        val sb = StringBuilder()
-        // Fixture type API (for scripts)
-        sb.appendLine("## Fixture Type API (for run_lighting_script)")
-        sb.appendLine("When writing scripts, use `fixture<TypeName>(\"key\")` to access fixtures.")
-        val infrastructureKeys = state.show.fixtures.infrastructureKeys()
-        val fixturesByType = state.show.fixtures.fixtures.groupBy { it::class }
-        for ((klass, fixtures) in fixturesByType) {
-            val sample = fixtures.first()
-            val typeName = klass.simpleName ?: continue
-            // A script may still drive an infrastructure fixture, so its key stays — set apart, as
-            // `describeRig` sets it apart, so it is never the obvious target of "all the lights".
-            val (infrastructure, lighting) = fixtures.partition { it.key in infrastructureKeys }
-            sb.appendLine("### $typeName")
-            if (lighting.isNotEmpty()) sb.appendLine("Keys: ${lighting.joinToString(", ") { "`${it.key}`" }}")
-            if (infrastructure.isNotEmpty()) {
-                sb.appendLine(
-                    "Infrastructure keys (not lighting — do not target unless the operator names them): " +
-                        infrastructure.joinToString(", ") { "`${it.key}`" },
-                )
-            }
-            sb.appendLine("Properties:")
-            for (prop in sample.fixtureProperties) {
-                val propValue = prop.classProperty.call(sample)
-                val propType = propValue?.javaClass?.simpleName ?: "Unknown"
-                sb.appendLine("  - `${prop.name}` ($propType, category=${prop.category})")
-            }
-            val triggers = FixtureTriggers.of(sample)
-            if (triggers.isNotEmpty()) {
-                sb.appendLine(
-                    "One-shot triggers (not properties — a script cannot set them; they fire as cue events while the desk is armed): " +
-                        triggers.joinToString(", ") { "`${it.name}` (${it.spec.label})" },
-                )
-            }
-            val commands = FixtureCommands.of(sample)
-            if (commands.isNotEmpty()) {
-                sb.appendLine(
-                    "Fixture commands (not properties — no look, cue or programmer value can hold one; run one with " +
-                        "run_fixture_command only when the operator asks for it): " +
-                        commands.joinToString(", ") { c ->
-                            val pre = c.alongside.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "; sets ") { it.why }.orEmpty()
-                            "`${c.name}` (${c.spec.label}, held ${c.spec.holdMs / 1000.0} s$pre)"
-                        },
-                )
-            }
-            sb.appendLine()
-        }
-
-        return sb.toString()
-    }
-
-    /**
-     * The composition model in a page: layers, templates, speed masters, stacks, the programmer.
-     * [scriptTool] says whether the surface offers `run_lighting_script`, which one sentence names.
-     */
-    fun keyConcepts(scriptTool: Boolean): String {
+    /** The composition model in a page: layers, templates, speed masters, stacks, the programmer. */
+    fun keyConcepts(): String {
         val sb = StringBuilder()
         // Key concepts
         sb.appendLine("## Key Concepts")
@@ -320,14 +261,14 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- A template reference is legal **only in an effect parameter**. Cue values, look rows and programmer values are always literals; a cue that should follow a template gets a *layer* applying it (see create_cue / cue layers).")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Static effects default to stepTiming=true (chase), continuous effects default to false. You can override this per effect with the `stepTiming` parameter.")
-        sb.appendLine("- UByte values range 0-255 (use 'u' suffix in scripts: 128u)")
+        sb.appendLine("- DMX values range 0-255")
         sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look's rows always name their own fixtures, so editing a look moves every cue layering it. A look's *effects* may instead be **deferred** — they name no target and fan over whatever the layer points at, so the same effect bundle can be aimed at different fixtures. A value you want to point at a selection is a *template*, not a look — and so is a single named effect you want to point at a selection: a template holds values **or** one effect, never both, so a colour plus a chase is a look and 'a slow amber breathe on the selection' is an effect template. Create either with create_template.")
         sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
         sb.appendLine("- **Cues**: A cue is an ordered stack of look layers plus its own local values and ad-hoc effects. Multiple cues can run concurrently — applying a cue adds it alongside existing cues. Re-applying the same cue refreshes it. Use stop_cue to stop one cue, or apply_cue with replaceAll=true to stop all others first. Looks are read fresh at apply time, so edits to a look are always reflected.")
         sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted means master 1 / unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with beat divisions. A master with `followNum`/`followDen` set follows another master (`followTargetUuid`, or Master 1 when absent) at that ratio: it ticks — and beats — in step with that master, its tempo is derived, set_bpm on it is refused, and the way to move it is to retune the master it follows.")
         sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack, then run it with go_cue_stack — one GO fires whatever is on deck, and starts the stack if it is stopped. Use advance_cue_stack for BACKWARD and activate_cue_stack to jump to a named cue. Stacks support looping (wraps at end). Individual cues within a stack can have: auto-advance (timed transition to next cue, configured per-cue via autoAdvance + autoAdvanceDelayMs), crossfade (intensity envelope between cue transitions, configured per-cue via fadeDurationMs + fadeCurve). Multiple stacks can be active simultaneously.")
-        sb.appendLine("- **The programmer, and how work gets saved**: the programmer is the manual overlay on top of whatever is running — what busking writes, and what apply_look${if (scriptTool) " and run_lighting_script" else ""} write${if (scriptTool) "" else "s"} through. record_cue puts it into a cue (CREATE a new one, or MERGE / UPDATE_EXISTING / REMOVE against an existing one). The round trip in the other direction is include_into_programmer, which loads a cue or look back in as an edit buffer, then update_from_programmer, which writes back **only what changed** — that is what leaves the rest of the cue, template references included, alone. Call update_from_programmer with preview=true first if you are unsure what the programmer is sitting on top of.")
+        sb.appendLine("- **The programmer, and how work gets saved**: the programmer is the manual overlay on top of whatever is running — what busking writes, and what apply_look writes through. record_cue puts it into a cue (CREATE a new one, or MERGE / UPDATE_EXISTING / REMOVE against an existing one). The round trip in the other direction is include_into_programmer, which loads a cue or look back in as an edit buffer, then update_from_programmer, which writes back **only what changed** — that is what leaves the rest of the cue, template references included, alone. Call update_from_programmer with preview=true first if you are unsure what the programmer is sitting on top of.")
         sb.appendLine("- **One-shot triggers and cue events**: a fixture listed with one-shot triggers (a confetti cannon) spends something physical when it fires, so its triggers are never a value — no look, template, cue row, effect or programmer value can name one, and the desk refuses it by name. A cue fires one through its **events** (create_cue / build_cue_stack's `events`, or set_cue_events): a tube and an offset after GO. Events fire on GO into their cue only — never tracked, never on GO TO a later cue, never previewed — and only while the operator has armed the desk; unarmed, they are skipped and announced. Arming and firing a tube outright are the operator's, at the desk, and no tool offers them — but the arm is the operator's consent to the show's events, so while the desk is armed a GO you make (go_cue_stack, apply_cue) fires its cue's events as a GO at the desk would.")
         sb.appendLine("- **Standby and GO**: what the next GO fires is the desk's, not the caller's — an armed standby if one is set, else the cue after the live one. set_standby arms (or, with no cueId, disarms) it without moving a light, so \"stand by cue 5\" and \"go\" stay two gestures; get_current_state's `cue_run` reports what each stack has on deck.")
 

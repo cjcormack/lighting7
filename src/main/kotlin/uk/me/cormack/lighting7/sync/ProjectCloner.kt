@@ -27,7 +27,6 @@ import java.util.UUID
  *    ([ProjectImporter.import] forces both).
  *  * Cloud-sync state (`sync_configs`, `sync_state`, linked repo, session history) — the
  *    clone is a new project with no remote and no sync history.
- *  * AI conversations — local scratch, not show content (also absent from the export).
  *
  * What it *does* inherit beyond the portable graph: `machine_overrides`, notably the
  * per-universe controller IPs. Those are excluded from the export by design (they're

@@ -56,7 +56,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-MOBILE-SHEET-FADE`](#fu-manual-mobile-sheet-fade) | the phone cue-list sheet and the desktop cue-stack view stay smooth on a big stack | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROMPTBOOK-FADE`](#fu-manual-promptbook-fade) | a live cue's fade animates without re-rendering every other cue in the show | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CURSOR-OWNERSHIP`](#fu-manual-cursor-ownership) | GO/BACK/standby and the fade survive the transport's single reconcile effect | Frontend sweep, 2026-08-30 |
-| [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the four lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-CODE-SPLITTING`](#fu-manual-code-splitting) | the three lazy chunks arrive on a real desk, including one with no internet | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-COLLAPSED-PANELS`](#fu-manual-collapsed-panels) | collapsed overview panels stop working, and reopening one is instant rather than empty | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-CUE-REPUBLISH-FRAME`](#fu-manual-cue-republish-frame) | a cue expanded on one client refreshes when another retunes a Look it layers | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-WS-SEND-DROPPED`](#fu-manual-ws-send-dropped) | a WebSocket blip announces itself instead of eating every gesture silently | Frontend sweep, 2026-08-30 |
@@ -1472,26 +1472,24 @@ or stutters the fade it is drawing, and that a standby armed mid-fade survives t
 
 ## `FU-MANUAL-CODE-SPLITTING`
 
-**Four route/component chunks now arrive after boot rather than in it**
+**Three route/component chunks now arrive after boot rather than in it**
 · frontend sweep `FS-PERF-CODE-SPLITTING`, 2026-08-30
 
-The app was one 4.0 MB entry chunk; it is now a 2.0 MB boot payload plus four lazily-fetched
-chunks — Stage (`@react-three/*`), Prompt Book (`react-pdf`/pdfjs), the Kotlin script editor
-(`kotlin-playground`), and the Lux chat panel (`react-markdown`). The split is measured from the
+The app was one 4.0 MB entry chunk; it is now a 2.0 MB boot payload plus three lazily-fetched
+chunks — Stage (`@react-three/*`), Prompt Book (`react-pdf`/pdfjs) and the Kotlin script editor
+(`kotlin-playground`). (A fourth, the Lux chat panel, went with the in-app AI chat.) The split is measured from the
 build output, not profiled, and the checks that matter are the ones a build can't make: that the
 chunks actually load from the packaged installer's static resources, and that the fallbacks read as
 "loading" rather than "broken" at desk latency.
 
 **Test**: from a packaged install (not the Vite dev server), hard-reload the desk and confirm the
 login screen paints noticeably sooner than before, then visit `/stage`, `/prompt-book`, a script in
-`/scripts`, an effect editor in `/fx-library`, a cue's trigger editor inside Show, and Lux. Each
+`/scripts`, an effect editor in `/fx-library`, and a cue's trigger editor inside Show. Each
 should show a brief spinner and then the real surface — never a blank pane, a console 404 on a
 `/assets/*.js` chunk, or a stuck spinner. Repeat the Stage and Prompt Book visits with the desk's
 network cable pulled, since these are the first assets the desk fetches *after* boot and a desk
 runs offline: they are served by lighting7 itself from `src/main/resources/static/`, so they must
-still arrive. Finally, open Lux, send a message, close the sheet, reopen it, and confirm the
-conversation is still there — the panel is now mounted on first open and deliberately never
-unmounted, and losing the thread on close would be the regression. 10 minutes.
+still arrive. 10 minutes.
 
 ---
 

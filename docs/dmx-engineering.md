@@ -477,7 +477,7 @@ buffer) *before* removing the override, via the `UnparkValueSink` that `Show` wi
 `ParkManager` — so releasing park never moves the output and park/unpark is a safe toggle.
 Regression coverage: `UnparkPreservesValueTest`.
 
-The AI chat and MCP tools `park_channel` / `unpark_channel` (`ai/AiTools.kt`) go through the same
+The MCP tools `park_channel` / `unpark_channel` (`ai/AiTools.kt`) go through the same
 `ParkManager` calls as the WebSocket's `parkChannel` / `unparkChannel`, so both keep these
 properties; `describe_rig` and `get_current_state` list what is parked. See
 [mcp-engineering.md](mcp-engineering.md) §"Tools".

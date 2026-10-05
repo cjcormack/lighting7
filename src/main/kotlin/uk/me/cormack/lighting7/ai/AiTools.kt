@@ -6,8 +6,6 @@ import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
 import uk.me.cormack.lighting7.models.CueTargetDto
 
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.*
 import kotlinx.serialization.json.JsonNull
 import uk.me.cormack.lighting7.fx.toMaskNames
@@ -24,17 +22,21 @@ import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 
 /**
- * Defines the tools available to Claude and dispatches their execution.
+ * The show-running tools the MCP server offers, and their dispatch.
  *
  * Each tool maps to existing backend functionality. Adding a new tool
- * requires adding a schema to [allTools] and a handler branch in [executeTool].
+ * requires adding a schema to [toolDefs] and a handler branch in [executeTool].
+ *
+ * There is no script tool. MCP adds a new actor — a model reading fixture names, cue notes and
+ * synced content it did not write — and a literal-script tool is the step that turns a prompt
+ * injection into code running as the desk process. Dropped by decision (see
+ * `docs/mcp-engineering.md` §"No script tool").
  */
 class AiTools(private val state: State) {
 
-    val allTools: List<AnthropicToolDef> = listOf(
+    val toolDefs: List<ToolDef> = listOf(
         createLookTool,
         applyLookTool,
-        runLightingScriptTool,
         setBpmTool,
         createSpeedMasterTool,
         clearEffectsTool,
@@ -62,15 +64,6 @@ class AiTools(private val state: State) {
     )
 
     /**
-     * What the MCP server offers: every tool but `run_lighting_script`. The MCP surface adds a
-     * new actor — a model reading fixture names, cue notes and synced content it did not write —
-     * and a literal-script tool is the step that turns a prompt injection into code running as
-     * the desk process. Dropped by decision (see `docs/mcp-engineering.md` §"No script tool").
-     * [executeTool] would still run it, so the MCP layer dispatches only names in this list.
-     */
-    val mcpTools: List<AnthropicToolDef> = allTools.filter { it.name != runLightingScriptTool.name }
-
-    /**
      * Execute a tool by name and return a JSON result string.
      */
     suspend fun executeTool(name: String, input: JsonObject): ToolExecutionResult {
@@ -78,7 +71,6 @@ class AiTools(private val state: State) {
             when (name) {
                 "create_look" -> executeCreateLook(input)
                 "apply_look" -> executeApplyLook(input)
-                "run_lighting_script" -> executeRunLightingScript(input)
                 "set_bpm" -> executeSetBpm(input)
                 "create_speed_master" -> executeCreateSpeedMaster(input)
                 "clear_effects" -> executeClearEffects(input)
@@ -254,40 +246,6 @@ class AiTools(private val state: State) {
         )
     }
 
-    @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
-    private suspend fun executeRunLightingScript(input: JsonObject): ToolExecutionResult {
-        val script = input["script"]?.jsonPrimitive?.content ?: return errorResult("Missing 'script'")
-        val description = input["description"]?.jsonPrimitive?.contentOrNull ?: "Run lighting script"
-
-        var scriptResult: uk.me.cormack.lighting7.show.ScriptResult? = null
-        val job = GlobalScope.launch {
-            scriptResult = state.show.runLiteralScript(script)
-        }
-        job.join()
-
-        val result = scriptResult?.toRunResult()
-        val success = result?.status == "success"
-
-        return ToolExecutionResult(
-            success = success,
-            description = if (success) description else "Script error: ${result?.result ?: result?.status}",
-            result = buildJsonObject {
-                put("status", result?.status ?: "unknown")
-                if (result?.result != null) put("result", result.result)
-                if (result?.messages?.isNotEmpty() == true) {
-                    put("messages", buildJsonArray {
-                        result.messages.forEach { msg ->
-                            addJsonObject {
-                                put("severity", msg.severity)
-                                put("message", msg.message)
-                            }
-                        }
-                    })
-                }
-            }.toString()
-        )
-    }
-
     private fun executeSetBpm(input: JsonObject): ToolExecutionResult {
         val bpm = input["bpm"]?.jsonPrimitive?.double ?: return errorResult("Missing 'bpm'")
         // Omitting the reference still means the global tempo — master 1 — which is what the
@@ -400,10 +358,11 @@ class AiTools(private val state: State) {
             }
 
             if ("speed_masters" in include) {
-                // The uuids belong here as well as in the system prompt: every effect-authoring
+                // The uuids belong here as well as in `describe_rig`: every effect-authoring
                 // tool takes a `speedMasterUuid`, and a master created mid-conversation (by
                 // `create_speed_master`, or by the operator at the desk) is unnameable until the
-                // model can read its uuid back. The prompt is built once per conversation.
+                // model can read its uuid back. A `describe_rig` answer is a snapshot of when it
+                // was called.
                 put("speedMasters", buildJsonArray {
                     for (master in state.show.fxEngine.speedMasters.masterStates()) {
                         addJsonObject {
@@ -1819,8 +1778,7 @@ class AiTools(private val state: State) {
 
     /**
      * `run_fixture_command` (fixture optics plan session 7). Whether the caller may is decided before
-     * this is reached — `AiService` for the chat, `McpProtocol` for MCP — exactly as the REST route's
-     * `requireCommandsAccess` decides it.
+     * this is reached, by `McpProtocol`, exactly as the REST route's `requireCommandsAccess` decides it.
      */
     private suspend fun executeRunFixtureCommand(input: JsonObject): ToolExecutionResult {
         val fixtureKey = input["fixtureKey"]?.jsonPrimitive?.contentOrNull ?: return errorResult("Missing 'fixtureKey'")
@@ -1860,10 +1818,7 @@ data class ToolExecutionResult(
     val success: Boolean,
     val description: String,
     val result: String,
-    /**
-     * Images to answer beside [result] — MCP's image content (`render_view`'s PNG). Only the MCP
-     * surface sends them; the in-app chat has no tool that makes one.
-     */
+    /** Images to answer beside [result] — MCP's image content (`render_view`'s PNG). */
     val images: List<ToolImage> = emptyList(),
 )
 

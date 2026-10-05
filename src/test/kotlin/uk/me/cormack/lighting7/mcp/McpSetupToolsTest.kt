@@ -233,7 +233,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         assertTrue(patchTwoDimmers().success, "a row that omits the flag leaves it as it was")
         assertTrue(state.show.fixtures.isInfrastructure("foh-2"))
 
-        // The chat's own reads of the rig set it apart rather than listing it as lighting.
+        // get_current_state's read of the rig sets it apart rather than listing it as lighting.
         val current = runBlocking {
             AiTools(state).executeTool("get_current_state", Json.parseToJsonElement("""{"include":["fixtures"]}""").jsonObject)
         }.json()["fixtures"]!!.jsonArray.associateBy { it.jsonObject["key"]!!.jsonPrimitive.content }

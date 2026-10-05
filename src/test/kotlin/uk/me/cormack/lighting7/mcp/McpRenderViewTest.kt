@@ -132,7 +132,7 @@ class McpRenderViewTest : RouteIntegrationTest() {
     // ─── The tool ───────────────────────────────────────────────────────
 
     @Test
-    fun `render_view is offered read-only over MCP and not to the chat`() {
+    fun `render_view is offered read-only over MCP`() {
         val protocol = McpProtocol(state)
         val user = AuthenticatedUser(1, UUID.randomUUID(), "tester", "Tester", UserRole.ADMIN, "test")
         val listed = runBlocking {
@@ -141,7 +141,6 @@ class McpRenderViewTest : RouteIntegrationTest() {
         val tool = listed.getValue("render_view").jsonObject
         assertTrue(tool["annotations"]!!.jsonObject["readOnlyHint"]!!.jsonPrimitive.boolean)
         assertEquals(listOf("viewpoint"), tool["inputSchema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertFalse(AiTools(state).allTools.any { it.name == "render_view" }, "the chat gains nothing")
     }
 
     @Test

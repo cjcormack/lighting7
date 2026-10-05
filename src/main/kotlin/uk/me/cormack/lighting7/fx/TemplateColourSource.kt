@@ -65,7 +65,7 @@ fun serializeTemplateColourRef(templateUuid: UUID): String = "$TEMPLATE_COLOUR_R
  * The colour-family rows of a template a `tmpl:` reference may name, or **null** when it may not.
  *
  * One predicate for the four places that ask the same question — [resolveTemplateColour] here, the
- * AI's system prompt (`AiService`), the AI's `get_state` tool (`AiTools`), and `isOfferable` in the
+ * MCP `describe_rig` briefing (`RigBriefing`), the `get_current_state` tool (`AiTools`), and `isOfferable` in the
  * client's `FxColourTemplates.tsx`. Three of those were independent `rows.singleOrNull()` copies of
  * "exactly one row", and relaxing that rule for emitters moved only one of them: a generic colour
  * template holding a hex *and* an explicit amber resolved correctly on the desk while being

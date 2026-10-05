@@ -1,8 +1,9 @@
 # MCP server
 
 The desk is an [MCP](https://modelcontextprotocol.io) server, so Claude — on a phone through a
-claude.ai connector, in Claude Code, or in the desktop app — can drive the lights with the same
-tools the in-app AI chat has. The decisions behind the shape below are recorded in the project's
+claude.ai connector, in Claude Code, or in the desktop app — can drive the lights. (The desk once had its own
+in-app AI chat, *Lux*, calling Anthropic's API with these same show-running tools; it was removed in
+favour of this server.) The decisions behind the shape below are recorded in the project's
 `decisions/mcp-auth-and-scripts.md`; this doc is how it is built.
 
 ## The public listener
@@ -143,9 +144,7 @@ except for scripts and the cannons:
   over remote access*). A script is arbitrary Kotlin in the desk's JVM. Refused
   (`REMOTE_SCRIPTS_DISABLED`, `requireScriptAccess`): creating, compiling and running a project
   script, changing a saved script's text or type (a rename is fine), the same for FX definitions,
-  the whole `/script-editor` service, and the AI chat's `run_lighting_script` (the chat is given
-  the MCP tool list and a prompt without the script API instead). MCP never has the script tool,
-  whatever this says.
+  and the whole `/script-editor` service. MCP never has a script tool, whatever this says.
 - **Arming and firing are refused remotely unless an admin allows them** (Remote access → *Allow
   arming and firing over remote access*; stage-view plan session 9, P2, D16). A confetti cannon spends
   something physical in a room a remote caller cannot see. Refused (`REMOTE_EFFECTS_DISABLED`,
@@ -162,9 +161,8 @@ except for scripts and the cannons:
   through its travel and a lamp off leaves a discharge head dark for minutes, in a room a remote caller
   cannot see. Refused (`REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`, the `requireEffectsAccess`
   twin): `POST …/patches/{id}/commands/{command}`, the one REST door — and **MCP's
-  `run_fixture_command`**, which `McpProtocol` holds to the same setting since MCP is always remote,
-  and the in-app chat's, through `AiService`'s `allowCommands` for a remote caller. On the desk's own
-  listener both roles run one behind the fixture panel's confirm, and the chat may run one. Off by
+  `run_fixture_command`**, which `McpProtocol` holds to the same setting since MCP is always remote.
+  On the desk's own listener both roles run one behind the fixture panel's confirm. Off by
   default; `remote_access_settings.allow_commands`, machine-local.
 
 **Residual risks, known and accepted:** a remote *admin* can still bring scripts in by importing a
@@ -258,16 +256,15 @@ URL's origin, claude.ai, claude.com or loopback (DNS-rebinding protection).
 
 ### Tools
 
-`describe_rig`, then `AiTools.mcpTools` — every chat tool **except `run_lighting_script`** —
-then the show-setup tools below, which only this surface has. A script runs arbitrary Kotlin inside the desk's JVM, so reaching it
-through a tunnel would make a leaked token a shell on the desk machine; every other tool is a
-bounded operation on the show.
+`describe_rig`, then the show-running tools (`AiTools.toolDefs`), then the show-setup tools
+below. There is **no script tool** (§"No script tool"): a script runs arbitrary Kotlin inside the
+desk's JVM, so reaching it through a tunnel would make a leaked token a shell on the desk machine;
+every tool here is a bounded operation on the show.
 
-`describe_rig` returns what the chat puts in its system prompt each turn (`ai/RigBriefing.kt`,
-shared with `AiService`): fixtures, groups, the effect library, what is running and parked,
-speed masters, Looks, colour templates, cues and stacks. The chat gets that for free; an MCP client gets
-nothing it does not ask for, so the `instructions` sent at `initialize` tell the model to call it
-first, along with the composition rules (`RigBriefing.keyConcepts(scriptTool = false)`).
+`describe_rig` returns the live rig in prose (`ai/RigBriefing.kt`): fixtures, groups, the effect
+library, what is running and parked, speed masters, Looks, colour templates, cues and stacks. An MCP
+client gets nothing it does not ask for, so the `instructions` sent at `initialize` tell the model
+to call it first, along with the composition rules (`RigBriefing.keyConcepts()`).
 
 Each conventional's line names its **lantern** (stage-view plan session 7): `lantern=Source Four
 19°`, `(default)` after one the patch does not name, and for a paired dimmer whose lanterns differ,
@@ -282,7 +279,7 @@ until the model can see what is loaded there.
 
 `describe_rig` and `get_current_state` both report **parked channels** — address, held value,
 and the fixture channel it drives (`ai/ParkReport.kt`, from `Fixtures.getChannelMappings`) — and
-`park_channel` / `unpark_channel` (chat tools, so the chat has them too) park and release one. Park
+`park_channel` / `unpark_channel` park and release one. Park
 sits above every layer the other tools write, so a model that cannot see it applies a look to a
 parked head, sees nothing change and cannot say why. The two tools make exactly the WebSocket's
 `parkChannel` / `unparkChannel` write (`ParkManager` plus the provenance refresh), so unpark keeps
@@ -290,7 +287,7 @@ its hand-down; `park_channel` refuses a universe the show does not output, the s
 counting universes from 1 would otherwise make, and `unpark_channel` on an unparked address answers
 `wasParked: false` rather than an error.
 
-`aim_fixtures` (a chat tool too) points moving heads at a stage coordinate — the same
+`aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
 `dryRun` that answers each head's degrees and writes nothing, and a `saveAsTemplate` that also
 records the aims as a new position template (one fixture row per head, in degrees), since an aim
@@ -310,7 +307,7 @@ grammar holds focus, but a template is one family and focus is beam, so a focus 
 `record_cue` (`docs/fixtures-engineering.md` §"Focusing a head on a point"). With `render_view`,
 that is the plan's MCP check: aim and focus a Revolution on the back wall, then look at it.
 
-`run_fixture_command` (a chat tool too; fixture optics plan session 7) runs one fixture command — a
+`run_fixture_command` (fixture optics plan session 7) runs one fixture command — a
 reset, a lamp strike, a lamp off — through the same `runFixtureCommand` as `POST
 …/patches/{id}/commands/{command}`, and answers when the hold ends. `describe_rig` names each
 fixture's commands beside its triggers (`commands=reset (Reset, 5.0 s),…`, with what a command sets
@@ -320,7 +317,7 @@ fixture: a model cannot see the head swing or the stage go dark. Its refusals ca
 (`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `COMMAND_UNKNOWN`). A row naming a command as a
 property is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
 
-Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
+Tools act on the desk's **current** project. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup
 readers below (`list_projects`, `list_fixture_types`, `get_patch`, `get_prompt_book`, `get_scene`)
 and `render_view` carry `readOnlyHint`.
@@ -352,9 +349,8 @@ prompt-book markup from a script and lighting notes.
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
 `create_cue`, `create_look` and `build_cue_stack` (per cue, and the stack's set) — and `set_scenery`
 replaces one cue's, stack's or Look's whole list (`cueId` | `stackId` | `lookId`; `[]` clears), so
-"close the tabs on the blackout at the end of Act 1" is one call. Those three are the chat's tools
-too, so MCP gets them through `AiTools.mcpTools`; `build_cue_stack` is MCP-only like the rest of this
-table. One item is `{element, visible?, open?, trimM?, transitionSeconds?}`: the element by its
+"close the tabs on the blackout at the end of Act 1" is one call. Those three are show-running
+tools (`AiTools`); `build_cue_stack` is a setup tool like the rest of this table. One item is `{element, visible?, open?, trimM?, transitionSeconds?}`: the element by its
 `set_scene` **name** (or uuid), the states beside it, and on a cue its own clock (omitted, it moves
 with the cue's fade). Each is checked against the element's kind exactly as the REST `PUT
 …/scenery` routes check it (`parseToolSceneryList` beside `parseSceneryList`, `models/scenery.kt`):
@@ -374,11 +370,8 @@ fired on GO into the cue only, never tracked or previewed, and only while the op
 desk — and that arming and firing are the operator's: **no tool arms or fires**, and a row naming a
 trigger as a property is refused by name (`TRIGGER_NOT_STORABLE`) by every tool that writes rows.
 
-Four decisions shape them:
+Three decisions shape them:
 
-- **MCP only.** They are not in `AiTools.allTools`, so the in-app chat does not get them: its
-  conversation belongs to the current project, which `switch_project` would move out from under
-  it, and the documents these tools are for arrive through an MCP client.
 - **No tool takes a file.** The model reads the PDFs and photos in its own conversation and passes
   structured data. The one file the desk must hold — the prompt-book PDF — comes in through the
   Prompt Book view's import (`/prompt-book`), which hashes it and counts its pages with pdf.js;
@@ -421,8 +414,8 @@ level — so the hall floor sits at −`deckHeightM` and the hall runs from the 
 
 **`describe_rig` gains a stage summary** (`RigBriefing.stageSummary`): the coordinate frame, the
 stage box, the regions, the riggings upstage first with their kind and trim, a count of the scene's
-venue and set elements, and the saved viewpoints — a paragraph, not the document, because the
-briefing is also the in-app chat's prompt on every turn. Omitted for a project with none of it.
+venue and set elements, and the saved viewpoints — a paragraph, not the document, which
+`get_scene` answers. Omitted for a project with none of it.
 Since stage-view plan session 6 a rigging of a standing kind (`STANDING_RIGGING_KINDS`: `LEDGE`,
 `FLOOR_STAND`) says *units stand on it*, and a *Mounts:* line names each moving head whose
 base orientation disagrees with how its rigging carries it — 180 on a ledge is drawn and aimed hung

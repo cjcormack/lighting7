@@ -65,10 +65,9 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   'pressBuskPad',
   'resolveTemplate',
 
-  // ── Compile / run / chat: long-running, and each already reports its own outcome ──
+  // ── Compile / run: long-running, and each already reports its own outcome ──
   'compileProjectScript',
   'runProjectScript',
-  'aiChat',
 
   // ── Session and connection state, not project data ──
   'setCurrentProject',

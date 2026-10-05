@@ -303,7 +303,7 @@ unchanged list exports byte-for-byte as before. Deleting a cue or a patch sweeps
 same-project cue copy carries them. They travel in sync embedded in `CueJson.events` on
 `formatVersion` 21 (`docs/sync-engineering.md` §"Version 21 — cue events").
 
-The chat and MCP tools author them too — `create_cue` and `build_cue_stack` take `events`
+The MCP tools author them too — `create_cue` and `build_cue_stack` take `events`
 (`[{fixture, trigger, offsetSeconds?}]`, the fixture by key or name) and `set_cue_events` replaces
 one cue's list. No tool arms or fires (`docs/mcp-engineering.md`).
 
@@ -350,9 +350,9 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 - `QuickNavCard` in `ProjectOverview.tsx` (current project only)
 - Routes in `App.tsx`: `/projects/:projectId/cues` and `/cues` redirect
 
-## Lux AI Integration
+## MCP tools
 
-Three tools for the AI assistant:
+Three tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
 - `create_cue` — Create a named cue with Look layers and ad-hoc effects
 - `apply_cue` — Apply a saved cue by ID. Optional `replaceAll` parameter to stop all other running cues first.
 - `stop_cue` — Stop a running cue by ID, removing all its effects. Other running cues are unaffected.
@@ -369,7 +369,7 @@ with `tmpl:{uuid}`.
 
 The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning cue names and counts for the current project.
 
-The system prompt describes:
+The MCP `instructions` and `describe_rig` (`ai/RigBriefing.kt`) describe:
 - Multiple concurrent cues, applied alongside one another
 - Colour templates, listed with their uuids under `templates`, and the `tmpl:{uuid}` grammar an
   effect parameter uses to name one

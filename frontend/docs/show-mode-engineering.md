@@ -476,7 +476,7 @@ accidentally cancelling cue state mid-show is more disruptive than the extra cli
 deactivate mutation patches the playhead cache on success, so the transition is flicker-free.
 
 **The phone runner** is `RunMobile`, swapped in below **600 px** of *container* width — not viewport
-width, so side panels opened on desktop (AI chat, and the overview panels — stage, fixture, speed
+width, so side panels opened on desktop (the overview panels — stage, fixture, speed
 masters, cue slots) that squeeze
 the body below the threshold also flip the view. It replaces the ShowBar entirely, carrying its own
 transport footer, and it is **always locked**: it is a running surface with no room for editing
