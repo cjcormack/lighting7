@@ -174,6 +174,7 @@ export type PropertyDescriptor =
   | PositionPropertyDescriptor
   | SettingPropertyDescriptor
   | TriggerPropertyDescriptor
+  | CommandPropertyDescriptor
 
 export type PropertyCategory =
   | 'dimmer'
@@ -390,6 +391,37 @@ export type TriggerPropertyDescriptor = {
 /** A fixture's one-shot triggers, in the order the desk lists them; empty for every other fixture. */
 export function triggersOf(properties: readonly PropertyDescriptor[] | undefined): TriggerPropertyDescriptor[] {
   return (properties ?? []).filter((p): p is TriggerPropertyDescriptor => p.type === 'trigger')
+}
+
+/**
+ * A **fixture command** (fixture optics plan session 7, D13): a reset, a lamp strike, a lamp off. Not
+ * a control — nothing sets it, and every view that draws controls from a fixture's properties skips
+ * it. It runs from the fixture panel's *Commands* menu behind a confirm
+ * (`POST …/patches/{id}/commands/{name}`), and the desk holds its level for [holdMs] before giving
+ * the channel back. Listed so the menu can name its commands and the DMX sheet its channel.
+ */
+export type CommandPropertyDescriptor = {
+  type: 'command'
+  /** The command's name (`resetScroller`) — what the route and `run_fixture_command` name. */
+  name: string
+  /** The menu item: `Reset scroller`. */
+  displayName: string
+  category: 'command'
+  /** What it does, for the confirm. */
+  description: string
+  holdMs: number
+  confirm: boolean
+  channel: ChannelRef
+  /** No property covers [channel]: the desk holds it idle between commands. */
+  dedicated: boolean
+  /** Channels the desk sets for the hold because the manual wants them so. */
+  alongside?: { channel: ChannelRef; level: number; why: string }[]
+  compactDisplay?: undefined
+}
+
+/** A fixture's commands, in the order the desk lists them; empty for every fixture with none. */
+export function commandsOf(properties: readonly PropertyDescriptor[] | undefined): CommandPropertyDescriptor[] {
+  return (properties ?? []).filter((p): p is CommandPropertyDescriptor => p.type === 'command')
 }
 
 export type ElementDescriptor = {

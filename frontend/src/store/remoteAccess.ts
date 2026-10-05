@@ -24,6 +24,8 @@ export interface TunnelSettings {
   allowScripts: boolean
   /** A remote caller may arm the desk and fire or reload a one-shot trigger (stage-view session 9). Absent from an older desk. */
   allowEffects?: boolean
+  /** A remote caller — MCP included — may run a fixture command: a reset, a lamp strike, a lamp off (fixture optics session 7). Absent from an older desk. */
+  allowCommands?: boolean
   hasAuthtoken: boolean
   /** The desk's public base URL — the OAuth issuer — as it stands now. */
   publicUrl: string
@@ -44,6 +46,7 @@ export interface UpdateTunnelRequest {
   authtoken?: string
   allowScripts?: boolean
   allowEffects?: boolean
+  allowCommands?: boolean
 }
 
 export const remoteAccessApi = restApi.injectEndpoints({

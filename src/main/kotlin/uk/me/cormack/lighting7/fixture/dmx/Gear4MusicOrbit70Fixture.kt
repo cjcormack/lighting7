@@ -39,7 +39,8 @@ sealed class Gear4MusicOrbit70Fixture(
     }
 
     /**
-     * Channel 13 — built-in programs and reset.
+     * Channel 13 — built-in programs. Its 200–255 band is the fixture's reset: the [Mode13Ch.reset]
+     * command (fixture optics plan session 7), never an option a Look can hold.
      *
      * Only the bands documented in the 13CH manual table are exposed.
      * The 9CH personality additionally lists 240–255 as sound-active mode;
@@ -51,7 +52,6 @@ sealed class Gear4MusicOrbit70Fixture(
         PROGRAM_1_LEDS_ON(80u),
         PROGRAM_2_LEDS_OFF(90u),
         PROGRAM_2_LEDS_ON(100u),
-        RESET(200u),
     }
 
     /**
@@ -164,6 +164,16 @@ sealed class Gear4MusicOrbit70Fixture(
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )
+
+        // The program channel's 200–255 band (it was the setting's RESET option until fixture optics
+        // session 7). Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan and tilt. The head swings through its travel while it runs.",
+            holdMs = 5_000,
+        )
+        val reset = DmxCommand(universe, firstChannel + 12, 200u, bandMin = 200u, bandMax = 255u)
 
         companion object {
             const val STROBE_MIN: UByte = 16u

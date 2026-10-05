@@ -28,7 +28,8 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  * Discharge-lamp safety: lamp-on/off and reset bands live on the shutter
  * channel and must not be addressable from FX targeting. The shutter is
  * exposed as [WithStrobe] clamped to the safe band (closed/open/strobe,
- * 0–72); lamp/reset are explicit methods on [Mode4Ch].
+ * 0–72); lamp and reset are fixture commands on [Mode4Ch] (fixture optics
+ * plan session 7), held by the desk and refused at every write boundary.
  */
 sealed class MartinMac250Fixture(
     universe: Universe,
@@ -152,8 +153,8 @@ sealed class MartinMac250Fixture(
      * Mode 4 (13-channel, extended) — the patched personality.
      *
      * - Ch 1: Shutter / strobe (lamp on/off and reset live on this channel
-     *         too — exposed via the explicit [lampOn] / [lampOff] / [reset]
-     *         methods, NOT via the [strobe] property).
+     *         too — the [lampOn] / [lampOff] / [reset] commands, NOT the
+     *         [strobe] property).
      * - Ch 2: Master dimmer (HTP).
      * - Ch 3: Colour wheel.
      * - Ch 4: Gobo wheel.
@@ -200,12 +201,13 @@ sealed class MartinMac250Fixture(
          * [WithStrobe] property — the underlying slider's `max` clamp keeps
          * raw `value` writes from straying into Reset/Lamp territory. Pulse
          * and random-strobe bands are reachable only via raw transaction
-         * writes. Lamp on/off and reset are explicit methods on this class
-         * that bypass the slider clamp.
+         * writes. Lamp on/off and reset are the commands below; outside their
+         * hold the output sends a value in their bands as 0 (closed).
          *
          * The bands are the user manual's (UM_MAC250_EN_D, DMX protocol), past the clamp too, so the
          * Stage view draws a raw write as the fixture would; reset and the lamp bands are left
-         * undeclared (fixture optics plan session 7 makes them commands). Martin states no rates.
+         * undeclared — they are the [reset], [lampOn] and [lampOff] commands, and the view draws them
+         * open. Martin states no rates.
          * Estimate: the strobe at 1–10 Hz (the Robe ColorSpot's stated range, the same kind of
          * mechanical dimmer/shutter); the pulses at 0.5–2 Hz; random fast, medium and slow at 8, 4
          * and 2 Hz, its pulses at 2 and 1 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
@@ -298,37 +300,52 @@ sealed class MartinMac250Fixture(
         @FixtureProperty("Effect speed", category = PropertyCategory.SPEED)
         val effectSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
-        private val nonNullTransaction get() = checkNotNull(transaction) {
-            "Attempted to use fixture outside of a transaction"
-        }
-
         /**
-         * Strike the discharge lamp. Writes 228 to the shutter channel.
-         *
-         * The lamp draws ~16A inrush and takes several seconds to ignite.
-         * Don't strike multiple fixtures simultaneously on the same circuit;
-         * stagger the calls. Not FX-targetable by design.
+         * What the manual asks of a reset or a lamp off when the fixture's own menu has disabled the DMX
+         * versions (PERS → dRES / dLOF, both off from the factory): "can only be executed if the CTC
+         * filter is selected, the prism is on (not rotating) and the open gobo is selected" (DMX protocol,
+         * notes 1 and 2). The desk sets all three for the hold, so the command works whatever the menu says.
          */
-        fun lampOn() {
-            nonNullTransaction.setValue(universe, firstChannel, LAMP_ON_LEVEL)
-        }
+        private val menuSafeCombination = listOf(
+            DmxChannelHold(firstChannel + 2, Colour.CTC.level, "CTC filter in"),
+            DmxChannelHold(firstChannel + 3, Gobo.OPEN.level, "Open gobo"),
+            DmxChannelHold(firstChannel + 6, Prism.NO_ROT.level, "Prism in, not rotating"),
+        )
 
-        /**
-         * Extinguish the discharge lamp. Writes 248 to the shutter channel.
-         * The lamp needs to cool for several minutes before it can be
-         * re-struck. Not FX-targetable by design.
-         */
-        fun lampOff() {
-            nonNullTransaction.setValue(universe, firstChannel, LAMP_OFF_LEVEL)
-        }
+        // Estimate: 5 s. The manual gives no hold for a reset; the lamp-off band's "time > 5 seconds"
+        // is the one time it states, and holding a reset that long does no harm. Checked on the rig by
+        // FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan, tilt and every effect. The head swings through its travel and the " +
+                "beam moves while it runs; the colour wheel, gobo and prism are set to what the fixture needs " +
+                "to accept a reset from the desk.",
+            holdMs = 5_000,
+        )
+        val reset = DmxCommand(
+            universe, firstChannel, RESET_LEVEL, bandMin = 208u, bandMax = 217u, alongside = menuSafeCombination,
+        )
 
-        /**
-         * Reset the fixture (re-home pan/tilt and motors). Writes 208 to the
-         * shutter channel. Not FX-targetable by design.
-         */
-        fun reset() {
-            nonNullTransaction.setValue(universe, firstChannel, RESET_LEVEL)
-        }
+        // Estimate: 5 s, as for the reset — the manual states no hold for a strike. Checked on the rig by
+        // FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Lamp on",
+            description = "Strikes the discharge lamp. A strike draws many times the running current for an " +
+                "instant, so strike several heads one at a time, 5 seconds apart (the manual's advice).",
+            holdMs = 5_000,
+        )
+        val lampOn = DmxCommand(universe, firstChannel, LAMP_ON_LEVEL, bandMin = 228u, bandMax = 237u)
+
+        // The manual: 248–255 "Lamp off: time > 5 seconds". Held a second past it.
+        @FixtureCommand(
+            label = "Lamp off",
+            description = "Douses the discharge lamp. It cannot be struck again for 8 minutes, so this head " +
+                "is dark until then.",
+            holdMs = 6_000,
+        )
+        val lampOff = DmxCommand(
+            universe, firstChannel, LAMP_OFF_LEVEL, bandMin = 248u, bandMax = 255u, alongside = menuSafeCombination,
+        )
 
         companion object {
             /** Default open value (mid of 020–049 Open band). */
@@ -340,7 +357,8 @@ sealed class MartinMac250Fixture(
             /**
              * Upper bound of the strobe band; also the slider clamp, so
              * neither [WithStrobe] writes nor raw `value` writes can
-             * wander into Reset/Lamp bands.
+             * wander into Reset/Lamp bands (the commands' output guard
+             * catches every other path).
              */
             const val STROBE_BAND_MAX: UByte = 72u
 

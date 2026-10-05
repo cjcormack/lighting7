@@ -68,6 +68,25 @@ fun ApplicationCall.requireEffectsAccess(state: State) {
     if (!effectsAllowed(state)) throw RemoteEffectsDisabledException()
 }
 
+/** Thrown by [requireCommandsAccess]; `plugins/ErrorHandling.kt` answers it 403 `REMOTE_COMMANDS_DISABLED`. */
+class RemoteCommandsDisabledException :
+    RuntimeException("Fixture commands are turned off for remote access. An admin can allow them in Install settings → Remote access.")
+
+/** Whether this caller may run a fixture command: always on the LAN, per the setting remotely. */
+fun ApplicationCall.commandsAllowed(state: State): Boolean =
+    !isRemote || state.remoteAccess.allowRemoteCommands
+
+/**
+ * Refuse a fixture command — a reset, a lamp strike, a lamp off — that came through the tunnel while
+ * Remote access's "allow fixture commands" is off (fixture optics plan session 7, D13), the
+ * [requireEffectsAccess] twin. A lamp off is a dark head for eight minutes and a reset swings it through
+ * its travel, in a room a remote caller cannot see; on the desk's own listener both roles may run one,
+ * behind the panel's confirm. MCP's `run_fixture_command` is held to the same setting.
+ */
+fun ApplicationCall.requireCommandsAccess(state: State) {
+    if (!commandsAllowed(state)) throw RemoteCommandsDisabledException()
+}
+
 private val errorJson = Json { explicitNulls = false }
 
 /**

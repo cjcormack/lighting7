@@ -29,6 +29,8 @@ data class RemoteAccessSettings(
     val allowScripts: Boolean,
     /** Whether a remote caller may arm, fire or reload a one-shot trigger (stage-view plan session 9). */
     val allowEffects: Boolean = false,
+    /** Whether a remote caller, MCP included, may run a fixture command (fixture optics plan session 7). */
+    val allowCommands: Boolean = false,
 )
 
 class RemoteAccessException(message: String) : RuntimeException(message)
@@ -80,6 +82,9 @@ class RemoteAccessService(
     /** Whether a remote caller may arm the desk, fire a one-shot trigger or reload one. */
     val allowRemoteEffects: Boolean get() = settings.allowEffects
 
+    /** Whether a remote caller — MCP included — may run a fixture command. */
+    val allowRemoteCommands: Boolean get() = settings.allowCommands
+
     val hasAuthtoken: Boolean
         get() = runCatching { credentialStore().containsBlob(AUTHTOKEN_KEY) }.getOrDefault(false)
 
@@ -108,6 +113,7 @@ class RemoteAccessService(
         authtoken: String? = null,
         allowScripts: Boolean? = null,
         allowEffects: Boolean? = null,
+        allowCommands: Boolean? = null,
         hasAnyUser: Boolean,
     ): RemoteAccessSettings {
         val current = settings
@@ -142,6 +148,7 @@ class RemoteAccessService(
             domain = newDomain,
             allowScripts = allowScripts ?: current.allowScripts,
             allowEffects = allowEffects ?: current.allowEffects,
+            allowCommands = allowCommands ?: current.allowCommands,
         )
         transaction(database) {
             val row = DaoRemoteAccessSettings.all().firstOrNull() ?: DaoRemoteAccessSettings.new { updatedAt = nowUtc() }
@@ -149,6 +156,7 @@ class RemoteAccessService(
             row.domain = next.domain
             row.allowScripts = next.allowScripts
             row.allowEffects = next.allowEffects
+            row.allowCommands = next.allowCommands
             row.updatedAt = nowUtc()
         }
         settingsRef.set(next)
@@ -232,7 +240,7 @@ class RemoteAccessService(
     }
 
     private fun loadSettings(): RemoteAccessSettings {
-        val row = transaction(database) { DaoRemoteAccessSettings.all().firstOrNull()?.let { RemoteAccessSettings(it.enabled, it.domain, it.allowScripts, it.allowEffects) } }
+        val row = transaction(database) { DaoRemoteAccessSettings.all().firstOrNull()?.let { RemoteAccessSettings(it.enabled, it.domain, it.allowScripts, it.allowEffects, it.allowCommands) } }
         return row ?: RemoteAccessSettings(
             enabled = mcpConfig.tunnelEnabled,
             domain = mcpConfig.tunnelDomain?.let { runCatching { normaliseDomain(it) }.getOrNull() },

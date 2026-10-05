@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -327,6 +329,9 @@ private fun applyGroupEffect(
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
     TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
         ?.let { throw TriggerNotStorableException(it) }
+    // Nor a member's fixture command (fixture optics plan session 7).
+    CommandIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
+        ?.let { throw CommandNotStorableException(it) }
 
     // Validate property support (direct or via elements)
     if (!groupSupportsProperty(group, request.propertyName)) {

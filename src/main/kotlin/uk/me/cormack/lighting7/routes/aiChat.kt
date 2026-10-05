@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.ai.ProjectChangedDuringChatException
+import uk.me.cormack.lighting7.mcp.commandsAllowed
 import uk.me.cormack.lighting7.mcp.scriptsAllowed
 import uk.me.cormack.lighting7.state.State
 
@@ -37,6 +38,7 @@ internal fun Route.routeApiRestAiChat(state: State) {
                     request.conversationId,
                     request.message,
                     allowScripts = call.scriptsAllowed(state),
+                    allowCommands = call.commandsAllowed(state),
                 )
                 call.respond(AiChatResponseDto(
                     conversationId = response.conversationId,

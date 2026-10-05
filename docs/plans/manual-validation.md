@@ -20,6 +20,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
 | [`FU-MANUAL-S5-LIBRARY-OPTICS`](#fu-manual-s5-library-optics) | the library optics pass's estimates match the units — the Varytec's and the Wash-42's colours, the Whex's first program, the Robe's three zoom steps and its iris and frost holding past 179, and an animated colour band reading as the wheel does | Fixture optics plan S5, 2026-10-04 |
 | [`FU-MANUAL-S6-STROBE`](#fu-manual-s6-strobe) | the strobe bands' estimated rates and readings match the units — a MAC 250 dark at strobe 0 as in the view, each type's strobe rate at the ends of its band, the bands no manual to hand names, and the view's shimmer reading as a fast strobe does | Fixture optics plan S6, 2026-10-04 |
+| [`FU-MANUAL-S7-COMMANDS`](#fu-manual-s7-commands) | every fixture command does what its manual says, on the estimated holds — each reset re-homes, the lamps strike and douse, the MAC 250's preconditions let a reset through a menu that disables DMX reset, and the public listener refuses one | Fixture optics plan S7, 2026-10-04 |
 | [`FU-MANUAL-FOCUS-DIRECTION`](#fu-manual-focus-direction) | the declared focus ranges run the way the heads do — the Robe ColorSpot 575's far-at-DMX-0 is an estimate, and the Source Four Revolution's and Fusion 100's near-at-DMX-0 are defaults | Fixture focus range, 2026-10-02 |
 | [`FU-MANUAL-BUSK-CHROME`](#fu-manual-busk-chrome) | the busk view runs a show with no ShowBar, the band is one row, and any live view can drop the app around it — the fold's live cue, the two-screen Pads/Split pair, real full screen, the *Offline* chip and Safari are the desk's; the rest was run in review | Busk chrome A · A.5 · B, 2026-09-21 |
 | [`FU-MANUAL-BUSK-PAGE-FOLLOW`](#fu-manual-busk-page-follow) | two screens on two busk pages press onto one selection — the only half of the follow/local split that review cannot reach | Busk page follow/local, 2026-09-16 |
@@ -314,6 +315,55 @@ flashes, in project 15 — is steps 1 and 6.
 Where an answer disagrees, correct the band and its comment, and drop the `Estimate:` marker.
 
 40 minutes.
+
+---
+
+## `FU-MANUAL-S7-COMMANDS`
+
+**What it proves**: *each fixture command does on the rig what its manual says, held as long as the
+desk holds it*, and nothing else reaches a reset.
+
+**Why it is here**: the fixture optics plan's session 7 turns every reset and lamp control into a
+fixture command (`docs/fixtures-engineering.md` §"@FixtureCommand"). Only three holds are stated —
+the Revolution's three seconds (p15, held 3.5 with margin), the Robe's "at least 3 s" (held 4) and the MAC 250's lamp off
+"> 5 seconds" (held 6) — and the rest are marked `// Estimate:` at their source (D15): the MAC 250's
+reset and lamp on at 5 s, and every simple reset (Varytec, Shehds, Fusion, Orbit, Slender) at 5 s at
+the level the old setting option sent. Two decisions wait on the rig too: whether the MAC 250 needs
+its preconditions (CTC, static prism, open gobo) set for the hold, and whether closing the Robe's
+shutter for its commands is harmless. The plan's §9 desk check — *Reset scroller* on a Revolution
+holds 147–152 for its 3.5 s then drops, and the public listener refuses it — is steps 1 and 7.
+
+**Test**, on the rig, each from the fixture panel's *Commands* menu (the DMX sheet open on the
+universe beside it):
+
+1. **Source Four Revolution** (ch 12, dedicated). *Reset scroller*: the DMX sheet shows 149 for 3.5 s,
+   then 0 with no fade, and the scroller and lenses recalibrate. Then *Reset pan/tilt*, *Reset front
+   module*, *Reset rear module* (the blades move) and *Reset fixture*, each re-homing what it names.
+   A raw write to ch 12 from the DMX sheet does nothing.
+2. **Robe ColorSpot 575** (ch 6, dedicated). *Lamp off*, wait out the cool-down, *Lamp on* — the lamp
+   strikes; then each partial reset and *Total reset*. Each acts after the 4 s hold; if one never does,
+   lengthen `HOLD_MS`. The shutter closes for each hold and reopens after.
+3. **Martin MAC 250** (ch 1, shared with the strobe), with the menu's DMX reset and DMX lamp off
+   **off** (PERS → dRES / dLOF, the factory default): *Reset* re-homes and *Lamp off* douses with the
+   colour wheel, gobo and prism forced for the hold; *Lamp on* strikes. Then turn both menu settings
+   on and repeat — they should act the same. A strobe row typed at 210 in a cue sends 0 (closed),
+   never a reset.
+4. **The simple resets** — Varytec Easymove (ch 11 at 255), Shehds LED19 (24 / 16 at 255), Fusion 100
+   (motor mode at 251), Orbit-70 (program at 200), Slender bar 27ch (special function at 200): each
+   head re-homes within its 5 s hold. If one needs longer, raise its `holdMs`; if it acts at once,
+   shorten it.
+5. **Busy and Blind**: a second command on a unit while one holds is refused (*running … for another
+   … s*); with the programmer blind, a command is refused rather than sent.
+6. **A project switch mid-hold** ends the hold at once: a dedicated channel drops to 0 and the panel
+   says it was cut short.
+7. **Remote**: from the public listener (or a phone through the tunnel), a command answers
+   `REMOTE_COMMANDS_DISABLED`; Install settings → Remote access → *Allow fixture commands* lifts it,
+   and MCP's `run_fixture_command` follows the same switch.
+
+Where a hold is wrong, change it and its comment and drop the `Estimate:` marker. Where a precondition
+proves unneeded, it can stay — it costs nothing — but say so in the comment.
+
+45 minutes.
 
 ---
 

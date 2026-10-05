@@ -2,7 +2,10 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 
 class MartinMac250FixtureTest {
@@ -72,21 +75,26 @@ class MartinMac250FixtureTest {
     }
 
     @Test
-    fun `lampOn lampOff and reset write the dangerous shutter bands directly`() {
-        val (controller, transaction) = createTestTransaction(universe)
+    fun `lamp and reset are commands on the shutter channel, with the manual's bands`() {
         val fixture = MartinMac250Fixture.Mode4Ch(universe, "mac-1", "MAC 1", 1)
-            .withTransaction(transaction)
-
-        fixture.lampOn()
-        transaction.apply()
-        assertEquals(228u.toUByte(), controller.getValue(1))
-
-        fixture.lampOff()
-        transaction.apply()
-        assertEquals(248u.toUByte(), controller.getValue(1))
-
-        fixture.reset()
-        transaction.apply()
-        assertEquals(208u.toUByte(), controller.getValue(1))
+        val commands = FixtureCommands.of(fixture).associateBy { it.name }
+        assertEquals(setOf("lampOff", "lampOn", "reset"), commands.keys)
+        commands.values.forEach {
+            assertEquals(1, it.channelNo)
+            assertFalse(it.dedicated, "the shutter channel is the strobe property's too")
+        }
+        assertEquals(208u.toUByte(), commands.getValue("reset").level)
+        assertEquals(208..217, commands.getValue("reset").let { it.bandMin.toInt()..it.bandMax.toInt() })
+        assertEquals(228..237, commands.getValue("lampOn").let { it.bandMin.toInt()..it.bandMax.toInt() })
+        assertEquals(248..255, commands.getValue("lampOff").let { it.bandMin.toInt()..it.bandMax.toInt() })
+        // "Lamp off: time > 5 seconds".
+        assertTrue(commands.getValue("lampOff").spec.holdMs > 5_000)
+        // Reset and lamp off set what the fixture needs when its menu disables the DMX versions.
+        assertEquals(
+            listOf(3 to 200, 4 to 0, 7 to 80),
+            commands.getValue("reset").alongside.map { it.channelNo to it.level.toInt() },
+        )
+        assertEquals(commands.getValue("reset").alongside, commands.getValue("lampOff").alongside)
+        assertTrue(commands.getValue("lampOn").alongside.isEmpty())
     }
 }

@@ -362,6 +362,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectStageScene(state)
         routeApiRestProjectScenery(state)
         routeApiRestProjectEffects(state)
+        routeApiRestProjectFixtureCommands(state)
         routeApiRestProjectUniverseConfigs(state)
         routeApiRestProjectPatchGroups(state)
         routeApiRestProjectShow(state)

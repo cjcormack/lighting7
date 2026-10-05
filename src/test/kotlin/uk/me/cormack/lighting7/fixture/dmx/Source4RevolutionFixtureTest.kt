@@ -32,7 +32,7 @@ class Source4RevolutionFixtureTest {
         fixture.focusTime.value = 40u
         fixture.colTime.value = 50u
         fixture.beamTime.value = 60u
-        // Ch 12 (Reset) intentionally not exposed.
+        // Ch 12 (Reset) is the fixture's commands, never a property.
         fixture.gelScroller.setting = Source4RevolutionFixture.GelFrame.R357_ROYAL_LAVENDER
         fixture.fanSpeed.value = 70u
         fixture.iris.value = 80u
@@ -63,7 +63,7 @@ class Source4RevolutionFixtureTest {
         assertEquals(40u.toUByte(), controller.getValue(9))
         assertEquals(50u.toUByte(), controller.getValue(10))
         assertEquals(60u.toUByte(), controller.getValue(11))
-        // Ch 12 (Reset) was never written; default is 0.
+        // Ch 12 (Reset) is never written through the fixture; the desk holds it (CommandOutput).
         assertEquals(0u.toUByte(), controller.getValue(12))
         assertEquals(91u.toUByte(), controller.getValue(13))
         assertEquals(70u.toUByte(), controller.getValue(14))
@@ -144,9 +144,11 @@ class Source4RevolutionFixtureTest {
             assertNull(fixture.fixtureProperty(removed), "$removed is reserved with the shutter module fitted")
         }
 
-        // Every exposed channel is described; reset (12) and the reserved 20–23 are not.
-        val described = fixture.channelDescriptions().filterValues { it.isNotEmpty() }.keys
-        assertEquals((1..31).toSet() - setOf(12, 20, 21, 22, 23), described)
+        // Every exposed channel is described, and the reset channel as its commands (fixture optics
+        // session 7); the reserved 20–23 are not.
+        val descriptions = fixture.channelDescriptions()
+        assertEquals((1..31).toSet() - setOf(20, 21, 22, 23), descriptions.filterValues { it.isNotEmpty() }.keys)
+        assertEquals("5 commands", descriptions.getValue(12))
     }
 
     @Test

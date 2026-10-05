@@ -1,6 +1,9 @@
 package uk.me.cormack.lighting7.ai
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.routes.runFixtureCommand
+import uk.me.cormack.lighting7.routes.FixtureCommandResult
 import uk.me.cormack.lighting7.models.CueTargetDto
 
 import kotlinx.coroutines.GlobalScope
@@ -55,6 +58,7 @@ class AiTools(private val state: State) {
         createTemplateTool,
         setSceneryTool,
         setCueEventsTool,
+        runFixtureCommandTool,
     )
 
     /**
@@ -98,6 +102,7 @@ class AiTools(private val state: State) {
                 "create_template" -> executeCreateTemplate(input)
                 "set_scenery" -> executeSetScenery(input)
                 "set_cue_events" -> executeSetCueEvents(input)
+                RUN_FIXTURE_COMMAND -> executeRunFixtureCommand(input)
                 else -> ToolExecutionResult(
                     success = false,
                     description = "Unknown tool: $name",
@@ -127,7 +132,10 @@ class AiTools(private val state: State) {
         val effects = effectsArray.map { parseLookEffect(it.jsonObject) }
         // A deferred effect lands on whatever applies the Look, so it may name no one-shot trigger
         // at all (stage-view plan session 9) — the REST write boundary's rule, every problem at once.
-        TriggerIndex.EMPTY.check(effects.mapIndexed { i, e -> TriggerIndex.RowRef(DEFERRED_TARGET_TYPE, "", e.propertyName, "effects[$i]") })
+        val effectRefs = effects.mapIndexed { i, e -> TriggerIndex.RowRef(DEFERRED_TARGET_TYPE, "", e.propertyName, "effects[$i]") }
+        TriggerIndex.EMPTY.check(effectRefs)
+        // Nor a fixture command (fixture optics plan session 7).
+        CommandIndex.EMPTY.check(effectRefs)
 
         val project = state.projectManager.currentProject
         val scenery = sceneryArray?.let { items ->
@@ -875,6 +883,7 @@ class AiTools(private val state: State) {
         }
 
         state.show.triggerOutput.parkRefusal(universe, channel, value.toUByte())?.let { return errorResult(it) }
+        state.show.commandOutput.parkRefusal(universe, channel, value.toUByte())?.let { return errorResult(it) }
         val parkManager = state.show.parkManager
         val previous = parkManager.getParkedValue(universe, channel)?.toInt()
         parkManager.park(universe, channel, value.toUByte())
@@ -1806,6 +1815,37 @@ class AiTools(private val state: State) {
     private fun JsonObjectBuilder.putStrings(key: String, values: List<String>) {
         if (values.isEmpty()) return
         put(key, buildJsonArray { values.forEach { add(it) } })
+    }
+
+    /**
+     * `run_fixture_command` (fixture optics plan session 7). Whether the caller may is decided before
+     * this is reached — `AiService` for the chat, `McpProtocol` for MCP — exactly as the REST route's
+     * `requireCommandsAccess` decides it.
+     */
+    private suspend fun executeRunFixtureCommand(input: JsonObject): ToolExecutionResult {
+        val fixtureKey = input["fixtureKey"]?.jsonPrimitive?.contentOrNull ?: return errorResult("Missing 'fixtureKey'")
+        val command = input["command"]?.jsonPrimitive?.contentOrNull ?: return errorResult("Missing 'command'")
+        return when (val outcome = runFixtureCommand(state, fixtureKey, command)) {
+            is FixtureCommandResult.Refused -> ToolExecutionResult(
+                success = false,
+                description = outcome.message,
+                result = buildJsonObject { put("error", outcome.message); put("code", outcome.code) }.toString(),
+            )
+            is FixtureCommandResult.Done -> {
+                val r = outcome.response
+                ToolExecutionResult(
+                    success = r.completed,
+                    description = if (r.completed) "Ran '${r.label}' on '${r.fixtureName}' (${r.holdMs} ms)"
+                        else "'${r.label}' on '${r.fixtureName}' was interrupted before its hold ended",
+                    result = buildJsonObject {
+                        put("fixture", r.fixture)
+                        put("command", r.command)
+                        put("holdMs", r.holdMs)
+                        put("completed", r.completed)
+                    }.toString(),
+                )
+            }
+        }
     }
 
     private fun errorResult(message: String) = ToolExecutionResult(

@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.ParkSource
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.GroupableFixture
@@ -169,6 +170,16 @@ object DbFixtureLoader {
             if (triggers.isEmpty()) continue
             val idle = triggers.flatMap { listOf(it.channelNo, it.armChannelNo) }.associateWith { FixtureTriggers.IDLE_LEVEL }
             fixtures.controllerOrNull(dmx.universe)?.restoreState(idle)
+        }
+
+        // Likewise every fixture command's dedicated channel (fixture optics plan session 7): the command
+        // output owns it from here (`state/CommandOutput.kt`), and the buffer under it is set idle so a
+        // carried value — the Varytec's `reset` was a setting until then — never survives underneath.
+        for (fixture in fixtures.fixtures) {
+            val dmx = fixture as? DmxFixture ?: continue
+            val dedicated = FixtureCommands.of(dmx).filter { it.dedicated }
+            if (dedicated.isEmpty()) continue
+            fixtures.controllerOrNull(dmx.universe)?.restoreState(dedicated.associate { it.channelNo to it.idleLevel })
         }
     }
 

@@ -246,6 +246,17 @@ with an `ImportError`. Move both, or neither.
 colour lists nothing reads any more. Only the writer's number moved, which is what makes an older
 install refuse a v7 repo rather than silently write those fields back on its next push.
 
+**Fixture optics session 7 is the worked example of a data change that needs no version.** Five
+reset options left their settings and became fixture commands (`docs/fixtures-engineering.md`
+§"@FixtureCommand"), and the Varytec's and the Shehds' `reset` settings left their types. No field of
+any DTO changed: a row stores a setting by its level (`"251"`), never by an option's name, so an older
+archive decodes exactly as before. What changed is which stored rows the desk keeps — every import ends
+with `stripCommandRows` beside `stripTriggerRows`, dropping a row that names a command or holds a
+command's band on a property sharing its channel, and logging how many went. An older reader that
+imports such a row back would hold nothing worse than it held before; on this desk the output's band
+guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
+column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
 ### Version 22 — fitted media
 
 **v22 adds one optional field in two places** (fixture optics plan session 3, D6; P2 is the plan's

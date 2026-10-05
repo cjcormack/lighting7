@@ -42,7 +42,6 @@ class ShehdsLed19RgbwFixtureTest {
         fixture.program.setting = ShehdsLed19RgbwFixture.Program.AUTO_MODE_2
         fixture.programSpeed.value = 180u
         fixture.controlMode.value = 110u
-        fixture.reset.setting = ShehdsLed19RgbwFixture.Reset.RESET
 
         transaction.apply()
 
@@ -73,7 +72,8 @@ class ShehdsLed19RgbwFixtureTest {
         assertEquals(201u.toUByte(), controller.getValue(21))
         assertEquals(180u.toUByte(), controller.getValue(22))
         assertEquals(110u.toUByte(), controller.getValue(23))
-        assertEquals(255u.toUByte(), controller.getValue(24))
+        // Ch 24 is the reset command's (fixture optics plan session 7): nothing writes it through the fixture.
+        assertEquals(0u.toUByte(), controller.getValue(24))
     }
 
     @Test
@@ -126,7 +126,6 @@ class ShehdsLed19RgbwFixtureTest {
         fixture.program.setting = ShehdsLed19RgbwFixture.Program.PROGRAM_GRADIENT
         fixture.programSpeed.value = 180u
         fixture.controlMode.value = 50u
-        fixture.reset.setting = ShehdsLed19RgbwFixture.Reset.NO_FUNCTION
 
         transaction.apply()
 

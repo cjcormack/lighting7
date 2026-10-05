@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 
 import uk.me.cormack.lighting7.fixture.Fixture
@@ -80,6 +82,12 @@ object FxTargetFactory {
             FixtureTriggers.reservedNamesOf(fixture::class).firstOrNull { it.equals(propertyName, ignoreCase = true) }?.let {
                 throw TriggerNotStorableException(
                     "'$it' on '${fixture.targetKey}' is a one-shot trigger or its arm: no effect can drive it — it fires as an event while the desk is armed",
+                )
+            }
+            // Nor a fixture command (fixture optics plan session 7).
+            FixtureCommands.reservedNamesOf(fixture::class).firstOrNull { it.equals(propertyName, ignoreCase = true) }?.let {
+                throw CommandNotStorableException(
+                    "'$it' on '${fixture.targetKey}' is a fixture command: no effect can drive it — it runs from the fixture panel's Commands menu",
                 )
             }
         }

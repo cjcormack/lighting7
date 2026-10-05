@@ -527,10 +527,15 @@ export function spreadCellCount(targets: readonly WriteTarget[]): number {
  */
 export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily[] {
   const out = new Set<AttributeFamily>()
+  // A trigger or a command is no attribute a head can take: neither can be held by a template or a
+  // layer, so a head whose only beam-ish descriptor is a reset must not offer Beam.
+  const add = (property: PropertyDescriptor) => {
+    if (property.type !== 'trigger' && property.type !== 'command') out.add(familyForCategory(property.category))
+  }
   for (const target of targets) {
-    for (const property of target.properties) out.add(familyForCategory(property.category))
+    for (const property of target.properties) add(property)
     for (const element of target.elements ?? []) {
-      for (const property of element.properties) out.add(familyForCategory(property.category))
+      for (const property of element.properties) add(property)
     }
   }
   return ATTRIBUTE_FAMILIES.filter((family) => out.has(family))

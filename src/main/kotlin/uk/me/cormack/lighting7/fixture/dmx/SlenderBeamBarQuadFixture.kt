@@ -120,11 +120,11 @@ sealed class SlenderBeamBarQuadFixture(
     }
 
     /**
-     * Special function channel options for 27CH mode.
+     * Special function channel options for 27CH mode. Its 200–239 band is the fixture's reset: the
+     * [Mode27Ch.reset] command (fixture optics plan session 7), never an option a Look can hold.
      */
     enum class SpecialFunction(override val level: UByte) : DmxFixtureSettingValue {
         NO_FUNCTION(0u),
-        RESET(200u),
         STAND_ALONE(240u);
     }
 
@@ -506,6 +506,16 @@ sealed class SlenderBeamBarQuadFixture(
 
         @FixtureProperty("Special function", category = PropertyCategory.SETTING)
         val specialFunction = DmxFixtureSetting(transaction, universe, firstChannel + 26, SpecialFunction.entries.toTypedArray())
+
+        // The special-function channel's 200–239 band (it was the setting's RESET option until fixture
+        // optics session 7). Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes all four heads. They swing through their travel while it runs.",
+            holdMs = 5_000,
+        )
+        val reset = DmxCommand(universe, firstChannel + 26, 200u, bandMin = 200u, bandMax = 239u)
 
         /** Set all heads to the same colour */
         fun setAllHeadsColour(colour: Colour) {

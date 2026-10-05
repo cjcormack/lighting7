@@ -152,14 +152,15 @@ sealed class Fusion100SpotMkIIFixture(
     }
 
     /**
-     * Motor mode / reset control.
-     * 5CH mode CH5 / 15CH mode CH15.
+     * Motor mode. 5CH mode CH5 / 15CH mode CH15.
+     *
+     * The channel's top band, 251–255, is the fixture's reset: the [Mode5Ch.reset] / [Mode15Ch.reset]
+     * command (fixture optics plan session 7), never an option a Look can hold.
      */
     enum class MotorMode(override val level: UByte) : DmxFixtureSettingValue {
         NO_FUNCTION(0u),
         HIGH_SPEED_MOTOR_MOVEMENT(51u),
-        LOW_SPEED_MOTOR_MOVEMENT(151u),
-        RESET(251u);
+        LOW_SPEED_MOTOR_MOVEMENT(151u);
     }
 
     // ============================================
@@ -212,6 +213,16 @@ sealed class Fusion100SpotMkIIFixture(
 
         @FixtureProperty("Motor mode", category = PropertyCategory.SETTING)
         val motorMode = DmxFixtureSetting(transaction, universe, firstChannel + 4, MotorMode.entries.toTypedArray())
+
+        // The motor-mode channel's 251–255 band (it was the setting's RESET option until fixture optics
+        // session 7). Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
+            holdMs = 5_000,
+        )
+        val reset = DmxCommand(universe, firstChannel + 4, 251u, bandMin = 251u, bandMax = 255u)
     }
 
     /**
@@ -384,5 +395,15 @@ sealed class Fusion100SpotMkIIFixture(
 
         @FixtureProperty("Motor mode", category = PropertyCategory.SETTING)
         val motorMode = DmxFixtureSetting(transaction, universe, firstChannel + 14, MotorMode.entries.toTypedArray())
+
+        // The motor-mode channel's 251–255 band (it was the setting's RESET option until fixture optics
+        // session 7). Estimate: a 5 s hold — the manual gives none.
+        // Checked on the rig by FU-MANUAL-S7-COMMANDS.
+        @FixtureCommand(
+            label = "Reset",
+            description = "Re-homes pan, tilt and the wheels. The head swings through its travel while it runs.",
+            holdMs = 5_000,
+        )
+        val reset = DmxCommand(universe, firstChannel + 14, 251u, bandMin = 251u, bandMax = 255u)
     }
 }

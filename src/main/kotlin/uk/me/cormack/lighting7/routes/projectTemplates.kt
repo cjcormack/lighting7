@@ -3,6 +3,9 @@ package uk.me.cormack.lighting7.routes
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
@@ -1023,6 +1026,13 @@ private fun triggerTemplateRefusal(propertyName: String): String? =
             "(a cue's Events, the cannon's panel, a MIDI FireTrigger) while the desk is armed, and is never a stored value"
     }
 
+/** A fixture command's name, refused as a command (fixture optics plan session 7) — [triggerTemplateRefusal]'s twin. */
+private fun commandTemplateRefusal(propertyName: String): String? =
+    FixtureCommands.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
+        "A template cannot hold '$it' — it is a fixture command, which runs from the fixture panel's " +
+            "Commands menu behind a confirm, and is never a stored value"
+    }
+
 /**
  * The template write boundary: a value template's rows *or* an effect template's one effect.
  *
@@ -1057,6 +1067,7 @@ internal fun validateTemplateContents(
         }
         val property = TemplateProperty.ofOrNull(row.propertyName)
             ?: triggerTemplateRefusal(row.propertyName)?.let { throw TriggerNotStorableException(it) }
+            ?: commandTemplateRefusal(row.propertyName)?.let { throw CommandNotStorableException(it) }
             ?: return "A template cannot hold '${row.propertyName}' — " +
                 "slotted properties (gobo, colour wheel, macros) are per-model, so they live in a " +
                 "recorded look. Templates hold: " +
@@ -1233,6 +1244,12 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
             rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.propertyName, "rows[$i]") },
         )
     }
+    // Nor a fixture command (fixture optics plan session 7).
+    if (rows.any { CommandIndex.mayRefuse(it.propertyName) }) {
+        CommandIndex.of(template.project).check(
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.propertyName, "rows[$i]") },
+        )
+    }
     for ((index, row) in rows.withIndex()) {
         DaoTemplateRow.new {
             this.template = template
@@ -1257,6 +1274,7 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
 private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDto) {
     // A template's effect has no target of its own: it lands on the selection.
     TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
+    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
     DaoTemplateEffect.new {
         this.template = template
         effectType = effect.effectType

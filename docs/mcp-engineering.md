@@ -157,6 +157,15 @@ except for scripts and the cannons:
   **The local arm is the consent, by decision** (session 9 review): a GO from a remote session or an
   MCP tool (`go_cue_stack`, `apply_cue`) into a cue with events fires them while the desk is armed,
   as a GO at the desk would. What a remote caller cannot do is arm, fire a tube outright or reload.
+- **Fixture commands are refused remotely unless an admin allows them** (Remote access → *Allow
+  fixture commands over remote access*; fixture optics plan session 7, D13). A reset swings a head
+  through its travel and a lamp off leaves a discharge head dark for minutes, in a room a remote caller
+  cannot see. Refused (`REMOTE_COMMANDS_DISABLED`, `requireCommandsAccess`, the `requireEffectsAccess`
+  twin): `POST …/patches/{id}/commands/{command}`, the one REST door — and **MCP's
+  `run_fixture_command`**, which `McpProtocol` holds to the same setting since MCP is always remote,
+  and the in-app chat's, through `AiService`'s `allowCommands` for a remote caller. On the desk's own
+  listener both roles run one behind the fixture panel's confirm, and the chat may run one. Off by
+  default; `remote_access_settings.allow_commands`, machine-local.
 
 **Residual risks, known and accepted:** a remote *admin* can still bring scripts in by importing a
 project or pulling a cloud-sync repo, which the gate does not cover — an admin account is trusted
@@ -300,6 +309,16 @@ writes neither. `saveAsTemplate` still saves the position only: the template
 grammar holds focus, but a template is one family and focus is beam, so a focus is kept with
 `record_cue` (`docs/fixtures-engineering.md` §"Focusing a head on a point"). With `render_view`,
 that is the plan's MCP check: aim and focus a Revolution on the back wall, then look at it.
+
+`run_fixture_command` (a chat tool too; fixture optics plan session 7) runs one fixture command — a
+reset, a lamp strike, a lamp off — through the same `runFixtureCommand` as `POST
+…/patches/{id}/commands/{command}`, and answers when the hold ends. `describe_rig` names each
+fixture's commands beside its triggers (`commands=reset (Reset, 5.0 s),…`, with what a command sets
+for its hold). Over MCP it answers `isError` unless an admin has allowed fixture commands (§"Remote
+hardening"), and the schema says to run one only when the operator asked for that command on that
+fixture: a model cannot see the head swing or the stage go dark. Its refusals carry the route's codes
+(`COMMAND_BUSY`, `COMMAND_BLIND`, `COMMAND_PARKED`, `COMMAND_UNKNOWN`). A row naming a command as a
+property is refused by name (`COMMAND_NOT_STORABLE`) by every tool that writes rows.
 
 Tools act on the desk's **current** project, as the chat's do. Before the show is warm a call
 answers `isError` with "still starting". `describe_rig`, `get_current_state` and the five setup

@@ -5,9 +5,11 @@ package uk.me.cormack.lighting7.dmx
  * controllers are given in place of the bare [ParkManager], so that a second owner can hold
  * channels above composition without becoming a park.
  *
- * Today that owner is the one-shot trigger output (`state/TriggerOutput.kt`, stage-view plan
- * session 9), **under** park: a park is the operator's hand on the channel and beats everything,
- * a fire included — a cannon parked at 0 is locked out.
+ * Today those owners are the fixture-command output and the one-shot trigger output
+ * (`state/CommandOutput.kt`, fixture optics plan session 7; `state/TriggerOutput.kt`, stage-view plan
+ * session 9), layered as one source **under** park (`Show.outputSource`): a park is the operator's hand
+ * on the channel and beats everything, a fire or a command hold included — a cannon parked at 0 is
+ * locked out.
  */
 class LayeredParkSource(
     private val top: ParkSource,

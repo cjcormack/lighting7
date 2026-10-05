@@ -36,6 +36,7 @@ internal fun Route.routeApiRestInstallTunnel(state: State) {
                 authtoken = request.authtoken,
                 allowScripts = request.allowScripts,
                 allowEffects = request.allowEffects,
+                allowCommands = request.allowCommands,
                 hasAnyUser = state.authService.hasAnyUser,
             )
         } catch (e: RemoteAccessException) {
@@ -58,6 +59,8 @@ data class UpdateTunnelRequest(
     val allowScripts: Boolean? = null,
     /** Allow arming, firing and reloading one-shot triggers from a remote caller (stage-view session 9). */
     val allowEffects: Boolean? = null,
+    /** Allow running fixture commands (resets, lamp on/off) from a remote caller, MCP included (fixture optics session 7). */
+    val allowCommands: Boolean? = null,
 )
 
 @Serializable
@@ -67,6 +70,8 @@ data class TunnelSettingsDto(
     val allowScripts: Boolean,
     /** Whether a remote caller may arm, fire and reload one-shot triggers. Off by default. */
     val allowEffects: Boolean = false,
+    /** Whether a remote caller, MCP included, may run fixture commands. Off by default. */
+    val allowCommands: Boolean = false,
     /** Whether an authtoken is stored. The token itself is never sent back. */
     val hasAuthtoken: Boolean,
     /** The desk's public base URL — the OAuth issuer — as it stands now. */
@@ -114,6 +119,7 @@ internal fun State.tunnelSettingsDto(): TunnelSettingsDto {
         domain = s.domain,
         allowScripts = s.allowScripts,
         allowEffects = s.allowEffects,
+        allowCommands = s.allowCommands,
         hasAuthtoken = ra.hasAuthtoken,
         publicUrl = publicUrl,
         connectorUrl = "$publicUrl/mcp",

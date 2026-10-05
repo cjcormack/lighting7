@@ -161,8 +161,8 @@ interface Strobe {
 Most library strobes are a `BandedStrobeChannel` (`fixture/dmx/`): a `DmxSlider` that maps
 `strobe(0..255)` linearly onto one band `strobeMin..strobeMax` and writes `fullOnValue` for
 `fullOn()`; `zeroIntensityIsFullOn` makes `strobe(0)` "no strobe", and `max` clamps the slider
-below the bands it must not reach (the MAC 250's reset and lamp, the Robe's pulses and random
-strobe). A higher intensity is always a faster strobe: `fastToSlow` runs it down a band whose
+below the bands it must not reach (the Robe's pulses and random strobe; the MAC 250's reset and
+lamp, which are its fixture commands, §"@FixtureCommand"). A higher intensity is always a faster strobe: `fastToSlow` runs it down a band whose
 fastest end is its first value (the MAC 250's "strobe, fast → slow", where `strobe()` wrote the
 slowest rate for 255 until session 6). `strobeLevel(intensity)` is the pure value `strobe` writes. What each range of the channel *does* — closed, open, strobe at a rate — is the
 property's declared bands, not the class's (§"Beam vocabulary"); `StrobeBandsTest` holds the two to
@@ -528,8 +528,8 @@ slider's `@FixtureProperty(strobe = […])`:
 - The bands are in DMX order, never overlap, and **cover the slider's own range** (`min..max`, what
   composition can write). They may reach **past a clamp**, to describe what a raw channel write would
   find there — the MAC 250's pulses and random strobes above its 72 — and a value no band covers
-  draws open: the MAC 250's reset and lamp bands are left undeclared, for session 7's
-  fixture commands.
+  draws open: the MAC 250's reset and lamp bands are left undeclared — they are its fixture
+  commands (§"@FixtureCommand"), and outside a hold the output sends any value in them as 0.
 - A **setting-backed** STROBE channel declares the same per option instead:
   `DmxFixtureStrobeSettingValue` (`strobeKind`, `hzMin`, `hzMax`, `strobeInverted`), the band running
   from the option's level to the next option's, on the wire as `SettingOption.strobeKind` and friends.
@@ -574,7 +574,7 @@ armed by its shared `master`, which is no property either.
 - **The desk owns the channels.** `state/TriggerOutput.kt` (one per show, rebuilt on every register
   change) holds every trigger channel at idle and every arm channel at the desk's arm, **above
   composition and under park**, through the controllers' park source (`dmx/LayeredParkSource.kt`:
-  park on top, the trigger output under it, every `DbFixtureLoader.loadFixtures` handed
+  park on top, the command output and then the trigger output under it, every `DbFixtureLoader.loadFixtures` handed
   `Show.outputSource`). A raw `updateChannel` on one of them is dropped (logged) rather than parked
   in the programmer's sideband; a **park at or above the fire threshold (51) is refused** on them —
   a park beats the trigger output, so it would be a held fire — while a park below it is a lock-out
@@ -604,6 +604,109 @@ On the wire a trigger is a `TriggerPropertyDescriptor` (`type: "trigger"`, its c
 channel and its label) at the end of a fixture's `properties` — so the cannon's panel can name its
 tubes, and a client drawing controls from the list skips it. The DMX sheet names the channels
 `Tube A (trigger)` and `Master enable (arm)`.
+
+### @FixtureCommand — resets and lamp control
+
+```kotlin
+@FixtureCommand(
+    label = "Reset scroller",
+    description = "Recalibrates the gel scroller and the lenses (zoom and focus). …",
+    holdMs = 3_000,
+)
+val resetScroller = DmxCommand(universe, firstChannel + 11, 149u, bandMin = 147u, bandMax = 152u)
+```
+
+A **fixture command** (fixture optics plan session 7, D13) is a level the fixture acts on when it is
+held on a channel for a while — a reset, a lamp strike, a lamp off. A reset recorded into a Look
+re-homes every head on every recall and a lamp off in a cue is a dark head for eight minutes, so a
+command is, like a trigger, **its own kind, not a `@FixtureProperty`**: a `DmxCommand` is a channel,
+a level, the manual's band around it, an idle level and the preconditions it holds (`alongside`),
+nothing more — not a `Slider`, no transaction — so nothing that resolves a property by name finds
+one, and nothing composes or crossfades it. `FixtureCommands.of(fixture)` resolves a fixture's
+commands (`fixture/FixtureCommand.kt`, cached per class like the triggers).
+
+The library's commands:
+
+| Type | Commands | Channel | Hold |
+|---|---|---|---|
+| ETC Source 4 Revolution | `reset`, `resetScroller`, `resetPanTilt`, `resetFrontModule`, `resetRearModule` | 12, dedicated | 3.5 s — the manual's 3 s (p15) plus margin |
+| Robe ColorSpot 575 AT | `lampOn`, `lampOff`, `reset` and six partial resets | 6 (control), dedicated | 4 s — the chart's "at least 3 s" plus one |
+| Martin MAC 250 | `reset`, `lampOn`, `lampOff` | 1 (shutter), shared with `strobe` | 5 s, 5 s, 6 s — lamp off "> 5 seconds"; the others estimates |
+| Varytec Easymove XL 60, Shehds LED19 (both modes) | `reset` | dedicated (the old two-option `reset` setting) | 5 s, estimate |
+| Equinox Fusion 100 Spot (5 / 15ch), Gear4music Orbit-70, Slender Beam Bar Quad 27ch | `reset` | shared with the setting it was an option of | 5 s, estimate |
+
+- **Dedicated or shared, read from the fixture.** A command channel no property covers is
+  *dedicated*: the desk owns it outright, holding it at its idle level (0) between commands, and a raw
+  `updateChannel` on it is dropped (logged), as on a trigger channel. A channel a property drives is
+  *shared*: composition owns it between commands, and the **band guard** — `CommandOutput` is also a
+  `TransmitModifier` — sends any value inside a command's band as the channel's idle level, whatever
+  wrote it (a typed `208` on the MAC's strobe, a programmer level, an effect, a script). That guard is
+  the half of "no path can hold a reset" a name check cannot reach: `strobe = 208` is a strobe row by
+  name. The five RESET setting options this session removed stay removed: `FixtureCommandsTest` fails
+  if a shared channel's setting offers an option inside a command's band.
+- **The desk holds it.** `state/CommandOutput.kt` (one per show) is a park-source layer beside the
+  trigger output, **above composition and under park** (`Show.outputSource`: park, then the command
+  and trigger outputs, which never own the same channel). A command holds its level — and every
+  `alongside` channel at its level — for `holdMs`, then gives the channels back: a dedicated one
+  straight to idle with no fade (the Revolution's manual: "then set the channel to 0% without timing
+  or fading"), a shared one to whatever composition is sending. Held values bypass the transmit
+  modifiers as a park does, so **a blackout or the Grand Master does not cut a hold short**.
+- **What refuses a command**, each with its own code on the route: another command on the same unit
+  (`COMMAND_BUSY` — one at a time per fixture; different fixtures run together), Blind
+  (`COMMAND_BLIND` — it would reach the rig), a parked channel among those it holds (`COMMAND_PARKED`
+  — a park beats the hold, so it would not reach the fixture), and the public listener unless an
+  admin allows it (`REMOTE_COMMANDS_DISABLED`). A project switch or shutdown ends a hold as
+  *interrupted*, as does a repatch that takes the fixture or its command away, and so does a park
+  landing mid-hold on any channel the hold owns (its own or a precondition's — polled every 100 ms):
+  the park would hide the rest of the hold from the fixture, so the request answers `completed:
+  false` rather than claiming the full hold. The fixture panel greys out a command whose channels are
+  parked before it is pressed. Nothing is persisted.
+- **Preconditions are set, not refused.** Where the manual says a function needs other channels just
+  so, the command declares them in `alongside` and the desk sets them for the hold: the MAC 250's
+  reset and lamp off want the CTC filter, a static prism and the open gobo whenever the fixture's menu
+  has disabled the DMX versions (its factory default — "a reset command can only be executed if…",
+  DMX protocol notes 1 and 2), and the Robe's commands close the shutter. The Robe's chart puts its
+  shutter condition on the 50–129 switch functions the desk does not expose, not on the lamp and
+  reset bands; closing it anyway costs nothing during a reset or a strike, where a command the fixture
+  ignored costs a trip up the ladder. A command whose precondition channel is parked is refused.
+- **Parks.** A park that would itself be a command is refused live (`ParkSocket`, `park_channel`),
+  passed over at the output and dropped from storage at show start (`Show.dropRefusedParks`): on a
+  dedicated channel anything but idle (several manuals say only "Reset", with no bands), on a shared
+  one a level inside a command's band. A park at idle on a dedicated channel is a lock-out and
+  allowed. A reload seeds every dedicated command channel idle (`DbFixtureLoader`).
+- **Refused by name at every write boundary**, beside the trigger refusal and on its three rules
+  (`fixture/CommandGuard.kt`'s `CommandIndex`): a Look row or effect, a template row or effect, a cue
+  row or ad-hoc effect, a programmer value, a live effect (`FxTargetFactory`), a group effect and a
+  surface binding naming a command — on a fixture, on a group with such a fixture in it, or, for a row
+  with no target of its own, by any command's name — answer 400 `COMMAND_NOT_STORABLE` naming every
+  refused row. `FixtureCommandsTest` keeps every command name clear of every property and trigger name
+  in the library, since a generic row is refused by all of them. A **stored** Look or cue row is also
+  refused by level, by the strip's own rule below (`CommandIndex.levelRefusal`): a property sharing a
+  command's channel holding a level inside its band (`strobe = 210` on a MAC 250 is its reset), on the
+  fixture by its type, on a group by every member's. So the write boundary and the strip agree, and
+  no row is accepted only to vanish on the next import or clone. A Record whose programmer holds such
+  a level is refused the same way, naming the row; the programmer itself may hold one, transiently,
+  because the band guard sends it as idle.
+- **Stored rows** were stripped once at startup (`state/CommandRowStrip.kt`, to be deleted once run,
+  beside its trigger twin) and are stripped on every sync import (`models/commandRows.kt`'s
+  `stripCommandRows`): by name (the Varytec's and the Shehds' old `reset = 255`), and by level — a
+  Look or cue row on a property sharing a command's channel holding a level in its band (the Fusion's
+  motor mode at 251, the Orbit's program at 200, the Slender's special function at 200, a MAC 250
+  strobe row at 208–255), a group row judged by every member's type. Template rows hold intents and
+  effects their own parameters, so neither is judged by level; the band guard covers whatever they
+  produce. A removed option is stored as a level, never a name, so nothing failed to load before the
+  pass: a level in a band went out as idle.
+
+On the wire a command is a `CommandPropertyDescriptor` (`type: "command"`: label, description,
+`holdMs`, `confirm`, its channel, `dedicated`, `alongside`) at the very end of a fixture's
+`properties`, after any trigger — the panel's *Commands* menu reads it and a client drawing controls
+from the list skips it. The DMX sheet names a dedicated command channel `Reset (command)` for one
+command and `5 commands` for several; a shared one keeps its property's name. It runs over REST, `POST
+/api/rest/projects/{id}/patches/{pid}/commands/{command}`, which answers when the hold ends
+(`completed: false` when it was cut short) — no WS frame, the hold is the request — and from MCP's
+`run_fixture_command` (`docs/mcp-engineering.md`). `describe_rig` lists each fixture's commands with
+their hold. Every hold not in a manual is marked `// Estimate:` and checked on the rig by
+`FU-MANUAL-S7-COMMANDS`.
 
 ## Transaction Pattern
 

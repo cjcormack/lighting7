@@ -2,6 +2,8 @@ package uk.me.cormack.lighting7.midi
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
+import uk.me.cormack.lighting7.fixture.CommandIndex
+import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -575,6 +577,15 @@ class ControlSurfaceBindingService(
             null
         }
         refusal?.let { throw BindingRefused(it, TriggerNotStorableException.CODE) }
+        // Nor a fixture command (fixture optics plan session 7): a fader on a reset is a reset.
+        val commandRefusal = if (context != null) {
+            CommandIndex.refusalLive(context.fixtures, type, key, property, "binding")
+        } else if (type == null) {
+            CommandIndex.EMPTY.refusal(null, null, property, "binding")
+        } else {
+            null
+        }
+        commandRefusal?.let { throw BindingRefused(it, CommandNotStorableException.CODE) }
     }
 
     /**

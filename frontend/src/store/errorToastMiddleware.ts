@@ -36,6 +36,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // The rig's commit queue reports its own refusal **by code** (`rigWriteFailureMessage`) after
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
+  'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

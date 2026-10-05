@@ -29,6 +29,12 @@ object DaoRemoteAccessSettingsTable : IntIdTable("remote_access_settings") {
      * the remote caller cannot see.
      */
     val allowEffects = bool("allow_effects").default(false)
+    /**
+     * Whether a remote request — MCP included — may run a fixture command: a reset, a lamp strike, a
+     * lamp off (fixture optics plan session 7, D13). Off by default: a lamp off is a dark head for eight
+     * minutes, in a room the remote caller cannot see.
+     */
+    val allowCommands = bool("allow_commands").default(false)
     val updatedAt = utcInstant("updated_at")
 }
 
@@ -39,5 +45,6 @@ class DaoRemoteAccessSettings(id: EntityID<Int>) : IntEntity(id) {
     var domain by DaoRemoteAccessSettingsTable.domain
     var allowScripts by DaoRemoteAccessSettingsTable.allowScripts
     var allowEffects by DaoRemoteAccessSettingsTable.allowEffects
+    var allowCommands by DaoRemoteAccessSettingsTable.allowCommands
     var updatedAt by DaoRemoteAccessSettingsTable.updatedAt
 }

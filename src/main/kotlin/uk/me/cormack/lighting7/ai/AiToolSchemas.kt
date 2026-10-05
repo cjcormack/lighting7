@@ -875,3 +875,30 @@ internal val setSceneryTool = AnthropicToolDef(
         put("required", buildJsonArray { add("scenery") })
     },
 )
+
+/**
+ * Run one fixture command (fixture optics plan session 7, D13). Offered to the in-app chat; held to
+ * Remote access's "allow fixture commands" for a remote caller and for MCP (`McpProtocol`), which is
+ * always remote.
+ */
+internal val runFixtureCommandTool = AnthropicToolDef(
+    name = RUN_FIXTURE_COMMAND,
+    description = "Run one fixture command — a reset, a lamp strike or a lamp off — on one fixture. The desk holds the command's level for its declared time (a few seconds) and answers when it ends. " +
+        "describe_rig lists each fixture's commands by name. A command is never a stored value: no look, cue, template or programmer value can hold one, and this is the only way to run one besides the fixture panel. " +
+        "Commands move heads and can leave a discharge lamp dark for minutes, in a room you cannot see: run one only when the operator asked for that command on that fixture. " +
+        "Refused while the programmer is blind, while a channel it holds is parked, while the fixture is running another command, and over remote access unless an admin has allowed fixture commands.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("fixtureKey", buildJsonObject { put("type", "string"); put("description", "The fixture's key, as describe_rig lists it.") })
+            put("command", buildJsonObject { put("type", "string"); put("description", "The command's name, as describe_rig lists it (e.g. 'reset', 'lampOn').") })
+        })
+        put("required", buildJsonArray { add("fixtureKey"); add("command") })
+    },
+)
+
+internal const val RUN_FIXTURE_COMMAND = "run_fixture_command"
+
+/** What the tool answers when a caller may not run one. */
+internal const val FIXTURE_COMMANDS_REMOTE_REFUSAL =
+    "run_fixture_command is not available: fixture commands are turned off for remote access. An admin can allow them in Install settings → Remote access."

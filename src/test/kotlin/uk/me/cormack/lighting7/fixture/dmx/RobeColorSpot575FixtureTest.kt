@@ -2,7 +2,9 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
+import uk.me.cormack.lighting7.fixture.FixtureCommands
 import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 
 class RobeColorSpot575FixtureTest {
@@ -84,45 +86,24 @@ class RobeColorSpot575FixtureTest {
     }
 
     @Test
-    fun `lampOn lampOff and reset family write the dangerous control bands directly`() {
-        val (controller, transaction) = createTestTransaction(universe)
+    fun `lamp and the resets are commands on the control channel, which the desk owns`() {
         val fixture = RobeColorSpot575Fixture.Mode2Ch(universe, "spot-1", "Spot 1", 1)
-            .withTransaction(transaction)
-
-        fixture.lampOn()
-        transaction.apply()
-        assertEquals(130u.toUByte(), controller.getValue(6))
-
-        fixture.resetPanTilt()
-        transaction.apply()
-        assertEquals(140u.toUByte(), controller.getValue(6))
-
-        fixture.resetColour()
-        transaction.apply()
-        assertEquals(150u.toUByte(), controller.getValue(6))
-
-        fixture.resetGobo()
-        transaction.apply()
-        assertEquals(160u.toUByte(), controller.getValue(6))
-
-        fixture.resetDimmer()
-        transaction.apply()
-        assertEquals(170u.toUByte(), controller.getValue(6))
-
-        fixture.resetFocusZoomFrost()
-        transaction.apply()
-        assertEquals(180u.toUByte(), controller.getValue(6))
-
-        fixture.resetIrisPrism()
-        transaction.apply()
-        assertEquals(190u.toUByte(), controller.getValue(6))
-
-        fixture.reset()
-        transaction.apply()
-        assertEquals(200u.toUByte(), controller.getValue(6))
-
-        fixture.lampOff()
-        transaction.apply()
-        assertEquals(230u.toUByte(), controller.getValue(6))
+        val commands = FixtureCommands.of(fixture).associateBy { it.name }
+        assertEquals(
+            mapOf(
+                "lampOn" to 130, "resetPanTilt" to 140, "resetColour" to 150, "resetGobo" to 160,
+                "resetDimmer" to 170, "resetFocusZoomFrost" to 180, "resetIrisPrism" to 190,
+                "reset" to 200, "lampOff" to 230,
+            ),
+            commands.mapValues { it.value.level.toInt() },
+        )
+        commands.values.forEach {
+            assertEquals(6, it.channelNo)
+            assertTrue(it.dedicated, "no property covers channel 6")
+            assertEquals(it.level.toInt() + 9, it.bandMax.toInt(), "each band is the chart's ten values")
+            // The chart's "at least 3 s".
+            assertTrue(it.spec.holdMs >= 3_000)
+            assertEquals(listOf(18 to 0), it.alongside.map { h -> h.channelNo to h.level.toInt() }, "the shutter is closed for the hold")
+        }
     }
 }

@@ -142,6 +142,10 @@ function hasEmitter(property: AnyPropertyDescriptor, key: (typeof EMITTERS)[numb
 
 /** A property as the binding surfaces see it — a colour brings its bundled emitters with it. */
 function expand(property: AnyPropertyDescriptor): AvailableProperty[] {
+  // A one-shot trigger and a fixture command are listed with the properties but are none: nothing
+  // binds, records or sets one, and the desk refuses either by name (`TRIGGER_NOT_STORABLE`,
+  // `COMMAND_NOT_STORABLE`). Offering one in a picker would only offer a 400.
+  if (property.type === 'trigger' || property.type === 'command') return []
   const out = [toAvailable(property)]
   if (property.type !== 'colour') return out
   for (const emitter of EMITTERS) {

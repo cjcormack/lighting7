@@ -12,6 +12,7 @@ import {
   findColourSource,
   findDimmerProperty,
   triggersOf,
+  commandsOf,
   useFixtureTypeListQuery,
 } from '../../store/fixtures'
 import type { GroupPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
@@ -26,6 +27,7 @@ import { GroupPropertyVisualizer, GroupVirtualDimmerSlider } from './GroupProper
 import { GroupMembershipSection } from './GroupMembershipSection'
 import { FxSection } from '../fx/FxSection'
 import { CannonPanel } from '../effects/CannonPanel'
+import { FixtureCommandsMenu } from './FixtureCommandsMenu'
 import { FixtureBoundControlsRow } from '../surfaces/FixtureBoundControlsRow'
 import { GelSwatch, useDimmerBrightness } from './GelSwatch'
 import { SWATCH_FLOOR } from '@/lib/colourMath'
@@ -104,8 +106,10 @@ function PropertiesView({
 
   // A one-shot fixture's tubes are not controls: they get the cannon's panel (stage-view session 9).
   const triggers = useMemo(() => triggersOf(fixture.properties), [fixture.properties])
+  // Nor are its resets and lamp commands: they get the Commands menu (fixture optics session 7).
+  const commands = useMemo(() => commandsOf(fixture.properties), [fixture.properties])
   const hasFixtureProperties =
-    fixture.properties && fixture.properties.length > triggers.length
+    fixture.properties && fixture.properties.length > triggers.length + commands.length
   const hasElementGroupProperties =
     fixture.elementGroupProperties && fixture.elementGroupProperties.length > 0
   const hasAnyProperties = hasFixtureProperties || hasElementGroupProperties
@@ -139,6 +143,11 @@ function PropertiesView({
 
       {/* A confetti cannon's panel: loaded and spent, arm, hold to fire, reload. */}
       {triggers.length > 0 && <CannonPanel fixtureKey={fixture.key} triggers={triggers} canFire={isEditing} />}
+
+      {/* Resets and lamp control: held for a few seconds behind a confirm, never stored. */}
+      {commands.length > 0 && (
+        <FixtureCommandsMenu fixtureKey={fixture.key} fixtureName={fixture.name} commands={commands} canRun={isEditing} />
+      )}
 
       {/* Properties - fixture-level and element-group interleaved by category */}
       {(hasAnyProperties || hasVirtualDimmer) && (
@@ -262,7 +271,7 @@ function PropertiesView({
         </>
       )}
 
-      {!hasAnyProperties && !hasElements && triggers.length === 0 && (
+      {!hasAnyProperties && !hasElements && triggers.length === 0 && commands.length === 0 && (
         <p className="text-sm text-muted-foreground">No properties available</p>
       )}
     </div>

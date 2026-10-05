@@ -132,6 +132,9 @@ function channelsFor(
     // The programmer never holds a one-shot trigger: the desk refuses one by name.
     case 'trigger':
       return []
+    // Nor a fixture command (fixture optics plan session 7), refused the same way.
+    case 'command':
+      return []
   }
 }
 

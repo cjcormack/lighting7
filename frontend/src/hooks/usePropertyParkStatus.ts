@@ -22,6 +22,10 @@ function getPropertyChannels(property: PropertyDescriptor): ChannelRef[] {
     // A one-shot trigger and its arm can be parked — below the fire level, as a lock-out.
     case "trigger":
       return [property.channel, property.armChannel]
+    // A fixture command's channel likewise — at idle, as a lock-out — and its preconditions' channels
+    // are the properties' own.
+    case "command":
+      return [property.channel]
   }
 }
 
