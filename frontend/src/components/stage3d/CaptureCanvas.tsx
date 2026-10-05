@@ -19,8 +19,8 @@ export interface StageCapture {
 
 export interface StageCaptureHandle {
   /**
-   * Draw [frames] frames, a task apart so the effects between them land (the bloom composer's
-   * rebuild after its camera is swapped in, a light table packed by the frame before).
+   * Draw [frames] frames, a task apart so the effects between them land (a camera swapped in, a
+   * light table packed by the frame before).
    */
   draw(frames: number): Promise<void>
   /** The last frame drawn, as a PNG. */

@@ -13,7 +13,7 @@ import {
   type Material,
 } from 'three'
 import { NO_RAYCAST } from '../raycast'
-import { makeSurfaceMaterial } from '../scene/surfaceShader'
+import { litByFill, makeSurfaceMaterial } from '../scene/surfaceShader'
 import { useSurfaceLighting } from '../scene/SurfaceLighting'
 import type { BodySpec } from './archetype'
 import {
@@ -29,7 +29,7 @@ import {
   type BodyLod,
 } from './bodyGeometry'
 import type { Mount } from './mount'
-import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_COLOR } from './palette'
+import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_ACTIVE_FILL, HOUSING_COLOR, HOUSING_FILL } from './palette'
 
 /**
  * Every fixture body on one canvas, **instanced per archetype part** (stage-view plan session 6,
@@ -136,7 +136,9 @@ export function useBodies(): BodiesHandle | null {
 
 const ZERO = new Matrix4().makeScale(0, 0, 0)
 const HOUSING = new Color(HOUSING_COLOR)
-const HOUSING_ACTIVE = new Color(HOUSING_ACTIVE_COLOR)
+// The housing material's fill is HOUSING_FILL; a selected housing's extra fill rides its tint.
+const HOUSING_ACTIVE = new Color(HOUSING_ACTIVE_COLOR).multiplyScalar(HOUSING_ACTIVE_FILL / HOUSING_FILL)
+
 const LENS_OFF = new Color(BODY_LENS_COLOR)
 
 type PartName = 'base' | 'yoke' | 'head'
@@ -432,10 +434,10 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
 }
 
 /**
- * Just before the emitters' flush — after every director (0) and before the composer (1) — so a
- * body and its beam upload in one frame.
+ * Just before the emitters' flush — after every director (0) and before the render
+ * (`STAGE_RENDER_PRIORITY`) — so a body and its beam upload in one frame.
  */
-const BODIES_FLUSH_PRIORITY = 0.4
+export const BODIES_FLUSH_PRIORITY = 0.4
 
 interface StageBodiesProps {
   layout: BodyLayout
@@ -447,7 +449,7 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
   const { uniforms } = useSurfaceLighting()
   const invalidate = useThree((s) => s.invalidate)
   const housingMaterial = useMemo(
-    () => makeSurfaceMaterial(uniforms, { colour: '#ffffff', pattern: 'PLAIN', emissive: false }, { doubleSided: true }),
+    () => makeSurfaceMaterial(uniforms, { colour: '#ffffff', pattern: 'PLAIN', emissive: false }, { doubleSided: true, fill: HOUSING_FILL }),
     [uniforms],
   )
   const lensMaterial = useMemo(
@@ -458,8 +460,8 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
     () =>
       new ShaderMaterial({
         uniforms: {
-          uHousing: { value: new Color(HOUSING_COLOR).multiplyScalar(2.5) },
-          uHousingActive: { value: new Color(HOUSING_ACTIVE_COLOR).multiplyScalar(2.5) },
+          uHousing: { value: litByFill(HOUSING, HOUSING_FILL) },
+          uHousingActive: { value: litByFill(HOUSING_ACTIVE, HOUSING_FILL) },
         },
         vertexShader: BILLBOARD_VERTEX,
         fragmentShader: BILLBOARD_FRAGMENT,

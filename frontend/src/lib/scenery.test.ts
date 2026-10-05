@@ -91,7 +91,7 @@ describe('scenery, drawn (stage-view plan session 8)', () => {
     const cache: SceneryOverlayCache = new WeakMap()
     const reach = (scenery: LiveScenery) => {
       const [drawn] = sceneryElements([tabs], scenery, 0, cache)
-      const colliders = elementColliders(drawn, buildElement(drawn, { drawnRegionUuids: new Set() }))
+      const colliders = elementColliders(drawn, buildElement(drawn))
       const out: BeamHit = { t: 0, nx: 0, ny: 0, nz: 0 }
       // A beam straight upstage through the middle of the opening, a metre up.
       return beamReach(0, 1, 5, 0, 0, -1, colliders, 40, out) ? out.t : null

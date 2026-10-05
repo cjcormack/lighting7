@@ -223,8 +223,9 @@ the bug that doc exists to prevent.
 changes the picture without changing an R3F prop — an imperative material write, an emitter buffer
 write, a uniform — must call `invalidate` (`useStageInvalidate` from `stage3d/stageInvalidate.tsx`),
 or it shows only when something else happens to draw a frame. The same doc's §"The 3D renderer"
-lists what already asks, and covers the other renderer rules: no MSAA in the composer, DPR at 1.5,
-context-loss recovery, emitters sized by the rig, regions hanging down from `centerZ` (the top
+lists what already asks, and covers the other renderer rules: no post-processing — `StageRender`
+draws straight to an opaquely cleared canvas and every fragment encodes itself, so beams and pools
+add in display space as the prototype's do — DPR at 1.5, context-loss recovery, emitters sized by the rig, regions hanging down from `centerZ` (the top
 surface), dark-glass lenses, and the one DOM label layer. **Light lands through one surface shader**
 (session 3): every venue, set and region surface loops over a float data texture of the live lights
 (`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, with the
@@ -247,9 +248,8 @@ same key — no new announce key — until *Save this view…* makes it a `SEAT`
 `components/stage3d/scene/builders/` — pure functions a node test pins, one per kind, the seats
 exactly `lib/stageSeats.ts`'s. The View menu's Venue · Set · Seating · Haze are per window
 (`sessionStorage`), and so is the **vis source** now, riding `windows.viewOptions` as `source` beside
-`viewpoint`. Two traps, both in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
-`useDefaultCamera`, and the bloom composer rebuilds after the swap's frame, so `Bloom` invalidates on
-each new composer or the view sits on the old camera's picture.
+`viewpoint`. One trap, in the doc's §"Cameras and viewpoints": a camera swapped in must be sized by
+`useDefaultCamera`.
 
 **Any window can be asked to render a viewpoint for Claude** (`render_view`, stage-view plan
 session 4). `StageRenderHost` (`components/stageRender/`, mounted once in `Layout`) takes the desk's
@@ -269,7 +269,8 @@ outside the canvas must be bridged there too. See `docs/stage-vis-engineering.md
 **Editing on a section is the 3D scene's too** (session 5, D1): with Edit on and the camera on
 Plan, Front or Side, `stage3d/edit/SectionEditLayer.tsx` — DOM over the canvas, like the label layer
 — owns the pointer and does everything the SVG plot did, in the section's metres: marquee (⇧/⌘ +
-drag), click-select, body drags with alignment guides and the snap grid, drop-onto-a-bar, sliding
+drag), click-select, body drags of a selected object (a drag on an unselected one pans) with
+alignment guides and the snap grid, drop-onto-a-bar, sliding
 along a bar, the region and rigging handles (height handles in the elevations), placement clicks, pan
 and zoom. The section camera reports where it looks (`StageCameraRig`'s `onSectionView`) and takes
 pan, zoom and fit through `StageCameraHandle.section`; a pointer is resolved from the canvas's live

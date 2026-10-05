@@ -1,5 +1,5 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
-import { EMPTY_BUILD, isElementShown, type BuildContext, type ElementBuild } from '../sceneParts'
+import { EMPTY_BUILD, isElementShown, type ElementBuild } from '../sceneParts'
 import { buildDrape } from './drape'
 import { buildFlat } from './flat'
 import { buildObject } from './object'
@@ -13,7 +13,7 @@ import { buildSeating } from './seating'
  * that is `hidden`, or whose `visible` state is false, builds nothing; so does a kind this build
  * does not know, which a later desk may send.
  */
-export function buildElement(element: StageElementDto, context: BuildContext): ElementBuild {
+export function buildElement(element: StageElementDto): ElementBuild {
   if (!isElementShown(element)) return EMPTY_BUILD
   switch (element.kind) {
     case 'ROOM':
@@ -25,7 +25,7 @@ export function buildElement(element: StageElementDto, context: BuildContext): E
     case 'DRAPE':
       return buildDrape(element)
     case 'PLATFORM':
-      return buildPlatform(element, context)
+      return buildPlatform(element)
     case 'SEATING':
       return buildSeating(element)
     case 'OBJECT':

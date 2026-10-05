@@ -254,6 +254,17 @@ describe('SectionEditLayer — the plot’s gestures on a section', () => {
     expect(rects.filter((r) => r.style.cursor === 'ns-resize')).toHaveLength(0)
   })
 
+  it('pans from an object that is not selected, and selects it on a click', () => {
+    const { svg, onSelectionChange, onRegionPositionChange } = draw()
+    drag(svg, [-1.5, -2], [-1, -2])
+    expect(controls.panBy).toHaveBeenCalled()
+    expect(onRegionPositionChange).not.toHaveBeenCalled()
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    fireEvent.pointerDown(svg, at(-1.5, -2))
+    fireEvent.pointerUp(window, at(-1.5, -2))
+    expect(onSelectionChange).toHaveBeenLastCalledWith({ kind: 'region', uuid: 'deck' }, 'replace')
+  })
+
   it('pans and zooms the section camera, never itself', () => {
     const { svg } = draw()
     fireEvent.pointerDown(svg, at(6, 3))

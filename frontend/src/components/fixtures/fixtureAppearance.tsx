@@ -39,7 +39,7 @@ import { computeNormalizedHueCss } from '../../lib/colourMath'
  *
  * Both numbers are raw, not display-ready: `color` is the hue at **full** brightness and
  * `intensity` is the **linear** 0..1 level. Each medium applies its own curve — the DOM marker
- * folds `perceptualBrightness` into a box-shadow and an opacity, the 3D scene splits it (perceptual
+ * folds `perceptualBrightness` into a box-shadow and an opacity, the 3D scene splits it (`level^0.6`
  * on the lens, linear on the cone so it can double as the beam cull), and the busk rig's tiles draw
  * a live bar from it. A pre-baked CSS string would take that choice away, which is why `useColourAppearance`
  * is not the shape this needs: it returns only the baked string and drops the level.

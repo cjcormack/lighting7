@@ -60,15 +60,6 @@ export interface ElementBuild {
 
 export const EMPTY_BUILD: ElementBuild = { parts: [], seats: [] }
 
-/** What a builder may read beyond the element itself. */
-export interface BuildContext {
-  /**
-   * The regions the view is drawing, by uuid. A platform linked to one of them (D5) is that
-   * region's deck, so it draws its rail but not a second deck over the region's.
-   */
-  drawnRegionUuids: ReadonlySet<string>
-}
-
 // — reading an element ————————————————————————————————————————————————————————
 
 function finite(value: unknown): value is number {

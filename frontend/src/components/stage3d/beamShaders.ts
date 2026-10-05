@@ -10,9 +10,11 @@ import {
   GOBO_BLUR_TEXELS,
   HAZE_LEVEL,
   VOLUMETRIC_STEPS,
+  VOL_AXIAL_FADE,
   VOL_GAIN,
   VOL_LOD_BASE,
   VOL_SPREAD,
+  VOL_SPREAD_NEAR,
 } from './washConfig'
 
 /** Compile-time march bound; `uVolSteps` varies below it at runtime. */
@@ -100,8 +102,11 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 // bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
 // clamped by the axial range, where the beam landed (`scene/landing.ts`), the floor, the upstage
 // and side walls, the window's haze plane and camera-ray region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
-// through a box — then sampled with a per-pixel interleaved-gradient jitter so banding dissolves
-// under bloom. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
+// through a box — then sampled with a per-pixel interleaved-gradient jitter so banding reads as
+// grain. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
+//
+// The air is dense by the lamp and thins along the throw and as the beam spreads (`washConfig.ts`),
+// rolled off by `1 − exp(−light)` and encoded here, so two beams crossing visibly sum.
 const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
@@ -179,6 +184,8 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   uniform int uVolSteps;
   uniform float uVolGain;
   uniform float uVolSpread;
+  uniform float uVolSpreadNear;
+  uniform float uVolAxialFade;
   uniform float uVolLodBase;
   uniform float uGoboBlurTexels;
   uniform float uLodMax;
@@ -344,7 +351,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     if (tExit <= tEnter) discard;
 
     // Interleaved gradient noise — per-pixel phase so undersampling reads as
-    // grain (masked by bloom) instead of rings.
+    // grain instead of rings.
     float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
 
     // The cross-section frame (bx, by, tanHalf, above) is constant per fragment — hoisted out of
@@ -396,18 +403,20 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
         if (tb > near && tb < relLen - 0.01) { lit = 0.0; break; }
       }
 
-      // The air thins as the beam spreads: the same light over a wider cross-section. Without it
-      // a wide wash is as dense per metre as a spot, and looking down one is a white wall.
-      float spread = 1.0 / (1.0 + uVolSpread * max(0.0, relLen * cosAngle) * tanHalf);
-      sum += gobo * radial * lit * spread;
+      // The air thins along the throw and as the beam spreads — the same light over a wider
+      // cross-section, so a wide wash is not a white wall to look down.
+      float axial = max(0.0, relLen * cosAngle);
+      float density = (1.0 - uVolAxialFade * clamp(axial / vBeamLen, 0.0, 1.0)) / (uVolSpreadNear + uVolSpread * axial * tanHalf);
+      sum += gobo * radial * lit * density;
     }
 
-    // The beam's own opacity is the ceiling — what the retired shell drew it at — and the chord
-    // how near it gets: a thin edge is faint, a beam seen side-on is at its opacity within half a
-    // metre, and a long chord (the camera looking down the barrel) never adds up past it.
-    float alpha = uHaze * vOpacity * (1.0 - exp(-uVolGain * sum * (tExit - tEnter) / float(uVolSteps)));
-    if (alpha <= 0.0005) discard;
-    gl_FragColor = vec4(vColor, alpha);
+    // The prototype integrated in the unit cone's frame scaled by its end radius: metres side-on,
+    // shortened by tanHalf looking down the axis, which keeps a beam seen end-on bounded.
+    float metric = sqrt(max(1e-4, 1.0 - vd * vd * (1.0 - tanHalf * tanHalf)));
+    float chord = sum * (tExit - tEnter) / float(uVolSteps) * metric;
+    vec3 c = 1.0 - exp(-vColor * vOpacity * uHaze * uVolGain * chord);
+    if (max(c.r, max(c.g, c.b)) <= 0.0005) discard;
+    gl_FragColor = vec4(linearToOutputTexel(vec4(c, 1.0)).rgb, 1.0);
   }
 `
 
@@ -423,6 +432,8 @@ export function makeVolumeMaterial(gobo: DataArrayTexture): ShaderMaterial {
       uVolSteps: { value: VOLUMETRIC_STEPS },
       uVolGain: { value: VOL_GAIN },
       uVolSpread: { value: VOL_SPREAD },
+      uVolSpreadNear: { value: VOL_SPREAD_NEAR },
+      uVolAxialFade: { value: VOL_AXIAL_FADE },
       uVolLodBase: { value: VOL_LOD_BASE },
       uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
       uLodMax: { value: FOCUS_LOD_MAX },

@@ -32,9 +32,13 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * stand in for occlusion) — then the beam's cross-section, `beamMask`
  * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
  * iris, and an edge softened by the family and by how far the surface sits from the focal plane,
- * which is measured from the aperture. **No falloff with distance**, for `washConfig.ts`'s reason: the
- * desk draws a stylised, consistent beam, and a pool that dimmed with throw would disagree with the
- * uniform cone above it.
+ * which is measured from the aperture. A pool **falls off with distance from the aperture** — as
+ * the square of it out to [FALLOFF_KNEE_M], the prototype's throws, and linearly past it, as an eye
+ * adapted to the stage sees a long throw rather than as a meter reads it — and is as bright as its
+ * beam is narrow: the light is spread over the footprint, radius `da · tan(half
+ * field)`: a beam narrower than 20° lands brighter by the area it does not spread over, so a 15°
+ * spot still reaches the back of the stage from the balcony. A wider beam lands as the prototype
+ * drew it (`da` at least 0.3 m, the gain capped for a pinspot).
  *
  * **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers (texel 4,
  * `../goboLayers.ts`) samples the atlas in the same frame the mask cuts in, turned by each layer's
@@ -45,12 +49,36 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * axial beam reach stands in for occlusion until the quality tier's shadow maps
  * (`FU-STAGE-QUALITY-TIER`).
  *
- * The colour is the finish lit by the lights plus a little of the light itself (`uSheen`), so a
- * pool still reads as the beam's colour on the near-black finishes a hall is painted in.
+ * The colour is the prototype's (`docs/plans/stage-view-design/prototype.html`): every light, the
+ * room's ambient and the material's own fill summed, times the finish, rolled off once by
+ * `1 − exp(−·)` and encoded — so two pools overlapping add as the eye sees them, and a wall under the
+ * whole rig is bright rather than a flat blown-out plate. The light reflects off no less than
+ * `uReflectFloor` of itself, so a pool still reads on the near-black finishes a hall is painted in —
+ * black serge shows a spot — while the ambient and fill keep the finish's own darkness.
  */
+
+/** The room's light on every surface, and the gain the summed light is rolled off at. */
+export const SURFACE_AMBIENT = 0.012
+export const SURFACE_LIGHT_GAIN = 1.1
+
+/**
+ * A finish as the surface shader draws it lit by its ambient and fill alone, with [facing] the
+ * normal's dot with the fill's direction — the billboard's stand-in for an unlit housing.
+ */
+export function litByFill(albedo: Color, fill: number, facing = 0.5): Color {
+  const k = (SURFACE_AMBIENT + fill * (0.3 + 0.7 * Math.max(facing, 0))) * SURFACE_LIGHT_GAIN
+  return new Color(1 - Math.exp(-albedo.r * k), 1 - Math.exp(-albedo.g * k), 1 - Math.exp(-albedo.b * k))
+}
 
 /** How far behind a landing plane a fragment may sit and still be lit: the hit surface's own skin. */
 const REACH_EPS_M = 0.03
+
+/** The half field below which a pool brightens with how narrow its beam is: a 20° field. */
+const SPREAD_REF_HALF_DEG = 10
+/** A pinspot's ceiling on that normalisation, so a 2° beam is a hot spot rather than a white hole. */
+const SPREAD_GAIN_MAX = 16
+/** Where a pool stops falling off as the square of its throw and starts falling off linearly. */
+const FALLOFF_KNEE_M = 6
 
 /** The shared uniforms of one canvas's surfaces: the light table, how many rows are live, the room's fill. */
 export interface SurfaceUniforms {
@@ -58,7 +86,8 @@ export interface SurfaceUniforms {
   uLightCount: { value: number }
   uAmbient: { value: number }
   uLightGain: { value: number }
-  uSheen: { value: number }
+  uReflectFloor: { value: number }
+  uCatchLevel: { value: number }
   uFocusSoftBlur: { value: number }
   uGobo: { value: DataArrayTexture }
   uGoboBlurTexels: { value: number }
@@ -81,9 +110,10 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
   return {
     uLights: { value: texture },
     uLightCount: { value: 0 },
-    uAmbient: { value: 0.16 },
-    uLightGain: { value: 1.6 },
-    uSheen: { value: 0.18 },
+    uAmbient: { value: SURFACE_AMBIENT },
+    uLightGain: { value: SURFACE_LIGHT_GAIN },
+    uReflectFloor: { value: 0.1 },
+    uCatchLevel: { value: 0.36 },
     uFocusSoftBlur: { value: FOCUS_SOFT_BLUR },
     uGobo: { value: getGoboTexture() },
     uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
@@ -117,11 +147,15 @@ const SURFACE_VERTEX_SHADER = /* glsl */ `
 
 const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   #define REACH_EPS ${REACH_EPS_M.toFixed(3)}
+  #define SPREAD_REF_TAN2 ${(Math.tan(SPREAD_REF_HALF_DEG * Math.PI / 180) ** 2).toFixed(6)}
+  #define SPREAD_GAIN_MAX ${SPREAD_GAIN_MAX.toFixed(1)}
+  #define FALLOFF_KNEE ${FALLOFF_KNEE_M.toFixed(1)}
   uniform sampler2D uLights;
   uniform int uLightCount;
   uniform float uAmbient;
   uniform float uLightGain;
-  uniform float uSheen;
+  uniform float uReflectFloor;
+  uniform float uCatchLevel;
   uniform float uFocusSoftBlur;
   uniform sampler2DArray uGobo;
   uniform float uGoboBlurTexels;
@@ -129,6 +163,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uAlbedo;
   uniform int uPattern;
   uniform float uOpacity;
+  uniform float uFill;
 
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
@@ -238,19 +273,21 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
         m *= goboPair(g, rotA, rotB, goboLod(blur, footprint / radius, uGoboBlurTexels, uLodMax));
         if (m <= 0.0) continue;
       }
-      acc += colour.rgb * m * (0.3 + 0.7 * facing);
+      // Falls off from the lens, not the apex behind it (nearer than 0.3 m it holds), over the
+      // beam's own footprint: a narrow beam puts the same light on less of the surface.
+      float da = max(dist - aperture.x, 0.3);
+      float spread = clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX);
+      acc += colour.rgb * m * facing * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
     }
 
     #ifdef CATCH
     // A catch surface is the light alone, added over whatever is behind it: the floor round a stage
     // that has no room modelled, where pools landed before there was anything to land on.
-    gl_FragColor = linearToOutputTexel(vec4((1.0 - exp(-acc * uLightGain)) * uSheen * 2.0, 1.0));
+    gl_FragColor = linearToOutputTexel(vec4((1.0 - exp(-acc * uLightGain)) * uCatchLevel, 1.0));
     #else
-    float fill = uAmbient * (0.75 + 0.25 * n.y);
-    // Many lights overlapping would add past white; roll the light off instead, as a stop of film
-    // would, so a wall under the whole rig is bright rather than a flat blown-out plate.
-    vec3 light = 1.0 - exp(-acc * uLightGain);
-    vec3 lit = albedo * (vec3(fill) + light * 2.0) + light * uSheen;
+    // The material's own fill (a housing reads against the dark), from above and a little in front.
+    float fill = uFill * (0.3 + 0.7 * max(dot(n, normalize(vec3(0.25, 0.9, 0.35))), 0.0));
+    vec3 lit = 1.0 - exp(-(albedo * vec3(uAmbient + fill) + max(albedo, vec3(uReflectFloor)) * acc) * uLightGain);
     // The finishes are sRGB hex, held linear by three's colour management: out through the
     // canvas's output transfer, as three's own materials are.
     gl_FragColor = linearToOutputTexel(vec4(lit, uOpacity));
@@ -261,8 +298,10 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 export interface SurfaceMaterialOptions {
   /** Drawn from both faces: cloth, and anything a camera can see the back of. */
   doubleSided?: boolean
-  /** Below 1, blended over what is behind — a selected region's highlight. */
+  /** Below 1, blended over what is behind. */
   opacity?: number
+  /** Light of the material's own, so it reads against a dark room: a housing's. Default 0. */
+  fill?: number
   /** The light alone, added: a catch surface ([SURFACE_FRAGMENT_SHADER]'s `CATCH`). */
   catchOnly?: boolean
   /**
@@ -292,6 +331,7 @@ export function makeSurfaceMaterial(
       uAlbedo: { value: new Color(finish.colour) },
       uPattern: { value: PATTERN_INDEX[finish.pattern] },
       uOpacity: { value: opacity },
+      uFill: { value: options.fill ?? 0 },
     },
     vertexShader: SURFACE_VERTEX_SHADER,
     fragmentShader: SURFACE_FRAGMENT_SHADER,

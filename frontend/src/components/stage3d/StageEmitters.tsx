@@ -297,9 +297,9 @@ interface StageEmittersProps {
 }
 
 /**
- * The frame at which the flush runs: after every director (priority 0) and before the composer
- * renders (priority 1), whatever order the two mounted in. At 1 it tied with the composer and ran
- * after it whenever this component remounted after `Bloom` — a frame's lights a frame late.
+ * The frame at which the flush runs: after every director (priority 0) and before the render
+ * (`STAGE_RENDER_PRIORITY`), whatever order the two mounted in. Tied with the render it would run
+ * after it whenever this component remounted after it — a frame's lights a frame late.
  */
 export const EMITTER_FLUSH_PRIORITY = 0.5
 
