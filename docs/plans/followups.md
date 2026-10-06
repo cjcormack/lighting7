@@ -2176,8 +2176,9 @@ basis made from the axis and a `fwidth` per fragment (+2–3 % of a frame with n
 material, so *Gobos on surfaces → Selected heads only* stays off by default. Stage-light session 3
 adds a sixth: every lit fragment, housings included, now runs the box test over its light's collider
 list, and every pack of the light table re-culls each light's list on the CPU (`cullLightColliders`)
-and uploads it — every frame a head moves. **Trigger**: the Safari and iPad pass finds the budget
-short. **Then**: measure the three first — a housing could take a
+and uploads it — every frame a head moves; measured per list entry on the occlusion bench, the iPad
+pays six to seven times the Mac, and the View menu's *Box shadows* caps it per browser. **Trigger**:
+the Safari and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
 cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
 

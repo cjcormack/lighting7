@@ -734,10 +734,17 @@ without a room — the back wall and the catch floor:
     box test, before the skip, was +0.177 ms an entry, so the skip pays wherever fewer than about
     43 % of a light's entries stand behind a given fragment. The Commemoration Hall packs 61
     colliders; its two advance-bar spots carry 11 and 8, its 9.7° balcony spot 49.
-  - **A light's list holds at most `MAX_LIGHT_COLLIDERS`** (64 — provisional, until
-    `FU-MANUAL-STAGE-LIGHT-BUDGET`'s Safari and iPad pass); a light whose cone reaches more falls
-    back to its landing planes (texel 3, `landing.ts`'s `behindLanding`), as does every light while
-    the scene holds more colliders than the texture's 1024 rows.
+  - **How many boxes a light may be shadowed by is the viewer's** — the View menu's *Box shadows*,
+    per browser in `localStorage` (`stage.boxShadows`, `scene/sceneView.ts`) beside the light budget
+    and *Gobos on surfaces*: *Up to 64 boxes a light* (the default, the list texture's width,
+    `MAX_LIGHT_COLLIDERS`), *Up to 16* or *Off*. A light whose cone reaches more than the cap falls
+    back to its landing planes (texel 3, `landing.ts`'s `behindLanding`), so a lower cap takes the
+    widest cones' shadows first; *Off* puts every light there, the cost the surfaces had before
+    session 3. So does a scene with more colliders than the texture's 1024 rows. It is the
+    machine's because the machines differ by more than any one cap suits: the same bench in Safari
+    on the desk Mac matched Chromium (+0.10 ms an entry skipped, +0.27 tested; 7.5 and 18.2 ms at
+    64), and on an iPad cost +0.65 and +1.86 (46.7 and 123.8 ms at 64, from 5 ms on the planes). A
+    `render_view` capture keeps the default: it draws one frame, with no frame rate to guard.
   - **The haze keeps its planes** (`aBeamLand`, `edgeLanding`). It samples a beam pixel twelve times
     (eight above DPR 1), so a box test per sample would cost about twelve times what a surface pixel
     pays: +22 to +53 ms a frame at the bench's load for a 16-entry list, against the surfaces' +1.8

@@ -235,6 +235,20 @@ describe("each light's colliders", () => {
     expect(listRowFloats(lists, 0)).toBe(4)
   })
 
+  it('puts every light on its planes with box shadows off, culling nothing', () => {
+    const lights = packLights([
+      { apex: [0, 5, 0], dir: [0, 0, -1], cosBound: Math.cos(0.5), near: 0.2 },
+      { apex: [0, 5, 0], dir: [0, 0, 1], cosBound: Math.cos(0.5), near: 0.2 },
+    ])
+    const set = makeColliderSet()
+    packColliders([boxCollider(0, 5, -3, 0.5, 0.5, 0.1)], set)
+    const lists = newLists()
+    cullLightColliders(lights, 2, set, 40, lists, 0)
+    // Even the light that reaches nothing: off is the planes for every light, as before session 3.
+    expect(listOf(lists, 0)).toBe('overflow')
+    expect(listOf(lists, 1)).toBe('overflow')
+  })
+
   it("gives each entry its sphere's cone from the apex, which never skips a fragment the box blocks", () => {
     const random = rng(31)
     let blocked = 0

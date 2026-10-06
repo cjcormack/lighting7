@@ -36,9 +36,9 @@ export const COLLIDER_TEXELS = 2
 /** The collider texture's rows: past any venue the view draws. A collider past it shadows nothing. */
 export const MAX_COLLIDERS = 1024
 /**
- * The most colliders one light tests per fragment — the surface pass's cost per lit pixel. Provisional
- * until `FU-MANUAL-STAGE-LIGHT-BUDGET`'s Safari and iPad pass; a light that reaches more falls back to
- * its landing planes.
+ * The most colliders one light's list holds — the list texture's width. The View menu's *Box
+ * shadows* sets each browser's cap at or below it (`sceneView.ts`); a light that reaches more falls
+ * back to its landing planes.
  */
 export const MAX_LIGHT_COLLIDERS = 64
 /** Each light list row: the count, then one texel an entry. */
@@ -151,7 +151,7 @@ const LIGHT_FLOATS = LIGHT_TEXELS * 4
  * Each of the [lightCount] packed light rows of [lights] (`LightTable.pack`'s layout), its colliders:
  * every collider of [set] whose bounding sphere the light's cone reaches within [throwM] of its
  * aperture, written as row `k` of [out] — the count, then the entries — or [LIST_OVERFLOW] past
- * [cap] (itself at most [MAX_LIGHT_COLLIDERS]). A collider the aperture sits inside is left out, as
+ * [cap] (itself at most [MAX_LIGHT_COLLIDERS]; 0 sends every light to its planes). A collider the aperture sits inside is left out, as
  * beam reach skips a box the ray starts inside: a head mounted in a deck's box is not blocked by it.
  * While the scene holds more colliders than [set] could pack, every light overflows: a list of the
  * packed ones alone would leave out shadows the planes still give.
@@ -169,6 +169,11 @@ export function cullLightColliders(
   cap = MAX_LIGHT_COLLIDERS,
 ): void {
   const limit = Math.min(cap, MAX_LIGHT_COLLIDERS)
+  if (limit <= 0) {
+    // Box shadows off: every light on its planes, and nothing to cull.
+    for (let k = 0; k < lightCount; k++) out[k * LIST_TEXELS * 4] = LIST_OVERFLOW
+    return
+  }
   const s = set.spheres
   for (let k = 0; k < lightCount; k++) {
     const o = k * LIGHT_FLOATS

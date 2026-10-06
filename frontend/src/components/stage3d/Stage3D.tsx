@@ -23,9 +23,12 @@ import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLigh
 import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { StageConfetti } from './StageConfetti'
 import {
+  BOX_SHADOW_CAPS,
+  DEFAULT_BOX_SHADOWS,
   DEFAULT_GOBO_SURFACES,
   DEFAULT_SCENE_LAYERS,
   goboLandsOnSurfaces,
+  type BoxShadows,
   type GoboSurfaces,
   type SceneLayers,
 } from './scene/sceneView'
@@ -202,6 +205,8 @@ interface Stage3DProps {
   lightBudget?: number
   /** Whose gobos land on surfaces: every gobo light's, or the selected heads' only (`scene/sceneView.ts`). */
   goboSurfaces?: GoboSurfaces
+  /** How many boxes a light may be shadowed by (`scene/sceneView.ts`). */
+  boxShadows?: BoxShadows
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
@@ -242,6 +247,7 @@ export function Stage3D({
   layers = DEFAULT_SCENE_LAYERS,
   lightBudget = DEFAULT_LIGHT_BUDGET,
   goboSurfaces = DEFAULT_GOBO_SURFACES,
+  boxShadows = DEFAULT_BOX_SHADOWS,
   seatPicking = null,
   framingRef,
   capture = null,
@@ -675,6 +681,7 @@ export function Stage3D({
               colliders={colliders}
               clip={beamClip}
               lightBudget={lightBudget}
+              colliderCap={BOX_SHADOW_CAPS[boxShadows]}
               haze={layers.haze !== 'off'}
               hazeClip={hazeClip}
               hazeQuality={hazeQuality}

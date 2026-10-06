@@ -230,7 +230,8 @@ surface), dark-glass lenses, and the one DOM label layer. **Light lands through 
 (session 3): every venue, set and region surface loops over a float data texture of the live lights
 (`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, and each
 fragment is shadowed by the scene's colliders — the boxes beam reach casts at — tested against the
-light's own culled list (`scene/occlusion.ts`); the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
+light's own culled list (`scene/occlusion.ts`), capped per browser by the View menu's *Box shadows*;
+the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle

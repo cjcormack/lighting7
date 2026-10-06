@@ -31,7 +31,7 @@ import {
 import { LightTable, type LightRow } from './scene/lightTable'
 import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
 import { packLanding } from './scene/landing'
-import { cullLightColliders, LIST_TEXELS, listRowFloats, packColliders } from './scene/occlusion'
+import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import type { HazeQuality } from './scene/hazeGovernor'
 
@@ -289,6 +289,11 @@ interface StageEmittersProps {
   clip: BeamClip
   /** How much of the light table the surfaces take (`scene/sceneView.ts`). */
   lightBudget: number
+  /**
+   * How many boxes a light may be shadowed by (`scene/sceneView.ts`'s `BOX_SHADOW_CAPS`); a light
+   * that reaches more keeps its landing planes. Every light's list width when absent.
+   */
+  colliderCap?: number
   /** Whether the air shows the beams — the View menu's Haze, unless it is Off. */
   haze: boolean
   /** How far the air shows them (`hazeClipFor`); null everywhere. */
@@ -320,6 +325,7 @@ export function StageEmitters({
   colliders,
   clip,
   lightBudget,
+  colliderCap = MAX_LIGHT_COLLIDERS,
   haze,
   hazeClip,
   hazeQuality,
@@ -422,6 +428,13 @@ export function StageEmitters({
     built.lights.dirty = true
     invalidate()
   }, [lightBudget, built, invalidate])
+  const capRef = useRef(colliderCap)
+  useEffect(() => {
+    if (capRef.current === colliderCap) return
+    capRef.current = colliderCap
+    built.lights.dirty = true
+    invalidate()
+  }, [colliderCap, built, invalidate])
   // The table leaves with the rig it was sized for: a surface must not keep last rig's lights.
   useEffect(
     () => () => {
@@ -442,7 +455,7 @@ export function StageEmitters({
     if (built.lights.dirty) {
       const packed = built.lights.pack(budgetRef.current, lighting.data)
       const { set, lists, listData } = lighting.occlusion
-      cullLightColliders(lighting.data, packed, set, MAX_THROW_M, listData)
+      cullLightColliders(lighting.data, packed, set, MAX_THROW_M, listData, capRef.current)
       lighting.uniforms.uLightCount.value = packed
       lighting.uniforms.uLights.value.needsUpdate = true
       // Only the rows packed, and only as far as each list runs; with none, nothing reads them. Ranges

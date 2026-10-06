@@ -25,12 +25,16 @@ import { CYC_DEPTH_MAX_M, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } fro
 import type { Facing, PartGeometry } from './sceneParts'
 import { partGeometry } from './StageSceneElements'
 import { HAZE_TIERS, HazeGovernor, MAX_SAMPLE_MS, MIN_SAMPLES, RECOVER_AFTER_MS } from './hazeGovernor'
+import { MAX_LIGHT_COLLIDERS } from './occlusion'
 import { beamClipFor, drawsRoom, hazeClipFor, sceneBuilds, sceneColliders, sceneElementBounds } from './stageSurfaces'
 import {
+  BOX_SHADOW_CAPS,
+  DEFAULT_BOX_SHADOWS,
   DEFAULT_GOBO_SURFACES,
   DEFAULT_SCENE_LAYERS,
   elementInLayers,
   goboLandsOnSurfaces,
+  isBoxShadows,
   isGoboSurfaces,
   parseSceneLayers,
 } from './sceneView'
@@ -484,6 +488,19 @@ describe('where gobos land (fixture-optics plan session 4)', () => {
     expect(isGoboSurfaces('selected')).toBe(true)
     expect(isGoboSurfaces('none')).toBe(false)
     expect(isGoboSurfaces(true)).toBe(false)
+  })
+})
+
+describe('box shadows (stage-light plan session 3)', () => {
+  it('lets every light carry a full list by default, and caps it at 16 or at none', () => {
+    expect(DEFAULT_BOX_SHADOWS).toBe('all')
+    expect(BOX_SHADOW_CAPS).toEqual({ all: MAX_LIGHT_COLLIDERS, some: 16, off: 0 })
+  })
+
+  it('reads back only a mode this build offers', () => {
+    expect(isBoxShadows('some')).toBe(true)
+    expect(isBoxShadows('none')).toBe(false)
+    expect(isBoxShadows(16)).toBe(false)
   })
 })
 
