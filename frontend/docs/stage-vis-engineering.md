@@ -665,7 +665,9 @@ without a room — the back wall and the catch floor:
   face it struck — a beam on a round rostrum's top leaves the deck round it dark — and carries it on
   (`BeamHit`, the director's `SurfaceHit`, both planes of `edgeLanding`), and
   `packLanding` moves each plane back by its face's skin beyond `REACH_EPS` — so a pool on a drape
-  lights its troughs with its crests and a column is lit across its face. The landed **point** is
+  lights its troughs with its crests and a column is lit across its face. The haze's planes
+  (`aBeamLand`) take no skin: a hull drawn behind a pleat's crests sits outside the cloth on its far
+  side, where — below — it would be marched through the cloth. The landed **point** is
   untouched: the beam's length, `coneLandingDepth` and *Focus here* read it. Before, a drape's box was
   10 cm deep round 5 cm pleats, the plane sat 2.5 cm in front of the crests, and only each crest's cap
   was lit — the thin stripes a backcloth drew. The same skin is what lets a surface inside its own
@@ -749,7 +751,15 @@ without a room — the back wall and the catch floor:
     (eight above DPR 1), so a box test per sample would cost about twelve times what a surface pixel
     pays: +22 to +53 ms a frame at the bench's load for a 16-entry list, against the surfaces' +1.8
     to +4.4. So a beam in the air still stops at the planes and still passes a box it overhangs on
-    both sides; its pool is shadowed properly.
+    both sides; its pool is shadowed properly. The march ignores depth, so the hull is the only
+    thing a surface can hide it by, and a hull front face behind both planes is discarded: the hull
+    runs on past them for the cone's far rim, and marched from there, on the far side of a flat or a
+    cloth, it summed the beam through the surface — the whole beam showed through a wall seen from
+    behind. So is one outside the room the haze is clipped to (`beamClipFor`), taken in by
+    `REACH_EPS` for the flat that stands against a wall: a beam landing on the deck in a concave
+    corner is cut by the deck's plane alone, and its hull ran on through the back cloth and the back
+    wall and showed behind the stage house. A room's wall seen from outside still shows the beam in
+    the room, being drawn from inside only.
   - `?profileHarness=shadow` (a flat 1.5 m in front of a wall under one profile from high front
     stage left) is where a shadow is seen landing clear of what casts it. In the drape harness the
     column throws its shadow on the backcloth, and the pool swept from pan 30 to 50 in quarter steps
@@ -848,8 +858,12 @@ without a room — the back wall and the catch floor:
   cloth beats it by most at the first crest's shoulder — where the cloth's slope equals the ray's —
   so one closed form answers it, with a 4 mm soft edge and no shadow map. A lamp nearer the cloth's
   normal than its steepest flank casts no fold shadow; raking light bands it. A trough sees less of
-  the room's ambient by how steep its walls are. `pleat.ts` holds the twin, pinned against a march
-  along the ray.
+  the room's ambient by how steep its walls are. And a face sees only its own side of the sheet: a
+  lamp further than the fold's amplitude out of the cloth's plane on the other side lights neither
+  face there (`pleatFaceSeesLamp`). The back of a steep flank faces a raking lamp in front, the fold
+  shadow lets its soft edge through, and the box test passes a point within the cloth's own skin, so
+  black serge seen from behind showed the pool in front as faint stripes. `pleat.ts` holds the twins,
+  pinned against a march along the ray.
 - **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers samples the
   gobo atlas in its own frame, blurred by the same focus term as its edge — §"Gobos on surfaces"
   under §"Fixture bodies".
@@ -936,7 +950,7 @@ canvas. `StageLabel` now renders an empty anchor group and registers it with a `
 (`stageLabels.ts`), which owns one plain `<div>` per label in a single layer over the canvas.
 `StageLabelDriver` lays them out once per rendered frame: project each anchor, place greedily by rank
 — hovered or selected first, then positions (rigging and regions), then fixtures — and hide whatever
-collides, with a couple of pixels' gap. Three rules:
+collides, with a couple of pixels' gap. Four rules:
 
 - **The mode is the store's, not the call sites'.** *Positions* (the default) shows the rigging,
   the regions while editing (a region draws no label outside Edit), and a fixture only while hovered
@@ -948,6 +962,17 @@ collides, with a couple of pixels' gap. Three rules:
   `<div>` down on every hover was the churn the layer exists to avoid.
 - **The flag was a boolean.** `StageViewFlags.labels` is a `StageLabelMode` now, and a desk's stored
   `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`).
+- **A label behind scenery is hidden.** Once a label has found room, the sight line from the eye to
+  its anchor — along the view from the camera's plane on a section — is cast against the colliders
+  beams stop at (`sightBlocked` in `scene/beamReach.ts`, given them by `setOccluders`), and a hit
+  hides it, leaving its room to the next. Two exceptions. A label is never hidden by a box its anchor
+  sits within `LABEL_CLEAR_M` (15 cm) of, which is a region's label on its own deck. And a
+  single-sided surface (`Collider.face`: a room's faces, the stage box's floor and back wall) hides
+  only when the line meets its face from the front, so from an orbit outside the room the near wall
+  hides nothing, as it draws nothing; the catch floor, which is light alone, hides nothing at all
+  (`sight: false`). The test runs last, on labels that would be
+  placed: on the Commemoration Hall, 61 colliders and every fixture labelled, the layout went from
+  0.025 to 0.074 ms a frame on the desk Mac.
 
 ### A quiet stage: no chrome, regions and bars as the real things
 
@@ -1010,7 +1035,9 @@ perspective camera's. Under an orthographic camera the rays are parallel: the sh
 `isOrthographic` (three's built-in uniform) and casts along the camera's forward axis from the
 camera plane, so an ortho view draws the same haze as orbit, and `t >= 0` is the section's cut. The
 beam shell's rim and the pixel strip's glow take the same flag: under ortho their view vector is the
-constant view axis. The label layer needed nothing — it projects every anchor through whatever the default camera is.
+constant view axis. The label layer projects every anchor through whatever the default camera is,
+and casts its sight lines the same way: from the eye, or along the view from the camera plane on a
+section.
 
 ### The viewpoint is the window's, and the pose is kept
 

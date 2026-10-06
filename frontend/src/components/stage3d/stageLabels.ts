@@ -1,4 +1,5 @@
-import { Vector3, type Camera, type Object3D } from 'three'
+import { Vector3, type Camera, type Object3D, type OrthographicCamera } from 'three'
+import { sightBlocked, type Collider } from './scene/beamReach'
 
 /**
  * The Stage view's labels: one DOM layer over the canvas, positioned once per frame and
@@ -7,7 +8,8 @@ import { Vector3, type Camera, type Object3D } from 'three'
  * It replaced a drei `<Html>` per label — a React root and a `backdrop-blur` each, sixty-odd
  * over a WebGL canvas, and one of the memory findings in the stage-view design record. Nothing
  * here is React: the scene registers an anchor (`useStageLabel`), this store owns one `<div>`
- * per label, and `layout` projects, decides and writes transforms. See
+ * per label, and `layout` projects, decides and writes transforms. A label whose anchor is hidden
+ * behind scenery — the colliders beams stop at — is not shown. See
  * `docs/stage-vis-engineering.md` §"The label layer".
  */
 
@@ -48,6 +50,9 @@ export type StageLabelKind = 'position' | 'fixture'
 const PRIORITY_EMPHASISED = 3
 const PRIORITY_POSITION = 2
 const PRIORITY_FIXTURE = 1
+
+/** How near a box a label's anchor may sit and still not be hidden by it: a label on what it names. */
+export const LABEL_CLEAR_M = 0.15
 
 /** Horizontal and vertical breathing room between two labels, in px. */
 const GAP_X = 2
@@ -116,6 +121,9 @@ export interface StageLabelEntry {
 }
 
 const SCRATCH = new Vector3()
+const ANCHOR = new Vector3()
+const EYE = new Vector3()
+const VIEW = new Vector3()
 
 /**
  * One per Stage3D. `invalidate` is the canvas's, set by the driver inside the canvas, so a label
@@ -127,6 +135,7 @@ export class StageLabelStore {
   // Reused per frame: the layout runs on every rendered frame and allocates nothing.
   private readonly order: StageLabelEntry[] = []
   private readonly placed: ScreenRect[] = []
+  private occluders: readonly Collider[] = []
   mode: StageLabelMode = 'positions'
   invalidate: () => void = () => {}
 
@@ -144,6 +153,13 @@ export class StageLabelStore {
   setMode(mode: StageLabelMode): void {
     if (mode === this.mode) return
     this.mode = mode
+    this.invalidate()
+  }
+
+  /** The scene's colliders (`sceneColliders`): a label they stand in front of is hidden. */
+  setOccluders(colliders: readonly Collider[]): void {
+    if (colliders === this.occluders) return
+    this.occluders = colliders
     this.invalidate()
   }
 
@@ -219,10 +235,15 @@ export class StageLabelStore {
 
     let placedCount = 0
     const placed = this.placed
+    const occluders = this.occluders
+    const ortho = (camera as OrthographicCamera).isOrthographicCamera === true
+    camera.getWorldPosition(EYE)
+    camera.getWorldDirection(VIEW)
     for (const e of order) {
       const anchor = e.anchor!
       anchor.updateWorldMatrix(true, false)
-      SCRATCH.setFromMatrixPosition(anchor.matrixWorld).project(camera)
+      ANCHOR.setFromMatrixPosition(anchor.matrixWorld)
+      SCRATCH.copy(ANCHOR).project(camera)
       let fits = SCRATCH.z >= -1 && SCRATCH.z <= 1
       if (fits) {
         if (e.w === 0) measure(e)
@@ -238,6 +259,8 @@ export class StageLabelStore {
           rect.w = w
           rect.h = h
           fits = !overlapsAny(rect, placed, placedCount)
+          // Last, being the dearest: a label that would not be placed anyway needs no sight line.
+          if (fits && occluders.length > 0) fits = !hiddenFrom(EYE, VIEW, ortho, ANCHOR, occluders)
           if (fits) {
             placedCount++
             const rx = Math.round(x)
@@ -263,6 +286,27 @@ export class StageLabelStore {
   hideAll(): void {
     for (const e of this.entries) setShown(e, false)
   }
+}
+
+/**
+ * Whether [anchor] is hidden from the camera behind a collider: along the sight line from the eye,
+ * or — on an orthographic section, whose rays are parallel — along the view from the camera's plane.
+ */
+function hiddenFrom(eye: Vector3, view: Vector3, ortho: boolean, anchor: Vector3, colliders: readonly Collider[]): boolean {
+  if (ortho) {
+    const len = (anchor.x - eye.x) * view.x + (anchor.y - eye.y) * view.y + (anchor.z - eye.z) * view.z
+    if (len <= 0) return false
+    return sightBlocked(
+      anchor.x - view.x * len, anchor.y - view.y * len, anchor.z - view.z * len,
+      view.x, view.y, view.z, len, colliders, LABEL_CLEAR_M,
+    )
+  }
+  const dx = anchor.x - eye.x
+  const dy = anchor.y - eye.y
+  const dz = anchor.z - eye.z
+  const len = Math.hypot(dx, dy, dz)
+  if (len < 1e-6) return false
+  return sightBlocked(eye.x, eye.y, eye.z, dx / len, dy / len, dz / len, len, colliders, LABEL_CLEAR_M)
 }
 
 function applyClass(e: StageLabelEntry): void {

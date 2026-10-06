@@ -48,16 +48,19 @@ export function landNormalCode(nx: number, ny: number, nz: number): number {
 
 /**
  * Pack [first] and [second] into [out] at [o]: `(code, offset)` for each, the offset being `n · p`
- * moved back by the face's skin beyond [REACH_EPS_M], so the plane the shaders cut at lies that far
- * behind the face and a pleat's troughs are lit with its crests. The landed point itself is not
- * moved. No first face (open air) is a plane nothing is behind; no second one a plane everything is
- * behind, so the first alone decides.
+ * — with [skins], moved back by the face's skin beyond [REACH_EPS_M], so the plane the surfaces cut
+ * at lies that far behind the face and a pleat's troughs are lit with its crests. The haze packs
+ * without them: its plane is the face it hit, because a hull drawn behind a pleat's crests is
+ * outside the cloth on its far side, and a march from there sums the beam through it. The landed
+ * point itself is not moved. No first face (open air) is a plane nothing is behind; no second one a
+ * plane everything is behind, so the first alone decides.
  */
 export function packLanding(
   first: LandingFace | null,
   second: LandingFace | null,
   out: { [i: number]: number },
   o: number,
+  skins = true,
 ): void {
   if (first == null) {
     out[o] = LAND_NONE
@@ -67,18 +70,19 @@ export function packLanding(
     return
   }
   out[o] = landNormalCode(first.nx, first.ny, first.nz)
-  out[o + 1] = planeOffset(first)
+  out[o + 1] = planeOffset(first, skins)
   if (second == null) {
     out[o + 2] = LAND_NONE
     out[o + 3] = 1
   } else {
     out[o + 2] = landNormalCode(second.nx, second.ny, second.nz)
-    out[o + 3] = planeOffset(second)
+    out[o + 3] = planeOffset(second, skins)
   }
 }
 
-function planeOffset(face: LandingFace): number {
-  return face.nx * face.px + face.ny * face.py + face.nz * face.pz - Math.max(0, face.skin - REACH_EPS_M)
+function planeOffset(face: LandingFace, skins: boolean): number {
+  const n = face.nx * face.px + face.ny * face.py + face.nz * face.pz
+  return skins ? n - Math.max(0, face.skin - REACH_EPS_M) : n
 }
 
 /**

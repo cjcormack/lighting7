@@ -677,7 +677,7 @@ export function makeHandle(b: BuiltEmitters, colliders: () => readonly Collider[
       b.volumeFx.setXYZW(i, w.edge, w.gobos, 0, w.focusDist)
       b.volumeShape.setXYZW(i, w.near, w.iris, w.aspect, w.dof)
       b.volumeGate.setXYZW(i, w.cosHalf, w.shadowMask, w.bladesA, w.bladesB)
-      packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0)
+      packLanding(w.land, w.edgeLand, SCRATCH_LAND, 0, false)
       b.volumeLand.setXYZW(i, SCRATCH_LAND[0], SCRATCH_LAND[1], SCRATCH_LAND[2], SCRATCH_LAND[3])
     },
 

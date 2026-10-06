@@ -209,6 +209,19 @@ export function foldLight(x: number, lx: number, lz: number, pleat: PleatShape):
   return 1 - smoothstep(-FOLD_SHADOW_SOFT_M, FOLD_SHADOW_SOFT_M, lead)
 }
 
+/**
+ * Whether a face of the cloth can see a lamp [lz] metres out of the cloth's plane at all — the
+ * [front] face the +z side, the back the −z. The cloth is one sheet: a face sees only its own side
+ * of it, and every point of the sheet lies within the amplitude of its plane, so a lamp further
+ * than that on the other side is behind the sheet wherever the point is. The back of a flank can
+ * face a raking lamp in front, and [foldLight], which reasons from the lamp's side, darkens most of
+ * that but not its soft edge at a crest's shoulder or where it reads a wandering pitch from the
+ * point; the cloth's own box lets a point within its skin through, so nothing else stops it.
+ */
+export function pleatFaceSeesLamp(lz: number, front: boolean, pleat: PleatShape): boolean {
+  return front ? lz > -pleat.amplitudeM : lz < pleat.amplitudeM
+}
+
 function smoothstep(e0: number, e1: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)))
   return t * t * (3 - 2 * t)
@@ -229,7 +242,7 @@ export function troughAmbient(x: number, front: boolean, pleat: PleatShape): num
 }
 
 /**
- * The same three, for the surface shader: the fold in its own frame from `uPleat` (`x` the mean
+ * The same, for the surface shader: the fold in its own frame from `uPleat` (`x` the mean
  * rate ω, `y` the amplitude, `z` the [pleatShift] to the edge it is measured from) and `uPleatWarp`
  * (`a`, `k`, `θ` per term). The twin is above; a change to one is a change to both.
  */
@@ -278,6 +291,10 @@ export const PLEAT_GLSL = /* glsl */ `
     if (along >= run) return 1.0;
     float lead = a * sqrt(1.0 - c * c) - z - slope * along;
     return 1.0 - smoothstep(-FOLD_SHADOW_SOFT, FOLD_SHADOW_SOFT, lead);
+  }
+
+  bool pleatFaceSeesLamp(float lz, bool front) {
+    return front ? lz > -uPleat.y : lz < uPleat.y;
   }
 
   float troughAmbient(float x, bool front) {

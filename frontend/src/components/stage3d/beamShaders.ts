@@ -3,7 +3,7 @@ import type { DataArrayTexture } from 'three'
 import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL, FOCUS_SPREAD_MAX } from './beamMask'
 import { GOBO_LAYERS_GLSL } from './goboLayers'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
-import { LANDING_GLSL } from './scene/landing'
+import { LANDING_GLSL, REACH_EPS_M } from './scene/landing'
 import {
   FOCUS_LOD_MAX,
   GOBO_BLUR_TEXELS,
@@ -172,6 +172,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
 const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
   #define MAX_VOL_STEPS ${MAX_VOL_STEPS}
+  #define REACH_EPS ${REACH_EPS_M.toFixed(3)}
   uniform float uFloorY;
   uniform float uWallZ;
   // The outermost side walls, (min x, max x).
@@ -270,6 +271,17 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
       ? abs(dot(co, bx)) <= cod * tanBound && abs(dot(co, by)) <= cod * ty0
       : cod * cod >= cos2 * dot(co, co));
     if (gl_FrontFacing == rayStartsInside) discard;
+    // A front face behind where the beam lands, or outside the room the haze is clipped to, is on
+    // the far side of a surface — the hull runs on past the plane for the cone's far rim, and a beam
+    // landing on the deck runs on through the back wall. The march ignores depth, so marched from
+    // there it would sum the beam through that surface. Without it, a surface hides the beam behind
+    // it by depth, and a room's wall, drawn from inside only, still shows the beam in the room. The
+    // room is taken in by REACH_EPS: a flat stands against its wall, and the hull between the two
+    // would still draw.
+    if (!rayStartsInside && (
+        (dot(vBeamLand.xyz, vWorldPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, vWorldPos) < vBeamLandEdge.w)
+        || vWorldPos.y < uFloorY + REACH_EPS || vWorldPos.z < uWallZ + REACH_EPS
+        || vWorldPos.x < uSideX.x + REACH_EPS || vWorldPos.x > uSideX.y - REACH_EPS)) discard;
 
     float tEnter = 0.0;
     float tExit = -1.0;

@@ -176,6 +176,21 @@ describe('emitter dirty groups', () => {
     expect(packed.slice(8, 12)).toEqual([LAND_NONE, -1, LAND_NONE, -1])
   })
 
+  it("lands the haze on the face it hit, not behind a pleat's crests by its skin", () => {
+    const b = build()
+    const cloth = { px: 0, py: 0, pz: -4, nx: 0, ny: 0, nz: 1, skin: 0.15, collider: null }
+    makeHandle(b).writeBeam(0, 0, { ...beamWrite(), land: cloth, edgeLand: null })
+    expect(b.volumeLand.array[1]).toBe(-4)
+  })
+
+  it('drops a hull front face behind where the beam lands, which a march would sum through the surface', () => {
+    const shader = makeVolumeMaterial(getGoboTexture()).fragmentShader
+    expect(shader).toContain('(dot(vBeamLand.xyz, vWorldPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, vWorldPos) < vBeamLandEdge.w)')
+    // …or outside the room it is clipped to: a beam landing on the deck runs on through the back wall.
+    expect(shader).toContain('|| vWorldPos.y < uFloorY + REACH_EPS || vWorldPos.z < uWallZ + REACH_EPS')
+    expect(shader).toContain('|| vWorldPos.x < uSideX.x + REACH_EPS || vWorldPos.x > uSideX.y - REACH_EPS)) discard;')
+  })
+
   it("carries the depth of field in the haze's shape attribute, beside near, iris and aspect", () => {
     const b = build()
     makeHandle(b).writeBeam(0, 0, beamWrite())
