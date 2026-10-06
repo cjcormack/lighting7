@@ -112,7 +112,7 @@ one-line row with the session's commit SHA, added on the branch before its PR me
   (the flag is per window); `frontend/CLAUDE.md` §Stage views; `manual-validation.md`'s
   `FU-MANUAL-STAGE-LIGHT-BUDGET` reads the readout instead of the Web Inspector.
 
-### Session 2 — work lights, and `render_view`'s (frontend + backend)
+### ~~Session 2 — work lights, and `render_view`'s (frontend + backend)~~ — done, `f80902ec`
 
 - **Work lights (D6, D8):** `scene/workLights.ts`; the uniforms; the housing fill and billboard
   colours in `bodies/StageBodies.tsx`; `litByFill` takes the work lights. `lib/stageViewpoint.ts` —
