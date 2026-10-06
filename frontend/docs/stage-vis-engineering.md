@@ -831,6 +831,38 @@ without a room — the back wall and the catch floor:
   Since session 4 the finish is more than a colour: each light's share is shaped by the finish's
   **lobes** (next bullet), and what they add beside the albedo's light goes through the same
   exposure and the same one roll-off.
+  **Work lights** (stage-view menu plan D6–D8, `scene/workLights.ts`; the stage-light plan's
+  *Realistic / Readable*) lift the dark without touching any of that: a two-row table —
+  `off {ambient 0.003, lift 0, housing 0.225}`, `on {ambient 0.02, lift 0.04, housing 0.8}` —
+  applied as **uniforms, never a define**, so a switch recompiles nothing. The room's ambient
+  (`uAmbient`) rises, and every surface material's directional fill gains `uLift` through the fill's
+  own direction term, so faces turned different ways read differently — shape, not a flat grey. The
+  lift's share alone reflects `max(albedo, uLiftAlbedoFloor)`, a floor of `LIFT_ALBEDO_FLOOR` (4 %),
+  so black serge shows its folds as a dark grey; every light still sees the finish's own albedo, so
+  a spot on that serge is exactly as bright either way and D6's no-floor rule stays true of the
+  light. The housings' own fill (`HOUSING_FILL`) rises to the table's `housing` with the room —
+  without it the matt black rig vanishes against a newly lit floor on the Plan — and the billboard
+  housings follow through `litByFill`, which takes the same row (a selected housing keeps its lead
+  by riding the same tint). The exposure, the roll-off, the haze, the lenses (dark glass until lit)
+  and the canvas's background do not move. `SurfaceLightingProvider` takes the canvas's work
+  lights, writes the shared `uAmbient` / `uLift` — every material spreads the same uniform objects,
+  so one write reaches them all — and `invalidate`s, because a uniform write is not an R3F prop;
+  `StageBodies` writes the housing's `uFill` and the billboards' colours the same way, from a layout
+  effect, rather than rebuilding materials, which would rebuild the meshes and drop every slot's
+  written state. Off is an exact 0 lift and today's constants, so it draws what it drew before the
+  switch. Measured on *Balcony · desk* at level *a* (the design record, live uniforms): the floor
+  pool 119 → 121 of 255 and the black backcloth's pool not at all, an unlit seat 1 → 17, the pale
+  ceiling at 79 % of the floor pool — brighter levels put the ceiling over it, which is what chose
+  *a*. Re-measured on the built switch (session 2, Chromium/SwiftShader at DPR 1.5, three lanterns
+  up, 9 × 9 means): pools within +0–3, the ceiling soffit 23 → 96 under a floor pool of 190, a seat
+  1 → 15, the riser 1 → 17; on the Plan the FOH balcony housings 40 → 85 against a floor lifted to
+  20–50. The floor was judged in `?profileHarness=cyc` (Front): the serge's unlit folds read 0
+  with work lights off, and 2–8 / 4–15 / 6–19 of 255 at a floor of 2 / 4 / 6 % — 2 % barely shows
+  the folds, 6 % starts to read as grey cloth, so 4 %. They are **per window and
+  announced** (`sessionStorage stage.workLights`, default off; `viewOptions.workLights`, a Screens
+  row segment, `?workLights=` on *Copy link*), and every canvas in the window follows them: the
+  Stage view and the Positions plan. A `render_view` capture takes the request's (§"Rendering for
+  `render_view`").
 - **A finish has lobes** (stage-light plan session 4, `scene/lobes.ts`): over Lambert, which was the
   whole BRDF, a finish may carry **Oren–Nayar** (Fujii's form) for a rough matte — a little darker
   lit square on, brighter lit from behind the eye, so plaster and cloth look flat; the **Charlie
@@ -990,7 +1022,8 @@ lens dark glass at level 0 and the hue at level 1, never brighter than its level
 every body goes through it. Since session 6 a lens is a flat disc or segment on the barrel's face,
 one instance per cell, and housings, yokes and hangers are matt near-black **lit by the surface
 shader** like any surface, with a fill of their own (`HOUSING_FILL`) so the rig reads against a dark
-room. A lens mixes from dark glass to its hue in display space on `level^0.6`, and nothing glows: there
+room — raised with the room's when work lights are on (§"Light lands through one surface shader").
+A lens mixes from dark glass to its hue in display space on `level^0.6`, and nothing glows: there
 is no bloom. **Selection is the housing alone**, as the prototype has it: a selected fixture's
 housing turns the desk's blue (`HOUSING_ACTIVE_COLOR`, its brighter fill folded into the instance
 tint) and its label the same blue chip; there is no ring, no outline and no change to any beam, which
@@ -1277,6 +1310,12 @@ prop, and every other prop means what it does on screen:
   Stage), the
   default view flags **minus labels** — the label layer is DOM over the canvas, so a frame read off
   the canvas never had them — and the machine's light budget, read, not written.
+- **The work lights are the request's** (stage-view menu plan D9): `render_view`'s optional
+  `workLights`, off unless asked, so a capture means the room as lit. `parseStageRenderRequest`
+  reads the frame's boolean as `on` / `off`, a missing one as off (a desk that predates the field)
+  and anything else as a malformed frame; the job hands it to `Stage3D`, which hands it to the
+  canvas's `SurfaceLightingProvider`. This window's own work lights are never read and never
+  written.
 - **The light** comes through the same `StageChannelSourceProvider` as the Stage view, now with a
   `source` it can be handed (the request's, not this window's) and an `onSettled` that says when a
   derived source holds what it will hold: the programmer source once it is built over the fixture
@@ -1309,8 +1348,8 @@ reading another outside context must be bridged there too, or a render silently 
 so a head mid-swing on the desk's own screens is drawn where the DMX says it is going.
 None of this window's facts move: `StageCameraRig`'s `oneShot` lands the render's viewpoint
 **unconditionally** and records nothing — no pose in `sessionStorage`, no landed marker (it was
-`persist` that marked, and a render's rig is never persisted); the layers and the source are the
-render's own, not read from or written to this window's stores. The job's container sits far
+`persist` that marked, and a render's rig is never persisted); the layers, the source and the work
+lights are the render's own, not read from or written to this window's stores. The job's container sits far
 offscreen, `aria-hidden` and `inert`, holding only the scene's DOM overlays, all empty.
 
 **When it draws.** The job fetches afresh every read the scene draws from — the project, saved
@@ -1329,11 +1368,12 @@ disposes the renderer and forces the context's loss — session 0's memory rule,
 context on an iPad is the expensive case. A context lost mid-render (`ContextLossWatcher`) ends the
 render with that reason: a render has no *Restore* to offer.
 
-Tests: `api/stageRenderApi.test.ts` (the frame), `savedViewpoints.test.ts` (`resolveViewpoint`),
+Tests: `api/stageRenderApi.test.ts` (the frame, its work lights included), `savedViewpoints.test.ts` (`resolveViewpoint`),
 `stageRender/StageRenderHost.test.tsx` (a request mounts one render, its outcome goes back bound to
 its id and token, busy, a throwing render, and nothing toasted) and
 `stage3d/render/StageRenderJob.test.tsx` (the props `Stage3D` is handed, drawing once the scene
-reports in, giving up with a reason, and this window's viewpoint and landed marker untouched).
+reports in, giving up with a reason, this window's viewpoint and landed marker untouched, and the
+request's work lights drawn rather than this window's).
 
 ## Editing on the sections
 

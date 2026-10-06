@@ -434,6 +434,7 @@ internal val renderViewTool = ToolDef(
         "Use it to check a model against the operator's photo or video frame and correct it with set_scene. " +
         "A signed-in desk window draws it offscreen (any window on the desk's own network, whatever view it is on; nothing on its screen changes), so it needs one open: with none it answers RENDER_NO_WINDOW, and asking the operator to open the desk in a browser is the fix. " +
         "It draws what a fresh Stage window shows on that viewpoint: every scene layer, haze on, and no labels. orbit and eye are the default views a fresh window opens on; plan, front and side are sections. " +
+        "By default it draws the room as lit, so a scene with nothing lit comes back nearly black; set workLights true to lift the dark and check the geometry — the venue, the set and the rig — with the pools left as they are. " +
         "Read-only: it changes no DMX, no programmer value and no window's view. Errors are named: RENDER_NO_WINDOW, RENDER_BUSY, RENDER_TIMEOUT, RENDER_WINDOW_CLOSED, RENDER_UNKNOWN_VIEWPOINT, RENDER_UNKNOWN_SEAT, RENDER_FAILED, RENDER_INVALID_REQUEST.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -451,6 +452,7 @@ internal val renderViewTool = ToolDef(
             prop("width", "integer", "Pixels, ${RENDER_MIN_SIDE}–${RENDER_MAX_SIDE}, at most $RENDER_MAX_PIXELS pixels in all (1920 × 1080). Default ${RENDER_DEFAULT_WIDTH}; with only height given, 16:9 to it.")
             prop("height", "integer", "Pixels, ${RENDER_MIN_SIDE}–${RENDER_MAX_SIDE}, at most $RENDER_MAX_PIXELS pixels in all. Default ${RENDER_DEFAULT_HEIGHT}; with only width given, 16:9 to it.")
             enumProp("source", RENDER_SOURCES, "Which light to draw: 'output' (default) is what the desk is transmitting; 'outputProgrammer' lays the programmer over it (differs only in Blind); 'programmer' is the programmer alone; 'nextGo' the look the next GO would produce.")
+            prop("workLights", "boolean", "Lift the dark, as the Stage view's Work lights do: unlit surfaces show their shape while every pool keeps its exposure. Default false — the room as lit. Turn it on to check geometry; it changes no window's own setting.")
         })
         put("required", buildJsonArray { add("viewpoint") })
     },

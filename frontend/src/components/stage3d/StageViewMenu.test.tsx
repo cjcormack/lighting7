@@ -34,6 +34,8 @@ function setup(over: Partial<Props> = {}) {
     stats: createStageStats(),
     frameRateReadout: false,
     setFrameRateReadout: vi.fn(),
+    workLights: 'off',
+    setWorkLights: vi.fn(),
     ...over,
   }
   render(<StageViewMenu {...props} />)
@@ -122,14 +124,42 @@ describe('the View tab', () => {
     expect(props.setLabelMode).toHaveBeenCalledWith('none')
   })
 
-  it('writes every group as this window, and has no Work lights yet', () => {
+  it('writes every group as this window', () => {
     setup()
     open()
-    for (const label of ['Source', 'Show', 'Haze', 'Labels']) {
+    for (const label of ['Source', 'Show', 'Haze', 'Labels', 'Work lights']) {
       expect(within(group(label)).getByText('this window')).toBeInTheDocument()
     }
     expect(screen.queryByText('this machine')).toBeNull()
-    expect(screen.queryByText(/Work lights/)).toBeNull()
+  })
+
+  it('shows Work lights last, announced like the source, with the chosen value’s hint, and sets them (menu plan D8)', () => {
+    const props = setup({ workLights: 'off', setWorkLights: vi.fn() })
+    open()
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    expect(regions.slice(-1)).toEqual(['Work lights'])
+    const work = group('Work lights')
+    expect(within(work).getByText('Screens')).toBeInTheDocument()
+    expect(within(work).getAllByRole('radio').filter(isOn).map((i) => i.textContent)).toEqual(['Off'])
+    expect(within(work).getByText('The room as lit: what no beam reaches stays dark.')).toBeInTheDocument()
+    fireEvent.click(within(work).getByRole('radio', { name: 'On' }))
+    expect(props.setWorkLights).toHaveBeenCalledWith('on')
+  })
+
+  it('shows the board’s hint while work lights are on', () => {
+    setup({ workLights: 'on', setWorkLights: vi.fn() })
+    open()
+    const work = group('Work lights')
+    expect(within(work).getAllByRole('radio').filter(isOn).map((i) => i.textContent)).toEqual(['On'])
+    expect(
+      within(work).getByText('Lifts the dark, so unlit surfaces show their shape. Pools keep their exposure.'),
+    ).toBeInTheDocument()
+  })
+
+  it('draws no Work lights group where the host has none to set', () => {
+    setup({ workLights: undefined, setWorkLights: undefined })
+    open()
+    expect(screen.queryByRole('region', { name: 'Work lights' })).toBeNull()
   })
 })
 

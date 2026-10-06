@@ -33,8 +33,15 @@ describe('parseStageRenderRequest', () => {
       width: 1280,
       height: 720,
       source: 'output',
+      workLights: 'off',
       timeoutMs: 30_000,
     })
+  })
+
+  it('reads the capture’s work lights, a missing one as off (a desk that predates the field)', () => {
+    expect(parseStageRenderRequest(frame({ workLights: true }))?.workLights).toBe('on')
+    expect(parseStageRenderRequest(frame({ workLights: false }))?.workLights).toBe('off')
+    expect(parseStageRenderRequest(frame())?.workLights).toBe('off')
   })
 
   it('takes every viewpoint in the vocabulary: a camera, a saved view uuid, a seat', () => {
@@ -50,6 +57,8 @@ describe('parseStageRenderRequest', () => {
     expect(parseStageRenderRequest(frame({ height: 0 }))).toBeNull()
     expect(parseStageRenderRequest(frame({ token: undefined }))).toBeNull()
     expect(parseStageRenderRequest(frame({ type: 'windows.show' }))).toBeNull()
+    // Work lights are a boolean on the wire; a word is not read as one.
+    expect(parseStageRenderRequest(frame({ workLights: 'on' }))).toBeNull()
     expect(parseStageRenderRequest(null)).toBeNull()
   })
 })

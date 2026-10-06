@@ -13,7 +13,10 @@ import {
   releaseBodyGeometry,
   releaseUnheldBodyGeometry,
 } from './bodyGeometry'
-import { buildBodies, buildBodyLayout, flushBodies, makeBodiesHandle, makeBodyPose } from './StageBodies'
+import { applyHousingWorkLights, buildBodies, buildBodyLayout, flushBodies, makeBodiesHandle, makeBodyPose } from './StageBodies'
+import { HOUSING_COLOR, HOUSING_FILL } from './palette'
+import { litByFill } from '../scene/surfaceShader'
+import { WORK_LIGHT_LEVELS } from '../scene/workLights'
 
 function spec(kind: 'PROFILE' | 'FRESNEL', lengthM: number | null = null): BodySpec {
   return bodySpecFor({
@@ -120,5 +123,37 @@ describe('the shared geometry', () => {
     expect(cachedBodyGeometryCount()).toBe(start + 1)
     releaseUnheldBodyGeometry()
     expect(cachedBodyGeometryCount()).toBe(start)
+  })
+})
+
+describe('the housings under work lights (stage-view menu plan D6)', () => {
+  const materials = () => ({
+    housing: new ShaderMaterial({ uniforms: { uFill: { value: HOUSING_FILL } } }),
+    billboard: new ShaderMaterial({ uniforms: { uHousing: { value: new Color() }, uHousingActive: { value: new Color() } } }),
+  })
+
+  it('raises the housings’ own fill with the room, and the billboards follow through litByFill', () => {
+    const { housing, billboard } = materials()
+    applyHousingWorkLights(housing, billboard, WORK_LIGHT_LEVELS.on)
+    expect(housing.uniforms.uFill.value).toBe(0.8)
+    const on = billboard.uniforms.uHousing.value as Color
+    expect(on.equals(litByFill(new Color(HOUSING_COLOR), 0.8, 0.5, WORK_LIGHT_LEVELS.on))).toBe(true)
+
+    applyHousingWorkLights(housing, billboard, WORK_LIGHT_LEVELS.off)
+    expect(housing.uniforms.uFill.value).toBe(HOUSING_FILL)
+    const off = billboard.uniforms.uHousing.value as Color
+    // Off is the billboard exactly as it was drawn before there was a switch.
+    expect(off.equals(litByFill(new Color(HOUSING_COLOR), HOUSING_FILL))).toBe(true)
+    expect(on.r).toBeGreaterThan(off.r)
+  })
+
+  it('keeps a selected housing’s lead at either level: it rides the same tint', () => {
+    const { housing, billboard } = materials()
+    for (const level of [WORK_LIGHT_LEVELS.off, WORK_LIGHT_LEVELS.on]) {
+      applyHousingWorkLights(housing, billboard, level)
+      const plain = billboard.uniforms.uHousing.value as Color
+      const active = billboard.uniforms.uHousingActive.value as Color
+      expect(active.b).toBeGreaterThan(plain.b)
+    }
   })
 })

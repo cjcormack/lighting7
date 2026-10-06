@@ -160,6 +160,12 @@ class McpRenderViewTest : RouteIntegrationTest() {
         assertEquals("RENDER_INVALID_REQUEST", call("""{"viewpoint":"plan","width":1920,"height":1920}""").code())
         assertEquals("RENDER_INVALID_REQUEST", call("""{"viewpoint":"plan","height":"720"}""").code())
         assertEquals("RENDER_INVALID_REQUEST", call("""{"viewpoint":"plan","source":"dmx"}""").code())
+        // Work lights are true or false: a word, a number or an object is a named problem.
+        for (bad in listOf("\"on\"", "\"true\"", "1", "{}")) {
+            val refused = call("""{"viewpoint":"plan","workLights":$bad}""")
+            assertEquals("RENDER_INVALID_REQUEST", refused.code(), "workLights $bad")
+            assertTrue(refused.description.contains("workLights must be true or false"), refused.description)
+        }
         assertEquals("RENDER_INVALID_REQUEST", call("""{"viewpoint":"plan","zoom":2}""").code())
         assertEquals("RENDER_INVALID_REQUEST", call("""{}""").code())
         assertEquals("RENDER_UNKNOWN_VIEWPOINT", call("""{"viewpoint":"Row F centre"}""").code())
@@ -237,6 +243,7 @@ class McpRenderViewTest : RouteIntegrationTest() {
             assertEquals("side", request.viewpoint)
             assertEquals(640 to 360, request.width to request.height, "16:9 to the width given")
             assertEquals("output", request.source)
+            assertFalse(request.workLights, "off unless asked: a capture means the room as lit")
 
             val frame = png()
             assertEquals(HttpStatusCode.NoContent, client.upload(request.requestId, request.token, cookie, frame).status)
@@ -250,11 +257,25 @@ class McpRenderViewTest : RouteIntegrationTest() {
             assertTrue(frame.contentEquals(Base64.getDecoder().decode(image["data"]!!.jsonPrimitive.content)))
             val text = Json.parseToJsonElement(content[0]["text"]!!.jsonPrimitive.content).jsonObject
             assertEquals("Screen 1", text["renderedBy"]!!.jsonPrimitive.content)
+            assertFalse(text["workLights"]!!.jsonPrimitive.boolean, "echoed in the result")
 
             // Answered: the same upload again finds nothing to answer.
             val again = client.upload(request.requestId, request.token, cookie, frame)
             assertEquals(HttpStatusCode.NotFound, again.status)
             assertEquals("RENDER_REQUEST_UNKNOWN", again.errorCode())
+        }
+    }
+
+    @Test
+    fun `workLights true rides the frame to the window and is echoed in the result`() = testApplication {
+        withOneWindow { client, cookie ->
+            val answer = async { tools.executeTool("render_view", Json.parseToJsonElement("""{"viewpoint":"plan","workLights":true}""").jsonObject) }
+            val request = awaitOfType<StageRenderRequestOutMessage>()
+            assertTrue(request.workLights, "the request's, sent to the window")
+            assertEquals(HttpStatusCode.NoContent, client.upload(request.requestId, request.token, cookie, png()).status)
+            val result = answer.await()
+            assertTrue(result.success, result.description)
+            assertTrue(Json.parseToJsonElement(result.result).jsonObject["workLights"]!!.jsonPrimitive.boolean)
         }
     }
 

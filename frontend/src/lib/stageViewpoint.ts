@@ -2,6 +2,12 @@ import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 import { writeEyePose } from './stageCameraPoses'
 import { isVisSource, setVisSource, type VisSource } from '../hooks/useVisSource'
+import {
+  isWorkLights,
+  setWorkLights,
+  VIEW_OPTION_WORK_LIGHTS,
+  type WorkLights,
+} from '../components/stage3d/scene/workLights'
 
 /**
  * Where this window's Stage view looks from (stage-view plan sessions 1 and 2; `Stage.dc.html` is
@@ -213,13 +219,15 @@ export const VIEW_OPTION_SOURCE = 'source'
 export interface AppliedStageOptions {
   viewpoint?: StageViewpoint
   source?: VisSource
+  workLights?: WorkLights
 }
 
 /**
- * A `windows.viewOptions` frame's Stage keys, applied to this tab: the viewpoint and the source,
- * each only when its value is in its vocabulary — a value outside it is ignored rather than read as
- * Orbit or as Output, so a frame from a later build cannot move the window somewhere it did not
- * mean. Returns what was applied.
+ * A `windows.viewOptions` frame's Stage keys, applied to this tab: the viewpoint, the source and
+ * the work lights (stage-view menu plan D8, `scene/workLights.ts`), each only when its value is in
+ * its vocabulary — a value outside it is ignored rather than read as Orbit, as Output or as off, so
+ * a frame from a later build cannot move the window somewhere it did not mean. Returns what was
+ * applied.
  */
 export function applyStageViewOptions(options: Readonly<Record<string, string>>): AppliedStageOptions {
   const applied: AppliedStageOptions = {}
@@ -233,30 +241,39 @@ export function applyStageViewOptions(options: Readonly<Record<string, string>>)
     setVisSource(source)
     applied.source = source
   }
+  const workLights = options[VIEW_OPTION_WORK_LIGHTS]
+  if (isWorkLights(workLights)) {
+    setWorkLights(workLights)
+    applied.workLights = workLights
+  }
   return applied
 }
 
 /**
- * `?viewpoint=` and `?source=` on arrival — a Screens row's *Copy link* carries both: apply the
- * values in their vocabularies, and answer the search with both parameters stripped, so a reload
- * keeps whatever the window has moved to since. Null when there is neither, so the caller writes
- * nothing. A value outside its vocabulary is stripped and not applied, as a frame's is.
+ * `?viewpoint=`, `?source=` and `?workLights=` on arrival — a Screens row's *Copy link* carries all
+ * three: apply the values in their vocabularies, and answer the search with the parameters
+ * stripped, so a reload keeps whatever the window has moved to since. Null when there is none, so
+ * the caller writes nothing. A value outside its vocabulary is stripped and not applied, as a
+ * frame's is.
  */
 export function consumeLaunchStageOptions(search: URLSearchParams): URLSearchParams | null {
   const viewpoint = search.get(VIEW_OPTION_VIEWPOINT)
   const source = search.get(VIEW_OPTION_SOURCE)
-  if (viewpoint == null && source == null) return null
+  const workLights = search.get(VIEW_OPTION_WORK_LIGHTS)
+  if (viewpoint == null && source == null && workLights == null) return null
   if (isStageViewpoint(viewpoint)) setStageViewpoint(viewpoint)
   if (isVisSource(source)) setVisSource(source)
+  if (isWorkLights(workLights)) setWorkLights(workLights)
   const next = new URLSearchParams(search)
   next.delete(VIEW_OPTION_VIEWPOINT)
   next.delete(VIEW_OPTION_SOURCE)
+  next.delete(VIEW_OPTION_WORK_LIGHTS)
   return next
 }
 
-/** What the Stage view announces as its `viewOptions`: the viewpoint and the source. */
-export function stageViewOptions(viewpoint: StageViewpoint, source: VisSource): Record<string, string> {
-  return { [VIEW_OPTION_VIEWPOINT]: viewpoint, [VIEW_OPTION_SOURCE]: source }
+/** What the Stage view announces as its `viewOptions`: the viewpoint, the source and the work lights. */
+export function stageViewOptions(viewpoint: StageViewpoint, source: VisSource, workLights: WorkLights): Record<string, string> {
+  return { [VIEW_OPTION_VIEWPOINT]: viewpoint, [VIEW_OPTION_SOURCE]: source, [VIEW_OPTION_WORK_LIGHTS]: workLights }
 }
 
 /** Test seam: the stores back to Orbit and nothing landed, with no listeners. */

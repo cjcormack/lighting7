@@ -2,6 +2,7 @@ import { pathHasSegment } from './navMatch'
 import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskWindow'
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
 import { VIEW_OPTION_SOURCE, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
+import { VIEW_OPTION_WORK_LIGHTS, WORK_LIGHTS } from '../components/stage3d/scene/workLights'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
@@ -13,7 +14,7 @@ import { VIEW_OPTION_SOURCE, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
  * this view called" once (`/templates` carries four ⌘K entries on one `pathMatch`). The order is
  * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
  * viewpoint), then the two libraries. Stage is not a live view — it has no `ShowHeader` and no
- * immersive — so it carries its viewpoint and its source and nothing else.
+ * immersive — so it carries its viewpoint, its source and its work lights, and nothing else.
  *
  * Matching is [pathHasSegment], never `startsWith`: `/programmer` must not answer for `/program`
  * (the legacy redirect) and `/fx-library` must not answer for `/busk`'s old `/fx`.
@@ -31,7 +32,7 @@ export interface WindowView {
    * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
    * (busk-chrome plan D9): immersive is a window's fact, but it rides *here* because a top-level
    * announce key would drop the frame, and it is drawn on the row as the view's Chrome segment.
-   * Stage carries [STAGE_VIEWPOINT_OPTION] and [STAGE_SOURCE_OPTION].
+   * Stage carries [STAGE_VIEWPOINT_OPTION], [STAGE_SOURCE_OPTION] and [STAGE_WORK_LIGHTS_OPTION].
    */
   options?: readonly WindowViewOption[]
 }
@@ -141,6 +142,20 @@ export const STAGE_SOURCE_OPTION: WindowViewOption = {
   valueLabels: { output: 'Output', nextGo: 'Next GO' },
 }
 
+/**
+ * The Stage view's work lights, *Work lights · Off | On* on the row (stage-view menu plan D8,
+ * `WorkLights.dc.html`'s Screens row): the desk screen plots with them on while the hall screen
+ * shows the room as lit, so another window is what sets them. Both values, unlike the source's two
+ * of four. The target applies the value through `lib/stageViewpoint.ts`'s `applyStageViewOptions`.
+ */
+export const STAGE_WORK_LIGHTS_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_WORK_LIGHTS,
+  label: 'Work lights',
+  kind: 'enum',
+  values: WORK_LIGHTS,
+  valueLabels: { off: 'Off', on: 'On' },
+}
+
 export const WINDOW_VIEWS: readonly WindowView[] = [
   { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION] },
   { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION] },
@@ -161,7 +176,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     id: 'stage',
     label: 'Stage',
     segment: '/stage',
-    options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION],
+    options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'templates', label: 'Templates', segment: '/templates' },
@@ -169,10 +184,9 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
 
 /**
  * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
- * on the busk view, the viewpoint and the source on the Stage view, and `immersive` under every
- * live view; nothing
- * at all — the key absent, not an empty map — for a view that contributes none, so a window on a
- * library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which
+ * on the busk view, the viewpoint, the source and the work lights on the Stage view, and
+ * `immersive` under every live view; nothing at all — the key absent, not an empty map — for a view
+ * that contributes none, so a window on a library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which
  * views carry the key without a router.
  */
 export function announcedViewOptions(

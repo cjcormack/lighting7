@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import {
   BufferGeometry,
@@ -14,7 +14,8 @@ import {
 } from 'three'
 import { NO_RAYCAST } from '../raycast'
 import { litByFill, makeSurfaceMaterial } from '../scene/surfaceShader'
-import { useSurfaceLighting } from '../scene/SurfaceLighting'
+import { useSurfaceLighting, useWorkLightLevels } from '../scene/SurfaceLighting'
+import type { WorkLightLevels } from '../scene/workLights'
 import { FINISH_LOBES } from '../scene/sceneParts'
 import type { BodySpec } from './archetype'
 import {
@@ -137,10 +138,24 @@ export function useBodies(): BodiesHandle | null {
 
 const ZERO = new Matrix4().makeScale(0, 0, 0)
 const HOUSING = new Color(HOUSING_COLOR)
-// The housing material's fill is HOUSING_FILL; a selected housing's extra fill rides its tint.
+// The housing material's fill is HOUSING_FILL (the work lights' `housing` with them on); a selected
+// housing's extra fill rides its tint, as a ratio, so it keeps its lead at either level.
 const HOUSING_ACTIVE = new Color(HOUSING_ACTIVE_COLOR).multiplyScalar(HOUSING_ACTIVE_FILL / HOUSING_FILL)
 
 const LENS_OFF = new Color(BODY_LENS_COLOR)
+
+/**
+ * The housings under [levels] (stage-view menu plan D6): the instanced housing material's own fill
+ * and the billboard glyphs' two colours, which follow it through `litByFill`. With work lights on
+ * the rig's fill rises with the room, or the matt black bodies vanish against a newly lit floor on
+ * the Plan. A selected housing keeps its lead by riding the same tint. Uniform writes only: the
+ * caller asks for the frame.
+ */
+export function applyHousingWorkLights(housing: ShaderMaterial, billboard: ShaderMaterial, levels: WorkLightLevels): void {
+  housing.uniforms.uFill.value = levels.housing
+  billboard.uniforms.uHousing.value = litByFill(HOUSING, levels.housing, 0.5, levels)
+  billboard.uniforms.uHousingActive.value = litByFill(HOUSING_ACTIVE, levels.housing, 0.5, levels)
+}
 
 type PartName = 'base' | 'yoke' | 'head'
 const PARTS: readonly PartName[] = ['base', 'yoke', 'head']
@@ -448,6 +463,7 @@ interface StageBodiesProps {
 /** The canvas's bodies, and the handle every `FixtureModel` writes its own through. */
 export function StageBodies({ layout, children }: StageBodiesProps) {
   const { uniforms } = useSurfaceLighting()
+  const workLights = useWorkLightLevels()
   const invalidate = useThree((s) => s.invalidate)
   const housingMaterial = useMemo(
     () => makeSurfaceMaterial(uniforms, { colour: '#ffffff', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.LAMBERT }, { doubleSided: true, fill: HOUSING_FILL }),
@@ -477,6 +493,13 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
     },
     [housingMaterial, lensMaterial, billboardMaterial],
   )
+  // The work lights' housing fill: written onto the materials rather than rebuilding them, which
+  // would rebuild the meshes and drop every slot's written state. A layout effect, so a canvas
+  // mounted with work lights on draws its first frame with them.
+  useLayoutEffect(() => {
+    applyHousingWorkLights(housingMaterial, billboardMaterial, workLights)
+    invalidate()
+  }, [housingMaterial, billboardMaterial, workLights, invalidate])
 
   const layoutKey = layout.signature
   const built = useMemo(

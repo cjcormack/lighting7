@@ -193,8 +193,11 @@ cloth at the view's distances, and a weave is below a pixel from the house.
 
 ## 10. Open questions
 
-1. **Exposure:** one realistic look, or a View menu choice between *Realistic* and *Readable* if
-   dark venues become hard to plot in?
+1. ~~**Exposure:** one realistic look, or a View menu choice between *Realistic* and *Readable* if
+   dark venues become hard to plot in?~~ **Answered 2026-10-06:** a View menu choice, named
+   **Work lights · Off | On** — the dark lifted, pools at their exposure, per window and announced,
+   and an optional `workLights` on `render_view`. See
+   [`stage-view-menu-plan.md`](stage-view-menu-plan.md) D2, D6–D9.
 2. **Cylinders between sessions 1 and 3:** is lighting a little of what sits just behind a column
    acceptable for that stretch?
 3. **Order of sessions 2 and 3:** materials first (the larger visible gain once session 1 lands) is

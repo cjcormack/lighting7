@@ -50,6 +50,8 @@ class StageRenderService(private val windows: WindowRegistry) {
         val width: Int,
         val height: Int,
         val source: String,
+        /** Lift the dark for this capture alone (stage-view menu plan D9); never the window's own. */
+        val workLights: Boolean,
         /** How long the window has; it gives up a little sooner and says what it was waiting for. */
         val timeoutMs: Long,
     )
@@ -144,12 +146,13 @@ class StageRenderService(private val windows: WindowRegistry) {
         width: Int,
         height: Int,
         source: String,
+        workLights: Boolean = false,
     ): Outcome {
         val wait = answerTimeout
         // `Mutex.lock` is cancellable, so a wait that times out holds nothing.
         withTimeoutOrNull(wait) { lock.lock() } ?: return Outcome.Busy(wait)
         try {
-            return renderLocked(projectId, viewpoint, width, height, source)
+            return renderLocked(projectId, viewpoint, width, height, source, workLights)
         } finally {
             lock.unlock()
         }
@@ -161,6 +164,7 @@ class StageRenderService(private val windows: WindowRegistry) {
         width: Int,
         height: Int,
         source: String,
+        workLights: Boolean,
     ): Outcome = run {
         val window = eligibleWindows(projectId).firstOrNull() ?: return@run Outcome.NoWindow
         val attached = sockets[window.id] ?: return@run Outcome.NoWindow
@@ -173,7 +177,7 @@ class StageRenderService(private val windows: WindowRegistry) {
             if (!sockets.containsKey(window.id)) return@run Outcome.WindowClosed(window)
             val timeout = answerTimeout
             val sent = attached.requests.trySend(
-                Request(window.id, requestId, job.token, projectId, viewpoint, width, height, source, timeout.inWholeMilliseconds),
+                Request(window.id, requestId, job.token, projectId, viewpoint, width, height, source, workLights, timeout.inWholeMilliseconds),
             )
             // Closed: the socket went after it was chosen.
             if (sent.isFailure) return@run Outcome.WindowClosed(window)

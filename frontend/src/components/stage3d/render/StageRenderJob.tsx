@@ -56,8 +56,8 @@ const noop = () => {}
  *
  * **Read-only in every sense.** It reads the rows and the live channels and writes nothing: no DMX,
  * no programmer, and none of this window's own facts — the viewpoint, the camera poses, the landed
- * marker (the rig's `oneShot`), the layers (the defaults, not this window's) and the source (the
- * request's, not this window's). The one it reads, the light budget, is the machine's and is only
+ * marker (the rig's `oneShot`), the layers (the defaults, not this window's), the source and the
+ * work lights (the request's, not this window's — stage-view menu plan D9). The one it reads, the light budget, is the machine's and is only
  * read. The container sits offscreen and the canvas is never attached, so nothing on screen moves.
  *
  * **It draws once everything is in**: every row read afresh, the viewpoint resolved, the scene
@@ -207,6 +207,7 @@ export default function StageRenderJob({
             view={RENDER_VIEW_FLAGS}
             layers={DEFAULT_SCENE_LAYERS}
             lightBudget={lightBudget}
+            workLights={request.workLights}
             capture={capture}
           />
         )}

@@ -47,6 +47,15 @@ describe('windowSetupUrl', () => {
     )
   })
 
+  it('carries a Stage row’s work lights beside its source, both values (stage-view menu plan D8)', () => {
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', source: 'output', workLights: 'on' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=plan&source=output&workLights=on',
+    )
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', workLights: 'off' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=plan&workLights=off',
+    )
+  })
+
   it('carries immersive only while it is on — off is what every window boots with (busk-chrome D9)', () => {
     expect(windowSetupUrl('Screen 2', '/projects/1/show', { immersive: 'on' }, 'http://desk')).toBe(
       'http://desk/projects/1/show?window=Screen%202&immersive=on',

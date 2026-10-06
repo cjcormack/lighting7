@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, Cpu, Eye, Gauge, Link2, Monitor, RotateCcw } from 'lucide-react'
+import { Check, Cpu, Eye, Gauge, Link2, Monitor, Moon, RotateCcw, Sun, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -34,6 +34,7 @@ import {
   type SceneLayers,
 } from './scene/sceneView'
 import { LIGHT_BUDGETS } from './scene/lightTable'
+import { isWorkLights, type WorkLights } from './scene/workLights'
 import { HAZE_TIERS } from './scene/hazeGovernor'
 import { isSlowReading } from './scene/frameRate'
 import { useStageStats, type StageStatsStore } from './scene/stageStats'
@@ -56,6 +57,15 @@ const BOX_SHADOWS_LABELS: Record<BoxShadows, string> = {
   some: `${BOX_SHADOW_CAPS.some} a light`,
   off: 'Off',
 }
+
+/**
+ * Work lights (stage-view menu plan D2, D6), with the chosen value's hint: on's is the board's copy
+ * (`Menu.dc.html`), off says what the room is without them.
+ */
+const WORK_LIGHT_ITEMS: ReadonlyArray<{ value: WorkLights; label: string; icon: LucideIcon; hint: string }> = [
+  { value: 'off', label: 'Off', icon: Moon, hint: 'The room as lit: what no beam reaches stays dark.' },
+  { value: 'on', label: 'On', icon: Sun, hint: 'Lifts the dark, so unlit surfaces show their shape. Pools keep their exposure.' },
+]
 
 /** The rig's four toggles, then (on a second row) the scene's three. */
 const RIG_TOGGLES: ReadonlyArray<{ key: StageViewToggle; label: string; hint: string }> = [
@@ -108,6 +118,9 @@ interface StageViewMenuProps {
   /** How many boxes may shadow each light, per machine; absent with the budget. */
   boxShadows?: BoxShadows
   setBoxShadows?: (mode: BoxShadows) => void
+  /** Whether this window lifts the dark (`scene/workLights.ts`), per window and announced. */
+  workLights?: WorkLights
+  setWorkLights?: (next: WorkLights) => void
   /** What this window's canvas is doing (`scene/stageStats.ts`), for Performance's live block. */
   stats?: StageStatsStore | null
   /** Whether this window draws the frame-rate readout over its canvas. */
@@ -201,6 +214,8 @@ function ViewTab({
   layers,
   setLayer,
   setHaze,
+  workLights,
+  setWorkLights,
 }: StageViewMenuProps) {
   const status = sourceStatus?.[visSource]
   return (
@@ -268,6 +283,20 @@ function ViewTab({
           items={STAGE_LABEL_MODES.map((mode) => ({ value: mode, label: STAGE_LABEL_MODE_LABELS[mode] }))}
         />
       </Group>
+
+      {workLights != null && setWorkLights != null && (
+        <Group label="Work lights" scope="window" announced>
+          <Segments
+            label="Work lights"
+            value={workLights}
+            onChange={(v) => {
+              if (isWorkLights(v)) setWorkLights(v)
+            }}
+            items={WORK_LIGHT_ITEMS}
+          />
+          <Hint>{WORK_LIGHT_ITEMS.find((item) => item.value === workLights)?.hint}</Hint>
+        </Group>
+      )}
     </div>
   )
 }
@@ -482,7 +511,7 @@ function Segments({
   label: string
   value: string
   onChange: (value: string) => void
-  items: ReadonlyArray<{ value: string; label: string }>
+  items: ReadonlyArray<{ value: string; label: string; icon?: LucideIcon }>
 }) {
   return (
     <ToggleGroup
@@ -496,8 +525,9 @@ function Segments({
         <ToggleGroupItem
           key={item.value}
           value={item.value}
-          className="h-6 min-w-0 flex-1 px-1.5 text-[11.5px] data-[state=on]:bg-muted data-[state=on]:shadow-none"
+          className="h-6 min-w-0 flex-1 gap-1 px-1.5 text-[11.5px] data-[state=on]:bg-muted data-[state=on]:shadow-none"
         >
+          {item.icon != null && <item.icon aria-hidden className="size-3" />}
           {item.label}
         </ToggleGroupItem>
       ))}

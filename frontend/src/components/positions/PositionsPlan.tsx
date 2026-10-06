@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { Stage3D, type Selection } from '../stage3d/Stage3D'
+import { useWorkLights } from '../stage3d/scene/workLights'
 import { StageChannelSourceProvider } from '../../hooks/useChannelSource'
 import { clearDeskSelection, setDeskSelection } from '../../store/selection'
 
@@ -13,7 +14,8 @@ import { clearDeskSelection, setDeskSelection } from '../../store/selection'
  * Stage view's. A fixture clicked here sets the desk selection, as a chip does — and, as a chip
  * does, a click on the one fixture selected clears it, since a click on empty space here selects
  * nothing (the view edits nothing, so a miss is not a gesture). The highlight follows the desk's
- * first selected fixture.
+ * first selected fixture. Work lights are the window's (stage-view menu plan D8): every canvas in
+ * the window follows the one switch, so the rig reads here as it does on the Stage view.
  */
 export default function PositionsPlan({
   projectId,
@@ -25,6 +27,7 @@ export default function PositionsPlan({
   /** The desk selection is exactly [selectedKey] — a click on it then clears. */
   soleSelected: boolean
 }) {
+  const workLights = useWorkLights()
   const selection: Selection = selectedKey == null ? null : { kind: 'patch', patchKey: selectedKey }
   const onSelectionChange = useCallback(
     (next: Selection) => {
@@ -42,6 +45,7 @@ export default function PositionsPlan({
         editMode={false}
         selection={selection}
         hidePatchSelectionInfo
+        workLights={workLights}
         onSelectionChange={onSelectionChange}
       />
     </StageChannelSourceProvider>

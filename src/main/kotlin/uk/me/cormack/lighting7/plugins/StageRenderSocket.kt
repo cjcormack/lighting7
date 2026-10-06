@@ -16,7 +16,8 @@ import uk.me.cormack.lighting7.state.StageRenderService
 sealed class StageRenderOutMessage : OutMessage()
 
 /**
- * Render [viewpoint] offscreen at [width] × [height] from [source] and upload the PNG to
+ * Render [viewpoint] offscreen at [width] × [height] from [source], with [workLights] lifting the
+ * dark or not (stage-view menu plan D9 — the request's, never the window's own), and upload the PNG to
  * `POST /api/rest/stage-renders/{requestId}` with [token] — or say why not at `…/failure`. Sent to
  * **one** socket, never rebroadcast: [token] is the secret that binds the upload to it.
  * [viewpoint] is already the Stage view's own vocabulary (a camera, a saved view's uuid, or
@@ -32,11 +33,12 @@ data class StageRenderRequestOutMessage(
     val width: Int,
     val height: Int,
     val source: String,
+    val workLights: Boolean,
     val timeoutMs: Long,
 ) : StageRenderOutMessage()
 
 internal fun StageRenderService.Request.toOutMessage() =
-    StageRenderRequestOutMessage(requestId, token, projectId, viewpoint, width, height, source, timeoutMs)
+    StageRenderRequestOutMessage(requestId, token, projectId, viewpoint, width, height, source, workLights, timeoutMs)
 
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
