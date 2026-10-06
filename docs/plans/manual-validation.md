@@ -168,14 +168,16 @@ changes (`lobeCost` in its answer, ms a frame over plain Lambert; `?only=lobes` 
 | renderer | Lambert | Oren–Nayar | sheen | GGX | velour (ON + sheen) | paint (ON + GGX) |
 |---|---|---|---|---|---|---|
 | desk Mac, Chromium (ANGLE Metal, M3 Pro; 2026-10-06, 60 frames) | 0.95 | +0.04 | +0.09 | +0.08 | +0.11 | +0.12 |
+| iPad, Safari (2026-10-06, 60 frames) | 5.22 | +0.30 | +0.83 | +1.15 | +1.12 | +1.30 |
 
-So on the Mac a two-lobe finish costs about one *skipped* box entry (+0.106). Still owed:
+So on the Mac a two-lobe finish costs about one *skipped* box entry (+0.106), and on the iPad about
+two (+0.65 each): under the three that would call for a per-browser fallback, so there is none. The
+iPad pays about ten times the Mac per lobe where it pays five and a half for the Lambert frame; GGX
+is its dearest lobe. If a fallback is ever wanted, the precedent is *Box shadows* in
+`scene/sceneView.ts`, and the cheap one is Lambert for every finish. Still owed:
 
-7. In Safari on the desk Mac, then on the iPad, open `/occlusion-bench.html?only=lobes&frames=60` and
-   read off `msPerFrame.lambert` and the five `lobeCost` values; add them to the table above. If the
-   iPad's `velour` or `paint` cost is more than about three of its skipped entries (+0.65 each), say
-   so here before adding a per-browser fallback: the precedent is *Box shadows* in
-   `scene/sceneView.ts`, and the cheap fallback is Lambert for every finish.
+7. In Safari on the desk Mac, open `/occlusion-bench.html?only=lobes&frames=60` and add its
+   `msPerFrame.lambert` and five `lobeCost` values to the table above.
 
 45 minutes; all of it is the desk's.
 
