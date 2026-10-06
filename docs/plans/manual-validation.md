@@ -82,7 +82,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 **What it proves**: *the room, lit, runs at a frame rate on the desk's own hardware*. Session 3 of
 [`stage-view-plan.md`](completed/stage-view-plan.md) put every surface on one receiver shader that loops over
-the live lights (cost: pixels × lights, capped by the View menu's **Light budget**, default 64), and
+the live lights (cost: pixels × lights, capped by the **Light budget** on the View popover's Performance tab, default 64), and
 gave the raymarched haze a governor that gives up march steps when a continuous run averages over
 28 ms a frame (back up under 19 ms for 3 s). The plan's §10 fixed the rule and left the numbers to
 be measured in Safari on the operator's Mac and an iPad.
@@ -105,14 +105,18 @@ session, a gap now counts up to a second). None of these numbers is a GPU's.
 
 **Test**: the hall scene (or the show's real one), the Stage view full screen on the desk Mac in
 **Safari**, then the iPad, with the rig lit in Blind (never live output) and the source on Output +
-Programmer. The container carries `data-lights="<packed>/<lit>"` and `data-haze-tier` for the Web
-Inspector.
+Programmer. Turn on **Frame rate on the canvas** on the View popover's Performance tab: the chip in
+the canvas's corner reads fps and ms a frame while the canvas draws, amber past the governor's 28 ms,
+and the tab's live block reads the lights packed of lit and the haze tier (*full* at tier 0). That
+replaces reading `data-lights` and `data-haze-tier` in the Web Inspector, which the container still
+carries. The readout counts frames drawn, not GPU time, so Safari's Timelines → Rendering Frames
+stays the cross-check if a number looks wrong.
 
-1. Orbit continuously for ten seconds at each light budget, 32 · 64 · 128 · 256: note the frame rate
-   (Safari's Timelines → Rendering Frames) and whether `data-haze-tier` leaves 0.
+1. Orbit continuously for ten seconds at each light budget, 32 · 64 · 128 · 256: note the readout's
+   fps and ms, and whether Performance's Haze line leaves *full*.
 2. Sit in *Row F centre* and repeat at the default budget: the seated view is most of the screen in
    lit surfaces.
-3. Turn **Haze** off in the View menu and orbit again: the difference is the volume's cost.
+3. Turn **Haze** off on the View tab and orbit again: the difference is the volume's cost.
 4. Record the numbers here and, if the default budget or the governor's 28 / 19 ms thresholds
    (`scene/hazeGovernor.ts`) should move, move them in the same commit.
 
@@ -131,14 +135,14 @@ against the same rig with the surface gobos off, and the frame change under it +
 `main` — no reason to narrow it by default, and still no GPU's number. So:
 
 5. With a gobo in every head that has one (the show's real gobos, or the MAC 250's and the Robe's) and
-   one spinning, orbit at the default budget with the View menu's **Gobos on surfaces** on *Every gobo
-   light*, then on *Selected heads only* with nothing selected: the difference is the gobo pass. If
-   the budget runs short with it on, make *Selected heads only* the default (`DEFAULT_GOBO_SURFACES`
+   one spinning, orbit at the default budget with Performance's **Gobos on surfaces** on *Every gobo
+   light*, then on *Selected heads* with nothing selected: the difference is the gobo pass. If
+   the budget runs short with it on, make *Selected heads* the default (`DEFAULT_GOBO_SURFACES`
    in `scene/sceneView.ts`) in the same commit, and say so here.
 
 **Since stage-light session 3 boxes cast shadows on surfaces**: every lit fragment tests the segment
-to its lamp against the light's list of colliders, capped per browser by the View menu's **Box
-shadows** (*Up to 64 boxes a light*, the default; *Up to 16*; *Off*; `scene/sceneView.ts`), and a
+to its lamp against the light's list of colliders, capped per machine by **Box
+shadows** on Performance (*64 a light*, the default; *16 a light*; *Off*; `scene/sceneView.ts`), and a
 light that reaches more falls back to its landing planes. The Commemoration Hall packs 61 colliders;
 its advance-bar spots carry 11 and 8, its balcony spot 49. The occlusion bench
 (`/occlusion-bench.html` on the dev server, `frontend/src/components/stage3d/occlusionBench.ts`): one

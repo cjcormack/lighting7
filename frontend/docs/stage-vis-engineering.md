@@ -587,8 +587,8 @@ and **Restore 3D**. The label layer is hidden with it. A browser that restores o
 (`webglcontextrestored`) clears the state; **Restore** does not wait for that and remounts the canvas
 (`canvasKey`), a fresh renderer and a fresh context, because a context taken to save memory may
 never come back. The camera comes back where it was: the pose is in `sessionStorage` (§"Cameras and
-viewpoints" below). The View menu's **Test recovery** (3D only) drops the context through
-`WEBGL_lose_context` so the path can be exercised on purpose.
+viewpoints" below). **Test recovery**, at the foot of the View popover's Performance tab, drops the
+context through `WEBGL_lose_context` so the path can be exercised on purpose.
 
 ### The emitters are sized by the rig
 
@@ -636,11 +636,12 @@ without a room — the back wall and the catch floor:
   in a basis built from the beam's axis, beside the gobo layers — §"Gobos on surfaces") and its
   aperture (the apex → aperture distance, the iris and a segment's aspect) — what the surface
   shader's `beamMask` shapes the pool with.
-- **The light budget is the viewer's** — the View menu's *Light budget*, 32 · 64 · 128 · 256, default
-  64, per browser in `localStorage` (`stage.lightBudget`, `scene/sceneView.ts`): the shader's cost is
-  pixels × lights, and what a machine's GPU affords is the machine's fact, not a window's. A light
-  the budget drops still draws its beam; it lands on nothing that frame. The container carries
-  `data-lights="<packed>/<lit>"` for measurement.
+- **The light budget is the viewer's** — *Light budget* on the View popover's **Performance** tab,
+  32 · 64 · 128 · 256, default 64, per machine in `localStorage` (`stage.lightBudget`,
+  `scene/sceneView.ts`): the shader's cost is pixels × lights, and what a machine's GPU affords is the
+  machine's fact, not a window's. A light the budget drops still draws its beam; it lands on nothing
+  that frame. The tab's live block reads *Lights 64 on surfaces of 71 lit* from the canvas's stats
+  store, and the container still carries `data-lights="<packed>/<lit>"` for a test or a measurement.
 - **Axial beam reach is where a beam ends in the air** (`scene/beamReach.ts`). The director casts
   each lobe's axis against the scene's **colliders** — oriented boxes in three.js space turned about
   y, the regions' OBB maths: a wall a 2 cm slab behind its face, a deck its whole box — out to
@@ -736,10 +737,10 @@ without a room — the back wall and the catch floor:
     box test, before the skip, was +0.177 ms an entry, so the skip pays wherever fewer than about
     43 % of a light's entries stand behind a given fragment. The Commemoration Hall packs 61
     colliders; its two advance-bar spots carry 11 and 8, its 9.7° balcony spot 49.
-  - **How many boxes a light may be shadowed by is the viewer's** — the View menu's *Box shadows*,
-    per browser in `localStorage` (`stage.boxShadows`, `scene/sceneView.ts`) beside the light budget
-    and *Gobos on surfaces*: *Up to 64 boxes a light* (the default, the list texture's width,
-    `MAX_LIGHT_COLLIDERS`), *Up to 16* or *Off*. A light whose cone reaches more than the cap falls
+  - **How many boxes a light may be shadowed by is the viewer's** — *Box shadows* on the View
+    popover's **Performance** tab, per machine in `localStorage` (`stage.boxShadows`,
+    `scene/sceneView.ts`) beside the light budget and *Gobos on surfaces*: *64 a light* (the default,
+    the list texture's width, `MAX_LIGHT_COLLIDERS`), *16 a light* or *Off*. A light whose cone reaches more than the cap falls
     back to its landing planes (texel 3, `landing.ts`'s `behindLanding`), so a lower cap takes the
     widest cones' shadows first; *Off* puts every light there, the cost the surfaces had before
     session 3. So does a scene with more colliders than the texture's 1024 rows. It is the
@@ -915,7 +916,8 @@ what it measured (`endRun`), so the recovery clock never counts through idle tim
 never steps on the last one's average; the tier itself is kept. A gap over a second is a pause, not
 a frame — deliberately far above any frame worth governing, because a software renderer at ~700 ms
 a frame is exactly the case the rule is for. The light budget is the viewer's and never touched by
-it. The container carries `data-haze-tier`.
+it. The container carries `data-haze-tier`, and the canvas's stats store the same tier for the
+Performance tab (*Haze full*, or the share of march steps left).
 
 The View menu's **Haze** is how far the air shows the beams, per window: **Off**, **Stage** (the
 default) or **Everywhere**. Off does not draw the volume mesh at all, rather than marching it to
@@ -931,6 +933,39 @@ Off and anything else as Stage.
 The haze *level* is still `washConfig.ts`'s constant. The plan wanted it to follow the hazer's DMX,
 but nothing in a rig says which fixture is the hazer (the Commemoration Hall's is a generic dimmer),
 so that waits for a typed identity (`FU-STAGE-HAZE-FOLLOWS-HAZER`).
+
+### Frame-rate readout
+
+The View popover (stage-view menu plan D1, D5; `StageViewMenu.tsx`) has two tabs: **View** is what
+this window sees and **Performance** what it costs. Performance leads with a live block — frames a
+second and ms a frame, the lights packed of lit, the haze tier — then the machine's light budget,
+gobos and box shadows, then Test recovery. Each group says whose it is, *this window* or *this
+machine*. The block reads a **stats store** (`scene/stageStats.ts`) that the Stage route creates and
+hands to its canvas and its menu, one per canvas, so the Positions plan's canvas never mixes in its
+numbers. Three writers feed it: `FrameRateProbe`, the emitters' flush (the light counts, beside
+`data-lights`) and the governor's tier (beside `data-haze-tier`).
+
+The **readout** is the same number over the canvas: a chip in the bottom-left corner, one row above
+the section HUD's cursor strip on a section in Edit, off by default and per window
+(`sessionStorage stage.frameRate`, not announced: each window draws its own canvas at its own rate).
+Clicking it opens the popover on Performance. `scene/frameRate.ts` is the arithmetic, pure: fps
+counts the frames drawn in the trailing second; ms is the median gap between the frames less than a
+second before the last one, so a run after an idle spell is judged on its own frames; the chip turns
+amber past 28 ms (the governor's `SLOW_FRAME_MS`) and reads *idle* after a second with no frame. It
+counts what is drawn, not what it costs: a light scene on a 60 Hz display reads 16.7 ms however
+little the GPU did. GPU timing is not portable (Safari has none), and a setting's per-pixel cost
+stays the occlusion bench's job.
+
+**It never asks for a frame.** A readout that invalidated would keep the demand canvas drawing
+forever and measure itself. `FrameRateProbe` (`FrameRateReadout.tsx`) runs beside
+`HazeGovernorProbe` at priority 2, after the frame has rendered, and writes the reading to the store
+at most four times a second. The chip paints its own DOM node from the store's listener, so no React
+render is involved. A `setTimeout` flips it to idle, so a still stage stays still with the readout
+on, and a hidden tab reads idle when it is shown again. The route never subscribes to the store, or
+its re-render would hand the canvas new props. `FrameRateReadout.test.tsx` drives R3F's real demand
+loop through a stubbed animation-frame queue and fails if the readout asks for a frame. The chip is
+hidden while the context is lost (the paused card owns the canvas). A `render_view` capture neither
+mounts it nor feeds the store.
 
 ### Regions hang down from `centerZ`
 
@@ -968,7 +1003,7 @@ canvas. `StageLabel` now renders an empty anchor group and registers it with a `
 (`stageLabels.ts`), which owns one plain `<div>` per label in a single layer over the canvas.
 `StageLabelDriver` lays them out once per rendered frame: project each anchor, place greedily by rank
 — hovered or selected first, then positions (rigging and regions), then fixtures — and hide whatever
-collides, with a couple of pixels' gap. Four rules:
+collides, with a couple of pixels' gap. Five rules:
 
 - **The mode is the store's, not the call sites'.** *Positions* (the default) shows the rigging,
   the regions while editing (a region draws no label outside Edit), and a fixture only while hovered
@@ -980,6 +1015,12 @@ collides, with a couple of pixels' gap. Four rules:
   `<div>` down on every hover was the churn the layer exists to avoid.
 - **The flag was a boolean.** `StageViewFlags.labels` is a `StageLabelMode` now, and a desk's stored
   `true` / `false` reads as *Positions* / *None* (`toStageLabelMode`).
+- **The mode is the window's**, with the Show toggles (stage-view menu plan D3): `useStageView`
+  keeps them in `sessionStorage stage.viewFlags`, not announced, so the hall screen can show no
+  labels while the desk screen shows them all. They were one value per browser
+  (`localStorage stageViewFlags`). A window with nothing of its own reads that key once as its seed,
+  field by field over the defaults, and never writes or deletes it, so a build rolled back finds it
+  as it was.
 - **A label behind scenery is hidden.** Once a label has found room, the sight line from the eye to
   its anchor — along the view from the camera's plane on a section — is cast against the colliders
   beams stop at (`sightBlocked` in `scene/beamReach.ts`, given them by `setOccluders`), and a hit
@@ -1763,9 +1804,9 @@ wall and the deck.
   invalidates each frame while — and only while — the turned wheel shows a pattern and spins
   (`stepGoboLayers`' `spinning`, `goboLayers.test.ts`); an indexed, stopped or static wheel asks for
   nothing. The *Gobos on surfaces* switch invalidates when it flips.
-- **The budget's fallback: *Gobos on surfaces*** (the View menu, per browser in `localStorage` as
-  `stage.goboSurfaces`, beside the light budget: it is the machine's GPU's fact). *Every gobo light*
-  (the default) or *Selected heads only*, which keeps every other head's pool plain — its gobo still
+- **The budget's fallback: *Gobos on surfaces*** (the View popover's Performance tab, per machine in
+  `localStorage` as `stage.goboSurfaces`, beside the light budget: it is the machine's GPU's fact).
+  *Every gobo light* (the default) or *Selected heads*, which keeps every other head's pool plain — its gobo still
   shows in the air (`goboLandsOnSurfaces` in `scene/sceneView.ts`; the director zeroes the light
   row's gobos, never the haze's). A `render_view` capture keeps the default: it draws one frame, so
   there is no frame rate to guard, and no selection to narrow to.

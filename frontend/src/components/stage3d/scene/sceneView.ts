@@ -21,6 +21,7 @@ import { MAX_LIGHT_COLLIDERS } from './occlusion'
  *   tests its light's list of colliders (`occlusion.ts`), which an iPad pays for six times over what
  *   the desk Mac does. A light whose cone reaches more than the cap keeps its landing planes, so a
  *   lower cap takes the shadows of the widest cones first; *Off* puts every light on its planes.
+ * - **The frame-rate readout is per window**, like the layers and for their reason.
  *
  * A seating element follows **Seating** whatever its layer; every other element follows its layer.
  * **Haze** is how far the air shows the beams: not at all, only upstage of the proscenium (the stage
@@ -51,6 +52,7 @@ export const SCENE_LAYERS_KEY = 'stage.sceneLayers'
 export const LIGHT_BUDGET_KEY = 'stage.lightBudget'
 export const GOBO_SURFACES_KEY = 'stage.goboSurfaces'
 export const BOX_SHADOWS_KEY = 'stage.boxShadows'
+export const FRAME_RATE_KEY = 'stage.frameRate'
 
 /** How many boxes a light may be shadowed by, as the View menu offers it. */
 export const BOX_SHADOWS = ['all', 'some', 'off'] as const
@@ -157,6 +159,25 @@ export function setBoxShadows(mode: BoxShadows): void {
   if (isBoxShadows(mode)) boxShadowsStore.set(mode)
 }
 
+/**
+ * Whether this window draws the frame-rate readout over its canvas. Per window and not announced:
+ * each window draws its own canvas at its own rate.
+ */
+const frameRateStore = createSyncStore<boolean>({
+  key: FRAME_RATE_KEY,
+  fallback: false,
+  parse: (parsed) => parsed === true,
+  storage: sessionStorageArea,
+})
+
+export function useFrameRateReadout(): boolean {
+  return useSyncExternalStore(frameRateStore.subscribe, frameRateStore.getSnapshot, frameRateStore.getServerSnapshot)
+}
+
+export function setFrameRateReadout(on: boolean): void {
+  frameRateStore.set(on)
+}
+
 /** Whether [element] is drawn under [layers]: a seating by **Seating**, anything else by its layer. */
 export function elementInLayers(element: Pick<StageElementDto, 'kind' | 'layer'>, layers: SceneLayers): boolean {
   if (element.kind === 'SEATING') return layers.seating
@@ -169,4 +190,5 @@ export function resetSceneViewStores(): void {
   budgetStore.reset()
   goboSurfacesStore.reset()
   boxShadowsStore.reset()
+  frameRateStore.reset()
 }

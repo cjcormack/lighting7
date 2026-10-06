@@ -73,15 +73,18 @@ import {
 } from '../components/stage3d/savedViewpoints'
 import {
   setBoxShadows,
+  setFrameRateReadout,
   setGoboSurfaces,
   setHazeExtent,
   setLightBudget,
   setSceneLayer,
   useBoxShadows,
+  useFrameRateReadout,
   useGoboSurfaces,
   useLightBudget,
   useSceneLayers,
 } from '../components/stage3d/scene/sceneView'
+import { createStageStats } from '../components/stage3d/scene/stageStats'
 import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
 import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
@@ -115,7 +118,7 @@ import type { CreateStageViewpointRequest } from '../api/stageViewpointApi'
 import { useDeskSelection } from '../store/selection'
 import { DEFAULT_STAGE_DIMS } from '../hooks/useProjectedPatches'
 import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
-import { StageViewMenu } from '../components/stage3d/StageViewMenu'
+import { StageViewMenu, type StageViewMenuTab } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
 import { setVisSource, useVisSource } from '../hooks/useVisSource'
 import { useNextGoStatus } from '../hooks/useNextGoPreview'
@@ -272,6 +275,16 @@ export function Stage() {
   const goboSurfaces = useGoboSurfaces()
   // How many boxes a light may be shadowed by (stage-light plan session 3), per browser too.
   const boxShadows = useBoxShadows()
+  // What the canvas is doing, for the View popover's Performance tab. Never read here: a route that
+  // re-rendered on it would hand the canvas new props and ask for the frames it measures.
+  const [stageStats] = useState(createStageStats)
+  const frameRateReadout = useFrameRateReadout()
+  const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const [viewMenuTab, setViewMenuTab] = useState<StageViewMenuTab>('view')
+  const openPerformance = useCallback(() => {
+    setViewMenuTab('performance')
+    setViewMenuOpen(true)
+  }, [])
 
   // Which camera the viewpoint draws through, and — for a saved view — where it lands. A saved view
   // whose rows have not arrived yet takes the camera it last landed with (a reload), else Orbit.
@@ -1240,6 +1253,13 @@ export function Stage() {
             setGoboSurfaces={setGoboSurfaces}
             boxShadows={boxShadows}
             setBoxShadows={setBoxShadows}
+            stats={stageStats}
+            frameRateReadout={frameRateReadout}
+            setFrameRateReadout={setFrameRateReadout}
+            open={viewMenuOpen}
+            onOpenChange={setViewMenuOpen}
+            tab={viewMenuTab}
+            onTabChange={setViewMenuTab}
           />
           {showEditToggle && (
             <Tooltip>
@@ -1299,6 +1319,9 @@ export function Stage() {
                 onRiggingPositionChange={handleRiggingPositionChange}
                 onElementPositionChange={handleElementPositionChange}
                 recoveryRef={recoveryRef}
+                stats={stageStats}
+                frameRateReadout={frameRateReadout}
+                onFrameRateClick={openPerformance}
               />
             </StageChannelSourceProvider>
             {/* On a section, where a click lands exactly where it says: the tray arms fixtures and

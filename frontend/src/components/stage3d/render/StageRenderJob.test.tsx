@@ -21,7 +21,7 @@ import { restApi } from '../../../store/restApi'
 import type { Stage3D } from '../Stage3D'
 import type { StageCaptureHandle } from '../CaptureCanvas'
 import type { StageRenderRequest } from '../../../api/stageRenderApi'
-import { DEFAULT_SCENE_LAYERS } from '../scene/sceneView'
+import { DEFAULT_SCENE_LAYERS, FRAME_RATE_KEY } from '../scene/sceneView'
 import { STAGE_LANDED_KEY, STAGE_VIEWPOINT_KEY } from '../../../lib/stageViewpoint'
 import StageRenderJob, { type StageRenderOutcome } from './StageRenderJob'
 
@@ -103,6 +103,8 @@ const last = () => drawn[drawn.length - 1]
 
 describe('StageRenderJob', () => {
   it('draws the Stage view offscreen as a fresh window shows it, at the asked size', async () => {
+    // A window with its readout on: a capture is drawn as a fresh window, never with it.
+    sessionStorage.setItem(FRAME_RATE_KEY, 'true')
     const { container } = mount(request())
     await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
     const props = last()
@@ -114,6 +116,9 @@ describe('StageRenderJob', () => {
     expect(props.view?.labels).toBe('none')
     expect(props.persistCamera).toBeFalsy()
     expect(props.capture).toMatchObject({ width: 640, height: 360 })
+    // No frame-rate readout and nothing fed to a window's Performance tab, whatever this window has on.
+    expect(props.stats).toBeUndefined()
+    expect(props.frameRateReadout).toBeFalsy()
     // Offscreen, and out of the way of every pointer and screen reader.
     const box = container.querySelector<HTMLElement>('[data-stage-render="r-1"]')!
     expect(box.getAttribute('aria-hidden')).toBe('true')

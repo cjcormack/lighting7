@@ -35,6 +35,8 @@ import {
 } from './scene/sceneView'
 import { DEFAULT_LIGHT_BUDGET } from './scene/lightTable'
 import { HAZE_TIERS, HazeGovernor, type HazeQuality } from './scene/hazeGovernor'
+import type { StageStatsStore } from './scene/stageStats'
+import { FrameRateProbe, FrameRateReadout } from './FrameRateReadout'
 import {
   beamClipFor,
   drawsRoom,
@@ -218,6 +220,15 @@ interface Stage3DProps {
    * without recording anything for this window. Every other prop means what it does on screen.
    */
   capture?: StageCapture | null
+  /**
+   * The canvas's stats store (`scene/stageStats.ts`): fed the frame rate, the light counts and the
+   * haze tier for the View popover's Performance tab. The Stage route's canvas only; never a capture.
+   */
+  stats?: StageStatsStore | null
+  /** Draw the frame-rate readout over the canvas (`FrameRateReadout.tsx`); needs [stats]. */
+  frameRateReadout?: boolean
+  /** The readout was clicked: open the View popover on Performance. */
+  onFrameRateClick?: () => void
 }
 
 export function Stage3D({
@@ -252,6 +263,9 @@ export function Stage3D({
   seatPicking = null,
   framingRef,
   capture = null,
+  stats = null,
+  frameRateReadout = false,
+  onFrameRateClick,
 }: Stage3DProps) {
   const { data: project } = useProjectQuery(projectId)
   const stageW = project?.stageWidthM ?? 10
@@ -348,6 +362,11 @@ export function Stage3D({
   const venueBounds = useMemo(() => sceneElementBounds(builds), [builds])
   // Haze degrades before frame rate (`scene/hazeGovernor.ts`): the governor in the canvas steps it.
   const [hazeQuality, setHazeQuality] = useState<HazeQuality>(HAZE_TIERS[0])
+  // A render measures nothing and is shown nothing: it never feeds the stats.
+  const liveStats = capture == null ? stats : null
+  useEffect(() => {
+    liveStats?.setHazeTier(hazeQuality.tier)
+  }, [liveStats, hazeQuality.tier])
 
   // The canvas's container, which the emitters stamp with the light table's counts (`data-lights`).
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -645,6 +664,7 @@ export function Stage3D({
       />
       <StageLabelDriver store={labelStore} paused={contextLost} />
       <HazeGovernorProbe onChange={setHazeQuality} />
+      {liveStats != null && <FrameRateProbe stats={liveStats} />}
       <StageInvalidateProvider>
       <StageLabelContext.Provider value={labelStore}>
       <SurfaceLightingProvider>
@@ -690,6 +710,7 @@ export function Stage3D({
               hazeClip={hazeClip}
               hazeQuality={hazeQuality}
               statsRef={containerRef}
+              stats={liveStats}
             >
               {allFixtureNodes}
             </StageEmitters>
@@ -824,6 +845,14 @@ export function Stage3D({
       )}
       {caption != null && !contextLost && <ViewpointCaption name={caption.name} note={caption.note} />}
       {contextLost && <ContextLostOverlay onRestore={restore} />}
+      <FrameRateReadout
+        stats={stats}
+        on={frameRateReadout}
+        contextLost={contextLost}
+        capturing={capture != null}
+        raised={sectionEditing}
+        onOpen={onFrameRateClick}
+      />
       {placing && (
         <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md bg-background/85 px-3 py-1.5 text-xs shadow-md backdrop-blur">
           Click on the stage to place {placing} · Esc to cancel

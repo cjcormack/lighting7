@@ -228,10 +228,28 @@ draws straight to an opaquely cleared canvas and every fragment encodes itself, 
 add in display space as the prototype's do — DPR at 1.5, context-loss recovery, emitters sized by the rig, regions hanging down from `centerZ` (the top
 surface), dark-glass lenses, and the one DOM label layer. **Light lands through one surface shader**
 (session 3): every venue, set and region surface loops over a float data texture of the live lights
-(`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, and each
+(`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-machine light budget, and each
 fragment is shadowed by the scene's colliders — the boxes beam reach casts at — tested against the
-light's own culled list (`scene/occlusion.ts`), capped per browser by the View menu's *Box shadows*;
+light's own culled list (`scene/occlusion.ts`), capped per machine by *Box shadows*;
 the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
+
+**The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
+`stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/stage-view-menu-design/`). **View** is
+this window's: Source, Show, Haze, Labels. **Performance** is what it costs: a live block (fps and ms
+a frame, the lights packed of lit, the haze tier), then the machine's light budget, *Gobos on
+surfaces* and *Box shadows* (their `localStorage` keys unchanged), then Test recovery. Every group
+says whose it is, *this window* or *this machine*. The button names a source that is not Output
+(*View · Next GO*). *Beam cones* is **Light** now, because off unmounts the emitters, which pack the
+light table every surface reads; the stored key stays `beamCones`. **Show's toggles and Labels are
+per window** (`useStageView` on `createSyncStore`, `sessionStorage stage.viewFlags`, not announced),
+and a window with nothing stored seeds once from the old per-browser `localStorage stageViewFlags`,
+which is never written. The live block reads a per-canvas **stats store**
+(`scene/stageStats.ts`) that the route creates and never subscribes to. The **frame-rate readout**
+(`stage3d/FrameRateReadout.tsx`, `scene/frameRate.ts`) is a chip in the canvas's bottom-left corner,
+off by default and per window (`sessionStorage stage.frameRate`), and a click opens Performance. It
+**never asks for a frame**: the probe writes from inside the frame loop at most four times a second,
+the chip paints its own DOM node, and a timer flips it to *idle*. It is hidden while the context is
+lost and absent from a `render_view` capture. See the stage-vis doc's §"Frame-rate readout".
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
@@ -328,7 +346,7 @@ beam carries **two layers** packed in one float (`packGobos`: the wheels in DMX-
 rotation channel turning the wheel it follows), in the haze's `aBeamFx.y` and the light table's
 texel 4 `.z` — still six texels, because texel 4's frame became `(cos, sin)` in a basis built from
 the axis (`lightTable.ts`'s header says why not an angle). A second **colour** wheel is a filter on
-both dispatches (`colourFilters`). The View menu's *Gobos on surfaces* (per browser) can limit the
+both dispatches (`colourFilters`). *Gobos on surfaces* (per machine, on Performance) can limit the
 pass to the selected heads; it defaults to every gobo light. See the stage-vis doc's §"Gobos on
 surfaces".
 
