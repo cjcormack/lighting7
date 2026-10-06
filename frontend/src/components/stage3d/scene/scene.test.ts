@@ -20,7 +20,7 @@ import {
   UNPACK_EDGE_IRIS_GLSL,
   UNPACK_FOCUS_GLSL,
 } from './lightTable'
-import { LAND_NONE, LAND_UP, packLanding, REACH_EPS_M } from './landing'
+import { LAND_NONE, LAND_UP, landingReach, packLanding, planeReach, REACH_EPS_M } from './landing'
 import { CYC_DEPTH_MAX_M, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } from './pleat'
 import type { Facing, PartGeometry } from './sceneParts'
 import { partGeometry } from './StageSceneElements'
@@ -286,6 +286,60 @@ describe('where a beam lands (stage-light plan D1)', () => {
     const out = [0, 0, 0, 0]
     packLanding(face(0), null, out, 0)
     expect(out[1]).toBe(0.5)
+  })
+})
+
+describe('how far a hull reaches before where its beam lands', () => {
+  const eps = REACH_EPS_M
+  const apex = [0, 5, 0] as const
+  const deck = { px: 0, py: 1, pz: 0, nx: 0, ny: 1, nz: 0, skin: eps }
+  // The riser faces the house, +z, its lip at z = 2.
+  const riser = { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: eps }
+  const along = (from: readonly number[], to: readonly number[], s: number) => from.map((f, i) => f + (to[i] - f) * s)
+
+  it('stops a vertex behind the plane just in front of it, on its line from the apex', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    const s = landingReach([2, -3, 1], apex, planes, 0, eps)
+    expect(along(apex, [2, -3, 1], s)[1]).toBeCloseTo(1 + eps, 9)
+  })
+
+  it('leaves a vertex in front of the plane, and every vertex of a beam in open air', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    expect(landingReach([2, 1.5, 1], apex, planes, 0, eps)).toBe(1)
+    packLanding(null, null, planes, 0, false)
+    expect(planes[0]).toBe(LAND_NONE)
+    expect(landingReach([2, -30, 1], apex, planes, 0, eps)).toBe(1)
+  })
+
+  it('stops a vertex behind both faces of an edge where its line leaves the last of them', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(riser, deck, planes, 0, false)
+    // Below the deck and upstage of the lip, from a lamp out front and above: the line from the
+    // apex crosses the deck's plane before the riser's, and is behind both only past the riser.
+    const lamp = [0, 5, 10] as const
+    const [, y, z] = along(lamp, [0, -1, 0], landingReach([0, -1, 0], lamp, planes, 0, eps))
+    expect(z).toBeCloseTo(2 + eps, 9)
+    expect(y).toBeLessThan(1)
+    // Behind one face only is in the air over the other: left alone.
+    expect(landingReach([0, 0.5, 4], lamp, planes, 0, eps)).toBe(1)
+    expect(landingReach([0, 1.5, 0], lamp, planes, 0, eps)).toBe(1)
+  })
+
+  it('is never stopped by a plane its apex is not in front of', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    expect(landingReach([0, -2, 0], [0, 0.5, 0], planes, 0, eps)).toBe(1)
+    expect(planeReach(-1, -3, eps)).toBe(1)
+    expect(planeReach(eps, -3, eps)).toBe(1)
+  })
+
+  it("stops at one plane where the line comes within eps of it, and not before", () => {
+    // The apex 4 m in front, the vertex 2 m behind: eps in front is (4 − eps) / 6 of the way.
+    expect(planeReach(4, -2, eps)).toBeCloseTo((4 - eps) / 6, 12)
+    expect(planeReach(4, eps, eps)).toBe(1)
+    expect(planeReach(4, eps / 2, eps)).toBeCloseTo((4 - eps) / (4 - eps / 2), 12)
   })
 })
 
