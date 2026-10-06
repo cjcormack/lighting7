@@ -227,6 +227,8 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
     val state = scope.state
     val session = scope.session
 
+    val runStateGate = CueRunStateGate { scope.send(it) }
+
     val listener = object : FixturesChangeListener {
         // Bridges the non-suspending callback into the suspending [scope.send]; safe to call
         // from any thread because [DefaultWebSocketServerSession] is its own CoroutineScope.
@@ -282,7 +284,7 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         }
 
         override fun cueRunStateChanged(runState: CueRunState) {
-            fire(CueRunStateChangedOutMessage.of(runState))
+            session.launch { runStateGate.change(runState) }
         }
 
         override fun promptBookChanged() = fire(PromptBookChangedOutMessage)
@@ -307,18 +309,17 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
     // Run-state snapshot, for the same reason plus one more: a session that opens mid-fade
     // gets a non-null `fadeElapsedMs` and animates the remainder instead of nothing.
     //
-    // Captured here, synchronously, and only sent from the launch: a snapshot *read* inside the
-    // coroutine would describe whenever the coroutine happened to be scheduled, which can be
-    // long after the connect and after a GO the listener has already queued a `transition = true`
-    // frame for — a stale-looking `transition = false` frame carrying the newer cue. One
-    // transaction for the whole walk, since each `runStateFor` would otherwise open its own.
+    // Captured after the listener is registered, so a GO in between is never missed, and
+    // through [runStateGate], which drops the snapshot when the listener's frame for that GO
+    // went first. One transaction for the whole walk, since each `runStateFor` would otherwise
+    // open its own.
     val runStateSnapshot = transaction(state.database) {
         val runState = state.show.cueStackManager.runState
         runState.stacksWithRunState().map { runState.runStateFor(state, it) }
     }
     if (runStateSnapshot.isNotEmpty()) {
         scope.sendSnapshot {
-            for (runState in runStateSnapshot) send(CueRunStateChangedOutMessage.of(runState))
+            for (runState in runStateSnapshot) runStateGate.snapshot(runState)
         }
     }
 

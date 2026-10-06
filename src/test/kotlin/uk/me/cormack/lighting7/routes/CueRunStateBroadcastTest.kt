@@ -6,11 +6,16 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.plugins.ChannelMappingStateOutMessage
 import uk.me.cormack.lighting7.plugins.CueRunStateChangedOutMessage
+import uk.me.cormack.lighting7.plugins.CueRunStateGate
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitOfType
 import uk.me.cormack.lighting7.testsupport.createWsClient
@@ -60,12 +65,15 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             awaitOfType<ChannelMappingStateOutMessage>()
 
             // A GO fired over HTTP — the "desk" — observed from this socket, the "tablet".
-            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
+            val go = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/activate") {
                 contentType(ContentType.Application.Json)
                 setBody(ActivateCueStackRequest(cueId = cue1))
             }
+            assertEquals(HttpStatusCode.OK, go.status)
 
-            val fired = awaitOfType<CueRunStateChangedOutMessage>()
+            // Keyed on content, not position: the connect snapshot is read after the listener is
+            // registered, so it may describe this GO too, and may legitimately arrive first.
+            val fired = awaitOfType<CueRunStateChangedOutMessage> { it.transition }
             assertEquals(stackId, fired.stackId)
             assertEquals(cue1, fired.activeCueId)
             assertEquals(cue2, fired.nextCueId, "the positional next is on deck")
@@ -73,17 +81,52 @@ class CueRunStateBroadcastTest : RouteIntegrationTest() {
             assertTrue(fired.transition, "a GO is a transition — the client animates the fade")
 
             // Somebody arms a different cue.
-            client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
+            val arm = client.post("/api/rest/projects/$projectId/cue-stacks/$stackId/standby") {
                 contentType(ContentType.Application.Json)
                 setBody(SetStandbyRequest(cueId = cue3))
             }
+            assertEquals(HttpStatusCode.OK, arm.status)
 
-            val armed = awaitOfType<CueRunStateChangedOutMessage>()
+            val armed = awaitOfType<CueRunStateChangedOutMessage> { it.nextIsArmed }
             assertEquals(cue1, armed.activeCueId, "arming doesn't move the live cue")
             assertEquals(cue3, armed.nextCueId)
             assertTrue(armed.nextIsArmed)
             assertFalse(armed.transition, "arming must not restart anyone's fade")
         }
+    }
+
+    @Test
+    fun `a connect snapshot read after a GO is not sent beside the GO's own frame`() = testApplication {
+        mountTestApp(state)
+        val client = createWsClient()
+
+        val stackId = createStack(client, "Act 1")
+        val cue1 = createCue(client, "a1", stackId)
+        createCue(client, "a2", stackId)
+
+        // The socket's listener hears the GO, and its snapshot — read after the listener was
+        // registered — describes the same GO.
+        val heard = mutableListOf<CueRunState>()
+        val listener = object : FixturesChangeListener {
+            override fun cueRunStateChanged(runState: CueRunState) { heard += runState }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            state.show.cueStackManager.activateCueInStack(state, stackId, cue1)
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+        val go = heard.single()
+        val snapshot = state.show.cueStackManager.runState.runStateFor(state, stackId)
+        assertEquals(go.seq, snapshot.seq, "a read after a publish ties it")
+
+        val sent = mutableListOf<CueRunStateChangedOutMessage>()
+        val gate = CueRunStateGate { sent += it as CueRunStateChangedOutMessage }
+        runBlocking {
+            gate.change(go)
+            gate.snapshot(snapshot)
+        }
+        assertEquals(listOf(true), sent.map { it.transition }, "only the GO reaches the client")
     }
 
     @Test
