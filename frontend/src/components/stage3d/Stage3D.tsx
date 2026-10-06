@@ -20,6 +20,7 @@ import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
+import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { StageConfetti } from './StageConfetti'
 import {
@@ -1150,7 +1151,7 @@ function PlacementClickCatcher({
 // The stage's own floor across its footprint, lit like every other surface (the retired floor
 // cookies drew pools on it). A few millimetres below the deck, so a region or a platform whose top is
 // at 0 draws over it rather than fighting it for the same depth.
-const STAGE_FLOOR_FINISH = { colour: '#1c2330', pattern: 'PLAIN', emissive: false } as const
+const STAGE_FLOOR_FINISH: PartFinish = { colour: '#1c2330', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.FLOOR }
 function StageFloor({ width, depth }: { width: number; depth: number }) {
   const material = useSurfaceMaterial(STAGE_FLOOR_FINISH)
   return (
@@ -1162,7 +1163,7 @@ function StageFloor({ width, depth }: { width: number; depth: number }) {
 
 // Round a stage with no room modelled, the grid's square catches light the way the retired floor
 // cookies did anywhere on the plane: the light alone, added over the canvas, no surface of its own.
-const CATCH_FINISH = { colour: '#ffffff', pattern: 'PLAIN', emissive: false } as const
+const CATCH_FINISH: PartFinish = { colour: '#ffffff', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.LAMBERT }
 function CatchFloor({ size }: { size: number }) {
   const material = useSurfaceMaterial(CATCH_FINISH, { catchOnly: true })
   return (
@@ -1174,7 +1175,7 @@ function CatchFloor({ size }: { size: number }) {
 
 // The upstage back wall — a real surface, lit, so a gobo'd cyc wash lands on something visible.
 // Drawn only while no room is modelled; a room's stage house has a back wall of its own.
-const BACK_WALL_FINISH = { colour: '#161c26', pattern: 'PLAIN', emissive: false } as const
+const BACK_WALL_FINISH: PartFinish = { colour: '#161c26', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.MATTE }
 function StageBackWall({ width, depth, height }: { width: number; depth: number; height: number }) {
   const material = useSurfaceMaterial(BACK_WALL_FINISH)
   return (

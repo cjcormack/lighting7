@@ -19,6 +19,7 @@ import {
   unpackBlade,
 } from './beamMask'
 import { resolveEdgeHardness } from './beamOptics'
+import { LAMBERT_LOBES } from './scene/lobes'
 import type { SliderPropertyDescriptor } from '../../store/fixtures'
 
 /** Blades in the wire's order: top, bottom, left, right. */
@@ -380,6 +381,7 @@ describe('focus measured along the axis (stage-light plan D3)', () => {
       colour: '#808080',
       pattern: 'PLAIN',
       emissive: false,
+      lobes: LAMBERT_LOBES,
     }).fragmentShader
     expect(BEAM_FOCUS_GLSL).toContain('return focusBlur(dot(rel, axis) - near, focusDist, dof);')
     expect(surface).toContain('beamFocusBlur(v, axis.xyz, aperture.x, focus.x, focus.y)')

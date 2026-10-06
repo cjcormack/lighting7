@@ -175,8 +175,8 @@ describe("isHarnessActive", () => {
     expect(harnessMode()).toBe("drape")
   })
 
-  it("returns a material scene for ?profileHarness=rake, floor, cyc and shadow", () => {
-    for (const mode of ["rake", "floor", "cyc", "shadow"]) {
+  it("returns a material scene for ?profileHarness=rake, floor, cyc, shadow and gloss", () => {
+    for (const mode of ["rake", "floor", "cyc", "shadow", "gloss"]) {
       setSearch(`?profileHarness=${mode}`)
       expect(harnessMode()).toBe(mode)
     }

@@ -20,7 +20,7 @@ import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
 import { setPleatShift } from './surfaceShader'
 import { pleatOffset, pleatShift, pleatSlope } from './pleat'
-import { elementBaseZ, elementFinish, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
+import { elementBaseZ, elementFinish, finishLobes, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
 
 /** One element's build, beside the element it was built from — what the scene draws and casts beams at. */
 export interface SceneBuild {
@@ -207,10 +207,10 @@ function SeatingMesh({
     },
     [geometry],
   )
-  const finish = elementFinish(element)
+  const finish = elementFinish(element, 'seat')
   const frameColour = params?.frameColour ?? (chair === 'BANQUET' ? BANQUET_FRAME_COLOUR : finish.colour)
   const padMaterial = useSurfaceMaterial(finish)
-  const frameMaterial = useSurfaceMaterial({ colour: frameColour, pattern: 'PLAIN', emissive: finish.emissive })
+  const frameMaterial = useSurfaceMaterial({ colour: frameColour, pattern: 'PLAIN', emissive: finish.emissive, lobes: finishLobes('SEATING', null, 'frame') })
   const count = build.seats.length
   const [pads, setPads] = useState<InstancedMesh | null>(null)
   const [frame, setFrame] = useState<InstancedMesh | null>(null)

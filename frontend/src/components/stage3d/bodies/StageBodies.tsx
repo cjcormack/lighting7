@@ -15,6 +15,7 @@ import {
 import { NO_RAYCAST } from '../raycast'
 import { litByFill, makeSurfaceMaterial } from '../scene/surfaceShader'
 import { useSurfaceLighting } from '../scene/SurfaceLighting'
+import { FINISH_LOBES } from '../scene/sceneParts'
 import type { BodySpec } from './archetype'
 import {
   acquireBodyGeometry,
@@ -449,7 +450,7 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
   const { uniforms } = useSurfaceLighting()
   const invalidate = useThree((s) => s.invalidate)
   const housingMaterial = useMemo(
-    () => makeSurfaceMaterial(uniforms, { colour: '#ffffff', pattern: 'PLAIN', emissive: false }, { doubleSided: true, fill: HOUSING_FILL }),
+    () => makeSurfaceMaterial(uniforms, { colour: '#ffffff', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.LAMBERT }, { doubleSided: true, fill: HOUSING_FILL }),
     [uniforms],
   )
   const lensMaterial = useMemo(

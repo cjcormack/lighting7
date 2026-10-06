@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { LAMBERT_LOBES } from './lobes'
+import type { PartFinish } from './sceneParts'
 import { SurfaceLightingProvider, useSurfaceMaterial } from './SurfaceLighting'
 
-const FINISH = { colour: '#2a2a2d', pattern: 'PLAIN', emissive: false } as const
+const FINISH: PartFinish = { colour: '#2a2a2d', pattern: 'PLAIN', emissive: false, lobes: LAMBERT_LOBES }
 
 describe('a surface behind', () => {
   it('loses a depth tie to a coincident surface, and only when asked', () => {

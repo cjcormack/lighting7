@@ -799,6 +799,41 @@ without a room — the back wall and the catch floor:
   of 255) and the black backcloth's pool half as bright (129 → 64). `?profileHarness=cyc` (a white cyc, black serge and the
   default red drape under one light each), `=floor` (three floor finishes from the house) and
   `=rake` (a drape lit square on, at 45° and at 75°) are where these constants are judged.
+  Since session 4 the finish is more than a colour: each light's share is shaped by the finish's
+  **lobes** (next bullet), and what they add beside the albedo's light goes through the same
+  exposure and the same one roll-off.
+- **A finish has lobes** (stage-light plan session 4, `scene/lobes.ts`): over Lambert, which was the
+  whole BRDF, a finish may carry **Oren–Nayar** (Fujii's form) for a rough matte — a little darker
+  lit square on, brighter lit from behind the eye, so plaster and cloth look flat; the **Charlie
+  sheen** (Estevez & Kulla, Neubelt's visibility) for velour and serge — a grazing lobe coloured by
+  √albedo, Filament's cloth default, so red velour sheens red and black serge only faintly grey; and
+  **GGX** (Hammon's Smith fit, Schlick's Fresnel) for floors and paint — a highlight towards the eye,
+  so a lamp's lit aperture reads as a soft streak on a satin floor. That is what *the floor shows
+  the rig* means here: each light's own highlight on the surface it lights, towards the camera — no
+  reflection map, no second pass. Every lobe is in **π units**, Lambert at 1, so the loop still sums
+  irradiance; a lobe is compiled in only where a finish carries it (`LOBE_OREN_NAYAR`,
+  `LOBE_SHEEN`, `LOBE_GGX`), and the view direction is the camera's own axis on the orthographic
+  sections. **Energy**: Oren–Nayar is never normalised back to Lambert — it reflects at most what
+  Lambert does at any incidence (normalised square on, it reflected up to 28 % more at grazing) — and
+  the diffuse under a sheen or a specular gives up what that lobe reflects at the light's incidence
+  (`sheenAlbedo`, `specularAlbedo`, closed fits to the lobes' integrals). `lobes.test.ts` integrates
+  every preset over the hemisphere: within 5 % of the light that arrives at every incidence, and at
+  least 87 % of Lambert square on. **The finishes** are `sceneParts.ts`'s `FINISH_LOBES`, defaulted
+  by kind, a drape's role and the part (`finishLobes`; P2, no per-element override): `VELOUR` for
+  drapes but a cyc and for seat pads, `MATTE` for a room's walls and ceiling, a cyc and a pros's
+  surround, `PAINT` for flats, a pros, objects, rails and seat frames, `DECK` for platforms, region
+  decks and a room's floor, `FLOOR` (the satin, the sharpest) for the stage's own floor, and
+  `LAMBERT` for housings and catch surfaces. Each is an estimate judged in the material scenes.
+  Against session 3 on the hall's *Balcony · desk* view, 150 of a 16 × 10 grid of cell means are
+  identical; the ten that moved are the stage's two pools — the floor pool +17 % (a lamp's highlight
+  turned towards the house) and the black backcloth +39 % (14 → 20 of 255; Oren–Nayar's back-scatter
+  from a spot beside the camera, and the sheen on the pleats' flanks). The sheen's strength is that
+  trade: at 0.1 it models the folds and holds session 2's black, at 0.3 the backcloth reads 1.8×, and
+  it shows across a lit pool only past about 1. `=gloss` (three backlights on stands upstage onto
+  the stage floor and a timber deck, so their highlights face the house as `=floor`'s front light
+  cannot) is where the floors are judged. The occlusion bench times each lobe: on the desk Mac's GPU
+  in Chromium, twelve lights over every pixel, +0.04 ms a frame for Oren–Nayar, +0.09 for the sheen,
+  +0.08 for GGX — `VELOUR` and `PAINT` about one skipped box entry each.
 - **Pleats shadow each other** (stage-light plan D2, D7). A drape's fold is a sine whose depth is its
   `depthM` and whose fullness that depth sets, 1.5× at 5 cm to 2× at 20 cm — the 50–100 % a stage
   drape hangs at — with a phase that wanders ±30 % by a noise seeded from the element's uuid (and the
@@ -1623,12 +1658,35 @@ wall and the deck.
   and multiplied over the mask. So the blades, the iris and an oval cut the gobo exactly as they cut
   the pool (session 2's framing shutters included), and a gate rotation turns it, because it turns
   the frame. A segment (a rectangular aperture) carries none, as in the air.
-- **Blurred by the edge's own blur.** The mip level is `goboLod(blur, footprint)`: the relative
+- **Blurred by the edge's own blur.** The blur level is `goboLod(blur, footprint)`: the relative
   focus error times the type's depth of field (`focusBlur`, §"Focus") — the number the pool's edge
-  spreads by — or the pixel's footprint on the surface in field radii, whichever is wider, both at
-  `GOBO_BLUR_TEXELS` (64) texels to a field radius. The haze reads the same level from the same blur,
-  so a gobo sharp in the air at a distance is sharp on a wall at that distance. The footprint is
+  spreads by — or twice the pixel's footprint on the surface in field radii, whichever is wider, both
+  at `GOBO_BLUR_TEXELS` (64) texels to a field radius. The haze reads the same level from the same
+  blur, so a gobo sharp in the air at a distance is sharp on a wall at that distance. The footprint is
   `fwidth(vWorldPos)`, taken before the light loop: derivatives after its `continue`s are undefined.
+- **The blur levels are Gaussians, as layers** (stage-light plan session 4, `goboAtlas.ts`). They
+  were `generateMipmaps`' chain: each level a 2 × 2 box of the last at half the size, read
+  bilinearly — so a gobo racked through focus went blocky from level 3, where a 16 px tile is
+  stretched over the pool, and pulsed as the level stepped. Each pattern is now baked at seven blurs,
+  all at the full 128 px: level `L` under a Gaussian of `σ = 0.238 · (2^L − 1)` texels, the ratio
+  of a smoothstep's 10–90 % width to a Gaussian's, so the gobo's edge at the level `goboLod` reads
+  is as wide as the pool's at that blur (`goboAtlas.test.ts` measures the two against each other,
+  0.8–1.25 over blurs of 0.05–0.6). Small blurs are convolved with the sampled kernel, wide ones with
+  three running boxes, so the whole chain builds in under a tenth of a second. The sampler (`goboSample`) reads the two
+  levels either side of the blur and blends them by its fraction; that is the shader's because three
+  allocates hand-made mip levels of an array texture but fills only level 0. The cost is a second
+  bilinear read where trilinear did both, and 1.9 MB of R8 for the 278 KB the chain was. Three
+  consequences: the footprint is doubled, since a level's Gaussian is a quarter of its width where a
+  box level read bilinearly was about half; a gobo blurs half as much as it did at the same focus
+  error, being as soft as its edge rather than twice as soft (the Revolution's spokes 3 m off a 24 m
+  wall keep 61 % of their contrast); and levels 5 and 6 carry up to 8 % of a pattern's light off the
+  tile, so the mush end of a rack is a little dimmer. The tests on the generated data: every level
+  a Gaussian of its σ within 5 %, the blur growing at every quarter level, no kink sharper than 0.45
+  of the edge's slope from level 3 up (a box chain's levels 3 and 4 measure above 0.8), and a gobo's
+  contrast falling at every quarter level. In the view, a breakup racked through focus on
+  `=shadow`'s wall (the Stage view's director overridden locally) loses contrast in near-even steps
+  where the box chain's slope jumped (+15, then +10 of 255 a 10 cm step), and its arms blur round
+  where they were staircases.
 - **Two layers, multiplied** — stacked wheels. The Robe ColorSpot 575's static wheel and its rotating
   one are both drawn, in the air and on every surface; until session 4 the view drew whichever wheel
   selected a pattern and the other only while the first was open. The rule is one, in

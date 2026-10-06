@@ -10,15 +10,22 @@
  * - `list n` is n entries a light; with `?pass=1` every entry's sphere covers every fragment, so
  *   each runs the full box test, and without it none does, so each is skipped on its sphere.
  *
+ * The **lobes** (session 4) are timed on the same wall with every list empty, so only the finish
+ * changes: `lambert`, the whole BRDF before session 4; each lobe alone, `orenNayar`, `sheen` and
+ * `ggx`; and the presets that carry two, `velour` and `paint`. `lobeCost` is each one's milliseconds
+ * a frame over `lambert`, the number to set beside a list entry's.
+ *
  * The answer is printed as JSON: the renderer, the canvas and the mean milliseconds a frame for
- * each, the faster of two passes. Query parameters `w`, `h`, `lights` and `frames` change the load.
- * `FU-MANUAL-STAGE-LIGHT-BUDGET` says what to read off it.
+ * each, the faster of two passes. Query parameters `w`, `h`, `lights` and `frames` change the load,
+ * and `only=lobes` skips the box runs. `FU-MANUAL-STAGE-LIGHT-BUDGET` says what to read off it.
  */
 
-import { Mesh, OrthographicCamera, PlaneGeometry, Scene, WebGLRenderer } from 'three'
+import { Mesh, OrthographicCamera, PlaneGeometry, Scene, WebGLRenderer, type ShaderMaterial } from 'three'
 import { boxCollider } from './scene/beamReach'
 import { LightTable, makeLightRow } from './scene/lightTable'
+import { LAMBERT_LOBES, type FinishLobes } from './scene/lobes'
 import { LIST_OVERFLOW, LIST_TEXELS, MAX_LIGHT_COLLIDERS, packColliders, packEntry } from './scene/occlusion'
+import { FINISH_LOBES } from './scene/sceneParts'
 import { makeLightTexture, makeOcclusionTextures, makeSurfaceMaterial, makeSurfaceUniforms } from './scene/surfaceShader'
 
 const params = new URLSearchParams(location.search)
@@ -27,6 +34,7 @@ const height = Number(params.get('h') ?? 640)
 const lights = Number(params.get('lights') ?? 12)
 const frames = Number(params.get('frames') ?? 10)
 const pass = params.get('pass') === '1'
+const lobesOnly = params.get('only') === 'lobes'
 
 const canvas = document.createElement('canvas')
 document.body.appendChild(canvas)
@@ -38,8 +46,12 @@ const gl = renderer.getContext()
 const { texture, data } = makeLightTexture()
 const occlusion = makeOcclusionTextures()
 const uniforms = makeSurfaceUniforms(texture, occlusion)
+const material = (lobes: FinishLobes): ShaderMaterial =>
+  makeSurfaceMaterial(uniforms, { colour: '#808080', pattern: 'PLAIN', emissive: false, lobes })
+const lambert = material(LAMBERT_LOBES)
+const wall = new Mesh(new PlaneGeometry(20, 12.5), lambert)
 const scene = new Scene()
-scene.add(new Mesh(new PlaneGeometry(20, 12.5), makeSurfaceMaterial(uniforms, { colour: '#808080', pattern: 'PLAIN', emissive: false })))
+scene.add(wall)
 const camera = new OrthographicCamera(-10, 10, 6.25, -6.25, 0.1, 100)
 camera.position.set(0, 0, 20)
 
@@ -84,27 +96,68 @@ function frame(): void {
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel)
 }
 
-const runs: [string, number][] = [['planes', LIST_OVERFLOW], ['list 0', 0], ['list 8', 8], ['list 16', 16], ['list 32', 32], ['list 64', 64]]
-const ms: Record<string, number> = {}
-for (let round = 0; round < 2; round++) {
-  for (const [name, length] of runs) {
-    fillLists(length)
-    frame()
-    frame()
-    const t0 = performance.now()
-    for (let f = 0; f < frames; f++) frame()
-    const mean = (performance.now() - t0) / frames
-    ms[name] = round === 0 ? mean : Math.min(ms[name], mean)
+/** Each run sets the scene up, then is timed: the faster of two rounds, so a compile or a hiccup is not counted. */
+function measure(runs: ReadonlyArray<readonly [string, () => void]>): Record<string, number> {
+  const ms: Record<string, number> = {}
+  for (let round = 0; round < 2; round++) {
+    for (const [name, setUp] of runs) {
+      setUp()
+      frame()
+      frame()
+      const t0 = performance.now()
+      for (let f = 0; f < frames; f++) frame()
+      const mean = (performance.now() - t0) / frames
+      ms[name] = round === 0 ? mean : Math.min(ms[name], mean)
+    }
   }
+  return ms
 }
 
+const boxRuns: [string, number][] = [['planes', LIST_OVERFLOW], ['list 0', 0], ['list 8', 8], ['list 16', 16], ['list 32', 32], ['list 64', 64]]
+const boxes = lobesOnly
+  ? {}
+  : measure(
+      boxRuns.map(([name, length]) => [
+        name,
+        () => {
+          wall.material = lambert
+          fillLists(length)
+        },
+      ]),
+    )
+
+const only = (lobes: Partial<FinishLobes>): FinishLobes => ({ ...LAMBERT_LOBES, ...lobes })
+const lobeMaterials: [string, ShaderMaterial][] = [
+  ['lambert', lambert],
+  ['orenNayar', material(only({ diffuseRoughness: FINISH_LOBES.VELOUR.diffuseRoughness }))],
+  ['sheen', material(only({ sheen: FINISH_LOBES.VELOUR.sheen, sheenRoughness: FINISH_LOBES.VELOUR.sheenRoughness }))],
+  ['ggx', material(only({ specular: FINISH_LOBES.FLOOR.specular, roughness: FINISH_LOBES.FLOOR.roughness }))],
+  ['velour', material(FINISH_LOBES.VELOUR)],
+  ['paint', material(FINISH_LOBES.PAINT)],
+]
+const lobes = measure(
+  lobeMaterials.map(([name, m]) => [
+    name,
+    () => {
+      wall.material = m
+      fillLists(0)
+    },
+  ]),
+)
+
+const round2 = (v: number) => Number(v.toFixed(2))
 const info = gl.getExtension('WEBGL_debug_renderer_info')
 const result = {
   renderer: info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : 'unknown',
   canvas: `${width} × ${height}`,
   lights: packed,
   entries: pass ? 'every one tested' : 'every one skipped',
-  msPerFrame: Object.fromEntries(Object.entries(ms).map(([k, v]) => [k, Number(v.toFixed(2))])),
+  msPerFrame: Object.fromEntries(Object.entries({ ...boxes, ...lobes }).map(([k, v]) => [k, round2(v)])),
+  lobeCost: Object.fromEntries(
+    Object.entries(lobes)
+      .filter(([k]) => k !== 'lambert')
+      .map(([k, v]) => [k, round2(v - lobes.lambert)]),
+  ),
 }
 const out = document.getElementById('out')
 if (out) out.textContent = JSON.stringify(result, null, 1)

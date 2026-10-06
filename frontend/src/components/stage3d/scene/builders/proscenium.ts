@@ -1,9 +1,9 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
-import { boxPart, elementFinish, paramNumber, type ElementBuild, type PartFinish, type ScenePart } from '../sceneParts'
+import { boxPart, elementFinish, finishLobes, paramNumber, type ElementBuild, type PartFinish, type ScenePart } from '../sceneParts'
 import { wallWithOpenings } from './flat'
 
 /** The surround round a proscenium opening: matt black, as a pros's is painted. */
-const SURROUND: PartFinish = { colour: '#0e0e10', pattern: 'PLAIN', emissive: false }
+const SURROUND: PartFinish = { colour: '#0e0e10', pattern: 'PLAIN', emissive: false, lobes: finishLobes('PROSCENIUM', null, 'surround') }
 /** How far the surround stands proud of the wall's downstage face. */
 const SURROUND_PROUD_M = 0.012
 

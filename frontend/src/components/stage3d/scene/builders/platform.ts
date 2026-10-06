@@ -2,6 +2,7 @@ import type { StageElementDto } from '../../../../api/stageElementApi'
 import {
   boxPart,
   elementFinish,
+  finishLobes,
   paramEnum,
   paramNumber,
   type ElementBuild,
@@ -11,7 +12,7 @@ import {
 
 /** A rail's thickness, and its finish: a dark painted balustrade. */
 const RAIL_THICKNESS_M = 0.06
-const RAIL: PartFinish = { colour: '#24211f', pattern: 'PLAIN', emissive: false }
+const RAIL: PartFinish = { colour: '#24211f', pattern: 'PLAIN', emissive: false, lobes: finishLobes('PLATFORM', null, 'rail') }
 
 /**
  * A `PLATFORM`: a deck, rostrum or balcony whose **Z is its top surface** — the deck hangs

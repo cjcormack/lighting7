@@ -1,3 +1,4 @@
+import { GOBO_BLUR_LEVELS } from './goboAtlas'
 import { GOBO_SLOT_COUNT } from './goboPatterns'
 
 /**
@@ -22,10 +23,14 @@ import { GOBO_SLOT_COUNT } from './goboPatterns'
  * Each layer multiplies the beam (`goboPair`): two gobos in series pass only what both pass. A layer
  * is sampled in the beam's own frame — `g`, the field edge at 1 along the head's right axis and the
  * one at right angles to it, the frame `beamMask` cuts in — the turned one turned by the angle, at a
- * mip level that is the focus blur or the pixel's footprint, whichever is wider ([goboLod]).
+ * blur level that is the focus blur or the pixel's footprint, whichever is wider ([goboLod]). The
+ * levels are the atlas's own layers (`goboAtlas.ts`), each a Gaussian blur of the pattern at full
+ * size, and a fractional level is the blend of the two either side — so a gobo racked through focus
+ * softens steadily, never in steps.
  *
- * Pure and three.js-free, so the packing is pinned by a node test, and the GLSL has a TypeScript twin
- * ([goboPair], [goboLod]) that the test samples the real atlas data through.
+ * Pure but for the atlas's layout, so the packing is pinned by a node test, and the GLSL has a
+ * TypeScript twin ([goboPair], [goboLod], [atlasSampler]) that the test samples the real atlas
+ * data through.
  */
 
 /** Angle steps per turn: the low 13 bits. */
@@ -39,6 +44,13 @@ const TAU = Math.PI * 2
 
 /** The most layers a beam carries (a static wheel and a rotating one). */
 export const MAX_GOBO_LAYERS = 2
+
+/**
+ * How many times the pixel's footprint a pattern far away is blurred by. A blur level's Gaussian is
+ * a quarter of its width in texels (`goboLevelSigma`), and a pattern seen at `p` texels a pixel needs
+ * one about half `p` wide not to alias.
+ */
+export const GOBO_FOOTPRINT_FILTER = 2
 
 function layerCode(layer: number): number {
   const l = Math.round(layer)
@@ -88,7 +100,7 @@ export function unpackGobos(packed: number): UnpackedGobos | null {
  * uGobo` declared before it. `goboRots` decodes the packed float once into each layer's `(cos, sin,
  * atlas layer, live)` — one `cos` and one `sin` for both — so a caller hoists it out of a loop;
  * `goboSample` reads one decoded layer at `g` (the field edge at 1), and `goboPair` multiplies the
- * two. `goboLod` is the mip level for a blur and a pixel footprint, both in field radii.
+ * two. `goboLod` is the blur level for a focus blur and a pixel footprint, both in field radii.
  */
 export const GOBO_LAYERS_GLSL = /* glsl */ `
   void goboRots(float packed, out vec4 rotA, out vec4 rotB) {
@@ -106,10 +118,15 @@ export const GOBO_LAYERS_GLSL = /* glsl */ `
     rotB = vec4(turnedB > 0.5 ? cs : vec2(1.0, 0.0), layerB, layerB > 0.5 ? 1.0 : 0.0);
   }
 
+  // The pattern's blur levels are consecutive layers; between two, a blend of both.
   float goboSample(vec2 g, vec4 rot, float lod) {
     if (rot.w < 0.5) return 1.0;
     vec2 uv = vec2(rot.x * g.x - rot.y * g.y, rot.y * g.x + rot.x * g.y) * 0.5 + 0.5;
-    return textureLod(uGobo, vec3(uv, rot.z), lod).r;
+    float level = floor(lod);
+    float layer = rot.z * ${GOBO_BLUR_LEVELS}.0 + level;
+    float a = textureLod(uGobo, vec3(uv, layer), 0.0).r;
+    float t = lod - level;
+    return t > 0.0 ? mix(a, textureLod(uGobo, vec3(uv, layer + 1.0), 0.0).r, t) : a;
   }
 
   float goboPair(vec2 g, vec4 rotA, vec4 rotB, float lod) {
@@ -117,21 +134,21 @@ export const GOBO_LAYERS_GLSL = /* glsl */ `
   }
 
   float goboLod(float blur, float footprint, float texelsPerRadius, float lodMax) {
-    return clamp(log2(1.0 + texelsPerRadius * max(blur, footprint)), 0.0, lodMax);
+    return clamp(log2(1.0 + texelsPerRadius * max(blur, ${GOBO_FOOTPRINT_FILTER.toFixed(1)} * footprint)), 0.0, lodMax);
   }
 `
 
 /**
- * The TypeScript twin of `goboLod`: the mip level a gobo is read at for a focus [blur] and a pixel
+ * The TypeScript twin of `goboLod`: the blur level a gobo is read at for a focus [blur] and a pixel
  * [footprint], both in field radii, with [texelsPerRadius] atlas texels to a field radius. The
  * wider of the two wins — a defocused pattern is soft however close the camera, and a sharp one
- * far away is filtered rather than aliased.
+ * far away is filtered rather than aliased ([GOBO_FOOTPRINT_FILTER]).
  */
 export function goboLod(blur: number, footprint: number, texelsPerRadius: number, lodMax: number): number {
-  return Math.min(lodMax, Math.max(0, Math.log2(1 + texelsPerRadius * Math.max(blur, footprint))))
+  return Math.min(lodMax, Math.max(0, Math.log2(1 + texelsPerRadius * Math.max(blur, GOBO_FOOTPRINT_FILTER * footprint))))
 }
 
-/** Reads one atlas layer at texture coordinates `(u, v)` and a mip level: the twin's `textureLod`. */
+/** Reads one pattern at texture coordinates `(u, v)` and a blur level: the twin of `goboSample`'s reads. */
 export type GoboSampler = (layer: number, u: number, v: number, lod: number) => number
 
 function sampleLayer(gx: number, gy: number, layer: number, angle: number, lod: number, sample: GoboSampler): number {
@@ -149,21 +166,29 @@ export function goboPair(gx: number, gy: number, packed: number, lod: number, sa
 }
 
 /**
- * A [GoboSampler] over the atlas's own bytes (`buildGoboAtlasData`), for the twin's tests: a mip
- * level `lod` is the mean of the `2^lod` texel square the point falls in, as a box-filtered mip
- * chain is, and the coordinates clamp to the edge.
+ * A [GoboSampler] over the atlas's own bytes (`buildGoboAtlasData`), for the twin's tests: as the
+ * GPU reads it — bilinear between texel centres, the edge clamped — at the two blur levels either
+ * side of `lod`, blended by its fraction, as `goboSample` does.
  */
 export function atlasSampler(data: Uint8Array, size: number): GoboSampler {
-  return (layer, u, v, lod) => {
-    const span = Math.max(1, Math.round(2 ** Math.round(lod)))
-    const cells = Math.max(1, Math.floor(size / span))
-    const cx = Math.min(cells - 1, Math.max(0, Math.floor(u * cells)))
-    const cy = Math.min(cells - 1, Math.max(0, Math.floor(v * cells)))
-    const base = layer * size * size
-    let sum = 0
-    for (let y = cy * span; y < (cy + 1) * span; y++) {
-      for (let x = cx * span; x < (cx + 1) * span; x++) sum += data[base + y * size + x]
-    }
-    return sum / (span * span * 255)
+  const bilinear = (layer: number, u: number, v: number) => {
+    const x = u * size - 0.5
+    const y = v * size - 0.5
+    const x0 = Math.floor(x)
+    const y0 = Math.floor(y)
+    const fx = x - x0
+    const fy = y - y0
+    const at = (xi: number, yi: number) =>
+      data[layer * size * size + Math.min(size - 1, Math.max(0, yi)) * size + Math.min(size - 1, Math.max(0, xi))]
+    const top = at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx
+    const bottom = at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx
+    return (top * (1 - fy) + bottom * fy) / 255
+  }
+  return (slot, u, v, lod) => {
+    const level = Math.floor(lod)
+    const layer = slot * GOBO_BLUR_LEVELS + level
+    const a = bilinear(layer, u, v)
+    const t = lod - level
+    return t > 0 ? a + (bilinear(layer + 1, u, v) - a) * t : a
   }
 }

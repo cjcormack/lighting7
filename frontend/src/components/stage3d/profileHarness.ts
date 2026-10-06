@@ -20,7 +20,9 @@
 // light each. Their lanterns are fixed and at full, so nothing need be written.
 // See [buildMaterialHarness]. `?profileHarness=shadow` is one more of them (stage-
 // light plan session 3): a flat standing in front of a wall under one profile,
-// lit from the side so its shadow lands on the wall clear of the flat.
+// lit from the side so its shadow lands on the wall clear of the flat. And
+// `?profileHarness=gloss` (session 4): the stage floor under three backlights from
+// upstage, so their highlights face the house as `=floor`'s front light cannot.
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
@@ -33,9 +35,9 @@ const HARNESS_TYPE_KEY = '__profileHarness_type__'
 /** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`), the drape scene (`=drape`) or a material scene. */
 export type HarnessMode = 'load' | 'focus' | 'drape' | MaterialHarness
 
-/** The material scenes (stage-light plan session 2), and the shadow scene (session 3). */
-export type MaterialHarness = 'rake' | 'floor' | 'cyc' | 'shadow'
-const MATERIAL_HARNESSES: readonly string[] = ['rake', 'floor', 'cyc', 'shadow'] satisfies MaterialHarness[]
+/** The material scenes (stage-light plan session 2), the shadow scene (session 3) and the gloss scene (session 4). */
+export type MaterialHarness = 'rake' | 'floor' | 'cyc' | 'shadow' | 'gloss'
+const MATERIAL_HARNESSES: readonly string[] = ['rake', 'floor', 'cyc', 'shadow', 'gloss'] satisfies MaterialHarness[]
 
 export function harnessMode(): HarnessMode | null {
   if (typeof window === 'undefined') return null
@@ -138,7 +140,7 @@ export function buildHarness(
 ): HarnessData {
   if (mode === 'focus') return buildFocusHarness(stageD)
   if (mode === 'drape') return buildDrapeHarness()
-  if (mode === 'rake' || mode === 'floor' || mode === 'cyc' || mode === 'shadow') return buildMaterialHarness(mode)
+  if (mode === 'rake' || mode === 'floor' || mode === 'cyc' || mode === 'shadow' || mode === 'gloss') return buildMaterialHarness(mode)
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
@@ -686,6 +688,23 @@ export function materialScene(mode: MaterialHarness): { spots: MaterialSpot[]; e
         elements: cloths.map((c, i) => materialDrape(i + 1, c.name, c.x, 5, 3, 4, c.colour, c.depth, { operation: 'DEAD', role: c.role })),
       }
     }
+    case 'gloss': {
+      // Three backlights on stands 6.2 m upstage, 1.2, 2.4 and 3.6 m up, aimed 1.5 m upstage of the
+      // setting line: each pool carries its lamp's highlight as a streak towards the house, the
+      // lowest's for an eye in the stalls (14° up from the pool), the highest's for one in the circle
+      // (37°). Two pools land on the stage floor's satin (`FINISH_LOBES.FLOOR`), the third on a
+      // timber deck (`DECK`, rougher). All of it inside a 6.8 m stage.
+      const heights = [1.2, 2.4, 3.6]
+      return {
+        spots: heights.map((z, i) => ({ key: `gloss-${i}`, from: { x: -3 + 3 * i, y: 6.2, z }, at: { x: -3 + 3 * i, y: 1.5, z: 0 }, beamDeg: 24 })),
+        elements: [{
+          ...materialDrape(1, 'Timber', 3, 1.5, 2.4, 0.02, '#8a6a48', 2.4, {}),
+          kind: 'PLATFORM',
+          positionZ: 0.02,
+          finishPattern: 'BOARDS',
+        }],
+      }
+    }
     case 'shadow': {
       // A flat 1.2 m wide and 2.4 m tall standing 1.5 m in front of a wall 10 m across, under one
       // profile from high front stage left: the flat's shadow lands on the wall 0.6–2.3 m stage
@@ -705,7 +724,8 @@ export function materialScene(mode: MaterialHarness): { spots: MaterialSpot[]; e
  * A material scene (`?profileHarness=rake`, `=floor`, `=cyc`; stage-light plan session 2): the
  * finishes a hall is made of under fixed profiles at full, in white, so the exposure, the colour of
  * a pool and a fold's shadow are judged against one another with nothing written to the desk. The
- * shadow scene (`=shadow`, session 3) is built the same way: one flat's shadow on a wall.
+ * shadow scene (`=shadow`, session 3) is built the same way: one flat's shadow on a wall; and the
+ * gloss scene (`=gloss`, session 4): a floor's highlights, seen from the house.
  */
 function buildMaterialHarness(mode: MaterialHarness): HarnessData {
   const { spots, elements } = materialScene(mode)

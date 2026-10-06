@@ -174,6 +174,11 @@ Added to `followups.md` by the session that makes them concrete, not before:
 - cloth micro-detail;
 - a chromatic fringe on imaging families' penumbra.
 
+Session 4 recorded two, both Trigger-gated: `FU-STAGE-BOUNCE-FILL` (with D6's exposure a bright cyc
+or floor pool lights nothing round it) and `FU-STAGE-FOCUS-FRINGE` (a symmetric, colourless blur
+cannot say which side of focus a lens is). Cloth micro-detail was not: pleats and the sheen carry
+cloth at the view's distances, and a weave is below a pixel from the house.
+
 ## 9. Verification
 
 - **Session 1:** the drape harness swept by hand from pan 30 to 50 shows a pool that slides with no

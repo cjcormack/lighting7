@@ -6,6 +6,7 @@ import type { StageRegionDto } from '../../api/stageRegionApi'
 import { toThree } from '../../lib/stageCoords'
 import { StageLabel } from './StageLabel'
 import { useSurfaceMaterial } from './scene/SurfaceLighting'
+import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { NO_RAYCAST } from './raycast'
 import { isClick } from './dragThreshold'
 
@@ -51,7 +52,7 @@ interface RegionMeshProps {
 }
 
 /** A bare deck: what a region looks like with no platform modelled over it. */
-const DECK_FINISH = { colour: '#34312d', pattern: 'PLAIN', emissive: false } as const
+const DECK_FINISH: PartFinish = { colour: '#34312d', pattern: 'PLAIN', emissive: false, lobes: FINISH_LOBES.DECK }
 const EDGE_COLOUR = '#5b6472'
 const EDGE_HOVER_COLOUR = '#8a93a2'
 const EDGE_SELECTED_COLOUR = '#6b8cff'
