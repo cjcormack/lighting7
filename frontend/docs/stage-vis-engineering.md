@@ -753,13 +753,31 @@ without a room — the back wall and the catch floor:
     to +4.4. So a beam in the air still stops at the planes and still passes a box it overhangs on
     both sides; its pool is shadowed properly. The march ignores depth, so the hull is the only
     thing a surface can hide it by, and a hull front face behind both planes is discarded: the hull
-    runs on past them for the cone's far rim, and marched from there, on the far side of a flat or a
-    cloth, it summed the beam through the surface — the whole beam showed through a wall seen from
-    behind. So is one outside the room the haze is clipped to (`beamClipFor`), taken in by
-    `REACH_EPS` for the flat that stands against a wall: a beam landing on the deck in a concave
+    ran on past them for the cone's far rim (it is folded back to them now, next bullet, but still
+    dips behind both along an edge), and marched from there, on the far side of a flat or a cloth, it
+    summed the beam through the surface — the whole beam showed through a wall seen from behind. So
+    is one outside the room the haze is clipped to (`beamClipFor`), taken in by `REACH_EPS` for the
+    flat that stands against a wall: a beam landing on the deck in a concave
     corner is cut by the deck's plane alone, and its hull ran on through the back cloth and the back
     wall and showed behind the stage house. A room's wall seen from outside still shows the beam in
     the room, being drawn from inside only.
+  - **An eye standing in a beam sees the hull's back face**, and the depth test dropped that face
+    wherever it lay behind the surface, taking the haze of the whole ray from the eye with it: a black
+    ring round the pool, out to the hull, on the hall's *Centre stage* view inside the balcony spot.
+    So for a perspective eye inside the hull, the volume's vertex shader moves every hull vertex
+    behind both planes back along its line from the apex to `REACH_EPS` in front of the last one it
+    crosses (`landingReach`, `scene/landing.ts`); the fold and the face both start from one test
+    (`inHull`). An eye inside the hull but behind both planes — in a tab's shadow, behind the cloth —
+    takes the front face: the folded hull is outside it, seen past the tab's end or hidden by the
+    surface. Only that eye's hull folds, because a plane seen edge-on, as the sections see a drape,
+    would lose its haze in the `REACH_EPS` margin; a section's rays each start on its own plane, so it
+    keeps the unfolded hull and the old ring. And only onto the landing planes: folded onto the floor
+    as well, the hull cut across the corner where the floor met the wall, and a flat standing in the
+    corner was hazed through. Two pieces of the ring are left: where the cone meets a surface before
+    it lands (the stage floor in front of a drape), and a thin wedge along an edge's shadow line,
+    where a hull triangle spans the two planes and dips behind both. The folded hull is no longer
+    convex, so a ray leaving through that dip can meet a second back face and be hazed twice; the
+    surface that makes the edge hides the second one, except where its plane runs on past the box.
   - `?profileHarness=shadow` (a flat 1.5 m in front of a wall under one profile from high front
     stage left) is where a shadow is seen landing clear of what casts it. In the drape harness the
     column throws its shadow on the backcloth, and the pool swept from pan 30 to 50 in quarter steps
@@ -1582,8 +1600,9 @@ and the shell's buffers. Three things keep the march honest:
 - **The hull is depth-tested again**, face by face: its front face while the view ray starts outside
   the beam, so the stalls, a pros wall or a flat in front of a beam hide it as they hid the shell,
   and its back face while the ray starts inside (the camera in a beam, or a section's plane cutting
-  one) — the prototype's rule. With `depthTest` off, as the gobo volume had it, every beam drew over
-  the seats in front of it.
+  one) — the prototype's rule, but for an eye behind both landing planes, and with the hull folded
+  for an eye in the beam (§"Light lands through one surface shader", *An eye standing in a beam*).
+  With `depthTest` off, as the gobo volume had it, every beam drew over the seats in front of it.
 
 **Budget.** The march is the costliest thing per pixel and the haze governor is its only brake: 12
 steps (8 above DPR 1), stepped down to a quarter before the frame rate gives. Measured once, on

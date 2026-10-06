@@ -183,6 +183,24 @@ describe('emitter dirty groups', () => {
     expect(b.volumeLand.array[1]).toBe(-4)
   })
 
+  it('moves the hull back to where the beam lands for a perspective eye inside it, and for no other', () => {
+    const vertex = makeVolumeMaterial(getGoboTexture()).vertexShader
+    const fold = vertex.indexOf(`wp.xyz = apex + (wp.xyz - apex) * landingReach(wp.xyz, apex, vBeamLand, vBeamLandEdge, ${REACH_EPS_M.toFixed(3)});`)
+    const gate = vertex.indexOf('&& inHull(cameraPosition, apex, aBeamDir,')
+    expect(vertex).toContain('if (!isOrthographic\n')
+    expect(gate).toBeGreaterThan(-1)
+    expect(fold).toBeGreaterThan(gate)
+    expect(fold).toBeLessThan(vertex.indexOf('vWorldPos = wp.xyz;'))
+  })
+
+  it('starts the face from the test the fold uses, and a perspective eye behind both landing planes sees the hull from outside', () => {
+    const { vertexShader, fragmentShader } = makeVolumeMaterial(getGoboTexture())
+    const inHull = /bool inHull\([\s\S]*?\n {2}\}/
+    expect(vertexShader.match(inHull)?.[0]).toBe(fragmentShader.match(inHull)?.[0])
+    expect(fragmentShader).toContain('bool rayStartsInside = inHull(camPos, O, d, bx, by, near, vBeamLen, tanBound, aspect)\n'
+      + '      && (isOrthographic || !(dot(vBeamLand.xyz, camPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, camPos) < vBeamLandEdge.w));')
+  })
+
   it('drops a hull front face behind where the beam lands, which a march would sum through the surface', () => {
     const shader = makeVolumeMaterial(getGoboTexture()).fragmentShader
     expect(shader).toContain('(dot(vBeamLand.xyz, vWorldPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, vWorldPos) < vBeamLandEdge.w)')
