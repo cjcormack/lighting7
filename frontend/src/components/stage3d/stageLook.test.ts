@@ -86,7 +86,10 @@ describe('the surfaces', () => {
     expect(cloth.fragmentShader).toContain('uniform mat4 modelMatrix;')
     // Both the point and the lamp are measured from the edge the fold hangs from.
     expect(cloth.fragmentShader).toContain('float across = dot(vWorldPos - pleatO, pleatX) + uPleat.z;')
-    expect(cloth.fragmentShader).toContain('shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, dot(apex.xyz - pleatO, pleatZ));')
+    expect(cloth.fragmentShader).toContain('float lampOut = dot(apex.xyz - pleatO, pleatZ);')
+    expect(cloth.fragmentShader).toContain('shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, lampOut);')
+    // A face sees only its own side of the sheet, whichever way it faces the lamp.
+    expect(cloth.fragmentShader).toContain('if (!pleatFaceSeesLamp(lampOut, gl_FrontFacing)) continue;')
     setPleatShift(cloth, 1.25)
     expect(cloth.uniforms.uPleat.value.z).toBe(1.25)
     expect(cloth.fragmentShader).toContain('ao = troughAmbient(across, gl_FrontFacing);')

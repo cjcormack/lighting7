@@ -10,6 +10,7 @@ import {
   PITCH_WANDER,
   PLEAT_GLSL,
   PLEAT_WARP_TERMS,
+  pleatFaceSeesLamp,
   pleatOffset,
   pleatPhase,
   pleatRate,
@@ -257,9 +258,91 @@ describe('the fold shadow (stage-light plan D7)', () => {
     expect(PLEAT_GLSL).toContain('float shoulder = dx > 0.0 ? acos(c) : PI - acos(c);')
     expect(PLEAT_GLSL).toContain('float lead = a * sqrt(1.0 - c * c) - z - slope * along;')
     expect(PLEAT_GLSL).toContain('return 1.0 - smoothstep(-FOLD_SHADOW_SOFT, FOLD_SHADOW_SOFT, lead);')
+    expect(PLEAT_GLSL).toContain('return front ? lz > -uPleat.y : lz < uPleat.y;')
     const values = pleatUniformValues(wandering)
     expect(values.pleat[0]).toBeCloseTo((2 * Math.PI) / wandering.pitchM, 12)
     expect(values.pleat[1]).toBe(wandering.amplitudeM)
     expect(values.warp).toEqual(wandering.warp.flatMap((w) => [w.a, w.k, w.theta]))
+  })
+})
+
+describe('a face sees only its own side of the cloth', () => {
+  const sine: PleatShape = { pitchM: 0.16, amplitudeM: 0.05, fullness: 1.6, warp: [] }
+
+  /** The shader's facing test for one face, in section: its normal against the way to the lamp. */
+  function facesLamp(x: number, front: boolean, lx: number, lz: number, pleat: PleatShape): boolean {
+    const toward = -pleatSlope(x, pleat) * (lx - x) + (lz - pleatOffset(x, pleat))
+    return (front ? toward : -toward) > 0
+  }
+
+  /**
+   * Whether the lamp reaches the face by brute force: the face must face it, and the ray from the
+   * point must stay on the face's side of the sheet all the way — the sheet taken as unbounded, so a
+   * ray past a real cloth's edge is not counted.
+   */
+  function marchedSees(x: number, front: boolean, lx: number, lz: number, pleat: PleatShape): boolean {
+    if (!facesLamp(x, front, lx, lz, pleat)) return false
+    const z0 = pleatOffset(x, pleat)
+    const side = front ? 1 : -1
+    const n = Math.max(500, Math.ceil(Math.abs(lx - x) / 0.002))
+    for (let i = 1; i <= n; i++) {
+      const t = i / n
+      if (side * (z0 + (lz - z0) * t - pleatOffset(x + (lx - x) * t, pleat)) < -1e-6) return false
+    }
+    return true
+  }
+
+  it('lets light onto the back of the cloth from a lamp in front through the fold shadow, and refuses all of it', () => {
+    // The back of a flank faces a raking lamp in front where the cloth climbs towards it faster than
+    // the ray does. The fold shadow reasons from the lamp's side and darkens nearly all of that — but
+    // not its soft edge at the crest's shoulder, nor where it reads a wandering pitch from the point.
+    for (const pleat of [sine, pleatShape(drape(0.12, 'harness-material-1'))]) {
+      for (const deg of [45, 75, -75]) {
+        const a = (deg * Math.PI) / 180
+        let leaks = 0
+        for (let x = -1; x <= 1; x += 0.0005) {
+          const lx = x + Math.sin(a) * 6
+          const lz = Math.cos(a) * 6
+          if (!facesLamp(x, false, lx, lz, pleat) || foldLight(x, lx, lz, pleat) <= 0) continue
+          leaks++
+          expect(marchedSees(x, false, lx, lz, pleat)).toBe(false)
+          expect(pleatFaceSeesLamp(lz, false, pleat)).toBe(false)
+        }
+        expect(leaks, `${deg}°`).toBeGreaterThan(20)
+      }
+    }
+  })
+
+  it('never darkens a face the march sees the lamp from, and darkens every face behind a lamp clear of the folds', () => {
+    const random = stream(23)
+    let refused = 0
+    let leaks = 0
+    for (let i = 0; i < 4000; i++) {
+      const x = (random() - 0.5) * 2
+      const angle = (random() - 0.5) * Math.PI * 0.98
+      const dist = 0.05 + 6 * random()
+      const behind = random() < 0.5 ? -1 : 1
+      const lx = x + Math.sin(angle) * dist
+      const lz = behind * Math.cos(angle) * dist
+      for (const front of [true, false]) {
+        const sees = marchedSees(x, front, lx, lz, sine)
+        const passes = pleatFaceSeesLamp(lz, front, sine)
+        if (sees) expect(passes, `x ${x} ${front ? 'front' : 'back'} lamp (${lx}, ${lz})`).toBe(true)
+        if (!passes) refused++
+        if (!passes && facesLamp(x, front, lx, lz, sine)) leaks++
+        if (Math.abs(lz) > sine.amplitudeM && (lz > 0) !== front) expect(passes).toBe(false)
+      }
+    }
+    expect(refused).toBeGreaterThan(3000)
+    // The rule is not idle: it takes away faces the facing test alone would light.
+    expect(leaks).toBeGreaterThan(200)
+  })
+
+  it('reads the amplitude from the cloth, not a constant', () => {
+    const deep = pleatShape(drape(0.3))
+    expect(pleatFaceSeesLamp(0.1, false, deep)).toBe(true)
+    expect(pleatFaceSeesLamp(0.1, false, sine)).toBe(false)
+    expect(pleatFaceSeesLamp(-0.1, true, deep)).toBe(true)
+    expect(pleatFaceSeesLamp(-0.1, true, sine)).toBe(false)
   })
 })

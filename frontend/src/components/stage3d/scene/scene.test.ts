@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { packBlades } from '../beamMask'
 import { NO_SIDE_X } from '../beamShaders'
 import type { StageElementDto } from '../../../api/stageElementApi'
-import { beamReach, boxCollider, elementColliders, partBox, type BeamHit } from './beamReach'
+import { beamReach, boxCollider, elementColliders, partBox, quadNormal, sightBlocked, type BeamHit } from './beamReach'
 import { buildElement } from './builders'
 import { packGobos } from '../goboLayers'
 import {
@@ -20,7 +20,7 @@ import {
   UNPACK_EDGE_IRIS_GLSL,
   UNPACK_FOCUS_GLSL,
 } from './lightTable'
-import { LAND_NONE, LAND_UP, packLanding, REACH_EPS_M } from './landing'
+import { LAND_NONE, LAND_UP, landingReach, packLanding, planeReach, REACH_EPS_M } from './landing'
 import { CYC_DEPTH_MAX_M, PLEAT_DEPTH_MAX_M, PLEAT_DEPTH_MIN_M, pleatShape } from './pleat'
 import type { Facing, PartGeometry } from './sceneParts'
 import { partGeometry } from './StageSceneElements'
@@ -93,6 +93,87 @@ describe('the axial reach (stage-view plan session 3)', () => {
     expect(beamReach(0, 3, 9.2, 0, -1, 0, colliders, 40, out)).toBe(true)
     expect(out.t).toBeCloseTo(3.954, 3)
     expect(out.ny).toBe(1)
+  })
+})
+
+describe('a sight line through the scenery', () => {
+  const flat = boxCollider(0, 1.5, 2, 1, 1.5, 0.05)
+
+  it('is stopped by a box between the eye and the point, and by nothing beside it or beyond it', () => {
+    // From 10 m out, level, at a point 1 m up and 1 m upstage of the flat.
+    expect(sightBlocked(0, 1, 10, 0, 0, -1, 9, [flat], 0.15)).toBe(true)
+    expect(sightBlocked(3, 1, 10, 0, 0, -1, 9, [flat], 0.15)).toBe(false)
+    // The point is in front of the flat: the flat is beyond it.
+    expect(sightBlocked(0, 1, 10, 0, 0, -1, 7, [flat], 0.15)).toBe(false)
+  })
+
+  it('is not stopped by the box the point sits on, nor one the eye stands in', () => {
+    const deck = boxCollider(0, -0.5, 0, 2, 0.5, 2)
+    // A label 5 cm over the deck, seen from low in front: the line passes through the deck's front.
+    const ex = 0
+    const ey = -0.6
+    const ez = 6
+    const len = Math.hypot(0.05 - ey, ez)
+    expect(sightBlocked(ex, ey, ez, 0, (0.05 - ey) / len, -ez / len, len, [deck], 0.15)).toBe(false)
+    expect(sightBlocked(ex, ey, ez, 0, (0.05 - ey) / len, -ez / len, len, [deck], 0.01)).toBe(true)
+    // An eye inside the deck's box sees out of it.
+    expect(sightBlocked(0, -0.5, 0, 0, 0, 1, 9, [deck], 0.15)).toBe(false)
+  })
+
+  it('is stopped by a single-sided face only from its front', () => {
+    const wall = boxCollider(0, 2, -2, 5, 2, 0.01, 0, undefined, undefined, { x: 0, y: 0, z: 1 })
+    // Looking upstage at the wall's face, to a point behind it.
+    expect(sightBlocked(0, 2, 5, 0, 0, -1, 10, [wall], 0.15)).toBe(true)
+    // Looking downstage through its back.
+    expect(sightBlocked(0, 2, -9, 0, 0, 1, 10, [wall], 0.15)).toBe(false)
+  })
+
+  it("faces a room's walls into the room, so from outside it the near wall hides nothing", () => {
+    const hall = element({ kind: 'ROOM', positionX: 2, positionY: 3, widthM: 8, depthM: 12, heightM: 5, yawDeg: 30 })
+    const colliders = elementColliders(hall, buildElement(hall))
+    // The room's centre, three.js space: (x, z, −y).
+    const centre = { x: 2, y: 2.5, z: -3 }
+    for (const c of colliders) {
+      const f = c.face!
+      expect(Math.hypot(f.x, f.y, f.z)).toBeCloseTo(1, 9)
+      expect(f.x * (centre.x - c.cx) + f.y * (centre.y - c.cy) + f.z * (centre.z - c.cz)).toBeGreaterThan(0)
+    }
+    // Outside it, 20 m downstage, a point in the middle of the room is seen through the near wall…
+    const toCentre = (ox: number, oy: number, oz: number) => {
+      const dx = centre.x - ox
+      const dy = centre.y - oy
+      const dz = centre.z - oz
+      const len = Math.hypot(dx, dy, dz)
+      return sightBlocked(ox, oy, oz, dx / len, dy / len, dz / len, len, colliders, 0.15)
+    }
+    expect(toCentre(2, 2.5, 20)).toBe(false)
+    // …and from inside, a point outside the far wall is not.
+    const eye = { x: 2, y: 2.5, z: -3 }
+    const out = { x: 2 - 20 * Math.sin(Math.PI / 6), y: 2.5, z: -3 - 20 * Math.cos(Math.PI / 6) }
+    const dx = out.x - eye.x
+    const dz = out.z - eye.z
+    const len = Math.hypot(dx, dz)
+    expect(sightBlocked(eye.x, eye.y, eye.z, dx / len, 0, dz / len, len, colliders, 0.15)).toBe(true)
+  })
+
+  it('reads a quad\'s normal as the side its slab is not on', () => {
+    const FACINGS = ['up', 'down', 'upstage', 'downstage', 'left', 'right'] as const
+    for (const facing of FACINGS) {
+      const b = partBox({ shape: 'quad', w: 2, h: 2, facing })
+      const [nx, ny, nz] = quadNormal(facing)
+      expect(nx * b.ox + ny * b.oy + nz * b.oz).toBeLessThan(0)
+    }
+  })
+
+  it("marks the stage box's own floor and back wall single-sided, and its catch floor out of sight", () => {
+    const stage = { width: 8.6, height: 4, depth: 11 }
+    const colliders = sceneColliders({ stage, regions: [], builds: [], catchSizeM: 20 })
+    expect(colliders.map((c) => c.face)).toEqual([{ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }, undefined])
+    // A pit deck below the floor, downstage of the stage's footprint, seen from above: the catch
+    // floor is light added over the canvas, so it hides nothing.
+    expect(colliders[2].sight).toBe(false)
+    expect(sightBlocked(0, 5, 4, 0, -1, 0, 5.5, colliders, 0.15)).toBe(false)
+    expect(sightBlocked(0, 5, -4, 0, -1, 0, 5.5, colliders, 0.15)).toBe(true)
   })
 })
 
@@ -194,10 +275,71 @@ describe('where a beam lands (stage-light plan D1)', () => {
     expect(out[3]).toBeCloseTo(2 - (0.2 - REACH_EPS_M), 9)
   })
 
+  it('packs the face itself, whatever its skin, for the haze', () => {
+    const out = [0, 0, 0, 0]
+    packLanding(face(0.2), { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: 0.2 }, out, 0, false)
+    expect(out[1]).toBe(0.5)
+    expect(out[3]).toBe(2)
+  })
+
   it('never moves a plane forward, whatever skin it is handed', () => {
     const out = [0, 0, 0, 0]
     packLanding(face(0), null, out, 0)
     expect(out[1]).toBe(0.5)
+  })
+})
+
+describe('how far a hull reaches before where its beam lands', () => {
+  const eps = REACH_EPS_M
+  const apex = [0, 5, 0] as const
+  const deck = { px: 0, py: 1, pz: 0, nx: 0, ny: 1, nz: 0, skin: eps }
+  // The riser faces the house, +z, its lip at z = 2.
+  const riser = { px: 0, py: 0, pz: 2, nx: 0, ny: 0, nz: 1, skin: eps }
+  const along = (from: readonly number[], to: readonly number[], s: number) => from.map((f, i) => f + (to[i] - f) * s)
+
+  it('stops a vertex behind the plane just in front of it, on its line from the apex', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    const s = landingReach([2, -3, 1], apex, planes, 0, eps)
+    expect(along(apex, [2, -3, 1], s)[1]).toBeCloseTo(1 + eps, 9)
+  })
+
+  it('leaves a vertex in front of the plane, and every vertex of a beam in open air', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    expect(landingReach([2, 1.5, 1], apex, planes, 0, eps)).toBe(1)
+    packLanding(null, null, planes, 0, false)
+    expect(planes[0]).toBe(LAND_NONE)
+    expect(landingReach([2, -30, 1], apex, planes, 0, eps)).toBe(1)
+  })
+
+  it('stops a vertex behind both faces of an edge where its line leaves the last of them', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(riser, deck, planes, 0, false)
+    // Below the deck and upstage of the lip, from a lamp out front and above: the line from the
+    // apex crosses the deck's plane before the riser's, and is behind both only past the riser.
+    const lamp = [0, 5, 10] as const
+    const [, y, z] = along(lamp, [0, -1, 0], landingReach([0, -1, 0], lamp, planes, 0, eps))
+    expect(z).toBeCloseTo(2 + eps, 9)
+    expect(y).toBeLessThan(1)
+    // Behind one face only is in the air over the other: left alone.
+    expect(landingReach([0, 0.5, 4], lamp, planes, 0, eps)).toBe(1)
+    expect(landingReach([0, 1.5, 0], lamp, planes, 0, eps)).toBe(1)
+  })
+
+  it('is never stopped by a plane its apex is not in front of', () => {
+    const planes = [0, 0, 0, 0]
+    packLanding(deck, null, planes, 0, false)
+    expect(landingReach([0, -2, 0], [0, 0.5, 0], planes, 0, eps)).toBe(1)
+    expect(planeReach(-1, -3, eps)).toBe(1)
+    expect(planeReach(eps, -3, eps)).toBe(1)
+  })
+
+  it("stops at one plane where the line comes within eps of it, and not before", () => {
+    // The apex 4 m in front, the vertex 2 m behind: eps in front is (4 − eps) / 6 of the way.
+    expect(planeReach(4, -2, eps)).toBeCloseTo((4 - eps) / 6, 12)
+    expect(planeReach(4, eps, eps)).toBe(1)
+    expect(planeReach(4, eps / 2, eps)).toBeCloseTo((4 - eps) / (4 - eps / 2), 12)
   })
 })
 

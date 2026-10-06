@@ -1,6 +1,6 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { REACH_EPS_M } from './landing'
-import { elementBaseZ, type ElementBuild, type PartGeometry } from './sceneParts'
+import { elementBaseZ, type ElementBuild, type Facing, type PartGeometry } from './sceneParts'
 
 /**
  * **Axial beam reach** (stage-view plan session 3): the first surface on a beam's axis — where the
@@ -43,6 +43,21 @@ export interface Collider {
    * surface ([REACH_EPS_M]), and a cone's, whose sloped side faces them (its height).
    */
   capSkin: number
+  /**
+   * A single-sided surface's outward normal: a quad, drawn from its face only, as a room's faces
+   * are. Absent for a solid. Beams and the surfaces' shadows ignore it; a sight line
+   * ([sightBlocked]) is stopped only by a face it meets from the front, as the eye sees one.
+   */
+  face?: Face
+  /** False for a collider that draws nothing a sight line could stop at: the catch floor, light alone. */
+  sight?: false
+}
+
+/** A unit normal, three.js space. */
+export interface Face {
+  x: number
+  y: number
+  z: number
 }
 
 /** Where a beam's axis stops, written by [beamReach] into a caller's object. */
@@ -176,8 +191,82 @@ export function boxCollider(
   yawRad = 0,
   skin = REACH_EPS_M,
   capSkin = skin,
+  face?: Face,
 ): Collider {
-  return { cx, cy, cz, hx, hy, hz, cos: Math.cos(yawRad), sin: Math.sin(yawRad), skin, capSkin }
+  const box: Collider = { cx, cy, cz, hx, hy, hz, cos: Math.cos(yawRad), sin: Math.sin(yawRad), skin, capSkin }
+  if (face != null) box.face = face
+  return box
+}
+
+/**
+ * Whether anything in [colliders] hides a point [len] along the unit ray from [ox, oy, oz] along
+ * [dx, dy, dz] — the eye's sight line to it. A box the ray starts inside is skipped (an eye on a
+ * deck), as is one the point lies within [clearM] of: a label sits on what it names, a region's on
+ * its own deck, and is not hidden by it. A single-sided collider ([Collider.face]) hides only when
+ * the ray meets its face from the front: a room seen from outside its near wall is seen into.
+ *
+ * Allocation-free: a label layer asks it for every label on every frame.
+ */
+export function sightBlocked(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  len: number,
+  colliders: readonly Collider[],
+  clearM: number,
+): boolean {
+  for (let i = 0; i < colliders.length; i++) {
+    const b = colliders[i]
+    if (b.sight === false) continue
+    const f = b.face
+    if (f != null && f.x * dx + f.y * dy + f.z * dz >= 0) continue
+    const rx = ox - b.cx
+    const ry = oy - b.cy
+    const rz = oz - b.cz
+    const c = b.cos
+    const s = b.sin
+    const lox = c * rx - s * rz
+    const loz = s * rx + c * rz
+    const ldx = c * dx - s * dz
+    const ldz = s * dx + c * dz
+    let tNear = -Infinity
+    let tFar = Infinity
+    if (Math.abs(ldx) < 1e-12) {
+      if (Math.abs(lox) > b.hx) continue
+    } else {
+      const t1 = (-b.hx - lox) / ldx
+      const t2 = (b.hx - lox) / ldx
+      tNear = Math.max(tNear, Math.min(t1, t2))
+      tFar = Math.min(tFar, Math.max(t1, t2))
+    }
+    if (Math.abs(dy) < 1e-12) {
+      if (Math.abs(ry) > b.hy) continue
+    } else {
+      const t1 = (-b.hy - ry) / dy
+      const t2 = (b.hy - ry) / dy
+      tNear = Math.max(tNear, Math.min(t1, t2))
+      tFar = Math.min(tFar, Math.max(t1, t2))
+    }
+    if (Math.abs(ldz) < 1e-12) {
+      if (Math.abs(loz) > b.hz) continue
+    } else {
+      const t1 = (-b.hz - loz) / ldz
+      const t2 = (b.hz - loz) / ldz
+      tNear = Math.max(tNear, Math.min(t1, t2))
+      tFar = Math.min(tFar, Math.max(t1, t2))
+    }
+    if (tNear > tFar || tNear < 0 || tNear >= len) continue
+    // How far the point is from the box, in the box's frame.
+    const px = Math.max(Math.abs(lox + ldx * len) - b.hx, 0)
+    const py = Math.max(Math.abs(ry + dy * len) - b.hy, 0)
+    const pz = Math.max(Math.abs(loz + ldz * len) - b.hz, 0)
+    if (px * px + py * py + pz * pz <= clearM * clearM) continue
+    return true
+  }
+  return false
 }
 
 /** A part's collider in its element's lighting frame: centre offset, half-extents and skins. */
@@ -238,6 +327,24 @@ function shapeBox(geometry: PartGeometry): Omit<PartBox, 'capSkin'> {
   }
 }
 
+/** A quad's outward normal in its element's lighting frame (x right, y upstage, z up). */
+export function quadNormal(facing: Facing): [number, number, number] {
+  switch (facing) {
+    case 'up':
+      return [0, 0, 1]
+    case 'down':
+      return [0, 0, -1]
+    case 'upstage':
+      return [0, 1, 0]
+    case 'downstage':
+      return [0, -1, 0]
+    case 'left':
+      return [1, 0, 0]
+    case 'right':
+      return [-1, 0, 0]
+  }
+}
+
 /**
  * The colliders of one built element, placed by its pose: each colliding part's box, turned by the
  * element's yaw about its origin and moved to its origin — its base, a platform's top, or a flown
@@ -262,7 +369,12 @@ export function elementColliders(
     const wy = element.positionY + s * lx + c * ly
     const wz = baseZ + part.at.z + b.oz
     // Lighting → three: (x, z, −y); lighting (hx, hy, hz) → three (hx, hz, hy).
-    out.push(boxCollider(wx, wz, -wy, b.hx, b.hz, b.hy, yaw, b.skin, b.capSkin))
+    let face: Face | undefined
+    if (part.geometry.shape === 'quad') {
+      const [nx, ny, nz] = quadNormal(part.geometry.facing)
+      face = { x: c * nx - s * ny, y: nz, z: -(s * nx + c * ny) }
+    }
+    out.push(boxCollider(wx, wz, -wy, b.hx, b.hz, b.hy, yaw, b.skin, b.capSkin, face))
   }
   return out
 }

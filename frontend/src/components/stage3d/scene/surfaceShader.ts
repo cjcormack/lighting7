@@ -345,7 +345,9 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if (facing <= 0.0) continue;
       float shade = 1.0;
       #ifdef PLEAT
-      shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, dot(apex.xyz - pleatO, pleatZ));
+      float lampOut = dot(apex.xyz - pleatO, pleatZ);
+      if (!pleatFaceSeesLamp(lampOut, gl_FrontFacing)) continue;
+      shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, lampOut);
       if (shade <= 0.0) continue;
       #endif
       vec4 aperture = texelFetch(uLights, ivec2(5, i), 0);

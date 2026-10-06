@@ -3,7 +3,7 @@ import type { DataArrayTexture } from 'three'
 import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL, FOCUS_SPREAD_MAX } from './beamMask'
 import { GOBO_LAYERS_GLSL } from './goboLayers'
 import { MAX_BEAM_REGIONS } from './emitterLayout'
-import { LANDING_GLSL } from './scene/landing'
+import { LANDING_GLSL, LANDING_REACH_GLSL, REACH_EPS_M } from './scene/landing'
 import {
   FOCUS_LOD_MAX,
   GOBO_BLUR_TEXELS,
@@ -97,15 +97,37 @@ export const CROSS_SECTION_GLSL = /* glsl */ `
 // The closed hull geometry is only a conservative fragment generator — one face per covered pixel:
 // the front face, depth-tested, while the view ray starts outside the beam, so the scene in front of
 // a beam hides it; the back face while it starts inside, where the front faces are behind the eye
-// (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). The true
-// bounds come from an analytic ray-cone or ray-pyramid intersection per fragment. The chord is
-// clamped by the axial range, where the beam landed (`scene/landing.ts`), the floor, the upstage
-// and side walls, the window's haze plane and camera-ray region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
+// (the prototype's rule; a segment's hull is scaled to an ellipse round its rectangle). For an eye
+// in the beam the hull is folded back in front of where it lands, so that back face passes the depth
+// test too. The true bounds come from an analytic ray-cone or ray-pyramid intersection per fragment.
+// The chord is clamped by the axial range, where the beam landed (`scene/landing.ts`), the floor,
+// the upstage and side walls, the window's haze plane and camera-ray region occlusion — the depth test hides a beam behind something, but cannot cut one that passes
 // through a box — then sampled with a per-pixel interleaved-gradient jitter so banding reads as
 // grain. Each sample is shaped by `beamMask`: the field edge, the iris and the softness.
 //
 // The air is dense by the lamp and thins along the throw and as the beam spreads (`washConfig.ts`),
 // rolled off by `1 − exp(−light)` and encoded here, so two beams crossing visibly sum.
+
+// Whether a point is inside the hull as it is drawn unfolded: the test the vertex shader's fold and
+// the fragment shader's face both start from. The cone is the field, or past it by the most a focus
+// blur spreads the edge (beamMask.ts's FOCUS_SPREAD_MAX) for a head with a focus channel.
+const IN_HULL_GLSL = /* glsl */ `
+  float beamTanBound(float cosField, float focusDist) {
+    float sinHalf = sqrt(max(0.0, 1.0 - cosField * cosField));
+    float tanHalf = max(1e-4, sinHalf / max(1e-4, cosField));
+    return focusDist >= 0.0 ? tanHalf * ${(1 + FOCUS_SPREAD_MAX).toFixed(4)} : tanHalf;
+  }
+
+  bool inHull(vec3 p, vec3 apex, vec3 d, vec3 bx, vec3 by, float near, float len, float tanBound, float aspect) {
+    vec3 co = p - apex;
+    float cod = dot(co, d);
+    float cos2 = 1.0 / (1.0 + tanBound * tanBound);
+    return cod >= near && cod <= len && (aspect > 0.0
+      ? abs(dot(co, bx)) <= cod * tanBound && abs(dot(co, by)) <= cod * tanBound * aspect
+      : cod * cod >= cos2 * dot(co, co));
+  }
+`
+
 const VOLUME_VERTEX_SHADER = /* glsl */ `
   attribute vec3 aBeamOrigin;
   attribute vec3 aBeamDir;
@@ -144,6 +166,8 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
   flat varying float vBeamGobos;
 
   ${LANDING_GLSL}
+  ${LANDING_REACH_GLSL}
+  ${IN_HULL_GLSL}
 
   void main() {
     vBeamShape = aBeamShape;
@@ -156,6 +180,17 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
     vBeamLand = landPlane(aBeamLand.x, aBeamLand.y);
     vBeamLandEdge = landPlane(aBeamLand.z, aBeamLand.w);
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    // The hull runs past the planes it landed on, so the far side an eye inside it draws would lie
+    // behind the surface. For that eye, each vertex is moved back along its apex line to just in
+    // front of the planes. Not for a section, which would lose the haze beside a plane seen edge-on,
+    // and not onto the floor and walls, where the hull would cut across their corner.
+    vec3 apex = aBeamOrigin;
+    vec3 bx = normalize(aBeamRight - aBeamDir * dot(aBeamRight, aBeamDir));
+    float tanBound = beamTanBound(aBeamGate.x, aBeamFx.w);
+    if (!isOrthographic
+        && inHull(cameraPosition, apex, aBeamDir, bx, cross(aBeamDir, bx), aBeamShape.x, vBeamLen, tanBound, aBeamShape.z)) {
+      wp.xyz = apex + (wp.xyz - apex) * landingReach(wp.xyz, apex, vBeamLand, vBeamLandEdge, ${REACH_EPS_M.toFixed(3)});
+    }
     vWorldPos = wp.xyz;
     vBeamOrigin = aBeamOrigin;
     vBeamDir = aBeamDir;
@@ -172,6 +207,7 @@ const VOLUME_VERTEX_SHADER = /* glsl */ `
 const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   #define MAX_REGIONS ${MAX_BEAM_REGIONS}
   #define MAX_VOL_STEPS ${MAX_VOL_STEPS}
+  #define REACH_EPS ${REACH_EPS_M.toFixed(3)}
   uniform float uFloorY;
   uniform float uWallZ;
   // The outermost side walls, (min x, max x).
@@ -207,6 +243,7 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
   flat varying float vBeamGobos;
 
   ${RAY_OBB_T_GLSL}
+  ${IN_HULL_GLSL}
   ${CROSS_SECTION_GLSL}
   ${BEAM_MASK_GLSL}
   ${BEAM_FOCUS_GLSL}
@@ -253,10 +290,9 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     float cod = dot(co, d);
     float sinHalf = sqrt(max(0.0, 1.0 - cosField * cosField));
     float tanHalf = max(1e-4, sinHalf / max(1e-4, cosField));
-    // The cone the march runs through: the field, or past it by the most a focus blur spreads the
-    // edge (beamMask.ts's FOCUS_SPREAD_MAX) for a head with a focus channel. The mask still cuts in
-    // the field's own frame (tanHalf).
-    float tanBound = focusDist >= 0.0 ? tanHalf * ${(1 + FOCUS_SPREAD_MAX).toFixed(4)} : tanHalf;
+    // The cone the march runs through (beamTanBound). The mask still cuts in the field's own frame
+    // (tanHalf).
+    float tanBound = beamTanBound(cosField, focusDist);
     float cos2 = 1.0 / (1.0 + tanBound * tanBound);
     vec3 bx = normalize(vBeamRight - d * dot(vBeamRight, d));
     vec3 by = cross(d, bx);
@@ -265,11 +301,22 @@ const VOLUME_FRAGMENT_SHADER = /* glsl */ `
     // the view ray starts outside the beam — so the stalls, a pros wall or a flat in front of a beam
     // hide it, as they hid the retired shell — and its back face when the ray starts inside it (the
     // camera standing in a beam, or a section's plane cutting one), whose front faces are behind it.
+    // A perspective eye behind both landing planes is outside the beam: its hull is folded off it.
     float ty0 = tanBound * aspect;
-    bool rayStartsInside = cod >= near && cod <= vBeamLen && (aspect > 0.0
-      ? abs(dot(co, bx)) <= cod * tanBound && abs(dot(co, by)) <= cod * ty0
-      : cod * cod >= cos2 * dot(co, co));
+    bool rayStartsInside = inHull(camPos, O, d, bx, by, near, vBeamLen, tanBound, aspect)
+      && (isOrthographic || !(dot(vBeamLand.xyz, camPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, camPos) < vBeamLandEdge.w));
     if (gl_FrontFacing == rayStartsInside) discard;
+    // A front face behind where the beam lands, or outside the room the haze is clipped to, is on
+    // the far side of a surface — the hull runs on past the plane for the cone's far rim, and a beam
+    // landing on the deck runs on through the back wall. The march ignores depth, so marched from
+    // there it would sum the beam through that surface. Without it, a surface hides the beam behind
+    // it by depth, and a room's wall, drawn from inside only, still shows the beam in the room. The
+    // room is taken in by REACH_EPS: a flat stands against its wall, and the hull between the two
+    // would still draw. Folded, the hull still dips behind both planes along an edge.
+    if (!rayStartsInside && (
+        (dot(vBeamLand.xyz, vWorldPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, vWorldPos) < vBeamLandEdge.w)
+        || vWorldPos.y < uFloorY + REACH_EPS || vWorldPos.z < uWallZ + REACH_EPS
+        || vWorldPos.x < uSideX.x + REACH_EPS || vWorldPos.x > uSideX.y - REACH_EPS)) discard;
 
     float tEnter = 0.0;
     float tExit = -1.0;

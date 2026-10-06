@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { Object3D, OrthographicCamera } from 'three'
+import { Object3D, OrthographicCamera, PerspectiveCamera } from 'three'
+import { boxCollider } from './scene/beamReach'
 import {
   StageLabelStore,
   labelPriority,
@@ -144,5 +145,61 @@ describe('StageLabelStore.layout', () => {
     store.update(e, 'fixture', 'Par 1', true)
     store.setMode('all')
     expect(frames).toBe(3)
+  })
+})
+
+describe('labels behind the scenery', () => {
+  it('hides a label a collider stands in front of on a section, and shows the one beside it', () => {
+    const store = new StageLabelStore()
+    const behind = add(store, 'position', 'LX1', 0, 0)
+    const beside = add(store, 'position', 'LX2', 30, 0)
+    store.setOccluders([boxCollider(0, 0, 5, 10, 10, 0.05)])
+    store.layout(camera(), 100, 100)
+    expect(behind.shown).toBe(false)
+    expect(beside.shown).toBe(true)
+  })
+
+  it('hides it from a perspective eye, and leaves the space it would have taken to the label in front', () => {
+    const eye = new PerspectiveCamera(50, 1, 0.1, 100)
+    eye.position.set(0, 0, 10)
+    eye.lookAt(0, 0, 0)
+    eye.updateMatrixWorld()
+    const store = new StageLabelStore()
+    store.setMode('all')
+    // A position outranks a fixture, but this one is behind a flat; the fixture is in front of it.
+    const rig = add(store, 'position', 'LX1', 0, 0)
+    const par = add(store, 'fixture', 'Par 1', 0, 0)
+    par.anchor!.position.z = 8
+    store.layout(eye, 100, 100)
+    expect(rig.shown).toBe(true)
+    expect(par.shown).toBe(false)
+    store.setOccluders([boxCollider(0, 0, 5, 2, 2, 0.05)])
+    store.layout(eye, 100, 100)
+    expect(rig.shown).toBe(false)
+    expect(par.shown).toBe(true)
+  })
+
+  it('is not hidden by the box it sits on', () => {
+    const store = new StageLabelStore()
+    const region = add(store, 'position', 'Deck', 0, 0)
+    // The label 5 cm off a deck's face, the camera seeing it only through the deck.
+    store.setOccluders([boxCollider(0, 0, 0.55, 10, 10, 0.5)])
+    store.layout(camera(), 100, 100)
+    expect(region.shown).toBe(true)
+    store.setOccluders([boxCollider(0, 0, 0.75, 10, 10, 0.5)])
+    store.layout(camera(), 100, 100)
+    expect(region.shown).toBe(false)
+  })
+
+  it('asks for a frame when the colliders change, and not for the same ones again', () => {
+    const store = new StageLabelStore()
+    let frames = 0
+    store.invalidate = () => {
+      frames++
+    }
+    const colliders = [boxCollider(0, 0, 5, 1, 1, 1)]
+    store.setOccluders(colliders)
+    store.setOccluders(colliders)
+    expect(frames).toBe(1)
   })
 })

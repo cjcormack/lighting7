@@ -176,6 +176,39 @@ describe('emitter dirty groups', () => {
     expect(packed.slice(8, 12)).toEqual([LAND_NONE, -1, LAND_NONE, -1])
   })
 
+  it("lands the haze on the face it hit, not behind a pleat's crests by its skin", () => {
+    const b = build()
+    const cloth = { px: 0, py: 0, pz: -4, nx: 0, ny: 0, nz: 1, skin: 0.15, collider: null }
+    makeHandle(b).writeBeam(0, 0, { ...beamWrite(), land: cloth, edgeLand: null })
+    expect(b.volumeLand.array[1]).toBe(-4)
+  })
+
+  it('moves the hull back to where the beam lands for a perspective eye inside it, and for no other', () => {
+    const vertex = makeVolumeMaterial(getGoboTexture()).vertexShader
+    const fold = vertex.indexOf(`wp.xyz = apex + (wp.xyz - apex) * landingReach(wp.xyz, apex, vBeamLand, vBeamLandEdge, ${REACH_EPS_M.toFixed(3)});`)
+    const gate = vertex.indexOf('&& inHull(cameraPosition, apex, aBeamDir,')
+    expect(vertex).toContain('if (!isOrthographic\n')
+    expect(gate).toBeGreaterThan(-1)
+    expect(fold).toBeGreaterThan(gate)
+    expect(fold).toBeLessThan(vertex.indexOf('vWorldPos = wp.xyz;'))
+  })
+
+  it('starts the face from the test the fold uses, and a perspective eye behind both landing planes sees the hull from outside', () => {
+    const { vertexShader, fragmentShader } = makeVolumeMaterial(getGoboTexture())
+    const inHull = /bool inHull\([\s\S]*?\n {2}\}/
+    expect(vertexShader.match(inHull)?.[0]).toBe(fragmentShader.match(inHull)?.[0])
+    expect(fragmentShader).toContain('bool rayStartsInside = inHull(camPos, O, d, bx, by, near, vBeamLen, tanBound, aspect)\n'
+      + '      && (isOrthographic || !(dot(vBeamLand.xyz, camPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, camPos) < vBeamLandEdge.w));')
+  })
+
+  it('drops a hull front face behind where the beam lands, which a march would sum through the surface', () => {
+    const shader = makeVolumeMaterial(getGoboTexture()).fragmentShader
+    expect(shader).toContain('(dot(vBeamLand.xyz, vWorldPos) < vBeamLand.w && dot(vBeamLandEdge.xyz, vWorldPos) < vBeamLandEdge.w)')
+    // …or outside the room it is clipped to: a beam landing on the deck runs on through the back wall.
+    expect(shader).toContain('|| vWorldPos.y < uFloorY + REACH_EPS || vWorldPos.z < uWallZ + REACH_EPS')
+    expect(shader).toContain('|| vWorldPos.x < uSideX.x + REACH_EPS || vWorldPos.x > uSideX.y - REACH_EPS)) discard;')
+  })
+
   it("carries the depth of field in the haze's shape attribute, beside near, iris and aspect", () => {
     const b = build()
     makeHandle(b).writeBeam(0, 0, beamWrite())

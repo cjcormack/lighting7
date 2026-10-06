@@ -1,7 +1,7 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import type { LightingBounds } from '../stageCameras'
 import type { BeamClip, HazePlane, RegionGeometry, StageDims } from '../StageEmitters'
-import { boxCollider, elementColliders, type Collider } from './beamReach'
+import { boxCollider, elementColliders, type Collider, type Face } from './beamReach'
 import { buildElement } from './builders'
 import { NO_SIDE_X } from '../beamShaders'
 import { elementInLayers, type HazeExtent, type SceneLayers } from './sceneView'
@@ -63,6 +63,9 @@ export function regionColliders(regions: readonly RegionGeometry[]): Collider[] 
   )
 }
 
+const UP: Face = { x: 0, y: 1, z: 0 }
+const DOWNSTAGE: Face = { x: 0, y: 0, z: 1 }
+
 /**
  * Everything a beam can stop at in this view: the stage's floor, its back wall and the catch floor
  * where they are drawn, the drawn regions and the drawn elements.
@@ -79,13 +82,17 @@ export function sceneColliders({
   catchSizeM: number
 }): Collider[] {
   const t = SLAB_M / 2
+  // The floor and wall are planes drawn from their face only, so a sight line through the back of
+  // one is not stopped.
   const out: Collider[] = [
     // The stage floor: the footprint, its top at 0. Three: y up, z = −lighting Y.
-    boxCollider(0, -t, -stage.depth / 2, stage.width / 2, t, stage.depth / 2),
+    boxCollider(0, -t, -stage.depth / 2, stage.width / 2, t, stage.depth / 2, 0, undefined, undefined, UP),
   ]
   if (!drawsRoom(builds)) {
-    out.push(boxCollider(0, stage.height / 2, -stage.depth - t, stage.width / 2, stage.height / 2, t))
-    out.push(boxCollider(0, -t, 0, catchSizeM / 2, t, catchSizeM / 2))
+    out.push(boxCollider(0, stage.height / 2, -stage.depth - t, stage.width / 2, stage.height / 2, t, 0, undefined, undefined, DOWNSTAGE))
+    const catchFloor = boxCollider(0, -t, 0, catchSizeM / 2, t, catchSizeM / 2)
+    catchFloor.sight = false
+    out.push(catchFloor)
   }
   out.push(...regionColliders(regions))
   for (const { element, build } of builds) out.push(...elementColliders(element, build))

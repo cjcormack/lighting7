@@ -42,61 +42,60 @@ export function FixtureDetailView({
   const isEditing = externalIsEditing ?? internalIsEditing
   const showEditButton = externalIsEditing === undefined
   const hasElements = (fixture?.elements?.length ?? 0) > 0
+  const model = fixture ? [fixture.manufacturer, fixture.model].filter(Boolean).join(' ') : ''
 
   return (
     <>
       <SheetHeader>
-        <div className="flex items-center justify-between gap-2 pr-8">
-          {/* Truncates rather than wraps: with the Focus toggle beside Locate and Park, a long
-              name in the Stage view's 380px panel broke over two lines, the model over four. */}
-          <div className="min-w-0">
-            <TitleComponent className="truncate font-semibold text-foreground" title={fixture?.name}>
-              {fixture?.name ?? 'Fixture'}
-            </TitleComponent>
-            {fixture && (fixture.manufacturer || fixture.model) && (
-              <p className="truncate text-sm text-muted-foreground">
-                {[fixture.manufacturer, fixture.model].filter(Boolean).join(' ')}
-              </p>
+        {/* The name and model have the row to themselves, clear of the host's close cross. */}
+        <div className="min-w-0 pr-8">
+          <TitleComponent className="line-clamp-2 break-words font-semibold text-foreground" title={fixture?.name}>
+            {fixture?.name ?? 'Fixture'}
+          </TitleComponent>
+          {model && (
+            <p className="truncate text-sm text-muted-foreground" title={model}>
+              {model}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => value && setViewMode(value as FixtureViewMode | 'focus')}
+            size="sm"
+          >
+            <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
+              <Settings2 className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">
+              <SlidersHorizontal className="h-4 w-4" />
+            </ToggleGroupItem>
+            {focus != null && (
+              <ToggleGroupItem value="focus" aria-label="Show focus" title="Focus">
+                <Crosshair className="h-4 w-4" />
+              </ToggleGroupItem>
             )}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(value) => value && setViewMode(value as FixtureViewMode | 'focus')}
+          </ToggleGroup>
+          {fixture && (
+            <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
+          )}
+          {fixture && <FixtureParkButton fixture={fixture} isEditing={isEditing} />}
+          {showEditButton && (
+            <Button
+              variant={isEditing ? 'default' : 'outline'}
               size="sm"
+              className="ml-auto"
+              onClick={() => setInternalIsEditing(!internalIsEditing)}
             >
-              <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
-                <Settings2 className="h-4 w-4" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">
-                <SlidersHorizontal className="h-4 w-4" />
-              </ToggleGroupItem>
-              {focus != null && (
-                <ToggleGroupItem value="focus" aria-label="Show focus" title="Focus">
-                  <Crosshair className="h-4 w-4" />
-                </ToggleGroupItem>
-              )}
-            </ToggleGroup>
-            {fixture && (
-              <LocateButton type="fixture" targetKey={fixture.key} name={fixture.name} iconOnly />
-            )}
-            {fixture && <FixtureParkButton fixture={fixture} isEditing={isEditing} />}
-            {showEditButton && (
-              <Button
-                variant={isEditing ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setInternalIsEditing(!internalIsEditing)}
-              >
-                {isEditing ? 'Done' : 'Edit'}
-              </Button>
-            )}
-          </div>
+              {isEditing ? 'Done' : 'Edit'}
+            </Button>
+          )}
         </div>
 
         {/* Capability badges */}
         {fixture && (
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="flex flex-wrap gap-1">
             {hasElements && (
               <Badge variant="secondary">{fixture.elements!.length} heads</Badge>
             )}

@@ -555,6 +555,9 @@ export function Stage3D({
   useEffect(() => {
     labelStore.setMode(view.labels)
   }, [labelStore, view.labels])
+  useEffect(() => {
+    labelStore.setOccluders(colliders)
+  }, [labelStore, colliders])
 
   // Context loss. `canvasKey` remounts the canvas — a fresh renderer and a fresh context — which
   // is *Restore*: a context the browser took back to save memory may never be offered again, so
