@@ -34,6 +34,7 @@ import { packLanding } from './scene/landing'
 import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import type { HazeQuality } from './scene/hazeGovernor'
+import type { StageStatsStore } from './scene/stageStats'
 
 export { BEAM_LENGTH, MAX_BEAM_REGIONS, MAX_PRISM_LOBES } from './emitterLayout'
 
@@ -305,6 +306,8 @@ interface StageEmittersProps {
    * the surfaces took of how many were lit. Read by a test or a measurement, never by the UI.
    */
   statsRef?: React.RefObject<HTMLElement | null>
+  /** The canvas's stats store, which takes the same counts for the Performance tab. */
+  stats?: StageStatsStore | null
   children: React.ReactNode
 }
 
@@ -330,6 +333,7 @@ export function StageEmitters({
   hazeClip,
   hazeQuality,
   statsRef,
+  stats,
   children,
 }: StageEmittersProps) {
   const regionCount = Math.min(regionGeometry.length, MAX_BEAM_REGIONS)
@@ -450,6 +454,9 @@ export function StageEmitters({
   // a pack happens only when a light moves, and the element can be mounted after the one pack a
   // rig that stays dark ever gets.
   const statsText = useRef('0/0')
+  const statsCounts = useRef({ packed: 0, lit: 0 })
+  // Nothing packs the table once the emitters are gone (Light or Fixtures off).
+  useEffect(() => () => stats?.setLights(null), [stats])
   useFrame(() => {
     flushDirty(built, groups)
     if (built.lights.dirty) {
@@ -463,10 +470,13 @@ export function StageEmitters({
       lists.clearUpdateRanges()
       for (let k = 0; k < packed; k++) lists.addUpdateRange(k * LIST_TEXELS * 4, listRowFloats(listData, k))
       if (packed > 0) lists.needsUpdate = true
-      statsText.current = `${packed}/${built.lights.litCount()}`
+      const lit = built.lights.litCount()
+      statsText.current = `${packed}/${lit}`
+      statsCounts.current = { packed, lit }
     }
     const el = statsRef?.current
     if (el != null && el.dataset.lights !== statsText.current) el.dataset.lights = statsText.current
+    stats?.setLights(statsCounts.current)
   }, EMITTER_FLUSH_PRIORITY)
 
   return (

@@ -94,7 +94,7 @@ Each session is one PR. It ends with `npm run check` green (and `./gradlew test`
 outside `frontend/` changed), the engineering-doc paragraphs written, and its done-marker here: a
 one-line row with the session's commit SHA, added on the branch before its PR merges.
 
-### Session 1 — the popover, Performance and the readout (frontend)
+### ~~Session 1 — the popover, Performance and the readout (frontend)~~ — done, `9e8cb5f7`
 
 - **Menu (D1, D2, D4, D5, D11):** `StageViewMenu.tsx` rewritten on `Popover`, a two-value tab, a
   `ToggleGroup` per enum, toggles for Show. Same props, plus the readout's flag; the light budget,
