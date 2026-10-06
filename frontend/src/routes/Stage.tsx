@@ -72,10 +72,12 @@ import {
   viewpointFromCamera,
 } from '../components/stage3d/savedViewpoints'
 import {
+  setBoxShadows,
   setGoboSurfaces,
   setHazeExtent,
   setLightBudget,
   setSceneLayer,
+  useBoxShadows,
   useGoboSurfaces,
   useLightBudget,
   useSceneLayers,
@@ -268,6 +270,8 @@ export function Stage() {
   const lightBudget = useLightBudget()
   // Whose gobos land on surfaces (fixture-optics plan session 4) — the budget's fallback, per browser.
   const goboSurfaces = useGoboSurfaces()
+  // How many boxes a light may be shadowed by (stage-light plan session 3), per browser too.
+  const boxShadows = useBoxShadows()
 
   // Which camera the viewpoint draws through, and — for a saved view — where it lands. A saved view
   // whose rows have not arrived yet takes the camera it last landed with (a reload), else Orbit.
@@ -1234,6 +1238,8 @@ export function Stage() {
             setLightBudget={setLightBudget}
             goboSurfaces={goboSurfaces}
             setGoboSurfaces={setGoboSurfaces}
+            boxShadows={boxShadows}
+            setBoxShadows={setBoxShadows}
           />
           {showEditToggle && (
             <Tooltip>
@@ -1270,6 +1276,7 @@ export function Stage() {
                 layers={sceneLayers}
                 lightBudget={lightBudget}
                 goboSurfaces={goboSurfaces}
+                boxShadows={boxShadows}
                 seatPicking={seatPicking}
                 framingRef={framingRef}
                 editMode={editingActive}

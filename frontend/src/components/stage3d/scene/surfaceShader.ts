@@ -18,6 +18,7 @@ import { GOBO_LAYERS_GLSL } from '../goboLayers'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from '../washConfig'
 import { LANDING_GLSL, REACH_EPS_M } from './landing'
 import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
+import { COLLIDER_TEXELS, LIST_TEXELS, makeColliderSet, OCCLUSION_GLSL, type ColliderSet } from './occlusion'
 import { PLEAT_GLSL, pleatUniformValues, type PleatShape } from './pleat'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
@@ -30,12 +31,14 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * and one wall).
  *
  * Per light and fragment: inside the cone from the beam's **apex** (behind its aperture — stage-view
- * plan session 6), facing the light, and not behind where the beam lands (`landing.ts`: the plane of
- * the first surface on its axis, and of the second face a beam split across an edge lands on, which
- * stand in for occlusion) — then the beam's cross-section, `beamMask`
+ * plan session 6) and facing the light — then the beam's cross-section, `beamMask`
  * (`../beamMask.ts`), the one the haze is shaped by: its field circle or a segment's rectangle, its
  * iris, and an edge softened by the family and spread by how far the surface sits from the focal
- * plane, which is measured along the axis from the aperture. A pool **falls off with distance from the aperture** — as
+ * plane, which is measured along the axis from the aperture — and then **not shadowed**: the segment
+ * from the fragment to the lamp meets none of the colliders in that light's cone (`occlusion.ts`,
+ * stage-light plan session 3), so a flat shadows the wall behind it. A light whose cone reaches more
+ * colliders than its list holds falls back to where its beam lands (`landing.ts`'s two planes, which
+ * the haze still reads). A pool **falls off with distance from the aperture** — as
  * the square of it out to [FALLOFF_KNEE_M], the prototype's throws, and linearly past it, as an eye
  * adapted to the stage sees a long throw rather than as a meter reads it — and is as bright as its
  * beam is narrow: the light is spread over the footprint, radius `da · tan(half
@@ -48,9 +51,7 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * angle, multiplied over the mask — so the blades, the iris and an oval cut the gobo as they cut the
  * pool — at the mip level of the focus blur the edge is softened by, or of the pixel's footprint
  * where that is wider. The haze samples it through the same function, so a gobo sharp in the air at
- * a distance is sharp on a wall at that distance. What still does not land is a **shadow** of one
- * thing on another: the axial beam reach stands in for occlusion until the quality tier's shadow
- * maps (`FU-STAGE-QUALITY-TIER`). A drape's folds do shadow each other (stage-light plan D7, `PLEAT`):
+ * a distance is sharp on a wall at that distance. A drape's folds shadow each other (stage-light plan D7, `PLEAT`):
  * the fold is a known sine in the part's own frame — the mesh's model matrix — so `pleat.ts`'s
  * `foldLight` answers whether a crest stands between the point and the lamp, and its troughs see
  * less of the room's ambient.
@@ -137,21 +138,50 @@ export interface SurfaceUniforms {
   uGobo: { value: DataArrayTexture }
   uGoboBlurTexels: { value: number }
   uLodMax: { value: number }
+  /** The scene's colliders, `occlusion.ts`'s `packColliders`. */
+  uColliders: { value: DataTexture }
+  /** Each packed light row's colliders, `occlusion.ts`'s `cullLightColliders`. */
+  uLightColliders: { value: DataTexture }
 }
 
 /** A canvas's light texture: [MAX_LIGHT_BUDGET] rows of [LIGHT_TEXELS] RGBA float texels. */
 export function makeLightTexture(): { texture: DataTexture; data: Float32Array } {
   const data = new Float32Array(MAX_LIGHT_BUDGET * LIGHT_TEXELS * 4)
-  const texture = new DataTexture(data, LIGHT_TEXELS, MAX_LIGHT_BUDGET, RGBAFormat, FloatType)
-  // Read with texelFetch — never filtered, never mipmapped (float linear filtering is an extension).
+  return { texture: fetchOnly(new DataTexture(data, LIGHT_TEXELS, MAX_LIGHT_BUDGET, RGBAFormat, FloatType)), data }
+}
+
+/**
+ * A float texture read with `texelFetch` only — never filtered, never mipmapped (float linear
+ * filtering is an extension).
+ */
+function fetchOnly<T extends DataTexture>(texture: T): T {
   texture.magFilter = NearestFilter
   texture.minFilter = NearestFilter
   texture.generateMipmaps = false
   texture.needsUpdate = true
-  return { texture, data }
+  return texture
 }
 
-export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
+/**
+ * A canvas's occlusion textures (`occlusion.ts`): the colliders, [COLLIDER_TEXELS] RGBA texels a
+ * row, and each light row's list, [LIST_TEXELS] RGBA texels a row, one row per light row.
+ */
+export interface OcclusionTextures {
+  colliders: DataTexture
+  set: ColliderSet
+  lists: DataTexture
+  listData: Float32Array
+}
+
+export function makeOcclusionTextures(): OcclusionTextures {
+  const set = makeColliderSet()
+  const colliders = fetchOnly(new DataTexture(set.data, COLLIDER_TEXELS, set.data.length / (COLLIDER_TEXELS * 4), RGBAFormat, FloatType))
+  const listData = new Float32Array(LIST_TEXELS * 4 * MAX_LIGHT_BUDGET)
+  const lists = fetchOnly(new DataTexture(listData, LIST_TEXELS, MAX_LIGHT_BUDGET, RGBAFormat, FloatType))
+  return { colliders, set, lists, listData }
+}
+
+export function makeSurfaceUniforms(texture: DataTexture, occlusion: OcclusionTextures = makeOcclusionTextures()): SurfaceUniforms {
   return {
     uLights: { value: texture },
     uLightCount: { value: 0 },
@@ -161,6 +191,8 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
     uGobo: { value: getGoboTexture() },
     uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
     uLodMax: { value: FOCUS_LOD_MAX },
+    uColliders: { value: occlusion.colliders },
+    uLightColliders: { value: occlusion.lists },
   }
 }
 
@@ -221,6 +253,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${UNPACK_EDGE_IRIS_GLSL}
   ${UNPACK_FOCUS_GLSL}
   ${LANDING_GLSL}
+  ${OCCLUSION_GLSL}
   ${BEAM_FRAME_GLSL}
   ${GOBO_LAYERS_GLSL}
   ${ROLL_OFF_GLSL}
@@ -295,7 +328,6 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       if (c < axis.w) continue;
       float facing = dot(n, -L);
       if (facing <= 0.0) continue;
-      if (behindLanding(texelFetch(uLights, ivec2(3, i), 0), vWorldPos, REACH_EPS)) continue;
       float shade = 1.0;
       #ifdef PLEAT
       shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, dot(apex.xyz - pleatO, pleatZ));
@@ -334,6 +366,9 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
         m *= goboPair(g, rotA, rotB, goboLod(blur, footprint / radius, uGoboBlurTexels, uLodMax));
         if (m <= 0.0) continue;
       }
+      // Shadowed: a collider between here and the lamp, or behind where the beam lands for a light
+      // with too many colliders in its cone to test.
+      if (lightOccluded(i, vWorldPos, -L, dist, c, aperture.x, texelFetch(uLights, ivec2(3, i), 0))) continue;
       // Falls off from the lens, not the apex behind it (nearer than 0.3 m it holds), over the
       // beam's own footprint: a narrow beam puts the same light on less of the surface.
       float da = max(dist - aperture.x, 0.3);

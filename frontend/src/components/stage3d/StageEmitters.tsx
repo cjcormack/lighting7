@@ -20,6 +20,7 @@ import { makeVolumeMaterial } from './beamShaders'
 import { HAZE_LEVEL, VOLUMETRIC_STEPS } from './washConfig'
 import {
   MAX_BEAM_REGIONS,
+  MAX_THROW_M,
   beamCapacity,
   beamInstanceIndex,
   lightRowIndex,
@@ -30,6 +31,7 @@ import {
 import { LightTable, type LightRow } from './scene/lightTable'
 import { beamReach, type BeamHit, type Collider } from './scene/beamReach'
 import { packLanding } from './scene/landing'
+import { cullLightColliders, LIST_TEXELS, listRowFloats, MAX_LIGHT_COLLIDERS, packColliders } from './scene/occlusion'
 import { useSurfaceLighting } from './scene/SurfaceLighting'
 import type { HazeQuality } from './scene/hazeGovernor'
 
@@ -287,6 +289,11 @@ interface StageEmittersProps {
   clip: BeamClip
   /** How much of the light table the surfaces take (`scene/sceneView.ts`). */
   lightBudget: number
+  /**
+   * How many boxes a light may be shadowed by (`scene/sceneView.ts`'s `BOX_SHADOW_CAPS`); a light
+   * that reaches more keeps its landing planes. Every light's list width when absent.
+   */
+  colliderCap?: number
   /** Whether the air shows the beams — the View menu's Haze, unless it is Off. */
   haze: boolean
   /** How far the air shows them (`hazeClipFor`); null everywhere. */
@@ -318,6 +325,7 @@ export function StageEmitters({
   colliders,
   clip,
   lightBudget,
+  colliderCap = MAX_LIGHT_COLLIDERS,
   haze,
   hazeClip,
   hazeQuality,
@@ -405,6 +413,14 @@ export function StageEmitters({
 
   // The surfaces' light texture: packed from the table whenever a light moved or the budget did.
   const lighting = useSurfaceLighting()
+  // The colliders the surfaces' shadows are tested against: the ones beam reach casts at. A new set
+  // asks for a pack, so each light's list is culled against it.
+  useEffect(() => {
+    packColliders(colliders, lighting.occlusion.set)
+    lighting.occlusion.colliders.needsUpdate = true
+    built.lights.dirty = true
+    invalidate()
+  }, [colliders, lighting, built, invalidate])
   const budgetRef = useRef(lightBudget)
   useEffect(() => {
     if (budgetRef.current === lightBudget) return
@@ -412,6 +428,13 @@ export function StageEmitters({
     built.lights.dirty = true
     invalidate()
   }, [lightBudget, built, invalidate])
+  const capRef = useRef(colliderCap)
+  useEffect(() => {
+    if (capRef.current === colliderCap) return
+    capRef.current = colliderCap
+    built.lights.dirty = true
+    invalidate()
+  }, [colliderCap, built, invalidate])
   // The table leaves with the rig it was sized for: a surface must not keep last rig's lights.
   useEffect(
     () => () => {
@@ -431,8 +454,15 @@ export function StageEmitters({
     flushDirty(built, groups)
     if (built.lights.dirty) {
       const packed = built.lights.pack(budgetRef.current, lighting.data)
+      const { set, lists, listData } = lighting.occlusion
+      cullLightColliders(lighting.data, packed, set, MAX_THROW_M, listData, capRef.current)
       lighting.uniforms.uLightCount.value = packed
       lighting.uniforms.uLights.value.needsUpdate = true
+      // Only the rows packed, and only as far as each list runs; with none, nothing reads them. Ranges
+      // a pack never uploaded (no surface drew) are dropped: this pack rewrote every row they named.
+      lists.clearUpdateRanges()
+      for (let k = 0; k < packed; k++) lists.addUpdateRange(k * LIST_TEXELS * 4, listRowFloats(listData, k))
+      if (packed > 0) lists.needsUpdate = true
       statsText.current = `${packed}/${built.lights.litCount()}`
     }
     const el = statsRef?.current

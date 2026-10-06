@@ -39,18 +39,22 @@ export function computeLobeDirection(
     .normalize()
 }
 
+/** A point or direction: a `Vector3`, or the plain numbers the surfaces' collider cull passes. */
+type XYZ = Pick<Vector3, 'x' | 'y' | 'z'>
+
 /**
- * Conservative cone-vs-sphere reach test behind [regionShadowMask]. Conservative so a region never
- * drops out of a lobe's shadow tests while the cone still touches its bounding sphere — the
- * shader's per-fragment tests handle the exact silhouette.
+ * Conservative cone-vs-sphere reach test behind [regionShadowMask] and the surfaces' collider cull
+ * (`scene/occlusion.ts`). Conservative so a region never drops out of a lobe's shadow tests while
+ * the cone still touches its bounding sphere — the shader's per-fragment tests handle the exact
+ * silhouette.
  */
 export function coneReachesSphere(
-  origin: Vector3,
-  dir: Vector3,
+  origin: XYZ,
+  dir: XYZ,
   beamLength: number,
   cosCone: number,
   sinCone: number,
-  center: Vector3,
+  center: XYZ,
   radius: number,
 ): boolean {
   const dx = center.x - origin.x

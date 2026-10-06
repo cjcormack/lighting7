@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from '../../../lib/syncStore'
 import type { StageElementDto } from '../../../api/stageElementApi'
 import { DEFAULT_LIGHT_BUDGET, LIGHT_BUDGETS } from './lightTable'
+import { MAX_LIGHT_COLLIDERS } from './occlusion'
 
 /**
  * What of the scene this window draws — the View menu's **Venue**, **Set**, **Seating** and **Haze**
@@ -16,6 +17,10 @@ import { DEFAULT_LIGHT_BUDGET, LIGHT_BUDGETS } from './lightTable'
  *   gobo atlas on every surface it reaches by default; *Selected heads* limits that to the
  *   selection, and every other head keeps its plain pool (its gobo still shows in the air). It is
  *   the fallback the plan names if a machine's budget runs short, so it is the machine's too.
+ * - **And how many boxes a light may be shadowed by** (stage-light plan session 3): every lit pixel
+ *   tests its light's list of colliders (`occlusion.ts`), which an iPad pays for six times over what
+ *   the desk Mac does. A light whose cone reaches more than the cap keeps its landing planes, so a
+ *   lower cap takes the shadows of the widest cones first; *Off* puts every light on its planes.
  *
  * A seating element follows **Seating** whatever its layer; every other element follows its layer.
  * **Haze** is how far the air shows the beams: not at all, only upstage of the proscenium (the stage
@@ -45,6 +50,20 @@ export const DEFAULT_SCENE_LAYERS: SceneLayers = { venue: true, set: true, seati
 export const SCENE_LAYERS_KEY = 'stage.sceneLayers'
 export const LIGHT_BUDGET_KEY = 'stage.lightBudget'
 export const GOBO_SURFACES_KEY = 'stage.goboSurfaces'
+export const BOX_SHADOWS_KEY = 'stage.boxShadows'
+
+/** How many boxes a light may be shadowed by, as the View menu offers it. */
+export const BOX_SHADOWS = ['all', 'some', 'off'] as const
+export type BoxShadows = (typeof BOX_SHADOWS)[number]
+/** Every light up to the list's width: the desk Mac pays ~0.1–0.27 ms a frame an entry at the bench's load. */
+export const DEFAULT_BOX_SHADOWS: BoxShadows = 'all'
+
+/** The cap each setting puts on a light's collider list; past it, a light keeps its landing planes. */
+export const BOX_SHADOW_CAPS: Readonly<Record<BoxShadows, number>> = { all: MAX_LIGHT_COLLIDERS, some: 16, off: 0 }
+
+export function isBoxShadows(value: unknown): value is BoxShadows {
+  return typeof value === 'string' && (BOX_SHADOWS as readonly string[]).includes(value)
+}
 
 /** Which heads' gobos land on surfaces: every gobo light's, or only the selected heads'. */
 export const GOBO_SURFACES = ['all', 'selected'] as const
@@ -124,6 +143,20 @@ export function setGoboSurfaces(mode: GoboSurfaces): void {
   if (isGoboSurfaces(mode)) goboSurfacesStore.set(mode)
 }
 
+const boxShadowsStore = createSyncStore<BoxShadows>({
+  key: BOX_SHADOWS_KEY,
+  fallback: DEFAULT_BOX_SHADOWS,
+  parse: (parsed) => (isBoxShadows(parsed) ? parsed : DEFAULT_BOX_SHADOWS),
+})
+
+export function useBoxShadows(): BoxShadows {
+  return useSyncExternalStore(boxShadowsStore.subscribe, boxShadowsStore.getSnapshot, boxShadowsStore.getServerSnapshot)
+}
+
+export function setBoxShadows(mode: BoxShadows): void {
+  if (isBoxShadows(mode)) boxShadowsStore.set(mode)
+}
+
 /** Whether [element] is drawn under [layers]: a seating by **Seating**, anything else by its layer. */
 export function elementInLayers(element: Pick<StageElementDto, 'kind' | 'layer'>, layers: SceneLayers): boolean {
   if (element.kind === 'SEATING') return layers.seating
@@ -135,4 +168,5 @@ export function resetSceneViewStores(): void {
   layersStore.reset()
   budgetStore.reset()
   goboSurfacesStore.reset()
+  boxShadowsStore.reset()
 }

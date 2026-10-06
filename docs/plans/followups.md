@@ -111,7 +111,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LANTERN-LIBRARY-HALL`](#fu-lantern-library-hall) | Trigger | Stage | Chris answers which lanterns the Commemoration Hall owns (stage-view plan §11 Q4) |
 | [`FU-STAGE-FOCUS-ON-POOL`](#fu-stage-focus-on-pool) | Trigger | Stage | an operator focuses a rig from the Stage view rather than the card |
 | [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
-| [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a shadow land, not just the beam reach |
+| [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a mesh's shadow land — a body, a seat, an imported model — or a round one; boxes cast theirs already |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
@@ -2162,7 +2162,7 @@ frame — the inverse of `beamMask`'s blade line through the surface's plane.
 
 ### `FU-STAGE-SURFACE-LOOP-COST`
 
-**Unmeasured costs in the surface-light loop: three, session 7's fourth, and fixture-optics session 4's measured fifth** · Trigger ·
+**Unmeasured costs in the surface-light loop: three, session 7's fourth, fixture-optics session 4's measured fifth, and stage-light session 3's sixth** · Trigger ·
 stage-view plan sessions 6–7, 2026-09-30
 
 Session 6's review left three notes it could not measure in a container: dark cells still raycast
@@ -2173,22 +2173,31 @@ a blade in evaluates four half-plane cuts (skipped when every blade is out). Fix
 adds a fifth, measured this time on SwiftShader (not a GPU): the frame rebuilt from `(cos, sin)` in a
 basis made from the axis and a `fwidth` per fragment (+2–3 % of a frame with no gobo landing, against
 `main`), and a gobo light's atlas reads (+8 % with three gobo pools over most of the canvas) — not
-material, so *Gobos on surfaces → Selected heads only* stays off by default. **Trigger**: the Safari
-and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
+material, so *Gobos on surfaces → Selected heads only* stays off by default. Stage-light session 3
+adds a sixth: every lit fragment, housings included, now runs the box test over its light's collider
+list, and every pack of the light table re-culls each light's list on the CPU (`cullLightColliders`)
+and uploads it — every frame a head moves; measured per list entry on the occlusion bench, the iPad
+pays six to seven times the Mac, and the View menu's *Box shadows* caps it per browser. **Trigger**:
+the Safari and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
 cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
 
 ### `FU-STAGE-QUALITY-TIER`
 
-**No shadows** · Trigger · stage-view plan §8, 2026-10-01
+**Shadows of meshes** · Trigger · stage-view plan §8, 2026-10-01
 
-The surface shader lands every light as a pool through one loop over the light table, and beam reach
-stops at the first surface on the axis — crude occlusion, no shadow maps. The design record's
+The surface shader lands every light as a pool through one loop over the light table, and since the
+stage-light plan's session 3 every scene **box** casts a shadow: each fragment tests the segment to
+the lamp against the colliders in that light's cone (`frontend/docs/stage-vis-engineering.md`
+§"Light lands through one surface shader"). What casts none is anything that is not a collider — a
+fixture's body, a seat, a GLB mesh (`FU-STAGE-GLB-IMPORT`) — and a box's shadow is square however
+round the thing it stands for. The haze still stops at the landing planes. The design record's
 §"Lighting the room" sketched a quality tier: shadow maps for up to four selected heads, and gobos
 projected by sampling the existing gobo atlas in light space — the gobo half landed on every surface
 without a tier in [`fixture-optics-plan.md`](completed/fixture-optics-plan.md) session 4 (D10,
 `frontend/docs/stage-vis-engineering.md` §"Gobos on surfaces"). **Trigger**: an operator needs to see a
-shadow land. **Then**: an opt-in tier per window (the View menu), budgeted like the light table — a
+mesh's shadow land — a body, a seat, an imported model — or a round one. **Then**: an opt-in tier per
+window (the View menu), budgeted like the light table — a
 shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a starting point.
 The gobo pass's *Selected heads only* switch is the precedent for narrowing a cost to the selection.
 

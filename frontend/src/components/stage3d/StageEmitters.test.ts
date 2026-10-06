@@ -301,7 +301,7 @@ describe('the light table rows', () => {
     expect(b.lights.litCount()).toBe(0)
   })
 
-  it('writes a surface hit as the plane the surfaces stop lighting behind', () => {
+  it('writes a surface hit as the landing plane the haze, and a light past its collider cap, cut at', () => {
     const b = build(layout)
     makeHandle(b).writeLight(0, 0, lightRow(1, { px: 1.5, py: 0, pz: -2, nx: 0, ny: 1, nz: 0, skin: REACH_EPS_M }))
     const row = b.lights.staged.subarray(0, 24)

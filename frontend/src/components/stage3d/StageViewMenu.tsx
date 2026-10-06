@@ -26,9 +26,13 @@ import {
   type StageLabelMode,
 } from './stageLabels'
 import {
+  BOX_SHADOW_CAPS,
+  BOX_SHADOWS,
   GOBO_SURFACES,
+  isBoxShadows,
   isGoboSurfaces,
   isHazeExtent,
+  type BoxShadows,
   type GoboSurfaces,
   type HazeExtent,
   type SceneLayer,
@@ -39,6 +43,12 @@ import { LIGHT_BUDGETS } from './scene/lightTable'
 const GOBO_SURFACES_LABELS: Record<GoboSurfaces, string> = {
   all: 'Every gobo light',
   selected: 'Selected heads only',
+}
+
+const BOX_SHADOWS_LABELS: Record<BoxShadows, string> = {
+  all: `Up to ${BOX_SHADOW_CAPS.all} boxes a light`,
+  some: `Up to ${BOX_SHADOW_CAPS.some} boxes a light`,
+  off: 'Off',
 }
 
 /** The scene's per-window layers, in the order `Stage.dc.html`'s View menu lists them under Show. */
@@ -85,6 +95,9 @@ interface StageViewMenuProps {
   /** Whose gobos land on surfaces, per browser (fixture-optics plan session 4); absent with the budget. */
   goboSurfaces?: GoboSurfaces
   setGoboSurfaces?: (mode: GoboSurfaces) => void
+  /** How many boxes a light may be shadowed by, per browser (stage-light plan session 3); absent with the budget. */
+  boxShadows?: BoxShadows
+  setBoxShadows?: (mode: BoxShadows) => void
 }
 
 export function StageViewMenu({
@@ -102,6 +115,8 @@ export function StageViewMenu({
   setLightBudget,
   goboSurfaces,
   setGoboSurfaces,
+  boxShadows,
+  setBoxShadows,
 }: StageViewMenuProps) {
   return (
     <DropdownMenu>
@@ -256,6 +271,33 @@ export function StageViewMenu({
               {GOBO_SURFACES.map((mode) => (
                 <DropdownMenuRadioItem key={mode} value={mode}>
                   {GOBO_SURFACES_LABELS[mode]}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+        {boxShadows != null && setBoxShadows != null && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>
+              <span className="flex flex-col gap-0.5">
+                <span>Box shadows</span>
+                {/* Every lit pixel tests its light's boxes; a light that reaches more than the cap
+                    keeps where its beam lands instead, so the widest cones lose theirs first. */}
+                <span className="text-xs font-normal text-muted-foreground">
+                  How many boxes may shadow each light, on this machine
+                </span>
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={boxShadows}
+              onValueChange={(v) => {
+                if (isBoxShadows(v)) setBoxShadows(v)
+              }}
+            >
+              {BOX_SHADOWS.map((mode) => (
+                <DropdownMenuRadioItem key={mode} value={mode}>
+                  {BOX_SHADOWS_LABELS[mode]}
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>

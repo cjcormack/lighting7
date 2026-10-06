@@ -102,7 +102,7 @@ describe("the material scenes (stage-light plan session 2)", () => {
   }
 
   it("points each fixed lantern at its pool", () => {
-    for (const mode of ["rake", "floor", "cyc"] as const) {
+    for (const mode of ["rake", "floor", "cyc", "shadow"] as const) {
       for (const spot of materialScene(mode).spots) {
         const { baseYawDeg, basePitchDeg } = aimStatic(spot.from, spot.at)
         const d = beam(baseYawDeg, basePitchDeg)
@@ -129,6 +129,15 @@ describe("the material scenes (stage-light plan session 2)", () => {
     expect(cyc.elements?.map((e) => [e.finishColour, e.params.role])).toEqual([["#e8e6df", "CYC"], ["#101012", "LEG"], ["#3b1219", "LEG"]])
     // Nothing to write: the lanterns carry no channels and burn at full.
     expect(cyc.syntheticFixture.properties).toEqual([])
+  })
+
+  it("stands a flat in front of a wall under one profile, lit from the side (session 3)", () => {
+    const data = buildHarness(10, 8, 6, "shadow")
+    expect(data.elements?.map((e) => [e.kind, e.name, e.positionY])).toEqual([["FLAT", "Wall", 6], ["FLAT", "Flat", 4.5]])
+    expect(data.patches).toHaveLength(1)
+    const [spot] = materialScene("shadow").spots
+    // From stage left, so the shadow falls stage right of the flat rather than straight behind it.
+    expect(spot.from.x).toBeGreaterThan(spot.at.x)
   })
 })
 
@@ -166,8 +175,8 @@ describe("isHarnessActive", () => {
     expect(harnessMode()).toBe("drape")
   })
 
-  it("returns a material scene for ?profileHarness=rake, floor and cyc", () => {
-    for (const mode of ["rake", "floor", "cyc"]) {
+  it("returns a material scene for ?profileHarness=rake, floor, cyc and shadow", () => {
+    for (const mode of ["rake", "floor", "cyc", "shadow"]) {
       setSearch(`?profileHarness=${mode}`)
       expect(harnessMode()).toBe(mode)
     }

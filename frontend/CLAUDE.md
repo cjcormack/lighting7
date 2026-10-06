@@ -228,9 +228,10 @@ draws straight to an opaquely cleared canvas and every fragment encodes itself, 
 add in display space as the prototype's do — DPR at 1.5, context-loss recovery, emitters sized by the rig, regions hanging down from `centerZ` (the top
 surface), dark-glass lenses, and the one DOM label layer. **Light lands through one surface shader**
 (session 3): every venue, set and region surface loops over a float data texture of the live lights
-(`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, with the
-first surface on each beam's axis standing in for occlusion (`scene/beamReach.ts`); the region,
-wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
+(`scene/lightTable.ts` — no uniform-array ceiling), capped by a per-browser light budget, and each
+fragment is shadowed by the scene's colliders — the boxes beam reach casts at — tested against the
+light's own culled list (`scene/occlusion.ts`), capped per browser by the View menu's *Box shadows*;
+the region, wall and floor cookie instances are gone. The haze governor gives up march steps before frame rate.
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
