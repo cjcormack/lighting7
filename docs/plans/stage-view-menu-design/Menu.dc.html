@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage view menu</title>
+  <style>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { z-index:6; position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+    /* ── additions for the stage-view boards ─────────────────────────────── */
+    .appbar .armed { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.21 27); border:1px solid oklch(0.7 0.19 27); font-size:12px; font-weight:700; letter-spacing:0.06em; }
+    .viewhdr { height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .viewhdr .vt { font-size:14px; font-weight:600; margin-right:6px; }
+    .vp { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); font-size:12.5px; font-weight:600; color:oklch(0.85 0.1 255); }
+    .vp small { font-weight:400; color:var(--mfg); }
+    .btn .kbd, .kbd { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:1px 5px; border-radius:4px; border:1px solid var(--bd); color:var(--mfg); }
+    .spacer { flex:1; }
+    .canvas { position:relative; flex:1; min-width:0; background:#07090d; overflow:hidden; }
+    .canvas > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .ov { position:absolute; }
+    .ovcap { left:12px; top:10px; font-size:12px; color:var(--mfg); }
+    .ovcap b { color:var(--fg); font-weight:600; }
+    .poslbl { position:absolute; padding:1px 6px; border-radius:4px; font:700 10px ui-monospace,Menlo,monospace; letter-spacing:0.06em; color:var(--amber); background:oklch(0.141 0.005 285.823 / 0.82); border:1px solid oklch(0.82 0.16 80 / 0.4); }
+    .fxlbl { position:absolute; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:oklch(0.3 0.09 260 / 0.92); border:1px solid var(--pri); }
+    .selbar { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; display:flex; gap:10px; align-items:center; background:oklch(0.21 0.006 285.885 / 0.94); border:1px solid var(--bd); border-radius:10px; padding:6px 8px 6px 12px; font-size:12px; white-space:nowrap; }
+    .selbar .m { color:var(--mfg); }
+    .selbar .b { border:1px solid var(--bd); background:var(--muted); border-radius:6px; padding:2px 8px; font-size:11px; }
+    .panel { width:360px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+    .panel .ph { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .panel .ph b { font-size:14px; }
+    .panel .pb { padding:12px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sec .st { display:flex; align-items:center; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .sec .st::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .row2 { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; align-items:center; font-size:12px; }
+    .row2 > span:first-child { color:var(--mfg); font-size:11px; }
+    .row3 { display:grid; grid-template-columns:62px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; font-size:11px; }
+    .row3 > span:first-child { color:var(--mfg); }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .sel::after { content:'▾'; margin-left:auto; color:var(--mfg); font-size:10px; }
+    .num { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font:12px ui-monospace,Menlo,monospace; display:flex; align-items:center; font-variant-numeric:tabular-nums; }
+    .gate { width:132px; height:132px; flex:0 0 auto; }
+    .chipx { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px 0 4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11px; white-space:nowrap; }
+    .chipx i { width:14px; height:14px; border-radius:3px; background:#2a2d33; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08); display:block; }
+    .chipx b { font-weight:400; color:var(--mfg); font:10px ui-monospace,Menlo,monospace; }
+    .chipx.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.18); }
+    .prow { display:grid; grid-template-columns:70px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--bd); align-items:start; }
+    .prow .pn { font:700 10px ui-monospace,Menlo,monospace; color:var(--amber); letter-spacing:0.04em; padding-top:4px; }
+    .prow .pn small { display:block; font-weight:400; color:var(--mfg); letter-spacing:0; }
+    .prow .cs { display:flex; flex-wrap:wrap; gap:4px; }
+    .edge { text-align:center; font:700 9px ui-monospace,Menlo,monospace; letter-spacing:0.2em; color:var(--mfg); padding:4px 0; border-top:1px dashed var(--bd); border-bottom:1px dashed var(--bd); }
+    .pal { width:220px; flex-shrink:0; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+    .pal .pi { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; font-size:12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.5); }
+    .pal .pi svg { color:var(--mfg); }
+    .pal .ph2 { padding:10px 12px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .el { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; font-size:12px; padding:4px 0; align-items:baseline; }
+    .el .k { font:10px ui-monospace,Menlo,monospace; color:oklch(0.8 0.12 255); }
+    .el .d { font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .el.on { background:oklch(0.623 0.214 259.815 / 0.14); border-radius:6px; padding:4px 6px; margin:0 -6px; }
+    .sheet { width:520px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; }
+    .item { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; }
+    .item .m { color:var(--mfg); font-size:11px; }
+    .item.new { border-color:oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.18); }
+    .item.danger { border-color:oklch(0.55 0.2 27 / 0.7); background:oklch(0.3 0.08 27 / 0.25); }
+    .dim { opacity:0.45; }
+    .hatch { background-image:repeating-linear-gradient(135deg, oklch(0.274 0.006 286.033 / 0.5) 0 6px, transparent 6px 12px); }
+    .frame { position:absolute; border:2px dashed var(--amber); border-radius:10px; pointer-events:none; }
+    .btn.pri { background:var(--pri); color:#fff; border:0; }
+    .btn.red { background:oklch(0.55 0.21 27); color:#fff; border:0; }
+
+    /* ── additions for the stage-view-menu boards ─────────────────────────── */
+    .pop { position:absolute; width:320px; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 14px 34px rgba(0,0,0,0.55); z-index:4; overflow:hidden; }
+    .pop.ghost { box-shadow:none; outline:2px dashed oklch(0.82 0.16 80 / 0.55); outline-offset:6px; }
+    .ptabs { display:flex; gap:2px; margin:8px 8px 0; padding:2px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); }
+    .ptabs span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:26px; border-radius:6px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .ptabs span.on { background:var(--muted); color:var(--fg); }
+    .pbody { padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px; }
+    .grp { display:flex; flex-direction:column; gap:6px; }
+    .gh { display:flex; align-items:center; gap:6px; height:16px; }
+    .gh .lbl { flex:1; }
+    .scope { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:600; color:var(--mfg); border:1px solid var(--bd); white-space:nowrap; }
+    .scope.mach { color:oklch(0.82 0.12 80); border-color:oklch(0.6 0.12 80 / 0.5); }
+    .scope.wire { color:oklch(0.8 0.12 255); border-color:oklch(0.5 0.12 255 / 0.6); }
+    .sg { display:flex; gap:2px; border:1px solid var(--bd); background:var(--bg); border-radius:8px; padding:2px; }
+    .sg span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; padding:0 6px; border-radius:6px; font-size:11.5px; font-weight:500; color:var(--mfg); white-space:nowrap; }
+    .sg span.on { background:var(--muted); color:var(--fg); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .g2 { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    .opt { display:flex; align-items:center; gap:7px; height:30px; padding:0 9px; border-radius:7px; border:1px solid var(--bd); background:var(--bg); font-size:12px; color:var(--fg); white-space:nowrap; }
+    .opt i { width:12px; height:12px; border-radius:50%; border:1.5px solid var(--mfg); flex:0 0 auto; }
+    .opt.on { border-color:oklch(0.623 0.214 259.815 / 0.6); background:oklch(0.623 0.214 259.815 / 0.14); }
+    .opt.on i { border-color:var(--pri); background:radial-gradient(circle, var(--pri) 0 3px, transparent 3.5px); }
+    .hint { font-size:11px; line-height:1.4; color:var(--mfg); margin:0; }
+    .hint b { color:var(--fg); font-weight:600; }
+    .tgs { display:flex; flex-wrap:wrap; gap:4px; }
+    .tg { display:inline-flex; align-items:center; gap:4px; height:26px; padding:0 7px 0 6px; border-radius:7px; border:1px solid var(--bd); background:var(--bg); font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .tg svg { width:12px; height:12px; }
+    .tg.on { color:var(--fg); border-color:oklch(0.623 0.214 259.815 / 0.6); background:oklch(0.623 0.214 259.815 / 0.14); }
+    .tg.on svg { color:var(--pri); }
+    .tg.off svg { opacity:0; }
+    .tgsep { width:100%; height:0; }
+    .pfoot { border-top:1px solid var(--bd); padding:7px 10px; font-size:10.5px; color:var(--mfg); display:flex; align-items:center; gap:6px; background:oklch(0.17 0.005 286); }
+    .sw2 { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .sw2::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .sw2.on { background:var(--pri); }
+    .sw2.on::after { left:14px; background:#fff; }
+    .livebox { border:1px solid var(--bd); border-radius:8px; background:var(--bg); padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+    .livebox .big { font:600 20px ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+    .livebox .big small { font-size:12px; font-weight:500; color:var(--mfg); }
+    .livebox .row { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--mfg); }
+    .livebox .row b { color:var(--fg); font-weight:600; font-variant-numeric:tabular-nums; }
+    .fps { position:absolute; display:inline-flex; align-items:center; gap:6px; padding:2px 7px; border-radius:5px; background:oklch(0.141 0.005 285.823 / 0.8); font:10.5px ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; color:var(--mfg); border:1px solid transparent; }
+    .fps b { color:var(--fg); font-weight:600; }
+    .fps.slow { color:oklch(0.82 0.12 80); border-color:oklch(0.6 0.12 80 / 0.45); }
+    .fps.slow b { color:oklch(0.88 0.14 80); }
+    .fps.big { position:static; font-size:15px; padding:6px 12px; border-radius:7px; }
+    .hud { position:absolute; padding:2px 7px; border-radius:5px; background:oklch(0.141 0.005 285.823 / 0.8); font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .zb { position:absolute; display:flex; gap:4px; }
+    .zb span { width:26px; height:26px; border-radius:6px; border:1px solid var(--bd); background:var(--card); display:grid; place-items:center; color:var(--fg); font-size:13px; }
+    .vbtn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; border:1px solid var(--bd); font-size:12px; font-weight:500; background:oklch(0.274 0.006 286.033 / 0.3); white-space:nowrap; }
+    .vbtn.open { background:var(--muted); }
+    .vbtn .src { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:600; background:oklch(0.62 0.18 255 / 0.18); color:oklch(0.82 0.11 255); border:1px solid oklch(0.62 0.18 255 / 0.45); }
+    .bar { display:flex; height:30px; border-radius:6px; overflow:hidden; position:relative; }
+    .bar > span { display:flex; align-items:center; padding:0 7px; font-size:10px; font-weight:600; white-space:nowrap; overflow:hidden; color:oklch(0.16 0.01 286); border-right:1px solid oklch(0.141 0.005 285.823); }
+    .barrow { display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:center; }
+    .barrow .bl { font-size:11.5px; color:var(--fg); }
+    .barrow .bl small { display:block; font-size:10px; color:var(--mfg); }
+    .foldline { position:absolute; top:-8px; bottom:-8px; width:0; border-left:2px dashed oklch(0.65 0.2 27); }
+    .foldline em { position:absolute; bottom:-20px; left:4px; font-size:9.5px; font-style:normal; font-weight:700; color:oklch(0.75 0.17 27); white-space:nowrap; }
+    .shot { position:relative; border-radius:8px; overflow:hidden; border:1px solid var(--bd); background:#07090d; }
+    .shot img { display:block; width:100%; height:auto; }
+    .shot .tagl { position:absolute; left:8px; top:8px; display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:6px; background:oklch(0.141 0.005 285.823 / 0.85); font-size:11px; font-weight:600; }
+    .tbl { width:100%; border-collapse:collapse; font-size:11px; }
+    .tbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:5px 8px; border-bottom:1px solid var(--bd); white-space:nowrap; }
+    .tbl td { padding:5px 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); vertical-align:top; line-height:1.4; }
+    .tbl td.n { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; text-align:right; }
+    .tbl td.hot { color:oklch(0.78 0.17 27); font-weight:700; }
+    .tbl td.ok { color:oklch(0.8 0.15 145); }
+    .tbl tr.sub td { color:var(--mfg); }
+    .sect { display:flex; flex-direction:column; gap:10px; }
+    .cols { display:grid; gap:16px; }
+
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1300px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+
+<div style="display:flex; height:860px; flex-shrink:0;">
+<div class="rail"><div class="rh"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div><div class="rsep"></div><div class="ri on"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg></div><div class="ri"><svg class="ico16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></svg></div></div>
+<div style="flex:1; min-width:0; display:flex; flex-direction:column; position:relative;">
+<div class="appbar"><span class="title">Chris' DMX Controller v7</span><span class="conn"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Connected</span><span class="avatar">CL</span></div>
+<div class="viewhdr">
+  <span class="vt">Stage</span>
+  <span class="vp"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>Balcony · desk <small>▾</small></span>
+  <span class="seg"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>Orbit</span><span class="on">Eye</span><span>Plan</span><span>Front</span><span>Side</span></span>
+  <span class="spacer"></span>
+  <span class="vbtn open"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>View <small style="color:var(--mfg)">▾</small></span>
+  <span class="btn out sm"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Edit</span>
+</div>
+<div style="flex:1; min-height:0; display:flex;">
+  <div class="canvas">
+    <img src="plates/balcony-readable-a-housing.jpg" style="object-position:50% 40%">
+    <div class="ov ovcap" style="left:auto; right:12px; top:10px; background:oklch(0.141 0.005 285.823 / 0.7); padding:3px 8px; border-radius:6px"><b>Balcony · desk</b> · look around · drag to turn, scroll to zoom</div>
+    <span class="fps" style="left:12px; bottom:12px"><b>58</b> fps · <b>17.2</b> ms</span>
+    <span class="callout" style="left:150px; bottom:9px">7</span>
+  </div>
+</div>
+<div class="pop" style="right:72px; top:107px">
+  <div class="ptabs"><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>View</span><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg>Performance</span></div>
+  <div class="pbody">
+    <div class="grp"><div class="gh"><span class="lbl">Source</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span><span class="scope wire"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Screens</span></div>
+      <div class="g2"><span class="opt on"><i></i>Output</span><span class="opt "><i></i>Output + Programmer</span><span class="opt "><i></i>Programmer only</span><span class="opt "><i></i>Next GO</span></div>
+      <p class="hint">Final merged DMX — what the desk is transmitting.</p>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Show</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span></div>
+      <div class="tgs"><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Fixtures</span><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Light</span><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Rigging</span><span class="tg off"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Regions</span><span class="tgsep"></span><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Venue</span><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Set</span><span class="tg on"><svg class="ico14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>Seating</span></div>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Haze</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span></div>
+      <div class="sg"><span>Off</span><span class="on">Stage</span><span>Everywhere</span></div>
+      <p class="hint">Upstage of the proscenium, or the stage edge.</p>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Labels</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span></div>
+      <div class="sg"><span class="on">Positions</span><span>All fixtures</span><span>None</span></div>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Work lights</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span><span class="scope wire"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>Screens</span></div>
+      <div class="sg"><span class=""><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>Off</span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>On</span></div>
+      <p class="hint">Lifts the dark, so unlit surfaces show their shape. Pools keep their exposure.</p>
+    </div>
+  </div></div>
+<div class="pop ghost" style="right:420px; top:107px">
+  <div class="ptabs"><span><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>View</span><span class="on"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg>Performance</span></div>
+  <div class="pbody">
+    <div class="grp"><div class="gh"><span class="lbl">This window's canvas</span><span class="scope"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>this window</span></div>
+      <div class="livebox">
+        <span class="big">58 <small>fps</small> · 17.2 <small>ms a frame</small></span>
+        <div class="row"><span>Lights <b>64</b> on surfaces of <b>71</b> lit</span><span class="spacer"></span><span>Haze <b>full</b></span></div>
+        <div class="row" style="border-top:1px solid var(--bd); padding-top:6px"><span style="color:var(--fg); flex:1">Frame rate on the canvas</span><span class="sw2 on"></span></div>
+      </div>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Light budget</span><span class="scope mach"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>this machine</span></div>
+      <div class="sg"><span>32</span><span class="on">64</span><span>128</span><span>256</span></div>
+      <p class="hint">The brightest this many light the surfaces. The rest still draw their beams.</p>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Gobos on surfaces</span><span class="scope mach"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>this machine</span></div>
+      <div class="sg"><span class="on">Every gobo light</span><span>Selected heads</span></div>
+    </div>
+    <div class="grp"><div class="gh"><span class="lbl">Box shadows</span><span class="scope mach"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>this machine</span></div>
+      <div class="sg"><span class="on">64 a light</span><span>16 a light</span><span>Off</span></div>
+    </div>
+    <div class="grp" style="border-top:1px solid var(--bd); padding-top:8px">
+      <div style="display:flex; align-items:center; gap:8px"><span class="btn out sm"><svg class="ico12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Test recovery</span><span class="hint" style="flex:1">Drops the 3D context the way Safari does under memory pressure.</span></div>
+    </div>
+  </div></div>
+<div class="ov cap" style="right:420px; top:80px; width:320px; white-space:nowrap; color:oklch(0.85 0.12 80)">Its other tab, drawn beside it for the board</div>
+<span class="callout" style="right:150px; top:62px">1</span>
+<span class="callout" style="right:350px; top:116px">2</span>
+<span class="callout" style="right:52px; top:162px">3</span>
+<span class="callout" style="right:52px; top:272px">4</span>
+<span class="callout" style="right:52px; top:508px">5</span>
+<span class="callout" style="right:750px; top:160px">6</span>
+</div>
+</div>
+<div style="flex:1; padding:18px 24px 0; display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--bd)">
+  <div style="display:flex; align-items:baseline; gap:12px"><span class="h2">Height, to scale</span><span class="cap">Today measured on the desk (Chromium, 1440 × 900, project 15): 27 rows in a <span class="mono">w-64</span> dropdown, <b>1,535 px</b> of content, <b>801 px</b> on screen. The two tabs as drawn above, measured in the board — both clear the fold with room for a 768 px screen.</span></div>
+  <div class="barrow" style="margin-bottom:14px"><span class="bl">Today<small>one dropdown</small></span><div style="position:relative"><div class="bar" style="width:952px"><span style="width:205px; background:#8fb3ff">Source</span><span style="width:167px; background:#9ad6b0">Show</span><span style="width:128px; background:#b9a7f0">Haze</span><span style="width:85px; background:#e6c27a">Labels</span><span style="width:126px; background:#f0a58a">Light budget</span><span style="width:87px; background:#f0a58a">Gobos</span><span style="width:105px; background:#f0a58a">Box shadows</span><span style="width:48px; background:#c9c9d0">Test recovery</span></div><span class="foldline" style="left:497px"><em>the fold at 1440 × 900 — Labels and everything under it scroll</em></span></div></div>
+  <div class="barrow"><span class="bl">View tab<small>this window</small></span><div style="display:flex;align-items:center"><div class="bar" style="width:311px"><span style="width:99px; background:#8fb3ff">Tabs + Source</span><span style="width:57px; background:#9ad6b0">Show</span><span style="width:52px; background:#b9a7f0">Haze</span><span style="width:38px; background:#e6c27a">Labels</span><span style="width:65px; background:#e3e08c">Work lights</span></div><span class="cap" style="margin-left:10px">502 px</span></div></div>
+  <div class="barrow"><span class="bl">Performance tab<small>machine + this canvas</small></span><div style="display:flex;align-items:center"><div class="bar" style="width:283px"><span style="width:101px; background:#7fd6d0">Tabs + readout</span><span style="width:61px; background:#f0a58a">Light budget</span><span style="width:38px; background:#f0a58a">Gobos</span><span style="width:38px; background:#f0a58a">Box shadows</span><span style="width:44px; background:#c9c9d0">Test recovery</span></div><span class="cap" style="margin-left:10px">457 px</span></div></div>
+</div>
+<div class="legend"><div><span class="n">1</span><span><b>One trigger, two tabs.</b> The View button opens a 320 px popover rather than a menu: segments and toggles show every value at once, where radio rows spent a line each. It names a source that is not Output — <span class="vbtn" style="height:20px;font-size:10px;padding:0 6px">View <span class="src">Next GO</span></span> — because that is the one setting that makes the picture not the output.</span></div><div><span class="n">2</span><span><b>View is what this window sees; Performance is what it costs.</b> The split is by purpose. Scope is written on every group — <span class="scope">this window</span> or <span class="scope mach">this machine</span> — rather than implied by the tab.</span></div><div><span class="n">3</span><span><b>Source as a 2 × 2.</b> Only the chosen source's hint is shown, and Next GO's live status under it. The hint stays: Output + Programmer reads as broken without it.</span></div><div><span class="n">4</span><span><b>Show is seven toggles in two rows</b>: the rig's four, then the scene's three. They move from one value per browser to per window, so the hall screen can drop the rigging without the desk losing it. <i>Beam cones</i> becomes <b>Light</b>: since light lands through the surface shader, off draws no beam and no pool (Model board).</span></div><div><span class="n">5</span><span><b>Work lights: Off | On.</b> The stage-light plan's <i>Readable</i>, named for what it imitates. New, per window, and announced beside the source so a Screens row can set it. See the Work lights board.</span></div><div><span class="n">6</span><span><b>Performance</b> leads with what the canvas is doing — frame rate, the lights the budget packs, the haze tier — so the three machine settings are chosen against a number. Test recovery moves here.</span></div><div><span class="n">7</span><span><b>The readout</b>, off by default, bottom-left: frames per second and ms a frame while frames are drawn, <i>idle</i> otherwise. Click opens Performance. See the Readout board.</span></div></div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>

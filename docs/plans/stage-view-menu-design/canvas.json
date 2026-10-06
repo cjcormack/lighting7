@@ -1,0 +1,34 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Menu.dc.html": {
+      "h": 1300,
+      "title": "The View popover · View and Performance, and the height to scale",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "WorkLights.dc.html": {
+      "h": 1500,
+      "title": "Work lights off and on, from real frames",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Readout.dc.html": {
+      "h": 1240,
+      "title": "The frame-rate readout · states, placement, rules",
+      "w": 1440,
+      "x": 0,
+      "y": 1380
+    },
+    "Model.dc.html": {
+      "h": 1180,
+      "title": "The model · stored, wire, code, sessions",
+      "w": 1440,
+      "x": 1520,
+      "y": 1580
+    }
+  }
+}
