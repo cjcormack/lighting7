@@ -10,6 +10,8 @@ import {
   type SurfaceUniforms,
 } from './surfaceShader'
 import type { PartFinish } from './sceneParts'
+import { useStageInvalidate } from '../stageInvalidate'
+import { applyWorkLights, DEFAULT_WORK_LIGHTS, WORK_LIGHT_LEVELS, type WorkLightLevels, type WorkLights } from './workLights'
 
 /**
  * One canvas's surface lighting: the light texture, the uniforms every receiver shares, the float
@@ -27,13 +29,35 @@ export interface SurfaceLighting {
 }
 
 const SurfaceLightingContext = createContext<SurfaceLighting | null>(null)
+const WorkLightsContext = createContext<WorkLightLevels>(WORK_LIGHT_LEVELS[DEFAULT_WORK_LIGHTS])
 
-export function SurfaceLightingProvider({ children }: { children: React.ReactNode }) {
+export function SurfaceLightingProvider({
+  workLights = DEFAULT_WORK_LIGHTS,
+  children,
+}: {
+  /**
+   * This canvas's work lights (`workLights.ts`): the window's for the Stage view and the Positions
+   * plan, the request's for a `render_view` capture.
+   */
+  workLights?: WorkLights
+  children: React.ReactNode
+}) {
+  const levels = WORK_LIGHT_LEVELS[workLights]
   const [lighting] = useState<SurfaceLighting>(() => {
     const { texture, data } = makeLightTexture()
     const occlusion = makeOcclusionTextures()
-    return { uniforms: makeSurfaceUniforms(texture, occlusion), data, occlusion }
+    const uniforms = makeSurfaceUniforms(texture, occlusion)
+    // Written before the first frame, so a canvas mounted with work lights on never draws one off.
+    applyWorkLights(uniforms, levels)
+    return { uniforms, data, occlusion }
   })
+  // A switch is a uniform write, not an R3F prop: nothing recompiles, and the demand canvas has to
+  // be asked for the frame that shows it.
+  const invalidate = useStageInvalidate()
+  useEffect(() => {
+    applyWorkLights(lighting.uniforms, levels)
+    invalidate()
+  }, [lighting, levels, invalidate])
   useEffect(
     () => () => {
       lighting.uniforms.uLights.value.dispose()
@@ -42,7 +66,16 @@ export function SurfaceLightingProvider({ children }: { children: React.ReactNod
     },
     [lighting],
   )
-  return <SurfaceLightingContext.Provider value={lighting}>{children}</SurfaceLightingContext.Provider>
+  return (
+    <SurfaceLightingContext.Provider value={lighting}>
+      <WorkLightsContext.Provider value={levels}>{children}</WorkLightsContext.Provider>
+    </SurfaceLightingContext.Provider>
+  )
+}
+
+/** This canvas's work-light levels: what the housings' own fill follows (`bodies/StageBodies.tsx`). */
+export function useWorkLightLevels(): WorkLightLevels {
+  return useContext(WorkLightsContext)
 }
 
 /** This canvas's surface lighting. Throws outside a `SurfaceLightingProvider`: a surface with no lights is a bug. */

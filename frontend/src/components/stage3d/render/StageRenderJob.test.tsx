@@ -23,6 +23,7 @@ import type { StageCaptureHandle } from '../CaptureCanvas'
 import type { StageRenderRequest } from '../../../api/stageRenderApi'
 import { DEFAULT_SCENE_LAYERS, FRAME_RATE_KEY } from '../scene/sceneView'
 import { STAGE_LANDED_KEY, STAGE_VIEWPOINT_KEY } from '../../../lib/stageViewpoint'
+import { WORK_LIGHTS_KEY } from '../scene/workLights'
 import StageRenderJob, { type StageRenderOutcome } from './StageRenderJob'
 
 type Stage3DProps = ComponentProps<typeof Stage3D>
@@ -70,6 +71,7 @@ const request = (over: Partial<StageRenderRequest> = {}): StageRenderRequest => 
   width: 640,
   height: 360,
   source: 'output',
+  workLights: 'off',
   timeoutMs: 30_000,
   ...over,
 })
@@ -228,5 +230,21 @@ describe('StageRenderJob', () => {
     await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
     expect(sessionStorage.getItem(STAGE_VIEWPOINT_KEY)).toBe(JSON.stringify('front'))
     expect(sessionStorage.getItem(STAGE_LANDED_KEY)).toBeNull()
+  })
+
+  it('draws the request’s work lights, never this window’s, and writes neither', async () => {
+    // This window plots with work lights on; a capture means the room as lit unless asked.
+    sessionStorage.setItem(WORK_LIGHTS_KEY, JSON.stringify('on'))
+    const off = mount(request())
+    await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
+    expect(last().workLights).toBe('off')
+    off.unmount()
+    drawn.length = 0
+
+    sessionStorage.setItem(WORK_LIGHTS_KEY, JSON.stringify('off'))
+    mount(request({ requestId: 'r-2', workLights: 'on' }))
+    await waitFor(() => expect(drawn.length).toBeGreaterThan(0))
+    expect(last().workLights).toBe('on')
+    expect(sessionStorage.getItem(WORK_LIGHTS_KEY)).toBe(JSON.stringify('off'))
   })
 })

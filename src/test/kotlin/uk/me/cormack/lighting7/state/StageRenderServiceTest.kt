@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.state
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import uk.me.cormack.lighting7.plugins.toOutMessage
 import uk.me.cormack.lighting7.state.StageRenderService.Claim
 import uk.me.cormack.lighting7.state.StageRenderService.Outcome
 import uk.me.cormack.lighting7.state.StageRenderService.RenderSocket
@@ -81,6 +82,7 @@ class StageRenderServiceTest {
         assertTrue(queues.getValue("b").tryReceive().isFailure, "the other socket is sent nothing")
         assertEquals(listOf("front", "nextGo"), listOf(sent.viewpoint, sent.source))
         assertEquals(800 to 450, sent.width to sent.height)
+        assertEquals(false, sent.workLights, "a capture means the room as lit unless asked")
 
         assertEquals(Claim.OURS, service.claim(sent.requestId, sent.token, "session-a"))
         assertEquals(Claim.OURS, service.deliver(sent.requestId, sent.token, "session-a", png))
@@ -189,5 +191,17 @@ class StageRenderServiceTest {
         attach("a")
         service.detach("a")
         assertTrue(queues.getValue("a").tryReceive().isClosed)
+    }
+
+    @Test
+    fun `work lights ride the request and its frame only when asked`() = runBlocking<Unit> {
+        window("a")
+        attach("a")
+        val render = async { service.render(15, "plan", 320, 180, "output", workLights = true) }
+        val sent = next()
+        assertEquals(true, sent.workLights)
+        assertEquals(true, sent.toOutMessage().workLights)
+        assertEquals(Claim.OURS, service.deliver(sent.requestId, sent.token, "session-a", png))
+        assertIs<Outcome.Rendered>(render.await())
     }
 }

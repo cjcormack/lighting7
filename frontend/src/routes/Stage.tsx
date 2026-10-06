@@ -85,6 +85,7 @@ import {
   useSceneLayers,
 } from '../components/stage3d/scene/sceneView'
 import { createStageStats } from '../components/stage3d/scene/stageStats'
+import { setWorkLights, useWorkLights } from '../components/stage3d/scene/workLights'
 import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
 import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
@@ -275,6 +276,8 @@ export function Stage() {
   const goboSurfaces = useGoboSurfaces()
   // How many boxes a light may be shadowed by (stage-light plan session 3), per browser too.
   const boxShadows = useBoxShadows()
+  // Work lights (stage-view menu plan D8): this window's, announced beside the source.
+  const workLights = useWorkLights()
   // What the canvas is doing, for the View popover's Performance tab. Never read here: a route that
   // re-rendered on it would hand the canvas new props and ask for the frames it measures.
   const [stageStats] = useState(createStageStats)
@@ -371,8 +374,8 @@ export function Stage() {
   const sectionEditing = editingActive && isOrtho
   const projection = isOrthoCamera(camera) ? STAGE_PROJECTIONS[camera] : STAGE_PROJECTIONS.plan
 
-  // `?viewpoint=` and `?source=` — a Screens row's *Copy link* carries both — applied once on arrival
-  // and stripped, so a reload keeps whatever the window has moved to since.
+  // `?viewpoint=`, `?source=` and `?workLights=` — a Screens row's *Copy link* carries all three —
+  // applied once on arrival and stripped, so a reload keeps whatever the window has moved to since.
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
     const next = consumeLaunchStageOptions(searchParams)
@@ -1253,6 +1256,8 @@ export function Stage() {
             setGoboSurfaces={setGoboSurfaces}
             boxShadows={boxShadows}
             setBoxShadows={setBoxShadows}
+            workLights={workLights}
+            setWorkLights={setWorkLights}
             stats={stageStats}
             frameRateReadout={frameRateReadout}
             setFrameRateReadout={setFrameRateReadout}
@@ -1297,6 +1302,7 @@ export function Stage() {
                 lightBudget={lightBudget}
                 goboSurfaces={goboSurfaces}
                 boxShadows={boxShadows}
+                workLights={workLights}
                 seatPicking={seatPicking}
                 framingRef={framingRef}
                 editMode={editingActive}

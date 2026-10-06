@@ -69,6 +69,10 @@ describe('the announce', () => {
       .toEqual({ viewpoint: 'front', source: 'nextGo' })
     const frame = announceFrame({ ...ME, view: '/projects/1/stage', viewOptions: options })
     expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
+    // The work lights ride the same map too (stage-view menu plan D8): the frame's keys do not move.
+    const lit = announcedViewOptions(windowViewOf('/projects/1/stage'), busk, 'on', { viewpoint: 'front', source: 'output', workLights: 'on' })
+    expect(lit).toEqual({ viewpoint: 'front', source: 'output', workLights: 'on' })
+    expect(Object.keys(announceFrame({ ...ME, view: '/projects/1/stage', viewOptions: lit }))).toEqual(Object.keys(frame))
     // …and the viewpoint rides nowhere else.
     expect(announcedViewOptions(windowViewOf('/projects/1/busk'), busk, 'off', { viewpoint: 'front' })).toEqual({ ...busk, immersive: 'off' })
     expect(announcedViewOptions(windowViewOf('/projects/1/looks'), busk, 'off', { viewpoint: 'front' })).toBeUndefined()

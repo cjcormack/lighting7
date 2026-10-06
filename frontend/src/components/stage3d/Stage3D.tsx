@@ -20,6 +20,7 @@ import { DEFAULT_VIEW_FLAGS, type StageViewFlags } from './useStageView'
 import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
+import { DEFAULT_WORK_LIGHTS, type WorkLights } from './scene/workLights'
 import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { StageConfetti } from './StageConfetti'
@@ -210,6 +211,11 @@ interface Stage3DProps {
   goboSurfaces?: GoboSurfaces
   /** How many boxes a light may be shadowed by (`scene/sceneView.ts`). */
   boxShadows?: BoxShadows
+  /**
+   * Lift the dark (`scene/workLights.ts`): the window's for the Stage view and the Positions plan,
+   * the request's for a capture. Off by default — the room as lit.
+   */
+  workLights?: WorkLights
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
   /** Filled while the canvas is mounted; see [StageFraming]. */
@@ -260,6 +266,7 @@ export function Stage3D({
   lightBudget = DEFAULT_LIGHT_BUDGET,
   goboSurfaces = DEFAULT_GOBO_SURFACES,
   boxShadows = DEFAULT_BOX_SHADOWS,
+  workLights = DEFAULT_WORK_LIGHTS,
   seatPicking = null,
   framingRef,
   capture = null,
@@ -667,7 +674,7 @@ export function Stage3D({
       {liveStats != null && <FrameRateProbe stats={liveStats} />}
       <StageInvalidateProvider>
       <StageLabelContext.Provider value={labelStore}>
-      <SurfaceLightingProvider>
+      <SurfaceLightingProvider workLights={workLights}>
       <ambientLight intensity={0.5} />
       {/* A modelled room is the floor the operator reads by; the grid floats at deck height over
           the stalls. It stays while editing, where it is a measure. */}

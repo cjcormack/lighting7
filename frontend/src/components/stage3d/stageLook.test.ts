@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { Color, SRGBColorSpace } from 'three'
 import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
-import { litByFill, LUMA, makeLightTexture, makeSurfaceMaterial, makeSurfaceUniforms, ROLL_OFF_GLSL, rollOff, setPleatShift, SURFACE_AMBIENT, SURFACE_LIGHT_GAIN } from './scene/surfaceShader'
+import { LIFT_ALBEDO_FLOOR, litByFill, LUMA, makeLightTexture, makeSurfaceMaterial, makeSurfaceUniforms, ROLL_OFF_GLSL, rollOff, setPleatShift, SURFACE_AMBIENT, SURFACE_LIGHT_GAIN } from './scene/surfaceShader'
+import { WORK_LIGHT_LEVELS } from './scene/workLights'
 import { LAMBERT_LOBES } from './scene/lobes'
 import { pleatShape } from './scene/pleat'
 import { STAGE_RENDER_PRIORITY } from './StageRender'
@@ -70,8 +71,13 @@ describe('the surfaces', () => {
   it('rolls the finish, the ambient, the fill and every light off together, and encodes every exit', () => {
     // The finish takes its own share of every light: no reflectance floor (stage-light plan D6). The
     // sheen and the specular (session 4) are rolled off with it, beside the albedo's light.
-    expect(fragment).toContain('vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + gloss) * uLightGain);')
+    expect(fragment).toContain('vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss) * uLightGain);')
     expect(fragment).not.toContain('uReflectFloor')
+    // Work lights' lift (stage-view menu D6, D7): along the fill's direction, off at least the floor
+    // albedo — the lift's share only, never a light's.
+    expect(fragment).toContain('float fill = uFill * fillDirection;')
+    expect(fragment).toContain('vec3 lift = max(albedo, vec3(uLiftAlbedoFloor)) * (uLift * fillDirection * ao);')
+    expect(fragment).toContain('acc += irradiance * diffuse;')
     expect(fragment).toContain(ROLL_OFF_GLSL)
     const exits = [...fragment.matchAll(/gl_FragColor = (.*);/g)].map((m) => m[1])
     expect(exits.length).toBeGreaterThan(0)
@@ -153,6 +159,36 @@ describe('the exposure (stage-light plan D6)', () => {
     const housing = new Color('#2a2d33')
     const k = (SURFACE_AMBIENT + 0.5 * (0.3 + 0.35)) * SURFACE_LIGHT_GAIN
     expect(litByFill(housing, 0.5).equals(rollOff(housing.r * k, housing.g * k, housing.b * k))).toBe(true)
+  })
+
+  it('draws it unchanged with work lights off — the default is the off row, exactly', () => {
+    const housing = new Color('#2a2d33')
+    expect(litByFill(housing, 0.5, 0.5, WORK_LIGHT_LEVELS.off).equals(litByFill(housing, 0.5))).toBe(true)
+  })
+
+  it('lifts it with work lights on: the room’s ambient, and a lift off at least the floor albedo', () => {
+    const housing = new Color('#2a2d33') // linear ≈ 0.023 — under the 4 % floor on every channel
+    const on = WORK_LIGHT_LEVELS.on
+    const direction = 0.3 + 0.35
+    const k = (on.ambient + 0.5 * direction) * SURFACE_LIGHT_GAIN
+    const lift = on.lift * direction * SURFACE_LIGHT_GAIN
+    const expected = rollOff(
+      housing.r * k + Math.max(housing.r, LIFT_ALBEDO_FLOOR) * lift,
+      housing.g * k + Math.max(housing.g, LIFT_ALBEDO_FLOOR) * lift,
+      housing.b * k + Math.max(housing.b, LIFT_ALBEDO_FLOOR) * lift,
+    )
+    expect(litByFill(housing, 0.5, 0.5, on).equals(expected)).toBe(true)
+    expect(luminance(litByFill(housing, 0.5, 0.5, on))).toBeGreaterThan(luminance(litByFill(housing, 0.5)))
+  })
+
+  it('gives black serge a dark grey under work lights, where its own albedo would give it nothing', () => {
+    const serge = new Color('#111111') // 0.6 % reflectance
+    const on = WORK_LIGHT_LEVELS.on
+    const lifted = litByFill(serge, 0, 1, on)
+    const ownAlbedo = rollOff(...([serge.r, serge.g, serge.b].map((a) => a * (on.ambient + on.lift) * SURFACE_LIGHT_GAIN) as [number, number, number]))
+    expect(luminance(lifted)).toBeGreaterThan(luminance(ownAlbedo) * 3)
+    // Still dark: under 2 % linear, a deep grey rather than a lit cloth.
+    expect(luminance(lifted)).toBeLessThan(0.02)
   })
 })
 

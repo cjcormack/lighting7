@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -33,6 +34,9 @@ import kotlin.math.roundToInt
  * window already in the Stage view's own vocabulary — a camera, a saved view's uuid, or
  * `seat:<uuid>:<id>` — so a name the model got wrong is answered at once, with the names it could
  * have used, rather than after a window has loaded the scene to find nothing there.
+ *
+ * `workLights` (stage-view menu plan D9) lifts the dark for this capture alone: off by default, so
+ * a capture means the room as lit, and never read from or written to the drawing window's own.
  */
 internal class RenderViewTool(private val state: State) {
 
@@ -60,6 +64,11 @@ internal class RenderViewTool(private val state: State) {
             else -> (s as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it in RENDER_SOURCES }
                 ?: run { problems += "source must be one of ${RENDER_SOURCES.joinToString()}"; RENDER_SOURCES.first() }
         }
+        val workLights = when (val l = input["workLights"]) {
+            null, JsonNull -> false
+            else -> (l as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+                ?: run { problems += "workLights must be true or false"; false }
+        }
         if (input["viewpoint"] == null || input["viewpoint"] is JsonNull) problems += "viewpoint is required"
         if (problems.isNotEmpty()) return refused(CODE_INVALID, "The request was not rendered: ${problems.joinToString("; ")}")
 
@@ -75,7 +84,7 @@ internal class RenderViewTool(private val state: State) {
             is ViewpointResolution.Resolved -> resolution
         }
 
-        return when (val outcome = state.stageRender.render(project.id.value, viewpoint.ref, w, h, source)) {
+        return when (val outcome = state.stageRender.render(project.id.value, viewpoint.ref, w, h, source, workLights)) {
             is StageRenderService.Outcome.Rendered -> ToolExecutionResult(
                 success = true,
                 description = "Rendered ${viewpoint.label}",
@@ -84,6 +93,7 @@ internal class RenderViewTool(private val state: State) {
                     put("width", w)
                     put("height", h)
                     put("source", source)
+                    put("workLights", workLights)
                     put("renderedBy", outcome.window.name)
                 }.toString(),
                 images = listOf(ToolImage("image/png", Base64.getEncoder().encodeToString(outcome.png))),
@@ -137,7 +147,7 @@ internal class RenderViewTool(private val state: State) {
     )
 
     companion object {
-        val FIELDS = listOf("viewpoint", "width", "height", "source")
+        val FIELDS = listOf("viewpoint", "width", "height", "source", "workLights")
         private val SIDES = RENDER_MIN_SIDE..RENDER_MAX_SIDE
         const val CODE_INVALID = "RENDER_INVALID_REQUEST"
         const val CODE_NO_WINDOW = "RENDER_NO_WINDOW"

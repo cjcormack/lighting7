@@ -319,6 +319,15 @@ describe('ScreensSheet', () => {
       expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { viewpoint: ROW_F } }])
     })
 
+    it('sets a Stage row’s work lights from its Work lights · Off | On segment (stage-view menu plan D8)', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'plan', source: 'output', workLights: 'off' } })
+      render(<ScreensSheet />)
+      const work = within(rowFor('Hall')).getByRole('radiogroup', { name: 'Work lights on Hall' })
+      expect(within(work).getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true')
+      fireEvent.click(within(work).getByRole('radio', { name: 'On' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/stage', options: { workLights: 'on' } }])
+    })
+
     it('reads a picker option as text where the shell has no control for it', () => {
       registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/stage', viewOptions: { viewpoint: 'side' } })
       render(<ScreensSheet />)

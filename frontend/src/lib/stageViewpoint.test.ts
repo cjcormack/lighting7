@@ -20,6 +20,12 @@ import {
 } from './stageViewpoint'
 import { resetVisSourceStore, visSource } from '../hooks/useVisSource'
 import {
+  resetWorkLightsStore,
+  setWorkLights,
+  WORK_LIGHTS_KEY,
+  workLights,
+} from '../components/stage3d/scene/workLights'
+import {
   EYE_POSE_KEY,
   noteOrbitPose,
   readEyePose,
@@ -34,6 +40,7 @@ afterEach(() => {
   window.localStorage.clear()
   resetStageViewpointStore()
   resetVisSourceStore()
+  resetWorkLightsStore()
   resetLiveOrbitPose()
 })
 
@@ -73,8 +80,8 @@ describe('the Stage viewpoint (stage-view plan session 1)', () => {
     expect(consumeLaunchStageOptions(new URLSearchParams('cue=4'))).toBeNull()
   })
 
-  it('announces the viewpoint and the source, each under its own key', () => {
-    expect(stageViewOptions('eye', 'nextGo')).toEqual({ viewpoint: 'eye', source: 'nextGo' })
+  it('announces the viewpoint, the source and the work lights, each under its own key', () => {
+    expect(stageViewOptions('eye', 'nextGo', 'on')).toEqual({ viewpoint: 'eye', source: 'nextGo', workLights: 'on' })
   })
 
   it('forgets the eye’s pose when moving into Eye from another camera, and keeps it on a remount already on Eye', () => {
@@ -169,7 +176,7 @@ describe('a seat picked and not saved (stage-view plan session 3)', () => {
   it('rides a windows.viewOptions frame and ?viewpoint= like any viewpoint — no new key', () => {
     const ref = seatViewpointRef(STALLS, 'A1')
     expect(applyStageViewOptions({ viewpoint: ref })).toEqual({ viewpoint: ref })
-    expect(stageOptionsKeys(stageViewOptions(ref, 'output'))).toEqual(['source', 'viewpoint'])
+    expect(stageOptionsKeys(stageViewOptions(ref, 'output', 'off'))).toEqual(['source', 'viewpoint', 'workLights'])
   })
 })
 
@@ -188,6 +195,50 @@ describe('the Stage source per window (stage-view plan session 3)', () => {
     expect(next?.toString()).toBe('cue=4')
     expect(consumeLaunchStageOptions(new URLSearchParams('source=cueOnly'))?.toString()).toBe('')
     expect(visSource()).toBe('programmer')
+  })
+})
+
+describe('the Stage work lights per window (stage-view menu plan D8)', () => {
+  it('are off until switched, and per tab: sessionStorage, never localStorage', () => {
+    expect(workLights()).toBe('off')
+    setWorkLights('on')
+    expect(window.sessionStorage.getItem(WORK_LIGHTS_KEY)).toBe('"on"')
+    expect(window.localStorage.getItem(WORK_LIGHTS_KEY)).toBeNull()
+  })
+
+  it('round-trip through viewOptions: announced, then applied by another window’s frame', () => {
+    setWorkLights('on')
+    const announced = stageViewOptions('plan', 'output', workLights())
+    resetWorkLightsStore()
+    window.sessionStorage.clear()
+    expect(workLights()).toBe('off')
+    expect(applyStageViewOptions(announced)).toEqual({ viewpoint: 'plan', source: 'output', workLights: 'on' })
+    expect(workLights()).toBe('on')
+  })
+
+  it('ignore a value outside off | on, in a frame and on arrival, rather than reading it as off', () => {
+    setWorkLights('on')
+    expect(applyStageViewOptions({ workLights: 'bright' })).toEqual({})
+    expect(applyStageViewOptions({ workLights: 'true' })).toEqual({})
+    expect(workLights()).toBe('on')
+    expect(consumeLaunchStageOptions(new URLSearchParams('workLights=bright&cue=4'))?.toString()).toBe('cue=4')
+    expect(workLights()).toBe('on')
+  })
+
+  it('are taken from ?workLights= on arrival and stripped with the viewpoint and the source', () => {
+    const next = consumeLaunchStageOptions(new URLSearchParams('viewpoint=plan&source=nextGo&workLights=on&cue=4'))
+    expect(workLights()).toBe('on')
+    expect(stageViewpoint()).toBe('plan')
+    expect(visSource()).toBe('nextGo')
+    expect(next?.toString()).toBe('cue=4')
+    // ?workLights= alone is an arrival too.
+    expect(consumeLaunchStageOptions(new URLSearchParams('workLights=off'))?.toString()).toBe('')
+    expect(workLights()).toBe('off')
+  })
+
+  it('read a stored value they do not know as off', () => {
+    window.sessionStorage.setItem(WORK_LIGHTS_KEY, '"bright"')
+    expect(workLights()).toBe('off')
   })
 })
 

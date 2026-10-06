@@ -235,7 +235,7 @@ the region, wall and floor cookie instances are gone. The haze governor gives up
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
 `stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/stage-view-menu-design/`). **View** is
-this window's: Source, Show, Haze, Labels. **Performance** is what it costs: a live block (fps and ms
+this window's: Source, Show, Haze, Labels, Work lights. **Performance** is what it costs: a live block (fps and ms
 a frame, the lights packed of lit, the haze tier), then the machine's light budget, *Gobos on
 surfaces* and *Box shadows* (their `localStorage` keys unchanged), then Test recovery. Every group
 says whose it is, *this window* or *this machine*. The button names a source that is not Output
@@ -250,6 +250,22 @@ off by default and per window (`sessionStorage stage.frameRate`), and a click op
 **never asks for a frame**: the probe writes from inside the frame loop at most four times a second,
 the chip paints its own DOM node, and a timer flips it to *idle*. It is hidden while the context is
 lost and absent from a `render_view` capture. See the stage-vis doc's §"Frame-rate readout".
+
+**Work lights · Off | On lift the dark** (stage-view menu plan D6–D9, `stage3d/scene/workLights.ts`;
+the stage-light plan's *Realistic / Readable*): the room's ambient rises and every surface
+material's directional fill gains a lift, reflected off at least a 4 % floor albedo so black serge
+shows its folds, while every light keeps the finish's own albedo — pools stay at their exposure.
+The housings' own fill rises with the room so the rig still reads on the Plan, and the billboards
+follow through `litByFill`. All **uniforms**: `SurfaceLightingProvider` takes the canvas's
+`workLights` and writes the shared `uAmbient` / `uLift`, `StageBodies` the housing's `uFill`, and
+both `invalidate`, since a uniform write is not an R3F prop — no define, so nothing recompiles.
+They are **per window and announced**: `sessionStorage stage.workLights` (default off), riding
+`viewOptions` as `workLights` beside `source` (`applyStageViewOptions`, `stageViewOptions`,
+`consumeLaunchStageOptions`, a value outside `off | on` ignored), the Screens row's *Work lights ·
+Off | On* segment (`STAGE_WORK_LIGHTS_OPTION`), and `?workLights=` on *Copy link*. Every canvas in
+the window follows them — the Stage view and the Positions plan. `workLights.ts` is **free of
+three.js** (the off row restates `SURFACE_AMBIENT` and `HOUSING_FILL`, pinned by its test), because
+`lib/stageViewpoint.ts` and `lib/windowViews.ts` import it on the app shell's path.
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
@@ -276,11 +292,12 @@ session 4). `StageRenderHost` (`components/stageRender/`, mounted once in `Layou
 loaded `stage3d/render/StageRenderJob.tsx`, which draws **the Stage view's own `Stage3D`** with a
 `capture` prop: a detached canvas at the asked size (`CaptureCanvas.tsx` — `createRoot`, `dpr: 1`,
 `frameloop: 'never'`, driven by `advance`, so a hidden tab renders too), the viewpoint through
-`resolveViewpoint` (`savedViewpoints.ts`), the default layers, no labels, and the request's vis
+`resolveViewpoint` (`savedViewpoints.ts`), the default layers, no labels, the request's work
+lights (off unless `render_view` asked — the window's own are never read), and the request's vis
 source through the same `StageChannelSourceProvider`, which now takes a `source` and reports
 `onSettled`. The rig's `oneShot` lands it and records nothing, so the window's viewpoint, camera
-poses, landed marker, layers and source never move, and nothing appears on screen. The PNG goes
-back over REST with the request's token; both answers are silent endpoints. The capture root
+poses, landed marker, layers, source and work lights never move, and nothing appears on screen.
+The PNG goes back over REST with the request's token; both answers are silent endpoints. The capture root
 bridges only `ChannelSourceContext` — a scene component that starts reading another context from
 outside the canvas must be bridged there too. See `docs/stage-vis-engineering.md` §"Rendering for
 `render_view`".
@@ -4255,17 +4272,19 @@ Programmer, Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `op
 (`IMMERSIVE_OPTION`) and Busk carries it fourth — because the desk's Json is bare and a sixth
 top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
-the libraries, carrying two options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
-Plan | Front | Side*) and, since session 3, `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
-GO*, an `enum` segment) — and **no immersive** — it is a window view, not a live view, so it has no
-`ShowHeader` to leave standing. `announcedViewOptions` takes the Stage options (`stageViewOptions`:
-the viewpoint and the source) as its fourth argument and sends them only under Stage;
-`applyViewOptionsFor` applies `immersive` only on a view whose descriptor carries it and the two
-only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`, which ignores a value outside each
-vocabulary — a camera, a saved view's uuid since session 2 or an unsaved seat since session 3; one
-of the four vis sources). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
-the same list, and `windowSetupUrl` carries `viewpoint=` and `source=`, which the Stage route applies
-on arrival and strips (`consumeLaunchStageOptions`). **Since
+the libraries, carrying three options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
+Plan | Front | Side*), since session 3 `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
+GO*, an `enum` segment) and since the stage-view menu plan's session 2 `workLights`
+(`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*) — and **no immersive** — it is a window view,
+not a live view, so it has no `ShowHeader` to leave standing. `announcedViewOptions` takes the Stage
+options (`stageViewOptions`: the viewpoint, the source and the work lights) as its fourth argument
+and sends them only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose
+descriptor carries it and the three only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
+which ignores a value outside each vocabulary — a camera, a saved view's uuid since session 2 or an
+unsaved seat since session 3; one of the four vis sources; `off | on`). ⌘K gains *Show Stage on
+<window>* and *Open Stage on another display* from the same list, and `windowSetupUrl` carries
+`viewpoint=`, `source=` and `workLights=`, which the Stage route applies on arrival and strips
+(`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
 `StageViewpointRowPicker` for `viewpoint`), so the sheet draws the cameras, saved views and seats

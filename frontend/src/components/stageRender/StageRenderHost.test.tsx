@@ -59,6 +59,7 @@ const request = (over: Partial<StageRenderRequest> = {}): StageRenderRequest => 
   width: 640,
   height: 360,
   source: 'output',
+  workLights: 'off',
   timeoutMs: 30_000,
   ...over,
 })

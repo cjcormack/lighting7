@@ -23,6 +23,7 @@ import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL,
 import { COLLIDER_TEXELS, LIST_TEXELS, makeColliderSet, OCCLUSION_GLSL, type ColliderSet } from './occlusion'
 import { PLEAT_GLSL, pleatUniformValues, type PleatShape } from './pleat'
 import type { FinishPattern, PartFinish } from './sceneParts'
+import type { WorkLightLevels } from './workLights'
 
 /**
  * The **light-array receiver** (stage-view plan session 3): one shader for every surface a beam
@@ -67,6 +68,13 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * rig is bright rather than a flat blown-out plate, a white pool on a red drape is red, and a colour
  * too bright to keep runs towards white rather than towards another hue. What makes black serge show
  * a spot is the exposure, not a reflectance floor: the finishes keep their own range.
+ *
+ * **Work lights** (stage-view menu plan D6, D7; `workLights.ts`) add a lift to the material's
+ * directional fill, through the fill's own direction term so faces turned different ways still read
+ * differently. Only the lift's share sees a floor albedo — `max(albedo, uLiftAlbedoFloor)` — so
+ * black serge shows its folds as a dark grey while every light still sees the finish's own: a spot
+ * on it is exactly as bright with work lights on as off. With the lift at 0 the term is an exact
+ * 0, and off draws what it drew before there was a switch.
  */
 
 /**
@@ -76,6 +84,13 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  */
 export const SURFACE_AMBIENT = 0.003
 export const SURFACE_LIGHT_GAIN = 4.4
+
+/**
+ * The albedo the work lights' lift reflects at least (D7): about 4 %, judged in
+ * `?profileHarness=cyc` with black serge beside the white cyc until the serge's folds read. Lights
+ * never see it.
+ */
+export const LIFT_ALBEDO_FLOOR = 0.04
 
 /** The weights a colour's luminance is read with: Rec. 709, the canvas's linear working space. */
 export const LUMA: readonly [number, number, number] = [0.2126, 0.7152, 0.0722]
@@ -113,13 +128,29 @@ export const ROLL_OFF_GLSL = /* glsl */ `
   }
 `
 
+/** The room with work lights off: the shader's own ambient and no lift. */
+const ROOM_OFF: Pick<WorkLightLevels, 'ambient' | 'lift'> = { ambient: SURFACE_AMBIENT, lift: 0 }
+
 /**
  * A finish as the surface shader draws it lit by its ambient and fill alone, with [facing] the
- * normal's dot with the fill's direction — the billboard's stand-in for an unlit housing.
+ * normal's dot with the fill's direction — the billboard's stand-in for an unlit housing. [room] is
+ * the work lights' ambient and lift (`workLights.ts`); the lift reflects off at least
+ * [LIFT_ALBEDO_FLOOR], as the shader's does. Off by default, which is exactly the curve it was.
  */
-export function litByFill(albedo: Color, fill: number, facing = 0.5): Color {
-  const k = (SURFACE_AMBIENT + fill * (0.3 + 0.7 * Math.max(facing, 0))) * SURFACE_LIGHT_GAIN
-  return rollOff(albedo.r * k, albedo.g * k, albedo.b * k)
+export function litByFill(
+  albedo: Color,
+  fill: number,
+  facing = 0.5,
+  room: Pick<WorkLightLevels, 'ambient' | 'lift'> = ROOM_OFF,
+): Color {
+  const direction = 0.3 + 0.7 * Math.max(facing, 0)
+  const k = (room.ambient + fill * direction) * SURFACE_LIGHT_GAIN
+  const lift = room.lift * direction * SURFACE_LIGHT_GAIN
+  return rollOff(
+    albedo.r * k + Math.max(albedo.r, LIFT_ALBEDO_FLOOR) * lift,
+    albedo.g * k + Math.max(albedo.g, LIFT_ALBEDO_FLOOR) * lift,
+    albedo.b * k + Math.max(albedo.b, LIFT_ALBEDO_FLOOR) * lift,
+  )
 }
 
 /** What a catch surface reflects — the floor round a stage with no room — as a 25 % finish would. */
@@ -137,6 +168,10 @@ export interface SurfaceUniforms {
   uLights: { value: DataTexture }
   uLightCount: { value: number }
   uAmbient: { value: number }
+  /** The work lights' lift on every material's directional fill (`workLights.ts`); 0 with them off. */
+  uLift: { value: number }
+  /** The albedo the lift reflects at least, [LIFT_ALBEDO_FLOOR]. */
+  uLiftAlbedoFloor: { value: number }
   uLightGain: { value: number }
   uCatchLevel: { value: number }
   uGobo: { value: DataArrayTexture }
@@ -190,6 +225,8 @@ export function makeSurfaceUniforms(texture: DataTexture, occlusion: OcclusionTe
     uLights: { value: texture },
     uLightCount: { value: 0 },
     uAmbient: { value: SURFACE_AMBIENT },
+    uLift: { value: 0 },
+    uLiftAlbedoFloor: { value: LIFT_ALBEDO_FLOOR },
     uLightGain: { value: SURFACE_LIGHT_GAIN },
     uCatchLevel: { value: 0.36 },
     uGobo: { value: getGoboTexture() },
@@ -233,6 +270,8 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uLights;
   uniform int uLightCount;
   uniform float uAmbient;
+  uniform float uLift;
+  uniform float uLiftAlbedoFloor;
   uniform float uLightGain;
   uniform float uCatchLevel;
   uniform sampler2DArray uGobo;
@@ -416,13 +455,17 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     gl_FragColor = linearToOutputTexel(vec4(rollOff(acc * CATCH_REFLECTANCE * uLightGain) * uCatchLevel, 1.0));
     #else
     // The material's own fill (a housing reads against the dark), from above and a little in front.
-    float fill = uFill * (0.3 + 0.7 * max(dot(n, normalize(vec3(0.25, 0.9, 0.35))), 0.0));
+    float fillDirection = 0.3 + 0.7 * max(dot(n, normalize(vec3(0.25, 0.9, 0.35))), 0.0);
+    float fill = uFill * fillDirection;
     // How much of the room a fold's trough sees.
     float ao = 1.0;
     #ifdef PLEAT
     ao = troughAmbient(across, gl_FrontFacing);
     #endif
-    vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + gloss) * uLightGain);
+    // The work lights' lift, along the fill's direction, off at least the floor albedo (D7): an
+    // exact 0 with them off.
+    vec3 lift = max(albedo, vec3(uLiftAlbedoFloor)) * (uLift * fillDirection * ao);
+    vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + lift + gloss) * uLightGain);
     // The finishes are sRGB hex, held linear by three's colour management: out through the
     // canvas's output transfer, as three's own materials are.
     gl_FragColor = linearToOutputTexel(vec4(lit, uOpacity));

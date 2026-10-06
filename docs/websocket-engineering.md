@@ -346,7 +346,8 @@ drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | 
 `front` | `side`, stage-view plan session 1), a saved `stage_viewpoints` row by its uuid
 (session 2) or an unsaved seat, `seat:<seating uuid>:<seat id>` (session 3), and its `source` — the
 vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` (session 3; the Screens row
-offers Output and Next GO); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
+offers Output and Next GO), and its `workLights` — `off` | `on` (stage-view menu plan D8; the
+Screens row's *Work lights · Off | On*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how
@@ -665,11 +666,13 @@ the authenticated caller's display name, both stamped server-side for the reason
 
 | Message | Payload | Cast |
 |---|---|---|
-| `stageRender.request` | `requestId`, `token`, `projectId`, `viewpoint`, `width`, `height`, `source`, `timeoutMs` | **Unicast** — to the one window the desk chose |
+| `stageRender.request` | `requestId`, `token`, `projectId`, `viewpoint`, `width`, `height`, `source`, `workLights`, `timeoutMs` | **Unicast** — to the one window the desk chose |
 
 `render_view`'s job for one window (stage-view plan session 4; `docs/mcp-engineering.md`
 §"`render_view`"): draw `viewpoint` — already the Stage view's vocabulary, a camera, a saved view's
-uuid or `seat:<uuid>:<id>` — offscreen at `width` × `height` from `source`, and upload the PNG. It is
+uuid or `seat:<uuid>:<id>` — offscreen at `width` × `height` from `source`, with `workLights` (a
+boolean, always sent; stage-view menu plan D9) lifting the dark or not — the request's, never the
+window's own — and upload the PNG. It is
 the only frame in the protocol addressed to one socket: each attached socket has its own request
 queue in `StageRenderService`, and a job goes down the chosen socket's queue alone, so no other
 socket is ever sent it — unlike the five `windows.*` commands, which go to everyone and are acted on
