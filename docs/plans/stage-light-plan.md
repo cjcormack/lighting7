@@ -87,7 +87,7 @@ No controls change. The view looks different:
 
 Each session is one PR. It ends with `npm run check` green (and `./gradlew test` if anything
 outside `frontend/` changed), the engineering-doc paragraphs written, and its done-marker here: a
-one-line row with the merge SHA.
+one-line row with the session's commit SHA, added on the branch before its PR merges.
 
 ### ~~Session 1 — the visible bugs (frontend)~~ — done, `4eea82ed`, `263bee57`
 
@@ -115,7 +115,7 @@ one-line row with the merge SHA.
 - **Docs:** `frontend/docs/stage-vis-engineering.md` §"Light lands through one surface shader" (the
   skin, the landing bullet) and §"Focus" (axial, symmetric, the spread cap).
 
-### Session 2 — materials (frontend)
+### ~~Session 2 — materials (frontend)~~ — done, `f71576f5`
 
 - **Exposure (D6):** drop `uReflectFloor`; raise the gain; a luminance roll-off that keeps chroma.
   Retune `POOL_SCALE`, `VOL_GAIN` and the fills together so the prototype's balance between pools,
