@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.state.WindowRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -621,10 +622,12 @@ class SocketMessageWireFormatTest {
                 fadeElapsedMs = 0,
                 autoAdvance = false,
                 autoAdvanceDelayMs = null,
+                seq = 7,
             )
         )
         val encoded = json.encodeToString<OutMessage>(out)
         assertTrue(encoded.contains(""""type":"cueRunStateChanged""""))
+        assertFalse(encoded.contains("seq"), "the gate's ordering key stays on the server")
         assertEquals(out, assertIs<CueRunStateChangedOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 

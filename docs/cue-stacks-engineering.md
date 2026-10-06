@@ -472,10 +472,14 @@ Fired from `CueStackManager`, not from the routes, so *every* path reports: REST
 surface's GO binding, a cue-edit live apply, and the auto-advance timer (which previously moved
 the rig with no client ever being told). `setupBroadcastSubscriptions` also sends one frame per
 stack in `stacksWithRunState()` on connect, so a session that opens mid-fade animates the
-remainder instead of nothing. That snapshot is *read* synchronously while the listener is being
-registered and only *sent* from a coroutine: read inside the coroutine it would describe whenever
-the coroutine got scheduled, which can be after a GO the listener has already queued a frame for
-— i.e. a `transition = false` frame carrying a newer cue than the transition frame beside it.
+remainder instead of nothing. The snapshot is read *after* the listener is registered, so a GO
+landing in between is never missed — but that GO can then reach the socket twice, and every frame
+is its own launch, so the two can arrive in either order. Each frame therefore carries a
+server-side `CueRunState.seq` (one process-wide counter, taken *before* the state is read, so a
+frame stamped `n` is no older than any publish stamped `n` or below), and a per-socket
+`CueRunStateGate` sends only frames newer than the last it sent for that stack. A snapshot that
+ties a change already sent is dropped; a change that ties a snapshot still goes, because only it
+carries `transition`. `seq` is not on the wire.
 
 `fadeElapsedMs` is an elapsed duration, deliberately not a start timestamp: a tablet with a
 skewed clock would otherwise animate a fade that is already over. Null means no fade is running

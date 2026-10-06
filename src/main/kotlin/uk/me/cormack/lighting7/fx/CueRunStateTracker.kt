@@ -10,6 +10,7 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.state.State
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * A cue stack's *run state* — what is live, what the next GO will fire, and how far through a
@@ -33,6 +34,9 @@ import java.util.concurrent.ConcurrentHashMap
  *   the desk is *at send time*. A session joining mid-fade starts its animation there instead
  *   of replaying from zero. Deliberately a duration and not a wall-clock instant: a tablet
  *   with a skewed clock would otherwise animate a fade that is already over.
+ * @property seq where this frame sits among every run-state frame the desk has produced — see
+ *   [CueRunStateTracker.runStateFor]. Server-side only: a socket uses it to drop a frame older
+ *   than one it has already sent, and it is not on the wire.
  */
 data class CueRunState(
     val projectId: Int,
@@ -45,6 +49,7 @@ data class CueRunState(
     val fadeElapsedMs: Long?,
     val autoAdvance: Boolean,
     val autoAdvanceDelayMs: Long?,
+    val seq: Long,
 )
 
 /**
@@ -221,8 +226,17 @@ class CueRunStateTracker internal constructor(
      *
      * Also the connect-time snapshot: a session that opens mid-fade reads a non-null
      * `fadeElapsedMs` and animates the remainder.
+     *
+     * [seq] is read *before* the state, and [publishRunState] takes a fresh one before its
+     * read, so a frame stamped `n` describes the desk no earlier than every publish stamped
+     * `n` or below. That is what lets a socket keep the highest-stamped frame and drop the rest.
      */
-    fun runStateFor(state: State, stackId: Int, transition: Boolean = false): CueRunState {
+    fun runStateFor(
+        state: State,
+        stackId: Int,
+        transition: Boolean = false,
+        seq: Long = runStateSeq.get(),
+    ): CueRunState {
         val active = liveStacks.liveStack(stackId)
         // "Next" is derived from the *same* snapshot as `activeCueId`, not from a second read:
         // an activation landing between the two would otherwise produce a frame whose live cue
@@ -259,6 +273,7 @@ class CueRunStateTracker internal constructor(
             // delay both report false.
             autoAdvance = active?.autoAdvanceRunning == true,
             autoAdvanceDelayMs = active?.autoAdvanceDelayMs,
+            seq = seq,
         )
     }
 
@@ -270,6 +285,13 @@ class CueRunStateTracker internal constructor(
 
     /** Fan [stackId]'s run state out to every connected session. */
     internal fun publishRunState(state: State, stackId: Int, transition: Boolean = false) {
-        state.show.fixtures.cueRunStateChanged(runStateFor(state, stackId, transition))
+        val seq = runStateSeq.incrementAndGet()
+        state.show.fixtures.cueRunStateChanged(runStateFor(state, stackId, transition, seq))
+    }
+
+    private companion object {
+        /** Process-wide, not per tracker: a project reload builds a new tracker, and a socket
+         *  that outlives it must not see the count start again below what it has sent. */
+        val runStateSeq = AtomicLong()
     }
 }

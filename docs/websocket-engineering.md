@@ -593,10 +593,12 @@ they are different questions and only accidentally the same list. **That is why 
 `cuesRecomposed` and not `cuesRepublished`** — the two names sat one line apart in
 `republishForSourceEdit` during review and were read as the same set twice.
 
-`cueRunStateChanged` is snapshotted on connect for every stack with run state, and the snapshot is
-captured **synchronously** at setup and only *sent* from the launched coroutine — reading it inside
-the coroutine would describe whenever it happened to be scheduled, which can be after a GO the
-listener has already queued a `transition = true` frame for.
+`cueRunStateChanged` is snapshotted on connect for every stack with run state. The snapshot is read
+after the listener is registered, so it can describe a GO the listener has also queued a frame
+for, and both are separate launches that can reach the socket in either order. Both go through
+the socket's `CueRunStateGate`, which orders them by the server-side `CueRunState.seq` and drops a
+frame older than one already sent for its stack — the stale snapshot and the `transition = false`
+duplicate alike. See `docs/cue-stacks-engineering.md` §"WebSocket".
 
 ### Channel — `ChannelSocket.kt`
 
