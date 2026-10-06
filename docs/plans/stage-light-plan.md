@@ -144,7 +144,7 @@ one-line row with the session's commit SHA, added on the branch before its PR me
 - **Docs:** the occlusion paragraphs; `FU-STAGE-QUALITY-TIER`'s text (boxes cast shadows now; shadow
   maps would be for meshes).
 
-### Session 4 — lobes and gobo blur (frontend)
+### ~~Session 4 — lobes and gobo blur (frontend)~~ — done, `48d49f19`
 
 - **Per-finish lobes:** Oren–Nayar diffuse for rough matte surfaces; the Charlie sheen lobe
   (Estevez & Kulla 2017) for velour and serge; GGX specular with a roughness for floors and paint.
