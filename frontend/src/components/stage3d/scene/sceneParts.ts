@@ -1,5 +1,6 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import type { SeatPoint } from '../../../lib/stageSeats'
+import type { PleatAnchor, PleatShape } from './pleat'
 
 /**
  * What an element builder answers (stage-view plan session 3): the element as **parts** — boxes,
@@ -29,8 +30,11 @@ export type PartGeometry =
   | { shape: 'cylinder'; rTop: number; rBottom: number; h: number }
   /** A disc facing downstage (a moon, a clock face): [r] radius, [d] thick along y. */
   | { shape: 'disc'; r: number; d: number }
-  /** Soft goods: cloth [w] wide along x and [h] tall along z, pleated along x, seen from both sides. */
-  | { shape: 'pleat'; w: number; h: number }
+  /**
+   * Soft goods: cloth [w] wide along x and [h] tall along z, pleated along x by [pleat] — measured
+   * from its centre, or from its [anchor] edge — and seen from both sides.
+   */
+  | { shape: 'pleat'; w: number; h: number; pleat: PleatShape; anchor?: PleatAnchor }
 
 export type FinishPattern = 'PLAIN' | 'PANELS' | 'TILES' | 'BOARDS'
 

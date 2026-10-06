@@ -1,4 +1,5 @@
 import type { StageElementDto } from '../../../../api/stageElementApi'
+import { pleatShape } from '../pleat'
 import { elementFinish, elementStates, paramEnum, type ElementBuild, type ScenePart } from '../sceneParts'
 
 /**
@@ -29,7 +30,7 @@ export function drawnHalfWidth(widthM: number, open: number): number {
  * - `FLY` — its Z is its trim.
  * - `DEAD`, or none — hangs where it is.
  *
- * `depthM` is the cloth's fullness front to back: the pleats' depth, not a box.
+ * `depthM` is the depth of the cloth's folds, which sets its fullness too ([pleatShape]), not a box.
  */
 export function buildDrape(element: StageElementDto): ElementBuild {
   const w = element.widthM
@@ -39,12 +40,13 @@ export function buildDrape(element: StageElementDto): ElementBuild {
   const role = paramEnum(element, 'role')
   const finish = element.finishColour == null && role === 'CYC' ? { ...base, colour: '#d6dbe2' } : base
   if (paramEnum(element, 'operation') !== 'DRAW') {
-    return { parts: [{ key: 'cloth', geometry: { shape: 'pleat', w, h }, at: { x: 0, y: 0, z: h / 2 }, finish, collides: true }], seats: [] }
+    return { parts: [{ key: 'cloth', geometry: { shape: 'pleat', w, h, pleat: pleatShape(element) }, at: { x: 0, y: 0, z: h / 2 }, finish, collides: true }], seats: [] }
   }
   const half = drawnHalfWidth(w, elementStates(element).open ?? 0)
+  // Each half's folds are measured from its outer edge, which stays put as it gathers.
   const parts: ScenePart[] = [
-    { key: 'cloth-sr', geometry: { shape: 'pleat', w: half, h }, at: { x: -w / 2 + half / 2, y: 0, z: h / 2 }, finish, collides: true },
-    { key: 'cloth-sl', geometry: { shape: 'pleat', w: half, h }, at: { x: w / 2 - half / 2, y: 0, z: h / 2 }, finish, collides: true },
+    { key: 'cloth-sr', geometry: { shape: 'pleat', w: half, h, pleat: pleatShape(element, 'sr'), anchor: 'left' }, at: { x: -w / 2 + half / 2, y: 0, z: h / 2 }, finish, collides: true },
+    { key: 'cloth-sl', geometry: { shape: 'pleat', w: half, h, pleat: pleatShape(element, 'sl'), anchor: 'right' }, at: { x: w / 2 - half / 2, y: 0, z: h / 2 }, finish, collides: true },
   ]
   return { parts, seats: [] }
 }

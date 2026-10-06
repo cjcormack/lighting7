@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { buildHarness, DRAPE_HARNESS_CHANNELS, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive } from "./profileHarness"
+import { aimStatic, buildHarness, DRAPE_HARNESS_CHANNELS, FOCUS_HARNESS_HEADS, FOCUS_HARNESS_THROW_M, harnessMode, isHarnessActive, materialScene } from "./profileHarness"
 import { buildElement } from "./scene/builders"
 import { resolveDeclaredFocusDistance, resolveFocusParam } from "./beamOptics"
 import type { SliderPropertyDescriptor } from "../../store/fixtures"
@@ -93,6 +93,45 @@ describe("the drape scene", () => {
   })
 })
 
+describe("the material scenes (stage-light plan session 2)", () => {
+  /** A static lantern's beam at its base pose: yaw 0 at the house, +pitch down. */
+  const beam = (yawDeg: number, pitchDeg: number) => {
+    const y = (yawDeg * Math.PI) / 180
+    const p = (pitchDeg * Math.PI) / 180
+    return { x: Math.sin(y) * Math.cos(p), y: -Math.cos(y) * Math.cos(p), z: -Math.sin(p) }
+  }
+
+  it("points each fixed lantern at its pool", () => {
+    for (const mode of ["rake", "floor", "cyc"] as const) {
+      for (const spot of materialScene(mode).spots) {
+        const { baseYawDeg, basePitchDeg } = aimStatic(spot.from, spot.at)
+        const d = beam(baseYawDeg, basePitchDeg)
+        const len = Math.hypot(spot.at.x - spot.from.x, spot.at.y - spot.from.y, spot.at.z - spot.from.z)
+        expect(d.x * len + spot.from.x).toBeCloseTo(spot.at.x, 9)
+        expect(d.y * len + spot.from.y).toBeCloseTo(spot.at.y, 9)
+        expect(d.z * len + spot.from.z).toBeCloseTo(spot.at.z, 9)
+      }
+    }
+  })
+
+  it("rakes one serge cloth square on, at 45° and at 75°", () => {
+    const { spots, elements } = materialScene("rake")
+    expect(elements.map((e) => [e.kind, e.finishColour])).toEqual([["DRAPE", "#101012"]])
+    const off = spots.map((s) => Math.round((Math.atan2(s.at.x - s.from.x, s.at.y - s.from.y) * 180) / Math.PI))
+    expect(off).toEqual([0, 45, 75])
+  })
+
+  it("lays three floors and hangs a cyc, serge and a red drape, each under its own light", () => {
+    const data = buildHarness(10, 8, 6, "floor")
+    expect(data.elements?.map((e) => e.kind)).toEqual(["PLATFORM", "PLATFORM", "PLATFORM"])
+    expect(data.patches).toHaveLength(3)
+    const cyc = buildHarness(10, 8, 6, "cyc")
+    expect(cyc.elements?.map((e) => [e.finishColour, e.params.role])).toEqual([["#e8e6df", "CYC"], ["#101012", "LEG"], ["#3b1219", "LEG"]])
+    // Nothing to write: the lanterns carry no channels and burn at full.
+    expect(cyc.syntheticFixture.properties).toEqual([])
+  })
+})
+
 describe("isHarnessActive", () => {
   const originalSearch = window.location.search
 
@@ -125,6 +164,13 @@ describe("isHarnessActive", () => {
   it("returns the drape scene for ?profileHarness=drape", () => {
     setSearch("?profileHarness=drape")
     expect(harnessMode()).toBe("drape")
+  })
+
+  it("returns a material scene for ?profileHarness=rake, floor and cyc", () => {
+    for (const mode of ["rake", "floor", "cyc"]) {
+      setSearch(`?profileHarness=${mode}`)
+      expect(harnessMode()).toBe(mode)
+    }
   })
 
   it("returns false when the flag is absent", () => {

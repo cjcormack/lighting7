@@ -3,7 +3,7 @@ import type { StageElementDto } from '../api/stageElementApi'
 import { parseSceneryFrame, type LiveScenery } from '../api/sceneryApi'
 import { beamReach, elementColliders, type BeamHit } from '../components/stage3d/scene/beamReach'
 import { buildElement } from '../components/stage3d/scene/builders'
-import { PLEAT_DEPTH_M } from '../components/stage3d/scene/pleat'
+import { pleatShape } from '../components/stage3d/scene/pleat'
 import { elementBaseZ } from '../components/stage3d/scene/sceneParts'
 import {
   choiceOf,
@@ -98,7 +98,7 @@ describe('scenery, drawn (stage-view plan session 8)', () => {
       return beamReach(0, 1, 5, 0, 0, -1, colliders, 40, out) ? out.t : null
     }
     expect(reach(live({ tabs: { state: { open: 1 } } }))).toBeNull()
-    expect(reach(live({ tabs: { state: { open: 0 } } }))).toBeCloseTo(5.4 - PLEAT_DEPTH_M / 2, 9)
+    expect(reach(live({ tabs: { state: { open: 0 } } }))).toBeCloseTo(5.4 - pleatShape(tabs).amplitudeM, 9)
   })
 
   it('offers each kind its states, and names a change the way the card reads it', () => {

@@ -18,7 +18,8 @@ import { seatingParams } from '../../../lib/stageSeats'
 import { BANQUET_FRAME_COLOUR, chairGeometry } from './chairs'
 import { NO_RAYCAST } from '../raycast'
 import { useSurfaceMaterial } from './SurfaceLighting'
-import { pleatOffset, pleatShape } from './pleat'
+import { setPleatShift } from './surfaceShader'
+import { pleatOffset, pleatShift, pleatSlope } from './pleat'
 import { elementBaseZ, elementFinish, type ElementBuild, type PartGeometry, type ScenePart } from './sceneParts'
 
 /** One element's build, beside the element it was built from — what the scene draws and casts beams at. */
@@ -73,6 +74,9 @@ export const StageSceneElements = memo(function StageSceneElements({
   )
 })
 
+/** Segments a mean pitch: enough that a 2× fold reads as a curve rather than a zig-zag. */
+const PLEAT_SEGMENTS = 10
+
 /**
  * A part's geometry in its element's three.js frame (x across, y up, z towards the house), centred
  * on the origin: the part's `at` places it.
@@ -89,12 +93,20 @@ export function partGeometry(geometry: PartGeometry): BufferGeometry {
       return g
     }
     case 'pleat': {
-      const pleat = pleatShape()
-      const segments = Math.max(8, Math.round((geometry.w / pleat.pitchM) * 4))
+      const pleat = geometry.pleat
+      const shift = pleatShift(geometry.w, geometry.anchor)
+      const segments = Math.max(8, Math.round((geometry.w / pleat.pitchM) * PLEAT_SEGMENTS))
       const g = new PlaneGeometry(geometry.w, geometry.h, segments, 1)
       const pos = g.attributes.position
-      for (let i = 0; i < pos.count; i++) pos.setZ(i, pleatOffset(pos.getX(i), pleat))
-      g.computeVertexNormals()
+      const nor = g.attributes.normal
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i) + shift
+        pos.setZ(i, pleatOffset(x, pleat))
+        // The fold's own normal, not the facets': the surface shader shades with it as well.
+        const slope = pleatSlope(x, pleat)
+        const len = Math.hypot(slope, 1)
+        nor.setXYZ(i, -slope / len, 0, 1 / len)
+      }
       return g
     }
     case 'quad': {
@@ -134,7 +146,16 @@ function ScenePartMesh({ part }: { part: ScenePart }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is `part.geometry` serialised whole
   const geometry = useMemo(() => partGeometry(part.geometry), [key])
   useEffect(() => () => geometry.dispose(), [geometry])
-  const material = useSurfaceMaterial(part.finish, { doubleSided: part.geometry.shape === 'pleat' })
+  // The fold alone keys the material: a drawn half's width moves every frame of a draw, and only
+  // its shift (a uniform) moves with it.
+  const pleatKey = part.geometry.shape === 'pleat' ? JSON.stringify(part.geometry.pleat) : ''
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `pleatKey` is `part.geometry.pleat` serialised whole
+  const pleat = useMemo(() => (part.geometry.shape === 'pleat' ? part.geometry.pleat : undefined), [pleatKey])
+  const material = useSurfaceMaterial(part.finish, { doubleSided: pleat != null, pleat })
+  const shift = part.geometry.shape === 'pleat' ? pleatShift(part.geometry.w, part.geometry.anchor) : 0
+  useLayoutEffect(() => {
+    if (pleat != null) setPleatShift(material, shift)
+  }, [material, pleat, shift])
   return (
     <mesh
       geometry={geometry}

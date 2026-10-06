@@ -14,9 +14,9 @@ export const HOUSING_COLOR = '#2a2d33'
 /** A selected housing: the desk's blue, lit. */
 export const HOUSING_ACTIVE_COLOR = '#4262d0'
 /** How much light of its own a housing has, so the rig reads against a dark room. */
-export const HOUSING_FILL = 0.9
+export const HOUSING_FILL = 0.225
 /** A selected housing's fill. One material draws every housing, so the difference rides the tint. */
-export const HOUSING_ACTIVE_FILL = 1.6
+export const HOUSING_ACTIVE_FILL = 0.4
 
 const DARK_SRGB = new Color(BODY_LENS_COLOR).getRGB(new Color(), SRGBColorSpace)
 const HUE_SRGB = new Color()

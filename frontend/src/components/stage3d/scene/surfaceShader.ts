@@ -9,6 +9,8 @@ import {
   NearestFilter,
   RGBAFormat,
   ShaderMaterial,
+  Vector3,
+  Vector4,
 } from 'three'
 import { BEAM_FOCUS_GLSL, BEAM_MASK_GLSL } from '../beamMask'
 import { getGoboTexture } from '../goboAtlas'
@@ -16,6 +18,7 @@ import { GOBO_LAYERS_GLSL } from '../goboLayers'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from '../washConfig'
 import { LANDING_GLSL, REACH_EPS_M } from './landing'
 import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
+import { PLEAT_GLSL, pleatUniformValues, type PleatShape } from './pleat'
 import type { FinishPattern, PartFinish } from './sceneParts'
 
 /**
@@ -45,21 +48,65 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * angle, multiplied over the mask — so the blades, the iris and an oval cut the gobo as they cut the
  * pool — at the mip level of the focus blur the edge is softened by, or of the pixel's footprint
  * where that is wider. The haze samples it through the same function, so a gobo sharp in the air at
- * a distance is sharp on a wall at that distance. What still does not land is a **shadow**: the
- * axial beam reach stands in for occlusion until the quality tier's shadow maps
- * (`FU-STAGE-QUALITY-TIER`).
+ * a distance is sharp on a wall at that distance. What still does not land is a **shadow** of one
+ * thing on another: the axial beam reach stands in for occlusion until the quality tier's shadow
+ * maps (`FU-STAGE-QUALITY-TIER`). A drape's folds do shadow each other (stage-light plan D7, `PLEAT`):
+ * the fold is a known sine in the part's own frame — the mesh's model matrix — so `pleat.ts`'s
+ * `foldLight` answers whether a crest stands between the point and the lamp, and its troughs see
+ * less of the room's ambient.
  *
- * The colour is the prototype's (`docs/plans/stage-view-design/prototype.html`): every light, the
- * room's ambient and the material's own fill summed, times the finish, rolled off once by
- * `1 − exp(−·)` and encoded — so two pools overlapping add as the eye sees them, and a wall under the
- * whole rig is bright rather than a flat blown-out plate. The light reflects off no less than
- * `uReflectFloor` of itself, so a pool still reads on the near-black finishes a hall is painted in —
- * black serge shows a spot — while the ambient and fill keep the finish's own darkness.
+ * The colour (stage-light plan D6): every light, the room's ambient and the material's own fill
+ * summed, times the finish **and nothing else** — a `#111` serge reflects its own 0.6 % — exposed by
+ * [SURFACE_LIGHT_GAIN] and rolled off once by `1 − exp(−·)` **on the luminance**, the chroma kept
+ * ([rollOff]), and encoded. So two pools overlapping add as the eye sees them, a wall under the whole
+ * rig is bright rather than a flat blown-out plate, a white pool on a red drape is red, and a colour
+ * too bright to keep runs towards white rather than towards another hue. What makes black serge show
+ * a spot is the exposure, not a reflectance floor: the finishes keep their own range.
  */
 
-/** The room's light on every surface, and the gain the summed light is rolled off at. */
-export const SURFACE_AMBIENT = 0.012
-export const SURFACE_LIGHT_GAIN = 1.1
+/**
+ * The room's light on every surface, and the exposure the summed light is rolled off at. The
+ * exposure is what makes black serge show a spot; the ambient and the materials' fills are set
+ * against it, so what no beam reaches — the house, a housing — stays near black.
+ */
+export const SURFACE_AMBIENT = 0.003
+export const SURFACE_LIGHT_GAIN = 4.4
+
+/** The weights a colour's luminance is read with: Rec. 709, the canvas's linear working space. */
+export const LUMA: readonly [number, number, number] = [0.2126, 0.7152, 0.0722]
+
+/**
+ * The roll-off ([ROLL_OFF_GLSL]'s twin): `1 − exp(−Y)` on the luminance `Y`, the colour scaled by
+ * as much, so it keeps its chroma. Where that would push a channel past 1, the colour moves towards
+ * the grey of its own luminance until it fits — a bright saturated colour runs to white, never to
+ * another hue.
+ */
+export function rollOff(r: number, g: number, b: number, out = new Color()): Color {
+  const y = r * LUMA[0] + g * LUMA[1] + b * LUMA[2]
+  const t = 1 - Math.exp(-y)
+  const k = y > 1e-6 ? t / y : 1
+  let cr = r * k
+  let cg = g * k
+  let cb = b * k
+  const m = Math.max(cr, cg, cb)
+  if (m > 1) {
+    const f = (1 - t) / (m - t)
+    cr = t + (cr - t) * f
+    cg = t + (cg - t) * f
+    cb = t + (cb - t) * f
+  }
+  return out.setRGB(cr, cg, cb)
+}
+
+export const ROLL_OFF_GLSL = /* glsl */ `
+  vec3 rollOff(vec3 e) {
+    float y = dot(e, vec3(${LUMA.map((w) => w.toFixed(4)).join(', ')}));
+    float t = 1.0 - exp(-y);
+    vec3 c = e * (y > 1e-6 ? t / y : 1.0);
+    float m = max(c.r, max(c.g, c.b));
+    return m > 1.0 ? mix(vec3(t), c, (1.0 - t) / (m - t)) : c;
+  }
+`
 
 /**
  * A finish as the surface shader draws it lit by its ambient and fill alone, with [facing] the
@@ -67,8 +114,11 @@ export const SURFACE_LIGHT_GAIN = 1.1
  */
 export function litByFill(albedo: Color, fill: number, facing = 0.5): Color {
   const k = (SURFACE_AMBIENT + fill * (0.3 + 0.7 * Math.max(facing, 0))) * SURFACE_LIGHT_GAIN
-  return new Color(1 - Math.exp(-albedo.r * k), 1 - Math.exp(-albedo.g * k), 1 - Math.exp(-albedo.b * k))
+  return rollOff(albedo.r * k, albedo.g * k, albedo.b * k)
 }
+
+/** What a catch surface reflects — the floor round a stage with no room — as a 25 % finish would. */
+const CATCH_REFLECTANCE = 0.25
 
 /** The half field below which a pool brightens with how narrow its beam is: a 20° field. */
 const SPREAD_REF_HALF_DEG = 10
@@ -83,7 +133,6 @@ export interface SurfaceUniforms {
   uLightCount: { value: number }
   uAmbient: { value: number }
   uLightGain: { value: number }
-  uReflectFloor: { value: number }
   uCatchLevel: { value: number }
   uGobo: { value: DataArrayTexture }
   uGoboBlurTexels: { value: number }
@@ -108,7 +157,6 @@ export function makeSurfaceUniforms(texture: DataTexture): SurfaceUniforms {
     uLightCount: { value: 0 },
     uAmbient: { value: SURFACE_AMBIENT },
     uLightGain: { value: SURFACE_LIGHT_GAIN },
-    uReflectFloor: { value: 0.1 },
     uCatchLevel: { value: 0.36 },
     uGobo: { value: getGoboTexture() },
     uGoboBlurTexels: { value: GOBO_BLUR_TEXELS },
@@ -145,11 +193,11 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   #define SPREAD_REF_TAN2 ${(Math.tan(SPREAD_REF_HALF_DEG * Math.PI / 180) ** 2).toFixed(6)}
   #define SPREAD_GAIN_MAX ${SPREAD_GAIN_MAX.toFixed(1)}
   #define FALLOFF_KNEE ${FALLOFF_KNEE_M.toFixed(1)}
+  #define CATCH_REFLECTANCE ${CATCH_REFLECTANCE.toFixed(4)}
   uniform sampler2D uLights;
   uniform int uLightCount;
   uniform float uAmbient;
   uniform float uLightGain;
-  uniform float uReflectFloor;
   uniform float uCatchLevel;
   uniform sampler2DArray uGobo;
   uniform float uGoboBlurTexels;
@@ -175,6 +223,13 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   ${LANDING_GLSL}
   ${BEAM_FRAME_GLSL}
   ${GOBO_LAYERS_GLSL}
+  ${ROLL_OFF_GLSL}
+
+  #ifdef PLEAT
+  // The part's own frame, x across the cloth and z out of it: the fold is drawn in it.
+  uniform mat4 modelMatrix;
+  ${PLEAT_GLSL}
+  #endif
 
   float hash21(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
@@ -203,6 +258,14 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 
   void main() {
     vec3 n = normalize(vWorldNormal);
+    #ifdef PLEAT
+    vec3 pleatX = normalize(modelMatrix[0].xyz);
+    vec3 pleatZ = normalize(modelMatrix[2].xyz);
+    vec3 pleatO = modelMatrix[3].xyz;
+    float across = dot(vWorldPos - pleatO, pleatX) + uPleat.z;
+    // The fold's own normal at this point, smoother than the facets' interpolated.
+    n = normalize(pleatZ - uPleat.y * pleatRate(across) * cos(pleatPhase(across)) * pleatX);
+    #endif
     if (!gl_FrontFacing) n = -n;
     vec3 albedo = uAlbedo * finishPattern(vWorldPos, n);
     #if defined(USE_INSTANCING_COLOR) || defined(USE_COLOR)
@@ -233,6 +296,11 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       float facing = dot(n, -L);
       if (facing <= 0.0) continue;
       if (behindLanding(texelFetch(uLights, ivec2(3, i), 0), vWorldPos, REACH_EPS)) continue;
+      float shade = 1.0;
+      #ifdef PLEAT
+      shade = foldLight(across, dot(apex.xyz - pleatO, pleatX) + uPleat.z, dot(apex.xyz - pleatO, pleatZ));
+      if (shade <= 0.0) continue;
+      #endif
       vec4 aperture = texelFetch(uLights, ivec2(5, i), 0);
       float axial = dist * c;
       // Behind the aperture is inside the lantern: nothing there is lit by it.
@@ -270,23 +338,34 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       // beam's own footprint: a narrow beam puts the same light on less of the surface.
       float da = max(dist - aperture.x, 0.3);
       float spread = clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX);
-      acc += colour.rgb * m * facing * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
+      acc += colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
     }
 
     #ifdef CATCH
     // A catch surface is the light alone, added over whatever is behind it: the floor round a stage
     // that has no room modelled, where pools landed before there was anything to land on.
-    gl_FragColor = linearToOutputTexel(vec4((1.0 - exp(-acc * uLightGain)) * uCatchLevel, 1.0));
+    gl_FragColor = linearToOutputTexel(vec4(rollOff(acc * CATCH_REFLECTANCE * uLightGain) * uCatchLevel, 1.0));
     #else
     // The material's own fill (a housing reads against the dark), from above and a little in front.
     float fill = uFill * (0.3 + 0.7 * max(dot(n, normalize(vec3(0.25, 0.9, 0.35))), 0.0));
-    vec3 lit = 1.0 - exp(-(albedo * vec3(uAmbient + fill) + max(albedo, vec3(uReflectFloor)) * acc) * uLightGain);
+    // How much of the room a fold's trough sees.
+    float ao = 1.0;
+    #ifdef PLEAT
+    ao = troughAmbient(across, gl_FrontFacing);
+    #endif
+    vec3 lit = rollOff(albedo * (vec3((uAmbient + fill) * ao) + acc) * uLightGain);
     // The finishes are sRGB hex, held linear by three's colour management: out through the
     // canvas's output transfer, as three's own materials are.
     gl_FragColor = linearToOutputTexel(vec4(lit, uOpacity));
     #endif
   }
 `
+
+/** Measure [material]'s fold from an edge rather than its centre (`pleat.ts`'s `pleatShift`); no rebuild. */
+export function setPleatShift(material: ShaderMaterial, shift: number) {
+  const pleat = material.uniforms.uPleat?.value as Vector4 | undefined
+  if (pleat != null) pleat.z = shift
+}
 
 export interface SurfaceMaterialOptions {
   /** Drawn from both faces: cloth, and anything a camera can see the back of. */
@@ -297,6 +376,8 @@ export interface SurfaceMaterialOptions {
   fill?: number
   /** The light alone, added: a catch surface ([SURFACE_FRAGMENT_SHADER]'s `CATCH`). */
   catchOnly?: boolean
+  /** Pleated cloth: the fold's normal, its shadow on itself and its troughs' ambient (`pleat.ts`). */
+  pleat?: PleatShape
   /**
    * Loses every depth tie: a region under a platform that models the same deck. Without it two
    * coincident surfaces are won by whichever material three draws last, which is creation order.
@@ -316,6 +397,8 @@ export function makeSurfaceMaterial(
   const defines: Record<string, string> = {}
   if (finish.emissive) defines.EMISSIVE = ''
   if (options.catchOnly) defines.CATCH = ''
+  const pleat = options.pleat != null ? pleatUniformValues(options.pleat) : null
+  if (pleat != null) defines.PLEAT = ''
   const opacity = options.opacity ?? 1
   const material = new ShaderMaterial({
     defines,
@@ -325,6 +408,10 @@ export function makeSurfaceMaterial(
       uPattern: { value: PATTERN_INDEX[finish.pattern] },
       uOpacity: { value: opacity },
       uFill: { value: options.fill ?? 0 },
+      ...(pleat != null && {
+        uPleat: { value: new Vector4(...pleat.pleat) },
+        uPleatWarp: { value: Array.from({ length: pleat.warp.length / 3 }, (_, i) => new Vector3(...pleat.warp.slice(i * 3, i * 3 + 3))) },
+      }),
     },
     vertexShader: SURFACE_VERTEX_SHADER,
     fragmentShader: SURFACE_FRAGMENT_SHADER,

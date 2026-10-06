@@ -33,14 +33,17 @@ export function useSurfaceLighting(): SurfaceLighting {
   return lighting
 }
 
-/** A receiver material for [finish] on this canvas, rebuilt when the finish changes, disposed on unmount. */
+/**
+ * A receiver material for [finish] on this canvas, rebuilt when the finish changes, disposed on
+ * unmount. A `pleat` is compared by identity, so a caller holds it stable across builds.
+ */
 export function useSurfaceMaterial(finish: PartFinish, options: SurfaceMaterialOptions = {}): ShaderMaterial {
   const { uniforms } = useSurfaceLighting()
   const { colour, pattern, emissive } = finish
-  const { doubleSided, opacity, fill, catchOnly, behind } = options
+  const { doubleSided, opacity, fill, catchOnly, behind, pleat } = options
   const material = useMemo(
-    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive }, { doubleSided, opacity, fill, catchOnly, behind }),
-    [uniforms, colour, pattern, emissive, doubleSided, opacity, fill, catchOnly, behind],
+    () => makeSurfaceMaterial(uniforms, { colour, pattern, emissive }, { doubleSided, opacity, fill, catchOnly, behind, pleat }),
+    [uniforms, colour, pattern, emissive, doubleSided, opacity, fill, catchOnly, behind, pleat],
   )
   useEffect(() => () => material.dispose(), [material])
   return material
