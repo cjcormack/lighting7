@@ -112,6 +112,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-FOCUS-ON-POOL`](#fu-stage-focus-on-pool) | Trigger | Stage | an operator focuses a rig from the Stage view rather than the card |
 | [`FU-STAGE-SURFACE-LOOP-COST`](#fu-stage-surface-loop-cost) | Trigger | Stage | the Safari / iPad pass (`FU-MANUAL-STAGE-LIGHT-BUDGET`) finds the light budget short |
 | [`FU-STAGE-QUALITY-TIER`](#fu-stage-quality-tier) | Trigger | Stage | an operator needs to see a mesh's shadow land — a body, a seat, an imported model — or a round one; boxes cast theirs already |
+| [`FU-STAGE-BOUNCE-FILL`](#fu-stage-bounce-fill) | Trigger | Stage | a plot reads wrong because a bright cyc or floor pool lights nothing round it |
+| [`FU-STAGE-FOCUS-FRINGE`](#fu-stage-focus-fringe) | Trigger | Stage | an operator focusing a profile by eye in the Stage view cannot tell short of focus from past it |
 | [`FU-STAGE-GLB-IMPORT`](#fu-stage-glb-import) | Trigger | Stage | a venue or a fixture the parametric kinds cannot draw |
 | [`FU-STAGE-VENUE-SHARED`](#fu-stage-venue-shared) | Trigger | Stage | a second show plays the Commemoration Hall |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
@@ -2162,7 +2164,7 @@ frame — the inverse of `beamMask`'s blade line through the surface's plane.
 
 ### `FU-STAGE-SURFACE-LOOP-COST`
 
-**Unmeasured costs in the surface-light loop: three, session 7's fourth, fixture-optics session 4's measured fifth, and stage-light session 3's sixth** · Trigger ·
+**Unmeasured costs in the surface-light loop: three, session 7's fourth, fixture-optics session 4's measured fifth, and stage-light sessions 3's and 4's sixth and seventh** · Trigger ·
 stage-view plan sessions 6–7, 2026-09-30
 
 Session 6's review left three notes it could not measure in a container: dark cells still raycast
@@ -2177,7 +2179,11 @@ material, so *Gobos on surfaces → Selected heads only* stays off by default. S
 adds a sixth: every lit fragment, housings included, now runs the box test over its light's collider
 list, and every pack of the light table re-culls each light's list on the CPU (`cullLightColliders`)
 and uploads it — every frame a head moves; measured per list entry on the occlusion bench, the iPad
-pays six to seven times the Mac, and the View menu's *Box shadows* caps it per browser. **Trigger**:
+pays six to seven times the Mac, and the View menu's *Box shadows* caps it per browser. Stage-light
+session 4 adds a seventh: a finish's lobes (Oren–Nayar, a sheen, GGX), per light per lit pixel and
+compiled in only where a finish carries them — on the desk Mac's GPU about one skipped box entry for
+a two-lobe finish (`FU-MANUAL-STAGE-LIGHT-BUDGET` step 7 has the bench numbers and what the iPad
+owes). **Trigger**:
 the Safari and iPad pass finds the budget short. **Then**: measure the three first — a housing could take a
 cheaper loop (it is lit, not a receiver of pools), a dark cell could skip its reach, and `set` could
 compare before dirtying — before cutting steps from the march.
@@ -2200,6 +2206,37 @@ mesh's shadow land — a body, a seat, an imported model — or a round one. **T
 window (the View menu), budgeted like the light table — a
 shadowed `SpotLight` needs a shadow map each, so the four-head cap is the design, not a starting point.
 The gobo pass's *Selected heads only* switch is the precedent for narrowing a cost to the selection.
+
+### `FU-STAGE-BOUNCE-FILL`
+
+**One-bounce fill from a landed pool** · Trigger · stage-light plan §8, 2026-10-06
+
+Since stage-light session 2 a finish reflects its own albedo under an exposure, so a pool on a white
+cyc or a pale deck is bright and everything round it stays as dark as the room: nothing a pool lands
+on lights anything else. In a theatre a cyc wash fills the stage floor and the downstage faces in
+front of it, and a pool on a pale floor lifts the legs beside it. Session 4 gave finishes lobes and
+left this out: its cost is a light per pool, and the light budget is already the machine's limit.
+**Trigger**: a plot reads wrong because a bright cyc or floor pool lights nothing round it — a cyc
+state that looks like a lit cloth in a black void. **Then**: a virtual light per landed pool,
+written by the director beside the beam's own row — at the landed point, facing out of the surface,
+a wide cosine lobe coloured by the light × the hit finish's albedo — packed after the real lights so
+the budget drops bounces first, and drawn by no beam. `landedPoints.ts` and the director's `SurfaceHit`
+already know where a beam lands and on what; the finish would have to ride the collider.
+
+### `FU-STAGE-FOCUS-FRINGE`
+
+**A chromatic fringe on a profile's penumbra** · Trigger · stage-light plan §8, 2026-10-06
+
+A profile's lens images its gate with a little chromatic aberration: focusing through, the edge goes
+from a blue fringe to a red one, and an electrician focusing by eye reads which side of focus the
+lens is from the colour. The Stage view's focus blur is symmetric (stage-light plan D4) and colourless,
+so short of focus and past it look the same; *Focus here* solves the distance, so nobody needs to
+judge it by eye today. Cloth micro-detail, the plan's third §8 item, was not recorded: pleats and the
+sheen (sessions 2 and 4) carry cloth at the view's distances, and a weave is below a pixel from the
+house. **Trigger**: an operator focusing a profile by eye in the Stage view cannot tell short of
+focus from past it. **Then**: `beamMask`'s penumbra offset per channel by the sign of `f − d`, one end
+of the spectrum out and the other in, for imaging families only, with its twin — three mask
+evaluations a light where there is one, so measure it on the occlusion bench first.
 
 ### `FU-STAGE-GLB-IMPORT`
 

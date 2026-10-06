@@ -2,10 +2,11 @@
 //
 // jsdom only because store/fixtures imports the API facade, which reads `window` at module load.
 import { describe, expect, it } from 'vitest'
-import { buildGoboAtlasData, GOBO_TILE_PX } from './goboAtlas'
+import { buildGoboAtlasData, GOBO_BLUR_LEVELS, GOBO_TILE_PX } from './goboAtlas'
 import {
   atlasSampler,
   GOBO_ANGLE_STEPS,
+  GOBO_FOOTPRINT_FILTER,
   GOBO_LAYERS_GLSL,
   goboLod,
   goboPair,
@@ -23,6 +24,7 @@ import {
   type GoboRotation,
 } from './beamOptics'
 import { frameFromBasis, frameInBasis } from './scene/lightTable'
+import { LAMBERT_LOBES } from './scene/lobes'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from './washConfig'
 import { findGoboProperties, findGoboRotationProperty, goboRotationWheel } from '../../store/fixtures'
 import { fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
@@ -113,7 +115,8 @@ describe('the gobo packing', () => {
     expect(GOBO_LAYERS_GLSL).toContain(`floor(packed / ${GOBO_ANGLE_STEPS * 2 * 32}.0)`)
     expect(GOBO_LAYERS_GLSL).toContain(((Math.PI * 2) / GOBO_ANGLE_STEPS).toExponential(10))
     expect(GOBO_LAYERS_GLSL).toContain('* 0.5 + 0.5')
-    expect(GOBO_LAYERS_GLSL).toContain('max(blur, footprint)')
+    expect(GOBO_LAYERS_GLSL).toContain(`max(blur, ${GOBO_FOOTPRINT_FILTER.toFixed(1)} * footprint)`)
+    expect(GOBO_LAYERS_GLSL).toContain(`rot.z * ${GOBO_BLUR_LEVELS}.0 + level`)
   })
 })
 
@@ -132,7 +135,10 @@ describe('a gobo on a surface', () => {
     expect(lodAt(21)).toBeGreaterThan(lodAt(23))
     expect(lodAt(27)).toBeGreaterThan(lodAt(25))
     expect(contrast(spokes, lodAt(24))).toBeGreaterThan(0.8)
-    expect(contrast(spokes, lodAt(21))).toBeLessThan(contrast(spokes, lodAt(24)) / 2)
+    // As soft as the pool's edge at that blur (goboAtlas.test.ts): readable 3 m off, plainly softer.
+    expect(contrast(spokes, lodAt(22.5))).toBeLessThan(contrast(spokes, lodAt(24)))
+    expect(contrast(spokes, lodAt(21))).toBeLessThan(contrast(spokes, lodAt(22.5)))
+    expect(contrast(spokes, lodAt(21))).toBeLessThan(contrast(spokes, lodAt(24)) * 0.7)
     // A sharp pattern far away is read at its pixel's footprint, not aliased at level 0.
     expect(goboLod(0, 0.1, GOBO_BLUR_TEXELS, FOCUS_LOD_MAX)).toBeGreaterThan(2)
     expect(goboLod(0.3, 0.1, GOBO_BLUR_TEXELS, FOCUS_LOD_MAX)).toBe(goboLod(0.3, 0, GOBO_BLUR_TEXELS, FOCUS_LOD_MAX))
@@ -317,6 +323,7 @@ describe('one sampler, two programs', () => {
       colour: '#808080',
       pattern: 'PLAIN',
       emissive: false,
+      lobes: LAMBERT_LOBES,
     }).fragmentShader
     for (const program of [haze, surface]) {
       expect(program).toContain(GOBO_LAYERS_GLSL)

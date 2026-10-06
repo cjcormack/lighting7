@@ -1,5 +1,6 @@
 import type { StageElementDto } from '../../../api/stageElementApi'
 import type { SeatPoint } from '../../../lib/stageSeats'
+import { LAMBERT_LOBES, type FinishLobes } from './lobes'
 import type { PleatAnchor, PleatShape } from './pleat'
 
 /**
@@ -43,6 +44,8 @@ export interface PartFinish {
   pattern: FinishPattern
   /** Glows by itself (an exit sign) — drawn at its colour, not lit. */
   emissive: boolean
+  /** How light leaves it ([finishLobes]): one of [FINISH_LOBES], so a finish compares by identity. */
+  lobes: FinishLobes
 }
 
 export interface ScenePart {
@@ -124,31 +127,98 @@ const DEFAULT_KIND_COLOUR: Record<string, string> = {
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
+/**
+ * The finishes a stage is made of, as lobes (stage-light plan session 4, `lobes.ts`). Estimates,
+ * judged in `profileHarness.ts`'s material scenes rather than measured:
+ *
+ * - `MATTE` — plaster, a ceiling, a cyc's cloth, a pros's black surround: rough matte, no shine.
+ * - `PAINT` — a flat, a wall, a prop: eggshell paint, a little rough, a broad highlight.
+ * - `VELOUR` — legs, borders, tabs, a backcloth, a seat's upholstery: rough, with a grazing sheen.
+ * - `FLOOR` — the stage floor: a satin dance floor, the sharpest highlight here, so a lamp upstage
+ *   reads on it from the house as a soft streak.
+ * - `DECK` — a platform, a rostrum, a room's floor: a sealed or painted deck, a broader one.
+ * - `LAMBERT` — no lobes: the housings, which a fill lights, and a catch surface.
+ */
+// Estimate: judged by eye in `?profileHarness=rake`, `=cyc`, `=floor` and `=gloss`, not measured.
+export const FINISH_LOBES = {
+  LAMBERT: LAMBERT_LOBES,
+  MATTE: { diffuseRoughness: 0.5, sheen: 0, sheenRoughness: 1, specular: 0, roughness: 1 },
+  PAINT: { diffuseRoughness: 0.3, sheen: 0, sheenRoughness: 1, specular: 0.04, roughness: 0.7 },
+  VELOUR: { diffuseRoughness: 0.5, sheen: 0.1, sheenRoughness: 0.3, specular: 0, roughness: 1 },
+  FLOOR: { diffuseRoughness: 0, sheen: 0, sheenRoughness: 1, specular: 0.04, roughness: 0.35 },
+  DECK: { diffuseRoughness: 0, sheen: 0, sheenRoughness: 1, specular: 0.04, roughness: 0.55 },
+} as const satisfies Record<string, FinishLobes>
+
+/** Which part of an element a finish is for: its body, or one the builder names. */
+export type FinishPart = 'body' | 'floor' | 'ceiling' | 'surround' | 'rail' | 'seat' | 'frame'
+
+/**
+ * A finish's lobes by the element's [kind], a drape's [role] and the [part]. No element carries its
+ * own (stage-light plan P2: an override would be a portable field), so this table is the whole of it.
+ */
+export function finishLobes(kind: string, role: string | null, part: FinishPart = 'body'): FinishLobes {
+  switch (part) {
+    case 'floor':
+      return FINISH_LOBES.DECK
+    case 'ceiling':
+    case 'surround':
+      return FINISH_LOBES.MATTE
+    case 'rail':
+    case 'frame':
+      return FINISH_LOBES.PAINT
+    case 'seat':
+      return FINISH_LOBES.VELOUR
+    case 'body':
+      break
+  }
+  switch (kind) {
+    case 'ROOM':
+      return FINISH_LOBES.MATTE
+    case 'DRAPE':
+      return role === 'CYC' ? FINISH_LOBES.MATTE : FINISH_LOBES.VELOUR
+    case 'PLATFORM':
+      return FINISH_LOBES.DECK
+    case 'SEATING':
+      return FINISH_LOBES.VELOUR
+    default:
+      return FINISH_LOBES.PAINT
+  }
+}
+
 export function isFinishPattern(value: unknown): value is FinishPattern {
   return value === 'PLAIN' || value === 'PANELS' || value === 'TILES' || value === 'BOARDS'
 }
 
-/** The element's own finish, with its kind's colour where it names none. */
+/**
+ * The element's own finish for [part], with its kind's colour where it names none and its kind's,
+ * role's and part's lobes ([finishLobes]).
+ */
 export function elementFinish(
-  element: Pick<StageElementDto, 'kind' | 'finishColour' | 'finishPattern' | 'emissive'>,
+  element: Pick<StageElementDto, 'kind' | 'finishColour' | 'finishPattern' | 'emissive' | 'params'>,
+  part: FinishPart = 'body',
 ): PartFinish {
   const colour = element.finishColour != null && HEX.test(element.finishColour)
     ? element.finishColour
     : (DEFAULT_KIND_COLOUR[element.kind] ?? '#9aa5b1')
   const pattern = typeof element.finishPattern === 'string' ? element.finishPattern.toUpperCase() : null
-  return { colour, pattern: isFinishPattern(pattern) ? pattern : 'PLAIN', emissive: element.emissive === true }
+  return {
+    colour,
+    pattern: isFinishPattern(pattern) ? pattern : 'PLAIN',
+    emissive: element.emissive === true,
+    lobes: finishLobes(element.kind, paramEnum(element, 'role'), part),
+  }
 }
 
 /**
  * A sub-finish from `params` (a room's `floor` and `ceiling`) over [fallback]: its own colour and
- * pattern where it states them, the element's where it does not.
+ * pattern where it states them, the element's where it does not, and the fallback's lobes.
  */
 export function paramsFinish(value: unknown, fallback: PartFinish): PartFinish {
   if (value == null || typeof value !== 'object') return fallback
   const f = value as Record<string, unknown>
   const colour = typeof f.colour === 'string' && HEX.test(f.colour) ? f.colour : fallback.colour
   const pattern = typeof f.pattern === 'string' ? f.pattern.toUpperCase() : null
-  return { colour, pattern: isFinishPattern(pattern) ? pattern : fallback.pattern, emissive: false }
+  return { colour, pattern: isFinishPattern(pattern) ? pattern : fallback.pattern, emissive: false, lobes: fallback.lobes }
 }
 
 /** A number from `params`, or [fallback] where it is missing or not a finite number. */

@@ -9,6 +9,7 @@ import {
   NearestFilter,
   RGBAFormat,
   ShaderMaterial,
+  Vector2,
   Vector3,
   Vector4,
 } from 'three'
@@ -17,6 +18,7 @@ import { getGoboTexture } from '../goboAtlas'
 import { GOBO_LAYERS_GLSL } from '../goboLayers'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from '../washConfig'
 import { LANDING_GLSL, REACH_EPS_M } from './landing'
+import { lobeDefines, LOBES_GLSL, lobeUniformValues } from './lobes'
 import { BEAM_FRAME_GLSL, LIGHT_TEXELS, MAX_LIGHT_BUDGET, UNPACK_EDGE_IRIS_GLSL, UNPACK_FOCUS_GLSL } from './lightTable'
 import { COLLIDER_TEXELS, LIST_TEXELS, makeColliderSet, OCCLUSION_GLSL, type ColliderSet } from './occlusion'
 import { PLEAT_GLSL, pleatUniformValues, type PleatShape } from './pleat'
@@ -49,7 +51,7 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * **Gobos land too** (fixture-optics plan session 4, D10): a light carrying gobo layers (texel 4,
  * `../goboLayers.ts`) samples the atlas in the same frame the mask cuts in, turned by each layer's
  * angle, multiplied over the mask — so the blades, the iris and an oval cut the gobo as they cut the
- * pool — at the mip level of the focus blur the edge is softened by, or of the pixel's footprint
+ * pool — at the blur level of the focus blur the edge is softened by, or of the pixel's footprint
  * where that is wider. The haze samples it through the same function, so a gobo sharp in the air at
  * a distance is sharp on a wall at that distance. A drape's folds shadow each other (stage-light plan D7, `PLEAT`):
  * the fold is a known sine in the part's own frame — the mesh's model matrix — so `pleat.ts`'s
@@ -57,7 +59,9 @@ import type { FinishPattern, PartFinish } from './sceneParts'
  * less of the room's ambient.
  *
  * The colour (stage-light plan D6): every light, the room's ambient and the material's own fill
- * summed, times the finish **and nothing else** — a `#111` serge reflects its own 0.6 % — exposed by
+ * summed, times the finish **and nothing else** — a `#111` serge reflects its own 0.6 % — plus, per
+ * light, the finish's sheen and specular (`lobes.ts`, session 4: Oren–Nayar shapes the diffuse, the
+ * Charlie sheen and GGX add over it, uncoloured by the albedo but for the sheen's own hue), exposed by
  * [SURFACE_LIGHT_GAIN] and rolled off once by `1 − exp(−·)` **on the luminance**, the chroma kept
  * ([rollOff]), and encoded. So two pools overlapping add as the eye sees them, a wall under the whole
  * rig is bright rather than a flat blown-out plate, a white pool on a red drape is red, and a colour
@@ -238,6 +242,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
   uniform int uPattern;
   uniform float uOpacity;
   uniform float uFill;
+  ${LOBES_GLSL}
 
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
@@ -312,11 +317,21 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
 
     // How wide this pixel is on the surface, in metres — taken here, in uniform control flow, since
     // derivatives inside the light loop (after its continues) are undefined. A gobo is read at the
-    // mip level of this footprint where it is wider than the focus blur, so a sharp pattern far
+    // blur level of this footprint where it is wider than the focus blur, so a sharp pattern far
     // away is filtered rather than aliased.
     float footprint = length(fwidth(vWorldPos));
 
+    #if defined(LOBE_OREN_NAYAR) || defined(LOBE_SHEEN) || defined(LOBE_GGX)
+    // Towards the eye: the camera's own axis for an orthographic section, where every ray is parallel.
+    vec3 V = isOrthographic
+      ? normalize(vec3(viewMatrix[0][2], viewMatrix[1][2], viewMatrix[2][2]))
+      : normalize(cameraPosition - vWorldPos);
+    float NV = max(dot(n, V), 1e-4);
+    #endif
+
+    // The diffuse light (times the albedo below) and the gloss the finish adds over it (not).
     vec3 acc = vec3(0.0);
+    vec3 gloss = vec3(0.0);
     for (int i = 0; i < uLightCount; i++) {
       vec4 axis = texelFetch(uLights, ivec2(1, i), 0);
       vec4 apex = texelFetch(uLights, ivec2(0, i), 0);
@@ -373,7 +388,24 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
       // beam's own footprint: a narrow beam puts the same light on less of the surface.
       float da = max(dist - aperture.x, 0.3);
       float spread = clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX);
-      acc += colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
+      vec3 irradiance = colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);
+      float diffuse = 1.0;
+      #if defined(LOBE_SHEEN) || defined(LOBE_GGX)
+      vec3 H = normalize(V - L);
+      float NH = max(dot(n, H), 0.0);
+      #endif
+      #ifdef LOBE_OREN_NAYAR
+      diffuse = orenNayar(facing, NV, dot(-L, V));
+      #endif
+      #ifdef LOBE_SHEEN
+      gloss += irradiance * charlieSheen(facing, NV, NH);
+      diffuse *= sheenKeeps(facing);
+      #endif
+      #ifdef LOBE_GGX
+      gloss += irradiance * ggxSpecular(facing, NV, NH, max(dot(V, H), 0.0));
+      diffuse *= specularKeeps(facing);
+      #endif
+      acc += irradiance * diffuse;
     }
 
     #ifdef CATCH
@@ -388,7 +420,7 @@ const SURFACE_FRAGMENT_SHADER = /* glsl */ `
     #ifdef PLEAT
     ao = troughAmbient(across, gl_FrontFacing);
     #endif
-    vec3 lit = rollOff(albedo * (vec3((uAmbient + fill) * ao) + acc) * uLightGain);
+    vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + gloss) * uLightGain);
     // The finishes are sRGB hex, held linear by three's colour management: out through the
     // canvas's output transfer, as three's own materials are.
     gl_FragColor = linearToOutputTexel(vec4(lit, uOpacity));
@@ -432,6 +464,14 @@ export function makeSurfaceMaterial(
   const defines: Record<string, string> = {}
   if (finish.emissive) defines.EMISSIVE = ''
   if (options.catchOnly) defines.CATCH = ''
+  // A catch surface is the light alone, and an emissive one no light at all: neither has lobes.
+  const lobes = finish.emissive || options.catchOnly ? null : finish.lobes
+  const on = lobes != null ? lobeDefines(lobes) : null
+  if (on?.orenNayar) defines.LOBE_OREN_NAYAR = ''
+  if (on?.sheen) defines.LOBE_SHEEN = ''
+  if (on?.ggx) defines.LOBE_GGX = ''
+  const albedo = new Color(finish.colour)
+  const lobeValues = lobes != null ? lobeUniformValues(lobes, albedo.r, albedo.g, albedo.b) : null
   const pleat = options.pleat != null ? pleatUniformValues(options.pleat) : null
   if (pleat != null) defines.PLEAT = ''
   const opacity = options.opacity ?? 1
@@ -439,10 +479,16 @@ export function makeSurfaceMaterial(
     defines,
     uniforms: {
       ...uniforms,
-      uAlbedo: { value: new Color(finish.colour) },
+      uAlbedo: { value: albedo },
       uPattern: { value: PATTERN_INDEX[finish.pattern] },
       uOpacity: { value: opacity },
       uFill: { value: options.fill ?? 0 },
+      ...(lobeValues != null && {
+        uOrenNayar: { value: new Vector2(...lobeValues.orenNayar) },
+        uSheen: { value: new Vector4(...lobeValues.sheen) },
+        uSheenStrength: { value: lobeValues.sheenStrength },
+        uSpecular: { value: new Vector2(...lobeValues.specular) },
+      }),
       ...(pleat != null && {
         uPleat: { value: new Vector4(...pleat.pleat) },
         uPleatWarp: { value: Array.from({ length: pleat.warp.length / 3 }, (_, i) => new Vector3(...pleat.warp.slice(i * 3, i * 3 + 3))) },

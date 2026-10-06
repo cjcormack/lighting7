@@ -4,7 +4,7 @@ import { seatBase, seatingParams } from '../../../../lib/stageSeats'
 import { buildElement } from '.'
 import { DRAWN_GATHER, drawnHalfWidth } from './drape'
 import { ROOM_FACE_INSET_M } from './room'
-import { elementBaseZ, type ScenePart } from '../sceneParts'
+import { elementBaseZ, FINISH_LOBES, type ScenePart } from '../sceneParts'
 
 function element(fields: Partial<StageElementDto>): StageElementDto {
   return {
@@ -41,7 +41,7 @@ describe('the element builders (stage-view plan session 3)', () => {
     expect(part(parts, 'floor').at.z).toBeCloseTo(-ROOM_FACE_INSET_M, 9)
     expect(part(parts, 'stage_right').at.x).toBeCloseTo(-4.3 - ROOM_FACE_INSET_M, 9)
     // The floor takes its own finish; the walls the element's.
-    expect(part(parts, 'floor').finish).toEqual({ colour: '#2b2724', pattern: 'BOARDS', emissive: false })
+    expect(part(parts, 'floor').finish).toEqual({ colour: '#2b2724', pattern: 'BOARDS', emissive: false, lobes: FINISH_LOBES.DECK })
     expect(part(parts, 'downstage').finish.colour).toBe('#4a4540')
   })
 
@@ -138,7 +138,7 @@ describe('the element builders (stage-view plan session 3)', () => {
     expect(elementBaseZ(moon)).toBe(2.3)
     // An exit sign glows at its colour.
     expect(buildElement(element({ emissive: true, finishColour: '#1bd760' })).parts[0].finish).toEqual({
-      colour: '#1bd760', pattern: 'PLAIN', emissive: true,
+      colour: '#1bd760', pattern: 'PLAIN', emissive: true, lobes: FINISH_LOBES.PAINT,
     })
   })
 })

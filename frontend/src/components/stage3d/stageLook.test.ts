@@ -3,6 +3,7 @@ import { Color, SRGBColorSpace } from 'three'
 import { makeVolumeMaterial } from './beamShaders'
 import { getGoboTexture } from './goboAtlas'
 import { litByFill, LUMA, makeLightTexture, makeSurfaceMaterial, makeSurfaceUniforms, ROLL_OFF_GLSL, rollOff, setPleatShift, SURFACE_AMBIENT, SURFACE_LIGHT_GAIN } from './scene/surfaceShader'
+import { LAMBERT_LOBES } from './scene/lobes'
 import { pleatShape } from './scene/pleat'
 import { STAGE_RENDER_PRIORITY } from './StageRender'
 import { EMITTER_FLUSH_PRIORITY } from './StageEmitters'
@@ -22,7 +23,7 @@ const sources = import.meta.glob(['/src/**/*.{ts,tsx}', '!/src/**/stageLook.test
 }) as Record<string, string>
 
 const surface = (options: Parameters<typeof makeSurfaceMaterial>[2] = {}) =>
-  makeSurfaceMaterial(makeSurfaceUniforms(makeLightTexture().texture), { colour: '#808080', pattern: 'PLAIN', emissive: false }, options)
+  makeSurfaceMaterial(makeSurfaceUniforms(makeLightTexture().texture), { colour: '#808080', pattern: 'PLAIN', emissive: false, lobes: LAMBERT_LOBES }, options)
 
 describe('the stage draws straight to the canvas', () => {
   it('has no post-processing: nothing imports the composer', () => {
@@ -59,15 +60,17 @@ describe('the surfaces', () => {
 
   it('falls off from the lens, not the apex behind it, over the beam’s own footprint', () => {
     expect(fragment).toContain('max(dist - aperture.x, 0.3)')
-    expect(fragment).toContain('acc += colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5)')
+    expect(fragment).toContain('vec3 irradiance = colour.rgb * m * facing * shade * spread / (da * min(da, FALLOFF_KNEE) + 0.5);')
+    expect(fragment).toContain('acc += irradiance * diffuse;')
     // A beam narrower than 20° puts the same light on less of the surface; a wider one is unchanged.
     expect(fragment).toContain('clamp(SPREAD_REF_TAN2 / max(frame.w * frame.w, 1e-6), 1.0, SPREAD_GAIN_MAX)')
     expect(fragment).toContain(`#define SPREAD_REF_TAN2 ${(Math.tan(Math.PI / 18) ** 2).toFixed(6)}`)
   })
 
   it('rolls the finish, the ambient, the fill and every light off together, and encodes every exit', () => {
-    // The finish takes its own share of every light: no reflectance floor (stage-light plan D6).
-    expect(fragment).toContain('vec3 lit = rollOff(albedo * (vec3((uAmbient + fill) * ao) + acc) * uLightGain);')
+    // The finish takes its own share of every light: no reflectance floor (stage-light plan D6). The
+    // sheen and the specular (session 4) are rolled off with it, beside the albedo's light.
+    expect(fragment).toContain('vec3 lit = rollOff((albedo * (vec3((uAmbient + fill) * ao) + acc) + gloss) * uLightGain);')
     expect(fragment).not.toContain('uReflectFloor')
     expect(fragment).toContain(ROLL_OFF_GLSL)
     const exits = [...fragment.matchAll(/gl_FragColor = (.*);/g)].map((m) => m[1])

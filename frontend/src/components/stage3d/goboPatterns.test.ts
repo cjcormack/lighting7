@@ -5,7 +5,7 @@ import {
   PATTERN_GENERATORS,
   goboLayerFor,
 } from './goboPatterns'
-import { GOBO_TILE_PX, buildGoboAtlasData } from './goboAtlas'
+import { GOBO_TILE_PX, buildGoboAtlasData, goboLayerIndex } from './goboAtlas'
 
 describe('gobo pattern registry', () => {
   it('keeps layer 0 as the open invariant', () => {
@@ -54,7 +54,7 @@ describe('gobo pattern registry', () => {
     const signatures = GOBO_PATTERNS.map((_, i) => {
       const sig: number[] = []
       for (let o = 0; o < layerBytes; o += 331) {
-        sig.push(data[i * layerBytes + o])
+        sig.push(data[goboLayerIndex(i, 0) * layerBytes + o])
       }
       return sig.join(',')
     })

@@ -28,8 +28,8 @@ export function buildRoom(element: StageElementDto): ElementBuild {
       : [],
   )
   const walls = elementFinish(element)
-  const floor = paramsFinish(element.params.floor, walls)
-  const ceiling = paramsFinish(element.params.ceiling, walls)
+  const floor = paramsFinish(element.params.floor, elementFinish(element, 'floor'))
+  const ceiling = paramsFinish(element.params.ceiling, elementFinish(element, 'ceiling'))
   const parts: ScenePart[] = []
   const face = (side: string, part: Omit<ScenePart, 'key' | 'collides'>) => {
     if (!omit.has(side)) parts.push({ key: side.toLowerCase(), collides: true, ...part })

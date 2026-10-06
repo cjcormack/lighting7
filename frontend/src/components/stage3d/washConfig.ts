@@ -1,4 +1,4 @@
-import { GOBO_TILE_PX } from './goboAtlas'
+import { GOBO_BLUR_LEVELS, GOBO_TILE_PX } from './goboAtlas'
 
 // Stage-3D atmosphere tuning. These are code-level knobs, not UI settings — tweak the values here.
 // Read by the beam volumes (`beamShaders.ts`, through `StageEmitters`) and the surface shader.
@@ -20,17 +20,19 @@ export const HAZE_LEVEL = 0.5
 // sees, the relative focus error |f − d| / f along the axis times the type's
 // depth of field (focusBlur in beamMask, fixture-optics plan D9). Only the edge
 // was tuned to it (DEPTH_OF_FIELD in bodies/archetype.ts, and beamMask's
-// FOCUS_SPREAD_MAX); the gobo constants below were not.
+// FOCUS_SPREAD_MAX); the gobo follows the edge: each of its blur levels is a
+// Gaussian as wide as the edge at the blur that reads it (goboAtlas.ts's
+// goboLevelSigma, stage-light plan session 4).
 
 /** A gobo tile's texels across the field's radius. A blur `b` field radii wide
- *  spans `b ×` this many texels and each mip level averages twice as many, so the
- *  in-air gobo samples at LOD log2(1 + b × this). The blur is the relative-error
- *  one since fixture-optics session 1, which runs larger than the old blur circle
- *  on a long throw (a 24 m Revolution one DMX step off focus is about LOD 3). */
+ *  spans `b ×` this many texels, and the gobo is read at level log2(1 + b × this),
+ *  whose Gaussian (`goboLevelSigma`) makes its edge as wide as the pool's. The blur
+ *  is the relative-error one since fixture-optics session 1 (a 24 m Revolution one
+ *  DMX step off focus is about level 3). */
 export const GOBO_BLUR_TEXELS = GOBO_TILE_PX / 2
 
-/** LOD ceiling for defocus blur (128px atlas has 8 mip levels; 6 is mush). */
-export const FOCUS_LOD_MAX = 6
+/** The blurriest gobo level (`goboAtlas.ts`'s [GOBO_BLUR_LEVELS], 0 sharp): about a field radius, mush. */
+export const FOCUS_LOD_MAX = GOBO_BLUR_LEVELS - 1
 
 // — volumetric beam ————————————————————————————————————————————————
 // Every beam in the air is a raymarched volume since stage-view plan session 6 (the silhouette
@@ -56,9 +58,9 @@ export const VOL_SPREAD_NEAR = 0.15
  *  1 − fade · (axial / length) along the throw. */
 export const VOL_AXIAL_FADE = 0.55
 
-/** Base mip level for in-air gobo samples; defocus LOD adds on top. 0 keeps
- *  the pattern crisp for the full throw — the stylised "consistent cone"
- *  look. The march samples with textureLod (no automatic minification), so
- *  raise this if fine gobos (dots/stars) shimmer or alias at long throw, or
- *  if march banding shows through the jitter. */
+/** Base blur level for in-air gobo samples; the defocus level adds on top. 0
+ *  keeps the pattern crisp for the full throw — the stylised "consistent cone"
+ *  look. The march reads no pixel footprint, so raise this if fine gobos
+ *  (dots/stars) shimmer or alias at long throw, or if march banding shows
+ *  through the jitter. */
 export const VOL_LOD_BASE = 0.0

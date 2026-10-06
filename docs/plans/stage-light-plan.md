@@ -144,7 +144,7 @@ one-line row with the session's commit SHA, added on the branch before its PR me
 - **Docs:** the occlusion paragraphs; `FU-STAGE-QUALITY-TIER`'s text (boxes cast shadows now; shadow
   maps would be for meshes).
 
-### Session 4 — lobes and gobo blur (frontend)
+### ~~Session 4 — lobes and gobo blur (frontend)~~ — done, `48d49f19`
 
 - **Per-finish lobes:** Oren–Nayar diffuse for rough matte surfaces; the Charlie sheen lobe
   (Estevez & Kulla 2017) for velour and serge; GGX specular with a roughness for floors and paint.
@@ -173,6 +173,11 @@ Added to `followups.md` by the session that makes them concrete, not before:
 - one-bounce fill (a virtual light at each landed pool, coloured by the hit finish);
 - cloth micro-detail;
 - a chromatic fringe on imaging families' penumbra.
+
+Session 4 recorded two, both Trigger-gated: `FU-STAGE-BOUNCE-FILL` (with D6's exposure a bright cyc
+or floor pool lights nothing round it) and `FU-STAGE-FOCUS-FRINGE` (a symmetric, colourless blur
+cannot say which side of focus a lens is). Cloth micro-detail was not: pleats and the sheen carry
+cloth at the view's distances, and a weave is below a pixel from the house.
 
 ## 9. Verification
 
