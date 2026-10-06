@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stage view menu model</title>
+  <style>
+  <style>
+    body { margin: 0; }
+    a { color: oklch(0.707 0.165 254.624); }
+    a:hover { color: oklch(0.809 0.105 251.813); }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+    .num { font-variant-numeric: tabular-nums; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .ico12 { width:12px; height:12px; flex:0 0 auto; }
+    .ico14 { width:14px; height:14px; flex:0 0 auto; }
+    .ico16 { width:16px; height:16px; flex:0 0 auto; }
+    .beat { width:6px; height:6px; border-radius:50%; background:var(--green); }
+    .gobtn { width:64px; height:36px; border-radius:8px; background:var(--pri); color:oklch(0.21 0.006 285.885); font-size:14px; font-weight:700; letter-spacing:0.06em; display:grid; place-items:center; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:10px; font-weight:500; color:var(--fg); white-space:nowrap; }
+    .chip.pri { border-color:oklch(0.623 0.214 259.815 / 0.5); color:oklch(0.8 0.12 255); background:oklch(0.623 0.214 259.815 / 0.12); }
+    .chip.dash { border-style:dashed; color:var(--mfg); }
+    .pill { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10px; color:var(--fg); white-space:nowrap; }
+    .btn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; font-size:12px; font-weight:500; white-space:nowrap; color:var(--fg); }
+    .btn.out { border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    .btn.ghost { color:var(--mfg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11px; }
+    .seg { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .seg span { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 9px; border-radius:6px; font-size:11px; font-weight:600; color:var(--mfg); }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    /* rig tiles */
+    .rrow { display:flex; align-items:center; gap:8px; }
+    .rlbl { width:58px; flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tiles { display:flex; gap:8px; overflow:hidden; flex:1; min-width:0; }
+    .tile { position:relative; display:flex; flex-direction:column; justify-content:center; gap:4px; height:52px; padding:0 12px; min-width:148px; border-radius:10px;
+      border:1px solid var(--bd); background:var(--card); font-size:14px; white-space:nowrap; color:var(--fg); flex:0 0 auto; overflow:hidden; }
+    .tile .t1 { display:flex; align-items:center; gap:8px; }
+    .tile svg { color:var(--mfg); }
+    .tile.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .tile.on svg { color:var(--pri); }
+    .tile.some { border-color:oklch(0.623 0.214 259.815 / 0.45); background:oklch(0.623 0.214 259.815 / 0.08); }
+    .cnt { font-size:10px; padding:1px 6px; border-radius:999px; background:var(--muted); color:var(--mfg); }
+    .live { position:absolute; left:0; right:0; bottom:0; height:3px; background:var(--muted); }
+    .live i { display:block; height:100%; }
+    .pips { display:flex; gap:3px; }
+    .pip { width:11px; height:6px; border-radius:2px; background:var(--muted); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .pip.on { background:var(--pri); box-shadow:none; }
+    .handle { display:flex; align-items:center; justify-content:center; gap:8px; height:14px; margin-top:6px; color:var(--mfg); font-size:9px; letter-spacing:0.06em; text-transform:uppercase; font-weight:700; }
+    .handle::before, .handle::after { content:''; flex:1; height:1px; background:var(--bd); }
+    /* pads */
+    .bank { display:flex; flex-direction:column; gap:8px; border-radius:10px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.15); padding:10px; min-width:0; }
+    .bankh { display:flex; align-items:center; gap:8px; min-height:18px; }
+    .bankname { font-size:11px; font-weight:600; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .solotag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; background:oklch(0.27 0.09 302 / 0.5); color:oklch(0.82 0.11 305); border:1px solid oklch(0.45 0.16 300 / 0.6); }
+    .pads { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .pad { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px; padding:8px; text-align:center; border-radius:10px; border:1px solid var(--bd); background:var(--card); }
+    .pad.some { border-color:oklch(0.623 0.214 259.815 / 0.4); background:oklch(0.623 0.214 259.815 / 0.1); }
+    .pad.all { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.2); box-shadow:0 0 0 1px oklch(0.623 0.214 259.815 / 0.5); }
+    .pad.all::after, .pad.some::after { content:''; position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--pri); }
+    .pad.some::after { background:oklch(0.623 0.214 259.815 / 0.5); }
+    .padname { font-size:14px; font-weight:500; line-height:1.2; }
+    .pad.all .padname, .pad.some .padname { color:var(--pri); }
+    .paddetail { font-size:10px; line-height:1.2; color:var(--mfg); }
+    .padrow { display:flex; align-items:center; gap:6px; }
+    .sw { width:12px; height:12px; border-radius:4px; flex:0 0 auto; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15); }
+    .cue { align-items:flex-start; text-align:left; }
+    .cue .cn { font-family: ui-monospace, Menlo, monospace; font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; }
+    .cue .cname { font-size:11px; color:var(--mfg); }
+    .cue.live { border-color:rgba(74,222,128,0.7); background:rgba(74,222,128,0.08); box-shadow:0 0 0 1px rgba(74,222,128,0.35); }
+    .wave { color:var(--mfg); }
+    /* sheet */
+    .tabs { display:flex; align-items:stretch; height:40px; border-bottom:1px solid var(--bd); }
+    .tabs span { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; font-size:11px; font-weight:600; color:var(--mfg); border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .tabs span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .tabs .fold { flex:0 0 36px; border-left:1px solid var(--bd); color:var(--mfg); }
+    .field { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; min-width:0; }
+    .slider { position:relative; height:6px; border-radius:3px; background:var(--muted); flex:1; }
+    .slider i { position:absolute; top:-4px; width:14px; height:14px; border-radius:50%; background:var(--fg); box-shadow:0 0 0 1px var(--bd); }
+    .swatch { height:32px; border-radius:8px; border:1px solid var(--bd); display:flex; align-items:flex-end; padding:3px 5px; font-size:9px; font-weight:600; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.6); }
+    .switch { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .switch::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .callout { z-index:6; position:absolute; width:20px; height:20px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:11px; font-weight:800; display:grid; place-items:center; box-shadow:0 0 0 2px var(--bg); }
+    .legend { display:flex; gap:14px; align-items:flex-start; padding:10px 16px; border-top:1px solid var(--bd); background:oklch(0.17 0.005 286); }
+    .legend div { display:flex; gap:7px; flex:1; font-size:10.5px; line-height:1.35; color:var(--mfg); }
+    .legend b { color:var(--fg); font-weight:600; }
+    .legend .n { width:18px; height:18px; border-radius:50%; background:var(--amber); color:#1a1200; font-size:10px; font-weight:800; display:grid; place-items:center; flex:0 0 auto; }
+    /* ── additions for the busk-chrome boards ─────────────────────────────── */
+    .appbar { height:53px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 16px; background:var(--pri); color:#fff; }
+    .appbar .title { font-size:16px; font-weight:600; flex:1; }
+    .appbar .conn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; border:1px solid oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.6); font-size:13px; }
+    .appbar .ib { width:32px; height:32px; display:grid; place-items:center; color:#fff; opacity:0.95; }
+    .appbar .avatar { width:32px; height:32px; border-radius:50%; background:oklch(0.35 0.03 260); display:grid; place-items:center; font-size:11px; font-weight:600; }
+    .rail { width:64px; flex-shrink:0; border-right:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; align-items:center; }
+    .rail .rh { height:56px; width:100%; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri { width:40px; height:40px; margin:4px 0; border-radius:8px; display:grid; place-items:center; color:var(--mfg); }
+    .rail .ri.on { background:var(--muted); color:var(--fg); }
+    .rail .rsep { width:40px; height:1px; background:var(--bd); margin:8px 0; }
+    .showhdr { height:40px; flex-shrink:0; display:flex; align-items:center; gap:12px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .crumbs { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--mfg); }
+    .crumbs b { color:var(--fg); font-weight:600; }
+    .crumbs .active { display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:999px; background:var(--pri); color:#fff; font-size:11px; }
+    .switcher { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--bd); background:var(--card); border-radius:8px; padding:2px; }
+    .switcher span { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 9px; border-radius:6px; font-size:12px; font-weight:500; color:var(--mfg); }
+    .switcher span.on { background:var(--muted); color:var(--fg); }
+    .stopbtn { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.2 25); color:#fff; font-size:13px; font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+    .ibtn { width:32px; height:32px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); display:grid; place-items:center; color:var(--fg); }
+    .ibtn.on { border-color:oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); color:oklch(0.8 0.12 255); }
+    .ctrlrow { display:flex; align-items:center; gap:8px; }
+    /* sheet, show tab */
+    .sh-strip { height:48px; flex-shrink:0; display:flex; align-items:center; gap:4px; padding:0 8px; border-bottom:1px solid var(--bd); background:var(--card); }
+    .sh-strip .stack { display:inline-flex; align-items:center; gap:4px; height:36px; padding:0 8px; font-size:13px; font-weight:500; min-width:0; }
+    .sh-strip .stack span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sh-strip .ib { width:32px; height:32px; display:grid; place-items:center; color:var(--mfg); }
+    .sh-strip .tempo { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:12px; }
+    .sh-strip .dbo { display:inline-flex; align-items:center; height:32px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font-size:11px; font-weight:700; letter-spacing:0.08em; }
+    .card { border-radius:10px; border:1px solid var(--bd); background:var(--card); overflow:hidden; }
+    .card .ch { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+    .card .ch .k { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .card .ch .cn { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; font-size:15px; font-weight:700; }
+    .card.cur .ch .cn { color:var(--green); }
+    .card.nxt .ch .cn { color:oklch(0.75 0.15 255); }
+    .card .ch .nm { font-size:14px; font-weight:500; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .meta { display:flex; align-items:center; gap:8px; padding:0 10px 8px; font-size:11px; color:var(--mfg); }
+    .card .toggle { display:inline-flex; gap:2px; border:1px solid var(--bd); border-radius:6px; padding:2px; margin-left:auto; }
+    .card .toggle span { height:18px; padding:0 7px; border-radius:4px; font-size:10px; font-weight:600; color:var(--mfg); display:inline-flex; align-items:center; }
+    .card .toggle span.on { background:var(--muted); color:var(--fg); }
+    .card .cbody { border-top:1px solid var(--bd); padding:8px 10px; font-size:11px; color:var(--mfg); display:flex; flex-direction:column; gap:6px; }
+    .card.cur { border-left:3px solid var(--green); }
+    .card.nxt { border-left:3px solid oklch(0.62 0.18 255); }
+    .ministage { height:56px; border-radius:6px; background:oklch(0.17 0.005 286); display:flex; align-items:flex-end; justify-content:space-around; padding:0 10px 6px; }
+    .ministage i { width:14px; height:14px; border-radius:50%; display:block; }
+    .counter { display:inline-flex; align-items:center; height:18px; padding:0 8px; border-radius:999px; border:1px solid var(--bd); font-size:9.5px; color:var(--mfg); letter-spacing:0.08em; }
+    .change { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 8px; border-radius:999px; border:1px solid oklch(0.45 0.12 255 / 0.6); background:oklch(0.25 0.06 255 / 0.6); font-size:10.5px; font-weight:700; text-transform:uppercase; color:oklch(0.78 0.12 255); }
+    .transport { display:grid; grid-template-columns:1fr 2fr; gap:8px; padding:12px; border-top:1px solid var(--bd); flex-shrink:0; }
+    .transport .back { height:56px; border-radius:8px; border:1px solid var(--bd); background:var(--card); display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:700; letter-spacing:0.06em; }
+    .transport .go { height:56px; border-radius:8px; background:var(--pri); color:#fff; display:grid; place-items:center; font-size:24px; font-weight:700; letter-spacing:0.16em; box-shadow:0 6px 14px oklch(0.623 0.214 259.815 / 0.35); }
+    .endnote { border-radius:8px; border:1px solid oklch(0.35 0.1 255 / 0.6); background:oklch(0.22 0.05 255 / 0.4); padding:8px 10px; font-size:12px; font-style:italic; color:oklch(0.78 0.12 255); }
+    /* fold strip */
+    .fold { width:40px; flex-shrink:0; border-left:1px solid var(--bd); background:oklch(0.21 0.006 285.885 / 0.4); display:flex; flex-direction:column; align-items:center; }
+    .fold .cell { width:40px; height:40px; border-bottom:1px solid var(--bd); display:grid; place-items:center; color:var(--mfg); }
+    .fold .g { width:28px; height:28px; border-radius:6px; display:grid; place-items:center; color:var(--mfg); }
+    .fold .g.live { color:var(--green); }
+    /* copy blocks */
+    .h1 { font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+    .h2 { font-size:14px; font-weight:700; }
+    .cap { font-size:11px; line-height:1.45; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    .note { border-radius:8px; border:1px solid var(--bd); background:var(--card); padding:9px 12px; }
+    .note.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+    .note.warn { border-color:oklch(0.6 0.14 80 / 0.6); background:oklch(0.3 0.06 80 / 0.25); }
+    .note.no { border-color:oklch(0.5 0.15 25 / 0.5); background:oklch(0.25 0.06 25 / 0.25); }
+    .kv { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; font-size:11px; }
+    .kv .k { color:var(--mfg); white-space:nowrap; }
+    .tag { display:inline-flex; align-items:center; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; border:1px solid var(--bd); color:var(--mfg); }
+    .tag.new { border-color:oklch(0.62 0.17 145 / 0.6); color:oklch(0.8 0.15 145); background:oklch(0.25 0.06 145 / 0.4); }
+    .tag.gone { border-color:oklch(0.5 0.15 25 / 0.6); color:oklch(0.8 0.12 25); background:oklch(0.25 0.06 25 / 0.4); }
+    .tag.kept { border-color:oklch(0.5 0.12 255 / 0.6); color:oklch(0.8 0.12 255); background:oklch(0.25 0.06 255 / 0.4); }
+    .budget { display:flex; flex-direction:column; gap:2px; width:100%; }
+    .budget .seg2 { display:flex; align-items:center; padding:0 8px; font-size:10px; font-weight:600; border-radius:3px; white-space:nowrap; overflow:hidden; }
+    /* ── additions for the stage-view boards ─────────────────────────────── */
+    .appbar .armed { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:8px; background:oklch(0.55 0.21 27); border:1px solid oklch(0.7 0.19 27); font-size:12px; font-weight:700; letter-spacing:0.06em; }
+    .viewhdr { height:48px; flex-shrink:0; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .viewhdr .vt { font-size:14px; font-weight:600; margin-right:6px; }
+    .vp { display:inline-flex; align-items:center; gap:8px; height:32px; padding:0 10px; border-radius:8px; border:1px solid oklch(0.623 0.214 259.815 / 0.5); background:oklch(0.623 0.214 259.815 / 0.12); font-size:12.5px; font-weight:600; color:oklch(0.85 0.1 255); }
+    .vp small { font-weight:400; color:var(--mfg); }
+    .btn .kbd, .kbd { font-family:ui-monospace,Menlo,monospace; font-size:10px; padding:1px 5px; border-radius:4px; border:1px solid var(--bd); color:var(--mfg); }
+    .spacer { flex:1; }
+    .canvas { position:relative; flex:1; min-width:0; background:#07090d; overflow:hidden; }
+    .canvas > img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+    .ov { position:absolute; }
+    .ovcap { left:12px; top:10px; font-size:12px; color:var(--mfg); }
+    .ovcap b { color:var(--fg); font-weight:600; }
+    .poslbl { position:absolute; padding:1px 6px; border-radius:4px; font:700 10px ui-monospace,Menlo,monospace; letter-spacing:0.06em; color:var(--amber); background:oklch(0.141 0.005 285.823 / 0.82); border:1px solid oklch(0.82 0.16 80 / 0.4); }
+    .fxlbl { position:absolute; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:oklch(0.3 0.09 260 / 0.92); border:1px solid var(--pri); }
+    .selbar { position:absolute; left:50%; transform:translateX(-50%); bottom:14px; display:flex; gap:10px; align-items:center; background:oklch(0.21 0.006 285.885 / 0.94); border:1px solid var(--bd); border-radius:10px; padding:6px 8px 6px 12px; font-size:12px; white-space:nowrap; }
+    .selbar .m { color:var(--mfg); }
+    .selbar .b { border:1px solid var(--bd); background:var(--muted); border-radius:6px; padding:2px 8px; font-size:11px; }
+    .panel { width:360px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+    .panel .ph { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .panel .ph b { font-size:14px; }
+    .panel .pb { padding:12px; display:flex; flex-direction:column; gap:12px; overflow:hidden; }
+    .sec { display:flex; flex-direction:column; gap:8px; }
+    .sec .st { display:flex; align-items:center; gap:8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .sec .st::after { content:''; flex:1; height:1px; background:var(--bd); }
+    .row2 { display:grid; grid-template-columns:84px minmax(0,1fr); gap:8px; align-items:center; font-size:12px; }
+    .row2 > span:first-child { color:var(--mfg); font-size:11px; }
+    .row3 { display:grid; grid-template-columns:62px minmax(0,1fr) minmax(0,1fr); gap:8px; align-items:center; font-size:11px; }
+    .row3 > span:first-child { color:var(--mfg); }
+    .sel { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); font-size:12px; display:flex; align-items:center; gap:6px; }
+    .sel::after { content:'▾'; margin-left:auto; color:var(--mfg); font-size:10px; }
+    .num { height:28px; padding:0 8px; border-radius:8px; border:1px solid var(--bd); font:12px ui-monospace,Menlo,monospace; display:flex; align-items:center; font-variant-numeric:tabular-nums; }
+    .gate { width:132px; height:132px; flex:0 0 auto; }
+    .chipx { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px 0 4px; border-radius:6px; border:1px solid var(--bd); background:var(--card); font-size:11px; white-space:nowrap; }
+    .chipx i { width:14px; height:14px; border-radius:3px; background:#2a2d33; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.08); display:block; }
+    .chipx b { font-weight:400; color:var(--mfg); font:10px ui-monospace,Menlo,monospace; }
+    .chipx.on { border-color:var(--pri); background:oklch(0.623 0.214 259.815 / 0.18); }
+    .prow { display:grid; grid-template-columns:70px minmax(0,1fr); gap:10px; padding:7px 0; border-top:1px solid var(--bd); align-items:start; }
+    .prow .pn { font:700 10px ui-monospace,Menlo,monospace; color:var(--amber); letter-spacing:0.04em; padding-top:4px; }
+    .prow .pn small { display:block; font-weight:400; color:var(--mfg); letter-spacing:0; }
+    .prow .cs { display:flex; flex-wrap:wrap; gap:4px; }
+    .edge { text-align:center; font:700 9px ui-monospace,Menlo,monospace; letter-spacing:0.2em; color:var(--mfg); padding:4px 0; border-top:1px dashed var(--bd); border-bottom:1px dashed var(--bd); }
+    .pal { width:220px; flex-shrink:0; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+    .pal .pi { display:flex; align-items:center; gap:8px; height:34px; padding:0 12px; font-size:12px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.5); }
+    .pal .pi svg { color:var(--mfg); }
+    .pal .ph2 { padding:10px 12px 6px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); }
+    .el { display:grid; grid-template-columns:70px minmax(0,1fr) auto; gap:8px; font-size:12px; padding:4px 0; align-items:baseline; }
+    .el .k { font:10px ui-monospace,Menlo,monospace; color:oklch(0.8 0.12 255); }
+    .el .d { font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .el.on { background:oklch(0.623 0.214 259.815 / 0.14); border-radius:6px; padding:4px 6px; margin:0 -6px; }
+    .sheet { width:520px; flex-shrink:0; border-left:1px solid var(--bd); background:var(--bg); display:flex; flex-direction:column; }
+    .item { display:flex; align-items:center; gap:8px; min-height:36px; padding:6px 10px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; }
+    .item .m { color:var(--mfg); font-size:11px; }
+    .item.new { border-color:oklch(0.62 0.17 145 / 0.6); background:oklch(0.25 0.06 145 / 0.18); }
+    .item.danger { border-color:oklch(0.55 0.2 27 / 0.7); background:oklch(0.3 0.08 27 / 0.25); }
+    .dim { opacity:0.45; }
+    .hatch { background-image:repeating-linear-gradient(135deg, oklch(0.274 0.006 286.033 / 0.5) 0 6px, transparent 6px 12px); }
+    .frame { position:absolute; border:2px dashed var(--amber); border-radius:10px; pointer-events:none; }
+    .btn.pri { background:var(--pri); color:#fff; border:0; }
+    .btn.red { background:oklch(0.55 0.21 27); color:#fff; border:0; }
+
+    /* ── additions for the stage-view-menu boards ─────────────────────────── */
+    .pop { position:absolute; width:320px; background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 14px 34px rgba(0,0,0,0.55); z-index:4; overflow:hidden; }
+    .pop.ghost { box-shadow:none; outline:2px dashed oklch(0.82 0.16 80 / 0.55); outline-offset:6px; }
+    .ptabs { display:flex; gap:2px; margin:8px 8px 0; padding:2px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); }
+    .ptabs span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px; height:26px; border-radius:6px; font-size:12px; font-weight:600; color:var(--mfg); }
+    .ptabs span.on { background:var(--muted); color:var(--fg); }
+    .pbody { padding:6px 10px 10px; display:flex; flex-direction:column; gap:10px; }
+    .grp { display:flex; flex-direction:column; gap:6px; }
+    .gh { display:flex; align-items:center; gap:6px; height:16px; }
+    .gh .lbl { flex:1; }
+    .scope { display:inline-flex; align-items:center; gap:4px; height:16px; padding:0 6px; border-radius:999px; font-size:9px; font-weight:600; color:var(--mfg); border:1px solid var(--bd); white-space:nowrap; }
+    .scope.mach { color:oklch(0.82 0.12 80); border-color:oklch(0.6 0.12 80 / 0.5); }
+    .scope.wire { color:oklch(0.8 0.12 255); border-color:oklch(0.5 0.12 255 / 0.6); }
+    .sg { display:flex; gap:2px; border:1px solid var(--bd); background:var(--bg); border-radius:8px; padding:2px; }
+    .sg span { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:5px; height:24px; padding:0 6px; border-radius:6px; font-size:11.5px; font-weight:500; color:var(--mfg); white-space:nowrap; }
+    .sg span.on { background:var(--muted); color:var(--fg); box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / 0.6); }
+    .g2 { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+    .opt { display:flex; align-items:center; gap:7px; height:30px; padding:0 9px; border-radius:7px; border:1px solid var(--bd); background:var(--bg); font-size:12px; color:var(--fg); white-space:nowrap; }
+    .opt i { width:12px; height:12px; border-radius:50%; border:1.5px solid var(--mfg); flex:0 0 auto; }
+    .opt.on { border-color:oklch(0.623 0.214 259.815 / 0.6); background:oklch(0.623 0.214 259.815 / 0.14); }
+    .opt.on i { border-color:var(--pri); background:radial-gradient(circle, var(--pri) 0 3px, transparent 3.5px); }
+    .hint { font-size:11px; line-height:1.4; color:var(--mfg); margin:0; }
+    .hint b { color:var(--fg); font-weight:600; }
+    .tgs { display:flex; flex-wrap:wrap; gap:4px; }
+    .tg { display:inline-flex; align-items:center; gap:4px; height:26px; padding:0 7px 0 6px; border-radius:7px; border:1px solid var(--bd); background:var(--bg); font-size:11px; color:var(--mfg); white-space:nowrap; }
+    .tg svg { width:12px; height:12px; }
+    .tg.on { color:var(--fg); border-color:oklch(0.623 0.214 259.815 / 0.6); background:oklch(0.623 0.214 259.815 / 0.14); }
+    .tg.on svg { color:var(--pri); }
+    .tg.off svg { opacity:0; }
+    .tgsep { width:100%; height:0; }
+    .pfoot { border-top:1px solid var(--bd); padding:7px 10px; font-size:10.5px; color:var(--mfg); display:flex; align-items:center; gap:6px; background:oklch(0.17 0.005 286); }
+    .sw2 { width:28px; height:16px; border-radius:999px; background:var(--muted); position:relative; flex:0 0 auto; }
+    .sw2::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:var(--mfg); }
+    .sw2.on { background:var(--pri); }
+    .sw2.on::after { left:14px; background:#fff; }
+    .livebox { border:1px solid var(--bd); border-radius:8px; background:var(--bg); padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+    .livebox .big { font:600 20px ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; letter-spacing:-0.01em; }
+    .livebox .big small { font-size:12px; font-weight:500; color:var(--mfg); }
+    .livebox .row { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--mfg); }
+    .livebox .row b { color:var(--fg); font-weight:600; font-variant-numeric:tabular-nums; }
+    .fps { position:absolute; display:inline-flex; align-items:center; gap:6px; padding:2px 7px; border-radius:5px; background:oklch(0.141 0.005 285.823 / 0.8); font:10.5px ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; color:var(--mfg); border:1px solid transparent; }
+    .fps b { color:var(--fg); font-weight:600; }
+    .fps.slow { color:oklch(0.82 0.12 80); border-color:oklch(0.6 0.12 80 / 0.45); }
+    .fps.slow b { color:oklch(0.88 0.14 80); }
+    .fps.big { position:static; font-size:15px; padding:6px 12px; border-radius:7px; }
+    .hud { position:absolute; padding:2px 7px; border-radius:5px; background:oklch(0.141 0.005 285.823 / 0.8); font:10px ui-monospace,Menlo,monospace; color:var(--mfg); }
+    .zb { position:absolute; display:flex; gap:4px; }
+    .zb span { width:26px; height:26px; border-radius:6px; border:1px solid var(--bd); background:var(--card); display:grid; place-items:center; color:var(--fg); font-size:13px; }
+    .vbtn { display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px; border-radius:8px; border:1px solid var(--bd); font-size:12px; font-weight:500; background:oklch(0.274 0.006 286.033 / 0.3); white-space:nowrap; }
+    .vbtn.open { background:var(--muted); }
+    .vbtn .src { display:inline-flex; align-items:center; height:18px; padding:0 6px; border-radius:999px; font-size:10px; font-weight:600; background:oklch(0.62 0.18 255 / 0.18); color:oklch(0.82 0.11 255); border:1px solid oklch(0.62 0.18 255 / 0.45); }
+    .bar { display:flex; height:30px; border-radius:6px; overflow:hidden; position:relative; }
+    .bar > span { display:flex; align-items:center; padding:0 7px; font-size:10px; font-weight:600; white-space:nowrap; overflow:hidden; color:oklch(0.16 0.01 286); border-right:1px solid oklch(0.141 0.005 285.823); }
+    .barrow { display:grid; grid-template-columns:150px 1fr; gap:12px; align-items:center; }
+    .barrow .bl { font-size:11.5px; color:var(--fg); }
+    .barrow .bl small { display:block; font-size:10px; color:var(--mfg); }
+    .foldline { position:absolute; top:-8px; bottom:-8px; width:0; border-left:2px dashed oklch(0.65 0.2 27); }
+    .foldline em { position:absolute; bottom:-20px; left:4px; font-size:9.5px; font-style:normal; font-weight:700; color:oklch(0.75 0.17 27); white-space:nowrap; }
+    .shot { position:relative; border-radius:8px; overflow:hidden; border:1px solid var(--bd); background:#07090d; }
+    .shot img { display:block; width:100%; height:auto; }
+    .shot .tagl { position:absolute; left:8px; top:8px; display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:6px; background:oklch(0.141 0.005 285.823 / 0.85); font-size:11px; font-weight:600; }
+    .tbl { width:100%; border-collapse:collapse; font-size:11px; }
+    .tbl th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:5px 8px; border-bottom:1px solid var(--bd); white-space:nowrap; }
+    .tbl td { padding:5px 8px; border-bottom:1px solid oklch(0.274 0.006 286.033 / 0.6); vertical-align:top; line-height:1.4; }
+    .tbl td.n { font-family:ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; text-align:right; }
+    .tbl td.hot { color:oklch(0.78 0.17 27); font-weight:700; }
+    .tbl td.ok { color:oklch(0.8 0.15 145); }
+    .tbl tr.sub td { color:var(--mfg); }
+    .sect { display:flex; flex-direction:column; gap:10px; }
+    .cols { display:grid; gap:16px; }
+
+  </style>
+</head>
+<body>
+<x-dc>
+<div class="app" style="width:1440px; height:1180px; display:flex; flex-direction:column; overflow:hidden; position:relative;">
+
+<div style="padding:22px 24px 10px; display:flex; flex-direction:column; gap:6px">
+  <span class="h1">The model · stored, wire, code, sessions</span>
+</div>
+<div class="cols" style="grid-template-columns:1fr; padding:0 24px">
+  <div class="sect">
+    <span class="h2">Every setting, where it lives today and where it goes</span>
+    <table class="tbl">
+      <tr><th>Setting</th><th>Today</th><th>Proposed</th><th>On the wire</th><th>A render_view capture</th></tr>
+      <tr class=""><td><b>Source</b></td><td>Window — <span class="mono">sessionStorage stage.source</span></td><td><span class="tag kept">kept</span></td><td><span class="mono">viewOptions.source</span></td><td>The request's</td></tr>
+      <tr class=""><td><b>Fixtures · Light <span style="font-weight:400;color:var(--mfg)">(was Beam cones)</span> · Rigging · Regions</b></td><td><b>Browser</b> — <span class="mono">localStorage stageViewFlags</span></td><td>Window — <span class="mono">stage.viewFlags</span>, seeded once from the old key</td><td>No</td><td>The defaults</td></tr>
+      <tr class=""><td><b>Labels</b></td><td><b>Browser</b> — the same key</td><td>Window — the same new key</td><td>No</td><td>None (DOM over the canvas)</td></tr>
+      <tr class=""><td><b>Venue · Set · Seating · Haze</b></td><td>Window — <span class="mono">stage.sceneLayers</span>, not announced</td><td><span class="tag kept">kept</span></td><td>No</td><td>The defaults; Haze on the Stage</td></tr>
+      <tr class=""><td><b>Work lights</b></td><td>—</td><td>Window — <span class="mono">stage.workLights</span>, default off <span class="tag new">new</span></td><td><span class="mono">viewOptions.workLights</span> <span class="tag new">new</span></td><td>The request's <span class="mono">workLights</span>, default off <span class="tag new">new</span></td></tr>
+      <tr class=""><td><b>Frame-rate readout</b></td><td>—</td><td>Window — <span class="mono">stage.frameRate</span>, default off <span class="tag new">new</span></td><td>No</td><td>Never drawn</td></tr>
+      <tr class=""><td><b>Light budget</b></td><td>Machine — <span class="mono">localStorage stage.lightBudget</span></td><td><span class="tag kept">kept</span></td><td>No</td><td>The machine's, read</td></tr>
+      <tr class=""><td><b>Gobos on surfaces</b></td><td>Machine — <span class="mono">stage.goboSurfaces</span></td><td><span class="tag kept">kept</span></td><td>No</td><td>The default (every gobo light)</td></tr>
+      <tr class=""><td><b>Box shadows</b></td><td>Machine — <span class="mono">stage.boxShadows</span></td><td><span class="tag kept">kept</span></td><td>No</td><td>The default (64)</td></tr>
+      <tr class=""><td><b>Test recovery</b></td><td>An action</td><td>An action, on Performance</td><td>—</td><td>—</td></tr>
+    </table>
+  </div>
+</div>
+<div class="cols" style="grid-template-columns:1fr 1fr; padding:16px 24px 0">
+  <div class="sect">
+    <span class="h2">The starting proposal, tested</span>
+    <div class="note key"><p class="cap"><b>Held:</b> split <i>what you see</i> from <i>what it costs</i>. Two tabs of one popover, so the header keeps one button and the rare settings stop pushing the frequent ones off screen.</p></div>
+    <div class="note warn"><p class="cap"><b>Moved — the readout is per window, not per machine.</b> Each window draws its own canvas at its own rate, and the two desk screens are two windows of one profile: a machine setting would put the counter on the hall screen as well. Its group on Performance is labelled <span class="scope">this window</span>; the three below it <span class="scope mach">this machine</span>.</p></div>
+    <div class="note warn"><p class="cap"><b>Moved — the Show flags and Labels are per browser today</b>, not per window: <span class="mono">useStageView</span> keeps them in <span class="mono">localStorage</span>. Hiding the rigging on the hall screen hides it on the desk too. They move to <span class="mono">sessionStorage</span>, a window with nothing stored reading the old key once, as the vis source did when it moved.</p></div>
+    <div class="note warn" style="display:grid; grid-template-columns:200px 1fr; gap:12px; align-items:start"><div class="shot"><img src="plates/balcony-beamcones-off.jpg"></div><p class="cap"><b>Found while drawing — <i>Beam cones</i> is the light switch.</b> Off unmounts <span class="mono">StageEmitters</span>, which since light moved into the surface shader also packs the light table every surface reads: no beam, no pool, the rig dark (Balcony · desk with it off, left). Haze <i>Off</i> is what hides the cones alone. Renamed <b>Light</b>, hint <i>Beams and every pool</i>; the stored key stays <span class="mono">beamCones</span>.</p></div>
+    <div class="note"><p class="cap"><b>Corrected:</b> Venue · Set · Seating · Haze are per window but <b>not</b> announced — only the viewpoint and the source ride <span class="mono">viewOptions</span>. That stays; Work lights join the source, because it changes what the whole picture means and a plotting screen is a thing another window would set. The rest are this window's business.</p></div>
+  </div>
+  <div class="sect">
+    <span class="h2">Wire, storage, sync</span>
+    <div class="note"><div class="kv">
+      <span class="k">Desk tables</span><span>None. No schema, no sync, no <span class="mono">SyncCoverageTest</span> row.</span>
+      <span class="k">Announce</span><span><span class="mono">viewOptions.workLights</span> under the Stage view — a free map, so <span class="mono">windowsApi.test.ts</span>'s pinned key set is unchanged.</span>
+      <span class="k">windows.viewOptions</span><span><span class="mono">applyStageViewOptions</span> takes <span class="mono">workLights</span>; a value outside <span class="mono">off | on</span> is ignored, as a viewpoint's is.</span>
+      <span class="k">Copy link</span><span><span class="mono">?workLights=</span>, applied and stripped on arrival with <span class="mono">viewpoint</span> and <span class="mono">source</span>.</span>
+      <span class="k">render_view</span><span>Optional <span class="mono">workLights</span> input (<span class="mono">RenderViewTool</span>), through <span class="mono">StageRenderService.render</span> into the <span class="mono">stageRender.request</span> frame; the frontend's parse reads a missing one as off. Backend and frontend land in one PR.</span>
+    </div></div>
+    <span class="h2" style="margin-top:6px">Where the code goes</span>
+    <div class="note"><div class="kv">
+      <span class="k">StageViewMenu.tsx</span><span>Rewritten: <span class="mono">Popover</span>, a two-value tab, <span class="mono">ToggleGroup</span>s and toggles. Same props plus work lights and the readout.</span>
+      <span class="k">useStageView.ts</span><span>On <span class="mono">createSyncStore</span> over <span class="mono">sessionStorageArea</span>, seeded from <span class="mono">stageViewFlags</span>.</span>
+      <span class="k">scene/workLights.ts</span><span>New: the two rows, the store, the option key, <span class="mono">isWorkLights</span>.</span>
+      <span class="k">scene/surfaceShader.ts</span><span><span class="mono">uLift</span> and the lift's albedo floor beside <span class="mono">uAmbient</span>; <span class="mono">litByFill</span> takes the work lights.</span>
+      <span class="k">bodies/StageBodies.tsx</span><span>The housing fill and billboard colours follow the work lights.</span>
+      <span class="k">scene/frameRate.ts</span><span>New, pure: trailing-second count, median gap, idle. Its probe and chip live in <span class="mono">Stage3D</span>.</span>
+      <span class="k">lib/stageViewpoint.ts · windowViews.ts</span><span>The <span class="mono">workLights</span> key in apply, launch and announce; <span class="mono">STAGE_WORK_LIGHTS_OPTION</span>.</span>
+      <span class="k">render/StageRenderJob.tsx · api/stageRenderApi.ts</span><span>The request's work lights.</span>
+      <span class="k">ai/RenderViewTool.kt · state/StageRenderService.kt</span><span>The <span class="mono">workLights</span> input and the frame field.</span>
+    </div></div>
+  </div>
+</div>
+<div class="cols" style="grid-template-columns:1fr 1fr; padding:16px 24px 0">
+  <div class="sect">
+    <span class="h2">Two sessions, one PR each</span>
+    <div class="note"><p class="cap"><b>1 · The popover, Performance and the readout</b> (frontend). The menu rebuilt; Show and Labels per window; the stats store and the readout; the trigger naming a non-Output source. Docs: stage-vis §"The 3D renderer", frontend CLAUDE.md §Stage views.</p></div>
+    <div class="note"><p class="cap"><b>2 · Work lights, and render_view's</b> (frontend + backend). The work-lights table and store, the shader's lift and its floor tuned in the cyc harness, the housings and billboards, the Screens segment and link, the tool input. Docs: the colour bullet, §"Rendering for render_view", mcp-engineering, root CLAUDE.md's frame line; the stage-light plan's §10 question 1 marked answered.</p></div>
+  </div>
+  <div class="sect">
+    <span class="h2">Considered and declined</span>
+    <div class="note no"><p class="cap"><b>Keep the dropdown and add submenus</b> (Haze ▸, Labels ▸, Light budget ▸). A submenu hides its current value until hovered, and every change is two hovers — a poor trade on the iPad.</p></div>
+    <div class="note no"><p class="cap"><b>Two header buttons</b>, View and a gauge. The header already wraps at narrow widths (Edit drops to a second row at 800 px), and a control touched once per machine does not earn a permanent place.</p></div>
+    <div class="note no"><p class="cap"><b>One scroll with a Performance disclosure.</b> Shorter than today, still taller than a 768 px screen once opened, and the readout's click has no clean place to land.</p></div>
+    <div class="note no"><p class="cap"><b>Work lights as a slider</b>, or per machine. Off and on are enough to plot by, a level is one more number to argue with, and machine-wide work lights would light the hall screen's room too.</p></div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends (window.DCLogic || class {}) { renderVals() { return {}; } }
+</script>
+</body>
+</html>
