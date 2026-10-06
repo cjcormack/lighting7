@@ -3,18 +3,18 @@ import { REACH_EPS_M } from './landing'
 import { elementBaseZ, type ElementBuild, type PartGeometry } from './sceneParts'
 
 /**
- * **Axial beam reach** (stage-view plan session 3): the first surface on a beam's axis, which
- * stands in for occlusion until the quality tier's shadow maps (`FU-STAGE-QUALITY-TIER`).
+ * **Axial beam reach** (stage-view plan session 3): the first surface on a beam's axis — where the
+ * beam ends in the air, and where *Focus here* measures to.
  *
  * Every surface a beam can stop at is a **collider** — an oriented box in the desk's three.js space
  * (`lib/stageCoords.ts`: x right, y up, z towards the house), turned about y only, as the region
  * OBBs the beam shaders already shadow-test are — which [`landing.ts`](./landing.ts) relies on to
  * pack a face's normal in one float. A wall is a thin slab behind its face, a deck its whole box.
  * [beamReach] casts the beam's axis against them and answers the nearest hit and the **plane** of
- * the face it hit. The director draws the beam's cone to the hit, and the surface shader lights
- * nothing behind that plane (behind it and a second face, for a beam split across an edge) — so a
- * pool on the floor lands whole, however oblique the beam, while the floor under a deck the beam has
- * landed on stays dark.
+ * the face it hit. The director draws the beam's cone to the hit and hazes nothing behind that plane
+ * (behind it and a second face, for a beam split across an edge). The surfaces are shadowed by the
+ * same colliders, tested from each fragment towards the lamp (`occlusion.ts`, stage-light plan
+ * session 3), so the floor under a deck stays dark and a flat shadows the wall behind it.
  *
  * Pure and three.js-free: numbers in, numbers out, allocation-free on the per-frame path.
  */

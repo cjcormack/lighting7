@@ -423,7 +423,8 @@ function lateral(apex: Vector3, dir: Vector3, x: number, y: number, z: number): 
  * the beam — has two shadow lines, and the pair of planes can draw only one: the other would leave
  * the whole pool past the far side dark. So the beam passes it: [first] is moved to the nearest
  * place the rim landed beyond the box, on something else, and no second plane is answered. The box is still lit, standing in front of that
- * plane, and its shadow waits for box occlusion (`stage-light-plan.md` session 3).
+ * plane. The haze passes it; on the surfaces it is the box itself that casts the shadow
+ * (`scene/occlusion.ts`).
  */
 export function edgeLanding(
   emitters: Pick<EmittersHandle, 'reach'>,

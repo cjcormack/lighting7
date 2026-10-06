@@ -18,7 +18,9 @@
 // drape lit square on, at 45° and raking; three floor finishes seen from the
 // house; and a white cyc, black serge and a red drape side by side under one
 // light each. Their lanterns are fixed and at full, so nothing need be written.
-// See [buildMaterialHarness].
+// See [buildMaterialHarness]. `?profileHarness=shadow` is one more of them (stage-
+// light plan session 3): a flat standing in front of a wall under one profile,
+// lit from the side so its shadow lands on the wall clear of the flat.
 
 import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
@@ -31,9 +33,9 @@ const HARNESS_TYPE_KEY = '__profileHarness_type__'
 /** Which synthetic scene: the load profile (`=1`), the focus scene (`=focus`), the drape scene (`=drape`) or a material scene. */
 export type HarnessMode = 'load' | 'focus' | 'drape' | MaterialHarness
 
-/** The material scenes (stage-light plan session 2). */
-export type MaterialHarness = 'rake' | 'floor' | 'cyc'
-const MATERIAL_HARNESSES: readonly string[] = ['rake', 'floor', 'cyc'] satisfies MaterialHarness[]
+/** The material scenes (stage-light plan session 2), and the shadow scene (session 3). */
+export type MaterialHarness = 'rake' | 'floor' | 'cyc' | 'shadow'
+const MATERIAL_HARNESSES: readonly string[] = ['rake', 'floor', 'cyc', 'shadow'] satisfies MaterialHarness[]
 
 export function harnessMode(): HarnessMode | null {
   if (typeof window === 'undefined') return null
@@ -136,7 +138,7 @@ export function buildHarness(
 ): HarnessData {
   if (mode === 'focus') return buildFocusHarness(stageD)
   if (mode === 'drape') return buildDrapeHarness()
-  if (mode === 'rake' || mode === 'floor' || mode === 'cyc') return buildMaterialHarness(mode)
+  if (mode === 'rake' || mode === 'floor' || mode === 'cyc' || mode === 'shadow') return buildMaterialHarness(mode)
   const riggings = makeRiggings(stageW, stageD, stageH)
   const regions = makeRegions(stageW, stageD)
   const patches = makePatches(stageW, stageD, stageH, riggings)
@@ -634,6 +636,9 @@ export function aimStatic(from: MaterialSpot['from'], at: MaterialSpot['at']): {
 const BLACK_SERGE = '#101012'
 const DRAPE_RED = '#3b1219'
 const CYC_WHITE = '#e8e6df'
+/** The shadow scene's two flats: a mid-grey wall and a darker flat, so the shadow reads on one and the flat against it. */
+const PAINTED_GREY = '#9a948a'
+const PAINTED_DARK = '#5a5048'
 
 /** Where a material scene's lanterns hang and what they light. */
 export function materialScene(mode: MaterialHarness): { spots: MaterialSpot[]; elements: StageElementDto[] } {
@@ -681,13 +686,26 @@ export function materialScene(mode: MaterialHarness): { spots: MaterialSpot[]; e
         elements: cloths.map((c, i) => materialDrape(i + 1, c.name, c.x, 5, 3, 4, c.colour, c.depth, { operation: 'DEAD', role: c.role })),
       }
     }
+    case 'shadow': {
+      // A flat 1.2 m wide and 2.4 m tall standing 1.5 m in front of a wall 10 m across, under one
+      // profile from high front stage left: the flat's shadow lands on the wall 0.6–2.3 m stage
+      // right of centre, clear of the flat itself from the house, and its foot's on the floor.
+      return {
+        spots: [{ key: 'shadow-spot', from: { x: 4.5, y: 0, z: 4.5 }, at: { x: -0.6, y: 6, z: 1.4 }, beamDeg: 36 }],
+        elements: [
+          { ...materialDrape(1, 'Wall', 0, 6, 10, 5, PAINTED_GREY, 0.1, {}), kind: 'FLAT' },
+          { ...materialDrape(2, 'Flat', 0, 4.5, 1.2, 2.4, PAINTED_DARK, 0.05, {}), kind: 'FLAT' },
+        ],
+      }
+    }
   }
 }
 
 /**
  * A material scene (`?profileHarness=rake`, `=floor`, `=cyc`; stage-light plan session 2): the
  * finishes a hall is made of under fixed profiles at full, in white, so the exposure, the colour of
- * a pool and a fold's shadow are judged against one another with nothing written to the desk.
+ * a pool and a fold's shadow are judged against one another with nothing written to the desk. The
+ * shadow scene (`=shadow`, session 3) is built the same way: one flat's shadow on a wall.
  */
 function buildMaterialHarness(mode: MaterialHarness): HarnessData {
   const { spots, elements } = materialScene(mode)

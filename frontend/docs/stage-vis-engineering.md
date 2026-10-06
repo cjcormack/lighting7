@@ -641,14 +641,13 @@ without a room — the back wall and the catch floor:
   pixels × lights, and what a machine's GPU affords is the machine's fact, not a window's. A light
   the budget drops still draws its beam; it lands on nothing that frame. The container carries
   `data-lights="<packed>/<lit>"` for measurement.
-- **Axial beam reach stands in for occlusion** (`scene/beamReach.ts`), until the quality tier's
-  shadow maps (`FU-STAGE-QUALITY-TIER`). The director casts each lobe's axis against the scene's
-  **colliders** — oriented boxes in three.js space turned about y, the regions' OBB maths: a wall a
-  2 cm slab behind its face, a deck its whole box — out to `MAX_THROW_M` (40 m), and the first hit's
-  plane is where the beam lands (with a second face's for a beam split across an edge, below). The
-  surface shader lights nothing more than `REACH_EPS` (3 cm) behind it, so a pool on the floor lands
-  whole however oblique the beam, while the floor under a deck the beam landed on stays dark. The
-  **cone**
+- **Axial beam reach is where a beam ends in the air** (`scene/beamReach.ts`). The director casts
+  each lobe's axis against the scene's **colliders** — oriented boxes in three.js space turned about
+  y, the regions' OBB maths: a wall a 2 cm slab behind its face, a deck its whole box — out to
+  `MAX_THROW_M` (40 m), and the first hit's plane is where the beam lands (with a second face's for a
+  beam split across an edge, below). The haze draws nothing more than `REACH_EPS` (3 cm) behind it.
+  The surfaces read those planes only as a fallback: they are shadowed by the colliders themselves
+  (the box occlusion bullet below). The **cone**
   is cut at the same plane, however far away it is, so a follow spot on the Commemoration Hall's
   balcony reaches the stage 20 m away; the hull runs on past the axial hit to where the cone's far
   rim meets the plane (`coneLandingDepth`, capped at `MAX_THROW_M`), so a grazing beam is in the air
@@ -669,8 +668,8 @@ without a room — the back wall and the catch floor:
   lights its troughs with its crests and a column is lit across its face. The landed **point** is
   untouched: the beam's length, `coneLandingDepth` and *Focus here* read it. Before, a drape's box was
   10 cm deep round 5 cm pleats, the plane sat 2.5 cm in front of the crests, and only each crest's cap
-  was lit — the thin stripes a backcloth drew. A column still lights a little of what is within its
-  radius behind it until the stage-light plan's session 3.
+  was lit — the thin stripes a backcloth drew. The same skin is what lets a surface inside its own
+  box through the box occlusion test below.
   `?profileHarness=drape` (`profileHarness.ts`'s drape scene) is the scene to sweep a pool across a
   backcloth, a tab's edge and a column in.
 - **A beam split across an edge lands on both faces** (`scene/landing.ts`, `edgeLanding` in
@@ -681,8 +680,8 @@ without a room — the back wall and the catch floor:
   the rim's in turn (the riser and the deck, from either side); a rim that lands on something beyond
   instead, such as the stalls floor past the lip, is bisected back to the edge and the face just past
   it tried. Of several, the landing nearest the first face's plane wins: the deck, not a rostrum
-  further upstage. Nothing is lit or hazed **behind both** planes, which is the inside of the stage,
-  and the hull is drawn until the cone has crossed both. Where the rim passes a **vertical** edge of
+  further upstage. Nothing is hazed **behind both** planes, which is the inside of the stage, and
+  the hull is drawn until the cone has crossed both. Where the rim passes a **vertical** edge of
   the box the axis hit — a flat's or a tab's end, a leg's side — the second plane is the one
   through that edge and the lamp (`edgeShadowPlane`): the edge's shadow line, found from the box
   rather than from whichever rim ray happens to clip its end face, so a pool sliding off a tab onto
@@ -691,13 +690,66 @@ without a room — the back wall and the catch floor:
   and 46.5.) The hull then reaches where the rim past the edge landed. A box the rim passes on
   **both** sides, as the lamp sees it — a column narrower than the beam — has two shadow lines and
   room for one, so the beam passes it: the landing moves to the nearest surface the rim reached
-  beyond it, the box stays lit in front of that plane, and its shadow waits for the stage-light
-  plan's session 3. A level edge (the top of a flat, the bottom of a border) keeps the face past it,
+  beyond it and the box stays lit in front of that plane. The haze passes it; on the surfaces the
+  box casts its shadow (below). A level edge (the top of a flat, the bottom of a border) keeps the face past it,
   which must bound the solid as the deck does. Both planes ride the light's fourth texel and the `aBeamLand`
   attribute, one `vec4` as the single plane did: a collider turns about y, so a face's normal is up,
   down or level and one float codes it (`landNormalCode`). In the march, behind both is an interval
   of the view ray: at an end of the chord it trims the chord, and inside it (an edge seen side-on)
   the samples in it are skipped.
+- **Boxes cast shadows on surfaces** (stage-light plan session 3, D8; `scene/occlusion.ts`). After
+  the mask and the gobo, the surface shader tests the segment from the fragment to the lamp — to
+  `MIN_REACH_M` short of the aperture's plane, the stretch beam reach ignores in front of the lens —
+  against the colliders in that light's cone. So a flat shadows the wall behind it, a column the
+  backcloth, a leg the leg upstage of it, and a beam wider than a box passes it on both sides with
+  the box's shadow between. No shadow map and no extra pass: two float textures beside the light
+  table, which stays at six texels. **The colliders**, two RGBA texels each — the centre and the
+  yaw's cosine (a box turned by π is the same box, so the turn is folded to a sine of at least 0
+  and the shader takes `√(1 − cos²)` rather than a `cos` and a `sin`), then the half-extents and
+  the skin — packed from the same `sceneColliders` the director casts at, whenever they change.
+  **Each packed light row's list**: the count, then one texel an entry — the direction from the
+  apex to the collider's bounding sphere, octahedrally encoded; the cosine of the angle the sphere
+  spans; and the collider's index and the distance to the sphere's near side, packed exactly in one
+  float. `cullLightColliders` fills the lists in the emitters' flush, after `pack`, with
+  `coneReachesSphere` as its test; a box whose sphere is wide for its distance (a room's 18 m wall)
+  is halved along its longest axis and tried in pieces, or every wall would be in every list. A box
+  the aperture sits inside is left out, as beam reach leaves it. Only the rows packed are uploaded,
+  each as far as its list runs.
+  - **A box the fragment is inside passes it** as long as the fragment lies within the box's skin of
+    the face the segment leaves by: the larger of the collider's two skins, one number for all six
+    faces. So a pleated cloth inside its own box keeps lighting its troughs (whether a crest stands
+    in the way is `foldLight`'s question, above), a column's face inside its square box is lit, and
+    the floor under a deck — a deck's height behind the top the segment would leave by — stays
+    dark. A segment that ends inside the box it starts in is not blocked by it, and a box entered
+    within a millimetre of the fragment counts as one it is on. The box is the shadow's shape: a
+    column throws a square-sided one. Fixture housings are surfaces like any other and take the
+    same shadows, so a head standing in a flat's shadow is darker; a housing sunk more than its skin
+    into a deck or a wall's box is darkened by it too.
+  - **The sphere is the shader's first question.** A fragment outside an entry's cone from the apex,
+    or nearer the apex than the sphere's near side, skips the box test on that one fetch. Measured
+    with the occlusion bench (`/occlusion-bench.html` on the dev server, `occlusionBench.ts`) on the
+    desk Mac's GPU (Chromium, ANGLE Metal on an M3 Pro) at 1024 × 640, with twelve lights each over
+    every pixel: 0.97 ms a frame on the landing-plane path #67 drew; +0.106 ms a frame for
+    every list entry that skips and +0.27 ms for every one that runs the box test. A bare index and
+    box test, before the skip, was +0.177 ms an entry, so the skip pays wherever fewer than about
+    43 % of a light's entries stand behind a given fragment. The Commemoration Hall packs 61
+    colliders; its two advance-bar spots carry 11 and 8, its 9.7° balcony spot 49.
+  - **A light's list holds at most `MAX_LIGHT_COLLIDERS`** (64 — provisional, until
+    `FU-MANUAL-STAGE-LIGHT-BUDGET`'s Safari and iPad pass); a light whose cone reaches more falls
+    back to its landing planes (texel 3, `landing.ts`'s `behindLanding`), as does every light while
+    the scene holds more colliders than the texture's 1024 rows.
+  - **The haze keeps its planes** (`aBeamLand`, `edgeLanding`). It samples a beam pixel twelve times
+    (eight above DPR 1), so a box test per sample would cost about twelve times what a surface pixel
+    pays: +22 to +53 ms a frame at the bench's load for a 16-entry list, against the surfaces' +1.8
+    to +4.4. So a beam in the air still stops at the planes and still passes a box it overhangs on
+    both sides; its pool is shadowed properly.
+  - `?profileHarness=shadow` (a flat 1.5 m in front of a wall under one profile from high front
+    stage left) is where a shadow is seen landing clear of what casts it. In the drape harness the
+    column throws its shadow on the backcloth, and the pool swept from pan 30 to 50 in quarter steps
+    at tilt 204 changes by at most 4.4 % a step (49.75 → 50, part of a steady slope) where #67 lost
+    7.8 % in one (43 → 43.25). The hall's *Balcony · desk* view keeps its balance against #67: of a
+    16 × 10 grid of cell means, 156 are within 0.1 of a level; the four that moved are Legs 3 SL's
+    face, which Legs 2 SL now shadows from the advance bar.
 - **A focus channel focuses at a distance.** Where the type declares a focus range
   (`@FixtureProperty(focusNearM =, focusFarM =)`, `docs/fixtures-engineering.md` §"@FixtureProperty"),
   the channel sets one focal distance from the aperture wherever the head points, so a spot focused

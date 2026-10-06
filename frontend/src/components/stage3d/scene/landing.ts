@@ -1,6 +1,8 @@
 /**
- * **Where a beam lands**, as the haze and the surfaces both read it: up to two planes, and nothing is
- * lit or hazed **behind both**. One plane is the face the beam's axis hit (`beamReach.ts`). The second
+ * **Where a beam lands**, as the haze reads it: up to two planes, and nothing is hazed **behind
+ * both**. The surfaces are shadowed by the colliders themselves (`occlusion.ts`, stage-light plan
+ * session 3) and read the planes only for a light whose cone reaches more colliders than its list
+ * holds. One plane is the face the beam's axis hit (`beamReach.ts`). The second
  * is there for a beam split across a convex edge, such as a follow spot aimed at the front of a stage:
  * the axis hits the riser, the half above it carries on to the deck, and the deck's plane is the
  * second. Behind both planes is the inside of the stage, the only part of the beam the edge stops.

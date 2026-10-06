@@ -58,8 +58,9 @@
  *
  * Texel 3 is where the beam lands ([`landing.ts`](./landing.ts)): the face its axis hit
  * ([`beamReach.ts`](./beamReach.ts)) and, for a beam split across an edge, the face the rest of it
- * lands on. A fragment behind both is not lit. A light that reaches nothing lights everything in its
- * cone.
+ * lands on. The haze cuts at the same planes; the surfaces read them only for a light whose cone
+ * reaches more colliders than its list holds (`occlusion.ts`), and are otherwise shadowed by the
+ * colliders themselves. Neither cuts a light that reaches nothing.
  *
  * Pure and three.js-free, so the packing is pinned by a node test.
  */

@@ -136,6 +136,25 @@ against the same rig with the surface gobos off, and the frame change under it +
    the budget runs short with it on, make *Selected heads only* the default (`DEFAULT_GOBO_SURFACES`
    in `scene/sceneView.ts`) in the same commit, and say so here.
 
+**Since stage-light session 3 boxes cast shadows on surfaces**: every lit fragment tests the segment
+to its lamp against the light's list of colliders, at most `MAX_LIGHT_COLLIDERS` (64, provisional —
+this pass settles it; `scene/occlusion.ts`), and a light that reaches more falls back to its landing
+planes. On the desk Mac's GPU (Chromium, ANGLE Metal, M3 Pro), a bench of one wall under twelve
+lights at 1024 × 640 drew 0.97 ms a frame on the planes path, +0.106 ms for every list entry a
+fragment skips on its bounding sphere and +0.27 ms for every one that runs the box test. The
+Commemoration Hall packs 61 colliders; its advance-bar spots carry 11 and 8, its balcony spot 49.
+SwiftShader was not measured: the agent's sandbox refuses Chromium's Mach ports. So:
+
+6. Open the occlusion bench, `/occlusion-bench.html` on the dev server (`npm run dev` in
+   `frontend/`; for the iPad `npm run dev -- --host` and the Mac's `.local` name, since it needs no
+   desk session), once plain and once with `?pass=1`, and copy its `msPerFrame` here for Safari and
+   the iPad. `list 64` against `planes` is the worst a light can cost; the step per entry is what
+   the cap trades. `frontend/src/components/stage3d/occlusionBench.ts` says what each run is.
+7. In the hall at a full look (Blind), orbit at the default budget on this branch and on `main` before
+   it, and note the frame rate on each. If the budget runs short, lower `MAX_LIGHT_COLLIDERS` (a
+   light past it keeps its planes, so the hall's balcony spot is the first to lose its shadows) and
+   say here what it was set to.
+
 40 minutes; all of it is the desk's.
 
 ---
