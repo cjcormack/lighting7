@@ -128,7 +128,7 @@ one-line row with the session's commit SHA, added on the branch before its PR me
 - **Tests:** `stageLook.test.ts`'s roll-off pins move with D6; the fold shadow's twin.
 - **Docs:** §"Light lands through one surface shader" (the colour bullet).
 
-### Session 3 — box occlusion (frontend)
+### ~~Session 3 — box occlusion (frontend)~~ — done, `553ee841`, `dec94e6a`
 
 - **Colliders as a texture:** centre, half-extents, yaw and skin, two texels each.
 - **Per-light lists:** the CPU culls each lit light's cone against the colliders
