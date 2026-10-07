@@ -1,7 +1,8 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
-> backend) shipped the same day (`32ce090a`); sessions 2–5 to come.** Chris approved the design on
+> backend) shipped the same day (`32ce090a`), and session 2 (`SceneryControl` and the rail's
+> Scenery band, frontend) the same day (`95fe24e4`); sessions 3–5 to come.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -65,9 +66,9 @@ The D-numbers match the design document's. Stage-view plan decisions are named i
 | D12 | **The Stage view draws a blind change.** While Blind holds a scenery change, `scenery.state` carries `staged`. Output + Programmer and Programmer draw it; Output draws live. |
 | D13 | **Cue scenery reaches the cue table.** `CueSheet` gains a Scenery column. It is a read-out whose button opens `SceneryEditor` with times. `StackDetail` gains *Stack settings…*. Both follow the lock as the cards do. |
 | D14 | **The Prompt Book puts scenery on the page.** A Blinds glyph sits beside a marker whose cue moves something. Rail cards list the cue's changes inline. An *On GO* line at the top of the rail names the next GO's moves. When unlocked, a card's *Scenery…* edits in place. |
-| D15 | **A live MCP tool, `move_scenery`, moves scenery through the programmer.** It takes `{element, visible?, open?, trimM?, fadeSeconds?, release?}` and writes the same overlay as the Scenery tab, in the current project only. The authoring tools are unchanged. Scenery is drawn and never output, so the tool needs no remote-access gate. |
+| D15 | **A live MCP tool, `move_scenery`, moves scenery through the programmer.** It takes `{element, visible?, open?, trimM?, fadeSeconds?, release?}` and writes the same overlay as the Scenery tab, in the current project only. The authoring tools are unchanged. Scenery is drawn and never output, so the tool needs no remote-access gate. *Session 2 amendment:* the tab is the rail's Scenery band (§4), which writes that overlay. |
 | D16 | **The Positions plan draws scenery** as the Stage view does, following the window's vis source, so a closed tab or a flown piece shows where the light lands. |
-| D17 | **Phone, iPad and desktop use the desk's existing forms** (§4). `SceneryControl` is built from the editor kit. Every pop-up opens through `EditorSurface`. The action bar's Scenery chip is the door to the list wherever the rail's tabs are not docked. |
+| D17 | **Phone, iPad and desktop use the desk's existing forms** (§4). `SceneryControl` is built from the editor kit. Every pop-up opens through `EditorSurface`. The action bar's Scenery chip is the door to the list wherever the rail's tabs are not docked. *Session 2 amendment:* there is no chip and no tab — scenery is a band of the rail's Stack body, in every arm the rail has (§4). |
 
 The plan adds three decisions of its own:
 
@@ -178,6 +179,13 @@ already has (D17):
 
   It writes as it goes through `useLivePush` (floor 33 ms, a release that always lands), and it has
   no verbs and no `EditorFooter`.
+  *Session 2 amendment:* `scenery.state`'s `source` names the element's **top** tier only, so the
+  read-out says *held by the programmer*, *held by Night, pressed*, *tracked from Q14*, *held by
+  Main's set* or *at its base*; the example's second clause (*Q14 had it out*) would need the tier
+  below on the wire, which session 1 does not send. And the control has a second commit mode,
+  `release`, for a host whose write is a whole-list `PUT` — `SceneryEditor`'s rows and a focused
+  Look's scenery — where writing as it goes would be thirty saves, and thirty refetches of every cue,
+  a second.
 - **Every pop-up opens through `EditorSurface`.** It is a `w-72` popover on a desk or iPad, a bottom
   sheet on an upright phone, and a right-hand sheet where the viewport is short. Rows are
   finger-sized in the two sheet forms only. The form decides; never a `sm:` variant.
@@ -191,7 +199,7 @@ already has (D17):
 
 | Surface | Desktop | iPad (704–1200 px of workspace) | Phone |
 |---|---|---|---|
-| Programmer scenery | the **Scenery** rail tab (`Blinds`, `tabWordClass`), docked at ≥ 1200 px | the action bar's Scenery chip opens the same list through `EditorSurface`; rail tabs are docked-only | the chip opens a bottom sheet; the 44 px handle keeps the stack |
+| Programmer scenery | the **Scenery** rail tab (`Blinds`, `tabWordClass`), docked at ≥ 1200 px | the action bar's Scenery chip opens the same list through `EditorSurface`; rail tabs are docked-only | the chip opens a bottom sheet; the 44 px handle keeps the stack. *Session 2 amendment:* on every width it is the rail's Scenery band instead (below) |
 | Stage popover | popover anchored to the piece's projected centre, recomputed per frame through the label layer's projection | popover; Edit still needs ≥ 640 px | bottom sheet; a tap selects, a finger still pans |
 | Cue table column | read-out with `ReadOutButton` to the editor (`wide`) | the same; the table scrolls sideways under its sticky first column | the table never renders; the card readout shows scenery as today |
 | Prompt Book | *On GO* line at the top of the rail | below 1040 px the rail is a drawer; its toggle carries a `Blinds` dot when the next GO moves something | the same drawer; tapping a glyph opens that cue's card |
@@ -201,6 +209,19 @@ already has (D17):
 The chip reads *Scenery* with no count when nothing is held, and *Scenery 2* when two pieces are
 held. On a docked desk it opens the rail on the Scenery tab. Its word hides below `@[800px]` like
 the rest of the action bar, and its glyph stays at every width.
+*Session 2 amendment:* **there is no chip, and no Scenery tab: scenery is a band of the rail's
+Stack body, like the effects**, at its top (it is the top tier, D2), listing what the scope holds,
+with *All scenery…* opening the full list through `EditorSurface`. Chris's call on 2026-10-07, once
+the tab and the chip had been built and measured: the tab was docked-only, so the chip was the door
+everywhere else, and its 40px pushed `Q15 · Update · Revert` half out of a 393px phone's row A (a
+`…` menu folding the chip, Include… and Revert was tried, and a wrapping row A before it). A band is
+in every arm the rail has — docked, the overlay, the phone's bottom sheet — so it needs no door of
+its own, and row A is as it was. The count rides the rail as FX's does: the collapsed strip and the
+phone handle (doors that open the rail at the band) and the tabless faces (the overlay header, the
+phone sheet's title); the docked Stack tab's face has no room for a third count (211px of strip
+against the 224 its three tabs already need), so the band's label carries it there (with a Look layer focused it names the Look instead). This replaces
+D17's *the action bar's Scenery chip is the door to the list wherever the rail's tabs are not
+docked* and the surface table's chip entries.
 
 ## 5. Implementation — five sessions
 
@@ -240,7 +261,7 @@ branch before its PR merges.
     - `docs/sync-engineering.md` (the params field, P2);
     - root `CLAUDE.md`'s `scenery.state` line, and a line for the `programmer.*Scenery` frames.
 
-### Session 2 — `SceneryControl` and the Scenery tab (frontend)
+### ~~Session 2 — `SceneryControl` and the Scenery tab (frontend)~~ — done, `95fe24e4`
 
 - **The control (D5, D17):** `components/scenery/SceneryControl.tsx` on the editor kit; presets and
   ranges come from `lib/scenery.ts` (in and out from Z and the stored trim). `SceneryEditor`'s rows
@@ -253,9 +274,20 @@ branch before its PR merges.
     - one `SceneryControl` per element, with the held ring, its source read-out and a release ×.
   In Output scope the rows are disabled with *Output is read-only*. A focused Look layer writes the
   Look's scenery through `setLookScenery`.
+  *Session 2 amendment:* the three filters are independent — *Set* lists the Set layer, *Venue* the
+  Venue layer, *Moving only* drops what only shows and hides — with Set and Venue on by default,
+  as the mock-up draws them; a held piece is listed whatever they say, so its × stays in reach. A
+  focused **template** layer is read-only too (*A template carries no scenery*, stage-view D11). The
+  Look arm writes on release, its whole list per gesture.
 - **The chip (D17):** `ProgrammerActionBar` gains the Scenery chip. It opens the rail's tab when the
   rail is docked, and otherwise the same list through `EditorSurface`. Clear's confirmation counts
   held scenery.
+  *Session 2 amendment:* the tab and the chip became the rail's Scenery band (§4's chip paragraph
+  has why); the tab bullet above is that band's full list, opened by its *All scenery…*. And Clear
+  has no confirmation dialog — it releases on a press, and its tooltip is
+  what says what it will drop. That tooltip now counts held scenery (*Release … and 2 pieces of held
+  scenery over 2s*, from `programmer.sceneryState`, since `programmer.cleared` counts values and
+  effects only), and Clear is enabled for a programmer holding only scenery, which it was not.
 - **The element form's stale `travelS`** (*Session 1 amendment:* found in session 1's review): the
   backend now refuses `travelS` on a piece that does not travel, and the Stage view's Edit form sends
   `params` whole, so `withKindParam` (`components/stage/elementDraft.ts`) must drop `travelS` when a
@@ -268,6 +300,11 @@ branch before its PR merges.
     - the tab's grouping, filters and scope arms;
     - the chip's two doors by width;
     - `SceneryEditor` keeping its draft over a refetch with the new control.
+  *Session 2 amendment:* the tab's tests are the band's and the full list's
+  (`RailSceneryBand.test.tsx`, `ProgrammerSceneryList.test.tsx`); the chip's are the rail's doors to
+  the band — the collapsed strip's count and the phone handle (`ProgrammerRail.test.tsx`) — and
+  Clear's tooltip (`ProgrammerActionBar.test.tsx`). A `SceneryEditor` row also unsets a key it
+  states, so a key once set can track again without deleting the row.
 - **Docs:** `frontend/CLAUDE.md` §"The rail's tabs", §"The editor kit" (a `SceneryControl` entry)
   and §"Scenery moves with the show".
 
@@ -373,6 +410,10 @@ and nothing admin-only gains a WS command.
   shows it; Blind holds the move; leaving Blind lands it; Clear flies it back out on the Clear fade.
 - **Session 2:** on the desk the Scenery tab moves the house tabs; on a 1024 × 768 iPad the chip
   opens the same list as a popover; on an iPhone it opens as a bottom sheet with finger-sized rows.
+  *Session 2 amendment:* the band, not a tab: on the desk the docked rail's band moves the house
+  tabs; on a 1024 × 768 iPad the overlay rail carries the band and *All scenery…* opens the list as
+  a popover; on an iPhone the handle's Scenery count opens the sheet at the band, and *All scenery…*
+  opens as a bottom sheet with finger-sized rows.
 - **Session 3:** fly the moon in, Record into Q15, and the cue card shows one row; Include Q15, move
   the tabs, Update, and Q15 shows two; Record look with only the moon held makes a pad that flies it.
 - **Session 4:** a click on the moon opens the popover in Orbit and in Front; a pan does not; the

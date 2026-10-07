@@ -417,7 +417,18 @@ reach reads closed tabs** for free; `useSceneryClock` invalidates every frame on
 flight. The vis source picks the scenery too (`StageSceneryContext` from `StageChannelSourceProvider`:
 Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in Cue
 properties, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
-holding its draft over a refetch. See the stage-vis doc's §"Scenery that moves with the show".
+holding its draft over a refetch; since the scenery-programmer plan's session 2 each of its rows is
+element select · time · × over a `SceneryControl` (§"The editor kit") in `commit="release"`, so a row
+can set a range (`open 40%`, a trim between in and out) and several states at once, and let one go
+again — a key the row does not state is drawn muted, and each it does carries an *Unset* ×. **The programmer
+holds scenery too** (that plan's D1): `programmer.sceneryState` is bridged in
+`api/programmerWsApi.ts` (its own subscription, never `notifyState`) into `store/programmer.ts`'s
+form-3 `programmerScenery` (`useProgrammerScenery`), written by `programmerSetScenery` /
+`programmerClearScenery` as operator gestures (`sendGesture`; a refusal is `programmer.error` and the
+existing toast), and edited in the rail's Scenery band (§"The rail's tabs").
+`scenery.state`'s per-entry `source` and blind `staged` list are parsed into `LiveScenery`, both
+optional so an older desk's frame parses as before; the Stage view does not draw `staged` yet (that
+plan's session 4). See the stage-vis doc's §"Scenery that moves with the show".
 
 **One-shot effects — the cannons** (session 9; lighting7 `docs/fixtures-engineering.md`
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
@@ -3221,6 +3232,32 @@ each was:
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
   literal 33, the trailing call, and that a repeat is sent.
 
+- **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
+  session 2): one scene element's state wherever it is edited, built from the kit — an
+  `EditorLabel` with the element's name (a host that names it itself, `SceneryEditor`'s row with its
+  element select, passes `showLabel={false}`; `labelEnd` takes the kind's word and a release ×), a
+  `ToggleGroup size="sm"` of presets (*Closed · Half · Drawn* for a drawn drape, *In · Out* for a
+  flown piece — the old step select's choices, in the mock-ups' words), a `Slider` with an
+  `EditorField` (`open` 0–1 shown as `%`, `trimM` between the piece's in — its Z — and its out — its
+  stored trim — in `m`; a flown piece whose stored trim is its Z has *In* and no slider), *Shown ·
+  Hidden* on every element (`visible` is every kind's), and an `EditorReadout` saying what holds the
+  piece. The presets, the range and the shown state are `lib/scenery.ts`'s (`sceneryPresetsOf`,
+  `sceneryRangeOf`, `shownSceneryState`), so the control only draws. **No verbs and no
+  `EditorFooter`**: it writes as it goes through `useLivePush` at `floorMs: 33` (the sheet's floor)
+  and a release that always lands — `reset()` after every release, since the piece moves by other
+  routes between gestures — and each write carries only the keys the gesture moved, merged across
+  it, so a preset pressed while a drag's last move is held by the floor carries that move too
+  rather than `flush` dropping it. `commit="release"` writes once per gesture instead, for a host
+  whose write is a **whole-list `PUT`** (a cue's, a stack's or a Look's scenery), where thirty saves a
+  second would be thirty refetches of every cue. What the operator moved is drawn over the host's
+  state until the host says the same or 1.5 s pass, so the thumb does not jump back for a round trip.
+  Finger-sized presets in the two sheet forms only (`useEditorForm`), never a `sm:` variant. A press
+  on the **lit** preset or visibility writes too (Radix deselects it with `''`, which writes
+  nothing), since holding a piece where it already is — its base, or a cue's — is a gesture. A host
+  whose record states only part of the state (`SceneryEditor`'s row) passes `stated` and
+  `onUnstate`: an unstated key is drawn muted, and each stated one gets an *Unset* × while the
+  record states another.
+
 **The label line replaced the count line** (D8). No editor says *Applying to N targets* any more,
 anywhere — `ColourCell`'s trigger `title` was the last place the sentence survived, until session 2.
 The popover form draws `EditorLabelLine` first — *4 heads · Local* on the left (the batch and the
@@ -3881,8 +3918,9 @@ yours. It is a sequence, so a failure part-way leaves the Look and says so.
 ### The rail's tabs
 
 **The rail's header is a tab strip — Stack · Colour · Spread** (editor-kit plan session 4,
-`../docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail as it always was,
-`LAYERS n · FX n` its face and the body and footer unchanged; **Colour** and **Spread** are the busk
+`../docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail's body and
+footer — since the scenery-programmer plan's session 2 the Scenery band, the layers and the effects —
+with `LAYERS n · FX n` its face; **Colour** and **Spread** are the busk
 sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
 `RailSpreadTab.tsx`) — a long busk over one marquee with the grid uncovered, where a cell's popover
 is the quick form. The strip is the header row itself, the mode toggle and the chevron after it; a
@@ -3890,7 +3928,8 @@ second tab row was declined. Its words fold by the busk sheet's rule, `tabWordCl
 `components/sheet/sidePanel.ts` now as the panels' shared chrome: the strip's unpadded wrapper is the
 `@container`, and below 400px of strip only the open tab keeps its word — every width the rail has,
 the strip being the rail less its toggle and chevron — while the Stack tab folds to the collapsed
-strip's glyph-and-count pairs, so the counts are never lost. `RailTabs.test.tsx` pins that as an
+strip's glyph-and-count pairs (layers and effects; scenery's count is the band's own label there,
+§"Scenery is a band" below). `RailTabs.test.tsx` pins that as an
 ordering.
 
 Six rules, each with a reason:
@@ -3935,6 +3974,52 @@ Six rules, each with a reason:
   takes its compact curve row below 300 of rail (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked
   panel's root). That root is the busk Spread tab's too, so the busk sheet carries the container as
   well; it never matches there, because that sheet's floor is 320.
+
+**Scenery is a band of the Stack body, not a tab** (scenery-programmer plan D1, D4; session 2 —
+Chris's call over a docked-only Scenery tab and an action-bar chip, made once both had been built
+and measured). `programmer/RailSceneryBand.tsx` sits at the **top** of `RailBody`, above *Values*,
+because the programmer's scenery is the resolver's top tier (D2) and is drawn rather than output, so
+it is not a row of the value stack. Being a band, it is in every arm the rail has — docked, the
+704–1200 overlay, overlay mode and the phone's bottom sheet — the way the effects band is, which a
+tab (docked only, for the reasons above) could not be; that is what retired the chip, whose 40px the
+phone's row A did not have beside `Q15 · Update · Revert`. The band lists **only what the scope
+holds**, each a `SceneryElementRow` (its `SceneryControl`, the kind's glyph and word, a release ×),
+under a `SCENERY · 2 held · top wins` label whose *All scenery…* opens `ProgrammerSceneryList` — every
+element **Venue then Set**, by name — through `EditorSurface` (a `w-72` popover on a desk or iPad, a
+bottom sheet on an upright phone, a side sheet on a short viewport). **Its count rides the rail like
+FX's**: a `StripCount` on the collapsed strip and a glyph-and-count door on the phone handle, both
+opening the rail at the band (`RailBand` gained `'scenery'`), and `Scenery n` on the tabless faces
+(the overlay header's `StackLabels`, the phone sheet's title). **Not on the docked Stack tab's
+face**: that strip is 211px at the rail's 300px default and its three tabs already need 224 with
+Stack open, so a third glyph-and-count pair would push Colour and Spread out; the band's label,
+first in the body the tab opens on, says it there — except with a Look layer focused, where it names
+the Look (*in Night*) and lists that Look's scenery rather than the programmer's. **A focused Look's
+rows write nothing until its own list has loaded**: a whole-list `PUT` built on an empty draft would
+replace everything the Look holds.
+
+The band and the list share one scope reading, `useSceneryScope` (`ProgrammerSceneryList.tsx`), so
+they cannot draw an element two ways. Neither is under `ScopedEditorContextProvider` or reads the
+marquee — scenery is addressed by element, never through the selection (D3) — but both follow the
+scope band's arm: **Local** writes `programmer.setScenery` at the programmer's fade (the Clear/Blind
+picker's; at Snap the piece moves at its own `travelS`) and the × sends `programmer.clearScenery`; a
+focused **Look** layer lists and writes that Look's scenery **whole** through `setLookScenery` (the
+Look's own scenery `PUT`, on release, its draft held over a refetch as `SceneryEditor`'s is), and
+its × takes the element out of the Look; **Output** and a focused **template** layer list the
+programmer's holds disabled, with *Output is read-only* or *A template carries no scenery* —
+disabled, never hidden. A held row wears `ring-primary`; a row that only inherits wears the tracked
+hatch (`scenery/trackedHatch.ts`, shared with the cue card's tracked rows); a row Blind is staging
+wears the `BlindDot` and shows the staged state (`scenery.state`'s `staged`, Local only). The
+read-out is the frame's `source`, the top tier only — *held by the programmer*, *held by Night,
+pressed*, *tracked from Q14*, *held by Main's set*, *at its base* — because nothing on the wire says
+what the tier below would hold. The list's filters *Set*, *Venue* and *Moving only* are three
+independent toggles (Set layer, Venue layer, only what draws or flies; Set and Venue on by default),
+stored per window in `sessionStorage` under `programmer.scenery.filters` inside a `try/catch`, and a
+held piece is listed whatever they say, so its × stays in reach.
+
+**Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
+scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —
+the desk's `programmer.cleared` reply counts values and effects only, so the count is
+`programmer.sceneryState`'s (`useHeldSceneryCount`).
 
 ### Speed Masters
 

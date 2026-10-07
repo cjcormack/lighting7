@@ -81,6 +81,18 @@ vi.mock('@/components/programmer/RailColourTab', () => ({
 vi.mock('@/components/programmer/RailSpreadTab', () => ({
   RailSpreadTab: () => <div data-testid="rail-spread" />,
 }))
+// The Scenery band has a suite of its own (`RailSceneryBand.test.tsx`); here it is a landmark with
+// a ref, and the held count is a value the test sets.
+vi.mock('@/components/programmer/RailSceneryBand', async () => {
+  const { forwardRef } = await import('react')
+  return {
+    RailSceneryBand: forwardRef<HTMLDivElement>(function Band(_, ref) {
+      return <div ref={ref} data-testid="scenery-band" />
+    }),
+  }
+})
+vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
+const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
 vi.mock('@/components/programmer/ProgrammerAddLayerSheet', () => ({
   ProgrammerAddLayerSheet: () => null,
 }))

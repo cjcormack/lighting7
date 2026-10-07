@@ -505,6 +505,8 @@ export function lightingApiMock() {
         isBlind: () => programmerWs.state.blind,
         entryCount: () => programmerWs.state.entries.size,
         lastIncluded: () => programmerWs.state.lastIncluded,
+        // The programmer's scenery has its own frame and subscription; the mock holds none.
+        scenery: () => ({ projectId: null, elements: [] }),
         getKeyState: (targetKey: string, propertyName: string) => ({
           entry: programmerWs.state.entries.get(`${targetKey}|${propertyName}`),
           provenance: programmerWs.state.provenance.get(`${targetKey}|${propertyName}`),
@@ -519,6 +521,7 @@ export function lightingApiMock() {
         },
         subscribeToKey: noopSub,
         subscribeToErrors: noopSub,
+        subscribeToScenery: noopSub,
         // The writers have to be spelled out too, and this is the cost of not being the Proxy any
         // more: it answered every unknown member, so a surface that merely *called* `programmerSet`
         // used to be safe under the mock. Without these, rendering one throws
@@ -534,6 +537,8 @@ export function lightingApiMock() {
         removeLayer: () => {},
         moveLayer: () => {},
         patchLayer: () => {},
+        setScenery: () => {},
+        clearScenery: () => {},
       },
       // Spelled out for the reason `status` is: `store/selection.ts`'s `queryFn` seeds its cache
       // entry from `getState()`, and the fallback Proxy would hand it back a Subscription — which

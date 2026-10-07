@@ -1683,9 +1683,10 @@ a Look pressed, a stack's set edited, a stack stopping, GO TO landing an earlier
 programmer move with no fade — runs at it, scaled by the share of the travel moved
 (`SceneryService.durationFor`; `docs/cue-stacks-engineering.md` §"Scenery"). Unset, those moves
 snap, as they did before the field existed. The Stage view's Edit form has no field for it yet
-(scenery-programmer plan session 4) and sends `params` whole, so until session 2 teaches it to drop
-the key with the travel, a piece given a `travelS` cannot be switched to `DEAD` (or unflown) from the
-form — `set_scene`, sending `params` without it, can.
+(scenery-programmer plan session 4) and sends `params` whole; it drops the key with the travel
+(`withKindParam`, `frontend/src/components/stage/elementDraft.ts`), as it drops a stale `open` or
+`trimM`, so a piece given a `travelS` through `set_scene` can still be switched to `DEAD` (or
+unflown) from the form.
 `elementTravelS` reads it, and ignores a stored value the
 piece no longer has (a drape switched to `DEAD`). Like every key here it needs no `formatVersion`:
 `params` travel verbatim, and an older desk keeps a field it does not read.

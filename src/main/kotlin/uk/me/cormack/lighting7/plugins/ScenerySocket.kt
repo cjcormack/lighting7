@@ -81,8 +81,9 @@ data class SceneryStagedEntryDto(
  *
  * [staged] is present only while the programmer is blind **and** holds something that would move a
  * piece (D12) — the Stage view's Output + Programmer and Programmer sources draw it, Output draws
- * [elements]. Absent rather than empty otherwise, so today's client, which reads neither it nor
- * [SceneryEntryDto.source], parses the frame exactly as before (scenery-programmer plan P3).
+ * [elements]. Absent rather than empty otherwise, and both it and [SceneryEntryDto.source] are
+ * optional on the client, so an older client that reads neither parses the frame exactly as before
+ * (scenery-programmer plan P3).
  */
 @Serializable
 @SerialName("scenery.state")

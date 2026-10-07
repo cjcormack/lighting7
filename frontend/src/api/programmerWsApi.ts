@@ -2,6 +2,12 @@ import type { CueTarget, LayerSource } from './cuesApi'
 import type { InternalApiConnection } from './internalApi'
 import type { Subscription } from './subscription'
 import { sendGesture } from './wsGesture'
+import {
+  NO_PROGRAMMER_SCENERY,
+  parseProgrammerSceneryFrame,
+  type ProgrammerScenery,
+  type SceneryState,
+} from './sceneryApi'
 
 /**
  * Client for the backend's Layer-2 programmer (`programmer.*` WS ops plus the
@@ -332,6 +338,24 @@ interface ProgrammerPatchLayerOutgoing {
   fadeMs?: number
 }
 
+/**
+ * Hold states on one scene element (scenery-programmer plan D1), merged over what it already holds.
+ * `fadeMs` above 0 is the move's clock; otherwise the piece moves at its own `travelS`.
+ */
+interface ProgrammerSetSceneryOutgoing {
+  type: 'programmer.setScenery'
+  elementUuid: string
+  state: SceneryState
+  fadeMs?: number
+}
+
+/** Let one element go, or every one with no uuid; `fadeMs` above 0 is the clock it flies home on. */
+interface ProgrammerClearSceneryOutgoing {
+  type: 'programmer.clearScenery'
+  elementUuid?: string
+  fadeMs?: number
+}
+
 export type ProgrammerOutgoingMessage =
   | ProgrammerSetOutgoing
   | ProgrammerSetColourOutgoing
@@ -344,6 +368,8 @@ export type ProgrammerOutgoingMessage =
   | ProgrammerRemoveLayerOutgoing
   | ProgrammerMoveLayerOutgoing
   | ProgrammerPatchLayerOutgoing
+  | ProgrammerSetSceneryOutgoing
+  | ProgrammerClearSceneryOutgoing
 
 // ── Incoming ────────────────────────────────────────────────────────────────
 
@@ -407,6 +433,13 @@ interface ProgrammerErrorIncoming {
   message: string
 }
 
+/** The programmer's scenery, whole: a `StateFlow` on the desk, so a broadcast and the connect snapshot. */
+interface ProgrammerSceneryStateIncoming {
+  type: 'programmer.sceneryState'
+  projectId?: number | null
+  elements?: unknown
+}
+
 interface ProvenanceStateIncoming {
   type: 'provenanceState'
   entries: ProvenanceEntry[]
@@ -427,6 +460,7 @@ type ProgrammerIncomingMessage =
   | ProgrammerClearedIncoming
   | ProgrammerBlindStateIncoming
   | ProgrammerErrorIncoming
+  | ProgrammerSceneryStateIncoming
   | ProvenanceStateIncoming
 
 // ── Public surface ──────────────────────────────────────────────────────────
@@ -444,6 +478,12 @@ export interface ProgrammerApi {
   layers(): readonly ProgrammerLayer[]
   /** The same stack resolved to per-target applied state — a busk pad's ring, already answered. */
   applied(): readonly ProgrammerAppliedSource[]
+  /**
+   * The programmer's own scenery (scenery-programmer plan D1) — the last `programmer.sceneryState`,
+   * or nothing held before the first. Kept apart from [getState]'s snapshot, and announced on its
+   * own subscription, because nothing that reads the values grid cares about it.
+   */
+  scenery(): ProgrammerScenery
 
   set(
     targetType: ProgrammerTargetType,
@@ -484,6 +524,14 @@ export interface ProgrammerApi {
   clearAll(fadeMs?: number): void
   setBlind(blind: boolean, fadeMs?: number): void
   requestState(): void
+  /**
+   * Hold [state] on one scene element, merged over what it already holds — an operator gesture of
+   * `set`'s tier, answered by the `programmer.sceneryState` broadcast, or by `programmer.error`
+   * naming every problem (which reaches the error toast through [subscribeToErrors]).
+   */
+  setScenery(elementUuid: string, state: SceneryState, fadeMs?: number): void
+  /** Let one element go, or — with no uuid — every one the programmer holds. */
+  clearScenery(elementUuid?: string, fadeMs?: number): void
 
   /**
    * Add a layer. Answered by the whole `programmer.layerState` broadcast, so there is no reply and
@@ -538,6 +586,8 @@ export interface ProgrammerApi {
    * subscriber can toast unconditionally; `store/programmerErrors.ts` is the one that does.
    */
   subscribeToErrors(fn: (message: string) => void): Subscription
+  /** Every `programmer.sceneryState`. The desk pushes one on connect, so a late subscriber is told the last one. */
+  subscribeToScenery(fn: (scenery: ProgrammerScenery) => void): Subscription
 }
 
 /** Cache/subscription key for a (target, property) pair. */
@@ -669,6 +719,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let lastIncluded: IncludedTarget | null = null
   let layers: readonly ProgrammerLayer[] = []
   let applied: readonly ProgrammerAppliedSource[] = []
+  let scenery: ProgrammerScenery = NO_PROGRAMMER_SCENERY
+  let sceneryKnown = false
 
   const buildSnapshot = (): ProgrammerState => ({
     blind,
@@ -688,6 +740,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const stateSubscriptions = new Map<number, (state: ProgrammerState) => void>()
   const keySubscriptions = new Map<string, Map<number, (state: ProgrammerKeyState) => void>>()
   const errorSubscriptions = new Map<number, (message: string) => void>()
+  const scenerySubscriptions = new Map<number, (scenery: ProgrammerScenery) => void>()
 
   const keyStateFor = (key: string): ProgrammerKeyState => {
     const entry = entries.get(key)
@@ -869,6 +922,14 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       case 'programmer.error':
         errorSubscriptions.forEach((fn) => fn(message.message))
         break
+      case 'programmer.sceneryState':
+        // Its own channel, not `notifyState`: the overlay is no cell's business, and waking every
+        // whole-state subscriber for a scenery move would re-render the grid's coarse readers.
+        // Broadcast and snapshot both — the programmer is shared, so another tab's move lands here.
+        scenery = parseProgrammerSceneryFrame(message)
+        sceneryKnown = true
+        scenerySubscriptions.forEach((fn) => fn(scenery))
+        break
     }
   }
 
@@ -899,6 +960,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     lastIncluded: () => lastIncluded,
     layers: () => layers,
     applied: () => applied,
+    scenery: () => scenery,
 
     set(targetType, targetKey, propertyName, value, fadeMs, sourceGroup) {
       send({
@@ -936,6 +998,12 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     },
     requestState() {
       conn.send(JSON.stringify({ type: 'programmer.state' }))
+    },
+    setScenery(elementUuid, state, fadeMs) {
+      send({ type: 'programmer.setScenery', elementUuid, state, fadeMs })
+    },
+    clearScenery(elementUuid, fadeMs) {
+      send({ type: 'programmer.clearScenery', elementUuid, fadeMs })
     },
 
     addLayer({ lookId, templateId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
@@ -991,6 +1059,12 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       const id = nextSubscriptionId++
       errorSubscriptions.set(id, fn)
       return { unsubscribe: () => { errorSubscriptions.delete(id) } }
+    },
+    subscribeToScenery(fn) {
+      const id = nextSubscriptionId++
+      scenerySubscriptions.set(id, fn)
+      if (sceneryKnown) fn(scenery)
+      return { unsubscribe: () => { scenerySubscriptions.delete(id) } }
     },
   }
 }

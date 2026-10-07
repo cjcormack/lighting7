@@ -37,6 +37,18 @@ vi.mock('./ProgrammerSheets', () => ({
   useProgrammerSheets: () => ({ openMakeLayer: () => {} }),
 }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalValueCount: () => 0 }))
+// The Scenery band has a suite of its own (`RailSceneryBand.test.tsx`); here it is a landmark with
+// a ref, and the held count is a value the test sets.
+vi.mock('./RailSceneryBand', async () => {
+  const { forwardRef } = await import('react')
+  return {
+    RailSceneryBand: forwardRef<HTMLDivElement>(function Band(_, ref) {
+      return <div ref={ref} data-testid="scenery-band" />
+    }),
+  }
+})
+vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
+const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
 
 import { ProgrammerRail } from './ProgrammerRail'
 import { ProgrammerWorkspace } from './ProgrammerWorkspace'
@@ -92,6 +104,10 @@ describe('ProgrammerRail — the collapsed arms', () => {
       'Open the rail at the effects',
       'Show the layers',
       'Show the effects',
+      // Scenery's doors (scenery-programmer plan D17): the strip's pair and the handle's one.
+      'Expand the rail at the scenery',
+      'Open the rail at the scenery',
+      'Show the scenery',
     ]
     for (const name of names) {
       expect(screen.getAllByRole('button', { name })).toHaveLength(1)
@@ -137,6 +153,34 @@ describe('ProgrammerRail — the collapsed arms', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show the layers' }))
     expect(scrolledTo).toHaveLength(1)
     expect(scrolledTo[0].textContent).toContain('top wins')
+  })
+
+  it('opens the rail at the Scenery band from the handle, the band being the top of the body', () => {
+    sceneryHeld.count = 2
+    draw()
+    const handle = screen.getByRole('button', { name: 'Show the scenery' })
+    expect(handle.textContent).toBe('2')
+    fireEvent.click(handle)
+    expect(scrolledTo).toHaveLength(1)
+    expect(scrolledTo[0].getAttribute('data-testid')).toBe('scenery-band')
+    // Above the values, as the top tier: the band comes before the Values label in the body.
+    const band = screen.getByTestId('scenery-band')
+    const values = screen.getByText('top wins')
+    expect(band.compareDocumentPosition(values) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // …and the sheet's title counts it beside the layers and the effects.
+    expect(screen.getByRole('dialog').textContent).toContain('Scenery2')
+    sceneryHeld.count = 0
+  })
+
+  it('counts held scenery on the strip, which opens the rail at the band', () => {
+    sceneryHeld.count = 1
+    draw()
+    const strip = screen.getByRole('button', { name: 'Open the rail at the scenery' })
+    expect(strip.textContent).toBe('1')
+    expect(strip.getAttribute('title')).toBe('1 held piece of scenery')
+    fireEvent.click(strip)
+    expect(scrolledTo[0].getAttribute('data-testid')).toBe('scenery-band')
+    sceneryHeld.count = 0
   })
 
   it('honours a band request once, and again on the next press', () => {

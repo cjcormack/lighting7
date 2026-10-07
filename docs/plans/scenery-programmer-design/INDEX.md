@@ -70,6 +70,8 @@ phone and a side sheet on a short viewport.
 **Every surface goes through that door.**
 
 - The programmer gains a Scenery rail tab, and an action-bar chip that reaches it at every width.
+  (Superseded in session 2: scenery is a band of the rail's Stack body instead, with no tab and no
+  chip — the plan's §4, *Session 2 amendment*.)
 - The Stage view opens the control on a clicked piece.
 - The cue table gains a Scenery column.
 - The Prompt Book marks cues that move scenery, lists their changes on the rail cards and names the

@@ -1978,9 +1978,10 @@ frames, an idle stage asks for none. Moves are eased sine in-out, the desk's own
 the end. A frame is anchored at receipt from its `elapsedMs`, never its wall-clock `startedAt`, so a
 skewed tablet does not replay a finished move.
 
-**Authoring** is one shared editor, `components/scenery/SceneryEditor.tsx` — element · state ·
-time · remove, the state a per-kind choice (`sceneryChoices`: Closed / Half open / Drawn, Trim · in /
-out, Shown / Hidden; a state no choice writes stays selectable as itself) — mounted as *Scenery* in
+**Authoring** is one shared editor, `components/scenery/SceneryEditor.tsx` — element · time ·
+remove over the element's `SceneryControl` (scenery-programmer plan session 2: the per-kind presets —
+Closed / Half / Drawn, In / Out — a range between them, *Shown · Hidden*, in `commit="release"`; a
+key the row does not state is drawn muted, and one it does can be unset) — mounted as *Scenery* in
 Cue properties (with a time: blank moves with the cue's fade), *Set for this stack* in
 `CueStackForm` and *Scenery while live* in `LookDetailSheet`. Each gesture saves the owner's
 **whole list**, as the desk's `PUT …/scenery` takes it, and the rows are a draft the editor holds, so

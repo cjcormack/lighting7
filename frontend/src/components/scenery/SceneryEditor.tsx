@@ -11,10 +11,12 @@ import {
 } from '@/components/ui/select'
 import { useFieldAutosave } from '@/hooks/useFieldAutosave'
 import { formatError } from '@/lib/formatError'
-import { choiceOf, describeSceneryState, sceneryChoices, sameState } from '@/lib/scenery'
+import { describeSceneryState, sceneryChoices, statesFor, shownSceneryState } from '@/lib/scenery'
+import type { SceneryKey } from '@/lib/scenery'
 import { useStageElementListQuery } from '@/store/stageElements'
 import type { SceneryChange, SceneryState, SceneryWriteItem } from '@/api/sceneryApi'
 import type { StageElementDto } from '@/api/stageElementApi'
+import { SceneryControl } from './SceneryControl'
 
 /**
  * One row as the editor holds it: its element, its state, and a cue's clock. Keyed by the element —
@@ -60,7 +62,10 @@ function itemsOf(rows: readonly DraftRow[], withTime: boolean): SceneryWriteItem
 
 /**
  * A scenery list's editor (stage-view plan session 8; the Cue, Stacks and Looks boards): one row per
- * element — element · state · time (a cue's only) · remove — and an add button. Every gesture saves
+ * element — element · time (a cue's only) · remove, and under them the element's `SceneryControl`
+ * (scenery-programmer plan D5: the old step select's choices as presets, plus a range and *Shown ·
+ * Hidden*) — and an add button. The control writes on **release** here, not as it goes: each write
+ * is the whole list's `PUT`, and a drag's thirty a second would be thirty refetches. Every gesture saves
  * the **whole list** at once through [onSave], which is what the desk's route takes, and the desk
  * checks each state against its element's kind; a refusal is drawn under the rows and the rows go
  * back to what the desk holds.
@@ -139,11 +144,18 @@ export function SceneryEditor({ projectId, scenery, withTime, addLabel, onSave, 
                 onElement={(uuid) => {
                   const next = byUuid.get(uuid)
                   if (next == null) return
-                  // Keep the state where the new element can take it, else its first choice.
-                  const keep = choiceOf(next, row.state)
-                  update(row.key, { key: uuid, elementUuid: uuid, state: keep?.state ?? sceneryChoices(next)[0].state })
+                  // Keep the states the new element can take, else its first choice.
+                  const keep = statesFor(next, row.state)
+                  update(row.key, { key: uuid, elementUuid: uuid, state: keep ?? sceneryChoices(next)[0].state })
                 }}
-                onState={(state) => update(row.key, { state })}
+                onState={(patch) => update(row.key, { state: { ...row.state, ...patch } })}
+                onUnstate={(key) => {
+                  // A row says only what it states: the key let go tracks again (the control
+                  // offers this only while the row states something else, so it is never empty).
+                  const rest: SceneryState = { ...row.state }
+                  delete rest[key]
+                  update(row.key, { state: rest })
+                }}
                 onTime={(ms) => update(row.key, { transitionMs: ms })}
                 onTimeEditing={(editing) => {
                   editingTime.current = editing
@@ -192,6 +204,7 @@ function SceneryRow({
   disabled,
   onElement,
   onState,
+  onUnstate,
   onTime,
   onTimeEditing,
   onRemove,
@@ -204,77 +217,71 @@ function SceneryRow({
   withTime: boolean
   disabled: boolean
   onElement: (uuid: string) => void
-  onState: (state: SceneryState) => void
+  onState: (patch: SceneryState) => void
+  onUnstate: (key: SceneryKey) => void
   onTime: (ms: number | null) => void
   onTimeEditing: (editing: boolean) => void
   onRemove: () => void
 }) {
-  const choices = element ? sceneryChoices(element) : []
-  const current = element ? choiceOf(element, row.state) : null
-  // A state no choice writes (a model's `open 0.3`) stays selectable as itself, so opening the row
-  // does not silently change it.
-  const customId = 'custom'
-  const value = current?.id ?? customId
-
   return (
-    <div className={withTime ? 'grid grid-cols-[1.2fr_1fr_5.5rem_1.75rem] items-center gap-1.5' : 'grid grid-cols-[1.2fr_1fr_1.75rem] items-center gap-1.5'}>
-      <Select value={row.elementUuid} onValueChange={onElement} disabled={disabled}>
-        <SelectTrigger id={`${id}-element`} className="h-8 w-full text-xs" aria-label="Element">
-          <SelectValue placeholder="Element" />
-        </SelectTrigger>
-        <SelectContent>
-          {element == null && (
-            <SelectItem value={row.elementUuid} disabled>
-              Missing element
-            </SelectItem>
-          )}
-          {elements.map((e) => (
-            <SelectItem key={e.uuid} value={e.uuid} disabled={e.uuid !== row.elementUuid && used.has(e.uuid)}>
-              {e.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select
-        value={value}
-        onValueChange={(v) => {
-          const choice = choices.find((c) => c.id === v)
-          if (choice != null && !sameState(choice.state, row.state)) onState(choice.state)
-        }}
-        disabled={disabled || element == null}
-      >
-        <SelectTrigger id={`${id}-state`} className="h-8 w-full text-xs" aria-label="State">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {current == null && <SelectItem value={customId}>{describeSceneryState(element, row.state)}</SelectItem>}
-          {choices.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {withTime && (
-        <TimeField
-          id={`${id}-time`}
-          valueMs={row.transitionMs}
+    <div data-scenery-row={row.elementUuid} className="space-y-1.5 rounded-md border px-2 py-1.5">
+      <div className={withTime ? 'grid grid-cols-[1fr_5.5rem_1.75rem] items-center gap-1.5' : 'grid grid-cols-[1fr_1.75rem] items-center gap-1.5'}>
+        <Select value={row.elementUuid} onValueChange={onElement} disabled={disabled}>
+          <SelectTrigger id={`${id}-element`} className="h-8 w-full text-xs" aria-label="Element">
+            <SelectValue placeholder="Element" />
+          </SelectTrigger>
+          <SelectContent>
+            {element == null && (
+              <SelectItem value={row.elementUuid} disabled>
+                Missing element
+              </SelectItem>
+            )}
+            {elements.map((e) => (
+              <SelectItem key={e.uuid} value={e.uuid} disabled={e.uuid !== row.elementUuid && used.has(e.uuid)}>
+                {e.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {withTime && (
+          <TimeField
+            id={`${id}-time`}
+            valueMs={row.transitionMs}
+            disabled={disabled}
+            onCommit={onTime}
+            onEditing={onTimeEditing}
+          />
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label={`Remove ${element?.name ?? 'change'}`}
           disabled={disabled}
-          onCommit={onTime}
-          onEditing={onTimeEditing}
+          onClick={onRemove}
+        >
+          <X className="size-3.5" />
+        </Button>
+      </div>
+      {element != null ? (
+        // The row's own states laid on the element's base, so the control has every key to draw;
+        // a write merges back into the row's states only what the gesture moved, and a key the row
+        // does not state is drawn muted, with an Unset × on each one it does.
+        <SceneryControl
+          element={element}
+          state={shownSceneryState(element, row.state)}
+          onWrite={onState}
+          commit="release"
+          stated={new Set(Object.keys(row.state) as SceneryKey[])}
+          onUnstate={onUnstate}
+          disabled={disabled}
+          showLabel={false}
+          idPrefix={id}
         />
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{describeSceneryState(undefined, row.state)}</p>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-7"
-        aria-label={`Remove ${element?.name ?? 'change'}`}
-        disabled={disabled}
-        onClick={onRemove}
-      >
-        <X className="size-3.5" />
-      </Button>
     </div>
   )
 }
