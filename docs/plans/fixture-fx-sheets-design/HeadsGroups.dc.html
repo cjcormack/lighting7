@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Heads and groups</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--skyl:oklch(0.83 0.1 230);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:28px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.lede{max-width:920px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.cap{font-size:12px;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.sheet{position:relative;background:var(--panel);border:1px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.st{padding:12px 12px 6px;display:flex;gap:8px;align-items:flex-start}
+.st .nm{font-size:15px;font-weight:600}
+.st .md{font-size:12px;color:var(--mfg)}
+.crow{height:40px;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--bd)}
+.tabs{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+.tab{height:26px;padding:0 9px;border-radius:6px;font-size:12px;font-weight:500;color:var(--mfg);display:inline-flex;align-items:center;gap:6px}
+.tab.on{background:var(--muted);color:var(--fg)}
+.ib{width:28px;height:28px;flex:0 0 auto;border:1px solid var(--bd);border-radius:7px;display:grid;place-items:center;color:var(--fg);background:oklch(0.274 0.006 286 / .3)}
+.ib.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.btn{height:28px;padding:0 10px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;background:oklch(0.274 0.006 286 / .3);color:var(--fg);white-space:nowrap}
+.btn.sm{height:24px;padding:0 8px;font-size:11px}
+.scope{height:28px;flex:0 0 auto;display:flex;align-items:center;gap:6px;padding:0 12px;font-size:11px;color:var(--mfg);border-bottom:1px solid var(--bd)}
+.scope b{color:var(--fg);font-weight:500}
+.body{flex:1;min-height:0;overflow:hidden;position:relative}
+.fade{position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(transparent,var(--panel))}
+.fam{display:flex;align-items:center;gap:8px;padding:12px 12px 2px}
+.fam .ln{flex:1;height:1px;background:var(--bd)}
+.prow{position:relative;padding:7px 12px 8px 16px;display:flex;flex-direction:column;gap:6px}
+.prow::before{content:'';position:absolute;left:0;top:7px;bottom:7px;width:3px;border-radius:0 2px 2px 0;background:var(--mk,transparent)}
+.prow.p{--mk:var(--pri)}.prow.e{--mk:var(--violet)}.prow.c{--mk:var(--sky)}
+.prow.mx::before{background:repeating-linear-gradient(to bottom,var(--mk) 0 4px,transparent 4px 7px)}
+.prow.b .nm,.prow.b .ctl{opacity:.62}
+.pl{display:flex;align-items:center;gap:6px;min-height:20px}
+.pl .nm{font-size:12.5px;font-weight:500}
+.src{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid var(--bd);color:var(--mfg);white-space:nowrap}
+.src.p{color:var(--pril);border-color:oklch(0.623 0.214 259.815 / .55);background:oklch(0.623 0.214 259.815 / .14)}
+.src.e{color:var(--violl);border-color:oklch(0.606 0.25 292.717 / .6);background:oklch(0.606 0.25 292.717 / .15)}
+.src.c{color:var(--skyl);border-color:oklch(0.685 0.169 237.323 / .5);background:oklch(0.685 0.169 237.323 / .12)}
+.src.b{border-style:dashed}
+.src.mx{border-style:dashed}
+.ctl{display:flex;align-items:center;gap:8px}
+.sl{position:relative;flex:1;height:16px;min-width:50px}
+.sl i{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--muted)}
+.sl b{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--pri)}
+.sl s{position:absolute;top:6px;height:4px;border-radius:2px;background:oklch(0.623 0.214 259.815 / .45);text-decoration:none}
+.sl u{position:absolute;top:1px;width:14px;height:14px;border-radius:50%;background:#fff;margin-left:-7px;box-shadow:0 0 0 2px var(--pri)}
+.sl.c b{background:var(--sky)}.sl.c u{box-shadow:0 0 0 2px var(--sky)}
+.sl.v b{background:var(--violet)}.sl.v u{box-shadow:0 0 0 2px var(--violet)}
+.fld{height:28px;width:84px;flex:0 0 auto;padding:0 8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);display:inline-flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px}
+.fld small{color:var(--mfg);font-size:11px}
+.xb{width:22px;height:22px;flex:0 0 auto;border-radius:6px;display:grid;place-items:center;color:var(--mfg)}
+.ro{font-size:10.5px;color:var(--mfg)}
+.ro b{color:var(--fg);font-weight:500}
+.strip{display:flex;align-items:center;gap:4px;padding:8px 12px;border-bottom:1px solid var(--bd);background:oklch(0.16 0.005 286)}
+.all{height:28px;padding:0 9px;border-radius:7px;border:1px solid var(--bd);font-size:11.5px;display:inline-flex;align-items:center;color:var(--mfg)}
+.all.on{color:var(--fg);border-color:var(--pri);background:oklch(0.623 0.214 259.815 / .14)}
+.pip{width:20px;height:28px;border-radius:5px;border:1px solid oklch(1 0 0 / .14);position:relative}
+.pip.on{box-shadow:0 0 0 2px var(--pri)}
+.pip.wide{width:38px}
+.pip em{position:absolute;left:0;right:0;bottom:-15px;text-align:center;font-style:normal;font-size:9px;color:var(--mfg)}
+.swr{display:flex;height:28px;flex:1;border-radius:6px;overflow:hidden;border:1px solid var(--bd)}
+.swr i{flex:1}
+.tray{flex:0 0 auto;border-top:1px solid var(--bd);background:oklch(0.195 0.006 286)}
+.trh{height:40px;display:flex;align-items:center;gap:6px;padding:0 8px 0 12px}
+.fxc{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:999px;border:1px solid oklch(0.606 0.25 292.717 / .5);background:oklch(0.606 0.25 292.717 / .12);font-size:11px;white-space:nowrap}
+.dot7{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:0 0 auto}
+.notes{display:flex;flex-direction:column;gap:14px}
+.note{display:flex;gap:10px;font-size:13px}
+.note p{margin:0;color:var(--mfg)}.note b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1400px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · heads and groups</div>
+<h1 class="h1">A strip picks the heads, the rows below edit them — for a bar's cells and a group's members alike</h1>
+<p class="lede">Today a 12-head bar is twelve accordions under the fixture's own controls, and a group is a different sheet with different visualisers that never writes a group. Both become the one sheet with a strip under the header: <b style="color: var(--fg)">All</b>, or any run of pips, drawn in their live colours — the busk rig tile's pips, grown to a row.</p>
+</div>
+
+<div class="row" style="gap: 28px">
+
+<!-- bar -->
+<div class="col" style="gap: 8px; width: 420px">
+<div class="lbl">A multi-head fixture · LED Lightbar 12 Pixel, heads 1–4 picked</div>
+<div class="sheet" style="width: 420px; height: 900px">
+<div class="st"><div class="sp"><div class="nm">Bar L · Truss 2</div><div class="md">LED Lightbar 12 Pixel · 12 heads · 38-ch · U2.001</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="crow"><div class="tabs"><span class="tab on">Values</span><span class="tab">Channels</span></div><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release <span class="mono" style="color: var(--mfg)">5</span></span></div>
+<div class="scope"><span>Writes to <b>Local</b> · fade <b class="mono">2.0 s</b></span><span class="sp"></span><span>5 values · 1 effect</span></div>
+<div class="body">
+<div class="fam"><span class="lbl">The fixture</span><span class="ln"></span></div>
+<div class="prow p"><div class="pl"><span class="nm">Master</span><span class="src p">Programmer</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="ctl"><div class="sl"><i></i><b style="left: 0; width: 100%"></b><u style="left: 100%"></u></div><span class="fld mono">100<small>%</small></span></div></div>
+<div class="prow b"><div class="pl"><span class="nm">Strobe</span><span class="src b">Base</span></div><div class="ctl"><div class="sl"><i></i><b style="left: 0; width: 0%; background: var(--mfg)"></b><u style="left: 0%; box-shadow: 0 0 0 2px var(--mfg)"></u></div><span class="fld mono">0<small>%</small></span></div></div>
+<div class="fam" style="padding-top: 14px"><span class="lbl">Heads</span><span class="ro" style="font-size: 11px"><b>4 of 12</b> · drag across to pick a run</span><span class="ln"></span></div>
+<div class="strip" style="border-top: 1px solid var(--bd); padding-bottom: 20px">
+<span class="all">All</span>
+<span class="pip on" style="background: #ff3d6e"><em>1</em></span><span class="pip on" style="background: #ff5d5d"><em>2</em></span><span class="pip on" style="background: #ff8a3d"><em>3</em></span><span class="pip on" style="background: #ffb03d"><em>4</em></span><span class="pip" style="background: #3d7bff"><em>5</em></span><span class="pip" style="background: #3d7bff"><em>6</em></span><span class="pip" style="background: #3d7bff"><em>7</em></span><span class="pip" style="background: #3d7bff"><em>8</em></span><span class="pip" style="background: #2a2a33"><em>9</em></span><span class="pip" style="background: #2a2a33"><em>10</em></span><span class="pip" style="background: #2a2a33"><em>11</em></span><span class="pip" style="background: #2a2a33"><em>12</em></span>
+</div>
+<div class="prow p mx"><div class="pl"><span class="nm">Colour</span><span class="src p">Programmer</span><span class="ro">· 4 heads, 4 colours</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><div class="swr"><i style="background: #ff3d6e"></i><i style="background: #ff5d5d"></i><i style="background: #ff8a3d"></i><i style="background: #ffb03d"></i></div><span class="fld mono" style="color: var(--mfg)">mixed</span></div>
+<div class="ro">A colour set here lands on all four; Spread… fans one across them</div></div>
+<div class="prow p mx"><div class="pl"><span class="nm">Dimmer</span><span class="src p mx">Programmer · 2 of 4</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><div class="sl"><i></i><s style="left: 40%; width: 40%"></s><u style="left: 80%"></u></div><span class="fld mono">40–80<small>%</small></span></div>
+<div class="ro">Heads 3 and 4 are Q8's 40%; a value set here lands on all four</div></div>
+<div class="fade"></div>
+</div>
+<div class="tray"><div class="trh"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">1</span><span class="fxc"><span class="dot7"></span>Rainbow · heads</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div></div>
+</div>
+<p class="cap"><b>The fixture's own properties stay above the strip</b>; the heads' are below it and follow the pick. With one head picked the rows read as that head's; with several, mixed values read as a range or a strip of swatches, and the edge goes dashed where the heads disagree on their source.</p>
+</div>
+
+<!-- group -->
+<div class="col" style="gap: 8px; width: 420px">
+<div class="lbl">A group · Front wash, all six picked</div>
+<div class="sheet" style="width: 420px; height: 900px">
+<div class="st"><div class="sp"><div class="nm">Front wash</div><div class="md">Group · 6 × Hex 12-channel · 2 sub-groups</div></div><span class="ib g"><svg class="i" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="crow"><div class="tabs"><span class="tab on">Values</span><span class="tab">Members</span></div><span class="sp"></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="btn"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release <span class="mono" style="color: var(--mfg)">3</span></span></div>
+<div class="scope"><span>Writes <b>the group</b> to Local · fade <b class="mono">2.0 s</b></span><span class="sp"></span><span>3 values · 1 effect</span></div>
+<div class="strip" style="padding-bottom: 22px">
+<span class="all on">All 6</span>
+<span class="pip wide" style="background: #ff8a3d"><em>Hex 1</em></span><span class="pip wide" style="background: #ff8a3d"><em>Hex 2</em></span><span class="pip wide" style="background: #ff8a3d"><em>Hex 3</em></span><span class="pip wide" style="background: #ff9f5a"><em>Hex 4</em></span><span class="pip wide" style="background: #ffb27a"><em>Hex 5</em></span><span class="pip wide" style="background: #ffc59a"><em>Hex 6</em></span>
+</div>
+<div class="body">
+<div class="fam"><span class="lbl">Intensity</span><span class="ln"></span></div>
+<div class="prow p mx"><div class="pl"><span class="nm">Dimmer</span><span class="src p mx">Programmer · 4 of 6</span><span class="sp"></span><span class="xb"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+<div class="ctl"><div class="sl"><i></i><s style="left: 60%; width: 40%"></s><u style="left: 100%"></u></div><span class="fld mono">60–100<small>%</small></span></div>
+<div class="ro">Hex 5 and 6 hold Q12's 60%. Setting it writes one group entry.</div></div>
+<div class="fam"><span class="lbl">Colour</span><span class="ln"></span></div>
+<div class="prow e"><div class="pl"><span class="nm">Colour</span><span class="src e">Colour fade · group · linear</span><span class="sp"></span></div>
+<div class="ctl"><div class="swr"><i style="background: #ff8a3d"></i><i style="background: #ff8a3d"></i><i style="background: #ff8a3d"></i><i style="background: #ff9f5a"></i><i style="background: #ffb27a"></i><i style="background: #ffc59a"></i></div><span class="fld mono" style="color: var(--mfg)">moving</span></div></div>
+<div class="fam"><span class="lbl">Position</span><span class="ln"></span></div>
+<div class="prow b"><div class="pl"><span class="nm">Position</span><span class="src b">Base</span></div><div class="ctl"><span class="fld mono" style="width: 100%">270<small>° pan</small></span><span class="fld mono" style="width: 100%">135<small>° tilt</small></span></div></div>
+<div class="fade"></div>
+</div>
+<div class="tray"><div class="trh"><span class="lbl">Effects</span><span class="mono" style="font-size: 11px; color: var(--mfg)">1</span><span class="fxc"><span class="dot7"></span>Colour fade · linear</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Effect</span></div></div>
+</div>
+<p class="cap"><b>All writes the group</b> — one entry carrying the group, which Record turns back into a group row — and starts group effects with a distribution. <b>Members</b> is today's member grid; a member opens its own sheet, where a group's effect shows <i>via Front wash</i>.</p>
+</div>
+
+<div class="col" style="flex: 1; gap: 14px; padding-top: 22px">
+<div class="notes">
+<div class="note"><span class="n">1</span><div><b>The strip is the sheet's own pick, not the desk selection.</b><p>Picking heads on a sheet does not move every other screen's targets; the sheet's own count says what a write lands on. Locate and Highlight act on the pick.</p></div></div>
+<div class="note"><span class="n">2</span><div><b>A pick is a run or a set</b>, the busk pip's rules: a tap toggles, a mouse drag runs, a held finger runs. <i>All</i> is one press back. A pip shows its head's live colour from the stage's colour dispatch, as a rig tile does.</p></div></div>
+<div class="note"><span class="n">3</span><div><b>On a group, a subset writes members.</b><p>With <i>All</i> the sheet writes one group entry; with a subset it writes those members, each carrying the group as its source, so Record can still tell. The sheet never sends a raw channel for a group, which the group sheet's sliders do today.</p></div></div>
+<div class="note"><span class="n">4</span><div><b>Mixed is a range and a dashed edge.</b><p>A slider over several heads draws the range of their values and a thumb at the highest, as the group visualisers do; a colour draws its heads as a strip. The chip counts how many heads its source holds (<i>4 of 6</i>), and the stack lists each source with its heads.</p></div></div>
+<div class="note"><span class="n">5</span><div><b>Effects follow the pick.</b><p>+ Effect on a pick of heads targets those cells; on a group's <i>All</i> it targets the group, with Distribution and Element mode in the editor's Advanced. The chip names the target: <i>Rainbow · heads</i>, <i>Colour fade · linear</i>.</p></div></div>
+<div class="note"><span class="n">6</span><div><b>What goes.</b><p><span class="code">ElementsView</span>'s accordions and aggregate preview, <span class="code">GroupPropertyVisualizers</span> and <span class="code">GroupDetailModal</span>'s separate body, the "Virtual" badges (the all-heads properties are the strip's <i>All</i>), and the fixture's virtual dimmer, which becomes the master row only where a head has no dimmer of its own.</p></div></div>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today's fixture sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--red:oklch(0.704 0.191 22.216);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:32px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.h3{margin:0;font-size:14px;font-weight:600}
+.lede{max-width:900px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:36px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.pin{position:absolute;z-index:5;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.sheet{position:relative;background:var(--bg);border:1px solid var(--bd);border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.hd{padding:16px 16px 10px;display:flex;flex-direction:column;gap:8px}
+.hd .nm{font-size:15px;font-weight:600}
+.hd .md{font-size:13px;color:var(--mfg)}
+.tg{display:inline-flex;border:1px solid var(--bd);border-radius:7px;overflow:hidden}
+.tg span{width:30px;height:28px;display:grid;place-items:center;color:var(--mfg)}
+.tg span.on{background:var(--muted);color:var(--fg)}
+.ib{width:28px;height:28px;border:1px solid var(--bd);border-radius:7px;display:grid;place-items:center}
+.btn{height:28px;padding:0 10px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;white-space:nowrap}
+.bdg{display:inline-flex;height:20px;padding:0 8px;border-radius:6px;border:1px solid var(--bd);font-size:11px;align-items:center;color:var(--fg)}
+.bdg.s{background:var(--muted);border-color:var(--muted)}
+.bodyt{padding:0 16px 16px;display:flex;flex-direction:column;gap:4px;overflow:hidden;flex:1;position:relative}
+.r{display:flex;align-items:center;gap:12px;min-height:30px}
+.r .k{width:80px;flex:0 0 auto;font-size:12px;color:var(--fg)}
+.bar{flex:1;height:8px;border-radius:999px;background:var(--muted);overflow:hidden}
+.bar b{display:block;height:100%;background:var(--pri)}
+.sl{position:relative;flex:1;height:16px}
+.sl i{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--muted)}
+.sl b{position:absolute;left:0;top:6px;height:4px;border-radius:2px;background:var(--pri)}
+.sl u{position:absolute;top:1px;width:14px;height:14px;border-radius:50%;background:#fff;margin-left:-7px;box-shadow:0 0 0 2px var(--pri)}
+.v{font-size:11.5px;color:var(--mfg);width:76px;text-align:right;flex:0 0 auto}
+.sel{flex:1;height:28px;border:1px solid var(--bd);border-radius:7px;display:flex;align-items:center;gap:8px;padding:0 8px;font-size:12px}
+.sw{width:14px;height:14px;border-radius:4px;border:1px solid oklch(1 0 0 / .15)}
+.xy{width:64px;height:64px;border:1px solid var(--bd);border-radius:6px;position:relative;background:var(--card)}
+.xy i{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--pri)}
+.fxh{display:flex;align-items:center;gap:8px;border-top:1px solid var(--bd);padding-top:10px;margin-top:6px;font-size:13px;font-weight:500}
+.cnt{display:inline-flex;height:18px;padding:0 6px;border-radius:6px;background:var(--muted);font-size:11px;align-items:center}
+.fade{position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(transparent,var(--bg))}
+.canvas{background:radial-gradient(ellipse at 40% 70%, oklch(0.35 0.08 260 / .45), transparent 60%),oklch(0.12 0.005 286);border:1px solid var(--bd);border-radius:10px;position:relative;overflow:hidden}
+.find{display:flex;gap:12px}
+.find p{margin:0;color:var(--mfg);font-size:13px}.find b{color:var(--fg);font-weight:600}
+.tagu{display:inline-flex;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:600;border:1px solid oklch(0.828 0.189 84.429 / .55);color:var(--amber);margin-right:4px}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 1560px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · survey of today, read from main at b42aff4</div>
+<h1 class="h1">Today: one body in five hosts, and a programmer surface that does not say so</h1>
+<p class="lede">Every slider on the sheet already writes the programmer (owner <span class="code">web</span>), but the sheet shows the output only — never who is driving a value — has no way to clear one, takes no typed value, and starts effects of a different kind from the programmer's own. Drawn as it renders, on the same Robe 575.</p>
+</div>
+
+<div class="row" style="gap: 32px">
+
+<!-- pop-up -->
+<div class="col" style="width: 470px">
+<div class="lbl">The pop-up · FixtureDetailModal, 512px · from the list, grid, overview, Channels, Groups</div>
+<div class="sheet" style="width: 470px; height: 960px">
+<div class="hd" style="position: relative">
+<div class="nm">Spot 3 · ADV1 L</div>
+<div class="md">Robe ColorSpot 575 AT</div>
+<div style="display: flex; gap: 8px; align-items: center; position: relative">
+<div class="pin" style="left: 268px; top: -24px">1</div>
+<div class="tg"><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5M17 17a3 3 0 1 0 0-.1M7 7a3 3 0 1 0 0-.1"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M21 4H14M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg></span></div>
+<span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span>
+<span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>
+<span class="sp"></span><span class="btn">Edit</span>
+</div>
+<div style="display: flex; gap: 4px; flex-wrap: wrap"><span class="bdg">19-channel</span><span class="bdg">dimmer</span><span class="bdg">position</span><span class="bdg">strobe</span></div>
+</div>
+<div class="bodyt">
+<div class="r"><span class="k">Position</span><div class="xy"><i style="left: 50%; top: 32%"></i></div><span class="sp"></span></div>
+<div class="r" style="padding-left: 92px"><span style="width: 30px; font-size: 11px; color: var(--mfg)">Pan</span><div class="bar"><b style="width: 50%"></b></div><span class="v mono">128</span></div>
+<div class="r" style="padding-left: 92px"><span style="width: 30px; font-size: 11px; color: var(--mfg)">Tilt</span><div class="bar"><b style="width: 17%"></b></div><span class="v mono">43</span></div>
+<div class="r" style="position: relative"><div class="pin" style="left: -12px; top: 5px">2</div><span class="k">Dimmer</span><div class="bar"><b style="width: 80%"></b></div><span class="v mono">204 (80%)</span></div>
+<div class="r"><span class="k">Strobe</span><div class="bar"><b style="width: 38%"></b></div><span class="v mono">48 (38%)</span></div>
+<div class="r"><span class="k">Speed</span><div class="bar"><b style="width: 0%"></b></div><span class="v mono">0 (0%)</span></div>
+<div class="r"><span class="k">Gobo rot.</span><div class="bar"><b style="width: 0%"></b></div><span class="v mono">0 (0%)</span></div>
+<div class="r"><span class="k">Prism rot.</span><div class="bar"><b style="width: 0%"></b></div><span class="v mono">0 (0%)</span></div>
+<div class="r"><span class="k">Frost</span><div class="bar"><b style="width: 0%"></b></div><span class="v mono">0 (0%)</span></div>
+<div class="r"><span class="k">Iris</span><div class="bar"><b style="width: 0%"></b></div><span class="v mono">0 (0%)</span></div>
+<div class="r"><span class="k">Focus</span><div class="bar"><b style="width: 62%"></b></div><span class="v mono">158 (62%)</span></div>
+<div class="r"><span class="k">Colour 1</span><div class="sel" style="opacity: .7"><span class="sw" style="background: #1d3fd6"></span>Deep blue</div></div>
+<div class="r"><span class="k">Colour 2</span><div class="sel" style="opacity: .7"><span class="sw" style="background: #fff"></span>Open</div></div>
+<div class="r"><span class="k">Static gobo</span><div class="sel" style="opacity: .7">Open</div></div>
+<div class="r"><span class="k">Rot. gobo</span><div class="sel" style="opacity: .7">Breakup</div></div>
+<div class="r"><span class="k">Prism</span><div class="sel" style="opacity: .7">Off</div></div>
+<div class="r"><span class="k">Zoom</span><div class="sel" style="opacity: .7">18°</div></div>
+<div class="fxh" style="position: relative"><div class="pin" style="left: -12px; top: 8px">3</div><svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>Effects <span class="cnt">1</span><span class="sp"></span><span class="ib" style="width: 24px; height: 24px"><svg class="s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span></div>
+</div>
+</div>
+</div>
+
+<!-- stage -->
+<div class="col" style="width: 470px">
+<div class="lbl">The Stage view · StageFixtureControlPanel, 380px docked · ≥ 640px only</div>
+<div style="display: flex; height: 960px; gap: 0; position: relative">
+<div class="canvas" style="width: 80px; border-radius: 10px 0 0 10px; border-right: none"></div>
+<div class="sheet" style="width: 380px; border-radius: 0 10px 10px 0">
+<div class="hd">
+<div class="nm">Spot 3 · ADV1 L</div>
+<div class="md">Robe ColorSpot 575 AT</div>
+<div style="display: flex; gap: 8px"><div class="tg"><span class="on"><svg class="i" viewBox="0 0 24 24"><path d="M20 7h-9M14 17H5M17 17a3 3 0 1 0 0-.1M7 7a3 3 0 1 0 0-.1"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><path d="M21 4H14M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg></span><span><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span></div><span class="ib"><svg class="i" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg></span><span class="ib"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span></div>
+</div>
+<div class="bodyt">
+<div class="r"><span class="k">Position</span><div class="xy"><i style="left: 50%; top: 32%"></i></div></div>
+<div class="r" style="padding-left: 92px; position: relative"><div class="pin" style="left: 60px; top: 5px">4</div><span style="width: 30px; font-size: 11px; color: var(--mfg)">Pan</span><div class="sl"><i></i><b style="width: 50%"></b><u style="left: 50%"></u></div><span class="v mono" style="width: 30px">128</span></div>
+<div class="r" style="padding-left: 92px"><span style="width: 30px; font-size: 11px; color: var(--mfg)">Tilt</span><div class="sl"><i></i><b style="width: 17%"></b><u style="left: 17%"></u></div><span class="v mono" style="width: 30px">43</span></div>
+<div class="r"><span class="k">Dimmer</span><div class="sl"><i></i><b style="width: 80%"></b><u style="left: 80%"></u></div><span class="v mono" style="width: 64px">204 (80%)</span></div>
+<div class="r"><span class="k">Strobe</span><div class="sl"><i></i><b style="width: 38%"></b><u style="left: 38%"></u></div><span class="v mono" style="width: 64px">48 (38%)</span></div>
+<div class="r"><span class="k">Speed</span><div class="sl"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="v mono" style="width: 64px">0 (0%)</span></div>
+<div class="r"><span class="k">Gobo rot.</span><div class="sl"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="v mono" style="width: 64px">0 (0%)</span></div>
+<div class="r"><span class="k">Prism rot.</span><div class="sl"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="v mono" style="width: 64px">0 (0%)</span></div>
+<div class="r"><span class="k">Frost</span><div class="sl"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="v mono" style="width: 64px">0 (0%)</span></div>
+<div class="r"><span class="k">Iris</span><div class="sl"><i></i><b style="width: 0%"></b><u style="left: 0%"></u></div><span class="v mono" style="width: 64px">0 (0%)</span></div>
+<div class="r"><span class="k">Focus</span><div class="sl"><i></i><b style="width: 62%"></b><u style="left: 62%"></u></div><span class="v mono" style="width: 64px">158 (62%)</span></div>
+<div class="r"><span class="k">Colour 1</span><div class="sel"><span class="sw" style="background: #1d3fd6"></span>Deep blue</div></div>
+<div class="r"><span class="k">Colour 2</span><div class="sel"><span class="sw" style="background: #fff"></span>Open</div></div>
+<div class="r"><span class="k">Static gobo</span><div class="sel">Open</div></div>
+<div class="r"><span class="k">Rot. gobo</span><div class="sel">Breakup</div></div>
+<div class="r" style="position: relative"><div class="pin" style="left: 120px; top: 30px">5</div><span class="k">Prism</span><div class="sel">Off</div></div>
+<div class="fade"></div>
+</div>
+<div style="border-top: 1px solid var(--bd); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; position: relative">
+<div class="pin" style="left: 6px; top: -10px">6</div>
+<div style="font-size: 13px; font-weight: 500">Aim at point</div>
+<div style="display: flex; gap: 6px"><span class="btn" style="flex: 1">X 0.0</span><span class="btn" style="flex: 1">Y 2.5</span><span class="btn" style="flex: 1">Z 1.7</span><span class="btn">Aim</span></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- findings -->
+<div class="col" style="width: 330px; gap: 18px; padding-top: 22px">
+<div class="find"><span class="n">1</span><p><b>Edit / Done before anything moves</b> in the pop-up, on the cards page and on the group sheet; forced on in the Stage panel and the overview. Read-only bars otherwise.</p></div>
+<div class="find"><span class="n">2</span><p><span class="tagu">Issue 4</span><b>No field for a value.</b> A slider and a read-out in bytes and percent. Only the Channels view takes a typed number — a raw channel.</p></div>
+<div class="find"><span class="n">3</span><p><span class="tagu">Issue 6</span><b>Effects come after every property</b>, folded. On a 19-channel head that is below the fold of a 1000px window; on a 12-head bar it is above twelve accordions.</p></div>
+<div class="find"><span class="n">4</span><p><b>Pan and tilt write raw channels.</b> The sheet's sliders go through the channel shim into the programmer's side track, which holds no effect back — while the provenance frame reports the programmer as the winner. The grid writes a position entry, which does.</p></div>
+<div class="find"><span class="n">5</span><p><span class="tagu">Issue 1</span><b>Nothing says who is driving a value.</b> The sheet reads the output only. Park's lock icon is the one source it shows; programmer, effect and cue all look the same.</p></div>
+<div class="find"><span class="n">6</span><p><b>Aim is pinned to the foot</b> in the Stage panel, so effects scroll under it. Below 640px the panel is not drawn at all.</p></div>
+<div style="height: 1px; background: var(--bd)"></div>
+<div class="find"><span class="n" style="background: var(--violet); color: #fff">!</span><p><span class="tagu">Issue 1</span><b>Why a Circle after a set position did nothing.</b> The sheet's + makes a <i>manual</i> effect (priority 0). The engine skips every non-programmer effect on a property the programmer holds, so the Circle ran, held back, with nothing on screen saying so. And under the default Override it would have circled 128/128 anyway: only Additive orbits what is underneath.</p></div>
+<div class="find"><span class="n" style="background: var(--violet); color: #fff">!</span><p><span class="tagu">Issue 2</span><b>No clear.</b> <span class="code">programmer.clearEntry</span> exists and the grid's ⌫ uses it; the sheet never offers it.</p></div>
+<div class="find"><span class="n" style="background: var(--violet); color: #fff">!</span><p><span class="tagu">Issue 3</span><b>Every FX form is a draft.</b> Apply / Update, then look. The desk's <span class="code">PUT /fx/{id}</span> already swaps parameters keeping the phase.</p></div>
+</div>
+</div>
+
+<div class="row" style="gap: 24px">
+<div class="col" style="flex: 1; gap: 8px; border: 1px solid var(--bd); border-radius: 10px; padding: 16px">
+<div class="h3">The five hosts, and the group sheet</div>
+<div style="display: grid; grid-template-columns: 170px 1fr; gap: 6px 16px; font-size: 12.5px; color: var(--mfg)">
+<span style="color: var(--fg)">Pop-up · 512px</span><span>FixtureDetailModal — the list's and grid's Info, the overview panel, Channels, Groups, a group's member</span>
+<span style="color: var(--fg)">Stage · 380px docked</span><span>adds a Focus tab and Aim at the foot; none below 640px</span>
+<span style="color: var(--fg)">Cards page</span><span>FixtureContent in a card per fixture, a pencil per card, the page's Properties/Channels toggle</span>
+<span style="color: var(--fg)">Group sheet · 512px</span><span>a separate visualiser set: ranges and Mixed; no FX, no park; writes one entry per member, sliders as raw channels</span>
+<span style="color: var(--fg)">Group card</span><span>the only place a group writes group entries, and the only group FX section</span>
+</div>
+</div>
+<div class="col" style="flex: 1; gap: 8px; border: 1px solid var(--bd); border-radius: 10px; padding: 16px">
+<div class="h3">Inspiration already on the desk</div>
+<div style="display: grid; grid-template-columns: 170px 1fr; gap: 6px 16px; font-size: 12.5px; color: var(--mfg)">
+<span style="color: var(--fg)">Programmer grid</span><span>ownership rings (programmer · effect · cue · park · base), ⌫ clears, Set · Clear · Spread, the scope band</span>
+<span style="color: var(--fg)">Programmer rail</span><span>VALUES · top wins; the FX band's two-line rows with name, division, target and home</span>
+<span style="color: var(--fg)">Busk side sheet</span><span>40px chrome rows, a tab strip, static footers with verbs, Live and useLivePush</span>
+<span style="color: var(--fg)">Editor kit</span><span>EditorField with a unit, EditorLabel, EditorReadout, ColourEditor, the position pad in degrees, EditorSurface's three forms</span>
+<span style="color: var(--fg)">Busk rig tiles</span><span>pips for cells, a run drag across them</span>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
