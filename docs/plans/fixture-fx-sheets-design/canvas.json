@@ -1,24 +1,118 @@
 {
   "v": 3,
-  "createdOnFiles": { "v": 1, "at": "2026-10-07T22:30:00Z" },
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-07T22:30:00Z"
+  },
   "title": "Fixture & FX Sheets",
-  "launch": { "view": "canvas" },
+  "launch": {
+    "view": "canvas"
+  },
   "pages": [],
   "boards": {
-    "Survey.dc.html": { "title": "Today · the fixture sheet in its hosts, and what goes wrong", "x": 0, "y": 0, "w": 1440, "h": 1560 },
-    "Main.dc.html": { "title": "The sheet · one anatomy, FX pinned to the foot", "x": 1520, "y": 0, "w": 1440, "h": 1820 },
-    "Layers.dc.html": { "title": "Layers · who is driving each value, and what is underneath", "x": 3040, "y": 0, "w": 1440, "h": 1760 },
-    "Fx.dc.html": { "title": "FX · the tray, live editing, movement around the set position", "x": 4560, "y": 0, "w": 1440, "h": 1820 },
-    "Hosts.dc.html": { "title": "Hosts · pop-up, Stage panel, phone, cards", "x": 0, "y": 1940, "w": 1440, "h": 2320 },
-    "HeadsGroups.dc.html": { "title": "Heads and groups · one sheet for both", "x": 1520, "y": 1940, "w": 1440, "h": 1400 },
-    "Model.dc.html": { "title": "Model · decisions, wire, code, sessions, open calls", "x": 3040, "y": 1940, "w": 1440, "h": 1760 }
+    "Survey.dc.html": {
+      "title": "Today · the fixture sheet in its hosts, and what goes wrong",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1560
+    },
+    "Main.dc.html": {
+      "title": "The sheet · one anatomy, FX pinned to the foot",
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 1820
+    },
+    "Layers.dc.html": {
+      "title": "Layers · who is driving each value, and what is underneath",
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1760
+    },
+    "Fx.dc.html": {
+      "title": "FX · the tray, live editing, movement around the set position",
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1820
+    },
+    "Hosts.dc.html": {
+      "title": "Hosts · pop-up, Stage panel, phone, cards",
+      "x": 0,
+      "y": 1940,
+      "w": 1440,
+      "h": 2320
+    },
+    "HeadsGroups.dc.html": {
+      "title": "Heads and groups · one sheet for both",
+      "x": 1520,
+      "y": 1940,
+      "w": 1440,
+      "h": 1400
+    },
+    "Model.dc.html": {
+      "title": "Model · decisions, wire, code, sessions, open calls",
+      "x": 3040,
+      "y": 1940,
+      "w": 1440,
+      "h": 2080
+    },
+    "BuskProgrammer.dc.html": {
+      "title": "Busk and Programmer · the same answers carried over",
+      "x": 4560,
+      "y": 1940,
+      "w": 1440,
+      "h": 2160
+    }
   },
-  "order": ["Survey.dc.html", "Main.dc.html", "Layers.dc.html", "Fx.dc.html", "Hosts.dc.html", "HeadsGroups.dc.html", "Model.dc.html"],
+  "order": [
+    "Survey.dc.html",
+    "Main.dc.html",
+    "Layers.dc.html",
+    "Fx.dc.html",
+    "Hosts.dc.html",
+    "HeadsGroups.dc.html",
+    "Model.dc.html",
+    "BuskProgrammer.dc.html"
+  ],
   "notes": {
-    "t1": { "kind": "title1", "x": 0, "y": -300, "maxW": 6000, "text": "Fixture and FX sheets: one sheet that says who is driving each value, clears it, takes typed values and edits effects live" },
-    "how": { "x": 0, "y": -180, "w": 380, "color": "gray", "text": "How to read this. Survey is today. Main is the new sheet's anatomy; Layers and FX draw its two new mechanisms out; Hosts, Heads and groups draw it everywhere it appears. Model is the decisions, the wire, the code and the open calls. Dark-only, the busk view's vocabulary — the intended pixels, not structure to copy." },
-    "agreed": { "x": 440, "y": -180, "w": 380, "color": "green", "text": "Agreed 2026-10-07 before drawing: sheet effects are programmer effects; movement orbits the set position; FX settings are always live; the Edit toggle goes; a source mark plus a tap for the stack; one sheet for groups; a bottom sheet on the phone; Release, editor-kit controls and a head strip are in." },
-    "open": { "x": 6080, "y": 0, "w": 380, "color": "orange", "text": "Open calls are on Model, each drawn one way on the boards." }
+    "t1": {
+      "kind": "title1",
+      "x": 0,
+      "y": -300,
+      "maxW": 6000,
+      "text": "Fixture and FX sheets: one sheet that says who is driving each value, clears it, takes typed values and edits effects live"
+    },
+    "how": {
+      "x": 0,
+      "y": -180,
+      "w": 380,
+      "color": "gray",
+      "text": "How to read this. Survey is today. Main is the new sheet's anatomy; Layers and FX draw its two new mechanisms out; Hosts, Heads and groups draw it everywhere it appears. Model is the decisions, the wire, the code and the open calls. Dark-only, the busk view's vocabulary — the intended pixels, not structure to copy."
+    },
+    "agreed": {
+      "x": 440,
+      "y": -180,
+      "w": 380,
+      "color": "green",
+      "text": "Agreed 2026-10-07 before drawing: sheet effects are programmer effects; movement orbits the set position; FX settings are always live; the Edit toggle goes; a source mark plus a tap for the stack; one sheet for groups; a bottom sheet on the phone; Release, editor-kit controls and a head strip are in."
+    },
+    "open": {
+      "x": 6080,
+      "y": 0,
+      "w": 380,
+      "color": "orange",
+      "text": "Open calls are on Model, each drawn one way on the boards."
+    },
+    "agreed2": {
+      "x": 880,
+      "y": -180,
+      "w": 380,
+      "color": "green",
+      "text": "Also agreed 2026-10-07: carry Around current into effect templates, the live editor into the programmer, Release over a selection, held-back marks and the stack into the grid; add a busk Effects tab (instance edits, with Update template and Reset to template) and Fixture sheet… on a rig tile."
+    }
   },
   "designSystems": []
 }

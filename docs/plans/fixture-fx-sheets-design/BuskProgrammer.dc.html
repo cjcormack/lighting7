@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Busk and Programmer</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
+.app{--bg:oklch(0.141 0.005 285.823);--card:oklch(0.21 0.006 285.885);--panel:oklch(0.17 0.005 286);--muted:oklch(0.274 0.006 286.033);--bd:oklch(0.3 0.006 286);--fg:oklch(0.985 0 0);--mfg:oklch(0.72 0.015 286.067);--pri:oklch(0.623 0.214 259.815);--pril:oklch(0.8 0.12 255);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--violl:oklch(0.8 0.13 293);--sky:oklch(0.685 0.169 237.323);--skyl:oklch(0.83 0.1 230);--green:#4ade80;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box;font-size:13px;line-height:1.4}
+.app *{box-sizing:border-box}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.board{padding:48px 56px;display:flex;flex-direction:column;gap:30px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mfg)}
+.h1{margin:0;font-size:34px;font-weight:650;letter-spacing:-.01em}
+.h2{margin:0;font-size:17px;font-weight:600}
+.lede{max-width:940px;color:var(--mfg);font-size:15px;margin:0}
+.row{display:flex;gap:28px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg)}
+.sp{flex:1}
+.cap{font-size:12px;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.frame{border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--bg);position:relative}
+.crow{height:40px;flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--bd)}
+.tabs{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+.tab{height:26px;padding:0 9px;border-radius:6px;font-size:12px;font-weight:500;color:var(--mfg);display:inline-flex;align-items:center;gap:6px}
+.tab.on{background:var(--muted);color:var(--fg)}
+.ib{width:28px;height:28px;flex:0 0 auto;border:1px solid var(--bd);border-radius:7px;display:grid;place-items:center;color:var(--fg);background:oklch(0.274 0.006 286 / .3)}
+.ib.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.ib.s{width:24px;height:24px}
+.btn{height:28px;padding:0 10px;border:1px solid var(--bd);border-radius:7px;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;background:oklch(0.274 0.006 286 / .3);color:var(--fg);white-space:nowrap}
+.btn.sm{height:24px;padding:0 8px;font-size:11px}
+.btn.g{border-color:transparent;background:transparent;color:var(--mfg)}
+.btn.hi{box-shadow:0 0 0 2px var(--pri)}
+.pill{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:10.5px;font-weight:500;border:1px solid var(--bd);color:var(--fg);white-space:nowrap}
+.src{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:500;border:1px solid var(--bd);color:var(--mfg);white-space:nowrap}
+.src.p{color:var(--pril);border-color:oklch(0.623 0.214 259.815 / .55);background:oklch(0.623 0.214 259.815 / .14)}
+.src.e{color:var(--violl);border-color:oklch(0.606 0.25 292.717 / .6);background:oklch(0.606 0.25 292.717 / .15)}
+.edited{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;font-weight:600;color:var(--amber);border:1px solid oklch(0.828 0.189 84.429 / .55)}
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--bd);border-radius:8px;background:var(--bg)}
+.seg span{flex:1;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;font-size:11.5px;color:var(--mfg);padding:0 6px;white-space:nowrap}
+.seg span.on{background:var(--muted);color:var(--fg);box-shadow:inset 0 0 0 1px oklch(0.4 0.01 286 / .6)}
+.ctl{display:flex;align-items:center;gap:8px}
+.sl{position:relative;flex:1;height:16px;min-width:50px}
+.sl i{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--muted)}
+.sl b{position:absolute;left:0;top:6px;height:4px;border-radius:2px;background:var(--violet)}
+.sl u{position:absolute;top:1px;width:14px;height:14px;border-radius:50%;background:#fff;margin-left:-7px;box-shadow:0 0 0 2px var(--violet)}
+.fld{height:28px;width:68px;flex:0 0 auto;padding:0 8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);display:inline-flex;align-items:center;justify-content:space-between;gap:4px;font-size:12px}
+.fld small{color:var(--mfg);font-size:11px}
+.ro{font-size:10.5px;color:var(--mfg)}
+.ro b{color:var(--fg);font-weight:500}
+.dot7{width:7px;height:7px;border-radius:50%;background:var(--violet);flex:0 0 auto}
+.mchip{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:4px;border:1px solid var(--bd);font-size:9.5px;color:var(--mfg)}
+.home{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:999px;font-size:9.5px;border:1px solid var(--bd);color:var(--mfg)}
+.fxr{display:flex;flex-direction:column;gap:2px;padding:7px 10px;border-radius:8px;border:1px solid transparent}
+.fxr.on{border-color:oklch(0.606 0.25 292.717 / .55);background:oklch(0.606 0.25 292.717 / .08)}
+.fxr .l1{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500}
+.fxr .l2{font-size:11px;color:var(--mfg);padding-left:13px}
+.ed{display:flex;flex-direction:column;gap:10px;padding:10px 12px 12px;border-top:1px solid var(--bd)}
+.live{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--mfg)}
+.live i{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.pop{background:var(--card);border:1px solid var(--bd);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+.grid{display:grid;font-size:12px}
+.grid > span{height:36px;display:flex;align-items:center;padding:0 10px;border-bottom:1px solid oklch(0.3 0.006 286 / .5)}
+.grid > span.hd{height:30px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mfg);border-bottom:1px solid var(--bd)}
+.cell{position:relative;width:100%;height:24px;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:11.5px}
+.cell.p{box-shadow:inset 0 0 0 1px var(--pri);background:oklch(0.623 0.214 259.815 / .1)}
+.cell.e{box-shadow:inset 0 0 0 1px oklch(0.606 0.25 292.717 / .5)}
+.cell.c{box-shadow:inset 0 0 0 1px oklch(0.685 0.169 237.323 / .4)}
+.cell.sel{outline:2px solid var(--pri);outline-offset:1px}
+.cell .hb{position:absolute;right:3px;top:3px;width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.tile{width:96px;height:64px;border-radius:8px;border:1px solid var(--bd);background:var(--card);padding:6px 8px;display:flex;flex-direction:column;justify-content:space-between;font-size:11.5px;position:relative}
+.tile.on{border-color:var(--pri);background:oklch(0.623 0.214 259.815 / .14)}
+.tile .bar{height:4px;border-radius:2px}
+.menu{background:var(--card);border:1px solid var(--bd);border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.55);padding:4px;display:flex;flex-direction:column;width:200px}
+.menu span{height:30px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:5px;font-size:12px}
+.menu span.on{background:var(--muted)}
+.notes{display:flex;flex-direction:column;gap:12px}
+.note{display:flex;gap:10px;font-size:13px}
+.note p{margin:0;color:var(--mfg)}.note b{color:var(--fg);font-weight:600}
+.n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1b1b1b;font-size:11px;font-weight:700;display:grid;place-items:center}
+.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;color:var(--fg)}
+svg.i{width:14px;height:14px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.s{width:12px;height:12px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; height: 2160px; overflow: hidden">
+<div class="board">
+
+<div class="col" style="gap: 10px">
+<div class="eyebrow">Fixture and FX sheets · busk and programmer</div>
+<h1 class="h1">The same answers in the Busk and Programmer views</h1>
+<p class="lede">The bug that started this lives in the busk view too: an effect template stores Override, so a Circle pad pressed after a position pad circles 128/128. Four of the sheet's answers carry over as they are; the busk view gains an Effects tab and a way to the fixture sheet.</p>
+</div>
+
+<!-- row 1: busk -->
+<div class="row" style="gap: 28px">
+
+<div class="col" style="gap: 8px; width: 680px">
+<div class="lbl">Busk · the side sheet's Effects tab, a pad's Circle tweaked on stage</div>
+<div class="frame" style="height: 760px; display: flex">
+<div style="flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--bd)">
+<div class="crow"><span class="lbl">Rig</span><span class="btn sm">Cells: All</span><span class="sp"></span><span class="btn sm"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release</span><span class="btn sm g">Clear</span></div>
+<div style="padding: 12px; display: flex; flex-wrap: wrap; gap: 8px; position: relative">
+<div class="tile on">Spot 1<div class="bar" style="background: #fff"></div></div>
+<div class="tile on">Spot 2<div class="bar" style="background: #fff"></div></div>
+<div class="tile on">Spot 3<div class="bar" style="background: #fff"></div></div>
+<div class="tile on">Spot 4<div class="bar" style="background: #fff"></div></div>
+<div class="tile">Wash 1<div class="bar" style="background: #ff8a3d"></div></div>
+<div class="tile">Wash 2<div class="bar" style="background: #ff8a3d"></div></div>
+</div>
+<div style="padding: 0 12px; display: flex; gap: 8px; flex-wrap: wrap">
+<div class="tile" style="width: 120px; height: 72px; border-color: var(--violet); background: oklch(0.606 0.25 292.717 / .14)">Circle<span class="ro">½ · M1 · around</span></div>
+<div class="tile" style="width: 120px; height: 72px">Fig 8<span class="ro">1 · M1</span></div>
+<div class="tile" style="width: 120px; height: 72px">Sweep<span class="ro">2 · M1</span></div>
+<div class="tile" style="width: 120px; height: 72px; border-color: var(--pri); background: oklch(0.623 0.214 259.815 / .14)">Over band<span class="ro">position</span></div>
+</div>
+</div>
+<div style="width: 340px; display: flex; flex-direction: column; background: var(--panel)">
+<div class="crow"><div class="tabs"><span class="tab" title="Speed"><svg class="i" viewBox="0 0 24 24"><path d="M12 14l4-4M3.3 19a10 10 0 1 1 17.4 0"/></svg></span><span class="tab"><svg class="i" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><path d="M12 2a10 10 0 1 0 0 20c1 0 2-1 2-2 0-.6-.3-1-.6-1.4-.4-.4-.6-.8-.6-1.3a1.8 1.8 0 0 1 1.8-1.8H17a5 5 0 0 0 5-5c0-4.4-4.5-8.5-10-8.5"/></svg></span><span class="tab"><svg class="i" viewBox="0 0 24 24"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM3 12h6M15 12h6"/></svg></span><span class="tab on"><svg class="i" viewBox="0 0 24 24"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/></svg>Effects</span><span class="tab"><svg class="i" viewBox="0 0 24 24"><path d="M7 4v16l13-8z"/></svg></span></div><span class="sp"></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></div>
+<div class="col" style="gap: 2px; padding: 6px">
+<div class="ro" style="padding: 4px 6px">Running on <b>4 heads</b> · 2 effects</div>
+<div class="fxr on"><div class="l1"><span class="dot7"></span>Circle<span class="mchip">½</span><span class="edited">edited</span><span class="sp"></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="l2">→ position · Spot 1–4 · <span class="home">pad · Circle</span></div></div>
+<div class="fxr"><div class="l1"><span class="dot7"></span>Pulse<span class="mchip">¼</span><span class="mchip">M2</span><span class="sp"></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div><div class="l2">→ strobe · Spot 3 · <span class="home">programmer</span></div></div>
+</div>
+<div class="ed">
+<div class="ctl"><span class="lbl">Speed</span><span class="sp"></span><span class="btn sm" style="height: 22px">M1 · <span class="mono">124</span></span></div>
+<div class="seg"><span>¼</span><span class="on">½</span><span>1</span><span>2</span><span>4</span><span>8</span></div>
+<div class="col" style="gap: 6px"><span class="lbl">Centre</span><div class="seg"><span class="on">Around current position</span><span>Absolute</span></div></div>
+<div class="ctl"><span class="lbl" style="width: 56px">Pan size</span><div class="sl"><i></i><b style="width: 40%"></b><u style="left: 40%"></u></div><span class="fld mono">80<small>°</small></span></div>
+<div class="ctl"><span class="lbl" style="width: 56px">Tilt size</span><div class="sl"><i></i><b style="width: 20%"></b><u style="left: 20%"></u></div><span class="fld mono">20<small>°</small></span></div>
+<div class="ro">Edited here: <b>pan size 60° → 80°</b>. The pad still holds 60°.</div>
+<div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px; flex-wrap: wrap; row-gap: 8px">
+<span class="btn sm">Update template</span><span class="btn sm g"><svg class="s" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg>Reset to template</span><span class="sp"></span><span class="live"><i></i>Live</span>
+</div>
+</div>
+</div>
+</div>
+<p class="cap"><b>A fifth tab, Effects</b>, lists what is running on the selection — pad effects and your own — with the tray's rows and the sheet's live editor. A pad's effect is edited <b>as this running instance only</b>, marked <span class="edited">edited</span> while it differs from its template, with <b>Update template</b> (write these settings back; every pad and cue layering it follows) and <b>Reset to template</b> (the template's settings again, phase kept). A local effect's footer is Revert · Done, as on the sheet.</p>
+</div>
+
+<div class="col" style="gap: 8px; flex: 1">
+<div class="lbl">Busk · a rig tile's menu opens the fixture sheet</div>
+<div class="frame" style="height: 340px; padding: 16px">
+<div style="display: flex; gap: 8px"><div class="tile on">Spot 3<div class="bar" style="background: #fff"></div></div><div class="tile">Spot 4<div class="bar" style="background: #fff"></div></div></div>
+<div class="menu" style="position: absolute; left: 70px; top: 70px">
+<span>Locate</span><span>Highlight</span><span class="on"><svg class="s" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Fixture sheet…</span></div>
+</div>
+<p class="cap"><b>Fixture sheet…</b> opens the new sheet over the busk view — the right-hand sheet on a desk, a bottom sheet on a phone — to see one head's layers and clear what you need. In play mode it is the tile's long-press or right-click menu; in edit mode it joins the tile menu's existing items. A group tile opens the group sheet.</p>
+
+<div class="lbl" style="margin-top: 14px">Busk · Release on the rig row</div>
+<div class="frame" style="padding: 0">
+<div class="crow" style="border-bottom: none"><span class="lbl">Rig</span><span class="btn sm">Cells: All</span><span class="btn sm">‹</span><span class="btn sm">›</span><span class="btn sm">Spread…</span><span class="sp"></span><span class="btn sm hi"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release</span><span class="btn sm g">Clear</span></div>
+</div>
+<p class="cap"><b>Release</b> takes the selected heads out of the programmer — their values and their local effects, at the programmer fade — where Clear only empties the selection. Pad layers stay: a lit pad still goes off by its own press. Folds to its glyph on the band's word rung.</p>
+</div>
+</div>
+
+<!-- row 2: programmer -->
+<div class="row" style="gap: 28px">
+
+<div class="col" style="gap: 8px; width: 680px">
+<div class="lbl">Programmer · held back in the grid, the stack from a cell, Release on row C</div>
+<div class="frame" style="height: 560px">
+<div class="crow"><span class="ro"><b>4 rows</b></span><span class="pill" style="border-color: oklch(0.623 0.214 259.815 / .5)">Intensity</span><span class="sp"></span><span class="btn sm">Set</span><span class="btn sm">Clear</span><span class="btn sm">Spread</span><span class="btn sm hi"><svg class="s" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21zM22 21H7M5 11l9 9"/></svg>Release 4</span><span class="btn sm g">Deselect</span></div>
+<div class="grid" style="grid-template-columns: 150px 1fr 1fr 1fr">
+<span class="hd">Fixture</span><span class="hd">Dimmer</span><span class="hd">Colour</span><span class="hd">Position</span>
+<span>Wash 1</span><span><span class="cell p">80%<i class="hb"></i></span></span><span><span class="cell c">#ff8a3d</span></span><span></span>
+<span>Wash 2</span><span><span class="cell p sel">80%<i class="hb"></i></span></span><span><span class="cell c">#ff8a3d</span></span><span></span>
+<span>Spot 3</span><span><span class="cell p">80%</span></span><span><span class="cell c">Deep blue</span></span><span><span class="cell e">orbiting</span></span>
+<span>Spot 4</span><span><span class="cell e">pulse</span></span><span><span class="cell c">Deep blue</span></span><span><span class="cell p">270°, 45°</span></span>
+</div>
+<div class="pop" style="position: absolute; left: 200px; top: 190px; width: 300px; overflow: hidden">
+<div class="crow" style="height: 34px"><span class="ro"><b>1 head</b> · Local</span><span class="sp"></span><span class="src p">Programmer <i style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--amber)"></i></span></div>
+<div class="col" style="gap: 8px; padding: 10px 12px">
+<div class="ctl"><div class="sl"><i></i><b style="width: 80%; background: var(--pri)"></b><u style="left: 80%; box-shadow: 0 0 0 2px var(--pri)"></u></div><span class="fld mono">80<small>%</small></span></div>
+<div class="ro">204 of 255 · <b>holds back Q12's Pulse</b> — the chip opens the stack</div>
+</div>
+</div>
+</div>
+<p class="cap"><b>An amber corner dot</b> on a cell whose value holds an effect back — the dot the sheet's chip carries, from the same client rule. <b>The cell editor's label line gains the source chip</b>, which opens the property's stack (W1) beside it; in Output scope a click still jumps to the owner. <b>Release n</b> joins row C's verbs over a row selection; ⌫ stays the cells' clear.</p>
+</div>
+
+<div class="col" style="gap: 8px; flex: 1">
+<div class="lbl">Programmer · the rail's Edit… is the live editor</div>
+<div class="frame" style="height: 560px; display: flex">
+<div style="flex: 1; background: oklch(0.15 0.005 286)"></div>
+<div style="width: 300px; border-left: 1px solid var(--bd); background: var(--panel); display: flex; flex-direction: column">
+<div class="crow"><div class="tabs"><span class="tab on">Stack</span><span class="tab">Colour</span><span class="tab">Spread</span></div></div>
+<div class="col" style="gap: 2px; padding: 6px">
+<div class="lbl" style="padding: 6px 6px 2px; color: var(--amber)">Values above · beat effects below</div>
+<div class="fxr on"><div class="l1"><span class="dot7"></span>Circle<span class="mchip">½</span><span class="edited">edited</span><span class="sp"></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div><div class="l2">→ position · Spot 3 · <span class="home">in Circle layer</span></div></div>
+<div class="fxr"><div class="l1"><span class="dot7"></span>Pulse<span class="mchip">¼</span><span class="mchip">M2</span><span class="sp"></span><span class="ib g s"><svg class="s" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div><div class="l2">→ strobe · Spot 3 · <span class="home">programmer band</span></div></div>
+</div>
+</div>
+<div class="pop" style="position: absolute; left: 24px; top: 80px; width: 300px; overflow: hidden">
+<div class="crow" style="height: 36px"><span class="dot7"></span><span style="font-size: 12.5px; font-weight: 500">Circle</span><span class="ro">→ position</span><span class="sp"></span><span class="edited">edited</span></div>
+<div class="ed" style="border-top: none">
+<div class="seg"><span>¼</span><span class="on">½</span><span>1</span><span>2</span><span>4</span></div>
+<div class="seg"><span class="on">Around current position</span><span>Absolute</span></div>
+<div class="ctl"><span class="lbl" style="width: 56px">Pan size</span><div class="sl"><i></i><b style="width: 40%"></b><u style="left: 40%"></u></div><span class="fld mono">80<small>°</small></span></div>
+<div class="ctl" style="border-top: 1px solid var(--bd); padding-top: 10px"><span class="btn sm">Update template</span><span class="btn sm g">Reset</span><span class="sp"></span><span class="live"><i></i>Live</span></div>
+</div>
+</div>
+</div>
+<p class="cap"><b>Edit…</b> on a rail row, and a chip in the per-fixture FX grid, open the live editor beside the rail through <span class="code">EditorSurface</span> — the same editor as the sheet's tray and the busk tab, with the same Update template / Reset arm for an effect a template layer spawned. <span class="code">ActiveEffectSheet</span> goes.</p>
+</div>
+</div>
+
+<!-- row 3: template editor + notes -->
+<div class="row" style="gap: 28px">
+<div class="col" style="gap: 8px; width: 420px">
+<div class="lbl">Templates · a movement effect template asks the Centre question</div>
+<div class="frame" style="padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--panel)">
+<div class="ctl"><span style="font-size: 14px; font-weight: 600">Big circle</span><span class="src e">Effect · Position</span></div>
+<div class="col" style="gap: 6px"><span class="lbl">Effect</span><div class="btn" style="justify-content: space-between">Circle<svg class="s" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div></div>
+<div class="col" style="gap: 6px"><span class="lbl">Centre</span><div class="seg"><span class="on">Around current position</span><span>Absolute</span></div><div class="ro">Pressed after a position, it circles that position. New movement templates start here; stored ones with Override read as Absolute.</div></div>
+<div class="ctl"><span class="lbl" style="width: 56px">Pan size</span><div class="sl"><i></i><b style="width: 30%"></b><u style="left: 30%"></u></div><span class="fld mono">60<small>°</small></span></div>
+</div>
+<p class="cap">The busk pad face gains the word: <i>½ · M1 · around</i>. Applies to the template sheet's Value cell editor too.</p>
+</div>
+
+<div class="col" style="flex: 1; gap: 14px; padding-top: 22px">
+<div class="notes">
+<div class="note"><span class="n">1</span><div><b>Instance edits stick until reset.</b><p>The desk keys a layer's running effect by its layer, effect and target, and leaves an existing instance alone on a re-cook, so a <span class="code">PUT /fx/{id}</span> on a pad's effect survives every layer change until the pad goes off. <i>edited</i> is the client comparing the instance with its template's effect.</p></div></div>
+<div class="note"><span class="n">2</span><div><b>Reset to template needs one desk op</b> — re-apply the template's effect to the instance in place, phase kept (W5). <b>Update template</b> is the template's existing <span class="code">PUT</span> with these settings. Today a template's effect edit does not reach layers already applied (they keep their instance until re-pressed); session 1 checks that and, if so, Update also resets this instance's <i>edited</i> mark against the new template.</p></div></div>
+<div class="note"><span class="n">3</span><div><b>Release is W2 over a selection.</b> The programmer's and the busk band's Release send one <span class="code">programmer.clearTarget</span> per target in a single frame list; pad and Look layers are untouched, as Clear's narrowing would.</p></div></div>
+<div class="note"><span class="n">4</span><div><b>Existing templates.</b> Nothing is migrated: a stored movement template keeps Override and reads as Absolute; the editor offers Around. Whether to flip the stock ones is an open call.</p></div></div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2160}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

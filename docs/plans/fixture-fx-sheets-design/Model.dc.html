@@ -36,7 +36,7 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 .lane{display:inline-flex;height:16px;padding:0 6px;border-radius:4px;font-size:9.5px;font-weight:600;border:1px solid var(--bd);color:var(--mfg);margin-right:4px}
 </style>
 </helmet>
-<div class="app" style="width: 1440px; height: 1760px; overflow: hidden">
+<div class="app" style="width: 1440px; height: 2080px; overflow: hidden">
 <div class="board">
 
 <div class="col" style="gap: 10px">
@@ -64,6 +64,12 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <span class="k">D13</span><span><b style="color: var(--fg)">A strip picks heads or members</b>; All writes the fixture's all-heads properties or one group entry, a subset writes each. <span class="ag">agreed</span></span>
 <span class="k">D14</span><span><b style="color: var(--fg)">A phone gets the sheet</b> in the Stage view as a bottom sheet; Aim moves to an <i>Aim…</i> popover on the Position row. <span class="ag">agreed</span></span>
 <span class="k">D15</span><span><b style="color: var(--fg)">One effect editor</b> for the tray, the rail's <i>Edit…</i> and <span class="code">FxSheet</span>'s chips; <span class="code">ActiveEffectSheet</span> and <span class="code">AddEditFxSheet</span> retire.</span>
+<span class="k">D16</span><span><b style="color: var(--fg)">Effect templates ask the Centre question</b>; new movement templates start Around; a pad face says <i>around</i>. <span class="ag">agreed</span></span>
+<span class="k">D17</span><span><b style="color: var(--fg)">The programmer edits effects live</b>: the rail's <i>Edit…</i> and the FX grid's chips open the one editor beside the rail. <span class="ag">agreed</span></span>
+<span class="k">D18</span><span><b style="color: var(--fg)">Release over a selection</b> on the programmer's row C and the busk rig row (W2 per target). <span class="ag">agreed</span></span>
+<span class="k">D19</span><span><b style="color: var(--fg)">The grid says held back</b> with an amber corner dot, and the cell editor's source chip opens the stack. <span class="ag">agreed</span></span>
+<span class="k">D20</span><span><b style="color: var(--fg)">A busk Effects tab</b>: what runs on the selection, edited live; a pad's effect as this instance only, marked <i>edited</i>, with Update template and Reset to template. <span class="ag">agreed</span></span>
+<span class="k">D21</span><span><b style="color: var(--fg)">Fixture sheet…</b> on a rig tile's menu opens the sheet (or the group sheet) over the busk view. <span class="ag">agreed</span></span>
 </div>
 </div>
 
@@ -75,6 +81,7 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <span class="k">W2</span><span><span class="code">programmer.clearTarget {targetType, targetKey, fadeMs}</span> — every entry on the fixture (its heads included) or the group, and every local effect on it, in one pass and one republish. Answers what it released, which Release's toast names.</span>
 <span class="k">W3</span><span>No new route for effects: <span class="code">POST /fx/add</span> with <span class="code">programmerOwned: true</span>; Around is <span class="code">blendMode: ADDITIVE</span> plus the centre at 128. Live edits are <span class="code">PUT /fx/{id}</span> at a 50 ms floor (open call 1).</span>
 <span class="k">W4</span><span>A bug to fix beside it: provenance counts the programmer's raw-channel side track as holding a property, though the engine holds no effect back for it, so a Channels-tab pan reads <i>Programmer</i> while an effect is what is on stage.</span>
+<span class="k">W5</span><span><span class="code">POST /fx/{id}/reset</span> — put a template layer's running instance back to its template's effect in place, phase kept; refused for an instance no template spawned.</span>
 </div>
 </div>
 
@@ -97,7 +104,8 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <div class="sess"><span class="t">2</span><p><span class="lane">frontend</span><b>The sheet.</b> <span class="code">FixtureSheet</span> in the pop-up and the Stage panel: the header, the scope line, families, rows with marks, fields, ×, Release, D8's position writes, the stack popover. Today's FX section rides along unchanged at the foot.</p></div>
 <div class="sess"><span class="t">3</span><p><span class="lane">frontend</span><b>The FX tray.</b> The tray, the picker, the live editor with Around / Absolute; programmer-owned starts; the rail's <i>Edit…</i> and <span class="code">FxSheet</span> on the same editor; the two old sheets deleted.</p></div>
 <div class="sess"><span class="t">4</span><p><span class="lane">frontend</span><b>Heads and groups.</b> The strip, mixed reads, group writes, the group sheet; the accordions and the group visualisers deleted.</p></div>
-<div class="sess" style="border-bottom: none"><span class="t">5</span><p><span class="lane">frontend</span><b>The rest of the hosts.</b> The phone's bottom sheet, the cards page, <i>Aim…</i> on the Position row; docs and the follow-ups.</p></div>
+<div class="sess"><span class="t">5</span><p><span class="lane">frontend</span><span class="lane">backend</span><b>Busk and Programmer.</b> D16 in the template editor and pad faces; D17 the rail on the live editor; D18 Release on row C and the rig row; D19 the grid's dot and chip; D20 the busk Effects tab with W5; D21 the tile menu.</p></div>
+<div class="sess" style="border-bottom: none"><span class="t">6</span><p><span class="lane">frontend</span><b>The rest of the hosts.</b> The phone's bottom sheet, the cards page, <i>Aim…</i> on the Position row; docs and the follow-ups.</p></div>
 </div>
 
 <div class="box" style="flex: 1">
@@ -107,13 +115,14 @@ a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.809 0.105 251.813)}
 <div class="q"><span class="n">3</span><p><b>Release asks nothing.</b> Drawn without a confirm, like the programmer's Clear: it fades at the programmer fade and the toast names what went.</p></div>
 <div class="q"><span class="n">4</span><p><b>The strip's pick is the sheet's own</b>, not the desk selection; it resets when the sheet opens on another fixture.</p></div>
 <div class="q"><span class="n">5</span><p><b>A row's editor opens inline</b> (colour, position) rather than as a popover beside the sheet; one open at a time.</p></div>
+<div class="q"><span class="n">6</span><p><b>Stock movement templates stay Override</b> (read as Absolute); only new ones start Around. Flipping existing ones would move shows already built on them.</p></div>
 </div>
 </div>
 
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1760}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2080}}'>
 class Component extends DCLogic {
   renderVals() { return {}; }
 }

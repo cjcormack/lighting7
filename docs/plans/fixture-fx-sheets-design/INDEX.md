@@ -27,7 +27,8 @@ this directory.
 | `Fx.dc.html` | The tray's four states, the add picker, and the live editor for three families. |
 | `Hosts.dc.html` | The pop-up, the Stage panel, a phone's bottom sheet and the cards page. |
 | `HeadsGroups.dc.html` | The head strip on a multi-head fixture and on a group. |
-| `Model.dc.html` | Decisions D1–D15, wire changes W1–W4, the code map, five sessions and the open calls. |
+| `BuskProgrammer.dc.html` | The same answers carried into the Busk and Programmer views: Around current in effect templates, the live editor on the rail, Release over a selection, held-back marks and the stack in the grid, a busk Effects tab and *Fixture sheet…* on a rig tile. |
+| `Model.dc.html` | Decisions D1–D21, wire changes W1–W5, the code map, six sessions and the open calls. |
 | `canvas.json` | The canvas index. |
 
 ## What was found
@@ -69,3 +70,18 @@ Chris answered eight questions on 2026-10-07:
 - The Stage view on a phone gets a bottom sheet.
 - Three extras are in: Release for a whole fixture, the editor kit's controls, and a head strip in
   place of accordions. *Save / Record from the sheet* was not chosen.
+
+On the same day, Chris asked whether the ideas also belong in the Busk and Programmer views. The
+survey found the starting bug there too: an effect template stores Override
+(`TemplateEditor.tsx:233`), so a Circle pad pressed after a position pad circles 128/128. He chose
+to carry over:
+
+- *Around current position* in effect templates.
+- The live editor in the programmer.
+- Release over a selection.
+- Held-back marks and the stack in the programmer grid.
+- A busk Effects tab.
+- *Fixture sheet…* on a rig tile.
+
+For the Effects tab he decided that a pad's effect is edited as the running instance only, with a
+button to update the template from it and one to reset it to the template.
