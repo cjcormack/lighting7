@@ -15,10 +15,10 @@ The brief's starting proposal, to be tested rather than adopted: split per-windo
 (source, show, haze, labels, the look) from per-machine *performance* (light budget, gobos, box
 shadows, the readout, test recovery).
 
-**Status: approved 2026-10-06.** Chris approved the boards and settled the four questions they left:
+**Status: approved 2026-10-06; both sessions shipped the same day (`9e8cb5f7`, `f80902ec`).** Chris approved the boards and settled the four questions they left:
 work lights are announced to other windows, `render_view` draws them off unless asked, the level is
 *a*, and the group is called **Work lights · Off | On** rather than *Rendering* (the plan's §10).
-The implementation plan is [`../stage-view-menu-plan.md`](../stage-view-menu-plan.md). A live copy of all four boards on one page is at
+The implementation plan is [`../completed/stage-view-menu-plan.md`](../completed/stage-view-menu-plan.md). A live copy of all four boards on one page is at
 <https://claude.ai/artifact/BhD6p5tGwFKQ319wBYAc7g>, private to Chris, a convenience; the files here
 are the authority. Where a board and the plan disagree, the plan wins on behaviour and the boards on
 layout and copy, as with every record in this directory.
