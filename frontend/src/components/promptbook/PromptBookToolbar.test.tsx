@@ -62,4 +62,23 @@ describe('PromptBookToolbar', () => {
     render(<PromptBookToolbar {...base} locked={false} canUndo />)
     expect(screen.getByText(/Undo/)).toBeTruthy()
   })
+
+  it('in drawer mode, the Cues toggle carries a scenery dot while the next GO moves something', () => {
+    // Below 1040px the rail — and its On GO line — is a drawer, shut most of the time; the dot is
+    // the line's stand-in on the toggle (scenery-programmer plan D14).
+    const moving = render(<PromptBookToolbar {...base} locked onOpenCues={() => {}} onGoMoves="House tabs close 4 s" />)
+    const toggle = screen.getByRole('button', { name: /Cues/ })
+    expect(toggle.querySelector('[data-on-go-dot]')).not.toBeNull()
+    expect(toggle.title).toBe('On GO: House tabs close 4 s')
+    moving.unmount()
+
+    const still = render(<PromptBookToolbar {...base} locked onOpenCues={() => {}} onGoMoves={null} />)
+    expect(screen.getByRole('button', { name: /Cues/ }).querySelector('[data-on-go-dot]')).toBeNull()
+    still.unmount()
+
+    // Wide, the rail is docked and shows the line itself: no toggle, so no dot.
+    render(<PromptBookToolbar {...base} locked onGoMoves="House tabs close 4 s" />)
+    expect(screen.queryByRole('button', { name: /Cues/ })).toBeNull()
+    expect(document.querySelector('[data-on-go-dot]')).toBeNull()
+  })
 })

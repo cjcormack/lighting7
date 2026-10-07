@@ -179,6 +179,8 @@ describe('StackDetail', () => {
     render(view())
     expect(screen.getByLabelText(/Record the programmer into/)).toBeTruthy()
     expect(screen.getByLabelText('Add separator')).toBeTruthy()
+    // The stack's settings — its set — from inside the stack, as the stack list's menu offers them.
+    expect(screen.getByLabelText('Stack settings…')).toBeTruthy()
   })
 
   it('withholds them while locked', () => {
@@ -187,6 +189,7 @@ describe('StackDetail', () => {
     render(view({ locked: true }))
     expect(screen.queryByLabelText(/Record the programmer into/)).toBeNull()
     expect(screen.queryByLabelText('Add separator')).toBeNull()
+    expect(screen.queryByLabelText('Stack settings…')).toBeNull()
   })
 
   it('passes the lock down to every row', () => {

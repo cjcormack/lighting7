@@ -1,4 +1,4 @@
-import { ListChecks, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
+import { Blinds, ListChecks, Minus, Play, Plus, TriangleAlert, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
@@ -24,6 +24,12 @@ interface PromptBookToolbarProps {
   /** Idle re-lock countdown (seconds); null unless the countdown is running. */
   /** Opens the cue-list drawer. Passed only on narrow, where the side rail is a drawer. */
   onOpenCues?: () => void
+  /**
+   * The next GO moves scenery: the drawer's toggle carries a `Blinds` dot, since the rail's *On GO*
+   * line is out of sight while the drawer is shut (scenery-programmer plan D14). [onGoMoves] is the
+   * line, for the toggle's title.
+   */
+  onGoMoves?: string | null
 }
 
 /**
@@ -51,6 +57,7 @@ export function PromptBookToolbar({
   warningCount,
   onToggleWarnings,
   onOpenCues,
+  onGoMoves,
 }: PromptBookToolbarProps) {
   // Unlocked mid-show is the only state worth shouting about.
   return (
@@ -84,9 +91,24 @@ export function PromptBookToolbar({
       <span className="flex-1" />
 
       {onOpenCues && (
-        <Button variant="outline" size="sm" onClick={onOpenCues} className="shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onOpenCues}
+          className="relative shrink-0"
+          title={onGoMoves ? `On GO: ${onGoMoves}` : undefined}
+        >
           <ListChecks className="size-3.5" />
           Cues
+          {onGoMoves ? (
+            <span
+              data-on-go-dot
+              aria-label="The next GO moves scenery"
+              className="absolute -top-1.5 -right-1.5 inline-flex size-4 items-center justify-center rounded-full bg-sky-500 text-white shadow"
+            >
+              <Blinds className="size-2.5" />
+            </span>
+          ) : null}
         </Button>
       )}
 

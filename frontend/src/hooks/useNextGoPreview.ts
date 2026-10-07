@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPushChannelSource, type PushChannelSource } from '../api/channelSource'
 import type { LiveScenery } from '../api/sceneryApi'
-import { previewScenery } from '../lib/scenery'
+import { onGoMoves, previewScenery, type OnGoMove } from '../lib/scenery'
 import { useCurrentProjectQuery } from '../store/projects'
+import { useLiveScenery } from '../store/scenery'
+import { useStageElementListQuery } from '../store/stageElements'
 import {
   useProjectCueStackListQuery,
   useProjectProgramStateQuery,
@@ -173,4 +175,78 @@ export function useNextGoSourceState(enabled: boolean): {
 
   const previewSettled = target.cueId == null || (!isFetching && (isSuccess || isError))
   return { source, settled: !enabled || (source != null && targetSettled && previewSettled), scenery: enabled ? scenery : null }
+}
+
+/** What [useOnGoScenery] answers: the cue on deck as the line names it, and what its GO moves. */
+export interface OnGoScenery {
+  /** *Q15*, or the cue's name where it has no number; null with no cue on deck. */
+  cueLabel: string | null
+  /** Empty when the GO moves nothing — the line is then not drawn. */
+  moves: OnGoMove[]
+}
+
+const NO_MOVES: OnGoScenery = { cueLabel: null, moves: [] }
+
+/** How long the live stage and the cue on deck must hold still before the preview is recomposed. */
+const ON_GO_SETTLE_MS = 250
+
+/**
+ * The Prompt Book's *On GO* line (scenery-programmer plan D14): the Next GO preview's scenery — the
+ * whole stage as the GO would land it, programmer and Looks included — compared with the live
+ * stage, piece by piece (`onGoMoves`). Only for [projectId] while it is the current project and its
+ * show is running; otherwise, and when nothing moves, there are no moves.
+ *
+ * **It keeps the preview fresh, which the Stage view's Next GO source does not.** That source is
+ * keyed on *which* cue is on deck (`docs/stage-vis-engineering.md`), so an edit to the cue on deck,
+ * or a programmer move, leaves the composed look as it was until the next GO. A line that names
+ * moves cannot be that stale — an edit made in the book's own *Scenery…* must show at once — so
+ * while this is mounted it recomposes the same query (one cache entry, so the Stage view's source
+ * gets the fresh answer too) once the live stage's targets or the cue on deck's own changes have
+ * held still for [ON_GO_SETTLE_MS]: a programmer drag at 30 frames a second asks once, at its end.
+ * A move's progress is not a change — only the states each piece is going to are compared.
+ *
+ * `currentData`, not `data`: across a GO the arg changes, and the outgoing cue's preview compared
+ * with the stage it has just landed would name nothing, or the wrong moves, until the new one
+ * answers.
+ */
+export function useOnGoScenery(projectId: number, enabled = true): OnGoScenery {
+  const { target } = useNextGoTargetState(enabled)
+  const ours = enabled && target.projectId === projectId && target.cueId != null
+  const preview = usePreviewOfTarget(ours ? target : NOTHING)
+  const live = useLiveScenery(ours)
+  const { data: elements } = useStageElementListQuery(projectId, { skip: !ours })
+  const { data: stacks } = useProjectCueStackListQuery(projectId, { skip: !ours })
+
+  const cue = ours ? stacks?.find((st) => st.id === target.stackId)?.cues.find((c) => c.id === target.cueId) : undefined
+  const cueLabel = cue == null ? null : cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
+
+  // What would make the preview stale: where each live piece is going, and the cue's own changes.
+  const signature = useMemo(() => {
+    if (!ours) return null
+    const targets = Object.values(live.entries)
+      .map((e) => [e.elementUuid, e.state] as const)
+      .sort(([a], [b]) => a.localeCompare(b))
+    return JSON.stringify([live.projectId, targets, cue?.scenery ?? []])
+  }, [ours, live, cue?.scenery])
+
+  const { refetch, isSuccess } = preview
+  const seen = useRef<{ cueId: number | null; signature: string | null }>({ cueId: null, signature: null })
+  useEffect(() => {
+    const was = seen.current
+    seen.current = { cueId: target.cueId, signature }
+    // A new cue on deck is a new request already (`refetchOnMountOrArgChange`); only a change
+    // under the same cue asks again.
+    if (!ours || !isSuccess || was.cueId !== target.cueId || was.signature == null || was.signature === signature) return
+    const timer = setTimeout(() => {
+      refetch()
+    }, ON_GO_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [ours, isSuccess, refetch, signature, target.cueId])
+
+  const previewed = ours ? preview.currentData?.scenery : undefined
+  const moves = useMemo(
+    () => (previewed == null || live.projectId !== projectId ? [] : onGoMoves(previewed, live, elements ?? [])),
+    [previewed, live, projectId, elements],
+  )
+  return ours ? { cueLabel, moves } : NO_MOVES
 }

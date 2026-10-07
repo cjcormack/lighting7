@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -17,14 +17,18 @@ export function ReadOutButton({
   disabled,
   children,
   'aria-label': ariaLabel,
+  ...data
 }: {
-  onClick: () => void
+  /** The press; the event is there for a host that opens an editor at the button (the cue sheet's Scenery). */
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void
   title: string
   className?: string
   /** The host gave this read-out nowhere to go, or it cannot act on this row — legible but inert. */
   disabled?: boolean
   children: ReactNode
   'aria-label'?: string
+  /** `data-*` attributes, passed through to the button — the addressing a test or a host reads. */
+  [data: `data-${string}`]: string | number | boolean | undefined
 }) {
   return (
     <button
@@ -33,6 +37,7 @@ export function ReadOutButton({
       disabled={disabled}
       title={title}
       aria-label={ariaLabel}
+      {...data}
       className={cn(
         // `min-w-0` + `whitespace-nowrap`: the cell is a fixed grid track and the row a fixed
         // height, so a read-out that wraps grows the row and paints over its neighbour.

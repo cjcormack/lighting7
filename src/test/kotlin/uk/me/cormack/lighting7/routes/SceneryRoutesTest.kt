@@ -15,7 +15,12 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -28,6 +33,7 @@ import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.SceneryChangeDto
+import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.state.SceneryService
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -149,6 +155,41 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         // A re-save keeps the row, so an unchanged list exports byte-for-byte as before.
         val again = putScenery(client, "cues/$q1", change(tabs, open(0.0), transitionMs = 4000)).body<List<SceneryChangeDto>>().single()
         assertEquals(first.uuid, again.uuid)
+    }
+
+    @Test
+    fun `the stack list carries each cue's own changes, and a cue scenery write announces the list`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (tabs, moon) = tabsAndMoon(client)
+        val s = stack(client, "Act 1")
+        val q1 = cue(client, s, "Q1")
+        val q2 = cue(client, s, "Q2")
+        var announced = 0
+        val listener = object : FixturesChangeListener {
+            override fun cueStackListChanged() { announced++ }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            assertEquals(HttpStatusCode.OK, putScenery(client, "cues/$q2", change(moon, trim(3.0), transitionMs = 4000), change(tabs, open(0.0))).status)
+            assertTrue(announced > 0, "a cue scenery write fires cueStackListChanged — the list carries it")
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+
+        val listed = client.get("/api/rest/projects/$projectId/cue-stacks")
+        val stackDto = listed.body<List<CueStackDetails>>().single { it.id == s }
+        val byId = stackDto.cues.associateBy { it.id }
+        assertTrue(byId.getValue(q1).scenery.isEmpty())
+        val own = byId.getValue(q2).scenery
+        assertEquals(listOf(moon, tabs), own.map { it.elementUuid }, "the cue's own order")
+        assertEquals(4000L, own.first().transitionMs)
+        assertEquals(null, own.last().transitionMs, "a change on the cue's clock")
+        // An empty list is on the wire, not left out (`@EncodeDefault(ALWAYS)`).
+        val raw = Json.parseToJsonElement(listed.bodyAsText()).jsonArray
+            .single { it.jsonObject["id"]!!.jsonPrimitive.int == s }.jsonObject["cues"]!!.jsonArray
+            .single { it.jsonObject["id"]!!.jsonPrimitive.int == q1 }.jsonObject
+        assertEquals(JsonArray(emptyList()), raw["scenery"], "Q1's empty list is sent: $raw")
     }
 
     @Test
@@ -514,7 +555,7 @@ class SceneryRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `deleting an element sweeps its scenery`() = testApplication {
+    fun `deleting an element sweeps its scenery, and announces the lists that carried it`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val (_, moon) = tabsAndMoon(client)
@@ -524,10 +565,44 @@ class SceneryRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, putScenery(client, "cue-stacks/$s", change(moon, buildJsonObject { put("visible", false) })).status)
 
         val moonId = client.get("/api/rest/projects/$projectId/stage-elements").body<List<StageElementDto>>().single { it.uuid == moon }.id
-        assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/stage-elements/$moonId").status)
+        val announced = mutableListOf<String>()
+        val listener = object : FixturesChangeListener {
+            override fun cueListChanged() { announced += "cues" }
+            override fun cueStackListChanged() { announced += "stacks" }
+            override fun lookListChanged() { announced += "looks" }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/stage-elements/$moonId").status)
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+        // Every list that carried a swept row is announced, so no window keeps editing a row for an
+        // element that is gone (a whole-list PUT naming one is refused).
+        assertTrue(announced.containsAll(listOf("cues", "stacks", "looks")), "announced $announced")
 
         assertTrue(client.get("/api/rest/projects/$projectId/cues/$q1").body<CueDetails>().scenery.isEmpty())
         val stackDto = client.get("/api/rest/projects/$projectId/cue-stacks/$s").body<CueStackDetails>()
         assertTrue(stackDto.scenery.isEmpty())
+        assertTrue(stackDto.cues.single { it.id == q1 }.scenery.isEmpty(), "the stack list's cue entry lost its row too")
+    }
+
+    @Test
+    fun `deleting an element no change names announces only the element list`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (_, moon) = tabsAndMoon(client)
+        val moonId = client.get("/api/rest/projects/$projectId/stage-elements").body<List<StageElementDto>>().single { it.uuid == moon }.id
+        var cueLists = 0
+        val listener = object : FixturesChangeListener {
+            override fun cueStackListChanged() { cueLists++ }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/stage-elements/$moonId").status)
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+        assertEquals(0, cueLists)
     }
 }

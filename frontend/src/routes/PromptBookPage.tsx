@@ -54,6 +54,9 @@ import { CueStackPanel } from '../components/promptbook/CueStackPanel'
 import { ScriptUploadCard } from '../components/promptbook/ScriptUploadCard'
 import { useEditLock } from '../hooks/useEditLock'
 import { useTransportKeys } from '../hooks/useTransportKeys'
+import { useOnGoScenery } from '../hooks/useNextGoPreview'
+import { useStageElementListQuery } from '../store/stageElements'
+import { cueSceneryLines, describeOnGo } from '../lib/scenery'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 
 export function PromptBookRedirect() {
@@ -191,6 +194,30 @@ export function PromptBookViewerPage() {
   const { isExpanded, toggleExpanded } = useRailExpansion(activeCueId, nextCueId)
   const { modeOf, onCueModeChange } = useCardViewMode()
 
+  // ── Scenery on the page (scenery-programmer plan D14) ──
+  // Every cue's own changes off the stack list (`CueStackCueEntry.scenery`), read once into lines:
+  // the rail cards list them, and the script's margin glyph carries them as its hover.
+  const { data: elements } = useStageElementListQuery(projectIdNum)
+  const sceneryLinesByCue = useMemo(() => {
+    const byUuid = elements == null ? null : new Map(elements.map((e) => [e.uuid, e]))
+    const out = new Map<number, readonly string[]>()
+    for (const [cueId, entry] of cueEntryByCue) {
+      const lines = cueSceneryLines(entry.scenery, byUuid)
+      if (lines.length > 0) out.set(cueId, lines)
+    }
+    return out
+  }, [cueEntryByCue, elements])
+  const sceneryByCue = useMemo(
+    () => new Map([...sceneryLinesByCue].map(([cueId, lines]) => [cueId, lines.join('\n')])),
+    [sceneryLinesByCue],
+  )
+  // **On GO** — what the next GO moves: the Next GO preview's scenery against the live stage.
+  const onGoScenery = useOnGoScenery(projectIdNum, isShowActive)
+  const onGo = useMemo(
+    () => ({ cue: onGoScenery.cueLabel, moves: describeOnGo(onGoScenery.moves) }),
+    [onGoScenery],
+  )
+
   // ── Desync — advisory only; recomputed on every edit and on load. ──
   const warnings: DesyncWarning[] = useMemo(
     () => (book ? computeWarnings(book.anchors, book.annotations, cueOrder) : []),
@@ -268,6 +295,22 @@ export function PromptBookViewerPage() {
       return
     }
     jumpToLive()
+  })
+
+  /**
+   * The margin glyph's tap: the cue's card, opened in the rail — the drawer slid in where the rail is
+   * one — and brought into view there. Never collapses one already open; the book stays where it is,
+   * since the glyph is already at the cue. Stable for the memoized viewer.
+   */
+  const openCueCard = useStableCallback((cueId: number) => {
+    if (!isExpanded(cueId)) toggleExpanded(cueId)
+    if (isNarrow) setDrawerOpen(true)
+    // After the card has expanded (and the drawer begun to slide), so the box scrolled to is the
+    // card's. One rail is mounted at a time (the side rail or the drawer), so the id is unique.
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-rail-cue="${cueId}"]`)
+      if (card instanceof HTMLElement) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
   })
 
   // Arm a cue as the next GO (mirrors the Run page's standby). Does NOT fire it. The
@@ -449,6 +492,8 @@ export function PromptBookViewerPage() {
     onDbo: () => setDbo((d) => !d),
     projectId: projectIdNum,
     coverPages: book.coverPages,
+    onGo,
+    sceneryLinesByCue,
   }
 
   const toneBtnActive: Record<NoteTone, string> = {
@@ -518,6 +563,7 @@ export function PromptBookViewerPage() {
         warningCount={warnings.length}
         onToggleWarnings={() => setShowWarnings((s) => !s)}
         onOpenCues={isNarrow ? () => setDrawerOpen((o) => !o) : undefined}
+        onGoMoves={onGo.moves || null}
       />
 
       {!locked && (
@@ -596,6 +642,8 @@ export function PromptBookViewerPage() {
               onAnnotationClick={ann.open}
               onDocumentError={doc.onDocumentError}
               onPagesReady={handlePagesReady}
+              sceneryByCue={sceneryByCue}
+              onOpenCueCard={openCueCard}
             />
           )}
         </div>

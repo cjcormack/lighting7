@@ -482,8 +482,11 @@ export const programmerOpsApi = restApi.injectEndpoints({
               { type: 'CueList', id: projectId },
               ...(cueId ? [{ type: 'Cue' as const, id: cueId }] : []),
               'CueList',
-              // Only a CREATE changes stack membership.
-              ...(result.created ? (['CueStackList'] as const) : []),
+              // A CREATE changes stack membership, and a scenery row the stack list's
+              // `CueStackCueEntry.scenery` (the cue table's column, the Prompt Book's glyph).
+              ...(result.created || (result.sceneryWritten ?? 0) + (result.sceneryRemoved ?? 0) > 0
+                ? (['CueStackList'] as const)
+                : []),
               // A scenery row moves what every later cue in the stack *tracks*, so — as
               // `setCueScenery` does — every cue entry, not just this one (scenery-programmer D7).
               ...((result.sceneryWritten ?? 0) + (result.sceneryRemoved ?? 0) > 0 ? (['Cue'] as const) : []),
@@ -549,8 +552,9 @@ export const programmerOpsApi = restApi.injectEndpoints({
           ? [
               { type: 'CueList', id: projectId },
               'CueList',
-              // Scenery written back moves what later cues track: every cue entry, as a Record's.
-              ...(result.results.some((r) => (r.sceneryWritten ?? 0) > 0) ? (['Cue'] as const) : []),
+              // Scenery written back moves what later cues track: every cue entry, as a Record's —
+              // and the stack list's `CueStackCueEntry.scenery`.
+              ...(result.results.some((r) => (r.sceneryWritten ?? 0) > 0) ? (['Cue', 'CueStackList'] as const) : []),
             ]
           : [],
     }),

@@ -2768,7 +2768,13 @@ Three surface rules, each pinned by its test:
   the row — it was a single click that had to swallow the press, which made the Cue column the one
   column where a click meant something different). **Locked, the number is plain text rather than a
   disabled trigger**, because a click on it must bubble to the column to arm the cue and a browser
-  dispatches no click for a press inside a disabled button. Layers · FX are read-outs that open the card on the cards view
+  dispatches no click for a press inside a disabled button. **Scenery is a read-out that opens an
+  editor** (scenery-programmer plan D13): the cue's own changes (`Tabs → closed · 4 s`), the tracked
+  hatch where it changes nothing but something is tracked into it, the em-dash where nothing is
+  (the editor can set it), blank on a MARKER; a press opens `CueSceneryEditor` at the cell, and
+  locked it asks to unlock like every refused edit (disabled with the reason where the lock is not
+  the operator's), closing on a re-lock. Not a `cell` — one cue's list is not a value a marquee
+  spreads. Layers · FX are read-outs that open the card on the cards view
   (with `CARDS_LINK_STATE`, so the sticky does not bounce it
   back; a peek is not a change of view); **Book opens the Prompt Book** at that cue instead, through
   `?cue=`, which is that page's arrival contract and the mirror of the one it mints for Show — it is
@@ -4582,7 +4588,7 @@ recovery. Frontend shape:
   can't render and the tab would otherwise be an error with nothing to press.
 
 ### Cues, Stacks & Triggers
-Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties; a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
+Cues bundle an ordered stack of **Look layers** (see §Looks and layers), their own property assignments, ad-hoc effects, and **script hooks** into named snapshots. **Every cue belongs to a cue stack** — there are no standalone cues. A project owns an *ordered* list of stacks (the "show"); a stack owns an ordered list of cues. A stack row can also be a **SEPARATOR** (a label-only divider between stacks). A cue can also carry **scenery** — scene elements it moves on GO, each on its own clock — shown on its card (with what it tracks, hatched) and edited in Cue properties, in the cue table's Scenery column and from the Prompt Book's rail card (§"Scenery in the cue table and the Prompt Book" below); a stack has a *set* and a Look *scenery while live* (stage-view plan session 8, §Stage views). Cues and stacks are authored **and run** entirely in the **Show** view (`/projects/:projectId/show`, drilling into a stack at `/show/stacks/:stackId?cue=:cueId`) — the old separate "FX Cues" view has been removed, Show was itself called Program until the programmer moved out of it into `/programmer`, and the separate **Run** view folded into it in session 2b (see §Navigation Registry and §The show-editing lock).
 
 #### The show-editing lock
 
@@ -4776,6 +4782,34 @@ Includes it) and **Cue properties…** (`CuePropertiesSheet`). Consequences wort
   and the Diagnostics `cueEdit` histogram panel are all gone too. Don't reintroduce any of it:
   a cue is edited by Include, and `EditorContext.tsx`'s doc comment is the record of why.
   `INCLUDE_TARGET_GONE` is Update's own 409 and is unrelated — that one is live.
+
+#### Scenery in the cue table and the Prompt Book
+
+Scenery-programmer plan session 5 (D13, D14); the mechanism is `docs/show-mode-engineering.md`
+§"Scenery in the cue table and the Prompt Book".
+
+- **The stack list carries every cue's own changes** (`CueStackCueEntry.scenery`, optional on the
+  client), so the table and the book read every cue at once; what a cue only *tracks* stays a
+  per-cue read (`CueDetails.trackedScenery`). Every cue scenery write announces the stack list too,
+  as does an element delete that swept scenery, and the client's scenery-writing mutations invalidate
+  `CueStackList`. `cueSceneryLines` /
+  `cueChangeLine` (`lib/scenery.ts`) are the one reader of a cue's lines — `House tabs → closed · 4 s`,
+  names from the scene, an element the scene has lost left out — so the column, the glyph's hover and
+  the rail cards cannot word a change three ways.
+- **One editor in place: `CueSceneryEditor`** (`components/scenery/`), Cue properties'
+  `SceneryEditor` with times inside `EditorSurface` at the button that opened it (wide in the side
+  sheet), with the cue's tracked state as its header. The cue table's Scenery cell and an open rail
+  card's *Scenery…* both open it; every host opens it unlocked only and closes it when a GO re-locks.
+- **The Show stack detail's header carries *Stack settings…*** unlocked, the stack form (and its set)
+  mounted in place through `OwnerEditor`, as the overview row's menu offers it.
+- **Prompt Book: a `Blinds` glyph** beside the margin marker of a cue that moves something — its
+  hover lists the changes, its tap opens the cue's card in the rail (the drawer slid in on narrow) —
+  the cue's lines on its rail card, both faces; **the *On GO* line** at the top of the rail
+  (`useOnGoScenery`: the Next GO preview's scenery against live, piece by piece, *appears* / *hides*
+  for a visibility flip, nothing drawn when nothing moves); and below 1040px a `Blinds` dot on the
+  toolbar's *Cues* toggle while the line is non-empty. The hook keeps the shared preview query fresh
+  while the book is mounted — the Stage view's Next GO source alone does not (stage-vis doc).
+  `FU-SCENERY-FLY-DEPT` is a fly department of its own (FQ markers, its own lane), not built.
 
 **Timed effects**: Layers and ad-hoc effects can have optional timing (delayMs, intervalMs, randomWindowMs) to fire after a delay or on a recurring interval. Immediate (no timing) is the default. A timed layer re-cooks the whole cue when it fires rather than appending its rows, so an in-flight crossfade weight survives.
 

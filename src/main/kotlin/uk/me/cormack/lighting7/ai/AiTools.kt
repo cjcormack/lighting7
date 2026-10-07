@@ -1083,7 +1083,11 @@ class AiTools(private val state: State) {
         }
         if (written == null) return errorResult(problems.joinToString("; "))
         when {
-            cueId != null -> state.show.fixtures.cueListChanged()
+            cueId != null -> {
+                state.show.fixtures.cueListChanged()
+                // The stack list carries every cue's own changes (`CueStackCueEntry.scenery`).
+                state.show.fixtures.cueStackListChanged()
+            }
             stackId != null -> state.show.fixtures.cueStackListChanged()
             else -> state.show.fixtures.lookListChanged()
         }

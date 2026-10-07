@@ -1,5 +1,5 @@
 import type { StageElementDto } from '../api/stageElementApi'
-import type { LiveScenery, LiveSceneryEntry, PreviewScenery, ProgrammerScenery, ProgrammerSceneryEntry, ScenerySource, SceneryState } from '../api/sceneryApi'
+import type { LiveScenery, LiveSceneryEntry, PreviewScenery, ProgrammerScenery, ProgrammerSceneryEntry, SceneryChange, ScenerySource, SceneryState } from '../api/sceneryApi'
 import { elementFlies, elementStates } from '../components/stage3d/scene/sceneParts'
 
 /**
@@ -194,12 +194,12 @@ export function describeSceneryState(element: StageElementDto | undefined, state
 }
 
 /**
- * One element's scenery in a library row's words — `Moon in`, `Tabs drawn`, `Sofa shown`,
- * `Cloth 4.2 m, hidden` — the short form of [describeSceneryState], without its `trim ·` prefix,
- * since a row of several elements has no room for it. [element] may be missing; the numbers then
- * read plainly.
+ * [state]'s short words for [element] — `closed`, `drawn`, `open 40%`, `in`, `out`, `4.2 m`,
+ * `shown`, `hidden` — joined by `, `; empty when it states nothing. The short form of
+ * [describeSceneryState], without its `trim ·` prefix, for a row with no room for it: the Looks
+ * library's summary and a cue change's line. [element] may be missing; the numbers then read plainly.
  */
-export function summariseSceneryState(element: StageElementDto | undefined, name: string, state: SceneryState): string {
+export function shortSceneryWords(element: StageElementDto | undefined, state: SceneryState): string {
   const parts: string[] = []
   if (state.open != null) {
     parts.push(state.open <= 0 ? 'closed' : state.open >= 1 ? 'drawn' : `open ${Math.round(state.open * 100)}%`)
@@ -210,14 +210,119 @@ export function summariseSceneryState(element: StageElementDto | undefined, name
     parts.push(trims && near(trims.inM) ? 'in' : trims && near(trims.outM) ? 'out' : formatMetres(state.trimM))
   }
   if (state.visible != null) parts.push(state.visible ? 'shown' : 'hidden')
-  return parts.length > 0 ? `${name} ${parts.join(', ')}` : name
+  return parts.join(', ')
+}
+
+/**
+ * One element's scenery in a library row's words — `Moon in`, `Tabs drawn`, `Sofa shown`,
+ * `Cloth 4.2 m, hidden` ([shortSceneryWords] after the name).
+ */
+export function summariseSceneryState(element: StageElementDto | undefined, name: string, state: SceneryState): string {
+  const words = shortSceneryWords(element, state)
+  return words ? `${name} ${words}` : name
 }
 
 /** A cue change as its card reads it: what it does to the element, and on whose clock. */
 export function describeCueChange(element: StageElementDto | undefined, state: SceneryState, transitionMs: number | null | undefined): string {
-  const what = describeSceneryState(element, state)
-  const when = transitionMs == null ? 'with the cue' : transitionMs === 0 ? 'snap' : `${Number((transitionMs / 1000).toFixed(2))} s`
-  return `${what} · ${when}`
+  return `${describeSceneryState(element, state)} · ${clockWords(transitionMs) ?? 'with the cue'}`
+}
+
+/** Milliseconds as a read-out says them: `4 s`, `0.5 s`. */
+function seconds(ms: number): string {
+  return `${Number((ms / 1000).toFixed(2))} s`
+}
+
+/** A cue change's own clock in words — `snap`, `4 s` — or null on the cue's fade; one wording for every reader. */
+function clockWords(transitionMs: number | null | undefined): string | null {
+  return transitionMs == null ? null : transitionMs === 0 ? 'snap' : seconds(transitionMs)
+}
+
+/**
+ * A cue change as one line of the cue table and the Prompt Book (scenery-programmer plan D13, D14):
+ * `Tabs → closed · 4 s` on its own clock, `Moon → in` on the cue's fade (the mock-ups' copy: the
+ * cue's own clock goes unsaid), `Sofa → hidden · snap`. [name] is the element's.
+ */
+export function cueChangeLine(element: StageElementDto | undefined, name: string, state: SceneryState, transitionMs: number | null | undefined): string {
+  const clock = clockWords(transitionMs)
+  return `${name} → ${shortSceneryWords(element, state) || 'no state'}${clock == null ? '' : ` · ${clock}`}`
+}
+
+/**
+ * A cue's own changes ([changes], off the stack list's `CueStackCueEntry.scenery`) as their lines,
+ * in the cue's order. Names come from the scene ([byUuid]), so a renamed element reads its new name;
+ * once the scene is known, a change whose element it no longer has is left out — a delete sweeps the
+ * element's changes and announces the stack list, but the two lists refetch apart, and a line for a
+ * piece that is gone should not flash in between. [byUuid] null is a scene not yet loaded: every
+ * change is read with the name it was stored under.
+ */
+export function cueSceneryLines(
+  changes: readonly SceneryChange[] | undefined,
+  byUuid: ReadonlyMap<string, StageElementDto> | null,
+): string[] {
+  if (changes == null || changes.length === 0) return []
+  const out: string[] = []
+  for (const change of [...changes].sort((a, b) => a.sortOrder - b.sortOrder)) {
+    const element = byUuid?.get(change.elementUuid)
+    if (byUuid != null && element == null) continue
+    out.push(cueChangeLine(element, element?.name ?? change.elementName, change.state, change.transitionMs))
+  }
+  return out
+}
+
+/** One piece the next GO moves, as the Prompt Book's *On GO* line names it (scenery-programmer plan D14). */
+export interface OnGoMove {
+  elementUuid: string
+  name: string
+  /** What it does, in a DSM's words: `close`, `draw`, `to 40%`, `in`, `out`, `to 4.2 m`, `appears`, `hides`. */
+  words: string
+  /** How long the GO takes over it; 0 lands it. */
+  durationMs: number
+}
+
+/**
+ * What the next GO moves (D14): the Next GO preview's scenery ([preview] — whole, an element it
+ * leaves out shows its base) compared with the live stage ([live] — likewise), key by key over each
+ * element's own states with its base filled in, so a piece the preview names but live does not, or
+ * live names but the preview does not, is compared against where it really is. A piece whose states
+ * all agree is not moving and is left out; one that goes from hidden to shown **appears**, and from
+ * shown to hidden **hides**. An element the scene does not have is left out (nothing to fill its base
+ * from). Ordered by name. [preview] undefined is no preview: nothing moves.
+ */
+export function onGoMoves(
+  preview: readonly PreviewScenery[] | undefined,
+  live: LiveScenery,
+  elements: readonly StageElementDto[],
+): OnGoMove[] {
+  if (preview == null) return []
+  const byUuid = new Map(elements.map((e) => [e.uuid, e]))
+  const next = new Map(preview.map((p) => [p.elementUuid, p]))
+  const uuids = new Set([...next.keys(), ...Object.keys(live.entries)])
+  const out: OnGoMove[] = []
+  for (const uuid of uuids) {
+    const element = byUuid.get(uuid)
+    if (element == null) continue
+    const before = shownSceneryState(element, live.entries[uuid]?.state)
+    const target = next.get(uuid)
+    const after = shownSceneryState(element, target?.state)
+    if (sameState(before, after)) continue
+    const words: string[] = []
+    const close = (a?: number, b?: number) => a != null && b != null && Math.abs(a - b) < 1e-6
+    if (after.open != null && !close(before.open, after.open)) {
+      words.push(after.open <= 0 ? 'close' : after.open >= 1 ? 'draw' : `to ${Math.round(after.open * 100)}%`)
+    }
+    if (after.trimM != null && !close(before.trimM, after.trimM)) {
+      const { inM, outM } = trimsOf(element)
+      words.push(close(after.trimM, inM) ? 'in' : close(after.trimM, outM ?? undefined) ? 'out' : `to ${formatMetres(after.trimM)}`)
+    }
+    if (after.visible !== before.visible) words.push(after.visible ? 'appears' : 'hides')
+    out.push({ elementUuid: uuid, name: element.name, words: words.join(', '), durationMs: target?.durationMs ?? 0 })
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** [moves] as the *On GO* line says them: `House tabs close 4 s · Moon in · Sofa appears`; empty when nothing moves. */
+export function describeOnGo(moves: readonly OnGoMove[]): string {
+  return moves.map((m) => `${m.name} ${m.words}${m.durationMs > 0 ? ` ${seconds(m.durationMs)}` : ''}`).join(' · ')
 }
 
 // — the control ————————————————————————————————————————————————————————————————————

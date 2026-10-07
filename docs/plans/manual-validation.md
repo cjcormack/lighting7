@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched | Stage view S3 · S6, 2026-09-30 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
 | [`FU-MANUAL-S4REV-OPTICS`](#fu-manual-s4rev-optics) | the Source Four Revolution's estimated optics match TCH's units — the front-bay module, the gel string, which frame is which blade, which way everything turns and how fast focus goes soft — the guesses the fixture-optics plan builds on, and that each unit's fitted media draws as loaded | Fixture optics plan, 2026-10-02 |
@@ -75,6 +76,53 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-SCENERY-DEVICES`
+
+**What it proves**: *scenery is reachable and correct on every device the show is run from* — the
+programmer's hands on a piece, Record, Include and Update, the Stage popover, the cue table's
+Scenery column and the Prompt Book's glyph, cards and *On GO* line — with a finger on an iPhone and an
+iPad as well as a pointer on the desk.
+
+**Why it is here**: the scenery-programmer plan's five sessions were each driven in a browser at desk
+(1440×900), iPad (1024×768) and phone (393×852) sizes (`docs/plans/scenery-programmer-plan.md` §9), but
+a resized desktop browser is not a device: Safari's toolbar eating the viewport, a finger's slop on
+the `SceneryControl` slider, the bottom sheet over the on-screen keyboard while a time is typed, a tap
+on the book's 12px glyph, and two devices editing one cue at once are the devices' own. Chris's
+condition on the design was iPhone, iPad and desktop taken into account (D17).
+
+**Test**, on the rig in a project with a drawn tab and a flown piece (*House tabs*, *Moon*, each with a
+`travelS`), a stack *Act 1* of a few cues, a Prompt Book with anchors, the desk at the Mac and an iPad
+and an iPhone signed in to it:
+
+1. **Programmer, desk**: the rail's Scenery band moves the tabs and flies the moon; Blind holds a move
+   and the Stage view's Programmer source draws it staged; leaving Blind lands it; Clear flies it home.
+2. **Programmer, iPad and iPhone**: the overlay rail's band and the phone's handle reach the same
+   list; *All scenery…* opens as a popover on the iPad and a bottom sheet with finger-sized rows on the
+   iPhone; drag the moon's slider by finger — it moves on the stage as it goes and lands on release.
+3. **Record and Update**: fly the moon in, Record into a cue (*Record scenery too* ticked); Include it,
+   move the tabs, Update; the cue card shows both rows.
+4. **Stage popover**: on the iPad, tap the moon in Orbit and Front — the popover opens beside it, and a
+   finger pan orbits rather than opening it; on the iPhone it is a bottom sheet.
+5. **Cue table, iPad**: Show → *Act 1* → Table, unlocked: the Scenery column reads each cue's changes
+   (*House tabs → closed · 4 s*); tap a cue's cell and change its scenery in the popover, a time typed
+   into the time field; the cell reads the change. Lock the show and tap again — it asks to unlock.
+   *Stack settings…* opens the stack form with its set.
+6. **Prompt Book, iPad (drawer)**: the glyph sits beside each marker whose cue moves scenery; tap it —
+   the drawer slides in with that cue's card open, its changes listed. Start the show at a cue before
+   one that moves scenery: the drawer's *Cues* toggle carries the scenery dot, and the drawer's *On GO*
+   line names the moves; GO, and they happen as named. Unlocked, a card's *Scenery…* edits in place and
+   *On GO* follows the edit within a second.
+7. **Prompt Book, desk and iPhone**: the desk's docked rail shows *On GO* without a dot; the iPhone's
+   drawer as the iPad's, the glyph tappable by finger.
+8. **Two devices**: edit Q2's scenery on the iPad's cue table while the desk shows the book — the
+   desk's card and *On GO* update without a reload.
+
+Where something fails, promote it to a `FU-` item in `followups.md`.
+
+45 minutes.
 
 ---
 

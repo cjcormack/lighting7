@@ -133,6 +133,12 @@ because an operator would otherwise read them as bugs; the last two it does not:
   so fixing this needs one; a partial key off `presetCount` would refresh for some
   edits and silently not for others, which is worse than the known limit. The operator's handle in
   the meantime is to reselect the source, which `refetchOnMountOrArgChange` makes recompose.
+  **One reader closes it for scenery, and lends the source its answer:** the Prompt Book's *On GO*
+  line (`useOnGoScenery`, scenery-programmer plan D14) cannot name moves an edit has changed, so
+  while the book is mounted it refetches this same query when the live pieces' targets or the cue on
+  deck's own scenery (the stack list's `cues[].scenery`, which does move) have held still for 250 ms.
+  One cache entry, so a Stage canvas on Next GO beside the book recomposes with it — scenery and
+  channels alike. See `docs/show-mode-engineering.md` §"Scenery in the cue table and the Prompt Book".
 
 ### Injection is at channel level
 

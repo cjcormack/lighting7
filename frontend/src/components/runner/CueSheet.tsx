@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AudioWaveform, Layers, Lock, Play, X } from 'lucide-react'
+import { AudioWaveform, Blinds, Layers, Lock, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -16,6 +16,10 @@ import { usePatchProjectCueMutation } from '@/store/cues'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { formatFadeDuration, parseFadeDuration } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
+import { cueSceneryLines } from '@/lib/scenery'
+import { useStageElementListQuery } from '@/store/stageElements'
+import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
+import { TRACKED_HATCH_CLASS } from '@/components/scenery/trackedHatch'
 import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { TruncateStart } from '@/components/TruncateStart'
 import { CueStatePip } from '@/components/cues/CueRowParts'
@@ -40,7 +44,7 @@ import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { CueStack, CueStackCueEntry } from '@/api/cueStacksApi'
 
-export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'notes'
+export type CueColumnKey = 'name' | 'fade' | 'curve' | 'follow' | 'book' | 'layers' | 'fx' | 'scenery' | 'notes'
 
 /** One cue of the stack; a marker is a divider row. */
 export interface CueSheetRow extends SheetRow {
@@ -122,6 +126,14 @@ export interface CueSheetProps {
  *
  * No Hooks column: `CueStackCueEntry` carries no trigger count, and adding one is a backend field.
  *
+ * **Scenery is a read-out that opens an editor** (scenery-programmer plan D13): the cue's own
+ * changes as `Tabs → closed · 4 s`, off the stack list's `CueStackCueEntry.scenery`, or the tracked
+ * hatch where it changes nothing but something is tracked into it; a press opens `CueSceneryEditor`
+ * (Cue properties' own `SceneryEditor`, with times) at the cell, so a cue's scenery is edited without
+ * opening its card. It is no `cell` — one cue's list is not a value a marquee spreads — and it
+ * follows the lock as the value cells do: locked, a press asks to unlock (or is disabled with the
+ * reason where the lock is not the operator's), and an editor open when the show locks closes.
+ *
  * **Blank means unsettable; an em-dash means empty but settable.** Follow and Notes draw the dash
  * because a marquee can reach them and Set will write them; a read-out (Book, Layers, FX) and a
  * snap cue's Curve draw nothing at all, because there is no cell there to select. One glyph for
@@ -143,12 +155,39 @@ export function CueSheet({
   onReorder,
 }: CueSheetProps) {
   const [patchCue] = usePatchProjectCueMutation()
+  const { data: elements } = useStageElementListQuery(projectId)
+  const elementsByUuid = useMemo(() => (elements == null ? null : new Map(elements.map((e) => [e.uuid, e]))), [elements])
+  /**
+   * The cues something is tracked *into* — the stack's set, or an earlier cue's own change — for the
+   * Scenery column's hatch: a cue that changes nothing reads *tracked* only where there is something
+   * to track, and an em-dash (empty, but the editor will set it) where the stack moves nothing above
+   * it. Scenery tracks from the top of the list, as the desk's `trackedSceneryAt` folds it.
+   */
+  const tracksScenery = useMemo(() => {
+    const out = new Set<number>()
+    let above = (stack.scenery?.length ?? 0) > 0
+    for (const c of stack.cues) {
+      if (c.cueType === 'MARKER') continue
+      if (above) out.add(c.id)
+      if ((c.scenery?.length ?? 0) > 0) above = true
+    }
+    return out
+  }, [stack.cues, stack.scenery])
+  /** The cue whose scenery editor is open, and the cell it opened from. */
+  const [sceneryCueId, setSceneryCueId] = useState<number | null>(null)
+  const sceneryAnchorRef = useRef<HTMLElement | null>(null)
+  // The GO that re-locks the show forgets the open editor rather than holding it for the unlock.
+  useEffect(() => {
+    if (locked) setSceneryCueId(null)
+  }, [locked])
   const patch = useCallback(
     (cueId: number, body: Record<string, unknown>) => {
       patchCue({ projectId, cueId, ...body }).unwrap().catch(ignoreReportedError)
     },
     [patchCue, projectId],
   )
+
+  const [unlockAsked, setUnlockAsked] = useState(false)
 
   const rows = useMemo<CueSheetRow[]>(
     () =>
@@ -359,6 +398,48 @@ export function CueSheet({
           ) : null,
       },
       {
+        key: 'scenery',
+        label: 'Scenery',
+        width: '196px',
+        value: () => undefined,
+        display: (row) => {
+          // A MARKER is never live, so it has no scenery: blank, as every unsettable cell is.
+          if (row.cue.cueType === 'MARKER') return null
+          const lines = cueSceneryLines(row.cue.scenery, elementsByUuid)
+          const said = lines.join(' · ')
+          const face =
+            lines.length > 0 ? (
+              <span className="truncate text-[11px] text-foreground">{said}</span>
+            ) : tracksScenery.has(row.cue.id) ? (
+              <span className={cn('rounded px-1.5 text-[10px] leading-4 text-muted-foreground', TRACKED_HATCH_CLASS)}>tracked</span>
+            ) : (
+              <span className="text-xs text-muted-foreground/60">—</span>
+            )
+          const what = lines.length > 0 ? said : tracksScenery.has(row.cue.id) ? 'Changes nothing — its scenery is tracked' : 'Changes no scenery'
+          return (
+            <ReadOutButton
+              data-scenery-cue={row.cue.id}
+              // Locked and not the operator's to lift: legible but inert, with the reason.
+              disabled={locked && onRequestUnlock == null}
+              title={locked ? `${what} — ${LOCKED_REASON}` : `${what} — edit the scenery this cue changes`}
+              aria-label={`Scenery of ${cueRowName(row)}: ${what}`}
+              onClick={(e) => {
+                // **A refused edit asks to unlock**, the sheet's rule for every gesture the lock refuses.
+                if (locked) {
+                  setUnlockAsked(true)
+                  return
+                }
+                sceneryAnchorRef.current = e.currentTarget
+                setSceneryCueId(row.cue.id)
+              }}
+            >
+              {lines.length > 0 && <Blinds className="size-3 shrink-0" />}
+              {face}
+            </ReadOutButton>
+          )
+        },
+      },
+      {
         key: 'notes',
         label: 'Notes',
         kind: 'notes',
@@ -388,7 +469,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeCueId, locationByCue, onOpenBook, onOpenCue, patch, standbyCueId],
+    [activeCueId, elementsByUuid, locationByCue, locked, onOpenBook, onOpenCue, onRequestUnlock, patch, standbyCueId, tracksScenery],
   )
 
   const copy = useCallback(
@@ -412,7 +493,6 @@ export function CueSheet({
    * backend would refuse the write anyway — see `ShowPage`), so the inert case keeps the disabled
    * buttons and their reason, which is the honest answer there.
    */
-  const [unlockAsked, setUnlockAsked] = useState(false)
   const askToUnlock = useCallback(() => setUnlockAsked(true), [])
   /** The verbs' half: a press, so there is no key to weigh. */
   const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
@@ -649,6 +729,14 @@ export function CueSheet({
             )
           },
         }}
+      />
+      <CueSceneryEditor
+        projectId={projectId}
+        // Closed by the lock as well as by its own dismissal: every edit on this sheet is an
+        // unlocked gesture, and the GO that re-locks the show must not leave one open.
+        cue={locked || sceneryCueId == null ? null : (stack.cues.find((c) => c.id === sceneryCueId) ?? null)}
+        anchorRef={sceneryAnchorRef}
+        onClose={() => setSceneryCueId(null)}
       />
       <AlertDialog open={unlockAsked} onOpenChange={setUnlockAsked}>
         <AlertDialogContent>

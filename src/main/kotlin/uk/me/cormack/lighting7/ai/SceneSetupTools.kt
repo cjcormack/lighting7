@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.blankElementFields
 import uk.me.cormack.lighting7.routes.seatResolves
 import uk.me.cormack.lighting7.routes.seatingOf
+import uk.me.cormack.lighting7.routes.sceneryOwnersChanged
 import uk.me.cormack.lighting7.routes.stageElementsOf
 import uk.me.cormack.lighting7.routes.stageViewpointsOf
 import uk.me.cormack.lighting7.routes.store
@@ -107,6 +108,7 @@ internal class SceneSetupTools(private val state: State) {
             problems += "nothing to change: send template, elements, viewpoints, removeElements or removeViewpoints"
         }
 
+        var swept = 0
         val plan = transaction(state.database) {
             val stored = stageElementsOf(project).associateBy { it.name }
             val storedViews = stageViewpointsOf(project).associateBy { it.name }
@@ -192,7 +194,7 @@ internal class SceneSetupTools(private val state: State) {
             for (name in removeViewpoints) storedViews[name]?.delete()
             for (name in removeElements) {
                 val element = stored[name] ?: continue
-                deleteSceneryForElements(listOf(element.id))
+                swept += deleteSceneryForElements(listOf(element.id))
                 element.delete()
             }
             Triple(written.size, viewWrites.size, true)
@@ -202,6 +204,7 @@ internal class SceneSetupTools(private val state: State) {
         if (wrote) {
             if (elementsSet > 0 || removeElements.isNotEmpty()) state.show.fixtures.stageElementListChanged()
             if (viewpointsSet > 0 || removeViewpoints.isNotEmpty()) state.show.fixtures.stageViewpointListChanged()
+            if (swept > 0) sceneryOwnersChanged(state)
         }
         return success(
             "Scene ${if (dryRun) "checked" else "updated"}: $elementsSet element(s) and $viewpointsSet viewpoint(s) set, " +

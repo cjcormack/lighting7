@@ -97,19 +97,21 @@ internal fun Route.routeApiRestProjectStageScene(state: State) {
 
     delete<ProjectStageElementResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
+            var swept = 0
             val outcome = transaction(state.database) {
                 val element = DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }
                     ?: return@transaction ElementWrite.NotFound
                 val views = seatViewsOf(project, element.uuid)
                 if (views.isNotEmpty() && !resource.force) return@transaction ElementWrite.InUse(views)
                 // Its scenery changes go with it, as a group's busk-rig tiles go with the group.
-                deleteSceneryForElements(listOf(element.id))
+                swept = deleteSceneryForElements(listOf(element.id))
                 element.delete()
                 ElementWrite.Deleted
             }
             when (outcome) {
                 ElementWrite.Deleted -> {
                     state.show.fixtures.stageElementListChanged()
+                    if (swept > 0) sceneryOwnersChanged(state)
                     call.respond(HttpStatusCode.NoContent)
                 }
                 else -> respondElementWrite(outcome, HttpStatusCode.NoContent)

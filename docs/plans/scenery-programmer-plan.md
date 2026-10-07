@@ -436,6 +436,15 @@ branch before its PR merges.
     - blank on a MARKER, and inert under the lock, where a refused edit asks to unlock.
 
   `StackDetail` gains *Stack settings…*, shown where `ShowOverview` shows it.
+
+  *Session 5 amendment:* where a cue changes nothing, the cell draws the hatch (*tracked*) only when
+  something is tracked into it — the stack's set or an earlier cue's change — and the sheet's em-dash
+  otherwise, since the sheet's rule is that an em-dash marks a cell that is empty but settable. A
+  line on the cue's own fade names no clock (*Moon → in*, the mock-ups' copy), and names its element
+  from the scene, leaving out one the scene has lost. The editor is one `CueSceneryEditor`
+  (`components/scenery/`), shared with the Prompt Book's *Scenery…*, anchored at the pressed cell —
+  one surface for the sheet, as the Stage popover is one for the stage — headed by what the cue
+  tracks. *Stack settings…* mounts the stack form in place through session 4's `OwnerEditor`.
 - **The Prompt Book (D14):**
     - `ScriptViewer`'s margin marker draws a `Blinds` glyph (`size-3`) when its cue has changes, and
       a tap opens that cue's card;
@@ -447,6 +456,26 @@ branch before its PR merges.
 
   If the book's cue list lacks `scenery`, the stack's cue DTO gains it. That is the session's only
   backend change.
+
+  *Session 5 amendment:* it lacked it, so `CueStackCueEntry.scenery` is the cue's **own** rows
+  (`@EncodeDefault(ALWAYS)`, one batched query per stack, `cueSceneryByCue`; no stored or synced shape
+  changed). The DTO change brought a second, smaller one: a cue scenery write announced only the cue
+  list, so every one — the `PUT`, the AI's `set_scenery` on a cue, a Record or an Update that wrote
+  scenery — now fires `cueStackListChanged` too, and the client's mutations invalidate
+  `CueStackList`, or another window's column and book would not have followed; and an element delete
+  that sweeps scenery (REST, or `set_scene`'s `removeElements`) announces the cue, stack and Look
+  lists, which it never did — a list naming the gone element would have had every whole-list `PUT`
+  from its editor refused (found in review). *On GO* names moves
+  as a DSM calls them — *close*, *draw*, *in*, *out*, *to 40%*, and *appears* / *hides* for a
+  visibility flip — each with its time where the GO takes one, and compares each piece with its base
+  filled in on both sides. Its hook (`useOnGoScenery`) also **refetches the shared Next GO preview**
+  when the live pieces' targets or the cue on deck's own changes have held still for 250 ms: the
+  preview is keyed only on which cue is on deck (the stage-vis doc's known limit), and a line naming
+  moves could not lag an edit made in the book's own *Scenery…*. The glyph's tap expands the card,
+  slides the drawer in on narrow and scrolls the card into view; the card lists the lines on its
+  collapsed face as well as its open one, and says nothing on a cue with no scenery (the mock-up's
+  *no scenery* would sit on most of a show's rows). The show-mode doc and `frontend/CLAUDE.md` had no
+  Prompt Book section, so each gained one on scenery in the cue table and the book.
 - **Tests:** the column's read-out, blank and locked arms; the On GO comparison (moving, unchanged,
   appearing, hiding); the glyph's presence and its tap; the dot in drawer mode.
 - **Docs:** `frontend/docs/show-mode-engineering.md` (the column and the book);

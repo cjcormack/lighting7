@@ -31,6 +31,8 @@ interface CueCardBodyProps {
   headerTrailing?: ReactNode
   /** Extra content pinned to the foot of the card (book: Edit cue / Set next / anchor controls). */
   footer?: ReactNode
+  /** Under the cue's identity and position line, above the Stage / Details toggle — the Prompt Book's scenery lines. */
+  afterIdentity?: ReactNode
   /** When set, the Q/name/position area becomes a click target (book: scroll to the cue). */
   onBodyClick?: () => void
   /** cur-only: 0..1 fade-in progress; drives the amber fade bar + FADING badge. */
@@ -70,6 +72,7 @@ export function CueCardBody({
   headerLabel,
   headerTrailing,
   footer,
+  afterIdentity,
   onBodyClick,
   fadeProgress,
   fadeRemainMs,
@@ -260,6 +263,8 @@ export function CueCardBody({
               </div>
             )}
           </div>
+
+          {afterIdentity}
 
           {/* Stage / Details toggle */}
           <div

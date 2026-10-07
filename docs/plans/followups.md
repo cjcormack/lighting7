@@ -128,6 +128,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SCENERY-MIDI-TARGET`](#fu-scenery-midi-target) | Trigger | Stage | an operator wants a fader or encoder to ride a tab or a flown piece |
 | [`FU-SCENERY-DRIVEN-BY`](#fu-scenery-driven-by) | Trigger | Stage | a venue's tabs or flys run on a DMX-controlled track the desk patches |
 | [`FU-SCENERY-STAGE-HANDLES`](#fu-scenery-stage-handles) | Trigger | Stage | the Stage popover feels indirect on the rig |
+| [`FU-SCENERY-FLY-DEPT`](#fu-scenery-fly-dept) | Trigger | Show | fly cues are called separately from LX |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2448,6 +2449,26 @@ through `useLivePush` exactly as the popover's slider does (same 33 ms floor, sa
 must stay a drag and not orbit — the handles take the pointer as `RegionEditHandles` do
 (`onHandlePress` turning the camera's controls off) — and the hit order stays fixture, rigging, then
 the piece. Orthographic sections (Front, Side) are where a trim drag reads best; a plan has no height.
+
+### `FU-SCENERY-FLY-DEPT`
+
+**The Prompt Book marks a cue that moves scenery, but has no fly department** · Trigger · scenery-programmer plan session 5, 2026-10-07
+
+Since session 5 of the scenery-programmer plan the Prompt Book puts scenery on the page (D14): a
+`Blinds` glyph beside the margin marker of a cue whose own changes move something
+(`promptbook/AnchorOverlay.tsx`), the changes listed on its rail card, and an *On GO* line naming the
+next GO's moves. Fly and LX cues stay one model — a cue moves scenery and lights alike, and a stack
+whose cues change only scenery already *is* a fly stack — so the book draws one cue lane, one marker
+colour language (live, next, standby, done) and one call per marker. Chris chose the glyph over a
+department of its own (§10, *A fly department in the book?*). **Trigger**: fly cues are called
+separately from LX — a show whose DSM gives *Fly 3 GO* apart from *LX 14 GO*, so one lane reads two
+calls as one, or a fly stack's markers are lost among the LX markers. **Then**: let a stack say it
+is a fly stack (a `department` on `cue_stacks`, portable, so a sync DTO field and a round-trip
+fixture value), and have the book draw that stack's markers as **FQ** in a colour of their own, in a
+lane of their own beside the LX one, with the rail's cards grouped or tagged to match and *On GO*
+naming which department's GO it describes. The glyph stays for an LX cue that also moves something.
+The transport question — one GO for both, or a GO per department — is the larger half, and the
+reason this waits for a show that needs it.
 
 ## Completed
 
