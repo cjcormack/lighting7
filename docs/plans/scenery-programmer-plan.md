@@ -2,8 +2,9 @@
 
 > **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
 > backend) shipped the same day (`32ce090a`), session 2 (`SceneryControl` and the rail's
-> Scenery band, frontend) the same day (`95fe24e4`), and session 3 (Record, Include and Update,
-> backend + frontend) the same day (`1e83f790`); sessions 4–5 to come.** Chris approved the design on
+> Scenery band, frontend) the same day (`95fe24e4`), session 3 (Record, Include and Update,
+> backend + frontend) the same day (`1e83f790`), and session 4 (the Stage view and the Positions
+> plan, backend + frontend) the same day (`a68e3a73`); session 5 to come.** Chris approved the design on
 > 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
@@ -371,7 +372,7 @@ branch before its PR merges.
 - **Docs:** `docs/lighting-composition-model.md` §"Record" and §"Scenery — beside the layers";
   `docs/cue-stacks-engineering.md` §"Scenery".
 
-### Session 4 — the Stage view and the Positions plan (backend + frontend)
+### ~~Session 4 — the Stage view and the Positions plan (backend + frontend)~~ — done, `a68e3a73`
 
 - **The read (D11):** `GET …/stage-elements/{eid}/scenery`.
 - **Clicking a piece (D11):** `Stage3D`'s scene elements take a click with Edit off in every
