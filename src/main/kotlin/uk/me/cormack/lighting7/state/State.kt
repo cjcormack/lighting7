@@ -735,6 +735,18 @@ class State(val config: ApplicationConfig) {
     val sceneryService: SceneryService by lazy { SceneryService(this) }
 
     /**
+     * The programmer's own scenery (scenery-programmer plan D1): what the operator's hands hold,
+     * the resolver's top tier — `programmer.sceneryState`. Runtime only and project-scoped: attached
+     * to the current project at start and again by the collector below, which drops it; Clear
+     * releases it on the Clear fade. See [ProgrammerScenery].
+     */
+    val programmerScenery: ProgrammerScenery by lazy {
+        ProgrammerScenery { projectId ->
+            transaction(database) { DaoProject.findById(projectId)?.let(::sceneryElementsOf).orEmpty() }
+        }
+    }
+
+    /**
      * The desk's one-shot effects (stage-view plan session 9): the arm, every fire, the spent tubes
      * and the cue events a GO schedules — `effects.armed`, `effects.fired`, `effects.skipped`.
      * Re-attached to the new show on a switch, which disarms; see [EffectsService].
@@ -928,6 +940,7 @@ class State(val config: ApplicationConfig) {
         surfaceFeedbackPublisher.start(GlobalScope)
         surfaceInputRouter.start(GlobalScope)
         attachBindingHealthListener()
+        programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
         sceneryService.attach(show, GlobalScope)
         effectsService.attach(show)
         // Re-attach the feedback publisher to the new show's fixture listener on project
@@ -951,7 +964,9 @@ class State(val config: ApplicationConfig) {
                 handState.drop()
                 surfaceFeedbackPublisher.onProjectChanged()
                 attachBindingHealthListener()
-                // A live cue belongs to the show being left; the new one starts with its base.
+                // A live cue belongs to the show being left; the new one starts with its base. The
+                // programmer's scenery names the old project's elements, so it goes first.
+                programmerScenery.attach(runCatching { projectManager.currentProject.id.value }.getOrNull())
                 sceneryService.attach(projectManager.show, GlobalScope)
                 // The arm drops on a project switch: the new show's cannons start disarmed, its tubes
                 // are read afresh, and nothing the old show scheduled fires (stage-view plan session 9).

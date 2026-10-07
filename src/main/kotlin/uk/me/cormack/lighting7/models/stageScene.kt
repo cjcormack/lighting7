@@ -121,6 +121,8 @@ data class DrapeParams(
     val role: DrapeRole,
     val operation: DrapeOperation? = null,
     override val states: ElementStates? = null,
+    /** A drawn or flown drape's full travel, in seconds ([elementTravelS]); null snaps. */
+    val travelS: Double? = null,
 ) : ElementParams
 
 @Serializable
@@ -163,7 +165,25 @@ data class ObjectParams(
     /** A flown piece: it may carry `trimM`. */
     val flies: Boolean = false,
     override val states: ElementStates? = null,
+    /** A flown piece's full travel, in seconds ([elementTravelS]); null snaps. */
+    val travelS: Double? = null,
 ) : ElementParams
+
+/** The fewest and most seconds a piece's full travel may take (scenery-programmer plan D6). */
+const val MIN_TRAVEL_S = 0.1
+const val MAX_TRAVEL_S = 600.0
+
+/**
+ * How long [params]' piece takes to travel its whole way — a drawn drape closed to drawn, a flown
+ * piece in to out — or null where it has no travel or none is set (scenery-programmer plan D6).
+ * Every move not on a cue's own clock runs at it, scaled by the share of the travel moved
+ * (`SceneryService.durationFor`); with none the move snaps. `visible` never travels.
+ */
+fun elementTravelS(params: ElementParams?): Double? = when (params) {
+    is DrapeParams -> params.travelS?.takeIf { params.operation == DrapeOperation.DRAW || params.operation == DrapeOperation.FLY }
+    is ObjectParams -> params.travelS?.takeIf { params.flies }
+    else -> null
+}
 
 @Suppress("UNCHECKED_CAST")
 private fun serializerFor(kind: StageElementKind): KSerializer<ElementParams> = when (kind) {
@@ -371,6 +391,8 @@ fun parseElementParams(
     val before = problems.size
     val r = ParamReader(obj, where, problems)
     val statesObj = r.obj("states")
+    // Read for every kind so a misplaced one is refused by name below, not as an unknown field.
+    val travelS = r.number("travelS", MIN_TRAVEL_S, MAX_TRAVEL_S, unit = "seconds")
     val params: ElementParams? = when (kind) {
         StageElementKind.ROOM -> {
             val omit = r.array("omit")?.mapIndexedNotNull { i, e ->
@@ -475,16 +497,22 @@ fun parseElementParams(
     if (states?.trimM != null && !flies) {
         problems += "$where.states.trimM is a flown piece's (an OBJECT with flies, or a DRAPE with operation FLY)"
     }
+    val travels = flies || (params as? DrapeParams)?.operation == DrapeOperation.DRAW
+    if (travelS != null && params != null && !travels) {
+        problems += "$where.travelS is a moving piece's (a DRAPE with operation DRAW or FLY, or an OBJECT with flies); this $kind${
+            (params as? DrapeParams)?.let { " with operation ${it.operation ?: DrapeOperation.DEAD}" }.orEmpty()
+        } does not travel"
+    }
     if (problems.size > before || params == null) return null
     val kept = states?.takeIf { it.visible != null || it.open != null || it.trimM != null }
     return when (params) {
         is RoomParams -> params.copy(states = kept)
         is ProsceniumParams -> params.copy(states = kept)
         is FlatParams -> params.copy(states = kept)
-        is DrapeParams -> params.copy(states = kept)
+        is DrapeParams -> params.copy(states = kept, travelS = travelS)
         is PlatformParams -> params.copy(states = kept)
         is SeatingParams -> params.copy(states = kept)
-        is ObjectParams -> params.copy(states = kept)
+        is ObjectParams -> params.copy(states = kept, travelS = travelS)
     }
 }
 

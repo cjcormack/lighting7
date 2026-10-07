@@ -28,9 +28,11 @@ import java.util.UUID
 // A **scenery change** is an element and the states it takes — `visible`, a drawn drape's `open`, a
 // flown piece's `trimM` — attached to one of three owners: a cue (moved on GO, on its own clock),
 // a cue stack (its *set*: held while the stack is live) or a Look (shown while the Look is live).
-// Not a template (D11: a template names no targets of its own), never captured by Record (D13), and
-// not a virtual DMX fixture (D12): nothing here reaches the composition pipeline. How the changes
-// resolve into what the stage shows is `show/SceneryResolver.kt`.
+// Not a template (D11: a template names no targets of its own), and not a virtual DMX fixture (D12):
+// nothing here reaches the composition pipeline. Record does not capture it yet (D13, which the
+// scenery-programmer plan's D7 narrows in its session 3). Above all three sits the programmer's own
+// scenery (`state/ProgrammerScenery.kt`, runtime only). How the changes resolve into what the stage
+// shows is `show/SceneryResolver.kt`.
 //
 // One row per (owner, element): an owner says one thing about each element. The element is a
 // foreign key here and a uuid on the wire and in sync; deleting an element sweeps its rows
@@ -297,7 +299,13 @@ fun parseToolSceneryList(
 
 private val TOOL_ITEM_KEYS = setOf("element", "visible", "open", "trimM", "transitionSeconds")
 
-private fun parseSceneryState(
+/**
+ * One element's state document ([obj]) checked against [element]'s kind, every problem at once:
+ * `open` only on a drawn drape, `trimM` only on a flown piece, `visible` on anything, and at least
+ * one of them. Null with [problems] grown when refused. The owners' lists and the programmer's
+ * scenery ([uk.me.cormack.lighting7.state.ProgrammerScenery]) all write through here.
+ */
+fun parseSceneryState(
     obj: JsonObject,
     element: SceneryElementInfo?,
     where: String,

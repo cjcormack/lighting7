@@ -401,6 +401,18 @@ Three things about the shape:
 - **Pose and size default to 0 and are omitted then**, so a seating (whose size comes from its rows)
   carries no `widthM` / `depthM` / `heightM` at all.
 
+**A params key added later needs no bump**, because of the first point. `travelS` (scenery-programmer
+plan D6, P2; written at v22) is an optional key on a `DRAW`/`FLY` drape's and a flown object's params —
+the seconds for the piece's full travel. Absent it is omitted, so a scene without one exports as before;
+an older desk stores the params it receives verbatim, decodes them with `ignoreUnknownKeys` and so
+keeps a `travelS` it does not read, and writes it back unchanged on its next export. It cannot
+*edit* such an element, though: its own write boundary (`parseElementParams`) refuses the key it does
+not know (`unknown field 'travelS'`), from its form and its `set_scene` alike, until it is updated —
+mixed-version editing, not sync. It is portable —
+how long the venue's tabs take to draw is the venue's — and `RichProjectFixture`'s house tabs carry
+one, so the round trip and the clone test it. The programmer's scenery (`state/ProgrammerScenery.kt`)
+is runtime only and never reaches an archive.
+
 **It bumped `formatVersion`** by the sharp-edge rule: a v17 reader ignores both folders, imports every
 project with no scene, and its next wipe-then-export push writes none back — deleting every peer's
 venue. `minReader` stays at 5: both folders read as empty when missing, so every older archive

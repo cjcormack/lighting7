@@ -232,4 +232,46 @@ class StageSceneTest {
         assertTrue(check(seat.copy(seatElementUuid = java.util.UUID.randomUUID())).any { "not a seating element" in it })
         assertTrue(check(seat.copy(eye = StagePoint(0.0, 0.0, 1.0))).any { "leave eye out" in it })
     }
+
+    /** `travelS` (scenery-programmer plan D6): a moving piece's only, refused by name elsewhere. */
+    @Test
+    fun `travelS is a drawn or flown piece's, and refused by name on anything that does not travel`() {
+        val (draw, drawProblems) = parse(StageElementKind.DRAPE, """{"role":"TABS","operation":"DRAW","travelS":4}""")
+        assertEquals(emptyList(), drawProblems)
+        assertEquals(4.0, assertIs<DrapeParams>(draw).travelS)
+        assertEquals(4.0, elementTravelS(draw))
+        assertEquals("""{"operation":"DRAW","role":"TABS","travelS":4.0}""", encodeElementParams(StageElementKind.DRAPE, draw))
+
+        val (fly, flyProblems) = parse(StageElementKind.DRAPE, """{"role":"BACKCLOTH","operation":"FLY","travelS":12.5}""")
+        assertEquals(emptyList(), flyProblems)
+        assertEquals(12.5, elementTravelS(fly))
+        val (moon, moonProblems) = parse(StageElementKind.OBJECT, """{"shape":"DISC","flies":true,"travelS":8}""")
+        assertEquals(emptyList(), moonProblems)
+        assertEquals(8.0, assertIs<ObjectParams>(moon).travelS)
+
+        val (dead, deadProblems) = parse(StageElementKind.DRAPE, """{"role":"LEG","operation":"DEAD","travelS":4}""")
+        assertNull(dead)
+        assertTrue(deadProblems.single().startsWith("params.travelS is a moving piece's"), deadProblems.toString())
+        assertTrue("this DRAPE with operation DEAD does not travel" in deadProblems.single(), deadProblems.toString())
+        val (_, unset) = parse(StageElementKind.DRAPE, """{"role":"LEG","travelS":4}""")
+        assertTrue("operation DEAD does not travel" in unset.single(), unset.toString())
+
+        val (flat, flatProblems) = parse(StageElementKind.FLAT, """{"travelS":4}""")
+        assertNull(flat)
+        assertTrue("this FLAT does not travel" in flatProblems.single(), flatProblems.toString())
+        assertTrue(flatProblems.none { "unknown field" in it }, "named, not an unknown field: $flatProblems")
+        val (_, grounded) = parse(StageElementKind.OBJECT, """{"shape":"BOX","travelS":4}""")
+        assertTrue("this OBJECT does not travel" in grounded.single(), grounded.toString())
+
+        // Every problem at once: the range and the rest of the document together.
+        val (_, many) = parse(StageElementKind.DRAPE, """{"role":"TABS","operation":"DRAW","travelS":0.05,"states":{"trimM":2}}""")
+        assertTrue(many.any { "travelS must be between 0.1 and 600.0 seconds" in it }, many.toString())
+        assertTrue(many.any { "states.trimM is a flown piece's" in it }, many.toString())
+
+        // An older document without it reads as no travel, and one with it reads back whole.
+        assertNull(elementTravelS(readElementParams(StageElementKind.DRAPE, """{"operation":"DRAW","role":"TABS"}""")))
+        assertEquals(draw, readElementParams(StageElementKind.DRAPE, encodeElementParams(StageElementKind.DRAPE, draw)))
+        // A stored travel the piece no longer has (switched to DEAD) is ignored, not obeyed.
+        assertNull(elementTravelS(DrapeParams(DrapeRole.LEG, DrapeOperation.DEAD, travelS = 4.0)))
+    }
 }

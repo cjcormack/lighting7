@@ -218,7 +218,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
-| Programmer | `ProgrammerSocket.kt` | 11 | 9 | `handleProgrammer` | `setupProgrammerSubscriptions` |
+| Programmer | `ProgrammerSocket.kt` | 13 | 10 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
 | Scenery | `ScenerySocket.kt` | — | 1 | — | `setupScenerySubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
@@ -233,7 +233,7 @@ Broadcast, Cloud sync, Effects, Machine, Scenery and Stage render. Channel is th
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (49)
+## Client → Server (51)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -492,6 +492,18 @@ always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect pa
 | `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
 | `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
 | `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?`, `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.setScenery` | `elementUuid`, `state: {visible?, open?, trimM?}`, `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
+| `programmer.clearScenery` | `elementUuid?` (absent: everything held), `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
+
+**The programmer's scenery** (scenery-programmer plan D1): `setScenery` holds states on one scene
+element, merged over what it already holds, and `clearScenery` lets one go or all of them. A write is
+checked against the element's kind — `open` only on a DRAW drape, `trimM` only on a flown piece —
+and a refusal answers `programmer.error` naming every problem (`Scenery refused: state ('Moon').open
+is a drawn drape's …`). `fadeMs` above 0 is the move's clock; otherwise the piece moves at its own
+`travelS` (`docs/cue-stacks-engineering.md` §"Scenery"). A release's `fadeMs` is the clock it flies
+home on; Clear (`programmer.clearAll`) releases everything on its own. Both are **operator gestures
+of `programmer.set`'s tier** — nothing admin-only gains a WS command — so `FU-AUTH-WS-PER-MESSAGE`
+does not fire.
 
 `sourceGroup` is for clients that fan a group-scoped gesture out to member fixtures rather than
 sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a Highlight
@@ -520,7 +532,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (77)
+## Server → Client (78)
 
 ### Boot — `BootSocket.kt`
 
@@ -718,16 +730,29 @@ what keeps `MutableStateFlow`'s `equals` conflation from swallowing a repeated p
 
 | Message | Fields | Cadence |
 |---|---|---|
-| `scenery.state` | `projectId?: Int`, `elements: [{elementUuid, state, from, startedAt, elapsedMs, durationMs}]` | Connect snapshot + broadcast |
+| `scenery.state` | `projectId?: Int`, `elements: [{elementUuid, state, from, startedAt, elapsedMs, durationMs, source}]`, `staged?: [{elementUuid, state, from, elapsedMs, durationMs}]` | Connect snapshot + broadcast |
 
-The live scenery (stage-view plan session 8): every scene element a scenery change names, as the
+The live scenery (stage-view plan session 8): every scene element a scenery change names or the
+programmer holds, as the
 desk resolves it now (`state/SceneryService.kt`, `show/SceneryResolver.kt`) — what it is going to
 (`state`), what it is leaving (`from`, as drawn when the move started, so a retarget mid-move starts
 where the piece is), and the move between. Each state object holds only the states the element's
 kind takes: `visible`, a drawn drape's `open`, a flown piece's `trimM`. An element absent from the
 list shows its base. `StateFlow`-backed, so the subscription *is* the snapshot; there is no inbound
-message — scenery moves only with the records that own it (a GO, a stack stopping, a Look pressed,
-blind, an edit).
+message — scenery moves with the records that own it (a GO, a stack stopping, a Look pressed, blind,
+an edit) and with the programmer's own scenery, written on the programmer's socket.
+
+Two additions from the scenery-programmer plan (D4, D12), both ignorable — today's client
+(`api/sceneryApi.ts`'s `parseSceneryFrame`) reads neither, and draws exactly as before (P3):
+
+- **`source`** on every entry names what holds the piece: `{kind: base | set | cue | cueLook |
+  programmerLook | programmer, stackId?, cueId?, label?, lookId?, name?}` — the source of the
+  element's highest-tier state. Always sent, `base` included.
+- **`staged`** is present only while the programmer is **blind** and holds something that would move
+  a piece: each element whose state with both programmer tiers differs from live, moving from where
+  live (or an earlier staged move) has it, on the clock leaving Blind will give it. Absent — never
+  empty — otherwise. The Stage view's Output + Programmer and Programmer sources draw it; Output
+  draws `elements`.
 
 `startedAt` is an ISO instant, but a client animates from **`elapsedMs`** — how far into the move the
 desk was when *this* frame was sent, computed at send time so the connect snapshot is as fresh as a
@@ -853,6 +878,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | **Broadcast** — every tab, on `layersFlow` |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String` | Unicast reply |
+| `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
 
 `applied` is the same stack resolved: one entry per Look or template with every target it covers,
@@ -866,7 +892,12 @@ the pads. See
 [`lighting-composition-model.md`](lighting-composition-model.md) §"Applied state is resolved by the
 desk".
 
-The three broadcast frames are broadcast for the same reason: the programmer is shared, so a
+`programmer.sceneryState` lists every element the programmer holds, in the order first held, each
+state object holding only the states held. `elements` is always sent, empty included: an empty
+overlay is a real state, and must reach a client as "nothing held". What the stage then *shows* is
+`scenery.state`'s job, where a held element's entry names `source.kind: "programmer"`.
+
+The four broadcast frames are broadcast for the same reason: the programmer is shared, so a
 second tab reordering the stack or pressing Include must not leave the first showing a stale view.
 Without the `layersFlow` subscription, a mutation that moved no value pushed no `provenanceState`
 either, and other tabs kept a stale layer list indefinitely.

@@ -367,7 +367,8 @@ Three deliberate limits, all worth knowing before building UI on it:
 
 **Scenery is the exception to all three** (stage-view plan session 8): the response's `scenery` is
 the whole stage's scenery as it would resolve with this cue live — its stack's set and its cues
-tracked down to it, beside every other live stack and every live Look, programmer included — each
+tracked down to it, beside every other live stack and every live Look, programmer included (its
+Looks and its own scenery, unless it is blind) — each
 element with `from` (where it is drawn now) and the `durationMs` the GO would move it over. Unlike
 `channels` it is whole: an element absent shows its base. It comes from the same resolver the GO
 runs (`SceneryService.preview`), so a preview and the GO that follows cannot disagree.
@@ -378,8 +379,10 @@ A cue, a stack and a Look can each carry **scenery changes** — an element of t
 the states it takes (`visible`, a drawn drape's `open`, a flown piece's `trimM`) — in
 `cue_scenery`, `cue_stack_scenery` and `look_scenery` (`models/scenery.kt`; stage-view plan session 8,
 D11–D13). Scenery sits **beside** the composition model, not in it: nothing here is a DMX channel,
-Record never captures it, and a template never carries it. See `docs/lighting-composition-model.md`
-§"Scenery".
+Record does not capture it (yet — the scenery-programmer plan's D7, its session 3), and a template
+never carries it. Above the three owners sits the **programmer's own scenery** — what the operator's
+hands hold now (scenery-programmer plan D1). See `docs/lighting-composition-model.md`
+§"Scenery — beside the layers".
 
 **Scenery tracks; lighting does not.** A cue is a complete lighting state, but a tab closed at Q14
 stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state, highest last:
@@ -390,18 +393,37 @@ stays closed at Q15. `show/SceneryResolver.kt` resolves each element, per state,
    GO TO Q20 lands the set as if the list had been run. With two stacks live they fold in GO order,
    so the most recently GO'd wins — not the lighting resolver's database-id order;
 3. the Looks the live cues **layer** (enabled, `amount > 0`, not timed), in layer order;
-4. the Looks **live in the programmer** — pressed, or on a busk pad — in layer order, unless the
-   programmer is blind.
+4. the Looks **live in the programmer** — pressed, or on a busk pad — in layer order;
+5. the **programmer's own scenery** (`state/ProgrammerScenery.kt`, scenery-programmer plan D1, D2):
+   a sparse overlay, element → the states held and the fade they were moved on, one per desk,
+   runtime only. Written by `programmer.setScenery` / `programmer.clearScenery` on the programmer's
+   socket and by the AI's `move_scenery`; each write is checked against the element's kind with
+   `parseSceneryState` (`open` only on a DRAW drape, `trimM` only on a flown piece) and merged over
+   what the element already holds. Clear (`clearProgrammerCompletely`) lets it all go on the Clear's
+   fade, and State's project collector drops it on a switch.
 
 A state the element's kind no longer takes (a drape switched from DRAW) is ignored.
+
+**Blind** takes tiers 4 and 5 off stage: the live resolve leaves them out, and a second resolve that
+includes them is published as `staged` — only the elements whose state differs from live, and only
+while there is one (D12). Each staged entry moves from where live (or an earlier staged move) has the
+piece, on the clock leaving Blind will give it, so the Stage view's Output + Programmer and
+Programmer sources can draw the move the operator is rehearsing. Leaving Blind lands it.
+
+**Each entry names what holds it** (`source`, D4): the source of its highest-tier state —
+`base`, `set` (with the stack and its name), `cue` (stack, cue, label), `cueLook` (stack, Look and its
+name), `programmerLook` (Look and name) or `programmer` (`SceneryResolver.holderOf`).
 
 **The hook.** `state/SceneryService.kt` holds the result as a `StateFlow`, `scenery.state` on the
 socket. It recomputes on `activateCueInStack` (`onCueLive`) and `deactivateStack`
 (`onStackStopped`), so every GO path reports — REST, MIDI, busk, auto-advance — and on the AI's
 `apply_cue`, which bypasses the manager (`applyCue` calls `onCueApplied`; the cue stands in for its
 stack's live cue until the stack goes or stops, and `stop_cue` lets it go). It also follows the
-programmer's layer stack (`layersFlow`), blind, and every cue, stack, Look and element list change,
-so an edit anywhere moves the stage.
+programmer's layer stack (`layersFlow`), the programmer's scenery (`ProgrammerScenery.flow`), blind,
+and every cue, stack, Look and element list change, so an edit anywhere moves the stage. The elements
+resolved are those a stored change names, those the programmer holds, and those the last frame
+carried — so a piece only the programmer held flies home before it leaves the frame, which it does
+once landed on its base.
 
 A hook only queues: the recompute runs on the service's one worker thread, never inside the
 caller's transaction (a stack delete calls `deactivateStack` inside its own, and the pool is one
@@ -414,10 +436,22 @@ each move on their own cue's, and a second GO on a stack before the first's was 
 first cue's changes to land. The live table is the service's own, written by the hooks — not the
 manager's, which changes a stack's cue before `activateCueInStack` reaches `onCueLive`.
 
-**Clocks.** A change moves on its own `transition` (a cue's only; null follows the cue's fade) —
-**when it belongs to the cue just GO'd**. Everything else snaps: a stack stopping, a Look pressed, an
-edit, and GO TO landing a change an earlier cue made. A move's `from` is where the piece is drawn at
-that moment, so a retarget mid-move starts there.
+**Clocks** (`SceneryService.durationFor`, scenery-programmer plan D6). Per state that moved, the
+longest wins, each on the first clock that applies:
+
+1. a change of **the cue just GO'd** keeps its own `transition` (a cue's only; null follows the cue's
+   fade);
+2. a **programmer move** takes the operator's fade when it is above 0;
+3. a piece the programmer **let go on a fade** (Clear's, or a release that carried one) flies home on
+   it;
+4. **everything else** — a programmer move with no fade, a Look pressed, a set edit, a stack stopping,
+   GO TO landing a change an earlier cue made — runs at the element's own `travelS`, the seconds for
+   its whole travel (`docs/fixtures-engineering.md` §"The scene document"), scaled by the share of
+   it moved: `|Δopen|` for a drawn drape, `|ΔtrimM| / |out − in|` for a flown piece (in its Z, out
+   its base trim; a full travel when they are equal). `visible` never travels, and a piece with no
+   `travelS` snaps, as every such move did before.
+
+A move's `from` is where the piece is drawn at that moment, so a retarget mid-move starts there.
 
 **REST.** Whole-list `PUT` on `cues/{id}/scenery`, `cue-stacks/{id}/scenery` and
 `looks/{id}/scenery` (`routes/projectScenery.kt`), body `{scenery: [{elementUuid, state,

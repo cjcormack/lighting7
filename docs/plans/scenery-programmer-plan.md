@@ -1,7 +1,8 @@
 # Scenery across the desk — the programmer's hands, Record, the Stage popover and the book
 
-> **Document status: DRAFT — awaiting Chris's approval.** Chris approved the design on 2026-10-07 and
-> answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
+> **Document status: APPROVED, 2026-10-07 — session 1 (the programmer's scenery on the desk,
+> backend) shipped the same day (`32ce090a`); sessions 2–5 to come.** Chris approved the design on
+> 2026-10-07 and answered its questions the same day (§10). He set two conditions: stay consistent with the desk's
 > current design language, and take iPhone, iPad and desktop into account. D17 and §4 answer both.
 > The design record is [`scenery-programmer-design/INDEX.md`](scenery-programmer-design/INDEX.md).
 > The design document, with its mock-ups, is at
@@ -99,15 +100,31 @@ The plan adds three decisions of its own:
   `ProgrammerStore.clearAll` clears it with the same fade. A write is validated against the
   element's kind with `parseSceneryState` (`models/scenery.kt`), so `open` lands only on a `DRAW`
   drape and `trimM` only on a flown piece.
+  *Session 1 amendment:* `ProgrammerStore.clearAll` takes no fade, and `ProgrammerWriter.clearAll`
+  returns before reaching it when no value is held — exactly the case of a programmer holding only
+  scenery — so the overlay is cleared in `clearProgrammerCompletely` (`routes/programmer.kt`), the
+  one path behind `programmer.clearAll`, with the Clear's `fadeMs`. The
+  overlay lives on `State` (`state.programmerScenery`) beside `sceneryService`, attached to the
+  current project at start and by the project collector, rather than on the show.
 - **`show/SceneryResolver.kt`** gains a fifth input and tier, `Source.Programmer`, above
   `ProgrammerLook` (D2). `SceneryService` follows the overlay's flow beside `layersFlow`. While
   `programmerStore.blind` is set, the live resolve leaves out both programmer tiers, as it does
   today for Looks. A second resolve that includes them answers `staged`, but only when it differs
   from live (D12).
+  *Session 1 amendment:* the service resolved only elements a stored change names, so a piece only
+  the programmer held would have had no entry. It now resolves those a stored change names, those
+  the programmer holds, and those the last frame carried — so a released piece flies home before it
+  leaves the frame, which it does once landed on its base.
 - **Durations** (D6), in `durationFor`:
     - a cue row of the cue just GO'd keeps its own transition;
     - a programmer move uses its `fadeMs` when greater than 0, otherwise `travelS`;
     - everything else uses `travelS`.
+
+  *Session 1 amendment:* D1's "Clear empties it, on the Clear fade" needed a fourth arm the three
+  above do not give — a released piece's move home is sourced from a lower tier, so it would have run
+  at `travelS`. A release carrying a fade above 0 (Clear's, or `programmer.clearScenery`'s optional
+  `fadeMs`, which `move_scenery`'s `release` with `fadeSeconds` uses) is remembered by element and
+  read once by the next recompute: that move runs on it, unless a GO'd cue's own clock decides it.
   `travelS` is scaled by the share of travel moved: `|Δopen|` for a drape, and `|ΔtrimM| / |out − in|`
   for a flown piece, which is a full travel when in equals out. With no `travelS` the move snaps.
 - **Record** (D7). `ProgrammerRecording` gains `scenery`. A cue's tracked state comes from
@@ -125,7 +142,9 @@ The plan adds three decisions of its own:
 ### 3.3 The wire
 
 - **`programmer.setScenery {elementUuid, state, fadeMs?}`** and **`programmer.clearScenery
-  {elementUuid?}`** are inbound on `plugins/ProgrammerSocket.kt`. A refused write answers
+  {elementUuid?}`** are inbound on `plugins/ProgrammerSocket.kt`. (*Session 1 amendment:*
+  `clearScenery` also takes an optional `fadeMs`, the clock a released piece flies home on; both reply
+  `programmer.sceneryState`, since `handleProgrammer` answers every message.) A refused write answers
   `programmer.error` with the named problem. These are operator gestures of the same tier as
   `programmer.set`, so `FU-AUTH-WS-PER-MESSAGE` is not fired.
 - **`programmer.sceneryState {projectId, elements: [{elementUuid, state}]}`** is outbound and backed
@@ -190,7 +209,7 @@ changed, `npm run check` green where anything inside it changed, the engineering
 written, and its done-marker here: a one-line row with the session's commit SHA, added on the
 branch before its PR merges.
 
-### Session 1 — the programmer's scenery on the desk (backend)
+### ~~Session 1 — the programmer's scenery on the desk (backend)~~ — done, `32ce090a`
 
 - **The overlay (D1):** `state/ProgrammerScenery.kt`; the two inbound messages and the outbound
   `programmer.sceneryState` on `ProgrammerSocket`; `clearAll` and the project collector clear it.
@@ -237,8 +256,15 @@ branch before its PR merges.
 - **The chip (D17):** `ProgrammerActionBar` gains the Scenery chip. It opens the rail's tab when the
   rail is docked, and otherwise the same list through `EditorSurface`. Clear's confirmation counts
   held scenery.
+- **The element form's stale `travelS`** (*Session 1 amendment:* found in session 1's review): the
+  backend now refuses `travelS` on a piece that does not travel, and the Stage view's Edit form sends
+  `params` whole, so `withKindParam` (`components/stage/elementDraft.ts`) must drop `travelS` when a
+  drape stops being DRAW/FLY or an object stops flying — as it already drops a stale `states.open` /
+  `states.trimM` — or an element given a `travelS` through `set_scene` cannot be switched to DEAD from
+  the form. Session 4 adds the field itself.
 - **Tests:**
     - the control's presets and ranges for each kind, and its `useLivePush` release;
+    - `withKindParam` dropping `travelS` with the travel;
     - the tab's grouping, filters and scope arms;
     - the chip's two doors by width;
     - `SceneryEditor` keeping its draft over a refetch with the new control.
