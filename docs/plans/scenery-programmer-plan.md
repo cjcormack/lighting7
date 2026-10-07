@@ -208,7 +208,7 @@ changed, `npm run check` green where anything inside it changed, the engineering
 written, and its done-marker here: a one-line row with the session's commit SHA, added on the
 branch before its PR merges.
 
-### Session 1 — the programmer's scenery on the desk (backend)
+### ~~Session 1 — the programmer's scenery on the desk (backend)~~ — done, `32ce090a`
 
 - **The overlay (D1):** `state/ProgrammerScenery.kt`; the two inbound messages and the outbound
   `programmer.sceneryState` on `ProgrammerSocket`; `clearAll` and the project collector clear it.
