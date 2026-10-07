@@ -167,7 +167,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
 
     // v18: the scene document. The seating carries every non-default column (a yaw, a finish, a
     // hidden flag, a sort order); the platform links the thrust by uuid, so a clone must re-point
-    // it; the drape carries a state. Params go through the real encoder, as a write would.
+    // it; the drape carries a state and a travel time. Params go through the real encoder, as a write would.
     val stalls = DaoStageElement.new {
         this.project = project
         name = "Stalls"
@@ -207,7 +207,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         widthM = 5.6; depthM = 0.12; heightM = 3.1
         params = encodeElementParams(
             StageElementKind.DRAPE,
-            DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0)),
+            // travelS (scenery-programmer plan D6): an optional param, off its null default.
+            DrapeParams(DrapeRole.TABS, DrapeOperation.DRAW, ElementStates(open = 1.0), travelS = 4.5),
         )
     }
     DaoStageViewpoint.new {

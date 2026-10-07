@@ -21,6 +21,8 @@ import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackScenery
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
@@ -28,6 +30,8 @@ import uk.me.cormack.lighting7.models.DaoStageElement
 import uk.me.cormack.lighting7.models.DaoStageElements
 import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.models.MAX_SCENERY_TRANSITION
+import uk.me.cormack.lighting7.models.elementTravelS
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.decodeSceneryState
 import uk.me.cormack.lighting7.models.sceneryInfo
@@ -42,7 +46,9 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToLong
 
 private val logger = LoggerFactory.getLogger("SceneryService")
 
@@ -53,12 +59,15 @@ private val logger = LoggerFactory.getLogger("SceneryService")
  *
  * **Resolution is [SceneryResolver]'s**; this class feeds it the live desk — the stacks
  * [uk.me.cormack.lighting7.fx.CueStackManager] holds live, the cues the AI's `apply_cue` applied
- * beside them, the programmer's Look layers (unless the programmer is blind: blind is not on stage)
- * and the rows — and turns each recompute into a **transition** per element: the state it is
- * leaving ([Entry.from], as drawn at that moment, so a retarget mid-move starts where the piece
- * is), the state it is going to, a start and a duration. A move takes the transition of the change
- * that made it **when that change belongs to the cue just GO'd**; everything else — a stack
- * stopping, a Look pressed, an edit, GO TO landing a change an earlier cue made — snaps.
+ * beside them, the programmer's Look layers and its own scenery ([ProgrammerScenery]) — unless the
+ * programmer is blind: blind is not on stage, so those two are **staged** instead ([Frame.staged],
+ * scenery-programmer plan D12) — and the rows, and turns each recompute into a **transition** per
+ * element: the state it is leaving ([Entry.from], as drawn at that moment, so a retarget mid-move
+ * starts where the piece is), the state it is going to, a start and a duration ([durationFor]): a
+ * cue's own transition when the change belongs to the cue just GO'd, the operator's fade for a
+ * programmer move, and otherwise the piece's own `travelS` — a pressed Look, an edit, a stack
+ * stopping, GO TO landing an earlier cue's change — which a piece without one snaps (D6). Each entry
+ * names what holds it ([Entry.source], D4).
  *
  * Every hook returns at once and never throws into its caller: it updates the live table and queues
  * the recompute on one worker thread (§"Resolution" below for why), so a GO can neither fail nor
@@ -74,9 +83,34 @@ class SceneryService(private val state: State) {
         /** Wall clock, millis — the frame's `startedAt`, and its `elapsedMs` at send. */
         val startedAtMs: Long,
         val durationMs: Long,
+        /** What holds the piece there — the source of its highest-tier state (D4). */
+        val source: Holder = Holder.BASE,
     )
 
-    data class Frame(val projectId: Int?, val entries: List<Entry>)
+    /**
+     * What holds an element where it is, as the frame names it (D4): [kind] is `base`, `set`, `cue`,
+     * `cueLook`, `programmerLook` or `programmer`, with the ids and words that kind has — a set's
+     * stack and its name, a cue's stack, id and label, a Look's id and name.
+     */
+    data class Holder(
+        val kind: String,
+        val stackId: Int? = null,
+        val cueId: Int? = null,
+        val label: String? = null,
+        val lookId: Int? = null,
+        val name: String? = null,
+    ) {
+        companion object {
+            val BASE = Holder("base")
+        }
+    }
+
+    /**
+     * The live scenery, and — while the programmer is blind and holds something that would move a
+     * piece — [staged]: each such element as it would be on leaving Blind, moving from where live
+     * (or an earlier staged move) has it. Null, never empty, when Blind stages nothing (D12).
+     */
+    data class Frame(val projectId: Int?, val entries: List<Entry>, val staged: List<Entry>? = null)
 
     /** A preview's answer for one element: what the next GO would move it to, from where it is now. */
     data class PreviewEntry(
@@ -92,6 +126,7 @@ class SceneryService(private val state: State) {
 
     private var projectId: Int? = null
     private var entries: Map<UUID, Entry> = emptyMap()
+    private var staged: Map<UUID, Entry> = emptyMap()
     private var seq = 0L
     /** The cue each stack last went to by the stack manager's GOs, and when. */
     private val goes = HashMap<Int, Pair<Int, Long>>()
@@ -102,6 +137,7 @@ class SceneryService(private val state: State) {
 
     private var listenedFixtures: uk.me.cormack.lighting7.show.Fixtures? = null
     private var layersJob: Job? = null
+    private var overlayJob: Job? = null
 
     private val listener = object : FixturesChangeListener {
         override fun cueListChanged() = recompute()
@@ -113,9 +149,9 @@ class SceneryService(private val state: State) {
     // ─── Lifecycle ───────────────────────────────────────────────────────────────────────────
 
     /**
-     * Follow [show]: its list-change events (an edit anywhere moves the stage) and its programmer's
-     * layer stack. Called on start and again on every project switch, which also forgets the old
-     * show's live cues — they belong to a show that is gone.
+     * Follow [show]: its list-change events (an edit anywhere moves the stage), its programmer's
+     * layer stack and the programmer's own scenery. Called on start and again on every project
+     * switch, which also forgets the old show's live cues — they belong to a show that is gone.
      */
     fun attach(show: Show, scope: CoroutineScope) {
         synchronized(lock) {
@@ -126,15 +162,22 @@ class SceneryService(private val state: State) {
             applied.clear()
             pendingGos.clear()
             entries = emptyMap()
+            staged = emptyMap()
         }
         layersJob?.cancel()
         layersJob = show.programmerStore.layersFlow.onEach { recompute() }.launchIn(scope)
+        // The overlay is the State's, not the show's, so one subscription would do — but it is
+        // renewed with the layers' to keep the two following the same scope.
+        overlayJob?.cancel()
+        overlayJob = state.programmerScenery.flow.onEach { recompute() }.launchIn(scope)
         recompute()
     }
 
     fun close() {
         layersJob?.cancel()
         layersJob = null
+        overlayJob?.cancel()
+        overlayJob = null
         synchronized(lock) {
             listenedFixtures?.unregisterListener(listener)
             listenedFixtures = null
@@ -184,7 +227,7 @@ class SceneryService(private val state: State) {
         recompute()
     }
 
-    /** The programmer went blind or came back: its Looks leave or rejoin the stage. */
+    /** The programmer went blind or came back: its Looks and its scenery leave or rejoin the stage. */
     fun onBlindChanged() = recompute()
 
     // ─── Resolution ──────────────────────────────────────────────────────────────────────────
@@ -246,43 +289,83 @@ class SceneryService(private val state: State) {
 
     private fun recomputeNow() {
         try {
-            val (live, gos) = synchronized(lock) {
+            val (live, gos, keep) = synchronized(lock) {
                 val live = liveCues()
                 // A stack stopped, or let go of an applied cue, since its GO has nothing left to move.
                 val gos = pendingGos.filter { (stackId, cueId) -> live[stackId]?.first == cueId }
                 pendingGos.clear()
-                live to gos
+                Triple(live, gos, entries.keys + staged.keys)
             }
-            val input = load(live)
+            val (overlay, releases) = state.programmerScenery.readForResolve(takeReleases = true)
+            val input = load(live, overlay, keep)
             synchronized(lock) {
                 if (input == null) {
-                    publish(null, emptyMap())
+                    publish(null, emptyMap(), emptyMap())
                     return
                 }
                 val now = System.currentTimeMillis()
-                val resolved = SceneryResolver.resolve(input.elements, input.stacks, input.lookScenery, input.programmerLookIds)
+                val released = releases.mapNotNull { (uuid, fade) -> input.idByUuid[uuid]?.let { it to fade } }.toMap()
+                val liveResolved = SceneryResolver.resolve(
+                    input.elements, input.stacks, input.lookScenery,
+                    if (input.blind) emptyList() else input.programmerLookIds,
+                    if (input.blind) emptyList() else input.held,
+                )
+                val sameProject = projectId == input.projectId
+                val carried = if (sameProject) entries else emptyMap()
                 val next = LinkedHashMap<UUID, Entry>()
-                val carried = if (projectId == input.projectId) entries else emptyMap()
-                for (r in resolved.values.sortedBy { it.element.name.lowercase() }) {
-                    // An element no change named until now is drawn at its base.
-                    val prev = carried[r.element.uuid]
-                    val was = prev?.state ?: r.element.base
-                    next[r.element.uuid] = when {
-                        prev != null && prev.state == r.state -> prev.copy(elementName = r.element.name)
-                        else -> Entry(
-                            r.element.uuid, r.element.name, r.state,
-                            from = prev?.let { displayedAt(it, now) } ?: was,
-                            startedAtMs = now,
-                            durationMs = if (was == r.state) 0 else durationFor(r, was, gos),
-                        )
+                for (r in liveResolved.values.sortedBy { it.element.name.lowercase() }) {
+                    val entry = transition(r, carried[r.element.uuid], fallback = null, input, gos, released[r.element.id], now)
+                    // An element only the programmer ever held, let go and landed back on its base,
+                    // leaves the frame: absent and at its base draw the same.
+                    if (r.element.id !in input.controlled && entry.state == r.element.base && landed(entry, now)) continue
+                    next[r.element.uuid] = entry
+                }
+                val nextStaged = LinkedHashMap<UUID, Entry>()
+                if (input.blind && (input.programmerLookIds.isNotEmpty() || input.held.isNotEmpty())) {
+                    val carriedStaged = if (sameProject) staged else emptyMap()
+                    val full = SceneryResolver.resolve(input.elements, input.stacks, input.lookScenery, input.programmerLookIds, input.held)
+                    for (r in full.values.sortedBy { it.element.name.lowercase() }) {
+                        if (r.state == liveResolved[r.element.id]?.state) continue
+                        nextStaged[r.element.uuid] =
+                            transition(r, carriedStaged[r.element.uuid], fallback = next[r.element.uuid], input, emptyMap(), released[r.element.id], now)
                     }
                 }
-                publish(input.projectId, next)
+                publish(input.projectId, next, nextStaged)
             }
+            if (input != null) state.programmerScenery.forget(input.projectId, input.missingHeld)
         } catch (e: Exception) {
             logger.warn("scenery: recompute failed — {}", e.message)
         }
     }
+
+    /**
+     * [r] as an entry: [prev] carried when it is already going there (its name and holder
+     * refreshed), else a new move from where [prev] — or, with none, [fallback], or the element's
+     * base — is drawn now.
+     */
+    private fun transition(
+        r: SceneryResolver.Resolved,
+        prev: Entry?,
+        fallback: Entry?,
+        input: Input,
+        gos: Map<Int, Int>,
+        releasedFadeMs: Long?,
+        now: Long,
+    ): Entry {
+        val source = input.holder(SceneryResolver.holderOf(r))
+        if (prev != null && prev.state == r.state) return prev.copy(elementName = r.element.name, source = source)
+        val origin = prev ?: fallback
+        val was = origin?.state ?: r.element.base
+        return Entry(
+            r.element.uuid, r.element.name, r.state,
+            from = origin?.let { displayedAt(it, now) } ?: was,
+            startedAtMs = now,
+            durationMs = if (was == r.state) 0 else durationFor(r, was, gos, releasedFadeMs),
+            source = source,
+        )
+    }
+
+    private fun landed(entry: Entry, nowMs: Long) = nowMs - entry.startedAtMs >= entry.durationMs
 
     /**
      * What the stage's scenery would be if [cueId] of [stackId] went now, from where it is now —
@@ -294,9 +377,14 @@ class SceneryService(private val state: State) {
         val (live, current) = synchronized(lock) {
             liveCues().toMutableMap().also { it[stackId] = cueId to (seq + 1) } to entries
         }
-        val input = load(live) ?: return emptyList()
+        val input = load(live, state.programmerScenery.readForResolve(takeReleases = false).first, current.keys) ?: return emptyList()
         val now = System.currentTimeMillis()
-        val resolved = SceneryResolver.resolve(input.elements, input.stacks, input.lookScenery, input.programmerLookIds)
+        // The GO lands under whatever the programmer holds live; blind holds nothing live.
+        val resolved = SceneryResolver.resolve(
+            input.elements, input.stacks, input.lookScenery,
+            if (input.blind) emptyList() else input.programmerLookIds,
+            if (input.blind) emptyList() else input.held,
+        )
         return resolved.values.sortedBy { it.element.name.lowercase() }.map { r ->
             val prev = current[r.element.uuid]
             val was = prev?.state ?: r.element.base
@@ -306,10 +394,11 @@ class SceneryService(private val state: State) {
         }
     }
 
-    private fun publish(projectId: Int?, next: Map<UUID, Entry>) {
+    private fun publish(projectId: Int?, next: Map<UUID, Entry>, nextStaged: Map<UUID, Entry>) {
         this.projectId = projectId
         entries = next
-        _frame.value = Frame(projectId, next.values.toList())
+        staged = nextStaged
+        _frame.value = Frame(projectId, next.values.toList(), nextStaged.values.toList().ifEmpty { null })
     }
 
     /**
@@ -330,17 +419,53 @@ class SceneryService(private val state: State) {
         val elements: List<SceneryResolver.Element>,
         val stacks: List<SceneryResolver.LiveStack>,
         val lookScenery: Map<Int, List<SceneryResolver.Change>>,
+        /** The programmer's live Look layers — blind or not; a caller leaves them out for a live resolve under Blind. */
         val programmerLookIds: List<Int>,
-    )
+        /** The programmer's own scenery, in the order first held — likewise blind or not. */
+        val held: List<SceneryResolver.Held>,
+        val blind: Boolean,
+        /** Elements a stored change names or the programmer holds: the ones whose entry stays at their base. */
+        val controlled: Set<Int>,
+        val idByUuid: Map<UUID, Int>,
+        /** Held elements the project's scene no longer has. */
+        val missingHeld: List<UUID>,
+        val lookNames: Map<Int, String>,
+        val stackNames: Map<Int, String>,
+    ) {
+        fun holder(source: SceneryResolver.Source): Holder = when (source) {
+            SceneryResolver.Source.Base -> Holder.BASE
+            is SceneryResolver.Source.StackSet -> Holder("set", stackId = source.stackId, name = stackNames[source.stackId])
+            is SceneryResolver.Source.CueRow -> Holder("cue", stackId = source.stackId, cueId = source.cueId, label = source.cueLabel)
+            is SceneryResolver.Source.CueLook -> Holder("cueLook", stackId = source.stackId, lookId = source.lookId, name = lookNames[source.lookId])
+            is SceneryResolver.Source.ProgrammerLook -> Holder("programmerLook", lookId = source.lookId, name = lookNames[source.lookId])
+            is SceneryResolver.Source.Programmer -> Holder("programmer")
+        }
+    }
 
-    private fun load(live: Map<Int, Pair<Int, Long>>): Input? {
+    /**
+     * The desk's scenery inputs: [live] stacks, the programmer's [overlay] (when it is this
+     * project's), and the rows. Elements are those a change names, the programmer holds, or [keep]
+     * — an entry the last frame carried, so a piece the programmer let go flies home rather than
+     * vanishing from the frame mid-move.
+     */
+    private fun load(live: Map<Int, Pair<Int, Long>>, overlay: ProgrammerScenery.Snapshot, keep: Set<UUID>): Input? {
         val show = state.showOrNull ?: return null
         val project = runCatching { state.projectManager.currentProject }.getOrNull() ?: return null
-        val programmerLooks = if (show.programmerStore.blind) emptyList() else programmerLookIds(show.programmerStore.layers)
+        val store = show.programmerStore
+        val blind = store.blind
+        val programmerLooks = programmerLookIds(store.layers)
         return transaction(state.database) {
             val dao = DaoProject.findById(project.id) ?: return@transaction null
+            val heldByUuid = if (overlay.projectId == dao.id.value) overlay.elements else emptyMap()
             val all = DaoStageElement.find { DaoStageElements.project eq dao.id }.toList()
-            if (all.isEmpty()) return@transaction Input(dao.id.value, emptyList(), emptyList(), emptyMap(), emptyList())
+            val idByUuid = all.associate { it.uuid to it.id.value }
+            val missingHeld = heldByUuid.keys.filter { it !in idByUuid }
+            if (all.isEmpty()) {
+                return@transaction Input(
+                    dao.id.value, emptyList(), emptyList(), emptyMap(), emptyList(), emptyList(), blind,
+                    emptySet(), emptyMap(), missingHeld, emptyMap(), emptyMap(),
+                )
+            }
             val ids = all.map { it.id }
             // Only elements a scenery change names are under the show's control; the rest are their base.
             val named = (
@@ -348,18 +473,26 @@ class SceneryService(private val state: State) {
                     DaoCueStackSceneryRow.find { DaoCueStackScenery.element inList ids }.map { it.element.id.value } +
                     DaoLookSceneryRow.find { DaoLookScenery.element inList ids }.map { it.element.id.value }
                 ).toSet()
-            val elements = all.filter { it.id.value in named }.map { it.toSceneryElement() }
+            val held = heldByUuid.mapNotNull { (uuid, h) -> idByUuid[uuid]?.let { SceneryResolver.Held(it, h.state, h.fadeMs) } }
+            val controlled = named + held.map { it.elementId }
+            val elements = all.filter { it.id.value in controlled || it.uuid in keep }.map { it.toSceneryElement() }
 
             val stacks = live.mapNotNull { (stackId, cue) ->
                 val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == dao.id } ?: return@mapNotNull null
                 liveStack(stack, cue.first, cue.second)
             }
+            val stackNames = stacks.mapNotNull { s -> DaoCueStack.findById(s.stackId)?.let { s.stackId to it.name } }.toMap()
             val lookIds = (stacks.flatMap { it.layeredLookIds } + programmerLooks).toSet()
             val lookScenery = if (lookIds.isEmpty()) emptyMap() else
                 DaoLookSceneryRow.find { DaoLookScenery.look inList lookIds }
                     .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
                     .groupBy({ it.look.id.value }) { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
-            Input(dao.id.value, elements, stacks, lookScenery, programmerLooks)
+            val lookNames = if (lookScenery.isEmpty()) emptyMap() else
+                DaoLook.find { DaoLooks.id inList lookScenery.keys }.associate { it.id.value to it.name }
+            Input(
+                dao.id.value, elements, stacks, lookScenery, programmerLooks, held, blind,
+                controlled, idByUuid, missingHeld, lookNames, stackNames,
+            )
         }
     }
 
@@ -405,11 +538,22 @@ class SceneryService(private val state: State) {
                 .map { it.source.id }
 
         /**
-         * How long a move to [r] from [previous] takes: the transition of a change of a cue just GO'd
-         * ([gos], the cue by stack) that decided a state that moved, the longest if several did; else
-         * a snap.
+         * How long a move to [r] from [previous] takes (scenery-programmer plan D6), the longest of
+         * the states that moved, each on the first clock that applies:
+         *
+         * 1. a change of a cue just GO'd ([gos], the cue by stack) keeps its own transition;
+         * 2. a programmer move takes the operator's fade when above 0;
+         * 3. a piece the programmer let go on a fade ([releasedFadeMs], a Clear's) flies home on it;
+         * 4. anything else — a programmer move with no fade, a pressed Look, an edit, a stack
+         *    stopping, GO TO landing an earlier cue's change — takes the piece's `travelS` scaled by
+         *    the share of its travel moved ([travelMs]); a piece with none snaps.
          */
-        fun durationFor(r: SceneryResolver.Resolved, previous: ElementStates, gos: Map<Int, Int>): Long {
+        fun durationFor(
+            r: SceneryResolver.Resolved,
+            previous: ElementStates,
+            gos: Map<Int, Int>,
+            releasedFadeMs: Long? = null,
+        ): Long {
             val changed = buildSet {
                 if (r.state.visible != previous.visible) add("visible")
                 if (r.state.open != previous.open) add("open")
@@ -417,8 +561,44 @@ class SceneryService(private val state: State) {
             }
             return changed.maxOfOrNull { key ->
                 val src = r.sources[key]
-                if (src is SceneryResolver.Source.CueRow && gos[src.stackId] == src.cueId) src.transitionMs else 0L
+                when {
+                    src is SceneryResolver.Source.CueRow && gos[src.stackId] == src.cueId -> src.transitionMs
+                    src is SceneryResolver.Source.Programmer ->
+                        src.fadeMs?.takeIf { it > 0 } ?: travelMs(r.element, key, previous, r.state)
+                    else -> releasedFadeMs?.takeIf { it > 0 } ?: travelMs(r.element, key, previous, r.state)
+                }
             } ?: 0L
+        }
+
+        /**
+         * [element]'s `travelS` for the share of its travel a move of [key] from [from] to [to]
+         * covers: `|Δopen|` for a drawn drape, `|ΔtrimM| / |out − in|` for a flown piece (in its
+         * Z, out its base trim — a full travel where the two are equal). `visible` never travels,
+         * and a piece with no `travelS` snaps.
+         */
+        fun travelMs(element: SceneryResolver.Element, key: String, from: ElementStates, to: ElementStates): Long {
+            val travelS = element.travelS ?: return 0L
+            val share = when (key) {
+                "open" -> {
+                    val a = from.open
+                    val b = to.open
+                    if (a == null || b == null) 1.0 else abs(b - a)
+                }
+                "trimM" -> {
+                    val a = from.trimM
+                    val b = to.trimM
+                    val inM = element.inTrimM
+                    val outM = element.base.trimM
+                    val span = if (inM == null || outM == null) 0.0 else abs(outM - inM)
+                    when {
+                        a == null || b == null -> 1.0
+                        span < 1e-9 -> 1.0
+                        else -> abs(b - a) / span
+                    }
+                }
+                else -> return 0L
+            }
+            return (travelS * 1000.0 * share).roundToLong().coerceIn(0L, MAX_SCENERY_TRANSITION.toMillis())
         }
 
         /** Sine in-out, the curve the Stage view moves scenery on — the two must agree. */
@@ -443,7 +623,8 @@ class SceneryService(private val state: State) {
 
 /**
  * [this] element as [SceneryResolver] reads it: the states its kind takes, and its base for each —
- * shown when unstated, a drawn drape closed (as the Stage view draws one), a flown piece at its Z.
+ * shown when unstated, a drawn drape closed (as the Stage view draws one), a flown piece at its Z —
+ * with its travel time and, for a flown piece, its *in* (its Z).
  * Must run inside a transaction.
  */
 fun DaoStageElement.toSceneryElement(): SceneryResolver.Element {
@@ -460,5 +641,7 @@ fun DaoStageElement.toSceneryElement(): SceneryResolver.Element {
             open = if ("open" in keys) own?.open ?: 0.0 else null,
             trimM = if ("trimM" in keys) own?.trimM ?: positionZ else null,
         ),
+        travelS = elementTravelS(info.params),
+        inTrimM = if ("trimM" in keys) positionZ else null,
     )
 }

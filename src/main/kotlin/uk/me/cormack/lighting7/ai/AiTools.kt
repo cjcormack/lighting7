@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlinx.serialization.json.*
 import kotlinx.serialization.json.JsonNull
 import uk.me.cormack.lighting7.fx.toMaskNames
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.eq
@@ -59,6 +60,7 @@ class AiTools(private val state: State) {
         updateFromProgrammerTool,
         createTemplateTool,
         setSceneryTool,
+        moveSceneryTool,
         setCueEventsTool,
         runFixtureCommandTool,
     )
@@ -93,6 +95,7 @@ class AiTools(private val state: State) {
                 "update_from_programmer" -> executeUpdate(input)
                 "create_template" -> executeCreateTemplate(input)
                 "set_scenery" -> executeSetScenery(input)
+                "move_scenery" -> executeMoveScenery(input)
                 "set_cue_events" -> executeSetCueEvents(input)
                 RUN_FIXTURE_COMMAND -> executeRunFixtureCommand(input)
                 else -> ToolExecutionResult(
@@ -602,6 +605,9 @@ class AiTools(private val state: State) {
                             target.cueStackId?.let { put("cueStackId", it) }
                         })
                     }
+                    // The scenery the programmer holds (move_scenery, the Scenery tab): each element
+                    // by name with the states held. Staged rather than shown while `blind`.
+                    put("scenery", programmerSceneryJson())
                 })
             }
             if ("selection" in include) {
@@ -1089,6 +1095,93 @@ class AiTools(private val state: State) {
                 stackId?.let { put("stackId", it) }
                 lookId?.let { put("lookId", it) }
                 put("changes", written.second)
+            }.toString(),
+        )
+    }
+
+    /** The programmer's scenery for `get_current_state`: `[{element, elementUuid, visible?, open?, trimM?}]`. */
+    private fun programmerSceneryJson(): JsonArray {
+        val snapshot = state.programmerScenery.flow.value
+        if (snapshot.elements.isEmpty()) return JsonArray(emptyList())
+        val names = transaction(state.database) {
+            DaoStageElement.find { DaoStageElements.uuid inList snapshot.elements.keys }.associate { it.uuid to it.name }
+        }
+        return buildJsonArray {
+            for ((uuid, held) in snapshot.elements) {
+                addJsonObject {
+                    put("element", names[uuid] ?: uuid.toString())
+                    put("elementUuid", uuid.toString())
+                    for ((k, v) in sceneryStateObject(held.state)) put(k, v)
+                }
+            }
+        }
+    }
+
+    /**
+     * `move_scenery` (scenery-programmer plan D15): one element's states held in the programmer, or
+     * let go — the same overlay the Scenery tab and the Stage view write, checked against the
+     * element's kind. Current project only. Scenery is drawn and never output, so unlike arming,
+     * firing and fixture commands this needs no remote-access gate.
+     */
+    private fun executeMoveScenery(input: JsonObject): ToolExecutionResult {
+        val ref = (input["element"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
+        if (ref.isNullOrEmpty()) return errorResult("Missing 'element': an element's name (get_scene lists them) or uuid")
+        val project = state.projectManager.currentProject
+        if (state.programmerScenery.flow.value.projectId != project.id.value) return errorResult("The project is still loading; try again")
+        val problems = mutableListOf<String>()
+        // A misspelt key (`trim` for `trimM`) is refused rather than dropped, or the call would
+        // answer success having held nothing — the scenery lists' rule (`TOOL_ITEM_KEYS`).
+        for (key in input.keys) {
+            if (key !in MOVE_SCENERY_KEYS) problems += "unknown field '$key' (known: ${MOVE_SCENERY_KEYS.sorted().joinToString()})"
+        }
+        val release = input["release"]?.takeIf { it !is JsonNull }?.let { r ->
+            (r as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: run { problems += "release must be true or false"; false }
+        } ?: false
+        val fadeMs = input["fadeSeconds"]?.takeIf { it !is JsonNull }?.let { f ->
+            val seconds = (f as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
+            when {
+                seconds == null -> { problems += "fadeSeconds must be a number"; null }
+                seconds < 0 || seconds * 1000 > MAX_SCENERY_TRANSITION.toMillis() ->
+                    { problems += "fadeSeconds must be between 0 and ${MAX_SCENERY_TRANSITION.seconds}"; null }
+                else -> Math.round(seconds * 1000)
+            }
+        }
+        val stateObj = JsonObject(input.filterKeys { it in MOVE_SCENERY_STATES && input[it] !is JsonNull })
+        if (release && stateObj.isNotEmpty()) problems += "give states or release, not both"
+        if (!release && stateObj.isEmpty()) problems += "give visible, open or trimM — or release: true to let the element go"
+        val elements = transaction(state.database) { sceneryElementsOf(DaoProject[project.id]) }
+        val element = runCatching { java.util.UUID.fromString(ref) }.getOrNull()?.let { elements[it] }
+            ?: elements.values.firstOrNull { it.name.equals(ref, ignoreCase = true) }
+        if (element == null) {
+            problems += "no stage element named '$ref' (elements: ${elements.values.map { it.name }.sorted().joinToString().ifEmpty { "none" }})"
+        }
+        if (problems.isNotEmpty() || element == null) return errorResult(problems.joinToString("; "))
+
+        val blind = state.show.programmerStore.blind
+        if (release) {
+            val released = state.programmerScenery.release(element.uuid, fadeMs)
+            return ToolExecutionResult(
+                success = true,
+                description = if (released == 0) "The programmer was not holding '${element.name}'"
+                    else "Released '${element.name}': it returns to what the show holds",
+                result = buildJsonObject {
+                    put("element", element.name)
+                    put("released", released > 0)
+                }.toString(),
+            )
+        }
+        val refused = state.programmerScenery.set(element.uuid, stateObj, fadeMs)
+        if (refused.isNotEmpty()) return errorResult(refused.joinToString("; "))
+        val held = state.programmerScenery.flow.value.elements[element.uuid]?.state ?: ElementStates()
+        return ToolExecutionResult(
+            success = true,
+            description = "Holding '${element.name}' in the programmer" +
+                (if (blind) " — staged: the programmer is blind, so it moves on stage when Blind is left" else ""),
+            result = buildJsonObject {
+                put("element", element.name)
+                put("held", sceneryStateObject(held))
+                fadeMs?.let { put("fadeMs", it) }
+                put("blind", blind)
             }.toString(),
         )
     }

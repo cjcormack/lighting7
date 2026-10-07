@@ -53,12 +53,17 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
  *   republish that follows lands every affected key once instead of twice.
  *
  * Clear is specified as "programmer values **and** programmer FX" — busking effects created
- * with `programmerOwned` therefore go with the values they were modulating.
+ * with `programmerOwned` therefore go with the values they were modulating — and, since the
+ * scenery-programmer plan's D1, the scenery the programmer holds, on the same fade.
  */
 internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): ProgrammerClearOutcome {
     state.show.locateManager.reset()
     state.show.programmerLayerStack.reset()
     val effectsCleared = state.show.fxEngine.removeProgrammerBandEffects()
     val entryCount = state.show.fxEngine.programmer.clearAll(fadeMs)
+    // The programmer's scenery goes with its values, flying home on the same fade (scenery-programmer
+    // plan D1). Here rather than in `ProgrammerStore.clearAll`, which takes no fade and which
+    // `ProgrammerWriter.clearAll` skips when no value is held — a programmer holding only scenery.
+    state.programmerScenery.clear(fadeMs)
     return ProgrammerClearOutcome(entryCount, effectsCleared)
 }

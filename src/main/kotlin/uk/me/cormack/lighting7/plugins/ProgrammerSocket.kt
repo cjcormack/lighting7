@@ -7,6 +7,7 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
@@ -28,6 +29,8 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.clearProgrammerCompletely
 import uk.me.cormack.lighting7.routes.resolveLayerSource
+import uk.me.cormack.lighting7.models.sceneryStateObject
+import uk.me.cormack.lighting7.state.ProgrammerScenery
 import uk.me.cormack.lighting7.state.State
 import java.awt.Color
 
@@ -121,6 +124,32 @@ data class ProgrammerSetBlindInMessage(
 @Serializable
 @SerialName("programmer.state")
 data object ProgrammerStateInMessage : ProgrammerInMessage()
+
+/**
+ * Hold [state] on one scene element in the programmer (scenery-programmer plan D1) — merged over
+ * what the element already holds, moved on [fadeMs] when above 0, else on the piece's own travel.
+ * Checked against the element's kind; a refusal answers `programmer.error` naming every problem.
+ * An operator gesture of `programmer.set`'s tier, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
+ */
+@Serializable
+@SerialName("programmer.setScenery")
+data class ProgrammerSetSceneryInMessage(
+    val elementUuid: String,
+    val state: JsonObject,
+    val fadeMs: Long? = null,
+) : ProgrammerInMessage()
+
+/**
+ * Let one element go, or — with no [elementUuid] — everything the programmer holds, so the piece
+ * returns to what the show below holds. [fadeMs] above 0 is the clock it flies home on; otherwise
+ * its own travel.
+ */
+@Serializable
+@SerialName("programmer.clearScenery")
+data class ProgrammerClearSceneryInMessage(
+    val elementUuid: String? = null,
+    val fadeMs: Long? = null,
+) : ProgrammerInMessage()
 
 // ── Outbound messages ───────────────────────────────────────────────────────
 
@@ -379,6 +408,33 @@ data class ProgrammerIncludeTargetOutMessage(
     val target: IncludedTargetDto? = null,
 ) : ProgrammerOutMessage()
 
+/** One element the programmer holds: the states it sets (only those), as `scenery.state` writes them. */
+@Serializable
+data class ProgrammerSceneryEntryDto(
+    val elementUuid: String,
+    val state: JsonObject,
+)
+
+/**
+ * The programmer's scenery (scenery-programmer plan D1): every element it holds, in the order first
+ * held. `StateFlow`-backed ([uk.me.cormack.lighting7.state.ProgrammerScenery.flow]), so the
+ * subscription is the connect snapshot and every change is broadcast to every tab — the programmer
+ * is shared. [elements] is `@EncodeDefault(ALWAYS)`: an empty overlay is a real state (Clear just
+ * ran), and must arrive as "nothing held", not as a field an older desk did not send.
+ */
+@Serializable
+@SerialName("programmer.sceneryState")
+data class ProgrammerSceneryStateOutMessage(
+    val projectId: Int? = null,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val elements: List<ProgrammerSceneryEntryDto> = emptyList(),
+) : ProgrammerOutMessage()
+
+internal fun ProgrammerScenery.Snapshot.toMessage() = ProgrammerSceneryStateOutMessage(
+    projectId = projectId,
+    elements = elements.map { (uuid, held) -> ProgrammerSceneryEntryDto(uuid.toString(), sceneryStateObject(held.state)) },
+)
+
 @Serializable
 @SerialName("programmer.error")
 data class ProgrammerErrorOutMessage(
@@ -544,6 +600,8 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     scope.subscribe(scope.state.show.fxEngine.provenance.flow) { update ->
         scope.send(buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision))
     }
+    // The programmer's scenery: a StateFlow, so this is its connect snapshot as well as its broadcast.
+    scope.subscribe(scope.state.programmerScenery.flow) { scope.send(it.toMessage()) }
 }
 
 /**
@@ -646,6 +704,23 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
             ProgrammerBlindStateOutMessage(state.show.programmerStore.blind)
         }
         is ProgrammerStateInMessage -> ProgrammerHandler.stateSnapshot(state)
+        is ProgrammerSetSceneryInMessage -> {
+            val uuid = runCatching { java.util.UUID.fromString(message.elementUuid.trim()) }.getOrNull()
+            val problems = if (uuid == null) listOf("elementUuid must be a uuid") else
+                state.programmerScenery.set(uuid, message.state, message.fadeMs)
+            if (problems.isEmpty()) state.programmerScenery.flow.value.toMessage()
+            else ProgrammerErrorOutMessage("Scenery refused: ${problems.joinToString("; ")}")
+        }
+        is ProgrammerClearSceneryInMessage -> {
+            val raw = message.elementUuid?.trim()
+            val uuid = raw?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            if (raw != null && uuid == null) {
+                ProgrammerErrorOutMessage("Scenery refused: elementUuid must be a uuid")
+            } else {
+                state.programmerScenery.release(uuid, message.fadeMs)
+                state.programmerScenery.flow.value.toMessage()
+            }
+        }
 
         is ProgrammerAddLayerInMessage -> ProgrammerHandler.addLayer(state, message)
         is ProgrammerRemoveLayerInMessage -> {

@@ -1015,9 +1015,9 @@ Per-fixture baseline values: typically 0 (blackout) for intensity-like channels,
 
 ## Scenery — beside the layers
 
-Cues, stacks and Looks can move **scenery** — the scene document's elements: tabs drawn
-(`open`), flown pieces trimmed (`trimM`), pieces shown or hidden (`visible`) — and none of it goes
-through the five layers above (stage-view plan session 8; the design record's §"Why scenery should
+Cues, stacks, Looks and the programmer can move **scenery** — the scene document's elements: tabs
+drawn (`open`), flown pieces trimmed (`trimM`), pieces shown or hidden (`visible`) — and none of it
+goes through the five layers above (stage-view plan session 8; the design record's §"Why scenery should
 not be a virtual fixture"):
 
 - **It is never a channel** (D12). Everything below the resolver is a DMX write; scenery is resolved
@@ -1028,14 +1028,27 @@ not be a virtual fixture"):
   over its *set*.
 - **Live Looks win**, programmer and busk layers above the Looks a live cue layers, and both above
   every cue and set — the cook's "local rows last" turned round, because a Look pressed for "the
-  sofa is only there in this Look" has to be there whatever the cues said. Blind takes the
-  programmer's Looks off stage with its values.
-- **Record never captures it** (D13), and **a template never carries it** (D11): a template names no
-  targets of its own, so it has nothing to say about a particular sofa.
+  sofa is only there in this Look" has to be there whatever the cues said.
+- **The programmer's hands win over everything** (scenery-programmer plan D1, D2). The programmer
+  holds scenery of its own — a sparse, runtime-only overlay, element → the states held
+  (`state/ProgrammerScenery.kt`) — and it is the resolver's top tier, above its own Looks, as its
+  local values sit above its layers. It is addressed **by element, never through the desk selection**
+  (D3): masks, subselect, spread, MIDI strips and the busk rig learn no new target kind. Clear drops
+  it on the Clear fade; a project switch drops it. Blind takes both programmer tiers off stage with
+  its values and *stages* them instead — `scenery.state`'s `staged` — and leaving Blind lands them.
+- **Record does not capture it yet.** Stage-view D13 said Record never captures scenery, because
+  there was nothing in the programmer to capture. The scenery-programmer plan's D7 **narrows** D13
+  rather than reversing it: Record will capture what the programmer **holds** — never what the stage
+  merely shows — writing into a cue only what differs from the state that cue would track, and into a
+  Look every held state. That lands in the plan's session 3; until then Record takes no scenery.
+- **A template never carries it** (D11, reaffirmed as the scenery-programmer plan's D9): a template
+  names no targets of its own, so it has nothing to say about a particular sofa. A Look that holds
+  only scenery is the busk vehicle.
 - A Look that lights nothing and carries scenery is still pressable with no selection, as a layer
   that names no targets: it asserts no value, and its pad's second press takes it off.
 
-The resolution order, the clocks and the routes are in `docs/cue-stacks-engineering.md` §"Scenery".
+The resolution order, the clocks (each piece's `travelS` for every move not on a cue's own clock),
+Blind's staging and the routes are in `docs/cue-stacks-engineering.md` §"Scenery".
 
 ## Crossfade behaviour
 

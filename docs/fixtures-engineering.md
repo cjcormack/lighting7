@@ -1666,13 +1666,29 @@ problem at once, unknown keys refused, enumerations read case-insensitively and 
 | `ROOM` | `omit` (sides not drawn: `DOWNSTAGE · UPSTAGE · STAGE_LEFT · STAGE_RIGHT · FLOOR · CEILING`), `floor` and `ceiling` finishes. |
 | `PROSCENIUM` | `openingWidthM`, `openingHeightM` (required), `openingSillM`, `surroundM` — the opening must fit the wall. |
 | `FLAT` | `openings[]` of `{kind: DOOR · WINDOW · FRENCH_WINDOW · ARCH, fromM, widthM, heightM, sillM}`, `fromM` from the stage-right end — each must fit the flat. |
-| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`). |
+| `DRAPE` | `role` (`LEG · BORDER · TABS · CYC · BACKCLOTH`, required), `operation` (`DEAD · DRAW · FLY`), `travelS` (a `DRAW` or `FLY` drape's). |
 | `PLATFORM` | `railHeightM` and `railEdge` together, `regionUuid` (a region of this project). |
 | `SEATING` | `rows` (1–26), `seatsPerRow`, `rowPitchM`, `seatPitchM`, `firstRow` (a letter), `rakeM` (rise per row), `aisles` (`[{afterSeat, widthM}]`), `chair` (`THEATRE` default, `BANQUET`), `frameColour`. |
-| `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`. |
+| `OBJECT` | `shape` (`BOX · CYLINDER · SHADE · DISC`), `flies`, `travelS` (a flown piece's). |
 
 Every kind may carry `states`, the base values session 8's scenery tracks from: `visible` on any,
 `open` (0–1) on a `DRAW` drape, `trimM` (replacing Z while set) on a flown piece.
+
+**`travelS`** (0.1–600 s; scenery-programmer plan D6) is how long a piece that moves takes over its
+**whole** travel — a drawn drape closed to drawn, a flown piece *in* (its Z) to *out* (its base
+`trimM`). It is a `DRAW` or `FLY` drape's and a flown `OBJECT`'s only, refused **by name** on
+anything else (`params.travelS is a moving piece's …; this FLAT does not travel`), with every other
+problem in the document reported beside it. Every scenery move that is not on a cue's own clock —
+a Look pressed, a stack's set edited, a stack stopping, GO TO landing an earlier cue's change, a
+programmer move with no fade — runs at it, scaled by the share of the travel moved
+(`SceneryService.durationFor`; `docs/cue-stacks-engineering.md` §"Scenery"). Unset, those moves
+snap, as they did before the field existed. The Stage view's Edit form has no field for it yet
+(scenery-programmer plan session 4) and sends `params` whole, so until session 2 teaches it to drop
+the key with the travel, a piece given a `travelS` cannot be switched to `DEAD` (or unflown) from the
+form — `set_scene`, sending `params` without it, can.
+`elementTravelS` reads it, and ignores a stored value the
+piece no longer has (a drape switched to `DEAD`). Like every key here it needs no `formatVersion`:
+`params` travel verbatim, and an older desk keeps a field it does not read.
 
 **Seats** are derived, never stored: row `firstRow` is nearest the stage at the origin, each later row
 a `rowPitchM` further from the stage (local −Y) and `rakeM` higher, seat 1 at the stage-right end,

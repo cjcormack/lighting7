@@ -10,8 +10,9 @@ import java.time.Instant
 
 /**
  * The `scenery.*` family (stage-view plan session 8): one outbound frame, no inbound. Scenery is
- * moved by the records that own it — a cue's GO, a stack starting and stopping, a Look pressed — so a
- * socket only ever *reports* it.
+ * moved by the records that own it — a cue's GO, a stack starting and stopping, a Look pressed — and
+ * by the programmer's own scenery, which is written on the programmer's socket
+ * (`programmer.setScenery`, scenery-programmer plan D1), so this family only ever *reports* it.
  */
 @Serializable
 sealed class SceneryOutMessage : OutMessage()
@@ -25,6 +26,9 @@ sealed class SceneryOutMessage : OutMessage()
  * absolute [startedAt]: a client animates from its own receive time plus the elapsed, as it does a
  * cue's fade from `cueRunStateChanged`, so a tablet with a skewed clock does not replay a finished
  * move. Neither is clamped: a client reads `elapsedMs >= durationMs` as landed.
+ *
+ * [source] names what holds the piece there (scenery-programmer plan D4). Additive: a client that
+ * does not read it draws exactly as before.
  */
 @Serializable
 data class SceneryEntryDto(
@@ -34,24 +38,64 @@ data class SceneryEntryDto(
     val startedAt: String,
     val elapsedMs: Long,
     val durationMs: Long,
+    /** No default, so the desk's `encodeDefaults = false` Json always sends it — `base` included. */
+    val source: ScenerySourceDto,
 )
 
 /**
- * Every element a scenery change names, as the desk resolves it now: the connect snapshot and the
- * broadcast on every change. `StateFlow`-backed, so the subscription *is* the snapshot. An element
- * absent from [elements] shows its base. [projectId] is the project resolved, null before the show
- * is up.
+ * What holds an element where it is — the source of its highest-tier state: `base`, `set` (a live
+ * stack's set: [stackId], the stack's [name]), `cue` ([stackId], [cueId], the cue's [label]),
+ * `cueLook` (a Look a live cue layers: [stackId], [lookId], its [name]), `programmerLook` (pressed
+ * or on a pad: [lookId], [name]) or `programmer` (the operator's own hands). Absent fields are the
+ * kind's nothing.
+ */
+@Serializable
+data class ScenerySourceDto(
+    val kind: String,
+    val stackId: Int? = null,
+    val cueId: Int? = null,
+    val label: String? = null,
+    val lookId: Int? = null,
+    val name: String? = null,
+)
+
+/**
+ * One element as it would be on leaving Blind (scenery-programmer plan D12): the state the
+ * programmer stages, the state it moves from (live, or an earlier staged move as drawn), and the move
+ * — [elapsedMs] at send, as [SceneryEntryDto.elapsedMs] is. Listed only where it differs from live.
+ */
+@Serializable
+data class SceneryStagedEntryDto(
+    val elementUuid: String,
+    val state: JsonObject,
+    val from: JsonObject,
+    val elapsedMs: Long,
+    val durationMs: Long,
+)
+
+/**
+ * Every element a scenery change names or the programmer holds, as the desk resolves it now: the
+ * connect snapshot and the broadcast on every change. `StateFlow`-backed, so the subscription *is*
+ * the snapshot. An element absent from [elements] shows its base. [projectId] is the project
+ * resolved, null before the show is up.
+ *
+ * [staged] is present only while the programmer is blind **and** holds something that would move a
+ * piece (D12) — the Stage view's Output + Programmer and Programmer sources draw it, Output draws
+ * [elements]. Absent rather than empty otherwise, so today's client, which reads neither it nor
+ * [SceneryEntryDto.source], parses the frame exactly as before (scenery-programmer plan P3).
  */
 @Serializable
 @SerialName("scenery.state")
 data class SceneryStateOutMessage(
     val projectId: Int? = null,
     val elements: List<SceneryEntryDto> = emptyList(),
+    val staged: List<SceneryStagedEntryDto>? = null,
 ) : SceneryOutMessage()
 
 internal fun SceneryService.Frame.toMessage(nowMs: Long = System.currentTimeMillis()) = SceneryStateOutMessage(
     projectId = projectId,
     elements = entries.map { it.toDto(nowMs) },
+    staged = staged?.map { it.toStagedDto(nowMs) },
 )
 
 internal fun SceneryService.Entry.toDto(nowMs: Long) = SceneryEntryDto(
@@ -59,6 +103,15 @@ internal fun SceneryService.Entry.toDto(nowMs: Long) = SceneryEntryDto(
     state = sceneryStateObject(state),
     from = sceneryStateObject(from),
     startedAt = Instant.ofEpochMilli(startedAtMs).toIsoUtc(),
+    elapsedMs = (nowMs - startedAtMs).coerceAtLeast(0),
+    durationMs = durationMs,
+    source = ScenerySourceDto(source.kind, source.stackId, source.cueId, source.label, source.lookId, source.name),
+)
+
+internal fun SceneryService.Entry.toStagedDto(nowMs: Long) = SceneryStagedEntryDto(
+    elementUuid = elementUuid.toString(),
+    state = sceneryStateObject(state),
+    from = sceneryStateObject(from),
     elapsedMs = (nowMs - startedAtMs).coerceAtLeast(0),
     durationMs = durationMs,
 )

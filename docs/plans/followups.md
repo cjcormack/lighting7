@@ -125,6 +125,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-STAGE-PROGRAM-MACROS`](#fu-stage-program-macros) | Trigger | Stage | an operator needs to see a head's built-in LED or movement program in the Stage view |
 | [`FU-STAGE-SETTING-SHUTTER`](#fu-stage-setting-shutter) | Trigger | Stage | a Scantastic blacked out on its shutter draws lit at a desk check |
 | [`FU-STAGE-VECTOR-SPEED`](#fu-stage-vector-speed) | Trigger | Stage | `FU-MANUAL-S8-TRAVEL` times a mover's speed channel, or a slowed head drawn arriving early misleads at a desk check |
+| [`FU-SCENERY-MIDI-TARGET`](#fu-scenery-midi-target) | Trigger | Stage | an operator wants a fader or encoder to ride a tab or a flown piece |
+| [`FU-SCENERY-DRIVEN-BY`](#fu-scenery-driven-by) | Trigger | Stage | a venue's tabs or flys run on a DMX-controlled track the desk patches |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -2391,6 +2393,41 @@ rate factor (or a duration) per DMX value, piecewise from the measured points, w
 blackout bands as "the type's speed" — and annotate the measured channels with it; a Robe's Time mode
 needs its menu mode declared per patch first (machine-local, like an address), since the desk cannot
 read it.
+
+### `FU-SCENERY-MIDI-TARGET`
+
+**No surface control rides one element's scenery** · Trigger · scenery-programmer plan session 1, 2026-10-07
+
+The programmer holds scenery since session 1 of the scenery-programmer plan (`state/ProgrammerScenery.kt`,
+`programmer.setScenery`, `move_scenery`), but a control surface cannot write it: `BindingTarget` has no
+arm for an element, and the plan's D3 keeps scenery out of the desk selection, so no strip, encoder bank
+or `SelectionProperty` reaches it either. The tabs are moved from the Scenery tab, the Stage view or
+the AI. **Trigger**: an operator wants a fader or encoder to ride a tab's `open` or a flown piece's
+`trimM` (a fly cue busked by hand), or a button to toggle a piece's `visible`. **Then**: a
+`BindingTarget.SceneryElement(elementUuid, key)` — by uuid, as `FireCue` carries one beside its id,
+since a binding outlives a rename — whose fader writes `programmer.setScenery` through the same
+overlay (a fader's 0–1 mapped onto `open`, or onto the piece's in → out for `trimM`), whose button
+toggles `visible`, and whose feedback reads `scenery.state`. Refuse a key the element's kind cannot
+take at bind time (`parseSceneryState`), as `FireTrigger` refuses a non-trigger; its health turns red
+when the element is deleted. The selection stays out of it (D3).
+
+### `FU-SCENERY-DRIVEN-BY`
+
+**An element cannot follow a DMX tab track** · Trigger · scenery-programmer plan session 1, 2026-10-07
+
+Stage-view D12 made scenery its own tracked record, not a virtual fixture, and said a *real* DMX tab
+track (a motorised curtain or fly winch on a DMX channel) is a fixture an element follows
+(`drivenBy: {fixture, property}`, `stage-view-design/INDEX.md` §"A real motorised tab track"). Nothing reads that yet: the
+scene document has no `drivenBy`, so a venue whose tabs are on a DMX track patches the track as a
+fixture and the Stage view draws the tabs from the scenery records instead of from the channel —
+two truths that can disagree. The scenery-programmer plan kept it out of scope (§7). **Trigger**: a
+venue's tabs or flys run on a DMX-controlled track that the desk patches. **Then**: an optional
+`drivenBy: {fixtureUuid, property}` in a DRAW or FLY drape's (or a flown object's) params, checked at
+the write boundary against a patched fixture with that slider; `SceneryService` resolves such an
+element's `open` / `trimM` from the live composed value (0–255 mapped onto 0–1, or onto in → out) and
+ignores scenery changes and programmer holds for that key — the channel is the truth, and the
+programmer moves it by moving the fixture's property. `travelS` does not apply; the motor has its own
+speed. An optional params key, so no `formatVersion` bump (`docs/sync-engineering.md` §"Version 18").
 
 ## Completed
 

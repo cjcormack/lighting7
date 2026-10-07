@@ -21,10 +21,13 @@ import java.util.UUID
  *    stacks folded oldest GO first, so with two stacks live the most recently GO'd wins (not the
  *    lighting resolver's database-id order);
  * 3. the **Looks layered in the live cues**, stack by stack in the same order, in layer order;
- * 4. the **Looks live in the programmer** — pressed, or on a busk pad — in layer order.
+ * 4. the **Looks live in the programmer** — pressed, or on a busk pad — in layer order;
+ * 5. the **programmer's own scenery** ([Held], `state/ProgrammerScenery.kt`; scenery-programmer
+ *    plan D1, D2) — what the operator's hands hold, above everything.
  *
  * "Live Looks win over the stack's cues and its set" is the design's rule (`StacksLooks.dc.html`),
- * so 3 and 4 sit above every cue. A state an element's kind cannot take (a drape no longer drawn) is
+ * so 3 and 4 sit above every cue; the programmer's hands sit above its Looks as its local values
+ * sit above its layers. A state an element's kind cannot take (a drape no longer drawn) is
  * ignored, so an element edited after its scenery was written never moves wrongly.
  */
 object SceneryResolver {
@@ -37,6 +40,10 @@ object SceneryResolver {
         val keys: Set<String>,
         /** Every key in [keys] with its base value. */
         val base: ElementStates,
+        /** The piece's full travel in seconds — closed to drawn, in to out — or null to snap (D6). */
+        val travelS: Double? = null,
+        /** A flown piece's *in*, its own Z; its *out* is [base]'s `trimM`. Null off a flown piece. */
+        val inTrimM: Double? = null,
     )
 
     /** One change as a stack's set or a Look holds it. */
@@ -46,6 +53,9 @@ object SceneryResolver {
     data class CueChange(val elementId: Int, val state: ElementStates, val transitionMs: Long)
 
     data class Cue(val cueId: Int, val label: String, val changes: List<CueChange>)
+
+    /** One element the programmer holds, and the fade the operator moved it on (null or 0: its travel). */
+    data class Held(val elementId: Int, val state: ElementStates, val fadeMs: Long?)
 
     /**
      * A live stack: its [set], its cues from the top of the list **down to and including** the live
@@ -67,7 +77,29 @@ object SceneryResolver {
         data class CueRow(val stackId: Int, val cueId: Int, val cueLabel: String, val transitionMs: Long) : Source
         data class CueLook(val stackId: Int, val lookId: Int) : Source
         data class ProgrammerLook(val lookId: Int) : Source
+        /** The programmer's own scenery, with the fade the operator moved it on. */
+        data class Programmer(val fadeMs: Long?) : Source
     }
+
+    /** How high [source] sits: base lowest, the programmer's own scenery highest. */
+    fun tierOf(source: Source): Int = when (source) {
+        Source.Base -> 0
+        is Source.StackSet -> 1
+        is Source.CueRow -> 2
+        is Source.CueLook -> 3
+        is Source.ProgrammerLook -> 4
+        is Source.Programmer -> 5
+    }
+
+    /**
+     * What holds [r] as one answer — the source of its highest-tier state, `visible` before `open`
+     * before `trimM` on a tie: the frame's per-element `source` (D4), which a client reads as "held
+     * by the programmer", "Q14 had it out".
+     */
+    fun holderOf(r: Resolved): Source =
+        STATE_KEYS.mapNotNull { r.sources[it] }.maxWithOrNull(compareBy(::tierOf)) ?: Source.Base
+
+    private val STATE_KEYS = listOf("visible", "open", "trimM")
 
     data class Resolved(
         val element: Element,
@@ -81,6 +113,7 @@ object SceneryResolver {
         stacks: List<LiveStack>,
         lookScenery: Map<Int, List<Change>>,
         programmerLookIds: List<Int>,
+        programmer: List<Held> = emptyList(),
     ): Map<Int, Resolved> {
         val folds = elements.associate { it.id to Fold(it) }
         fun apply(change: Change, source: Source) = folds[change.elementId]?.apply(change.state, source)
@@ -101,6 +134,9 @@ object SceneryResolver {
         }
         for (lookId in programmerLookIds) {
             lookScenery[lookId].orEmpty().forEach { apply(it, Source.ProgrammerLook(lookId)) }
+        }
+        for (held in programmer) {
+            folds[held.elementId]?.apply(held.state, Source.Programmer(held.fadeMs))
         }
         return folds.mapValues { it.value.result() }
     }

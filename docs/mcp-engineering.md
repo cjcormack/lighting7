@@ -358,6 +358,19 @@ with the cue's fade). Each is checked against the element's kind exactly as the 
 problem at once and nothing written. The schema text says scenery **tracks** — list only what
 changes — and that a Look's scenery shows while it is live, above every cue; templates carry none.
 
+**Moving scenery now** (scenery-programmer plan D15). `move_scenery` is the live counterpart: `{element,
+visible?, open?, trimM?, fadeSeconds?, release?}` holds one element's states in the **programmer's
+scenery** (`state/ProgrammerScenery.kt`) — the same overlay the Scenery tab and the Stage view write,
+the resolver's top tier, above every cue, set and Look — or, with `release: true`, lets it go back to
+what the show holds. The element is named as `set_scenery` names one, and checked against its kind by
+the same `parseSceneryState`. It moves at the element's `travelS` scaled by how far it goes, or over
+`fadeSeconds` when given; with neither it snaps. Blind stages it, Clear releases it, and it writes
+nothing stored — `set_scenery` is how a cue or Look learns a move. Current project only.
+`get_current_state`'s `programmer` section lists what is held as `scenery: [{element, elementUuid,
+visible?, open?, trimM?}]`. **It needs no remote-access gate**, unlike arming, firing and fixture
+commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
+motor, nothing in a room the model cannot see.
+
 **Events** (stage-view plan session 9). `create_cue` and `build_cue_stack` (per cue) carry an
 `events` list, and `set_cue_events` replaces one cue's whole list (`cueId`, `events`; `[]` clears),
 so "both cannons at the curtain call, 0.6 and 0.9 s after GO" is one call. One item is `{fixture,

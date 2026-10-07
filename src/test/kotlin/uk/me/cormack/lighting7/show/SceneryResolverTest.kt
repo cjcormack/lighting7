@@ -103,4 +103,48 @@ class SceneryResolverTest {
         assertEquals("2", (tracked.getValue("House tabs")["open"] as Source.CueRow).cueLabel)
         assertTrue(tracked.getValue("Sofa")["visible"] is Source.StackSet)
     }
+
+    // ─── The programmer's own scenery (scenery-programmer plan D2, D4) ──────────────────────
+
+    @Test
+    fun `the programmer's scenery sits above a pressed Look and above a cue`() {
+        val looks = mapOf(200 to listOf(Change(2, trim(5.0)), Change(1, open(0.25))))
+        val held = listOf(SceneryResolver.Held(2, trim(1.5), 3000), SceneryResolver.Held(1, open(0.6), null))
+        // Q3 flies the moon to 3 on its own clock; the pressed Look says 5; the programmer says 1.5.
+        val r = SceneryResolver.resolve(elements, listOf(liveAt(13)), looks, listOf(200), held)
+        assertEquals(1.5, r.getValue(2).state.trimM)
+        assertEquals(Source.Programmer(3000), r.getValue(2).sources["trimM"])
+        assertEquals(0.6, r.getValue(1).state.open)
+        assertEquals(Source.Programmer(null), r.getValue(1).sources["open"])
+        // Only the states held: the moon's visibility is still the base's.
+        assertEquals(Source.Base, r.getValue(2).sources["visible"])
+
+        val withoutHands = SceneryResolver.resolve(elements, listOf(liveAt(13)), looks, listOf(200))
+        assertEquals(5.0, withoutHands.getValue(2).state.trimM, "the Look over the cue, as before")
+    }
+
+    @Test
+    fun `holderOf names the highest tier holding any state, for every tier`() {
+        val set = listOf(Change(3, visible(false)))
+        val looks = mapOf(100 to listOf(Change(3, visible(true))), 200 to listOf(Change(1, open(0.5))))
+        fun holder(stacks: List<LiveStack>, lookScenery: Map<Int, List<Change>>, pl: List<Int>, held: List<SceneryResolver.Held>, id: Int) =
+            SceneryResolver.holderOf(SceneryResolver.resolve(elements, stacks, lookScenery, pl, held).getValue(id))
+
+        assertEquals(Source.Base, holder(emptyList(), emptyMap(), emptyList(), emptyList(), 3))
+        assertEquals(Source.StackSet(1), holder(listOf(liveAt(11, set = set)), emptyMap(), emptyList(), emptyList(), 3))
+        assertEquals(Source.CueRow(1, 12, "2", 4000), holder(listOf(liveAt(12)), emptyMap(), emptyList(), emptyList(), 1))
+        assertEquals(Source.CueLook(1, 100), holder(listOf(liveAt(11, set = set, looks = listOf(100))), looks, emptyList(), emptyList(), 3))
+        assertEquals(Source.ProgrammerLook(200), holder(listOf(liveAt(12)), looks, listOf(200), emptyList(), 1))
+        assertEquals(Source.Programmer(null), holder(listOf(liveAt(12)), looks, listOf(200), listOf(SceneryResolver.Held(1, visible(false), null)), 1))
+        // A tier holding one state outranks a lower tier holding another: the moon's trim from Q3,
+        // its visibility the base's, is the cue's.
+        assertEquals(Source.CueRow(1, 13, "3", 6000), holder(listOf(liveAt(13)), emptyMap(), emptyList(), emptyList(), 2))
+    }
+
+    @Test
+    fun `the programmer's state on a key the element does not take is ignored`() {
+        val r = SceneryResolver.resolve(elements, emptyList(), emptyMap(), emptyList(), listOf(SceneryResolver.Held(3, open(0.0), null)))
+        assertEquals(sofa.base, r.getValue(3).state)
+        assertEquals(Source.Base, SceneryResolver.holderOf(r.getValue(3)))
+    }
 }

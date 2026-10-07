@@ -298,7 +298,7 @@ internal val getCurrentStateTool = ToolDef(
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
             "`cue_run` says what each running stack's next GO will fire; " +
-            "`programmer` is the manual overlay this surface itself writes through apply_look; " +
+            "`programmer` is the manual overlay this surface itself writes through apply_look and move_scenery (its `scenery` lists the elements held); " +
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
             "`windows` lists the browser windows signed in to the desk, which is how a `selection.source` " +
@@ -854,6 +854,40 @@ internal val setSceneryTool = ToolDef(
             })
         })
         put("required", buildJsonArray { add("scenery") })
+    },
+)
+
+/** The states `move_scenery` reads beside its element. */
+internal val MOVE_SCENERY_STATES = setOf("visible", "open", "trimM")
+
+/** Every key `move_scenery` reads; anything else is refused by name. */
+internal val MOVE_SCENERY_KEYS = MOVE_SCENERY_STATES + setOf("element", "fadeSeconds", "release")
+
+/**
+ * Move scenery now, through the programmer (scenery-programmer plan D15): the same overlay the
+ * Scenery tab and the Stage view write. Not held to a remote-access setting — scenery is drawn, never
+ * output, so moving it reaches nothing physical.
+ */
+internal val moveSceneryTool = ToolDef(
+    name = "move_scenery",
+    description = "Move one scene element now — fly a piece in or out, draw or close the tabs, show or hide a piece — by holding it in the programmer, above every cue, stack set and Look until it is released or the programmer is cleared. " +
+        "It moves at the element's own travel time (set_scene's travelS) scaled by how far it goes, or over fadeSeconds when given; with neither it snaps. " +
+        "While the programmer is blind the move is staged and lands when Blind is left. Writes nothing stored: to make a cue or Look move it, use set_scenery. " +
+        "Give states to hold (merged over what the programmer already holds on the element), or release: true to let it go back to what the show holds. Current project only.",
+    inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("element", buildJsonObject {
+                put("type", "string")
+                put("description", "The scene element's name, as set_scene / get_scene give it (or its uuid).")
+            })
+            put("visible", buildJsonObject { put("type", "boolean"); put("description", "Any element: shown (true) or hidden (false).") })
+            put("open", buildJsonObject { put("type", "number"); put("description", "A drawn drape (a DRAPE with operation DRAW) only: 0 closed … 1 drawn fully open; anything between.") })
+            put("trimM", buildJsonObject { put("type", "number"); put("description", "A flown piece (an OBJECT with flies, or a DRAPE with operation FLY) only: its height in metres. Its own Z is in; its stored trimM is usually out.") })
+            put("fadeSeconds", buildJsonObject { put("type", "number"); put("description", "How long the move takes, overriding the element's travel time. 0 or omitted: its travel time.") })
+            put("release", buildJsonObject { put("type", "boolean"); put("description", "true: let the element go instead of holding states, so it returns to what the cues, sets and Looks hold — over fadeSeconds when given.") })
+        })
+        put("required", buildJsonArray { add("element") })
     },
 )
 
