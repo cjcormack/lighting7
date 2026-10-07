@@ -1,4 +1,5 @@
 import type { PointerEvent } from 'react'
+import { Blinds } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CueAnchorDto, Rect } from '../../api/promptBooksApi'
 import { MARKER_LANE_X, marginRailStyle, rectToStyle } from '../../lib/promptBook/geometry'
@@ -11,11 +12,11 @@ import { MARKER_LANE_X, marginRailStyle, rectToStyle } from '../../lib/promptBoo
 export type CueRunStatus = 'live' | 'next' | 'standby' | 'done'
 
 /** Per-status treatment. Wash reads as a highlighter over the white PDF page. */
-const statusStyles: Record<CueRunStatus, { band: string; wash: string; chip: string }> = {
-  live: { band: 'bg-emerald-500', wash: 'bg-emerald-400/20', chip: 'bg-emerald-500 text-white' },
-  next: { band: 'bg-sky-500', wash: 'bg-sky-400/20', chip: 'bg-sky-500 text-white' },
-  standby: { band: 'bg-amber-500', wash: 'bg-amber-400/15', chip: 'bg-amber-500 text-white' },
-  done: { band: 'bg-slate-400', wash: 'bg-slate-400/10', chip: 'bg-slate-500 text-white' },
+const statusStyles: Record<CueRunStatus, { band: string; wash: string; chip: string; glyph: string }> = {
+  live: { band: 'bg-emerald-500', wash: 'bg-emerald-400/20', chip: 'bg-emerald-500 text-white', glyph: 'text-emerald-600' },
+  next: { band: 'bg-sky-500', wash: 'bg-sky-400/20', chip: 'bg-sky-500 text-white', glyph: 'text-sky-600' },
+  standby: { band: 'bg-amber-500', wash: 'bg-amber-400/15', chip: 'bg-amber-500 text-white', glyph: 'text-amber-600' },
+  done: { band: 'bg-slate-400', wash: 'bg-slate-400/10', chip: 'bg-slate-500 text-white', glyph: 'text-slate-500' },
 }
 
 /**
@@ -55,6 +56,12 @@ export function CueWash({
  * gutter). Anchored to {@link MARKER_LANE_X} so every cue/cut marker lines up
  * vertically, independent of where each region's text starts. This is the drag
  * handle when unlocked; the live cue's chip pulses and shows a status dot.
+ *
+ * **A cue that moves scenery carries a `Blinds` glyph** between its chip and its band
+ * (scenery-programmer plan D14) — the DSM reads *LX 14 + fly* where the call is written. Hovering
+ * it lists the changes ([scenery], one per line, the rail card's own lines); a tap opens the cue's
+ * card in the rail ([onSceneryClick]). It takes its press whether the marker is locked or not, and
+ * never starts the marker's drag.
  */
 export function CueMarginMarker({
   anchor,
@@ -66,6 +73,8 @@ export function CueMarginMarker({
   dragging,
   laneX = MARKER_LANE_X,
   onPointerDown,
+  scenery,
+  onSceneryClick,
 }: {
   anchor: CueAnchorDto
   /** Live cue label from the cue stack; falls back to the anchor's cached label. */
@@ -78,6 +87,10 @@ export function CueMarginMarker({
   /** Normalized x of the shared margin rail (just left of the page's text block). */
   laneX?: number
   onPointerDown: (e: PointerEvent<HTMLDivElement>) => void
+  /** The cue's scenery changes, one per line — present only when it moves something. */
+  scenery?: string
+  /** Open the cue's card in the rail: the glyph's tap. */
+  onSceneryClick?: () => void
 }) {
   const s = statusStyles[status]
   const isLive = status === 'live'
@@ -107,6 +120,27 @@ export function CueMarginMarker({
         {label ?? `#${anchor.cueId}`}
         {hasWarning && ' ▲'}
       </span>
+      {scenery != null && (
+        <button
+          type="button"
+          data-scenery-glyph={anchor.cueId}
+          title={`Scenery on GO:\n${scenery}`}
+          aria-label={`${label ?? `Cue ${anchor.cueId}`} moves scenery: ${scenery.split('\n').join(', ')} — open its card`}
+          // Its own press in every state: the marker is click-through while locked, and a drag
+          // handle while unlocked, and neither is what a tap on the glyph means.
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onSceneryClick?.()
+          }}
+          className={cn(
+            'pointer-events-auto mr-0.5 -my-0.5 inline-flex shrink-0 cursor-pointer items-center rounded p-0.5 hover:bg-black/10',
+            s.glyph,
+          )}
+        >
+          <Blinds className="size-3" />
+        </button>
+      )}
       <span
         className={cn(
           'h-full w-[3px] shrink-0 rounded-full',

@@ -6,6 +6,10 @@ import { buildElement } from '../components/stage3d/scene/builders'
 import { pleatShape } from '../components/stage3d/scene/pleat'
 import { elementBaseZ } from '../components/stage3d/scene/sceneParts'
 import {
+  cueChangeLine,
+  cueSceneryLines,
+  describeOnGo,
+  onGoMoves,
   describeCueChange,
   describeSceneryState,
   easeSceneryT,
@@ -216,5 +220,67 @@ describe('the Positions plan draws the scenery that moves the light (D16)', () =
     expect(plansScenery(element({ kind: 'ROOM', layer: 'VENUE' }))).toBe(false)
     expect(plansScenery(element({ kind: 'PROSCENIUM', layer: 'VENUE' }))).toBe(false)
     expect(plansScenery(element({ kind: 'SEATING', layer: 'VENUE' }))).toBe(false)
+  })
+})
+
+describe('scenery on the cue table and the Prompt Book (scenery-programmer plan D13, D14)', () => {
+  const sofa = element({ uuid: 'sofa', name: 'Sofa', params: { states: { visible: false } } })
+  const scene = [tabs, moon, sofa]
+  const preview = (uuid: string, state: object, from: object, durationMs = 0) => ({ elementUuid: uuid, state, from, durationMs })
+
+  it('a change line names the piece, its short state and its own clock — the cue fade goes unsaid', () => {
+    expect(cueChangeLine(tabs, 'Tabs', { open: 0 }, 4000)).toBe('Tabs → closed · 4 s')
+    expect(cueChangeLine(moon, 'Moon', { trimM: 3 }, null)).toBe('Moon → in')
+    expect(cueChangeLine(moon, 'Moon', { trimM: 7 }, 8000)).toBe('Moon → out · 8 s')
+    expect(cueChangeLine(sofa, 'Sofa', { visible: true }, 0)).toBe('Sofa → shown · snap')
+    expect(cueChangeLine(tabs, 'Tabs', { open: 0.4, visible: false }, null)).toBe('Tabs → open 40%, hidden')
+  })
+
+  it("a cue's lines come in its order, named from the scene, and leave out an element the scene has lost", () => {
+    const changes = [
+      { uuid: 'b', elementUuid: 'moon', elementName: 'Old moon', elementKind: 'OBJECT', state: { trimM: 3 }, transitionMs: null, sortOrder: 1 },
+      { uuid: 'a', elementUuid: 'tabs', elementName: 'Tabs', elementKind: 'DRAPE', state: { open: 0 }, transitionMs: 4000, sortOrder: 0 },
+      { uuid: 'c', elementUuid: 'gone', elementName: 'Cloth', elementKind: 'DRAPE', state: { visible: false }, transitionMs: null, sortOrder: 2 },
+    ]
+    const byUuid = new Map(scene.map((e) => [e.uuid, e]))
+    expect(cueSceneryLines(changes, byUuid)).toEqual(['House tabs → closed · 4 s', 'Moon → in'])
+    // The scene not yet loaded: every change, under the name it was stored with.
+    expect(cueSceneryLines(changes, null)).toEqual(['Tabs → closed · 4 s', 'Old moon → 3 m', 'Cloth → hidden'])
+    expect(cueSceneryLines(undefined, byUuid)).toEqual([])
+  })
+
+  it('On GO: a piece the GO moves is named with where it goes and the time it takes', () => {
+    const moves = onGoMoves([preview('tabs', { open: 0 }, { open: 1 }, 4000)], live({ tabs: { state: { open: 1 } } }), scene)
+    expect(moves).toEqual([{ elementUuid: 'tabs', name: 'House tabs', words: 'close', durationMs: 4000 }])
+    expect(describeOnGo(moves)).toBe('House tabs close 4 s')
+  })
+
+  it('On GO: a piece the GO leaves where it is is not named, and nothing moving says nothing', () => {
+    const moves = onGoMoves([preview('moon', { trimM: 3 }, { trimM: 3 })], live({ moon: { state: { trimM: 3 } } }), scene)
+    expect(moves).toEqual([])
+    expect(describeOnGo(moves)).toBe('')
+    expect(onGoMoves(undefined, live({}), scene)).toEqual([])
+  })
+
+  it('On GO: a piece live leaves at its base is compared with its base — the moon flying in from out', () => {
+    // Not in the live frame: the moon is at its base, its stored trim (7, out).
+    const moves = onGoMoves([preview('moon', { trimM: 3 }, { trimM: 7 }, 6000)], live({}), scene)
+    expect(describeOnGo(moves)).toBe('Moon in 6 s')
+  })
+
+  it('On GO: a hidden piece shown appears, and one going home to hidden hides', () => {
+    // The sofa's base is hidden; the GO shows it.
+    expect(describeOnGo(onGoMoves([preview('sofa', { visible: true }, { visible: false })], live({}), scene))).toBe('Sofa appears')
+    // Live shows it; the preview leaves it out, so the GO lands it on its base — hidden.
+    expect(describeOnGo(onGoMoves([], live({ sofa: { state: { visible: true } } }), scene))).toBe('Sofa hides')
+  })
+
+  it('On GO: several pieces in name order, and an element the scene does not have is left out', () => {
+    const moves = onGoMoves(
+      [preview('tabs', { open: 0.5 }, { open: 1 }, 2000), preview('moon', { trimM: 7 }, { trimM: 3 }), preview('ghost', { visible: true }, {})],
+      live({ moon: { state: { trimM: 3 } } }),
+      scene,
+    )
+    expect(describeOnGo(moves)).toBe('House tabs to 50% 2 s · Moon out')
   })
 })

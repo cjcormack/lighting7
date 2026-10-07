@@ -9,6 +9,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
@@ -581,6 +582,17 @@ data class CueStackCueEntry(
     val cueNumberAuto: Boolean = false,
     val notes: String? = null,
     val cueType: String = "STANDARD",
+    /**
+     * The cue's own scenery changes — what it moves on GO, each on its clock (scenery-programmer
+     * plan D13, D14): the cue table's Scenery column, the Prompt Book's margin glyph and its rail
+     * cards read every cue's at once from here, rather than fetching each cue. Never what the cue
+     * only tracks (`CueDetails.trackedScenery`). Batched in one query per stack
+     * ([cueSceneryByCue]). `@EncodeDefault(ALWAYS)` so a cue with none arrives as "no scenery"
+     * rather than as a field an older desk never sent; the client treats it as optional all the
+     * same.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val scenery: List<SceneryChangeDto> = emptyList(),
 )
 
 @Serializable
@@ -665,7 +677,9 @@ private fun DaoCueStack.toCueStackDetails(
     isCurrentProject: Boolean,
     manager: CueStackManager,
 ): CueStackDetails {
-    val orderedCues = cues.sortedBy { it.sortOrder }.map { cue ->
+    val sortedCues = cues.sortedBy { it.sortOrder }
+    val sceneryByCue = cueSceneryByCue(sortedCues.map { it.id })
+    val orderedCues = sortedCues.map { cue ->
         CueStackCueEntry(
             id = cue.id.value,
             name = cue.name,
@@ -680,6 +694,7 @@ private fun DaoCueStack.toCueStackDetails(
             cueNumberAuto = cue.cueNumberAuto,
             notes = cue.notes,
             cueType = cue.cueType,
+            scenery = sceneryByCue[cue.id.value].orEmpty().map { it.toDto() },
         )
     }
     val standardCueIds = orderedCues.filter { it.cueType == CueType.STANDARD.name }.map { it.id }

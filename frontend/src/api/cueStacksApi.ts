@@ -34,6 +34,13 @@ export interface CueStackCueEntry {
   cueNumberAuto: boolean
   notes: string | null
   cueType: CueType
+  /**
+   * The cue's own scenery changes — what it moves on GO, each on its clock (scenery-programmer plan
+   * D13, D14): the cue table's Scenery column, the Prompt Book's margin glyph and its rail cards.
+   * Never what the cue only tracks (`CueDetails.trackedScenery`). Optional: an older desk does not
+   * send it, and a MARKER's is always empty.
+   */
+  scenery?: SceneryChange[]
 }
 
 export interface CueStack {

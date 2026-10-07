@@ -22,7 +22,10 @@ const sceneryApiSlice = restApi.injectEndpoints({
         method: 'PUT',
         body: { scenery },
       }),
-      invalidatesTags: (_result, error, { projectId }) => (error ? [] : ['Cue', { type: 'CueList', id: projectId }]),
+      // The stack list too: it carries every cue's own changes (`CueStackCueEntry.scenery`), which
+      // the cue table's Scenery column and the Prompt Book read (scenery-programmer plan D13, D14).
+      invalidatesTags: (_result, error, { projectId }) =>
+        error ? [] : ['Cue', { type: 'CueList', id: projectId }, { type: 'CueStackList', id: projectId }],
     }),
     setStackScenery: build.mutation<SceneryChange[], { projectId: number; stackId: number; scenery: SceneryWriteItem[] }>({
       query: ({ projectId, stackId, scenery }) => ({

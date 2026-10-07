@@ -556,7 +556,7 @@ payload-free, since one project has one rig).
 | `templateListChanged` | — | A template was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
 | `cuesRecomposed` | `cueIds` | A Look/template **contents** edit changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD |
-| `cueStackListChanged` | — | Cue-stack CRUD |
+| `cueStackListChanged` | — | Cue-stack CRUD, a stack's set, and any cue scenery write or element delete that swept scenery — the stack list carries every cue's own changes (`cues[].scenery`, scenery-programmer plan D13/D14) |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
 | `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a template / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
 | `busk.rigChanged` | — | The busk **rig** changed: a whole-document write, or a group / patch delete that took tiles off it. Payload-free because there is one rig per project (busk-further plan D1); the client re-reads `GET /busk/rig` |

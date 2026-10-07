@@ -184,6 +184,13 @@ interface ScriptViewerProps {
    * behind an operator reading ahead.
    */
   onPagesReady: () => void
+  /**
+   * The scenery each cue moves on GO, one change per line, for cues that move any — the margin
+   * marker's `Blinds` glyph and its hover (scenery-programmer plan D14). Absent or missing a cue: no glyph.
+   */
+  sceneryByCue?: Map<number, string>
+  /** Open a cue's card in the rail — the glyph's tap. Must be stable: this component is memoized. */
+  onOpenCueCard?: (cueId: number) => void
 }
 
 /**
@@ -219,6 +226,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
     onAnnotationClick,
     onDocumentError,
     onPagesReady,
+    sceneryByCue,
+    onOpenCueCard,
   },
   ref,
 ) {
@@ -857,6 +866,8 @@ export const ScriptViewer = memo(forwardRef<ScriptViewerHandle, ScriptViewerProp
                           dragging={dragOverride?.cueId === anchor.cueId}
                           laneX={laneX}
                           onPointerDown={(e) => onAnchorPointerDown(e, anchor, i)}
+                          scenery={sceneryByCue?.get(anchor.cueId)}
+                          onSceneryClick={onOpenCueCard ? () => onOpenCueCard(anchor.cueId) : undefined}
                         />
                       ))}
                       {/* Notes — desktop: tail anchored to the text's right edge, bubble

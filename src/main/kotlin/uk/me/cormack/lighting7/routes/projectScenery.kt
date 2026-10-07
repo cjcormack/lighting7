@@ -62,7 +62,11 @@ internal fun Route.routeApiRestProjectScenery(state: State) {
                     cueSceneryOf(cue.id).map { it.toDto() }
                 }
             }
-            respondScenery(outcome) { state.show.fixtures.cueListChanged() }
+            respondScenery(outcome) {
+                state.show.fixtures.cueListChanged()
+                // The stack list carries every cue's own changes (`CueStackCueEntry.scenery`).
+                state.show.fixtures.cueStackListChanged()
+            }
         }
     }
 
@@ -207,6 +211,18 @@ internal fun trackedSceneryAt(cue: DaoCue): List<TrackedSceneryDto> {
             fromSet = newest == null,
         )
     }
+}
+
+/**
+ * A sweep took scenery rows off their owners — an element delete (`deleteSceneryForElements`): announce
+ * every list that carries them, the cue list, the stack list (its `cues[].scenery` and each stack's
+ * set, scenery-programmer plan D13/D14) and the Look list, so no window keeps editing a row for an
+ * element that is gone (the desk refuses a whole-list `PUT` naming one).
+ */
+internal fun sceneryOwnersChanged(state: State) {
+    state.show.fixtures.cueListChanged()
+    state.show.fixtures.cueStackListChanged()
+    state.show.fixtures.lookListChanged()
 }
 
 /**

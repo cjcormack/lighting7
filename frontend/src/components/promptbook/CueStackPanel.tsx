@@ -1,5 +1,5 @@
 import { useMemo, type CSSProperties } from 'react'
-import { X } from 'lucide-react'
+import { Blinds, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SpeedMastersChip } from '@/components/SpeedMasters'
 import { cn } from '@/lib/utils'
@@ -73,6 +73,13 @@ interface CueStackPanelProps {
    *  border and the transport (the narrow layout carries its own bottom transport). */
   inDrawer?: boolean
   onClose?: () => void
+  /**
+   * What the next GO moves (scenery-programmer plan D14): the cue on deck and the line itself, e.g.
+   * `{cue: 'Q15', moves: 'House tabs close 2 s · Border 2 in'}`. Null, or an empty line, draws nothing.
+   */
+  onGo?: { cue: string | null; moves: string } | null
+  /** Each cue's scenery lines for its card; a cue absent moves nothing. Stable per cue — the cards are memoized. */
+  sceneryLinesByCue?: Map<number, readonly string[]>
 }
 
 /**
@@ -116,6 +123,8 @@ export function CueStackPanel({
   coverPages,
   inDrawer,
   onClose,
+  onGo,
+  sceneryLinesByCue,
 }: CueStackPanelProps) {
   const hasCues = rows.some((r) => r.type === 'cue')
 
@@ -178,6 +187,22 @@ export function CueStackPanel({
         </div>
       )}
 
+      {/* **On GO** — what the next GO moves, at the top of the rail where the next cue is read
+          (D14). Not "Standby": that word is the armed next cue in the cue table and the unfired
+          later cues here. Absent when nothing moves, so a rig with no scenery keeps its rail. */}
+      {onGo != null && onGo.moves !== '' && (
+        <div
+          data-on-go
+          className="mx-2 mt-2 shrink-0 rounded-md border border-sky-500/60 bg-sky-500/10 px-2.5 py-1.5"
+        >
+          <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.12em] text-sky-700 uppercase dark:text-sky-300">
+            <Blinds className="size-3" />
+            On GO{onGo.cue ? ` · ${onGo.cue}` : ''}
+          </div>
+          <div className="mt-0.5 text-xs font-semibold text-foreground">{onGo.moves}</div>
+        </div>
+      )}
+
       {showWarnings && <DesyncWarningsPanel warnings={warnings} onWarningClick={onWarningClick} />}
 
       <div
@@ -234,6 +259,7 @@ export function CueStackPanel({
               onRenameCue={onRenameCue}
               onRenumberCue={onRenumberCue}
               onRenoteCue={onRenoteCue}
+              sceneryLines={sceneryLinesByCue?.get(row.cue.cueId)}
             />
           )
         })}

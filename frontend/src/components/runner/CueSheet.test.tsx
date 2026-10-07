@@ -15,6 +15,17 @@ const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+// The scene the Scenery column names its elements from, and its editor — the editor's own rows are
+// `SceneryEditor.test.tsx`'s; here it says only which cue it was opened on.
+const SCENE = [
+  { uuid: 'tabs', name: 'House tabs', kind: 'DRAPE', layer: 'VENUE', positionZ: 0, params: { operation: 'DRAW' } },
+  { uuid: 'moon', name: 'Moon', kind: 'OBJECT', layer: 'SET', positionZ: 3, params: { flies: true, states: { trimM: 5 } } },
+]
+vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: SCENE }) }))
+vi.mock('@/components/scenery/CueSceneryEditor', () => ({
+  CueSceneryEditor: ({ cue }: { cue: { id: number } | null }) =>
+    cue == null ? null : <div data-testid="scenery-editor">editing {cue.id}</div>,
+}))
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count, estimateSize }: { count: number; estimateSize: () => number }) => ({
     getTotalSize: () => count * estimateSize(),
@@ -446,5 +457,90 @@ describe('CueSheet', () => {
     const space = new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })
     window.dispatchEvent(space)
     expect(space.defaultPrevented).toBe(false)
+  })
+})
+
+describe('CueSheet · Scenery (scenery-programmer plan D13)', () => {
+  const change = (uuid: string, elementName: string, state: Record<string, unknown>, transitionMs: number | null, sortOrder = 0) => ({
+    uuid: `c-${uuid}-${sortOrder}`,
+    elementUuid: uuid,
+    elementName,
+    elementKind: 'DRAPE',
+    state,
+    transitionMs,
+    sortOrder,
+  })
+  const SCENERY_STACK: CueStack = {
+    ...STACK,
+    cues: [
+      cue(1),
+      cue(2, { scenery: [change('tabs', 'Tabs', { open: 0 }, 4000), change('moon', 'Moon', { trimM: 3 }, null, 1)] }),
+      cue(3, { cueType: 'MARKER', name: 'Interval' }),
+      cue(4),
+      // A change whose element the scene no longer has (a delete swept it; the list is stale).
+      cue(5, { scenery: [change('gone', 'Cloth', { visible: false }, 0)] }),
+    ],
+  }
+  const scenery = (cueId: number) => document.querySelector(`[data-scenery-cue="${cueId}"]`) as HTMLButtonElement | null
+
+  it("reads a cue's own changes, named from the scene, each on its clock", () => {
+    draw({ stack: SCENERY_STACK })
+    // The element's name is the scene's (`House tabs`), not the one stored with the change.
+    expect(scenery(2)).toHaveTextContent('House tabs → closed · 4 s · Moon → in')
+  })
+
+  it('a cue that changes nothing reads tracked where something is tracked into it, else the em-dash', () => {
+    draw({ stack: SCENERY_STACK })
+    expect(scenery(1)).toHaveTextContent('—')
+    expect(scenery(1)).not.toHaveTextContent('tracked')
+    // Q4 tracks Q2's changes: hatched, not empty.
+    expect(scenery(4)).toHaveTextContent('tracked')
+    // Q5's only change names an element the scene does not have, so it reads as changing nothing.
+    expect(scenery(5)).toHaveTextContent('tracked')
+  })
+
+  it("a stack's set is tracked into its first cue", () => {
+    draw({ stack: { ...SCENERY_STACK, scenery: [change('tabs', 'Tabs', { open: 1 }, null)] } })
+    expect(scenery(1)).toHaveTextContent('tracked')
+  })
+
+  it('is blank on a MARKER', () => {
+    draw({ stack: SCENERY_STACK })
+    expect(scenery(3)).toBeNull()
+  })
+
+  it('unlocked: a press opens the editor on that cue', () => {
+    draw({ stack: SCENERY_STACK })
+    expect(screen.queryByTestId('scenery-editor')).toBeNull()
+    fireEvent.click(scenery(2)!)
+    expect(screen.getByTestId('scenery-editor')).toHaveTextContent('editing 2')
+  })
+
+  it('locked: a press asks to unlock and opens nothing', async () => {
+    const onRequestUnlock = vi.fn()
+    draw({ stack: SCENERY_STACK, locked: true, onRequestUnlock })
+    expect(scenery(2)).not.toBeDisabled()
+    fireEvent.click(scenery(2)!)
+    expect(await screen.findByText('Unlock the show to edit?')).toBeInTheDocument()
+    expect(screen.queryByTestId('scenery-editor')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock' }))
+    expect(onRequestUnlock).toHaveBeenCalled()
+  })
+
+  it('locked with no way out: inert, and says why', () => {
+    draw({ stack: SCENERY_STACK, locked: true })
+    expect(scenery(2)).toBeDisabled()
+    expect(scenery(2)!.title).toContain(LOCKED_TITLE)
+  })
+
+  it('an editor open when the show locks closes', () => {
+    const { rerender } = draw({ stack: SCENERY_STACK })
+    fireEvent.click(scenery(2)!)
+    expect(screen.getByTestId('scenery-editor')).toBeInTheDocument()
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} locked onRequestUnlock={() => {}} />)
+    expect(screen.queryByTestId('scenery-editor')).toBeNull()
+    // …and does not come back with the unlock.
+    rerender(<CueSheet stack={SCENERY_STACK} projectId={1} activeCueId={null} onOpenCue={() => {}} />)
+    expect(screen.queryByTestId('scenery-editor')).toBeNull()
   })
 })

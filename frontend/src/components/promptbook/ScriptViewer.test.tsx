@@ -333,4 +333,39 @@ describe('ScriptViewer render window', () => {
     await rerender()
     expect(onPagesReady).toHaveBeenCalledTimes(1)
   })
+
+  it("draws a scenery glyph beside a cue that moves something, and its tap opens the cue's card — locked or not", async () => {
+    const onOpenCueCard = vi.fn()
+    const sceneryByCue = new Map([[1, 'House tabs → closed · 4 s\nMoon → in']])
+    const { view } = await renderViewer({ sceneryByCue, onOpenCueCard })
+    const glyph = view.container.querySelector<HTMLElement>('[data-scenery-glyph="1"]')!
+    expect(glyph).not.toBeNull()
+    // Hovering it lists the changes, as the cue's card does.
+    expect(glyph.title).toBe('Scenery on GO:\nHouse tabs → closed · 4 s\nMoon → in')
+    // Locked, the marker is click-through; the glyph still takes its own press.
+    expect(glyph.className).toContain('pointer-events-auto')
+    fireEvent.click(glyph)
+    expect(onOpenCueCard).toHaveBeenCalledWith(1)
+  })
+
+  it('unlocked, the glyph never starts the marker\'s drag', async () => {
+    const capture = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { configurable: true, value: capture })
+    const onOpenCueCard = vi.fn()
+    const { view } = await renderViewer({ locked: false, sceneryByCue: new Map([[1, 'Moon → in']]), onOpenCueCard })
+    const glyph = view.container.querySelector<HTMLElement>('[data-scenery-glyph="1"]')!
+    fireEvent.pointerDown(glyph, { pointerId: 1 })
+    expect(capture).not.toHaveBeenCalled()
+    fireEvent.click(glyph)
+    expect(onOpenCueCard).toHaveBeenCalledWith(1)
+    // The chip beside it still is the drag handle.
+    fireEvent.pointerDown(view.getByText('Q1'), { pointerId: 1 })
+    expect(capture).toHaveBeenCalled()
+  })
+
+  it('draws no glyph for a cue that moves nothing', async () => {
+    const { view } = await renderViewer({ sceneryByCue: new Map(), onOpenCueCard: vi.fn() })
+    expect(view.container.querySelector('[data-scenery-glyph]')).toBeNull()
+    expect(view.getByText('Q1')).toBeVisible()
+  })
 })

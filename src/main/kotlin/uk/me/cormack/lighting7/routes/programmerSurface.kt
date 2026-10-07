@@ -143,7 +143,10 @@ internal fun performProgrammerRecord(
     )
 
     state.show.fixtures.cueListChanged()
-    if (written.outcome.created) state.show.fixtures.cueStackListChanged()
+    // A CREATE changes stack membership; a scenery row changes the stack list's
+    // `CueStackCueEntry.scenery`.
+    val sceneryMoved = written.outcome.scenery.written + written.outcome.scenery.removed > 0
+    if (written.outcome.created || sceneryMoved) state.show.fixtures.cueStackListChanged()
 
     return RecordCoreResult.Ok(
         outcome = written.outcome,
@@ -379,6 +382,8 @@ internal fun performProgrammerUpdate(
     }
 
     if (results.isNotEmpty()) state.show.fixtures.cueListChanged()
+    // Scenery written back changes the stack list's `CueStackCueEntry.scenery`.
+    if (results.any { it.sceneryWritten > 0 }) state.show.fixtures.cueStackListChanged()
 
     return UpdateCoreResult.CuesUpdated(modeLabel, results, allSkips, warnings)
 }

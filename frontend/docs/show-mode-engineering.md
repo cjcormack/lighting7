@@ -420,6 +420,10 @@ reading a stack that is not the playhead, the `OffPlayheadBanner`:
 - **"Add Cue" does not exist.** A cue is a captured state, so recording is the only way one is made:
   *Record into &lt;stack&gt;*. Separators and stacks keep their create buttons — neither is a captured
   state, and that is the line rather than "no new buttons".
+- **Unlocked, the header carries *Stack settings…*** (scenery-programmer plan D13) — the stack form,
+  and so the stack's *set*, from inside the stack, where the overview row's menu was the only door.
+  Shown where that menu is shown (unlocked), and mounted in place through `OwnerEditor`, the Stage
+  view's *Moves with* door to the same form.
 
 ### Page header
 
@@ -459,6 +463,75 @@ refetch that follows creating a stack would bounce the operator straight back ou
 - **Armed-cue accent** — blue. `CueCardEditor` had drawn this since 2a and `StackDetail` had accepted
   the prop, but nothing supplied it, so the affordance was unreachable in Show until the transport
   merged.
+
+
+## Scenery in the cue table and the Prompt Book
+
+Scenery-programmer plan session 5 (D13, D14). Until it, a cue's scenery changes could be read on its
+card and edited only behind it — Cards → unlocked → *Cue properties…* — so neither the cue table nor
+the Prompt Book said what a cue moves, and a DSM reading the book could not see *LX 14 + fly*.
+
+**One read for both: the stack list carries every cue's own changes.** `CueStackCueEntry.scenery` (the
+desk's `SceneryChangeDto`, batched in one query per stack, always sent, optional on the client) is the
+cue's **own** rows, never what it tracks — tracked state stays a per-cue read
+(`CueDetails.trackedScenery`) behind Details and the editor's header. Every cue scenery write
+announces the stack list as well as the cue list (the `PUT`, the AI's `set_scenery` on a cue, a
+Record or an Update that wrote scenery; the client's mutations invalidate `CueStackList` to match),
+and so does an element delete that swept scenery (REST or `set_scene`'s `removeElements`),
+so another window's column and book follow. `lib/scenery.ts` reads them into lines —
+`cueChangeLine` (`House tabs → closed · 4 s`; a change on the cue's own fade says no time, the
+mock-ups' copy) and `cueSceneryLines`, which names each element from the scene, so a rename reads at
+once, and leaves out one the scene has lost (an element delete sweeps its changes and announces the
+cue, stack and Look lists, but the element list and the stack list refetch apart). The words are `shortSceneryWords`, the Looks library's summary words, shared.
+
+**The cue table's Scenery column** (`CueSheet`) is a read-out between FX and Notes: the cue's lines
+joined by ` · ` behind a `Blinds` glyph; where it changes nothing, the tracked hatch reading
+*tracked* if anything is tracked into it (the stack's set, or an earlier cue's change — a boolean,
+not a second fold of the desk's resolver) and the sheet's em-dash otherwise, since the editor can
+set it. A MARKER is a divider row with no cells, so it is blank. A press opens `CueSceneryEditor`
+(`components/scenery/`) at the cell: `EditorSurface` anchored at the button (one surface for the
+sheet, as the Stage popover has one for the stage, not a popover per row), **wide** in the side-sheet
+form, holding *Q15 · Storm · what changes here*, *Tracked into it: …*, and Cue properties' own
+`SceneryEditor` with times — each row's `SceneryControl` on release, the cue's whole list saved per
+gesture. It follows the lock as every cell does: locked, a press asks to unlock through the sheet's
+own dialog (or is disabled with the reason where the lock is not the operator's), and an editor open
+when a GO re-locks the show closes and stays closed. It is not a `cell`: one cue's list is not a value
+a marquee spreads. The phone never draws the table; its card readout shows scenery as before.
+
+**The Prompt Book** puts the same lines on the page:
+
+- **The margin glyph.** `CueMarginMarker` draws a `Blinds` glyph (`size-3`, in the marker's status
+  colour) between the chip and the band of a cue that moves something. Its title lists the changes;
+  its tap opens that cue's card in the rail — expanded, the drawer slid in where the rail is one,
+  scrolled into view (`openCueCard`, by the card's `data-rail-cue`). It takes its own press whether the
+  marker is click-through (locked) or a drag handle (unlocked), and stops the pointerdown so it never
+  starts a nudge. `ScriptViewer` is memoized, so the page hands it a memoized `sceneryByCue` and a
+  stable callback.
+- **The rail cards** list the cue's changes inline under its identity, one line each, on both faces
+  (`CueCardBody`'s `afterIdentity` slot on an open card, a full-width line under a collapsed row);
+  tracked state stays under Details. Unlocked, an open card's footer adds *Scenery…*, which opens the
+  cue table's `CueSceneryEditor` in place, anchored at the button, rather than deep-linking to Show;
+  *Edit cue* stays for everything else.
+- **The *On GO* line** heads the rail (docked or drawer): *ON GO · Q15* over *House tabs close 4 s ·
+  Moon in*. `useOnGoScenery` (`hooks/useNextGoPreview.ts`) compares the Next GO preview's scenery —
+  the whole stage as the GO would land it, programmer and Looks included — with the live
+  `scenery.state`, piece by piece with each piece's base filled in on both sides (`onGoMoves`): a
+  piece only one side names is compared against where it really is, one whose states all agree is
+  left out, hidden → shown **appears** and shown → hidden **hides**. Nothing moving draws nothing.
+  Only for the current project while its show runs. Not called *Standby*: that is the armed next cue
+  in the cue table and the unfired later cues here.
+- **The drawer dot.** Below 1040px the rail is a drawer and *On GO* is out of sight, so the toolbar's
+  *Cues* toggle carries a `Blinds` dot (and the line as its title) while the line is non-empty.
+
+**`useOnGoScenery` keeps the preview fresh, which the Stage view's Next GO source does not.** That
+source is keyed on *which* cue is on deck (`docs/stage-vis-engineering.md` §"The fourth source: Next
+GO"), so an edit to the cue on deck, or a programmer move, leaves its composed look until the next
+GO. A line that names moves cannot lag an edit made in the book's own *Scenery…*, so while the book is
+mounted the hook refetches the same query — one cache entry, so a Stage canvas on Next GO gets the
+fresh answer too — once the live pieces' **targets** and the cue on deck's own changes have held
+still for 250 ms (a programmer drag asks once, at its end; a move's progress is not a change). It
+reads `currentData`, so across a GO the outgoing cue's preview is never compared with the stage it
+has just landed.
 
 
 ## The runner, inside Show
@@ -634,7 +707,7 @@ All messages are JSON with a `type` field, received on the shared WebSocket conn
 |-------------|---------|--------|
 | `showEntriesChanged` | (none) | Invalidates `ShowEntries` RTK Query tag. Fired on entry CRUD operations (add, remove, reorder, update). |
 | `showChanged` | `projectId`, `activeStackId`, `activeStackName` | Fired on any playhead change — activate, deactivate, advance, go-to. When deactivating, `activeStackId`/`activeStackName` are `null`. |
-| `cueStackListChanged` | (none) | Invalidates `CueStackList` RTK Query tag |
+| `cueStackListChanged` | (none) | Invalidates `CueStackList` RTK Query tag — fired by stack CRUD and also by a cue scenery write or an element delete that swept scenery, since the list carries each cue's own changes |
 | `cueListChanged` | (none) | Invalidates `CueList` RTK Query tag |
 
 ### Subscription Pattern
@@ -645,7 +718,7 @@ Each WS API module exposes subscribe methods returning a `{ unsubscribe }` handl
 ### RTK Query Cache
 All CRUD operations go through RTK Query with tag-based cache invalidation:
 - `ShowEntries` -- invalidated by any show mutation or WS `showEntriesChanged`
-- `CueStackList` -- invalidated by stack mutations or WS `cueStackListChanged`
+- `CueStackList` -- invalidated by stack mutations, cue scenery writes (`setCueScenery`, a Record or Update that wrote scenery) or WS `cueStackListChanged`
 - `CueList` -- invalidated by cue mutations or WS `cueListChanged`
 - `FixtureEffects`, `GroupActiveEffects` -- invalidated by playback mutations (activate, advance, deactivate)
 

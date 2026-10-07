@@ -326,7 +326,7 @@ Both this and `reorder` also call `FxEngine.repriorityCues`, since cue priority 
 
 - `NewCueStack` — name, loop
 - `CueStackDetails` — full stack with ordered cues, activeCueId, canEdit, canDelete
-- `CueStackCueEntry` — id, name, sortOrder, presetCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType
+- `CueStackCueEntry` — id, name, sortOrder, layerCount, adHocEffectCount, autoAdvance, autoAdvanceDelayMs, fadeDurationMs, fadeCurve, cueNumber, cueNumberAuto, notes, cueType, scenery (the cue's own scenery changes, always encoded — §"Scenery")
 - `CueStackActivateResponse` — stackId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
@@ -458,7 +458,14 @@ A move's `from` is where the piece is drawn at that moment, so a retarget mid-mo
 transitionMs?}]}`, every problem at once (a state its element's kind cannot take, an element named
 twice, a `transitionMs` off a cue, a MARKER or a separator). The owners' read DTOs carry the lists:
 `CueDetails.scenery` (plus `trackedScenery`, what the cue shows without moving it and where from),
-`CueStackDetails.scenery`, `LookDetails.scenery` — and the Look list's and busk pads' `LookDto`
+`CueStackDetails.scenery`, `LookDetails.scenery` — the stack list carries every cue's **own**
+changes too, `CueStackDetails.cues[].scenery` (scenery-programmer plan D13, D14: the cue table's
+Scenery column and the Prompt Book read every cue at once; `@EncodeDefault(ALWAYS)`, one batched query
+per stack, `cueSceneryByCue`), so every cue scenery write — the `PUT`, the AI's `set_scenery` on a
+cue, a Record or an Update that wrote scenery — fires `cueStackListChanged` beside `cueListChanged`, and an
+element delete that swept scenery (REST or `set_scene`'s `removeElements`) announces the cue, stack
+and Look lists (`sceneryOwnersChanged`) —
+and the Look list's and busk pads' `LookDto`
 carries a summary, `scenery: [{elementUuid, elementName, state}]` (`@EncodeDefault(ALWAYS)`, one
 batched query per list, `lookScenerySummariesFor`), for the Looks sheet's Scenery column. Deleting an element sweeps its changes; deleting a
 cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.

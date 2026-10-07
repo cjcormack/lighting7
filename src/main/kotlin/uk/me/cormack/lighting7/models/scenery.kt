@@ -428,6 +428,18 @@ internal fun DaoLookSceneryRow.toDto() = SceneryChangeDto(
 fun cueSceneryOf(cueId: EntityID<Int>): List<DaoCueSceneryRow> =
     DaoCueSceneryRow.find { DaoCueScenery.cue eq cueId }.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
+/**
+ * The own scenery changes of every cue in [cueIds], by cue id, each list in [cueSceneryOf]'s order —
+ * one query for a stack's cues rather than one per cue, for the stack list's `cues[].scenery`
+ * (scenery-programmer plan D13, D14). A cue with none is absent. Must be called inside a transaction.
+ */
+fun cueSceneryByCue(cueIds: Collection<EntityID<Int>>): Map<Int, List<DaoCueSceneryRow>> {
+    if (cueIds.isEmpty()) return emptyMap()
+    return DaoCueSceneryRow.find { DaoCueScenery.cue inList cueIds.toList() }
+        .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
+        .groupBy { it.readValues[DaoCueScenery.cue].value }
+}
+
 fun stackSceneryOf(stackId: EntityID<Int>): List<DaoCueStackSceneryRow> =
     DaoCueStackSceneryRow.find { DaoCueStackScenery.stack eq stackId }.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 

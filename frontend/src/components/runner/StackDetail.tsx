@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { ArrowLeft, SeparatorHorizontal, Zap } from 'lucide-react'
+import { ArrowLeft, Pencil, SeparatorHorizontal, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DndContext,
@@ -30,6 +30,7 @@ import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { ShowStackViewSwitcher, type CardsListView } from '@/components/ViewSwitcher'
 import { CueSheet } from './CueSheet'
+import { OwnerEditor } from '@/components/stage/OwnerEditor'
 
 interface StackDetailProps {
   stack: CueStack
@@ -125,6 +126,12 @@ export function StackDetail({
   onRequestUnlock,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
+  /** *Stack settings…* open — the stack form, the set's door from inside the stack (D13). */
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // A GO that re-locks the show closes the form rather than holding it for the unlock.
+  useEffect(() => {
+    if (locked) setSettingsOpen(false)
+  }, [locked])
   const [sortByCueNumber] = useSortCueStackByCueNumberMutation()
 
   // Offer to fix the order when a cue-number group descends against itself. Dismissal is scoped
@@ -261,6 +268,19 @@ export function StackDetail({
               <SeparatorHorizontal className="size-3.5" />
               <span className="ml-1.5 hidden @[600px]:inline">Separator</span>
             </Button>
+            {/* **The stack's settings — its set among them — from inside the stack**
+                (scenery-programmer plan D13), where the stack list's row menu is the only other
+                door. Shown where that menu shows it, unlocked; the same form, mounted in place. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Stack settings…"
+              title="Name, loop and the set — the scenery held while this stack is live"
+            >
+              <Pencil className="size-3.5" />
+              <span className="ml-1.5 hidden @[600px]:inline">Stack settings…</span>
+            </Button>
           </>
         )}
       </SheetPage.Header>
@@ -341,6 +361,10 @@ export function StackDetail({
           </SortableContext>
         </DndContext>
       </div>
+      )}
+      {/* Mounted only while open: the stack form reads the store, and a closed one is nothing. */}
+      {settingsOpen && !locked && (
+        <OwnerEditor projectId={projectId} entry={{ kind: 'set', id: stack.id }} onClose={() => setSettingsOpen(false)} />
       )}
     </div>
   )

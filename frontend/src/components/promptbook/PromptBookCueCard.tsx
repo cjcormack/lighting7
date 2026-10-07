@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { Anchor, ChevronRight, Pencil, TriangleAlert, X } from 'lucide-react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { Anchor, Blinds, ChevronRight, Pencil, TriangleAlert, X } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { positionLabel } from '@/lib/promptBook/geometry'
@@ -8,6 +8,7 @@ import { TruncateStart } from '@/components/TruncateStart'
 import { cueNumberCellWidth } from '@/lib/cueNumber'
 import { CueCardBody, type CueCardKind, type ExpansionMode } from '@/components/runner/mobile/CueCardBody'
 import { useCueFade } from '@/hooks/useCueFade'
+import { CueSceneryEditor } from '@/components/scenery/CueSceneryEditor'
 import type { CueAnchorDto } from '@/api/promptBooksApi'
 import type { CueStackCueEntry } from '@/api/cueStacksApi'
 import type { DesyncWarning, FlatCue } from '@/lib/promptBook/desync'
@@ -56,6 +57,12 @@ interface PromptBookCueCardProps {
   onRenumberCue: (cueId: number, cueNumber: string | null) => void
   /** Set (or clear, with null) the cue's note. Only wired up while unlocked. */
   onRenoteCue: (cueId: number, notes: string | null) => void
+  /**
+   * The scenery the cue moves on GO, one line per change (`Moon → in · 8 s`), listed inline under
+   * its name on both faces (scenery-programmer plan D14); what it only tracks stays under Details.
+   * Must keep its identity while the cue's changes do — this component is memoized.
+   */
+  sceneryLines?: readonly string[]
 }
 
 const STATUS_KIND: Record<CueRunStatus, CueCardKind> = {
@@ -106,6 +113,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   onRenameCue,
   onRenumberCue,
   onRenoteCue,
+  sceneryLines,
 }: PromptBookCueCardProps) {
   const anchored = anchor != null
   const showSetNext = canSetNext && status !== 'live' && status !== 'next'
@@ -117,6 +125,16 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
   // Cue identity is editable exactly while the book is unlocked — the same gate as anchors
   // and annotations. `cueEntry` carries the raw cueNumber (FlatCue only has the folded label).
   const editable = !locked && cueEntry != null
+
+  // *Scenery…* — the cue's changes edited in place, unlocked (D14), the cue table's own editor.
+  const [sceneryOpen, setSceneryOpen] = useState(false)
+  const sceneryButtonRef = useRef<HTMLButtonElement>(null)
+  // A GO that re-locks the book, or a collapse (the playhead's cards follow the GO), closes it
+  // rather than holding it for the unlock or the next expand: it is drawn only on the open card.
+  useEffect(() => {
+    if (locked || !expanded) setSceneryOpen(false)
+  }, [locked, expanded])
+  const lines = sceneryLines ?? []
 
   const warningTriangle =
     warnings.length > 0 ? (
@@ -220,7 +238,7 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
 
   if (expanded) {
     return (
-      <div className="my-1">
+      <div className="my-1" data-rail-cue={cue.cueId}>
         <CueCardBody
           kind={STATUS_KIND[status]}
           cue={cueEntry ?? null}
@@ -247,11 +265,38 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               {chevron}
             </>
           }
+          afterIdentity={
+            lines.length > 0 ? (
+              <div className="mx-3 mt-1.5 space-y-0.5" data-card-scenery={cue.cueId}>
+                {lines.map((line, i) => (
+                  <div key={`${i}:${line}`} className="flex min-w-0 items-center gap-1.5 text-xs text-foreground">
+                    <Blinds className="size-3 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{line}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null
+          }
           footer={
             <div className="flex items-center gap-2 px-3 pt-0.5 pb-3 text-xs">
               {anchorAffordance}
               <span className="flex-1" />
               {setNextButton}
+              {editable && cueEntry.cueType !== 'MARKER' && (
+                <button
+                  ref={sceneryButtonRef}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSceneryOpen(true)
+                  }}
+                  title="Edit the scenery this cue changes, here"
+                  className="inline-flex items-center gap-1 font-medium text-sky-400 hover:underline"
+                >
+                  <Blinds className="size-3" />
+                  Scenery…
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -265,6 +310,12 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
               </button>
             </div>
           }
+        />
+        <CueSceneryEditor
+          projectId={projectId}
+          cue={sceneryOpen && editable ? cueEntry : null}
+          anchorRef={sceneryButtonRef}
+          onClose={() => setSceneryOpen(false)}
         />
       </div>
     )
@@ -315,8 +366,9 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') onCueClick(cue)
       }}
+      data-rail-cue={cue.cueId}
       className={cn(
-        'group my-0.5 flex w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left',
+        'group my-0.5 flex w-full flex-wrap items-center gap-x-2.5 gap-y-0.5 rounded-md border px-2.5 py-2 text-left',
         isLive
           ? 'border-emerald-600/50 bg-emerald-950/20'
           : isNext
@@ -398,6 +450,17 @@ export const PromptBookCueCard = memo(function PromptBookCueCard({
       {warningTriangle}
       {anchorAffordance}
       {chevron}
+      {lines.length > 0 && (
+        // A line of its own under the row, indented past the status slot so it reads under the cue.
+        <div className="basis-full space-y-0.5 pl-[1.125rem]" data-card-scenery={cue.cueId}>
+          {lines.map((line, i) => (
+            <div key={`${i}:${line}`} className={cn('flex min-w-0 items-center gap-1.5 text-[11px]', isDone ? 'text-muted-foreground/60' : 'text-muted-foreground')}>
+              <Blinds className="size-3 shrink-0" />
+              <span className="truncate">{line}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 })
