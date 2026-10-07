@@ -280,6 +280,20 @@ class CascadePublisher internal constructor(
         PropertyChannelWriter.channelKeyIndex(fixtures).coveringKeys[universe to channel]
 
     /**
+     * Every (target, property) key whose channels include (universe, channel) — the address's
+     * whole list, of which [resolveChannelCoveringKey] is the one a raw write is filed under. A pan
+     * channel is both `pan` and `position`; an effect painting the second still paints the channel
+     * a raw write filed under the first, which is what provenance needs to know (fixture-fx-sheets
+     * plan W4). Same index, same one walk.
+     */
+    fun resolveChannelPropertyKeys(universe: Int, channel: Int): List<CueAssignmentResolver.Key> =
+        PropertyChannelWriter.channelKeyIndex(fixtures).propertyKeys[universe to channel] ?: emptyList()
+
+    /** The parked value of (universe, channel), or null when it is not parked or nothing parks. */
+    internal fun parkedValue(universe: Int, channel: Int): UByte? =
+        parkManager?.getParkedValue(universe, channel)
+
+    /**
      * Is every DMX channel backing [target] on [fixture] parked?
      *
      * When true, the caller can skip publish/reset work entirely because [ArtNetController]

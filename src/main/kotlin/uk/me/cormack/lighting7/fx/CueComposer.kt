@@ -81,7 +81,7 @@ data class CookWinner(
  * Which of a layer's *own* effects a higher stomping layer has switched off:
  * `layerId → targetKey → property names`.
  *
- * Read per tick by `FxEngine.isSuppressed` against an instance's `cueLayerId` /
+ * Read per tick by `EffectSuppression.isSuppressed` (through the engine's tick) against an instance's `cueLayerId` /
  * `programmerLayerId`. The key space is the layer's, not the cue's — and the two id spaces
  * (`DaoCueLayer` row ids and `ProgrammerStore.mintLayerId`'s counter) are held in **separate** maps
  * on the engine rather than risking a collision in one.

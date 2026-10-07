@@ -88,6 +88,26 @@ data class ToggleOutcome(
     val released: Int = 0,
 )
 
+/** What [ProgrammerLayerStack.resetEffectToTemplate] did. */
+sealed interface ResetToTemplateOutcome {
+    /** The instance now runs the template's current effect; [instance] is the one now live. */
+    data class Reset(val instance: FxInstance) : ResetToTemplateOutcome
+
+    /** No effect with that id is running. */
+    data object NotFound : ResetToTemplateOutcome
+
+    /** It is running but cannot be reset: [code] says why. */
+    data class Refused(val code: String, val message: String) : ResetToTemplateOutcome
+
+    companion object {
+        /** No template layer in the programmer spawned this instance. */
+        const val NOT_FROM_TEMPLATE = "FX_NOT_FROM_TEMPLATE"
+
+        /** Its template no longer resolves — deleted, or emptied of its effect. */
+        const val TEMPLATE_GONE = "FX_TEMPLATE_GONE"
+    }
+}
+
 /** How much of one target a library record is applied to — see [ProgrammerLayerStack.appliedState]. */
 enum class AppliedExtent {
     /** Every head the target names is covered. A fixture is only ever this or absent. */
@@ -702,6 +722,80 @@ class ProgrammerLayerStack(
         // an already-applied layer is not the layer arriving — re-timing it would make every nudge
         // of a colour crossfade on stage.
         return materialise(cookStack(layers, withEffects = false).values).moved
+    }
+
+    /**
+     * Put a template layer's **current** effect back on the instance it spawned — the busk Effects
+     * tab's *Reset to template* (fixture-fx-sheets plan W5, D20). The instance is edited in place
+     * through [FxEngine.updateEffect], so its id and its phase are kept: a running chase snaps back
+     * to the template's settings without restarting.
+     *
+     * Everything the layer would spawn the effect with is restored — the effect and its
+     * parameters, division, blend, phase offset, distribution, element mode and filter, step
+     * timing, timing source and both masters — with the layer's own overrides (its speed masters,
+     * its beat-division override) applied exactly as [build] applies them.
+     *
+     * **The spawn key moves to the template's current effect.** [syncEffects] matches an instance
+     * by the [EffectEntry] it was spawned from, so an instance spawned before a template edit
+     * carries the old entry and the next recook would retract it and spawn afresh. Reset is the
+     * moment the instance becomes the template's current effect, so it takes that entry as its key
+     * and the next recook keeps it. Done under [effectsLock], so no recook can classify the instance
+     * between the update and the re-key.
+     *
+     * Refused with [ResetToTemplateOutcome.NOT_FROM_TEMPLATE] for an instance no programmer
+     * template layer spawned — a Look layer's, a manual one, a cue's (whose template layer is
+     * re-spawned by the next GO, not edited in place), Include's.
+     */
+    fun resetEffectToTemplate(effectId: Long): ResetToTemplateOutcome = synchronized(effectsLock) {
+        val eng = engine()
+        val instance = eng.getEffect(effectId) ?: return ResetToTemplateOutcome.NotFound
+        val key = instance.programmerLayerEffectKey
+        val source = instance.source
+        val layer = key?.let { k -> store.layers.firstOrNull { it.layerId == k.layerId } }
+        if (key == null || source == null || !source.isTemplate || layer == null) {
+            return ResetToTemplateOutcome.Refused(
+                ResetToTemplateOutcome.NOT_FROM_TEMPLATE,
+                "Effect $effectId was not started by a template layer in the programmer",
+            )
+        }
+        val entry = templateRegistry().snapshot(source.uuid)?.effect
+            ?: return ResetToTemplateOutcome.Refused(
+                ResetToTemplateOutcome.TEMPLATE_GONE,
+                "Template '${source.name}' no longer holds an effect to reset to",
+            )
+        val st = state() ?: return ResetToTemplateOutcome.NotFound
+        val spec = entry.toEffectSpec()
+            .let { if (layer.beatDivisionOverride == null) it else it.copy(beatDivision = layer.beatDivisionOverride) }
+        // Built the way [build] builds a fresh spawn, on the instance's own target, and read for its
+        // settings only — this instance is never added to the engine.
+        val fresh = try {
+            EffectSpawner.createEffectInstance(
+                spec, instance.target, state = st,
+                overrideSpeedMasterUuid = layer.speedMasterUuid,
+                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+            )
+        } catch (e: Exception) {
+            return ResetToTemplateOutcome.Refused(
+                ResetToTemplateOutcome.TEMPLATE_GONE,
+                "Template '${source.name}''s effect could not be created: ${e.message}",
+            )
+        }
+        val updated = eng.updateEffect(
+            effectId = effectId,
+            newEffect = fresh.effect,
+            newTiming = fresh.timing,
+            newBlendMode = fresh.blendMode,
+            newPhaseOffset = fresh.phaseOffset,
+            newDistributionStrategy = fresh.distributionStrategy,
+            newElementMode = fresh.elementMode,
+            newElementFilter = fresh.elementFilter,
+            newStepTiming = fresh.stepTiming,
+            newRegistrationId = fresh.registrationId,
+            newTimingSource = fresh.timingSource,
+            replaceMasters = FxEngine.MasterAssignment(fresh.speedMasterUuid, fresh.rateSpeedMasterUuid),
+        ) ?: return ResetToTemplateOutcome.NotFound
+        updated.programmerLayerEffectKey = key.copy(effect = entry)
+        ResetToTemplateOutcome.Reset(updated)
     }
 
     // ── The cook ────────────────────────────────────────────────────────────

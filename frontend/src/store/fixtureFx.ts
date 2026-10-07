@@ -2,6 +2,7 @@ import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
 import type { BlendMode } from '../api/groupsApi'
+import type { UpdateFxRequest } from '../api/fxApi'
 
 // WebSocket subscription: invalidate fixture effects when any FX changes
 lightingApi.fx.subscribe(() => {
@@ -178,23 +179,8 @@ export interface ActiveEffect {
   rateSpeedMasterUuid: string | null
 }
 
-export interface UpdateFxRequest {
-  effectType?: string
-  parameters?: Record<string, string>
-  beatDivision?: number
-  blendMode?: string
-  phaseOffset?: number
-  distributionStrategy?: string
-  elementFilter?: string
-  stepTiming?: boolean
-  /**
-   * Reassign the effect's speed master (omitted = no change, like every other field). The
-   * picker always sends a concrete uuid — master 1's uuid means "back to the default".
-   */
-  speedMasterUuid?: string
-  /** Reassign the wall-clock rate master; omitted = no change, as above. */
-  rateSpeedMasterUuid?: string
-}
+/** The body of `PUT /fx/{id}` and the `updateFx` frame alike — declared beside the frame. */
+export type { UpdateFxRequest }
 
 // === RTK Query Endpoints ===
 
@@ -260,6 +246,20 @@ export const fixtureFxApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * Put a template layer's current effect back on the instance it spawned, keeping the id and
+     * the phase — `POST /fx/{id}/reset` (fixture-fx-sheets plan W5), the busk Effects tab's *Reset
+     * to template*. 409 `FX_NOT_FROM_TEMPLATE` for an instance no programmer template layer
+     * started, 409 `FX_TEMPLATE_GONE` when its template no longer holds an effect.
+     */
+    resetFxToTemplate: build.mutation<ActiveEffect, { id: number }>({
+      query: ({ id }) => ({
+        url: `fx/${id}/reset`,
+        method: 'POST',
+      }),
+      invalidatesTags: ['FixtureEffects'],
+    }),
+
     resumeFx: build.mutation<void, { id: number; fixtureKey: string }>({
       query: ({ id }) => ({
         url: `fx/${id}/resume`,
@@ -282,4 +282,5 @@ export const {
   useRemoveFxMutation,
   usePauseFxMutation,
   useResumeFxMutation,
+  useResetFxToTemplateMutation,
 } = fixtureFxApi

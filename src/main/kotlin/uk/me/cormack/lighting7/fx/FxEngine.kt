@@ -202,7 +202,7 @@ class FxEngine(
      * An entry here suppresses every effect on that (fixture, property) except effects in
      * the programmer priority band — the "programmer wins over effects" rule.
      */
-    private fun programmerSuppression(): Map<String, Set<String>> {
+    internal fun programmerSuppression(): Map<String, Set<String>> {
         if (programmerStore.blind) return emptyMap()
         val epoch = programmerStore.coverageEpoch
         var cached = suppressionCache
@@ -264,34 +264,18 @@ class FxEngine(
     }
 
     /**
-     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick?
-     *
-     * Two independent reasons, and the order matters:
-     *
-     * 1. **Within-cue / within-stack stomp** — a higher layer with `stomp` set asserts this
-     *    property, so this layer's effect is switched off on it. Checked *first*, and deliberately
-     *    outside the programmer-band exemption below: a programmer layer's effects live in that band
-     *    by construction, so exempting the band would make programmer stomp a no-op.
-     * 2. **Programmer suppression** — the programmer holds this key, so effects must not paint over
-     *    it. Band effects are exempt: they modulate on top of the programmer rather than fighting it.
-     *
-     * The reset pass ([resetActiveProperties]) has already put the layer below on the property, so a
-     * skipped apply *shows the cooked value* rather than freezing the effect's last frame. That is
-     * what makes suppression recoverable where removal would not be: the instance keeps running, and
-     * clearing the stomp brings it back with its phase intact.
+     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick? [EffectSuppression]'s
+     * rule, which provenance and the `programmer.keyStack` read ask too — see there for the two
+     * reasons and why their order matters.
      */
     private fun isSuppressed(
         suppression: Map<String, Set<String>>,
         fixtureKey: String,
         propertyName: String,
         effect: FxInstance,
-    ): Boolean {
-        if (cueLayer.isLayerStomped(effect, fixtureKey, propertyName)) return true
-
-        if (suppression.isEmpty()) return false
-        if (isProgrammerFxPriority(effect.priority)) return false
-        return suppression[fixtureKey]?.contains(propertyName) == true
-    }
+    ): Boolean = EffectSuppression.isSuppressed(
+        suppression, fixtureKey, propertyName, effect, isLayerStomped,
+    )
 
     private fun rebuildSortedSnapshots() {
         // Every mutation of [activeEffects] calls this immediately afterwards — before any
@@ -403,6 +387,13 @@ class FxEngine(
     }
 
     /**
+     * [cueLayer]'s stomp check as one function value, built once: the tick loops ask
+     * [EffectSuppression.isSuppressed] per effect per member per pass, and a bound reference
+     * written at the call site would allocate on every one of those.
+     */
+    private val isLayerStomped: (FxInstance, String, String) -> Boolean = cueLayer::isLayerStomped
+
+    /**
      * Provenance computation + broadcast. The lambdas hand it read access to the engine's
      * live effect set without a service → engine reference.
      */
@@ -413,6 +404,7 @@ class FxEngine(
         isLayerStomped = cueLayer::isLayerStomped,
         cueStackIdFor = cueLayer::cueStackIdFor,
         effectOrder = sortedEffectsComparator,
+        programmerSuppression = ::programmerSuppression,
     )
 
     /** PROGRAMMER-layer write delegation. */
@@ -643,6 +635,21 @@ class FxEngine(
     }
 
     /**
+     * Remove several effects as **one** mutation — one rebuild, one reset of what they left
+     * uncovered, one broadcast — returning how many were live. `programmer.clearTarget`'s effect
+     * half; [removeEffect] in a loop would rebuild and broadcast the whole list once per effect.
+     */
+    fun removeEffects(effectIds: Collection<Long>): Int {
+        val removed = effectIds.mapNotNull { activeEffects.remove(it) }
+        if (removed.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            resetUncoveredProperties(removed)
+            emitStateUpdate()
+        }
+        return removed.size
+    }
+
+    /**
      * Get an effect by ID.
      *
      * @param effectId The effect ID
@@ -777,6 +784,21 @@ class FxEngine(
          * this leaves [FxInstance.registrationId] naming the type the instance no longer runs.
          */
         newRegistrationId: String? = null,
+        /**
+         * The timing source of [newEffect]'s type, when the caller swapped the type. Null = keep.
+         * A beat effect swapped for a wall-clock one (or back) runs on the other loop and reads the
+         * other master, so a swap that kept the old source would run the new type on the wrong
+         * clock. Only honoured on the swap path, which is the only path a type change takes.
+         */
+        newTimingSource: TimingSource? = null,
+        /**
+         * Set **both** masters to exactly these values, null meaning each one's default (master 1;
+         * no rate master) — where [newSpeedMasterUuid] / [newRateSpeedMasterUuid] can only ever
+         * move a master, never clear one. Reset to template (`POST /fx/{id}/reset`) is the caller:
+         * it restores the template's assignment whatever the instance was edited to. Wins over the
+         * two single-master parameters when given.
+         */
+        replaceMasters: MasterAssignment? = null,
     ): FxInstance? {
         val existing = activeEffects[effectId] ?: return null
 
@@ -798,7 +820,7 @@ class FxEngine(
         }
 
         // Determine if we need an atomic swap (immutable fields changed)
-        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null
+        val needsSwap = newEffect != null || newTiming != null || newBlendMode != null || newTimingSource != null
 
         val updated = if (needsSwap) {
             FxInstance(
@@ -834,7 +856,7 @@ class FxEngine(
                 // would snap an edited wall-clock effect back to the start of its cycle —
                 // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
                 accumulatedScaledMs = existing.accumulatedScaledMs
-                timingSource = existing.timingSource
+                timingSource = newTimingSource ?: existing.timingSource
                 // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
                 // it on first read, which costs one walk and is the safe direction. Carrying it
                 // would survive a future `updateEffect` that learns to retarget, and the effect
@@ -855,6 +877,7 @@ class FxEngine(
                 } else {
                     existing.rateMasterSlot
                 }
+                replaceMasters?.let { assignMasters(this, it) }
             }
         } else {
             newSpeedMasterUuid?.let {
@@ -865,6 +888,7 @@ class FxEngine(
                 existing.rateSpeedMasterUuid = it
                 existing.rateMasterSlot = rateSlotFor(it)
             }
+            replaceMasters?.let { assignMasters(existing, it) }
             existing
         }
 
@@ -878,6 +902,16 @@ class FxEngine(
         }
         emitStateUpdate()
         return updated
+    }
+
+    /** Both of an effect's master assignments, as [updateEffect]'s `replaceMasters` sets them. */
+    data class MasterAssignment(val speedMasterUuid: java.util.UUID?, val rateSpeedMasterUuid: java.util.UUID?)
+
+    private fun assignMasters(instance: FxInstance, masters: MasterAssignment) {
+        instance.speedMasterUuid = masters.speedMasterUuid
+        instance.speedMasterSlot = speedMasters.slotFor(masters.speedMasterUuid)
+        instance.rateSpeedMasterUuid = masters.rateSpeedMasterUuid
+        instance.rateMasterSlot = rateSlotFor(masters.rateSpeedMasterUuid)
     }
 
     /**

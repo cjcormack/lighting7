@@ -244,6 +244,82 @@ class ProgrammerWriter internal constructor(
         return all
     }
 
+    /** What [releaseFixtures] took out of the programmer. */
+    data class Release(
+        /** Property entries released (one per key, however many owners held it) plus sideband channels. */
+        val values: Int,
+        /**
+         * Every (key, property, owner) **property** slot removed, for the callers that keep
+         * bookkeeping per owner (Locate). Sideband slots are not listed: no owner with bookkeeping
+         * writes one.
+         */
+        val releasedSlots: List<Triple<String, String, ProgrammerOwner>>,
+    )
+
+    /**
+     * Release **everything** the programmer holds on [targets] — every property entry on each key
+     * (a fixture's own and each of its heads', when the caller lists them) and every sideband slot on
+     * a channel one of them owns — in one sweep, one cascade publish and one provenance update. The
+     * fixture sheet's *Release* (`programmer.clearTarget`, fixture-fx-sheets plan W2, D6).
+     *
+     * [clearEntries]' rule per key, widened from one property to all of them: every owner's slot
+     * goes **except [ProgrammerOwner.LAYERS]**, whose contribution is derived and would come back on
+     * the next recook — a layer leaves by being removed, not by clearing what it cooked.
+     *
+     * A sideband channel is released when the property covering it belongs to one of [targets], or
+     * when it is one of [footprint]'s — the channels the targets are patched on, which also finds a
+     * raw write on a channel no property backs. A covered channel releases through the cascade; an
+     * unbacked one has nothing below it and goes to 0, as [clearAll] does.
+     */
+    fun releaseFixtures(
+        targets: Collection<GroupableFixture>,
+        footprint: Set<Long> = emptySet(),
+        fadeMs: Long = 0,
+    ): Release {
+        val byKey = targets.associateBy { it.targetKey }
+        val keys = HashSet<CueAssignmentResolver.Key>()
+        val released = ArrayList<Triple<String, String, ProgrammerOwner>>()
+        var values = 0
+        for (entry in programmerStore.entries()) {
+            val fixture = byKey[entry.fixtureKey] ?: continue
+            var any = false
+            for (slot in entry.slots) {
+                if (slot.owner == ProgrammerOwner.LAYERS) continue
+                programmerStore.clear(slot.owner, entry.fixtureKey, entry.propertyName)
+                released += Triple(entry.fixtureKey, entry.propertyName, slot.owner)
+                any = true
+            }
+            if (!any) continue
+            values++
+            if (PropertyChannelWriter.channelsFor(fixture, entry.propertyName).isNotEmpty()) {
+                keys += CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.propertyName)
+            }
+        }
+
+        val sideband = ArrayList<Long>()
+        val unbacked = ArrayList<Pair<Int, Int>>()
+        for (entry in programmerStore.channelEntries()) {
+            val covering = publisher.resolveChannelCoveringKey(entry.universe, entry.channel)
+            val packed = packChannelKey(entry.universe, entry.channel)
+            val ours = (covering != null && covering.targetKey in byKey) || packed in footprint
+            if (!ours) continue
+            sideband += packed
+            if (covering != null) keys += covering else unbacked += entry.universe to entry.channel
+        }
+        if (sideband.isNotEmpty()) programmerStore.clearChannelsAbsorbedBy(sideband)
+        values += sideband.size
+
+        if (values == 0) return Release(0, emptyList())
+        if (keys.isNotEmpty()) publisher.publishCascadeForKeys(keys, fadeMs)
+        if (!programmerStore.blind) {
+            for ((universe, channel) in unbacked) {
+                fixtures.controllerOrNull(Universe(0, universe))?.setValue(channel, 0u, fadeMs)
+            }
+        }
+        onProgrammerChanged()
+        return Release(values, released)
+    }
+
     /**
      * Raw-channel write into the programmer's sideband — the compatibility path for
      * `updateChannel` on channels the property model can't lift (position axes, channels

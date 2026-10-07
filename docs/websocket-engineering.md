@@ -214,11 +214,11 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Channel | `ChannelSocket.kt` | 4 | 3 | `handleChannel` | via Broadcast's listener |
 | Cloud sync | `CloudSyncSocket.kt` | — | 7 | — | `setupCloudSyncSubscriptions` |
 | Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
-| FX | `FxSocket.kt` | 5 | 2 | `handleFx` | `setupFxSubscriptions` |
+| FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
-| Programmer | `ProgrammerSocket.kt` | 13 | 10 | `handleProgrammer` | `setupProgrammerSubscriptions` |
+| Programmer | `ProgrammerSocket.kt` | 15 | 12 | `handleProgrammer` | `setupProgrammerSubscriptions` |
 | Project | `ProjectSocket.kt` | 1 | 2 | `handleProject` | `setupProjectSubscriptions` |
 | Scenery | `ScenerySocket.kt` | — | 1 | — | `setupScenerySubscriptions` |
 | Selection | `SelectionSocket.kt` | 3 | 1 | `handleSelection` | `setupSelectionSubscriptions` |
@@ -233,7 +233,7 @@ Broadcast, Cloud sync, Effects, Machine, Scenery and Stage render. Channel is th
 `BroadcastSocket.kt`'s `FixturesChangeListener`, which is also where its connect snapshot lives —
 so the family has no `setupChannelSubscriptions` of its own.
 
-## Client → Server (51)
+## Client → Server (54)
 
 Every inbound frame is `{ "type": "<name>", …fields }`. Fields with a default are optional.
 
@@ -287,8 +287,19 @@ and provenance read a sideband slot through the same lookup.
 | `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `clearFx` | — | Replies `fxChanged(CLEARED)` |
+| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`) | Replies `fxChanged(UPDATED, id)` \| `fxError` |
 
-Adding and updating effects is REST (`POST /api/rest/fx/add`), not WS.
+Adding effects is REST (`POST /api/rest/fx/add`), not WS. **Updating one is both**: `updateFx` is
+`PUT /api/rest/fx/{id}` as a frame (fixture-fx-sheets plan W3), for a live FX editor whose every
+drag is a write — a frame rather than a request per 50 ms, and P4 gives it the FX family's spelling
+rather than the boards' `fx.update`. Both doors call one parse, `applyEffectUpdate` in
+`routes/lightFx.kt` — the strict coercion (`EffectSpecCoercion.Strict`), the output-type check, the
+master-uuid check — so the two cannot drift, and `FxLiveEditRoutesTest` pins the frame's field list
+to the request's. The id and the phase are kept (`FxEngine.updateEffect`); a type swap takes the
+new type's timing source with it, as the add path does. A refusal decides before anything moves.
+It is gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
+`FU-AUTH-WS-PER-MESSAGE`'s trigger (an *admin-only* operation gaining a socket command) does not
+fire.
 
 ### Project — `ProjectSocket.kt`
 
@@ -494,6 +505,8 @@ always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect pa
 | `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?`, `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.setScenery` | `elementUuid`, `state: {visible?, open?, trimM?}`, `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
 | `programmer.clearScenery` | `elementUuid?` (absent: everything held), `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
+| `programmer.keyStack` | `targetType`, `targetKey`, `propertyName`, `requestId?` | `programmer.keyStack` (to this socket only) |
+| `programmer.clearTarget` | `targetType`, `targetKey`, `fadeMs?`, `requestId?` | `programmer.targetCleared` (to this socket only) |
 
 **The programmer's scenery** (scenery-programmer plan D1): `setScenery` holds states on one scene
 element, merged over what it already holds, and `clearScenery` lets one go or all of them. A write is
@@ -504,6 +517,22 @@ is a drawn drape's …`). `fadeMs` above 0 is the move's clock; otherwise the pi
 home on; Clear (`programmer.clearAll`) releases everything on its own. Both are **operator gestures
 of `programmer.set`'s tier** — nothing admin-only gains a WS command — so `FU-AUTH-WS-PER-MESSAGE`
 does not fire.
+
+**The property stack and Release** (fixture-fx-sheets plan W1, W2). `keyStack` asks what sits
+under one property, top first — the read behind the fixture sheet's source chip. It is a
+request/reply on the asking socket, never broadcast: only the asker has the stack open, and it
+re-asks when `provenanceState` moves. `clearTarget` is the sheet's *Release*: every owner's slot but
+a layer's, on every property of the fixture and its heads (or of every member of a group), the raw
+sideband on their channels, and the **local** effects on it — `FxInstance.isLocalEffect`, the grid
+⌫'s rule moved to the desk — the effects stopped first and then the values released in one sweep
+with one republish at `fadeMs` (`clearAll`'s order, so an effect-covered key fades rather than
+snapping), Locate's bookkeeping
+pruned as `clearEntry` prunes it. A local effect that drives heads outside the target (a group
+effect on one member's Release) is left running and named in the reply's `partial`. Both carry a
+client `requestId`, echoed so a promise resolves with its own answer, and answer a target that
+does not resolve with an `error` field rather than `programmer.error`, so the promise is answered
+rather than left to time out. A read and an operator gesture of `clearEntry`'s tier: neither fires
+`FU-AUTH-WS-PER-MESSAGE`.
 
 `sourceGroup` is for clients that fan a group-scoped gesture out to member fixtures rather than
 sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a Highlight
@@ -532,7 +561,7 @@ Learn sessions are **connection-owned**: `SocketScope.ownedLearnSessions` bounds
 broadcast so two `/surfaces` tabs don't see each other's captures, and teardown cancels any
 session this connection started.
 
-## Server → Client (78)
+## Server → Client (81)
 
 ### Boot — `BootSocket.kt`
 
@@ -632,7 +661,8 @@ duplicate alike. See `docs/cue-stacks-engineering.md` §"WebSocket".
 | Message | Payload | When |
 |---|---|---|
 | `fxState` | `activeEffects: [EffectDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
-| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the four FX writes |
+| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the five FX writes |
+| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404 and 400, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame |
 
 `fxState` is purely an effect frame. It carried `bpm` / `isClockRunning` before the speed-master
 bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `EffectDto` is defined in
@@ -882,6 +912,8 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.error` | `message: String` | Unicast reply |
 | `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
+| `programmer.keyStack` | `requestId?`, `targetType`, `targetKey`, `propertyName`, `blind`, `stacks: [{targetKey, layers: [KeyStackLayerDto]}]`, `error?` | Unicast reply — one stack for a fixture, one per member for a group |
+| `programmer.targetCleared` | `requestId?`, `targetType`, `targetKey`, `values: Int`, `effects: Int`, `partial: [{effectId, effectType, targetKey, isGroupTarget, propertyName}]`, `error?` | Unicast reply |
 
 `applied` is the same stack resolved: one entry per Look or template with every target it covers,
 each group marked `all` or `some` by how many of its heads the record holds
@@ -920,6 +952,22 @@ W / A / UV a bundled emitter's own row supplied, one `{propertyName, cueId?, cue
 layerSource?}` per emitter, because that colour's bytes came from two contributors (see
 [`lighting-composition-model.md`](lighting-composition-model.md) §"A bundled emitter's own row
 beats the colour's copy").
+
+**`KeyStackLayerDto`** is one layer of a property's stack (`ProvenanceService.keyStack`), listed
+top first: `PARK` (its `parkedChannels`), `PROGRAMMER_EFFECT` (an effect in the programmer band),
+`PROGRAMMER` (one owner's slot: `owner`, `value`, `ageMs`, and `universe`/`channel` on a raw
+sideband slot), `EFFECT` (any other effect, cue or manual), `CUE` (what the cues compose to, with
+the winning `cueId`, `cueStackId`, `layerId`, `layerSource` — from `underlyingSources` against the
+one Layer 4 snapshot the read takes) and `BASE` (`LayerResolver.baselineFor`). Every layer carries
+`onStage` — contributing to what the rig shows now, walked in output order (park, effects by
+priority, the programmer, the cue, the base), an on-stage Override effect, a programmer value, a
+cue value or a full park covering what is below. The effect kinds carry `effectId`, `effectType`,
+`effectName`, `beatDivision`, `blendMode`, `running`, the reported masters, and **`heldBack`** —
+`EffectSuppression.isSuppressed`'s answer over the engine's own suppression snapshot, the tick's
+question asked of the same code, so the sheet's *held back* mark cannot disagree with the rig. An
+effect painting every channel of the key under a sibling key — a Circle on `position` under a `pan`
+row — is on that key's stack too, as provenance credits it (`lighting-composition-model.md`
+§"Reading one property's stack"). Fields that do not belong to a layer's kind are absent.
 
 `provenanceState` doubles as the client's cue to refetch `programmer.state` — it is the one
 broadcast that fires for a programmer write made by a MIDI surface, a locate, or another tab.
@@ -1139,7 +1187,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/BroadcastSocket.kt` | `FixturesChangeListener` wiring and the 15 broadcast frames |
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
-| `plugins/FxSocket.kt` | Active-effect state and the four FX writes |
+| `plugins/FxSocket.kt` | Active-effect state, the five FX writes and their `fxError` refusal |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |

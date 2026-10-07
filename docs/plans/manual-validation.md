@@ -2088,8 +2088,10 @@ from "it ran and stayed attached to the right thing".
 2. Select Front Wash on Busk and press that pad → the effect runs on the four heads on M2's tempo.
    Press again → it stops. The presence dot must follow the layer stack, not the effect list.
 3. Retune M2 → the running effect retimes. Then edit the template's beat division: the *live*
-   instance keeps its old division until the pad is re-pressed (`FU-TMPL-FX-EDIT-NO-RETIME`,
-   inherited from deferred Look effects), and a programmer-band copy minted by a strip click never
+   instance keeps its old division until the pad is re-pressed **or the programmer's stack next
+   recooks for any reason** (a layer patch, a move, another pad) — which respawns it at the new
+   division with its phase restarted (`FU-TMPL-FX-EDIT-NO-RETIME`, inherited from deferred Look
+   effects; `fixture-fx-sheets-plan.md` session 1 amendment), and a programmer-band copy minted by a strip click never
    follows the template at all.
 4. In the programmer, ⌥click the chip with two heads selected, then Record → the cue holds a
    template *layer*; GO on that cue runs the effect; the cue editor's layer panel shows tempo and

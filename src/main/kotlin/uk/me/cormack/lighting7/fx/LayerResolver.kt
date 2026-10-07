@@ -261,7 +261,7 @@ class LayerResolver(
         val below = run {
             val idx = cueLayer.index
             val cue = if (idx.isNotEmpty()) idx[fixtureKey]?.get(target.propertyName) else null
-            cue?.asFxOutputFor(target) ?: target.baselineFallback(fixture)
+            cue?.asFxOutputFor(target) ?: baselineFor(target, fixture)
         }
         if (programmer.blind) return below
         // Per-fixture O(1) gate: composeProgrammerOver's colour path does reflective
@@ -272,6 +272,14 @@ class LayerResolver(
         if (!programmer.coversFixture(fixtureKey) && !programmer.hasSidebandEntries) return below
         return target.composeProgrammerOver(fixture, programmer, below)
     }
+
+    /**
+     * The bottom of [fallbackFor]'s cascade: what [target] reads on [fixture] when neither the
+     * programmer nor a cue says anything. Its own function so the property-stack read
+     * (`ProvenanceService.keyStack`, the fixture sheet's *Base* row) and the tick's reset ask one
+     * place rather than two.
+     */
+    fun baselineFor(target: FxTarget, fixture: GroupableFixture): FxOutput = target.baselineFallback(fixture)
 
     private fun CueAssignmentResolver.PropertyValue.asFxOutputFor(target: FxTarget): FxOutput? = when (this) {
         is CueAssignmentResolver.PropertyValue.Slider ->

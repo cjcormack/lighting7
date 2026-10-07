@@ -388,6 +388,22 @@ class FxInstance internal constructor(
     var programmerOrigin: ProgrammerFxOrigin? = null
 
     /**
+     * The operator's own busked effect: in the programmer priority band, and belonging to
+     * nothing — no Look or template ([source]), no programmer layer ([programmerLayerEffectKey]),
+     * no cue ([cueId]). What the programmer's Release takes off a fixture with its values
+     * (`programmer.clearTarget`, fixture-fx-sheets plan W2), and the rule the grid's ⌫ applies
+     * client-side (`cellEffects.isLocalEffect`), moved to the desk.
+     *
+     * An effect that came out of a Look, a template layer or a cue is that thing's, not the
+     * operator's: stopping it would either be undone by the next recook or quietly edit a library
+     * record. Include's ad-hoc children *are* local — they are the operator's busk being written
+     * back, which is why [programmerOrigin] does not exclude one.
+     */
+    val isLocalEffect: Boolean
+        get() = FxEngine.isProgrammerFxPriority(priority) &&
+            source == null && programmerLayerEffectKey == null && cueId == null
+
+    /**
      * Composition priority. Effects with lower priority compose first; higher priority effects
      * blend on top, making them dominant under non-OVERRIDE blend modes. Ties break on [id]
      * (monotonic, so insertion order is the stable tie-break).

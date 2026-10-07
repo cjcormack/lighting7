@@ -151,6 +151,40 @@ data class ProgrammerClearSceneryInMessage(
     val fadeMs: Long? = null,
 ) : ProgrammerInMessage()
 
+/**
+ * Ask what sits under one property, top first — park, the programmer's own effects, each owner's
+ * slot, the other effects with whether each is held back, the cue's value, the base
+ * (fixture-fx-sheets plan W1). Answered to **this socket only**, with `programmer.keyStack`; never
+ * broadcast, since only the asker has the stack open. A group target answers one stack per member.
+ *
+ * [requestId] is the client's, echoed so a promise can be matched to its answer however many are in
+ * flight. A read, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
+ */
+@Serializable
+@SerialName("programmer.keyStack")
+data class ProgrammerKeyStackInMessage(
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    val requestId: String? = null,
+) : ProgrammerInMessage()
+
+/**
+ * Release a whole fixture (its heads included) or group — the fixture sheet's *Release* (W2, D6):
+ * every owner's slot on every property but a layer's, the raw-channel sideband on its channels, and
+ * the local effects on it, in one pass with one republish at [fadeMs]. Answered to this socket with
+ * `programmer.targetCleared`. An operator gesture of `programmer.clearEntry`'s tier, so
+ * `FU-AUTH-WS-PER-MESSAGE` does not fire.
+ */
+@Serializable
+@SerialName("programmer.clearTarget")
+data class ProgrammerClearTargetInMessage(
+    val targetType: String,
+    val targetKey: String,
+    val fadeMs: Long? = null,
+    val requestId: String? = null,
+) : ProgrammerInMessage()
+
 // ── Outbound messages ───────────────────────────────────────────────────────
 
 @Serializable
@@ -442,6 +476,107 @@ internal fun ProgrammerScenery.Snapshot.toMessage() = ProgrammerSceneryStateOutM
     changedSinceInclude = changedSinceInclude,
 )
 
+/** One parked channel on a `PARK` layer of [KeyStackLayerDto]. */
+@Serializable
+data class KeyStackParkedChannelDto(val universe: Int, val channel: Int, val value: Int)
+
+/**
+ * One layer of a property's stack — see `ProvenanceService.keyStack`. [kind] is `PARK`,
+ * `PROGRAMMER_EFFECT`, `PROGRAMMER`, `EFFECT`, `CUE` or `BASE`, and decides which of the optional
+ * fields are present; every layer carries [onStage]. Absent fields are null (the socket's Json
+ * encodes no default), so a client reads absent as "not this kind's".
+ */
+@Serializable
+data class KeyStackLayerDto(
+    val kind: String,
+    /** Whether this layer contributes to what the rig shows on the property now. */
+    val onStage: Boolean,
+    /** The literal it holds, in the cue-assignment grammar — a programmer slot, the cue's value, the base. */
+    val value: String? = null,
+    /** `PARK`: the parked channels. */
+    val parkedChannels: List<KeyStackParkedChannelDto>? = null,
+    /** `PROGRAMMER`: the owner (`web`, `surface`, `layers`…) and how long ago its slot was written. */
+    val owner: String? = null,
+    val ageMs: Long? = null,
+    /** `PROGRAMMER`: present on a raw-channel sideband slot, naming the channel it holds. */
+    val universe: Int? = null,
+    val channel: Int? = null,
+    /** The two effect kinds: the instance, its type and display name, its timing and its masters. */
+    val effectId: Long? = null,
+    val effectType: String? = null,
+    val effectName: String? = null,
+    val beatDivision: Double? = null,
+    val blendMode: String? = null,
+    val running: Boolean? = null,
+    val speedMasterUuid: String? = null,
+    val rateSpeedMasterUuid: String? = null,
+    /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
+    val heldBack: Boolean? = null,
+    val cueId: Int? = null,
+    val cueStackId: Int? = null,
+    /** A programmer layer's id or a cue layer's — whichever produced this layer. */
+    val layerId: Int? = null,
+    val layerSource: LayerSourceDto? = null,
+)
+
+/** One member's (or the one fixture's) stack in a `programmer.keyStack` answer. */
+@Serializable
+data class KeyStackDto(
+    val targetKey: String,
+    val layers: List<KeyStackLayerDto>,
+)
+
+/**
+ * The answer to `programmer.keyStack`, to the asking socket only. [stacks] holds one entry for a
+ * fixture and one per member for a group (a member the property does not resolve on is absent).
+ * [error] is set, and [stacks] empty, when the target does not resolve — carried here rather than
+ * as `programmer.error` so the asker's promise is answered rather than left to time out.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("programmer.keyStack")
+data class ProgrammerKeyStackOutMessage(
+    val requestId: String?,
+    val targetType: String,
+    val targetKey: String,
+    val propertyName: String,
+    /** The programmer is blind: its slots are listed, none is on stage, and it holds nothing back. */
+    val blind: Boolean,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val stacks: List<KeyStackDto> = emptyList(),
+    val error: String? = null,
+) : ProgrammerOutMessage()
+
+/** A local effect `programmer.clearTarget` left running because it drives heads outside the target. */
+@Serializable
+data class TargetClearedPartialDto(
+    val effectId: Long,
+    val effectType: String,
+    /** The effect's own target — a group, or a fixture the released target only part-covers. */
+    val targetKey: String,
+    val isGroupTarget: Boolean,
+    val propertyName: String,
+)
+
+/**
+ * The answer to `programmer.clearTarget`, to the asking socket only: [values] property entries and
+ * sideband channels released, [effects] local effects stopped, and [partial] the local effects that
+ * overlap the target but drive heads outside it, left running and named so the operator can be told.
+ */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+@SerialName("programmer.targetCleared")
+data class ProgrammerTargetClearedOutMessage(
+    val requestId: String?,
+    val targetType: String,
+    val targetKey: String,
+    val values: Int,
+    val effects: Int,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val partial: List<TargetClearedPartialDto> = emptyList(),
+    val error: String? = null,
+) : ProgrammerOutMessage()
+
 @Serializable
 @SerialName("programmer.error")
 data class ProgrammerErrorOutMessage(
@@ -698,6 +833,8 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         is ProgrammerClearEntryInMessage -> withTarget(message.targetType, message.targetKey) { target ->
             ProgrammerHandler.clearEntry(state, target, message.propertyName, message.fadeMs ?: 0)
         }
+        is ProgrammerKeyStackInMessage -> ProgrammerHandler.keyStack(state, message)
+        is ProgrammerClearTargetInMessage -> ProgrammerHandler.clearTarget(state, message)
         is ProgrammerClearAllInMessage -> {
             val cleared = clearProgrammerCompletely(state, message.fadeMs ?: 0)
             ProgrammerClearedOutMessage(cleared.entryCount, cleared.effectsCleared)
@@ -904,6 +1041,131 @@ object ProgrammerHandler {
         return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, propertyName)
     }
 
+    /**
+     * `programmer.keyStack`: the property's stack from `ProvenanceService.keyStacks`, one for a
+     * fixture and one per member for a group, all against one snapshot of the desk.
+     */
+    fun keyStack(state: State, message: ProgrammerKeyStackInMessage): ProgrammerKeyStackOutMessage {
+        val provenance = state.show.fxEngine.provenance
+        fun answer(stacks: List<KeyStackDto>, error: String? = null) = ProgrammerKeyStackOutMessage(
+            requestId = message.requestId,
+            targetType = message.targetType,
+            targetKey = message.targetKey,
+            propertyName = message.propertyName,
+            blind = state.show.programmerStore.blind,
+            stacks = stacks,
+            error = error,
+        )
+        val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
+            ?: return answer(emptyList(), "Unknown targetType '${message.targetType}'")
+        val keys: List<String> = when (target) {
+            is TargetRef.Fixture -> {
+                try {
+                    state.show.fixtures.untypedGroupableFixture(target.key)
+                } catch (_: Exception) {
+                    return answer(emptyList(), "Unknown fixture '${target.key}'")
+                }
+                listOf(target.key)
+            }
+            is TargetRef.Group -> try {
+                state.show.fixtures.untypedGroup(target.key).fixtures.map { it.targetKey }
+            } catch (_: Exception) {
+                return answer(emptyList(), "Unknown group '${target.key}'")
+            }
+        }
+        val property = canonicalPropertyName(message.propertyName)
+        val engine = state.show.fxEngine
+        return answer(provenance.keyStacks(keys, property).map { it.toDto(engine) })
+    }
+
+    /**
+     * `programmer.clearTarget`: release everything the programmer holds on a fixture (and its
+     * heads) or a group (every member, and theirs), plus the local effects on it, in one pass.
+     *
+     * The effect half is the grid ⌫'s rule moved to the desk ([FxInstance.isLocalEffect], and
+     * `cellEffects.effectsToStop`'s *every head, or none*): a local effect is stopped when it
+     * targets exactly what is being released or every head it paints is among the released heads,
+     * and is **left running and named** in `partial` when it paints some of them and some others —
+     * a group effect on one member's release. There is no "stop it on these heads only".
+     *
+     * Locate's bookkeeping is pruned for the LOCATE slots this takes, as [clearEntry] prunes it.
+     * The local effects are stopped *before* the values are released, so the values' one publish
+     * fades every key at `fadeMs` — see the order note in the body.
+     */
+    fun clearTarget(state: State, message: ProgrammerClearTargetInMessage): ProgrammerTargetClearedOutMessage {
+        fun answer(values: Int, effects: Int, partial: List<TargetClearedPartialDto>, error: String? = null) =
+            ProgrammerTargetClearedOutMessage(
+                requestId = message.requestId,
+                targetType = message.targetType,
+                targetKey = message.targetKey,
+                values = values,
+                effects = effects,
+                partial = partial,
+                error = error,
+            )
+        val target = TargetRef.ofOrNull(message.targetType, message.targetKey)
+            ?: return answer(0, 0, emptyList(), "Unknown targetType '${message.targetType}'")
+        val fixtures = state.show.fixtures
+        val roots: List<GroupableFixture> = when (target) {
+            is TargetRef.Fixture -> try {
+                listOf(fixtures.untypedGroupableFixture(target.key))
+            } catch (_: Exception) {
+                return answer(0, 0, emptyList(), "Unknown fixture '${target.key}'")
+            }
+            is TargetRef.Group -> try {
+                fixtures.untypedGroup(target.key).fixtures
+            } catch (_: Exception) {
+                return answer(0, 0, emptyList(), "Unknown group '${target.key}'")
+            }
+        }
+        // Each root and its heads: a fixture's Release takes its cells with it.
+        val heads: List<GroupableFixture> = roots.flatMap { root ->
+            listOf(root) + ((root as? uk.me.cormack.lighting7.fixture.group.MultiElementFixture<*>)?.elements ?: emptyList())
+        }.distinctBy { it.targetKey }
+        val headKeys = heads.mapTo(HashSet()) { it.targetKey }
+        // The channels the roots are patched on — what finds a raw write on a channel no property backs.
+        val footprint = buildSet {
+            for (root in roots) {
+                val dmx = root as? uk.me.cormack.lighting7.fixture.DmxFixture ?: continue
+                for (offset in 0 until dmx.channelCount) {
+                    add(uk.me.cormack.lighting7.dmx.packChannelKey(dmx.universe.universe, dmx.firstChannel + offset))
+                }
+            }
+        }
+
+        val engine = state.show.fxEngine
+        val stop = ArrayList<Long>()
+        val partial = ArrayList<TargetClearedPartialDto>()
+        for (effect in engine.getActiveEffects()) {
+            if (!effect.isLocalEffect) continue
+            val exact = effect.target.targetKey == target.key &&
+                effect.isGroupEffect == (target is TargetRef.Group)
+            val painted = engine.fixtureKeysCoveredBy(effect)
+            val overlap = painted.count { it in headKeys }
+            when {
+                exact || (painted.isNotEmpty() && overlap == painted.size) -> stop += effect.id
+                overlap > 0 -> partial += TargetClearedPartialDto(
+                    effectId = effect.id,
+                    effectType = effect.effectTypeId,
+                    targetKey = effect.target.targetKey,
+                    isGroupTarget = effect.isGroupEffect,
+                    propertyName = effect.target.propertyName,
+                )
+            }
+        }
+        // Effects first, then the values — `clearProgrammerCompletely`'s order, for its reason. A
+        // running effect covers its keys, so a values publish made under it skips them; removing
+        // the effect afterwards would then put the layer below back with no fade, half the Release
+        // fading and the other half snapping. Stopped first, its keys reset to the programmer value
+        // still there, and the one values publish below ramps every key at [fadeMs].
+        val stopped = engine.removeEffects(stop)
+        val release = engine.programmer.releaseFixtures(heads, footprint, message.fadeMs ?: 0)
+        for ((fixtureKey, propertyName, owner) in release.releasedSlots) {
+            if (owner == ProgrammerOwner.LOCATE) state.show.locateManager.pruneWrite(fixtureKey, propertyName)
+        }
+        return answer(release.values, stopped, partial)
+    }
+
     /** The layer stack as the desk sees it, with the resolved applied state beside it. */
     fun layerState(state: State): ProgrammerLayerStateOutMessage {
         val layers = state.show.programmerStore.layers
@@ -1041,3 +1303,35 @@ object ProgrammerHandler {
         )
     }
 }
+
+private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.lighting7.fx.FxEngine) = KeyStackDto(
+    targetKey = targetKey,
+    layers = layers.map { layer ->
+        val effect = layer.effect
+        val dto = effect?.let { engine.effectDto(it) }
+        KeyStackLayerDto(
+            kind = layer.kind.name,
+            onStage = layer.onStage,
+            value = layer.value?.serialize(),
+            parkedChannels = layer.parkedChannels.takeIf { it.isNotEmpty() }
+                ?.map { KeyStackParkedChannelDto(it.universe, it.channel, it.value.toInt()) },
+            owner = layer.owner?.id,
+            ageMs = layer.ageMs,
+            universe = layer.channel?.first,
+            channel = layer.channel?.second,
+            effectId = effect?.id,
+            effectType = dto?.effectType,
+            effectName = effect?.effect?.name,
+            beatDivision = dto?.beatDivision,
+            blendMode = dto?.blendMode,
+            running = dto?.isRunning,
+            speedMasterUuid = dto?.speedMasterUuid,
+            rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
+            heldBack = if (effect != null) layer.heldBack else null,
+            cueId = layer.cueId,
+            cueStackId = layer.cueStackId,
+            layerId = layer.layerId,
+            layerSource = layer.layerSource?.toDto(),
+        )
+    },
+)

@@ -1,5 +1,6 @@
 import { InternalApiConnection, InternalEventType } from './internalApi'
 import { Subscription } from './subscription'
+import { sendGesture } from './wsGesture'
 
 // === Types ===
 
@@ -62,15 +63,62 @@ export interface FxState {
   activeEffects: FxEffectState[]
 }
 
+/**
+ * An edit to a running effect: every field optional, absent = keep. The body of `PUT /fx/{id}` and
+ * the `updateFx` frame both — the desk parses the two through one function
+ * (`applyEffectUpdate`), so this one declaration serves both doors.
+ */
+export interface UpdateFxRequest {
+  effectType?: string
+  parameters?: Record<string, string>
+  beatDivision?: number
+  blendMode?: string
+  phaseOffset?: number
+  distributionStrategy?: string
+  elementMode?: string
+  elementFilter?: string
+  stepTiming?: boolean
+  /**
+   * Reassign the effect's speed master (omitted = no change, like every other field). The
+   * picker always sends a concrete uuid — master 1's uuid means "back to the default".
+   */
+  speedMasterUuid?: string
+  /** Reassign the wall-clock rate master; omitted = no change, as above. */
+  rateSpeedMasterUuid?: string
+}
+
+/**
+ * A refused `updateFx`, unicast to the socket that sent it (fixture-fx-sheets plan W3).
+ * `FX_NOT_FOUND` for an effect that is not running, `FX_UPDATE_REFUSED` for a field the desk's
+ * strict policy refuses — `PUT /fx/{id}`'s 404 and 400. Keyed by the effect, so a live drag that
+ * keeps being refused can replace one toast rather than stack one per frame.
+ */
+export interface FxError {
+  effectId: number
+  code: 'FX_NOT_FOUND' | 'FX_UPDATE_REFUSED' | string
+  message: string
+}
+
 type FxMessage =
   | { type: 'fxState'; activeEffects: FxEffectState[] }
   | { type: 'fxChanged'; changeType: string; effectId?: number }
+  | ({ type: 'fxError' } & FxError)
 
 // === API Interface ===
 
 export interface FxApi {
   get(): FxState
   subscribe(fn: (state: FxState) => void): Subscription
+  /**
+   * Edit a running effect in place over the socket — the id and the phase kept, every field
+   * optional and "absent keeps it", exactly `PUT /fx/{id}`'s body (the desk parses both through
+   * one function). For a live editor whose every drag is a write; the answer is the ordinary
+   * `fxChanged`, or an `fxError` on [subscribeToErrors]. An operator gesture: a closed socket
+   * toasts and answers false.
+   */
+  updateFx(effectId: number, update: UpdateFxRequest): boolean
+  /** Every `fxError` this socket is sent. Nothing toasts them yet; the live editor will. */
+  subscribeToErrors(fn: (error: FxError) => void): Subscription
 }
 
 export function createFxApi(conn: InternalApiConnection): FxApi {
@@ -83,6 +131,8 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
     stateSubscriptions.forEach((fn) => fn(state))
   }
 
+  const errorSubscriptions = new Map<number, (error: FxError) => void>()
+
   conn.subscribe((evType, _ev, frame) => {
     if (evType === InternalEventType.message) {
       const message = frame as FxMessage | null
@@ -94,6 +144,9 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       } else if (message.type === 'fxChanged') {
         // Re-request full state to get updated effect list
         conn.send(JSON.stringify({ type: 'fxState' }))
+      } else if (message.type === 'fxError') {
+        const error: FxError = { effectId: message.effectId, code: message.code, message: message.message }
+        errorSubscriptions.forEach((fn) => fn(error))
       }
     }
   })
@@ -109,6 +162,20 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       return {
         unsubscribe: () => {
           stateSubscriptions.delete(thisId)
+        },
+      }
+    },
+
+    updateFx(effectId: number, update: UpdateFxRequest): boolean {
+      return sendGesture(conn, { type: 'updateFx', effectId, ...update })
+    },
+
+    subscribeToErrors(fn: (error: FxError) => void): Subscription {
+      const thisId = nextSubscriptionId++
+      errorSubscriptions.set(thisId, fn)
+      return {
+        unsubscribe: () => {
+          errorSubscriptions.delete(thisId)
         },
       }
     },

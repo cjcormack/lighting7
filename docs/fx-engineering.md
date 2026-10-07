@@ -671,6 +671,49 @@ Consequences:
   check), both as an optimisation and because the transmit-time parking override would
   discard the composition result anyway.
 
+**One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
+`fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
+(fixture, property) and the effect — and the tick loops, provenance (`ProvenanceService.compute`)
+and the property-stack read behind `programmer.keyStack` (`ProvenanceService.keyStack`) all ask it,
+against the engine's own snapshot (`FxEngine.programmerSuppression`, empty while blind). That is
+what lets the fixture sheet mark an effect *held back*: the mark is the tick's answer, not a second
+copy of it. Never write the rule again beside a reader.
+
+**The programmer outranks an effect only where the engine holds it back, on the key the effect
+paints.** The snapshot is `ProgrammerStore.activePropertiesByFixture` — property entries, each
+holding back effects on **its own key** alone. Two holds suppress nothing, and provenance credits
+an effect for both: a raw-channel sideband slot (an unpark hand-down, a Channels-tab write on a
+head with no pan property, filed under `position`), and a `pan` entry under a Circle keyed
+`position` (the Channels-tab pan on a head that declares pan, which `updateChannel` lifts to its
+own slider). An effect painting **every** channel of a programmer-held key under a sibling key takes
+the key; one painting some of them (a UV wave beside an RGBW colour entry) does not. Before W4 both
+holds read *Programmer* while the Circle was what the rig showed — the plan's issue 1.
+
+**Live edits** (W3). `updateFx` on the socket and `PUT /fx/{id}` share one parse,
+`applyEffectUpdate` (`routes/lightFx.kt`), and both land in `FxEngine.updateEffect`, which keeps the
+instance's id, phase, layer identity and fade. A type swap takes the new type's timing source
+(`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
+running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
+`FX_NOT_FOUND`) is decided before anything moves: a 400 / 404 on REST, an `fxError` on the socket.
+
+**Reset to template** (W5). `POST /fx/{id}/reset` re-applies a programmer template layer's
+**current** effect to the instance it spawned, through `updateEffect` — id and phase kept — with
+every setting the layer would spawn it with, its overrides included, both masters set exactly
+(`replaceMasters`, which can clear a master as the single-master arguments cannot). It also moves
+the instance's spawn key to the template's current entry, under the stack's effects lock, so the
+next recook keeps it rather than respawning it. 409 `FX_NOT_FROM_TEMPLATE` for anything no
+programmer template layer started (a Look's, a manual one, a cue's template layer, which the next GO
+respawns); 409 `FX_TEMPLATE_GONE` when the template holds no effect any more.
+
+**What a recook does to an edited instance.** `ProgrammerLayerStack.syncEffects` matches a live
+instance by the `EffectEntry` it was **spawned** from (`ProgrammerLayerEffectKey`), never by its
+current parameters, and `updateEffect` carries that key across its swap — so an instance edited
+through `updateFx` survives a patch, a move or an unrelated add. A template-effect `PUT` recooks
+values only and leaves the instance alone, but the next recook of the stack *for any reason* reads
+the edited template, whose entry no longer matches the instance's key, and respawns it from the
+template — its phase restarted, any instance edit gone. Reset is the per-instance way back. Pinned
+by `FxLiveEditRoutesTest`; see `FU-TMPL-FX-EDIT-NO-RETIME`.
+
 ### Locate versus park
 
 The Locate toggle (`routes/lightLocate.kt`) asserts its centre-and-open-white values as
