@@ -13,8 +13,8 @@ groups. The brief named six problems:
 6. In some hosts (the Stage view especially) the FX section is lost after the properties. It should
    stay fixed at the bottom of the sheet.
 
-**Status: drawn 2026-10-07, awaiting approval.** The implementation plan follows once the design is
-agreed. A live copy of the boards is at <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. It is
+**Status: approved 2026-10-07.** The implementation plan is
+[`../fixture-fx-sheets-plan.md`](../fixture-fx-sheets-plan.md). A live copy of the boards is at <https://claude.ai/artifact/AnEyZHYphuSdmWcSArXigv>. It is
 private to Chris and is a convenience; the files here are the authority. Where a board and the plan
 disagree, the plan will win on behaviour and the boards on layout and copy, as with every record in
 this directory.
