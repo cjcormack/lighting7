@@ -3,9 +3,11 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.http.*
 import io.ktor.resources.*
 import io.ktor.server.request.*
+import io.ktor.server.resources.get
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -23,7 +25,9 @@ import uk.me.cormack.lighting7.state.toSceneryElement
  * per owner — `cues/{id}/scenery`, `cue-stacks/{id}/scenery`, `looks/{id}/scenery` — body
  * `{scenery: [{elementUuid, state: {visible?, open?, trimM?}, transitionMs?}]}`, answered with the
  * list as stored. The owner's own read DTO carries the list (`CueDetails.scenery`,
- * `CueStackDetails.scenery`, `LookDto.scenery`), so there is no `GET` here.
+ * `CueStackDetails.scenery`, `LookDto.scenery`), so there is no `GET` per owner. The one `GET` is the
+ * other way round: `stage-elements/{id}/scenery`, every owner that moves one element (the
+ * scenery-programmer plan's D11) — the Stage popover's and the element form's *Moves with*.
  *
  * Stored data, so ungated by the current project, like the scene document's own routes. Every
  * state is checked against its element's kind and every problem comes back at once
@@ -31,6 +35,19 @@ import uk.me.cormack.lighting7.state.toSceneryElement
  * event, which is also what moves the live stage (`SceneryService` listens).
  */
 internal fun Route.routeApiRestProjectScenery(state: State) {
+    get<StageElementSceneryResource> { resource ->
+        withProject(state, resource.parent.projectId) { project ->
+            val dto = transaction(state.database) {
+                DaoStageElement.findById(resource.elementId)?.takeIf { it.project.id == project.id }?.let { elementSceneryOf(it) }
+            }
+            if (dto == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse(STAGE_ELEMENT_NOT_FOUND))
+            } else {
+                call.respond(dto)
+            }
+        }
+    }
+
     put<CueSceneryResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
             val items = sceneryItems(call.receive<JsonObject>()) ?: return@withProject call.respondBadScenery()
@@ -128,6 +145,9 @@ private suspend fun io.ktor.server.routing.RoutingContext.respondScenery(outcome
     }
 }
 
+@Resource("/{elementId}/scenery")
+internal data class StageElementSceneryResource(val parent: ProjectStageElementsResource, val elementId: Int)
+
 @Resource("/{cueId}/scenery")
 internal data class CueSceneryResource(val parent: ProjectCuesResource, val cueId: Int)
 
@@ -188,3 +208,64 @@ internal fun trackedSceneryAt(cue: DaoCue): List<TrackedSceneryDto> {
         )
     }
 }
+
+/**
+ * Every owner that moves one element (scenery-programmer plan D11): the cues that change it, the
+ * stacks whose set holds it, and the Looks that show it while live — `GET
+ * stage-elements/{id}/scenery`, the Stage popover's and the element form's *Moves with*. Each entry
+ * is the owner's own stored row, never what it tracks: a cue that only inherits the piece from an
+ * earlier one is not listed. Cues in show order (their stack's place, then theirs), sets in stack
+ * order, Looks by name. Must run inside a transaction.
+ */
+internal fun elementSceneryOf(element: DaoStageElement): ElementSceneryDto {
+    val cueRows = DaoCueSceneryRow.find { DaoCueScenery.element eq element.id }.toList()
+        .sortedWith(compareBy({ it.cue.cueStack.sortOrder }, { it.cue.cueStack.id.value }, { it.cue.sortOrder }, { it.cue.id.value }))
+    val setRows = DaoCueStackSceneryRow.find { DaoCueStackScenery.element eq element.id }.toList()
+        .sortedWith(compareBy({ it.stack.sortOrder }, { it.stack.id.value }))
+    val lookRows = DaoLookSceneryRow.find { DaoLookScenery.element eq element.id }.toList()
+        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.look.name })
+    return ElementSceneryDto(
+        cues = cueRows.map { row ->
+            ElementCueSceneryDto(
+                stackId = row.cue.cueStack.id.value,
+                cueId = row.cue.id.value,
+                // The cue's number where it has one, else its name — `trackedSceneryAt`'s label.
+                label = row.cue.cueNumber?.takeIf { it.isNotBlank() } ?: row.cue.name,
+                state = storedParamsObject(row.stateJson),
+                transitionMs = row.transition?.toMillis(),
+            )
+        },
+        sets = setRows.map { row ->
+            ElementSetSceneryDto(stackId = row.stack.id.value, name = row.stack.name, state = storedParamsObject(row.stateJson))
+        },
+        looks = lookRows.map { row ->
+            ElementLookSceneryDto(lookId = row.look.id.value, name = row.look.name, state = storedParamsObject(row.stateJson))
+        },
+    )
+}
+
+/** `GET stage-elements/{id}/scenery`: what moves one element, by owner (D11). */
+@Serializable
+data class ElementSceneryDto(
+    val cues: List<ElementCueSceneryDto>,
+    val sets: List<ElementSetSceneryDto>,
+    val looks: List<ElementLookSceneryDto>,
+)
+
+/** A cue that moves the element on GO, on its own clock ([transitionMs]; null moves with the cue's fade). */
+@Serializable
+data class ElementCueSceneryDto(
+    val stackId: Int,
+    val cueId: Int,
+    val label: String,
+    val state: JsonObject,
+    val transitionMs: Long?,
+)
+
+/** A stack whose set holds the element while it is live. */
+@Serializable
+data class ElementSetSceneryDto(val stackId: Int, val name: String, val state: JsonObject)
+
+/** A Look that shows the element while live. */
+@Serializable
+data class ElementLookSceneryDto(val lookId: Int, val name: String, val state: JsonObject)

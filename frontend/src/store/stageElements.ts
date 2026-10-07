@@ -1,10 +1,12 @@
 import { restApi } from "./restApi"
 import { lightingApi } from "../api/lightingApi"
 import { store } from "./index"
-import type {
-  StageElementDto,
-  CreateStageElementRequest,
-  UpdateStageElementRequest,
+import {
+  parseElementScenery,
+  type ElementScenery,
+  type StageElementDto,
+  type CreateStageElementRequest,
+  type UpdateStageElementRequest,
 } from "../api/stageElementApi"
 
 lightingApi.stageElements.subscribe(() => {
@@ -21,6 +23,24 @@ export const stageElementsApi = restApi.injectEndpoints({
     stageElementList: build.query<StageElementDto[], number>({
       query: (projectId) => `projects/${projectId}/stage-elements`,
       providesTags: ['StageElement'],
+    }),
+
+    /**
+     * What moves one element (scenery-programmer plan D11) — its *Moves with*. Read from the three
+     * owner tables, so it is stale the moment a cue, a stack's set or a Look changes: the project's
+     * cue and stack lists and the Look list are what those writes and their WS bridges invalidate
+     * (`cueListChanged`, `cueStackListChanged`, `lookListChanged`), and the element list for the
+     * element itself going.
+     */
+    stageElementScenery: build.query<ElementScenery, { projectId: number; elementId: number }>({
+      query: ({ projectId, elementId }) => `projects/${projectId}/stage-elements/${elementId}/scenery`,
+      transformResponse: (raw: unknown) => parseElementScenery(raw),
+      providesTags: (_result, _error, { projectId }) => [
+        'StageElement',
+        'LookList',
+        { type: 'CueList', id: projectId },
+        { type: 'CueStackList', id: projectId },
+      ],
     }),
 
     createStageElement: build.mutation<StageElementDto, { projectId: number } & CreateStageElementRequest>({
@@ -57,6 +77,7 @@ export const stageElementsApi = restApi.injectEndpoints({
 
 export const {
   useStageElementListQuery,
+  useStageElementSceneryQuery,
   useCreateStageElementMutation,
   useUpdateStageElementMutation,
   useDeleteStageElementMutation,

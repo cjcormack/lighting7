@@ -655,7 +655,8 @@ without a room — the back wall and the catch floor:
   over the whole of its pool rather than ending square to its axis. Only a beam that meets nothing
   keeps the desk's stylised `BEAM_LENGTH` (8 m). How much of a long throw shows in the air is the
   window's Haze setting (§"Haze degrades before frame rate"): Stage clips it at the proscenium,
-  Everywhere and the Positions plan draw it whole.
+  Everywhere and the Positions plan (which draws only the drapes and the Set layer, no house) draw it
+  whole.
 - **A collider holds what it draws, and carries a skin** (stage-light plan D1): how far behind its
   face the drawn surface can lie. A drape's box is exactly as deep as its pleats (`scene/pleat.ts`'s
   one fold, which the mesh, the box and the fold shadow all read: the element's `depthM` crest to
@@ -959,7 +960,8 @@ front-of-house beam is otherwise a cone through the whole house, and the house i
 audience-side camera looks through to see the stage. The plane is read from the stored elements, so
 hiding Venue does not move it, and reaches the shader as one more chord clamp (`uHazeClip`) beside
 the floor and the wall, so every march step lands in the haze that is drawn. A canvas that draws no
-scene (the Positions plan) is never clipped. A window that stored the old on/off reads `false` as
+scene, or only a subset of it (the Positions plan's drapes and Set pieces, `sceneSubset`), is never
+clipped. A window that stored the old on/off reads `false` as
 Off and anything else as Stage.
 
 The haze *level* is still `washConfig.ts`'s constant. The plan wanted it to follow the hazer's DMX,
@@ -1065,6 +1067,23 @@ collides, with a couple of pixels' gap. Five rules:
   (`sight: false`). The test runs last, on labels that would be
   placed: on the Commemoration Hall, 61 colliders and every fixture labelled, the layout went from
   0.025 to 0.074 ms a frame on the desk Mac.
+
+**The layer also projects points that are not labels** (scenery-programmer plan session 4). A
+`StageAnchorTracker` (`labelStore.track(point)`) is a point in three.js world space the layout
+projects on every frame it draws, through the same camera and projection a label's anchor goes through (`projectToScreen`),
+into px from the canvas's top-left — before the labels, and whatever the label mode, *None*
+included. Given the half-extents of a box round the point it also projects the box's eight corners
+into a screen box, clamped to the canvas, corners behind the eye left out. It is how the Stage
+popover follows its piece (§"Scenery that moves with the show"): the popover's anchor is a **virtual
+element** whose box is that screen box on the page (the layer's container rect plus the tracker's
+px), so the popover sits beside the piece rather than over its middle, and `EditorSurface`'s
+`followAnchor` has floating-ui re-place it every animation frame, so it moves with the piece as the
+camera orbits or the piece flies. A
+point behind the eye keeps the last place it was seen rather than taking the mirrored one, and
+`track` asks for a frame, since on the `demand` loop nothing else would lay the point out until
+something moved. A frame the layout does not draw moves nothing, which is exactly right: a still
+stage has a still popover. `stageLabels.test.ts` pins the projection for a moved and an orthographic
+camera, a tracked point through the layout, and a tracked box's screen box.
 
 ### A quiet stage: no chrome, regions and bars as the real things
 
@@ -1235,8 +1254,14 @@ element's origin — its base, a platform's top, a flown piece's trim — and tu
 
 **The View menu's Venue · Set · Seating layers** choose which elements a window draws — per window in
 `sessionStorage` (`stage.sceneLayers`, `scene/sceneView.ts`), not announced; a seating element
-follows **Seating** whatever its layer. Only the Stage route's canvas reads the scene (`showScene`);
-the Positions plan does not, so the collapsed panel stays as cheap as it was.
+follows **Seating** whatever its layer. The Stage route's canvas reads the whole scene (`showScene`);
+the Positions plan reads it too since the scenery-programmer plan's session 4 (D16), but draws only
+the **drapes and the Set layer** (`Stage3D`'s `sceneSubset`, `plansScenery` in `lib/scenery.ts`) —
+the pieces that change where light lands — and not the room, the proscenium or the seats, which
+would only cover the rig. Of those it follows the window's Venue · Set · Haze, as the Stage view
+does, so turning Venue off hides the house tabs in the plan too; with no house drawn, its haze is
+never clipped. It reads it only while open, so the collapsed panel stays as cheap as it
+was (everything below `CollapsiblePanel` unmounts).
 
 **The ortho sections cut on purpose now.** The section plane stays **rig-derived** — Front cuts at
 the rig's downstage edge, so the house and its seats in front of the plane are not drawn over the
@@ -1485,8 +1510,9 @@ pick a room. The form draws the kind's `params` fields and saves one partial `PU
 `validateStageElement` `set_scene` uses: a 400 lists every problem, and `elementProblems.ts` files
 each beside the field it leads with (`params.openings[1]` under that opening), or the first it
 names, or at the top — none is dropped. A reshaped seating that seat views sit in is a 409 the form
-asks about (*Save anyway* forces). *Moves with* is read-only and empty until session 8. The three
-element endpoints are in `SILENT_ENDPOINTS`, so the route's placement and drag toast their own
+asks about (*Save anyway* forces). *Moves with* lists what moves the piece and opens each owner's own
+editor (§"Scenery that moves with the show"), and a piece that travels takes its `travelS` beside
+its base states. The three element endpoints are in `SILENT_ENDPOINTS`, so the route's placement and drag toast their own
 failures. The design record's two builders (*Proscenium hall from measurements…*, *Ask Claude*) are
 not built: the template is `set_scene`'s over MCP.
 
@@ -1954,12 +1980,19 @@ entry). Each entry is a move: the state an element is going to, the one it is le
 This side never resolves precedence; it only draws a move.
 
 **The source picks the scenery too.** `StageChannelSourceProvider` provides `StageSceneryContext`
-beside the channel source: the live scenery for Output and the two programmer sources (the desk
-already counts the programmer's live Looks, blind excepted), and for **Next GO** the preview's
-`scenery` (the whole stage as it would resolve with the cue on deck, each element with `from` and the
-GO's duration), its moves started when the answer lands — so selecting Next GO draws Q2's tabs
-opening as the GO would open them. `Stage3D` reads the context itself, outside its canvas, so the
-capture root's bridge carries nothing new; a `render_view` draws every move landed.
+beside the channel source: the live scenery for **Output** (the desk already counts the
+programmer's own scenery and its live Looks, blind excepted); for **Output + Programmer** and
+**Programmer** the live scenery with `scenery.state`'s `staged` laid over it — what leaving Blind
+would land, scenery-programmer plan D12, `sceneryForSource` in `lib/scenery.ts` — the way their
+channels preview the blind programmer, so in Blind the Programmer source draws the staged moon
+flying in and Output draws it where the stage has it; and for **Next GO** the preview's `scenery`
+(the whole stage as it would resolve with the cue on deck, each element with `from` and the GO's
+duration), its moves started when the answer lands — so selecting Next GO draws Q2's tabs opening
+as the GO would open them. A frame with nothing staged comes back as itself, so a source switch
+outside Blind rebuilds nothing. `Stage3D` reads the context itself, outside its canvas, so the
+capture root's bridge carries nothing new; a `render_view` draws every move landed. The Positions
+plan draws through the same provider (D16), so its drapes and Set pieces follow the window's source
+as the Stage view's do.
 
 **Drawn by laying the state over the element.** `lib/scenery.ts`'s `sceneryElements` writes each
 element's interpolated state into its `params.states` before `sceneBuilds` — the builders already
@@ -1988,6 +2021,54 @@ Cue properties (with a time: blank moves with the cue's fade), *Set for this sta
 a refetch landing mid-save (or while a time is typed) never puts an older list back — the
 `StageFocusPanel` rule. The cue card (`CueDetailContent`) reads the cue's own changes and, hatched,
 what it shows by tracking (`CueDetails.trackedScenery`).
+
+**A click on a piece moves it** (scenery-programmer plan session 4, D11). With Edit off, in every
+camera, a click on a drawn drape, a flown piece or anything on the Set layer (`isSceneryPickable`)
+opens `stage3d/SceneryPopover.tsx`: the piece's `SceneryControl` writing `programmer.setScenery` at
+the window's programmer fade — the overlay the rail's Scenery band writes, through the band's own
+`useSceneryScope` (the Stage view has no programmer scope, so it is always the Local arm) — saying
+what holds the piece (`source`, the top tier) and, in Blind, showing the staged state; *Release*
+while the programmer holds it; *Edit element…* where the window has Edit (tablet width and up),
+which turns Edit on with the piece selected; and *Moves with*. On another project's stage it is
+read-only with the reason. Four rules:
+
+- **The hit order is fixture, then rigging, then the piece**, and it is the scene's own: fixtures'
+  hit proxies and rigging bars take R3F clicks and stop them, the scene's surfaces stay deaf to R3F
+  (a click meant for a fixture must never land on a wall in front of it), and only a click R3F
+  hands to `onPointerMissed` — nothing of the rig under it — is cast against the drawn elements
+  (`ScenePicker` in `Stage3D`, which calls each mesh's own raycast, single-sided as drawn). The
+  **nearest** surface decides (`pickedScenery` in `stage3d/sceneryPick.ts`): a fixed wall in front of
+  a piece hides it, a room's inward-facing near wall is seen through from outside, and a click that
+  meets only the venue clears the selection as before.
+- **A drag or a finger pan is never a click** (`pressPicks`): released more than
+  `DRAG_PX_THRESHOLD` from where it went down, it orbited, panned or turned the eye, and picks
+  nothing — the threshold every camera already tells a click from a drag by.
+- **The popover follows its piece.** Its anchor is the piece's box (`elementAnchorBox`: the box
+  round what is drawn of it, so a flown piece's anchor flies) — its centre and corners projected by
+  the label layer once per frame drawn (§"The label layer") into a screen box the popover sits
+  beside rather than over — a virtual element `EditorSurface` re-places every animation frame
+  (`followAnchor`). A drag on the canvas orbits rather than closes it (`keepOpenWithin`); a
+  click on another piece retargets it, a click on nothing or on the rig closes it. It is a `w-72`
+  popover on a desk or iPad and a bottom sheet on an upright phone (`EditorSurface`'s forms).
+- **It never reaches a `render_view`**: `Stage3D` mounts it only on screen (`capture == null`), and a
+  capture passes no `sceneryPopover` and casts nothing.
+
+**What moves a piece is one read**, `GET stage-elements/{id}/scenery` (lighting7
+`routes/projectScenery.kt`): every owner's own stored row for it — the cues that change it in show
+order with their clocks, the stacks whose set holds it, the Looks that show it while live — never
+what an owner only tracks. `components/scenery/MovesWithList.tsx` draws it in the popover (a
+read-out) and in the element form (each entry a press that opens its owner's own editor in place
+over the Stage view — Cue properties, Stack settings, the Look sheet, `stage/OwnerEditor.tsx` —
+since a scenery change is edited on its owner and never on the element). The query is invalidated by
+the cue, stack and Look lists and refetched on every mount, since a Look's own scenery write
+invalidates only that Look. The form also takes the piece's **`travelS`** beside its base states,
+shown only where the piece travels (a DRAW or FLY drape, a flown object); `withKindParam` drops it
+with the travel. Drag handles on the piece itself are `FU-SCENERY-STAGE-HANDLES`.
+
+Tests: `sceneryPick.test.ts` (the press, the nearest-surface pick, the venue passing through, the
+anchor point), `stageLabels.test.ts` (the projection and a tracker through the layout),
+`lib/scenery.test.ts` (`staged` per source, the pickable kinds, the *Moves with* lines, the plan's
+subset) and `EditSceneElementForm.test.tsx` (the list, its editors, and `travelS`).
 
 ## Confetti (session 9)
 

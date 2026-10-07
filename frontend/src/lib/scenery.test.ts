@@ -15,8 +15,13 @@ import {
   sceneryElements,
   sceneryKeysOf,
   sceneryLandsAt,
+  sceneryForSource,
+  isSceneryPickable,
+  movesWithEntries,
+  plansScenery,
   type SceneryOverlayCache,
 } from './scenery'
+import { parseElementScenery } from '../api/stageElementApi'
 
 function element(fields: Partial<StageElementDto>): StageElementDto {
   return {
@@ -111,5 +116,105 @@ describe('scenery, drawn (stage-view plan session 8)', () => {
   it("starts a Next GO preview's moves when it arrives", () => {
     const scenery = previewScenery([{ elementUuid: 'tabs', state: { open: 1 }, from: { open: 0 }, durationMs: 4000 }], 2, 500)
     expect(scenery.entries.tabs).toMatchObject({ startedAtMs: 500, durationMs: 4000 })
+  })
+})
+
+describe('Blind on stage: the staged scenery, per vis source (scenery-programmer plan D12)', () => {
+  const live: LiveScenery = parseSceneryFrame(
+    {
+      projectId: 1,
+      elements: [{ elementUuid: 'moon', state: { trimM: 7 }, from: { trimM: 7 }, elapsedMs: 0, durationMs: 0, source: { kind: 'base' } }],
+      staged: [{ elementUuid: 'moon', state: { trimM: 3 }, from: { trimM: 7 }, elapsedMs: 0, durationMs: 4000 }],
+    },
+    1000,
+  )
+
+  it('Output draws live; Output + Programmer and Programmer draw the staged move', () => {
+    expect(sceneryForSource(live, 'output').entries.moon.state.trimM).toBe(7)
+    expect(sceneryForSource(live, 'outputProgrammer').entries.moon.state.trimM).toBe(3)
+    expect(sceneryForSource(live, 'programmer').entries.moon.state.trimM).toBe(3)
+    expect(sceneryForSource(live, 'programmer').entries.moon.durationMs).toBe(4000)
+  })
+
+  it('keeps what nothing stages, and hands back the frame itself when nothing is staged', () => {
+    const both = parseSceneryFrame(
+      {
+        projectId: 1,
+        elements: [
+          { elementUuid: 'moon', state: { trimM: 7 }, from: { trimM: 7 } },
+          { elementUuid: 'tabs', state: { open: 0 }, from: { open: 0 } },
+        ],
+        staged: [{ elementUuid: 'moon', state: { trimM: 3 }, from: { trimM: 7 } }],
+      },
+      0,
+    )
+    expect(sceneryForSource(both, 'programmer').entries.tabs.state.open).toBe(0)
+    const unstaged = parseSceneryFrame({ projectId: 1, elements: [{ elementUuid: 'moon', state: { trimM: 7 }, from: { trimM: 7 } }] }, 0)
+    for (const source of ['output', 'outputProgrammer', 'programmer'] as const) {
+      expect(sceneryForSource(unstaged, source)).toBe(unstaged)
+    }
+    expect(sceneryForSource(live, 'output')).toBe(live)
+  })
+})
+
+describe('which pieces a click opens (D11)', () => {
+  it('a drawn drape, a flown piece and the Set layer; never a room, the seats or the fixed venue', () => {
+    expect(isSceneryPickable(tabs)).toBe(true)
+    expect(isSceneryPickable(element({ kind: 'OBJECT', layer: 'VENUE', params: { flies: true } }))).toBe(true)
+    expect(isSceneryPickable(element({ kind: 'DRAPE', layer: 'VENUE', params: { operation: 'FLY' } }))).toBe(true)
+    expect(isSceneryPickable(element({ kind: 'FLAT', layer: 'SET' }))).toBe(true)
+    expect(isSceneryPickable(element({ kind: 'DRAPE', layer: 'VENUE', params: { operation: 'DEAD' } }))).toBe(false)
+    expect(isSceneryPickable(element({ kind: 'PROSCENIUM', layer: 'VENUE' }))).toBe(false)
+    expect(isSceneryPickable(element({ kind: 'ROOM', layer: 'SET' }))).toBe(false)
+    expect(isSceneryPickable(element({ kind: 'SEATING', layer: 'SET' }))).toBe(false)
+  })
+})
+
+describe("Moves with: the element's read as the list says it (D11)", () => {
+  const moon = element({ uuid: 'moon', name: 'Moon', positionZ: 3, params: { flies: true, states: { trimM: 7 } } })
+  const read = parseElementScenery({
+    cues: [
+      { stackId: 1, cueId: 12, label: '2', state: { trimM: 3 }, transitionMs: 4000 },
+      { stackId: 1, cueId: 14, label: 'Blackout', state: { visible: false }, transitionMs: 0 },
+    ],
+    sets: [{ stackId: 1, name: 'Main', state: { trimM: 7 } }],
+    looks: [{ lookId: 5, name: 'Night', state: { trimM: 3, visible: true } }],
+    bogus: true,
+  })
+
+  it('names each owner and what it does, cues first with their clocks', () => {
+    expect(movesWithEntries(moon, read, () => 'Main').map((e) => [e.kind, e.id, e.owner, e.what])).toEqual([
+      ['cue', 12, 'Q2', 'trim · in · 4 s'],
+      ['cue', 14, 'Blackout', 'hidden · snap'],
+      ['set', 1, "Main's set", 'trim · out'],
+      ['look', 5, 'Night', 'trim · in · shown'],
+    ])
+  })
+
+  it("names a cue's stack only where the cues span more than one", () => {
+    const twoStacks = { ...read, cues: [...read.cues, { stackId: 2, cueId: 20, label: '1', state: { trimM: 7 }, transitionMs: null }] }
+    const names = new Map([[1, 'Act 1'], [2, 'Act 2']])
+    expect(movesWithEntries(moon, twoStacks, (id) => names.get(id)).filter((e) => e.kind === 'cue').map((e) => e.owner)).toEqual([
+      'Act 1 · Q2',
+      'Act 1 · Blackout',
+      'Act 2 · Q1',
+    ])
+  })
+
+  it('parses only well-formed entries off the wire', () => {
+    const parsed = parseElementScenery({ cues: [{ cueId: 1 }, null, { stackId: 1, cueId: 2, label: 'x', state: { open: 'no' } }], sets: 'x' })
+    expect(parsed.cues).toEqual([{ stackId: 1, cueId: 2, label: 'x', state: {}, transitionMs: null }])
+    expect(parsed.sets).toEqual([])
+    expect(parsed.looks).toEqual([])
+  })
+})
+
+describe('the Positions plan draws the scenery that moves the light (D16)', () => {
+  it('every drape and the Set layer, not the room, the proscenium or the seats', () => {
+    expect(plansScenery(element({ kind: 'DRAPE', layer: 'VENUE' }))).toBe(true)
+    expect(plansScenery(element({ kind: 'OBJECT', layer: 'SET' }))).toBe(true)
+    expect(plansScenery(element({ kind: 'ROOM', layer: 'VENUE' }))).toBe(false)
+    expect(plansScenery(element({ kind: 'PROSCENIUM', layer: 'VENUE' }))).toBe(false)
+    expect(plansScenery(element({ kind: 'SEATING', layer: 'VENUE' }))).toBe(false)
   })
 })

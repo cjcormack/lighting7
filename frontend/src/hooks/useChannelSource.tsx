@@ -13,6 +13,7 @@ import { useNextGoSourceState } from './useNextGoPreview'
 import { StageSceneryContext } from './stageScenery'
 import { useLiveScenery } from '../store/scenery'
 import type { LiveScenery } from '../api/sceneryApi'
+import { sceneryForSource } from '../lib/scenery'
 import { useVisSource, type VisSource } from './useVisSource'
 
 /**
@@ -110,10 +111,15 @@ function useResolvedChannelSource(visSource: VisSource): ResolvedChannelSource {
     visSource === 'outputProgrammer' || visSource === 'programmer',
   )
   const nextGo = useNextGoSourceState(visSource === 'nextGo')
-  // Every source but Next GO draws the stage's own scenery: the programmer sources preview values,
-  // and the desk already counts the programmer's live Looks in what it resolves (blind excepted).
+  // Every source but Next GO draws the stage's own scenery — the desk already counts the
+  // programmer's scenery and live Looks in what it resolves — and the two programmer sources lay
+  // Blind's staged moves over it (scenery-programmer plan D12), as their channels preview the blind
+  // programmer. Output draws live. Memoised, so a frame with nothing staged is the frame itself.
   const live = useLiveScenery()
-  const scenery = visSource === 'nextGo' ? (nextGo.scenery ?? live) : live
+  const scenery = useMemo(
+    () => (visSource === 'nextGo' ? (nextGo.scenery ?? live) : sceneryForSource(live, visSource)),
+    [visSource, nextGo.scenery, live],
+  )
   const source = useMemo(() => {
     switch (visSource) {
       case 'output':

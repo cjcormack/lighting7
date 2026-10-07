@@ -18,6 +18,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { EditorLabel } from '@/components/editor/EditorLabel'
+import { MovesWithList } from '@/components/scenery/MovesWithList'
+import type { MovesWithEntry } from '@/lib/scenery'
 import { useDeleteStageElementMutation, useUpdateStageElementMutation } from '@/store/stageElements'
 import { useStageRegionListQuery } from '@/store/stageRegions'
 import type { StageElementDto } from '@/api/stageElementApi'
@@ -37,6 +39,7 @@ import {
   type Draft,
   type Params,
 } from './elementDraft'
+import { OwnerEditor } from './OwnerEditor'
 
 /**
  * A scene element's form (stage-view plan session 5, `Edit.dc.html` §3): the body the docked
@@ -49,9 +52,13 @@ import {
  * beside the field it names (`elementProblems.ts`), and one naming no field at the top. The form
  * checks nothing itself beyond a name, so the two surfaces cannot disagree about what is allowed.
  *
- * *Moves with* is read-only and empty until session 8, when cues, stacks and Looks can set an
- * element's state: it will list them there, and scenery changes are edited on the cue, the stack or
- * the Look, never here.
+ * *Moves with* lists what moves the piece (scenery-programmer plan D11, session 4): every cue that
+ * changes it, every stack whose set holds it, every Look that shows it — from `GET
+ * stage-elements/{id}/scenery` — and each entry opens its owner's own editor in place (Cue
+ * properties, Stack settings, the Look sheet, `OwnerEditor`), since a scenery change is edited on
+ * its owner and never here. Beside the base states, a piece that travels — a DRAW or FLY drape, a
+ * flown object — takes its **travel time** (`travelS`, D6): how long a full travel takes when no
+ * cue's own clock moves it. `withKindParam` drops it with the travel.
  */
 
 interface EditSceneElementFormProps {
@@ -101,6 +108,8 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
     const [draft, setDraft] = useState<Draft>(() => draftOf(element))
     const [problems, setProblems] = useState<ElementProblem[]>([])
     const [inUse, setInUse] = useState<{ message: string; action: 'save' | 'delete' } | null>(null)
+    // The *Moves with* entry whose owner's editor is open over the form.
+    const [owner, setOwner] = useState<Pick<MovesWithEntry, 'kind' | 'id'> | null>(null)
     const [updateElement, { isLoading: isUpdating }] = useUpdateStageElementMutation()
     const [deleteElement, { isLoading: isDeleting }] = useDeleteStageElementMutation()
     const { data: regions } = useStageRegionListQuery(projectId, { skip: element.kind !== 'PLATFORM' })
@@ -128,6 +137,7 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
       p(['states.visible'])
       if (drawn) p(['states.open'])
       if (flies) p(['states.trimM'])
+      if (drawn || flies) p(['travelS'])
       switch (kind) {
         case 'ROOM':
           p(['omit', 'floor.colour', 'floor.pattern', 'ceiling.colour', 'ceiling.pattern'])
@@ -547,12 +557,21 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
             />
             {drawn && numberField('element-open', 'Open (0 closed – 1 drawn)', num(states.open), (v) => setStateValue('open', v), 'params.states.open')}
             {flies && numberField('element-trim', 'Trim (m)', num(states.trimM), (v) => setStateValue('trimM', v), 'params.states.trimM')}
+            {(drawn || flies) && (
+              <>
+                {paramNumber('travelS', 'Travel time (s, a full travel)')}
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  How long the piece takes to travel all the way when no cue&apos;s own clock moves it — a pressed Look, a
+                  stack&apos;s set, the programmer. A shorter move takes its share. Blank snaps.
+                </p>
+              </>
+            )}
           </Section>
 
           <Section title="Moves with">
-            <p className="text-xs text-muted-foreground" data-moves-with>
-              No cue, stack or Look moves it. Scenery changes are edited on the cue, the stack or the Look; this list is
-              where to find them.
+            <MovesWithList projectId={projectId} element={element} onOpen={(entry) => setOwner(entry)} className="-mx-1" />
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              Scenery changes are edited on the cue, the stack or the Look, never here.
             </p>
           </Section>
 
@@ -573,6 +592,8 @@ export const EditSceneElementForm = forwardRef<EditSceneElementFormHandle, EditS
             </Button>
           </div>
         </SheetFooter>
+
+        <OwnerEditor projectId={projectId} entry={owner} onClose={() => setOwner(null)} />
 
         <AlertDialog open={inUse != null} onOpenChange={(open) => !open && setInUse(null)}>
           <AlertDialogContent>

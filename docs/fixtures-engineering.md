@@ -1735,6 +1735,16 @@ A `PUT` is partial and the merged element is checked whole. Each write fires
 `get_scene` (`docs/mcp-engineering.md` §"Show-setup tools"); sync is v18
 (`docs/sync-engineering.md`).
 
+`GET …/stage-elements/{id}/scenery` (scenery-programmer plan D11, session 4;
+`routes/projectScenery.kt`'s `elementSceneryOf`) is the other way into the scenery tables: every
+owner that moves one element, `{cues: [{stackId, cueId, label, state, transitionMs}], sets:
+[{stackId, name, state}], looks: [{lookId, name, state}]}` — each owner's **own** stored row, never
+what a cue only tracks; cues in show order (their stack's place, then theirs), sets in stack order,
+Looks by name. A cue's `label` is its number, else its name (`trackedSceneryAt`'s), and a null
+`transitionMs` moves with the cue's fade. Stored data, so ungated by the current project like the
+CRUD; an element of another project, or none, is 404. It is the Stage popover's and the element
+form's *Moves with* (`docs/cue-stacks-engineering.md` §"Scenery").
+
 On the desk (stage-view plan session 5) the Stage view's Edit mode places an element with
 `+ Scenery` and edits it in its element form, both over these routes: a 400 lists every problem
 `validateStageElement` found, joined with `"; "`, each leading with the field it is about as the

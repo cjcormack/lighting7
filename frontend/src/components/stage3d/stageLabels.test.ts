@@ -2,9 +2,11 @@
 import { describe, expect, it } from 'vitest'
 import { Object3D, OrthographicCamera, PerspectiveCamera } from 'three'
 import { boxCollider } from './scene/beamReach'
+import { Vector3 } from 'three'
 import {
   StageLabelStore,
   labelPriority,
+  projectToScreen,
   overlapsAny,
   toStageLabelMode,
   wantsLabel,
@@ -201,5 +203,83 @@ describe('labels behind the scenery', () => {
     store.setOccluders(colliders)
     store.setOccluders(colliders)
     expect(frames).toBe(1)
+  })
+})
+
+describe('the anchor projection (scenery-programmer plan D11)', () => {
+  function camera(at: [number, number, number], lookAt: [number, number, number]) {
+    const cam = new PerspectiveCamera(50, 800 / 600, 0.1, 100)
+    cam.position.set(...at)
+    cam.lookAt(...lookAt)
+    cam.updateMatrixWorld()
+    return cam
+  }
+
+  it('puts a point straight ahead at the middle of the canvas', () => {
+    const at = projectToScreen({ x: 0, y: 2, z: -5 }, camera([0, 2, 5], [0, 2, -5]), 800, 600)
+    expect(at.inFront).toBe(true)
+    expect(at.x).toBeCloseTo(400, 3)
+    expect(at.y).toBeCloseTo(300, 3)
+  })
+
+  it('moves the point the other way when the camera moves', () => {
+    const point = { x: 0, y: 2, z: -5 }
+    // The camera stepped to its right (and still looking the same way): the piece is left of centre.
+    const right = projectToScreen(point, camera([2, 2, 5], [2, 2, -5]), 800, 600)
+    expect(right.x).toBeLessThan(400)
+    // Raised: the piece drops down the canvas.
+    const raised = projectToScreen(point, camera([0, 4, 5], [0, 4, -5]), 800, 600)
+    expect(raised.y).toBeGreaterThan(300)
+    // Orbited round to look from the side: the piece is still in the middle, now seen from +x.
+    const side = projectToScreen(point, camera([10, 2, -5], [0, 2, -5]), 800, 600)
+    expect(side.x).toBeCloseTo(400, 3)
+  })
+
+  it('says when the point is behind the eye', () => {
+    expect(projectToScreen({ x: 0, y: 2, z: 10 }, camera([0, 2, 5], [0, 2, -5]), 800, 600).inFront).toBe(false)
+  })
+
+  it('a tracked point follows the camera through the layout, and keeps its last place behind the eye', () => {
+    const store = new StageLabelStore()
+    const tracker = store.track(new Vector3(0, 2, -5))
+    store.layout(camera([0, 2, 5], [0, 2, -5]), 800, 600)
+    expect(tracker.visible).toBe(true)
+    expect(tracker.x).toBeCloseTo(400, 3)
+    store.layout(camera([2, 2, 5], [2, 2, -5]), 800, 600)
+    const left = tracker.x
+    expect(left).toBeLessThan(400)
+    // Turned right round: the piece is behind; the anchor stays where it was last seen.
+    store.layout(camera([0, 2, -10], [0, 2, -20]), 800, 600)
+    expect(tracker.visible).toBe(false)
+    expect(tracker.x).toBe(left)
+    // An ortho section projects it too.
+    const plan = new OrthographicCamera(-4, 4, 3, -3, 0.01, 50)
+    plan.position.set(0, 20, -5)
+    plan.lookAt(0, 0, -5)
+    plan.updateMatrixWorld()
+    store.layout(plan, 800, 600)
+    expect(tracker.visible).toBe(true)
+    expect(tracker.x).toBeCloseTo(400, 3)
+    store.untrack(tracker)
+    store.layout(camera([2, 2, 5], [2, 2, -5]), 800, 600)
+    expect(tracker.x).toBeCloseTo(400, 3)
+  })
+
+  it("a tracked box projects to the screen box round the point, so a popover can sit beside it", () => {
+    const store = new StageLabelStore()
+    const tracker = store.track(new Vector3(0, 2, -5), new Vector3(0.5, 0.5, 0.05))
+    store.layout(camera([0, 2, 5], [0, 2, -5]), 800, 600)
+    const box = { ...tracker.box }
+    expect(box.w).toBeGreaterThan(20)
+    expect(box.h).toBeGreaterThan(20)
+    expect(box.x + box.w / 2).toBeCloseTo(400, 0)
+    expect(box.y + box.h / 2).toBeCloseTo(300, 0)
+    // Nearer, the same piece is bigger on screen.
+    store.layout(camera([0, 2, 0], [0, 2, -5]), 800, 600)
+    expect(tracker.box.w).toBeGreaterThan(box.w)
+    // Clamped to the canvas, however big the piece.
+    store.layout(camera([0, 2, -4.8], [0, 2, -5]), 800, 600)
+    expect(tracker.box.x).toBeGreaterThanOrEqual(0)
+    expect(tracker.box.x + tracker.box.w).toBeLessThanOrEqual(800)
   })
 })

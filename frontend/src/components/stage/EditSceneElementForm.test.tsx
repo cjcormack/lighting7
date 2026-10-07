@@ -5,9 +5,20 @@ import type { StageElementDto } from '@/api/stageElementApi'
 
 const update = vi.fn()
 const remove = vi.fn()
+/** What `GET stage-elements/{id}/scenery` answers, as the query hook hands it over. */
+const sceneryRead: { current: unknown } = { current: { cues: [], sets: [], looks: [] } }
 vi.mock('@/store/stageElements', () => ({
   useUpdateStageElementMutation: () => [update, { isLoading: false }],
   useDeleteStageElementMutation: () => [remove, { isLoading: false }],
+  useStageElementSceneryQuery: () => ({ currentData: sceneryRead.current, isError: false }),
+}))
+vi.mock('@/store/cueStacks', () => ({
+  useProjectCueStackListQuery: () => ({ data: [{ id: 1, name: 'Act 1' }, { id: 2, name: 'Act 2' }] }),
+}))
+// The owners' own sheets are theirs to test; here, which one an entry opens.
+vi.mock('./OwnerEditor', () => ({
+  OwnerEditor: ({ entry }: { entry: { kind: string; id: number } | null }) =>
+    entry == null ? null : <div data-owner-editor={`${entry.kind}:${entry.id}`} />,
 }))
 vi.mock('@/store/stageRegions', () => ({
   useStageRegionListQuery: () => ({ data: [{ uuid: 'r-1', name: 'Main stage' }] }),
@@ -52,6 +63,7 @@ function type(label: string | RegExp, value: string) {
 beforeEach(() => {
   update.mockReset()
   remove.mockReset()
+  sceneryRead.current = { cues: [], sets: [], looks: [] }
 })
 afterEach(cleanup)
 
@@ -192,10 +204,70 @@ describe('EditSceneElementForm (stage-view plan session 5)', () => {
     expect((screen.getByRole('button', { name: 'Aisle' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('lists what moves it, read-only — nothing until cues, stacks and Looks can', () => {
+  it('says when nothing moves it', () => {
     render(<EditSceneElementForm element={element()} projectId={3} onClose={() => {}} />)
     expect(screen.getByText('Moves with')).toBeTruthy()
     expect(document.querySelector('[data-moves-with]')!.textContent).toMatch(/No cue, stack or Look moves it/)
+  })
+
+  it('lists what moves it — cues in show order, then sets, then Looks — each opening its own editor', () => {
+    const moon = element({ uuid: 'moon', name: 'Moon', kind: 'OBJECT', positionZ: 3, params: { shape: 'DISC', flies: true, states: { trimM: 7 } } })
+    sceneryRead.current = {
+      cues: [
+        { stackId: 1, cueId: 12, label: '2', state: { trimM: 3 }, transitionMs: 4000 },
+        { stackId: 2, cueId: 19, label: '9', state: { trimM: 7 }, transitionMs: null },
+      ],
+      sets: [{ stackId: 1, name: 'Act 1', state: { visible: false } }],
+      looks: [{ lookId: 5, name: 'Night', state: { trimM: 3 } }],
+    }
+    render(<EditSceneElementForm element={moon} projectId={3} onClose={() => {}} />)
+    const list = within(document.querySelector('ul[data-moves-with]') as HTMLElement)
+    const rows = list.getAllByRole('button').map((b) => b.textContent)
+    // Two stacks, so each cue names its own; the clock is the cue's, or the cue's fade.
+    expect(rows).toEqual([
+      'Act 1 · Q2 · trim · in · 4 s',
+      'Act 2 · Q9 · trim · out · with the cue',
+      "Act 1's set · hidden",
+      'Night · trim · in',
+    ])
+
+    fireEvent.click(list.getByRole('button', { name: /^Act 1 · Q2/ }))
+    expect(document.querySelector('[data-owner-editor="cue:12"]')).not.toBeNull()
+    fireEvent.click(list.getByRole('button', { name: /^Act 1's set/ }))
+    expect(document.querySelector('[data-owner-editor="set:1"]')).not.toBeNull()
+    fireEvent.click(list.getByRole('button', { name: /^Night/ }))
+    expect(document.querySelector('[data-owner-editor="look:5"]')).not.toBeNull()
+  })
+
+  it('offers travel time only on a piece that travels, and sends it in params', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve(element()) })
+    const tabs = element({ uuid: 'tabs', name: 'Tabs', kind: 'DRAPE', layer: 'VENUE', params: { role: 'TABS', operation: 'DRAW' } })
+    render(<EditSceneElementForm element={tabs} projectId={3} onClose={() => {}} />)
+    expect(screen.getByLabelText(/Travel time/)).toBeTruthy()
+    type(/Travel time/, '3')
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'TABS', operation: 'DRAW', travelS: 3 })
+
+    cleanup()
+    // A flat, and a drape that neither draws nor flies, have no travel to time.
+    render(<EditSceneElementForm element={element()} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByLabelText(/Travel time/)).toBeNull()
+    cleanup()
+    render(<EditSceneElementForm element={{ ...tabs, params: { role: 'LEG', operation: 'DEAD' } }} projectId={3} onClose={() => {}} />)
+    expect(screen.queryByLabelText(/Travel time/)).toBeNull()
+  })
+
+  it('drops a travel time with the travel when the drape stops drawing', async () => {
+    update.mockReturnValue({ unwrap: () => Promise.resolve(element()) })
+    const tabs = element({ uuid: 'tabs', name: 'Tabs', kind: 'DRAPE', layer: 'VENUE', params: { role: 'TABS', operation: 'DRAW', travelS: 3 } })
+    render(<EditSceneElementForm element={tabs} projectId={3} onClose={() => {}} />)
+    expect((screen.getByLabelText(/Travel time/) as HTMLInputElement).value).toBe('3')
+    fireEvent.change(document.getElementById('element-operation')!, { target: { value: 'DEAD' } })
+    expect(screen.queryByLabelText(/Travel time/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    expect(update.mock.calls[0]![0].params).toEqual({ role: 'TABS', operation: 'DEAD' })
   })
 
   it('shows where a drag on a section has moved it, without saving', () => {

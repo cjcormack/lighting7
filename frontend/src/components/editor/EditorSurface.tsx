@@ -352,8 +352,26 @@ interface EditorSurfaceProps {
    * Read at render time and only while [open]: a `virtualRef` whose `current` is null would set
    * Radix's anchor to null and leave the content unpositioned, so a missing button falls back to
    * the trigger anchor instead. Popover form only — a sheet is anchored to the screen edge.
+   *
+   * Anything with a box will do, not only an element: the Stage popover (scenery-programmer plan
+   * D11) has no trigger at all and anchors at a **virtual** element whose box is the clicked piece's
+   * projected box — see [followAnchor].
    */
-  anchorRef?: RefObject<HTMLElement | null>
+  anchorRef?: RefObject<{ getBoundingClientRect(): DOMRect } | null>
+  /**
+   * Re-place the popover **every frame**, not only on scroll and resize (floating-ui's
+   * `animationFrame`, Radix's `updatePositionStrategy="always"`). Only for an anchor that moves
+   * while nothing on the page scrolls — the Stage popover's, which follows its piece as the camera
+   * orbits and as it flies. Popover form only, and it costs a measure a frame while open.
+   */
+  followAnchor?: boolean
+  /**
+   * A press or focus inside this element does not count as outside the popover, so it does not
+   * close it. The Stage popover's canvas: a drag there orbits the camera, which the popover follows
+   * rather than closes on; the canvas's own click decides what a click there means. Popover form
+   * only — both sheets are modal.
+   */
+  keepOpenWithin?: RefObject<HTMLElement | null>
   children: ReactNode
 }
 
@@ -383,6 +401,8 @@ export function EditorSurface({
   wide,
   triggerOpens = true,
   anchorRef,
+  followAnchor = false,
+  keepOpenWithin,
   children,
 }: EditorSurfaceProps) {
   const form = useEditorForm()
@@ -473,6 +493,15 @@ export function EditorSurface({
         align={align}
         className={contentClassName}
         onOpenAutoFocus={onOpenAutoFocus}
+        updatePositionStrategy={followAnchor ? 'always' : undefined}
+        onInteractOutside={
+          keepOpenWithin == null
+            ? undefined
+            : (e) => {
+                const target = e.target
+                if (target instanceof Node && keepOpenWithin.current?.contains(target)) e.preventDefault()
+              }
+        }
       >
         {children}
       </PopoverContent>
